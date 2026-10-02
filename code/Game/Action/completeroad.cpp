@@ -12,7 +12,8 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // Pf_FinalizeRoadTile_9c640
+#include "Action/exe_bodies.h"   // the B4 FORWARD ctor door
+#include "Game/Map.h"   // Map::FinishRoadCell 0x14009c640
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -20,10 +21,8 @@
 
 // ============================================================
 // Helpers, called by name (B3R)
-//   0x14009c640 Pf_FinalizeRoadTile_9c640 -- complete road tile (terrain*, tileIndex,
-//               direction, roadType)
-// DAT_1401c3dd8 (the game state singleton) is read through g_pGameWorldSingleton, the
-// engine_funcs global bound to the same cell.
+//   0x14009c640 Map::FinishRoadCell -- complete road tile (tileIndex, direction, roadType)
+// DAT_1401c3dd8 is GameUpdateLoop::_singleton; +0xF8 its Map.
 // ============================================================
 
 // ============================================================
@@ -31,39 +30,23 @@
 // Serializes: status(+0x18), int(+0x20), uchar(+0x28), int(+0x24)
 // ============================================================
 void CompleteRoad::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
-    // Serialize status
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
-
-    // Serialize road fields
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned char*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    ser.Serialize(roadTileIndex, nullptr);   // +0x20
+    ser.Serialize(roadDirection, nullptr);   // +0x28
+    ser.Serialize(roadType, nullptr);        // +0x24
 }
 
 // ============================================================
 // CompleteRoad::AbstractImpl / _purecall (0x1400c5850)
-// Calls road tile completion on terrain system.
+// Calls road tile completion on the world map (GameUpdateLoop +0xF8).
 // Returns 0 (action complete).
 // ============================================================
 
 int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0x1400c5850
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    void* gameState = GameUpdateLoop::_singleton;
-    void* terrain = *(void**)((uint8_t*)gameState + 0xf8);
-
-    Pf_FinalizeRoadTile_9c640(static_cast<unsigned int*>(terrain),   // 0x14009c640
-                              roadTileIndex,
-                              roadDirection,
-                              *(uint32_t*)(s + 0x24));
+    GameUpdateLoop::_singleton->m_game->FinishRoadCell(roadTileIndex, roadDirection, roadType);   // 0x14009c640
     return 0;
 }
 
@@ -103,7 +86,7 @@ void* CompleteRoad::CreateInPlaceObject(void* storage) {
 //   RCX=self, EDX=p2(u32 @ +0x24), R8D=p3(u32 @ +0x20), R9B=p4(byte @ +0x28).
 // ============================================================
 void* ActChild_CompleteRoadCopyCtor_c59d0(void* self, uint32_t p2, uint32_t p3, uint8_t p4) {
-    // ENDGAME B.3.8 ACT: the real ctor (CompleteRoad.h). A by-address door.
+    // B4 FORWARD: 1 outside caller (Work/work_act_perform.cpp). The real ctor is CompleteRoad.h's.
     return static_cast<Object::Base*>(new (self) CompleteRoad(p2, p3, p4));
 }
 

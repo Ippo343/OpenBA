@@ -15,14 +15,19 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;       // Component/CitizenComponent.h
+class ComponentDescription;   // Component/ComponentDescription.h
+class ComponentEntity;        // Entity/ComponentEntity.h
 
 class DropOffRawMaterial final : public Action {
     DECLARE_EXE_TYPE(DropOffRawMaterial)
 
 public:
     DropOffRawMaterial();                                                   // create 0x140022600
-    DropOffRawMaterial(uint64_t* storage, uint64_t* source, uint64_t resType, uint32_t count,
-                       uint8_t flag);   // 0x1400c7cd0
+    DropOffRawMaterial(CitizenComponent* const* citizen, ComponentEntity* const* destination,
+                       ComponentDescription* material, uint32_t count, bool flag);   // 0x1400c7cd0
     ~DropOffRawMaterial() override = default;                  // [0] 0x140022670
     void Persist(void* stream) override;                       // [3] 0x1400c7b10
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c7300
@@ -30,12 +35,12 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400c7270
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    uint8_t   _field20;          // +0x20 bool flag
+    bool      _field20;          // +0x20 search for another storage when full (Persist: the bool overload)
     uint8_t   _pad21[3];         // +0x21 padding
-    int32_t   _field24;          // +0x24 count
-    void*     _field28;          // +0x28 resource type
-    void*     _field30;          // +0x30 target storage
-    void*     _field38;          // +0x38 source entity
+    int32_t   _field24;          // +0x24 count cap (-1 = all)
+    ComponentDescription* _field28;   // +0x28 ExternalPtr<ComponentDescription>: the material (null = every stack)
+    Object::InternalPtr<CitizenComponent> _field30;   // +0x30 the carrying citizen (Persist checks CitizenComponent)
+    Object::InternalPtr<ComponentEntity>  _field38;   // +0x38 the destination entity (Persist checks ComponentEntity)
 };
 
 static_assert(sizeof(DropOffRawMaterial) == 0x40, "DropOffRawMaterial is 0x40 (create 0x140022600 MemAlloc)");

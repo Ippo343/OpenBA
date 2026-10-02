@@ -15,13 +15,18 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;   // Component/CitizenComponent.h
+class ComponentEntity;    // Entity/ComponentEntity.h
 
 class RemoveNaturalResource final : public Action {
     DECLARE_EXE_TYPE(RemoveNaturalResource)
 
 public:
     RemoveNaturalResource();                                                   // create 0x140022f70
-    RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag);   // 0x1400cadf0
+    RemoveNaturalResource(ComponentEntity* const* resource, CitizenComponent* const* citizen,
+                          bool flag);   // 0x1400cadf0
     ~RemoveNaturalResource() override = default;               // [0] 0x140022fe0
     void Persist(void* stream) override;                       // [3] 0x1400cac50
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400cab10
@@ -29,9 +34,9 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400caa20
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 
-    void*     _field28;          // +0x28 
-    uint8_t   _field30;          // +0x30 flag
+    Object::InternalPtr<CitizenComponent> _field20;   // +0x20 the working citizen (Persist checks CitizenComponent)
+    Object::InternalPtr<ComponentEntity>  _field28;   // +0x28 the natural-resource entity (Persist checks ComponentEntity)
+    bool      _field30;          // +0x30 harvest flag (Persist: the bool overload)
     uint8_t   _pad31[7];         // +0x31 padding
 };
 

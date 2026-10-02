@@ -15,13 +15,18 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;   // Component/CitizenComponent.h
+class ComponentEntity;    // Entity/ComponentEntity.h
 
 class CompleteTask final : public Action {
     DECLARE_EXE_TYPE(CompleteTask)
 
 public:
     CompleteTask();                                                   // create 0x140021fc0
-    CompleteTask(uint32_t taskIndex, uint64_t* workEntity, uint64_t* targetEntity, uint32_t taskParam);   // 0x1400c5da0
+    CompleteTask(uint32_t taskIndex, CitizenComponent* const* workEntity,
+                 ComponentEntity* const* targetEntity, uint32_t taskParam);   // 0x1400c5da0
     ~CompleteTask() override = default;                        // [0] 0x140022030
     void Persist(void* stream) override;                       // [3] 0x1400c5be0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5b40
@@ -29,8 +34,8 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400c5a50
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     workEntity;        // +0x20 work entity ref
-    void*     targetEntity;      // +0x28 target entity ref
+    Object::InternalPtr<CitizenComponent> workEntity;   // +0x20 the working citizen (Persist checks CitizenComponent)
+    Object::InternalPtr<ComponentEntity>  targetEntity; // +0x28 target entity ref (Persist checks ComponentEntity)
     int32_t   taskIndex;         // +0x30 task index (0x7FFFFFFF = unresolved)
     int32_t   taskParam;         // +0x34 task parameter
 };

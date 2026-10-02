@@ -15,31 +15,39 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;       // Component/CitizenComponent.h
+class ComponentDescription;   // Component/ComponentDescription.h
+class ComponentEntity;        // Entity/ComponentEntity.h
 
 class CreateRawMaterial final : public Action {
     DECLARE_EXE_TYPE(CreateRawMaterial)
 
 public:
     CreateRawMaterial();                                                   // create 0x1400222d0
-    CreateRawMaterial(uint64_t desc, float yield, uint64_t* source, uint64_t* secondary,
-                      uint64_t unused6, uint32_t quantity, uint32_t cellIdx, uint8_t naturalRes,
-                      uint64_t* tertiary, uint32_t placementFlags);   // 0x1400c71a0
+    CreateRawMaterial(ComponentDescription* desc, float yield, CitizenComponent* const* source,
+                      ComponentEntity* const* secondary, uint64_t unused6, uint32_t quantity,
+                      uint32_t cellIdx, bool naturalRes, ComponentEntity* const* tertiary,
+                      uint32_t placementFlags);   // 0x1400c71a0
     ~CreateRawMaterial() override = default;                   // [0] 0x140022350
     void Persist(void* stream) override;                       // [3] 0x1400c6f30
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6b40
     bool GetTarget(void* param) override;                      // [9] 0x1400c6aa0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     descEntity;        // +0x20 description (ExternalPtr)
-    void*     sourceBuilding;    // +0x28 InternalBasePtr (source building)
-    void*     secondaryEntity;   // +0x30 InternalBasePtr (optional secondary entity)
-    void*     tertiaryEntity;    // +0x38 InternalBasePtr (optional tertiary entity)
+    ComponentDescription* descEntity;   // +0x20 ExternalPtr<ComponentDescription>: the material template
+    // +0x28: the WORKING CITIZEN, not a building (Persist checks CitizenComponent; AbstractImpl
+    // compares its education with its description's maxEducation). The name is the tree's.
+    Object::InternalPtr<CitizenComponent> sourceBuilding;
+    Object::InternalPtr<ComponentEntity>  secondaryEntity;   // +0x30 optional secondary entity
+    Object::InternalPtr<ComponentEntity>  tertiaryEntity;    // +0x38 optional tertiary entity
     int32_t   totalQuantity;     // +0x40 total quantity to produce
     int32_t   materialCellIdx;   // +0x44 material type index / cell index
     uint32_t  placementFlags;    // +0x48 placement flags
     float     yieldMultiplier;   // +0x4C yield multiplier
-    uint8_t   naturalResFlag;    // +0x50 natural resource flag
-    uint8_t   placeNearFlag;     // +0x51 place near flag
+    bool      naturalResFlag;    // +0x50 natural resource flag (Persist: the bool overload)
+    bool      placeNearFlag;     // +0x51 place near flag (Persist: the bool overload)
     uint8_t   _pad52[6];         // +0x52 padding
 };
 

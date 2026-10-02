@@ -296,6 +296,8 @@ in the code carries a comment.
 | 47 | `PathfinderThread::ApplyCommand` case 5 (`action_pf_astar.cpp`) | holds the lock through the ready store | 0x1400a6430 unlocks after the result-array resize (0x1400a658b) | CONFIRMED (ACT-a) |
 | 48 | `PathfinderThread::ApplyCommand`'s 64 KB path buffer | `static` (one worker thread uses it) | on the stack (0x1400a6436) | CONFIRMED (ACT-a) |
 | 49 | `RegionPairCache::Store` (`action_pf_region.cpp`) | writes 0 to `RegionPairEntry::field_0x0C` | 0x1400a5b30 stores a stale stack dword there (never read) | CONFIRMED (ACT-a) |
+| 51 | `PerformWork` ctor, tool-less time scaling (`performwork.cpp`) | reads the low dword of `requiredTime` (+0x30) and of `Time(desc->_f114)` as float bits and multiplies them | 0x1400c9720 calls `Time::AsSeconds` (IAT 0x140151318) on both (0x1400c9808 / 0x1400c9814), multiplies, and rebuilds with `Time(float)` (0x140152b00) | CONFIRMED (ACT-b; the two puns are LEFT at the site) |
+| 52 | `RemoveAnimal::Persist` (`removeanimal.cpp`) | validates the loaded +0x20 against `FireDescription::TypeId()` (cell 0x1401c4218), so a loaded RemoveAnimal always loses its entity | 0x1400ca870 tests ComponentEntity (`MOV EDX,[0x1401c5d70]` at 0x1400ca8e1) | CONFIRMED (ACT-b) |
 | 60 | the main menu's camera frustum (`MenuScene_Helper_8660`, `menudialogloopt.cpp`) | a second port of 0x140098660 next to `PlayerController::UpdateCamera`: takes the width / height from `Video::Configuration` +0x04 / +0x08, which are `interfaceIndex` / `adapterIndex` (so the aspect is 1 / 0 -> the 16:9 fallback, or interface / adapter), and has no ultrawide clamp | 0x140098660 reads `Video::Device`'s back-buffer width / height (+0x04 / +0x08) and clamps fovX past 16:9 (the member's body, `gameupdateloop_load.cpp`) | CONFIRMED from the two bodies and the header (GAME-b); retail not re-read for the menu's call |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
@@ -406,6 +408,29 @@ stated condition.
   type-id test is dead once the type is registered); `StorageCanAdd` sums the stored weight through
   `StorageComponent::QueryCount` instead of `CitizenComp_StorageComponent_QueryCount`, whose null
   test is unreachable there (0x14012c560 has already dereferenced the storage).
+- KEPT (ACT-b): `AnimateNaturalResource::Execute`'s null-ModelComponent return (0x1400c55b0 reads
+  +0x28 unguarded); `CompleteTask::AbstractImpl`'s null singleton / `m_tutorial` return
+  (0x1400c5b40); `CreateRawMaterial::AbstractImpl`'s zero-batch return (0x1400c6c22 divides by it);
+  the `MoveTo` ctor's `charDescTid &&` and `random ?` tests (0x1400c9170 has neither);
+  the `PerformWork` ctor's null-CitizenDescription skip of the scaling (0x1400c97e2..0x1400c97ee:
+  CMOVNZ picks null on an IsDerivedFrom miss and +0x114 is read unguarded, CONFIRMED);
+  `PickupStoredRawMaterial`'s null-RawMaterialDescription guards in the ctor and AbstractImpl
+  (0x1400ca520 / 0x1400c9d40 read +0x48 unguarded); `PlayAnimation::AbstractImpl`'s null-target
+  return, readable-memory stale-target probe and null-CharacterComponent return (0x140042420);
+  `RemoveNaturalResource` AbstractImpl / CheckEntity null-NaturalResourceComponent returns
+  (0x1400cab10 / 0x1400caaa0); `SendComponentMessage::AbstractImpl`'s canonical / dying /
+  readability probes and sentinel-slot skip (0x1400caef0); `ShowTool`'s null-citizen returns in
+  AbstractImpl / CheckEntity / GetTarget (0x140042710 / 0x1400426d0 / 0x140042680) and
+  `ShowTool_ShowCarried`, a second guarded port of 0x1401173b0's toolId < 0 branch beside
+  `ShowCitizenTool` (row 45 is the other copy's difference); `Pf_RegionPairCacheTick_5d10`'s null
+  tests. SUSPECTED unless an address range is quoted.
+- DROPPED (ACT-b, seen in B11): ConsumeRawMaterial AbstractImpl / CheckEntity, DropOffRawMaterial
+  AbstractImpl (two finds), PickupRawMaterial AbstractImpl and PickupStoredRawMaterial AbstractImpl
+  / CheckEntity find the StorageComponent through `ComponentEntity::FindComponent<StorageComponent>`
+  instead of `fn_FindComponent_Storage` (`entity_findcomponent.cpp`), whose null-entity return and
+  null-slot skip retail's 0x140006270 lacks (the tree's own 0x140006270 forwarder,
+  `WorkBase_FindComponent_6270`, already delegates to the template). A null entity there now
+  faults where the old body returned no storage.
 - KEPT (GAME-b): `ProfessionList::Startup` returns on a null `ExternalFactory::_singleton` and a 0
   Profession type id, and skips an external that is not a Profession; 0x1400a90a0 calls FindNext
   on the singleton unguarded and reads +0x4e of the null it substitutes for a non-Profession.
@@ -441,6 +466,22 @@ TUT (rows 80-84, 88-89):
   (`SpriteSheet::m_field50`, `TextDescription::_b84/_b85`, the ribbon / scroll `_vertical`,
   RenderState's six flags). Identical only if the byte is always 0 or 1. SUSPECTED; the settings
   flags were the same question and retail copies raw (0x14007248f), so those are `uint8_t`.
+- (ACT-b) Now `bool`: `AnimateNaturalResource` +0x2C (0x1400c5660 serializes it as bool),
+  `ConsumeRawMaterial` +0x38, `CreateRawMaterial` +0x50 / +0x51, `DropOffRawMaterial` +0x20,
+  `HuntAnimal` +0x38, `PerformWork::useTool` +0x40, `PickupStoredRawMaterial` +0x40 and
+  `RemoveNaturalResource` +0x30. The typed ctors copy the byte (B11: `movzbl` / `mov %dl`, as the
+  old ctors did); the NORMALISATION (`setne`) is at the seven `uint8_t` -> `bool` conversions of
+  the C entry points, where retail's ctor copies the byte raw:
+  `animatenaturalresource.cpp:145` (0x1400c57d0), `removenaturalresource.cpp:218` (0x1400cadf0),
+  `dropoffrawmaterial.cpp:276` (0x1400c7cd0), `consumerawmaterial.cpp:392` (0x1400c63b0, raw copy
+  read at 0x1400c640f), `pickupstoredrawmaterial.cpp:421` (0x1400ca520),
+  `createrawmaterial.cpp:379` (0x1400c71a0) and `performwork.cpp:252` (the `void*` ctor reached
+  through `Pf_PerformWorkCtor7_9720`, 0x1400c9720, raw copy read at 0x1400c9796). Retail not
+  re-read for the other five. H8 checked in B11: every caller of the seven passes a literal 0 / 1
+  (directly, or through `CitizenAI_PerformWorkCtor4_c1070`'s 1 / 0, `WorkAct_GatherRawMatCtor_bf790`'s
+  `useAnimal` / `param_14` 0 / 1, `WorkAct_PerformWorkCtor_c1eb0`'s 0 / 1), so no stored value
+  differs from the old tree's. The array appends of ConsumeRawMaterial /
+  PickupStoredRawMaterial keep retail's `&array[i] != nullptr` test, which an -O2 compiler may fold.
 
 ### 14f. Names that mislead (naming only)
 
@@ -490,6 +531,21 @@ TUT (rows 80-84, 88-89):
   node tree (`InteractNodePosition` / `InteractNodeCount`), and `ActCNR_NR_*` on the ModelComponent
   mesh selection (`ModelMeshGroupCount`, `ModelMeshCount`, `ModelSelectMesh`), not on a
   NaturalResourceComponent. (ACT-a)
+- (ACT-b) `CreateRawMaterial` +0x28 is the working CitizenComponent, and the yield picks
+  `_lowCreateCount` while its `education` < `CitizenDescription::maxEducation` (the tree said
+  building age / maturity); `RemoveNaturalResource`'s "growth value / threshold" are the same pair
+  and +0x248 is the workplace. `HuntAnimal` +0x20 is the HuntComponent and +0x28 the hunting
+  citizen (the tree: "animal", "herd"); 0x140005500 finds the AnimalComponent and 0x1400227e0 the
+  WildAnimalComponent (the tree: a model component, "HerdComponent"); 0x1400052c0 is
+  NaturalResourceComponent and 0x140003f60 ModelComponent (createnaturalresource.cpp's old banner
+  swapped them). `MoveTo`: +0x468 plays when a path starts and +0x46C when it ends (the tree's
+  idle / walk were swapped); +0x470 ("bridge flag") is SetMovementCosts' profile; +0x474 ("road
+  flag") is set when the nearest other character within 0.5 faces this one; +0x30 ("path data") is
+  the CharacterDescription; +0x20 / +0x24 are a PathTicket. `PickupStoredRawMaterial` +0x20 is the
+  carrying citizen and +0x28 the storage entity. `ShowTool_ShowCarried`'s "+0xb8 +0x120 sceneId"
+  store lands on `CitizenComponent::toolId` (+0x1D8), its "StateMachineComponent" is
+  `CitizenComponent::character`, and its scale Vector4 is `MeshInstance::_color`. The function the
+  tree called `Game::UpdateTimedEvents` (0x1400a5d10) is `RegionPairCache::Expire`.
 
 TUT (rows 85-87):
 

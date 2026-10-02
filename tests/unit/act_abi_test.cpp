@@ -186,19 +186,19 @@ UNIT_TEST(act_leaf_moveto) {
     CHECK_SLOT(MoveTo, Exit,        0x38/8);   // [7] 0x1400c8520
     CHECK_SLOT(MoveTo, CheckEntity, 0x40/8);   // [8] 0x1400c84d0
     CHECK_SLOT(MoveTo, GetTarget,   0x48/8);   // [9] 0x1400c8480
-    CHECK_EQ(offsetof(MoveTo, targetId), (size_t)0x20);
-    CHECK_EQ(offsetof(MoveTo, _field24), (size_t)0x24);
-    CHECK_EQ(offsetof(MoveTo, _field28), (size_t)0x28);
-    CHECK_EQ(offsetof(MoveTo, _field30), (size_t)0x30);
-    CHECK_EQ(offsetof(MoveTo, _field38), (size_t)0x38);
-    CHECK_EQ(offsetof(MoveTo, _field40), (size_t)0x40);
-    CHECK_EQ(offsetof(MoveTo, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(MoveTo, _field50), (size_t)0x50);
-    CHECK_EQ(offsetof(MoveTo, _field58), (size_t)0x58);
-    CHECK_EQ(offsetof(MoveTo, _field60), (size_t)0x60);
-    CHECK_EQ(offsetof(MoveTo, _field64), (size_t)0x64);
-    CHECK_EQ(offsetof(MoveTo, _pathData), (size_t)0x68);
-    CHECK_EQ(offsetof(MoveTo, _field474), (size_t)0x474);
+    CHECK_EQ(offsetof(MoveTo, ticket), (size_t)0x20);
+    CHECK_EQ(offsetof(MoveTo, ticket) + offsetof(PathTicket, token), (size_t)0x24);
+    CHECK_EQ(offsetof(MoveTo, character), (size_t)0x28);
+    CHECK_EQ(offsetof(MoveTo, description), (size_t)0x30);
+    CHECK_EQ(offsetof(MoveTo, destination), (size_t)0x38);
+    CHECK_EQ(offsetof(MoveTo, field_0x44), (size_t)0x44);
+    CHECK_EQ(offsetof(MoveTo, field_0x48), (size_t)0x48);
+    CHECK_EQ(offsetof(MoveTo, field_0x50), (size_t)0x50);
+    CHECK_EQ(offsetof(MoveTo, field_0x58), (size_t)0x58);
+    CHECK_EQ(offsetof(MoveTo, pathIndex), (size_t)0x60);
+    CHECK_EQ(offsetof(MoveTo, pathCount), (size_t)0x64);
+    CHECK_EQ(offsetof(MoveTo, path), (size_t)0x68);
+    CHECK_EQ(offsetof(MoveTo, field_0x474), (size_t)0x474);
     CHECK_EQ(offsetof(MoveTo, speedMultiplier), (size_t)0x478);
 }
 

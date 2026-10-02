@@ -226,8 +226,7 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
                 ComponentEntity* targetInner = innerR4;
                 // 0x1400c176d..0x1400c1796: the inlined RemoveNaturalResource ctor
                 // (+0x20 citizen inner, +0x28 param_4[i] inner, +0x30 = 1) — the real ctor.
-                new (obj) RemoveNaturalResource(reinterpret_cast<uint64_t*>(&targetInner),
-                                                reinterpret_cast<uint64_t*>(&entityInner), 1);
+                new (obj) RemoveNaturalResource(&targetInner, &entityInner, 1);
                 actionObj = obj;
             }
             WAC_IbpCtor(&ibpA, actionObj); // &local_res8 → ibpA scratch

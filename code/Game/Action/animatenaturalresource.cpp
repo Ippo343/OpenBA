@@ -15,8 +15,9 @@
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 batch K1
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
-#include "Action/exe_bodies.h"   // ActCNR_* helpers
-#include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0
+#include "Action/exe_bodies.h"   // NaturalResourceSetAnimation 0x140126440, the B4 FORWARD ctor door
+#include "Component/ModelComponent.h"
+#include "Component/NaturalResourceComponent.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -35,32 +36,21 @@
 // Serializes status, entity ref with type check, animIndex, waitForAnim.
 // ============================================================
 void AnimateNaturalResource::Persist(void* stream) {
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status (version 0)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&this->_status), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity ref + extra fields (version 0)
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
     // Entity ref (+0x20) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(this->_field20, ComponentEntity::TypeId())) {
-            this->_field20 = nullptr;
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), ComponentEntity::TypeId())) {
+            _field20 = nullptr;
         }
     }
 
-    // Animation index (+0x28)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->animIndex), nullptr);   // B.3.4 bridge
-
-    // Wait for anim flag (+0x2C)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(&this->waitForAnim), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(animIndex, nullptr);     // +0x28
+    ser.Serialize(waitForAnim, nullptr);   // +0x2C
 }
 
 // ============================================================
@@ -71,9 +61,8 @@ void AnimateNaturalResource::Persist(void* stream) {
 int  AnimateNaturalResource::AbstractImpl(void* actionStack) {
     (void)actionStack;
 
-    void* localIBP;
-    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(this->_field20), &localIBP);   // 0x1400052c0
-    ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(localIBP), (uint32_t)this->animIndex);   // 0x140126440
+    NaturalResourceSetAnimation(_field20->FindComponent<NaturalResourceComponent>(),   // 0x1400052c0
+                                static_cast<uint32_t>(animIndex));                     // 0x140126440
 
     return (this->waitForAnim != 0) ? 1 : 0;
 }
@@ -86,18 +75,15 @@ int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
     (void)actionStack;
     (void)time;
 
-    void* localIBP[4] = {nullptr, nullptr, nullptr, nullptr};
-    ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(this->_field20), localIBP);   // 0x140003f60
+    ModelComponent* model = _field20->FindComponent<ModelComponent>();   // 0x140003f60
 
     // Standalone-inert guard: on a tree whose ModelComponent find resolves null (inert
     // resource-entity render layer, unfilled type-id global), report "not animating" so the
     // action completes rather than dereferencing null+0x28 inside MeshInstance::IsAnimating.
     // Retail (live model) is unchanged.
-    if (localIBP[0] == nullptr) return 0;
+    if (model == nullptr) return 0;
 
-    // MeshInstance is at modelComp + 0x28, check if still animating
-    return reinterpret_cast<const Graphics::MeshInstance*>(
-               (uint8_t*)(localIBP[0]) + 0x28)->IsAnimating() ? 1 : 0;   // B.3.5 bridge
+    return model->meshInstance.IsAnimating() ? 1 : 0;
 }
 
 // ============================================================
@@ -105,7 +91,7 @@ int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
 // Returns true if param matches entity at +0x20.
 // ============================================================
 bool AnimateNaturalResource::GetTarget(void* param) {
-    return this->_field20 == *(void**)param;
+    return _field20.Get() == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 }
 
 // ============================================================
@@ -130,7 +116,7 @@ bool AnimateNaturalResource::GetTarget(void* param) {
 AnimateNaturalResource::AnimateNaturalResource()
     : _field20(nullptr),
       animIndex(0),
-      waitForAnim(0),
+      waitForAnim(false),
       _pad2D{} {}
 
 // [3] 0x1400c5660
@@ -158,12 +144,15 @@ void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4) {
     // ENDGAME B.3.8 ACT: the real ctor (AnimateNaturalResource.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) AnimateNaturalResource(param_2, param_3, param_4));
+    // B4 FORWARD: 1 outside caller (Work/work_base_actionctor.cpp) holds the entity as uint64_t*.
+    return static_cast<Object::Base*>(new (self) AnimateNaturalResource(
+        reinterpret_cast<ComponentEntity* const*>(param_2), param_3, param_4));
 }
 
 // 0x1400c57d0: +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
-AnimateNaturalResource::AnimateNaturalResource(uint64_t* entity, uint32_t animIndexArg, uint8_t wait)
-    : _field20(reinterpret_cast<void*>(*entity)),
+AnimateNaturalResource::AnimateNaturalResource(ComponentEntity* const* entity,
+                                               uint32_t animIndexArg, bool wait)
+    : _field20(*entity),
       animIndex(static_cast<int32_t>(animIndexArg)),
       waitForAnim(wait) {}
 
