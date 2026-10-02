@@ -30,6 +30,11 @@
 // pressing is ours.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/ProfessionList.h"          // B4: m_professionList
+#include "Entity/CitizenBehavior.h"
+#include "Component/CitizenComponent.h"
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -61,15 +66,15 @@ void Init() {
 // Count citizens currently holding `key` as their profession — the same walk the
 // Professions panel's "N" column does (townMgr+0xa0 array / +0xa8 count, profession
 // at citizen+0x1f0).
-int CountProfession(uint8_t* townMgr, uint64_t key) {
-    void** arr = *reinterpret_cast<void***>(townMgr + 0xa0);
-    int    n   = *reinterpret_cast<int*>(townMgr + 0xa8);
+int CountProfession(CitizenBehavior* townMgr, const Profession* key) {
+    CitizenComponent** arr = townMgr->citizens;   // +0xa0
+    int    n   = townMgr->citizenCount;           // +0xa8
     if (!arr || n <= 0) return 0;
     int hits = 0;
     for (int i = 0; i < n; ++i) {
-        void* c = arr[i];
+        CitizenComponent* c = arr[i];
         if (!c) continue;
-        if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x1f0) == key) ++hits;
+        if (c->profession == key) ++hits;         // +0x1f0
     }
     return hits;
 }
@@ -81,33 +86,36 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
     if (s_want <= 0 || s_fired) return;
     if (frameNum < s_settle) return;
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    uint8_t* townMgr = *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(gw) + 0xf0);
-    uint8_t* profMgr = *reinterpret_cast<uint8_t**>(static_cast<uint8_t*>(gw) + 0xb0);
+    CitizenBehavior* townMgr = gw->m_citizenList;     // +0xf0
+    ProfessionList*  profMgr = gw->m_professionList;  // +0xb0
     if (!townMgr || !profMgr) return;
 
     s_fired = true;
-    const uint64_t builderKey = *reinterpret_cast<uint64_t*>(profMgr + 0x38);
-    const int before = CountProfession(townMgr, builderKey);
+    Profession* const builder = profMgr->field_0x38;  // +0x38
+    // LEFT: CitizenList_AddWorker_91130 (CIT) takes the town manager as int64 and the
+    // profession as a uint64 key; the key is also what the log prints.
+    const uint64_t builderKey = reinterpret_cast<uintptr_t>(builder);
+    const int before = CountProfession(townMgr, builder);
 
     for (int i = 0; i < s_want; ++i)
         CitizenList_AddWorker_91130(reinterpret_cast<int64_t>(townMgr), builderKey);
 
-    const int after = CountProfession(townMgr, builderKey);
+    const int after = CountProfession(townMgr, builder);
 
     // Correlation for the ValidateTask crash (BANISHED_WORKVALIDATE_TRACE): list the
     // citizens now holding the builder key, so a later [WorkValidate] BAD VTABLE obj=
     // can be matched against the set this harness actually converted.
     if (const char* t = Opt().workValidateTrace) if (t[0] && t[0] != '0') {
-        void** carr = *reinterpret_cast<void***>(townMgr + 0xa0);
-        int    cn   = *reinterpret_cast<int*>(townMgr + 0xa8);
+        CitizenComponent** carr = townMgr->citizens;   // +0xa0
+        int    cn   = townMgr->citizenCount;            // +0xa8
         std::fprintf(stderr, "[BuilderSeat] converted citizens (roster %d):", cn);
         for (int i = 0; i < cn; ++i) {
-            void* c = carr[i];
+            CitizenComponent* c = carr[i];
             if (!c) continue;
-            if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x1f0) == builderKey)
-                std::fprintf(stderr, " %p", c);
+            if (c->profession == builder)               // +0x1f0
+                std::fprintf(stderr, " %p", (void*)c);
         }
         std::fprintf(stderr, "\n");
         std::fflush(stderr);

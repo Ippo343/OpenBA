@@ -40,6 +40,8 @@
 
 #include "object/Internal.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
 #include "options.h"
@@ -87,9 +89,9 @@ void PanelHoldClick(int frameNum) {
     // and ask each DialogInstance for a controller of that type (GetController's third
     // argument is the controller TYPE id). The held panel is the only open dialog that
     // carries one.
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     UI::UserInterface* uiSingleton =
-        gw ? *reinterpret_cast<UI::UserInterface**>(static_cast<uint8_t*>(gw) + 0x98) : nullptr;
+        gw ? gw->m_userInterface : nullptr;   // +0x98
     if (!uiSingleton) return;
     void* ctrl = nullptr;
     int dialogs = 0;
@@ -97,29 +99,28 @@ void PanelHoldClick(int frameNum) {
     // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150 = `*retval =
     // this->_dialogs._head`); the iterator is the bare node pointer.
     for (auto it = uiSingleton->_dialogs.GetFirst(); it && !ctrl; ++it) {
-        void* dlgInst = it.node->element;
+        // LEFT: the UI's dialog-list element is void* (ui/UserInterface.h
+        // DialogInstancePtr, R-UI): the one cast that names the dialog.
+        UI::DialogInstance* dlgInst = reinterpret_cast<UI::DialogInstance*>(it.node->element);
         if (!dlgInst) continue;
         ++dialogs;
         if (!s_listed) {
             // One-shot: what controllers does each open dialog carry? (DialogInstance
             // +0x78 = controller IBP array, +0x80 = count — UI::DialogInstance::
             // GetController 0x180113320 reads exactly these.)
-            const uintptr_t d = reinterpret_cast<uintptr_t>(dlgInst);
-            const int nc = *reinterpret_cast<int32_t*>(d + 0x80);
-            const uintptr_t arr = *reinterpret_cast<uintptr_t*>(d + 0x78);
-            std::fprintf(stderr, "[PanelHold] dialog #%d inst=%p controllers=%d:", dialogs, dlgInst, nc);
+            const int nc = dlgInst->_controllers._size;                   // +0x80
+            UI::DialogController** arr = dlgInst->_controllers._data;      // +0x78
+            std::fprintf(stderr, "[PanelHold] dialog #%d inst=%p controllers=%d:", dialogs, (void*)dlgInst, nc);
             for (int i = 0; i < nc && i < 32 && arr; ++i) {
-                void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                uint32_t t = c ? reinterpret_cast<Object::Base*>(c)->Type() : 0;   // B.3.8 bridge
+                UI::DialogController* c = arr[i];
+                uint32_t t = c ? c->Type() : 0;
                 std::fprintf(stderr, " %08x", t);
             }
             std::fprintf(stderr, "\n");
             std::fflush(stderr);
         }
-        uint64_t ctrlIBP = 0;
-        ::new (&ctrlIBP) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dlgInst)->GetController(tid));  // B.3.6 bridge
-        ctrl = reinterpret_cast<void*>(ctrlIBP);
+        const Object::InternalPtr<UI::DialogController> ctrlIBP = dlgInst->GetController(tid);
+        ctrl = ctrlIBP.Get();
     }
     s_listed = true;
     // NOTE: a controller that lives on an inserted page (the town hall's nomad tab,
@@ -146,17 +147,15 @@ namespace {
 
 uint32_t Tid(const char* n) { return ::Object::GetTypeIdByName(n); }
 
-void* FindComp(void* ent, uint32_t tid) {
+Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const uintptr_t e = reinterpret_cast<uintptr_t>(ent);
-    const int n = *reinterpret_cast<int32_t*>(e + 0x38);
-    const uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    const int n = ent->_componentCount;                           // +0x38
+    Object::InternalPtr<Component>* arr = ent->_components;       // +0x30
     if (!arr || n <= 0 || n > 4096) return nullptr;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* c = *slot;
+        Component* c = arr[i].Get();
         if (!c) continue;
-        const uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
+        const uint32_t t = c->Type();
         if (t == tid) return Object::IsDerivedFromNullSafe(c, tid) ? c : nullptr;
     }
     return nullptr;
@@ -179,12 +178,12 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
     if (s_done) PanelHoldClick(frameNum);
     if (s_at < 0 || s_done || !entityUI || frameNum < s_at) return;
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    const uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* el = gw->m_entityList;   // +0xe8
     if (!el) return;
-    const uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
-    const int n = *reinterpret_cast<int32_t*>(el + 0x10);
+    ComponentEntity** arr = el->masterArray.data;   // +0x08
+    const int n = el->masterArray.count;   // +0x10
     const uint32_t tid = Tid(s_want);
     if (!arr || n <= 0 || !tid) {
         s_done = true;
@@ -194,8 +193,7 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
     }
 
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent || !FindComp(ent, tid)) continue;
 
         void* tool = EditTool_HarnessAcquire(entityUI);
@@ -209,7 +207,7 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
         // panel stays up.
         std::fprintf(stderr, "[PanelHold] frame %d: opened %s panel ent=%p dialog=%p "
                              "(HELD OPEN — capture the window now)\n",
-                     frameNum, s_want, ent, dialog);
+                     frameNum, s_want, (void*)ent, dialog);
         std::fflush(stderr);
         return;
     }
