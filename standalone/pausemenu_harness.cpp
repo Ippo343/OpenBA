@@ -92,21 +92,19 @@ void Init() {
 // Where `dlg` sits in UserInterface's dialog array (data +0x28, count +0x30) --
 // the array ToolbarUtility_HarnessDriveController walks. Diagnostic only; the
 // harness addresses the dialog by the pointer the opener returned.
-int DialogListIndex(void* ui, void* dlg, int* outCount) {
+int DialogListIndex(UI::UserInterface* ui, void* dlg, int* outCount) {
     *outCount = 0;
     if (!ui) return -1;
-    uintptr_t uiAddr = reinterpret_cast<uintptr_t>(ui);
-    uintptr_t* data  = *reinterpret_cast<uintptr_t**>(uiAddr + 0x28);
-    int count        = *reinterpret_cast<int*>(uiAddr + 0x30);
+    UI::DialogInstancePtr* data = ui->_addDialogs.GetData();   // +0x28
+    int count                   = ui->_addDialogs.GetSize();   // +0x30
     *outCount = count;
     for (int i = 0; data && i < count && i < 64; ++i) {
-        uintptr_t ip = data[i];
-        if (reinterpret_cast<void*>(ip) == dlg) return i;
+        if (data[i] == dlg) return i;
     }
     return -1;
 }
 
-int Paused(void* ui) { return (int)reinterpret_cast<UI::UserInterface*>(ui)->PausesGame(); }  // B.3.6 bridge
+int Paused(UI::UserInterface* ui) { return (int)ui->PausesGame(); }
 
 }  // namespace
 
@@ -114,9 +112,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
     Init();
     if (s_openFrame <= 0) return;
 
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
-    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
+    UI::UserInterface* ui = gameWorld->m_userInterface;              // +0x98
 
     // Rearm for each new game. A quit-to-menu followed by another New Game builds a
     // fresh GameUpdateLoop, and BANISHED_AUTOSTART_GAMES=n drives n of them, so the
@@ -143,6 +141,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                     // 4-argument call; the by-name call passes 0 / nullptr. The
                     // four trailing arguments are the harness's choice: retail
                     // has no such caller.
+                    // LEFT (this and the two calls below): the dialogs arrive as void*
+                    // from ModDialog_LastOpened / ModDetailsDialog_LastOpened /
+                    // EntityUI_OpenPauseMenu (DLG's files).
                     static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
                         nullptr, 0x12, id, 0, 0, 0, nullptr);
                 }
@@ -178,7 +179,7 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
         s_vtable      = nullptr;
         s_clickedAt   = 0;
         std::fprintf(stderr, "[PauseMenu] new world %p at frame %d - rearmed\n",
-                     gameWorld, frameNum);
+                     static_cast<void*>(gameWorld), frameNum);
     }
 
     if (s_clicked) {
@@ -203,9 +204,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
         // Retail passes gameWorld+0x120 (the EntityUI). GameUpdateLoop hands us the
         // same pointer as m_toolManager; fall back to the world field if it is null.
         void* eui = entityUI ? entityUI
-                             : *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
+                             : static_cast<void*>(gameWorld->m_toolManager);   // +0x120
         std::fprintf(stderr, "[PauseMenu] frame %d - opening (entityUI=%p ui=%p pausesGame=%d)\n",
-                     frameNum, eui, ui, Paused(ui));
+                     frameNum, eui, static_cast<void*>(ui), Paused(ui));
         s_dialog   = EntityUI_OpenPauseMenu(eui);
         s_opened   = true;
         s_openedAt = frameNum;
@@ -215,6 +216,8 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
             s_clicked = true;
             return;
         }
+        // LEFT (three reads): the dialog's vtable word, compared later to tell a live
+        // dialog from a destroyed one; it has no name.
         s_vtable = *reinterpret_cast<void**>(s_dialog);
         int cnt = 0;
         int idx = DialogListIndex(ui, s_dialog, &cnt);

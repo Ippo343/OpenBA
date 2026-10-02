@@ -15,8 +15,10 @@
 #pragma once
 #include <cstdint>
 
+namespace Graphics { class Scene; class Renderer; }   // runtime/types/graphics
+
 void SceneWatch_Note(uint32_t sceneId, void* geometry, const char* who);
-void SceneWatch_Check(void* scene);
+void SceneWatch_Check(Graphics::Scene* scene);
 
 // BANISHED_SCENE_CENSUS=1 — per-frame membership + position churn of the scene.
 //
@@ -36,7 +38,7 @@ void SceneWatch_Check(void* scene);
 // Citizens and animals move legitimately every frame, so a raw "moved" count is
 // meaningless on its own — what matters is `jumped` (a discontinuous hop no walker
 // makes in one frame) and the membership deltas.
-void SceneWatch_Census(void* scene);
+void SceneWatch_Census(Graphics::Scene* scene);
 
 // BANISHED_LOD_CENSUS=1 — replicate the retail per-frame LOD pick and report it.
 //
@@ -63,7 +65,7 @@ void SceneWatch_Census(void* scene);
 // variantIdx is the shader-variant index the main pass will use (renderer+0x3c):
 // Graphics::Renderer::AddDrawItem drops, with no diagnostic, any item whose material
 // has no variant there, which is a model that is simply never drawn.
-void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx);
+void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int variantIdx);
 
 // BANISHED_LOD_CENSUS also enables this: what the frame ACTUALLY drew.
 //
@@ -76,7 +78,7 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx);
 // so reading them immediately AFTER Draw returns gives that frame's totals.
 //
 // Call it right after Graphics::Renderer::Draw.
-void SceneWatch_DrawItemCensus(void* renderer);
+void SceneWatch_DrawItemCensus(Graphics::Renderer* renderer);
 
 // BANISHED_FORCE_LOD0=1 — pin every GraphicsMesh to detail level 0 (implies the
 // census above). Clamps GraphicsMesh+0x58 to 1, which is the count

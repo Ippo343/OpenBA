@@ -61,6 +61,10 @@
 #include "Component/StateMachineComponent.h"
 #include "Component/StorageComponent.h"
 #include "Component/WorkPlaceComponent.h"
+#include "Component/NaturalResourceComponent.h"   // B4: OrchardSlot::resource
+#include "Component/FruitComponent.h"             // B4: OrchardSlot::fruit
+#include "Entity/ComponentEntity.h"               // B4: the component array by name
+#include "Entity/EntityList.h"                    // B4: GameUpdateLoop::m_entityList
 
 namespace {
 
@@ -119,7 +123,7 @@ uint64_t s_harvestExecuted    = 0; // Slot4 successfully created a harvest actio
 // storage in town gives a number that only moves when goods are actually deposited.
 //
 // This is a HARNESS probe, not a port: it reads published fields and writes nothing.
-void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
+void DumpTownStorage(int frameNum, ComponentEntity** arr, int n) {
     const uint32_t tidStorage = StorageComponent::TypeId();
     if (!tidStorage || !arr || n <= 0) {
         fprintf(stderr, "[OrchardDiag] frame=%d: town storage — cannot scan "
@@ -128,33 +132,31 @@ void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
     }
 
     // Aggregate by resType so the fruit shows up as its own line rather than lost in a total.
-    struct Stack { uintptr_t resType; long long count; };
+    struct Stack { const ComponentDescription* resType; long long count; };
     Stack byType[24] = {};
     int    types = 0;
     long long grandTotal = 0;
     int    storages = 0, nonEmpty = 0;
 
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        const int cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() != tidStorage) continue;   // B.3.8 bridge
+            if (comp->Type() != tidStorage) continue;
             ++storages;
 
-            uintptr_t st = reinterpret_cast<uintptr_t>(comp);
-            const int stacks = *reinterpret_cast<int32_t*>(st + 0x30);
-            uintptr_t inv = *reinterpret_cast<uintptr_t*>(st + 0x28);
+            StorageComponent* st = static_cast<StorageComponent*>(comp);   // exact type id
+            const int stacks = st->slotCount;                    // +0x30
+            const StorageComponent::Item* inv = st->storageSlots;   // +0x28 (stride 0x10)
             if (stacks > 0) ++nonEmpty;
             for (int k = 0; inv && k < stacks; ++k) {
-                uintptr_t e = inv + static_cast<uintptr_t>(k) * 0x10;
-                uintptr_t rt = *reinterpret_cast<uintptr_t*>(e);
-                const int ct = *reinterpret_cast<int32_t*>(e + 8);
+                const StorageComponent::Item& e = inv[k];
+                const ComponentDescription* rt = e._resource;    // +0x00
+                const int ct = e._count;                         // +0x08
                 grandTotal += ct;
                 int f = -1;
                 for (int t = 0; t < types; ++t) if (byType[t].resType == rt) { f = t; break; }
@@ -169,57 +171,55 @@ void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
             frameNum, storages, nonEmpty, types, grandTotal);
     for (int t = 0; t < types; ++t)
         fprintf(stderr, "[OrchardDiag]   resType=%p count=%lld\n",
-                reinterpret_cast<void*>(byType[t].resType), byType[t].count);
+                static_cast<const void*>(byType[t].resType), byType[t].count);
 }
 
 void DumpOrchards(int frameNum) {
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardDiag] frame=%d: gameWorld singleton null — cannot scan\n", frameNum);
         return;
     }
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* entityList = gw->m_entityList;                  // +0xe8
     if (!entityList) {
         fprintf(stderr, "[OrchardDiag] frame=%d: EntityList (gw+0xe8) null — cannot scan\n", frameNum);
         return;
     }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
+    ComponentEntity** arr = entityList->masterArray.data;       // +0x08
+    int       n   = entityList->masterArray.count;              // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     const uint32_t tidWorkPlaceComp = WorkPlaceComponent::TypeId();
     const uint32_t tidStateMachineComp = StateMachineComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardDiag] frame=%d: cannot scan (arr=%p n=%d tidOrchardComponent=%u) — "
-                        "no entities or type-id unresolved\n", frameNum, reinterpret_cast<void*>(arr), n,
+                        "no entities or type-id unresolved\n", frameNum, static_cast<void*>(arr), n,
                         tidOrchardComp);
         return;
     }
 
     int found = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
-        void* orchComp = nullptr;
+        int       cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        OrchardComponent* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
-                orchComp = comp;
+            if (comp->Type() == tidOrchardComp) {
+                orchComp = static_cast<OrchardComponent*>(comp);   // exact type id
                 break;
             }
         }
         if (!orchComp) continue;
         ++found;
 
-        uintptr_t comp = reinterpret_cast<uintptr_t>(orchComp);
-        uintptr_t treeType = *reinterpret_cast<uintptr_t*>(comp + 0x60);
-        uintptr_t slots     = *reinterpret_cast<uintptr_t*>(comp + 0x50);
-        int32_t   slotCount = *reinterpret_cast<int32_t*>(comp + 0x58);
+        OrchardComponent* comp = orchComp;
+        ComponentDescription* treeType = comp->treeType;       // +0x60
+        OrchardSlot* slots  = comp->slots;                     // +0x50
+        int32_t   slotCount = comp->slotCount;                 // +0x58
 
         // Histogram over the slot array (stride 0x28): state int at +0x04, plus
         // counts of non-null entity (+0x08) / non-null growth object (+0x18).
@@ -230,12 +230,12 @@ void DumpOrchards(int frameNum) {
         int nonNullEntity = 0, nonNullGrowth = 0;
         if (slots && slotCount > 0) {
             for (int s = 0; s < slotCount; ++s) {
-                uintptr_t slot = slots + static_cast<uintptr_t>(s) * 0x28;
-                int32_t state = *reinterpret_cast<int32_t*>(slot + 0x04);
+                const OrchardSlot& slot = slots[s];              // stride 0x28
+                int32_t state = slot.state;                      // +0x04
                 if (state >= -1 && state < kStateBuckets - 1) stateHist[state + 1]++;
                 else ++otherStates;
-                if (*reinterpret_cast<void**>(slot + 0x08) != nullptr) ++nonNullEntity;
-                if (*reinterpret_cast<void**>(slot + 0x18) != nullptr) ++nonNullGrowth;
+                if (slot.tree != nullptr) ++nonNullEntity;       // +0x08
+                if (slot.fruit != nullptr) ++nonNullGrowth;      // +0x18
             }
         }
 
@@ -244,27 +244,29 @@ void DumpOrchards(int frameNum) {
         // Sibling WorkPlaceComponent on the same entity, via the owner-entity scan
         // (owner = comp+0x10, CheckPtr'd per the project's raw-owner-pointer convention —
         // see e.g. code/Game/Work/cleararea.cpp:635, harvestorchard.cpp:713).
-        void* owner = *reinterpret_cast<void**>(comp + 0x10);
-        void* wpc = nullptr;
-        void* smc = nullptr;
+        ComponentEntity* owner = comp->_entity;                // +0x10
+        WorkPlaceComponent* wpc = nullptr;
+        StateMachineComponent* smc = nullptr;
         if (owner && (tidWorkPlaceComp || tidStateMachineComp)) {
-            int wN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(owner) + 0x38);
-            uintptr_t wA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(owner) + 0x30);
+            int wN = owner->_componentCount;                       // +0x38
+            Object::InternalPtr<Component>* wA = owner->_components;   // +0x30
             for (int c = 0; c < wN && wA; ++c) {
-                void** cs = reinterpret_cast<void**>(wA + static_cast<uintptr_t>(c) * 8);
-                void* wc = *cs;
+                Component* wc = wA[c].Get();
                 if (!wc) continue;
-                uint32_t wtid = reinterpret_cast<Object::Base*>(wc)->Type();   // B.3.8 bridge
-                if (!wpc && tidWorkPlaceComp && wtid == tidWorkPlaceComp) wpc = wc;
-                if (!smc && tidStateMachineComp && wtid == tidStateMachineComp) smc = wc;
+                uint32_t wtid = wc->Type();
+                // Both by exact type id.
+                if (!wpc && tidWorkPlaceComp && wtid == tidWorkPlaceComp)
+                    wpc = static_cast<WorkPlaceComponent*>(wc);
+                if (!smc && tidStateMachineComp && wtid == tidStateMachineComp)
+                    smc = static_cast<StateMachineComponent*>(wc);
                 if (wpc && smc) break;
             }
         }
 
         fprintf(stderr, "[OrchardDiag] frame=%d entity=%p comp=%p treeType(+0x60)=%s "
                         "slots(+0x50)=%p count(+0x58)=%d avgGrowth=%.6f\n",
-                frameNum, ent, orchComp,
-                treeType ? "SET" : "UNTYPED", reinterpret_cast<void*>(slots), slotCount, avgGrowth);
+                frameNum, static_cast<void*>(ent), static_cast<void*>(orchComp),
+                treeType ? "SET" : "UNTYPED", static_cast<void*>(slots), slotCount, avgGrowth);
         fprintf(stderr, "[OrchardDiag]   slot histogram (state:count) = "
                         "[-1:%d 0:%d 1:%d 2:%d 3:%d 4:%d 5:%d 6:%d other:%d]  "
                         "nonNullEntity=%d nonNullGrowth=%d\n",
@@ -281,22 +283,22 @@ void DumpOrchards(int frameNum) {
             float mMin = 1e30f, mMax = -1e30f;
             int active = 0, sampled = 0, matured = 0;
             for (int s = 0; s < slotCount; ++s) {
-                uintptr_t slot = slots + static_cast<uintptr_t>(s) * 0x28;
+                const OrchardSlot& slot = slots[s];              // stride 0x28
                 // The TREE's own maturity lives on the NaturalResourceComponent bound at
                 // slot+0x10, field +0x28. FruitComponent::Update gates ALL ripening on
                 // `growthRate >= 1.0f`, so a sapling correctly bears nothing and a fruit
                 // ratio of 0 says nothing about whether anything is wrong — this is the
                 // number that decides it.
-                if (void* nr = *reinterpret_cast<void**>(slot + 0x10)) {
-                    float mat = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(nr) + 0x28);
+                if (NaturalResourceComponent* nr = slot.resource) {     // +0x10
+                    float mat = nr->resourceScale;                       // +0x28
                     if (mat < mMin) mMin = mat;
                     if (mat > mMax) mMax = mat;
                     if (mat >= 1.0f) ++matured;
                 }
-                void* g = *reinterpret_cast<void**>(slot + 0x18);
+                FruitComponent* g = slot.fruit;                          // +0x18
                 if (!g) continue;
-                float ratio = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(g) + 0x30);
-                if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(g) + 0x34)) ++active;
+                float ratio = g->ripeness;                               // +0x30
+                if (g->fruitFlag) ++active;                              // +0x34
                 if (ratio < gMin) gMin = ratio;
                 if (ratio > gMax) gMax = ratio;
                 ++sampled;
@@ -312,14 +314,14 @@ void DumpOrchards(int frameNum) {
         }
 
         if (wpc) {
-            int32_t roster = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x60);
+            int32_t roster = wpc->workerCount;                       // +0x60
             fprintf(stderr, "[OrchardDiag]   WorkPlaceComponent=%p roster(+0x60)=%d  "
                             "(max-worker cap not read here — see file header comment; it's a "
                             "Work-side lazy cache on matDesc+0x30, not a WPC field)\n",
-                    wpc, roster);
+                    static_cast<void*>(wpc), roster);
         } else {
             fprintf(stderr, "[OrchardDiag]   no WorkPlaceComponent found on owner entity %p "
-                            "(tidWorkPlaceComponent=%u)\n", owner, tidWorkPlaceComp);
+                            "(tidWorkPlaceComponent=%u)\n", static_cast<void*>(owner), tidWorkPlaceComp);
         }
 
         // OrchardComponent's own embedded state node (comp+0x28, written by
@@ -327,8 +329,9 @@ void DumpOrchards(int frameNum) {
         // its owner back-pointer (comp+0x40, node+0x18 relative to comp+0x28). Printed
         // raw regardless of whether a StateMachineComponent exists, so InstallLive's
         // writes are visible even on an entity that can never tick them.
-        void* nodeVtbl  = *reinterpret_cast<void**>(comp + 0x28);
-        void* nodeOwner = *reinterpret_cast<void**>(comp + 0x40);
+        // LEFT: the node's vtable word has no name (the compiler's vptr); it is printed raw.
+        void* nodeVtbl  = *reinterpret_cast<void**>(&comp->_controller);   // +0x28
+        void* nodeOwner = comp->_controller._owner;                    // +0x40 (node+0x18)
         fprintf(stderr, "[OrchardDiag]   node(+0x28).vtable=%p  node(+0x28+0x18)/backptr(+0x40)=%p\n",
                 nodeVtbl, nodeOwner);
 
@@ -341,30 +344,31 @@ void DumpOrchards(int frameNum) {
                             "would be elsewhere (template/component list), not in OrchardComponent\n",
                     tidStateMachineComp);
         } else {
-            uintptr_t sm = reinterpret_cast<uintptr_t>(smc);
-            uint8_t currentInput  = *reinterpret_cast<uint8_t*>(sm + 0x50);
-            uint8_t activeState   = *reinterpret_cast<uint8_t*>(sm + 0x51);
-            uint8_t pendingState  = *reinterpret_cast<uint8_t*>(sm + 0x52);
-            uint8_t transitionSt  = *reinterpret_cast<uint8_t*>(sm + 0x53);
+            // The four state bytes are int8_t in the header; the harness prints them
+            // as unsigned bytes (%u of a uint8_t), kept.
+            uint8_t currentInput  = static_cast<uint8_t>(smc->stateMachine.currentInput);     // +0x50
+            uint8_t activeState   = static_cast<uint8_t>(smc->stateMachine.activeState);      // +0x51
+            uint8_t pendingState  = static_cast<uint8_t>(smc->stateMachine.pendingState);     // +0x52
+            uint8_t transitionSt  = static_cast<uint8_t>(smc->stateMachine.transitionState);  // +0x53
 
             // Walk the chain from the SM root's first child (sm+0x38) via each node's
             // +0x10 (child/next) pointer — a flat singly-linked list, not a tree (see
             // file header comment). Bounded to guard against a corrupt/cyclic chain.
-            void* target = reinterpret_cast<void*>(comp + 0x28);
-            void* walk = *reinterpret_cast<void**>(sm + 0x38);
+            const ControllerComponent::Controller* target = &comp->_controller;   // comp+0x28
+            const ControllerComponent::Controller* walk = smc->_controller._data10;   // sm+0x38
             bool linked = false;
             int chainLen = 0;
             constexpr int kMaxWalk = 256;
             while (walk && chainLen < kMaxWalk) {
                 ++chainLen;
                 if (walk == target) { linked = true; break; }
-                walk = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(walk) + 0x10);
+                walk = walk->_data10;                                  // node+0x10
             }
 
             fprintf(stderr, "[OrchardDiag]   hasStateMachine=YES smc=%p  stateFlags: "
                             "currentInput(+0x50)=%u activeState(+0x51)=%u pendingState(+0x52)=%u "
                             "transitionState(+0x53)=%u  linked=%s (chainLen scanned=%d%s)\n",
-                    smc, currentInput, activeState, pendingState, transitionSt,
+                    static_cast<void*>(smc), currentInput, activeState, pendingState, transitionSt,
                     linked ? "YES" : "NO", chainLen,
                     chainLen >= kMaxWalk ? ", TRUNCATED — possible cycle" : "");
         }

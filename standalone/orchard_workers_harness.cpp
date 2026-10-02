@@ -40,7 +40,12 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/OrchardComponent.h"
-#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
+#include "Component/exe_bodies.h"   // CitizenEmploy_SeatWorkers
+#include "Component/WorkPlaceComponent.h"     // B4: isAccepting / workerCount
+#include "Component/WorkPlaceDescription.h"   // B4: _profession0
+#include "Entity/CitizenBehavior.h"           // B4: GameUpdateLoop::m_citizenList
+#include "Entity/ComponentEntity.h"           // B4: components by name, FindComponent<T>
+#include "Entity/EntityList.h"                // B4: GameUpdateLoop::m_entityList
 
 // The seat cascade (code/Game/Component/citizen_employ.cpp) — the headless equivalent of
 // the per-worker inner loop of CitizenComponent_impl_dd10.
@@ -83,26 +88,25 @@ bool AlreadySeated(void* comp) {
 }
 
 void Fire(int frameNum) {
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardWorkers] frame=%d: gameWorld singleton null — cannot run\n", frameNum);
         return;
     }
-    uintptr_t gwB = reinterpret_cast<uintptr_t>(gw);
-    uintptr_t townMgr    = *reinterpret_cast<uintptr_t*>(gwB + 0xf0);
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(gwB + 0xe8);
+    CitizenBehavior* townMgr = gw->m_citizenList;               // +0xf0
+    EntityList* entityList   = gw->m_entityList;                // +0xe8
     if (!townMgr || !entityList) {
         fprintf(stderr, "[OrchardWorkers] frame=%d: townMgr(gw+0xf0)=%p entityList(gw+0xe8)=%p — "
-                        "cannot run\n", frameNum, reinterpret_cast<void*>(townMgr),
-                reinterpret_cast<void*>(entityList));
+                        "cannot run\n", frameNum, static_cast<void*>(townMgr),
+                static_cast<void*>(entityList));
         return;
     }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
+    ComponentEntity** arr = entityList->masterArray.data;       // +0x08
+    int       n   = entityList->masterArray.count;              // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardWorkers] frame=%d: cannot scan (arr=%p n=%d "
-                        "tidOrchardComponent=%u)\n", frameNum, reinterpret_cast<void*>(arr), n,
+                        "tidOrchardComponent=%u)\n", frameNum, static_cast<void*>(arr), n,
                 tidOrchardComp);
         return;
     }
@@ -114,18 +118,16 @@ void Fire(int frameNum) {
 
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
-        void* orchComp = nullptr;
+        int       cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        Component* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
+            if (comp->Type() == tidOrchardComp) {
                 orchComp = comp;
                 break;
             }
@@ -135,33 +137,36 @@ void Fire(int frameNum) {
         if (AlreadySeated(orchComp)) continue;
         ++considered;
 
-        uint64_t wpcIBP = 0;
-        AttendanceComponent_GetJobHostComponent(ent, &wpcIBP);   // 0x140002e10
+        // 0x140002e10 FindComponent_WorkPlace: ComponentEntity::FindComponent<WorkPlaceComponent>.
+        WorkPlaceComponent* wpcIBP = ent->FindComponent<WorkPlaceComponent>();
         if (!wpcIBP) {
             fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p has NO "
-                            "WorkPlaceComponent — cannot staff\n", frameNum, orchComp);
+                            "WorkPlaceComponent — cannot staff\n", frameNum, static_cast<void*>(orchComp));
             continue;
         }
-        const char accepting = *reinterpret_cast<char*>(wpcIBP + 0x50);
+        const char accepting = wpcIBP->isAccepting;                 // +0x50
         if (accepting == 0) {
             fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p workplace=%p is OFF "
                             "(+0x50=0) — not staffable yet (state 9 enter turns it on; is the "
-                            "orchard typed and started?)\n", frameNum, orchComp,
-                    reinterpret_cast<void*>(wpcIBP));
+                            "orchard typed and started?)\n", frameNum, static_cast<void*>(orchComp),
+                    static_cast<void*>(wpcIBP));
             continue;
         }
-        uint64_t desc    = *reinterpret_cast<uint64_t*>(wpcIBP + 0x18);
-        uint64_t profKey = desc ? *reinterpret_cast<uint64_t*>(desc + 0x20) : 0;
+        // The harness reads desc+0x20 whatever the description is: WorkPlaceDescription's layout.
+        const Description* descBase = wpcIBP->_description;       // +0x18
+        const WorkPlaceDescription* desc = static_cast<const WorkPlaceDescription*>(descBase);
+        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the town and the profession as integers.
+        uint64_t profKey = desc ? reinterpret_cast<uint64_t>(desc->_profession0) : 0;   // desc+0x20
         if (!profKey) {
             fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p workplace=%p has no "
-                            "profession key (desc=%p) — cannot staff\n", frameNum, orchComp,
-                    reinterpret_cast<void*>(wpcIBP), reinterpret_cast<void*>(desc));
+                            "profession key (desc=%p) — cannot staff\n", frameNum, static_cast<void*>(orchComp),
+                    static_cast<void*>(wpcIBP), static_cast<const void*>(desc));
             continue;
         }
 
-        const int32_t rosterBefore = *reinterpret_cast<int32_t*>(wpcIBP + 0x60);
-        int seated = CitizenEmploy_SeatWorkers(static_cast<int64_t>(townMgr), profKey, s_count);
-        const int32_t rosterAfter  = *reinterpret_cast<int32_t*>(wpcIBP + 0x60);
+        const int32_t rosterBefore = wpcIBP->workerCount;          // +0x60
+        int seated = CitizenEmploy_SeatWorkers(reinterpret_cast<int64_t>(townMgr), profKey, s_count);
+        const int32_t rosterAfter  = wpcIBP->workerCount;
 
         if (s_seatedCount < kMaxTracked) s_seated[s_seatedCount++] = orchComp;
 
@@ -170,7 +175,7 @@ void Fire(int frameNum) {
         // roster is the thing the rest of the chain actually reads.
         fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p workplace=%p profKey=0x%llx "
                         "cascade seated %d/%d — roster(+0x60) %d -> %d%s\n",
-                frameNum, orchComp, reinterpret_cast<void*>(wpcIBP),
+                frameNum, static_cast<void*>(orchComp), static_cast<void*>(wpcIBP),
                 static_cast<unsigned long long>(profKey), seated, s_count,
                 rosterBefore, rosterAfter,
                 rosterAfter > rosterBefore ? "" :

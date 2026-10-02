@@ -52,6 +52,9 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Dialog/WorkPlaceUI.h"
 #include "Dialog/exe_bodies.h"   // EntityUI_SetEditMode_Impl
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
+#include "ui/DialogInstance.h"        // B4: the open dialog's controller array
 
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
@@ -111,27 +114,28 @@ void Init() {
     }
 }
 
-void* FindComp(void* ent, uint32_t tid);
+Component* FindComp(ComponentEntity* ent, uint32_t tid);
 
 // The building's status-icon bitfield (StatusIconComponent+0xF0). Bit 4 (0x10) is the
 // "no workers" warning: raised by WorkPlaceComponent_SetAccepting on an unstaffed
 // workplace and cleared ONLY by WorkplaceComponent_Attach. Printed either side of the
 // click so a seat that fills the roster while leaving the icon up is legible as such
 // rather than being reported as a working seat. -1 = no StatusIconComponent.
-int IconMask(void* ent) {
-    void* si = FindComp(ent, StatusIconComponent::TypeId());
-    return si ? (int)*reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(si) + 0xF0) : -1;
+int IconMask(ComponentEntity* ent) {
+    // Found by exact type id.
+    StatusIconComponent* si =
+        static_cast<StatusIconComponent*>(FindComp(ent, StatusIconComponent::TypeId()));
+    return si ? (int)si->_geometry.activeMask : -1;              // +0xF0 (billboard +0xc8)
 }
 
-void* FindComp(void* ent, uint32_t tid) {
+Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
@@ -139,7 +143,7 @@ void* FindComp(void* ent, uint32_t tid) {
 // Open ent's info panel, click workerCountUp until the roster stops moving, close it.
 // Returns the number of seats actually gained (0 = the click had no effect, which is a
 // real answer: no idle laborer, or no WorkPlaceUI on this building's panel).
-int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
+int SeatViaPanel(void* entityUI, ComponentEntity* ent, WorkPlaceComponent* wpc, int want) {
     // Not just "is a tool active" — is it an EDIT tool. A build tool left armed by a
     // placement harness sits in the same slot, and its +0x28/+0x30 are drag state, not
     // dialog/entity refs (the FencedTool crash, 2026-08-19). Acquire switches edit mode
@@ -148,19 +152,21 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
     if (!tool) return 0;
 
     EditTool_HarnessSelectEntity(tool, ent);
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
+    // (+0x28, the open dialog) is a uint64_t in PLAYER's header.
+    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
     if (!dialog) return 0;
 
     int gained = 0;
-    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-    const int cnt  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
+    UI::DialogController** ctrlArr = dialog->_controllers.GetData();   // +0x78
+    const int cnt  = dialog->_controllers.GetSize();                   // +0x80
     const uint32_t tidWpUi = WorkPlaceUI::TypeId();
     WorkPlaceUI* wpUi = nullptr;
     for (int i = 0; ctrlArr && i < cnt && !wpUi; ++i) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tidWpUi)   // B.3.8 bridge
-            wpUi = reinterpret_cast<WorkPlaceUI*>(c);                // B.3.8 bridge
+        if (c->Type() == tidWpUi)
+            wpUi = static_cast<WorkPlaceUI*>(c);   // exact type id
     }
     if (wpUi) {
         // slot 9: WorkPlaceUI's OnElementEvent override (real class, ENDGAME B.3.8).
@@ -172,24 +178,25 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
             // touches it, so removing those guards can only be called measured if this
             // runs. The seat loop below immediately refills the seat.
             static const int unseat = EnvOnValue(Opt().autoStaffUnseat) ? 1 : 0;
-            if (unseat && *reinterpret_cast<int32_t*>(wpc + 0x60) > 0) {
-                const int b = *reinterpret_cast<int32_t*>(wpc + 0x60);
+            if (unseat && wpc->workerCount > 0) {                    // +0x60
+                const int b = wpc->workerCount;
                 wpUi->OnElementEvent(nullptr, 0x12, 0x1451, 0, 0, 0, nullptr);
                 std::fprintf(stderr, "[AutoStaff] UNSEAT click: roster %d -> %d\n",
-                             b, *reinterpret_cast<int32_t*>(wpc + 0x60));
+                             b, wpc->workerCount);
                 std::fflush(stderr);
                 ++want;   // refill the seat we just freed
             }
             for (int i = 0; i < want; ++i) {
-                const int before = *reinterpret_cast<int32_t*>(wpc + 0x60);
+                const int before = wpc->workerCount;                  // +0x60
                 // msg 0x12 = button command, id 0x1450 = workerCountUp.
                 wpUi->OnElementEvent(nullptr, 0x12, 0x1450, 0, 0, 0, nullptr);
-                const int after = *reinterpret_cast<int32_t*>(wpc + 0x60);
+                const int after = wpc->workerCount;
                 if (after <= before) break;      // nobody left to seat — stop asking
                 gained += after - before;
             }
         }
     }
+    // LEFT: EditTool_CloseInfoDialog's dialog is a uintptr_t and `tool` is void* (PLAYER).
     EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool),
                              reinterpret_cast<uintptr_t>(dialog));
     return gained;
@@ -202,31 +209,32 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
     if (s_interval <= 0 || !entityUI) return;
     if (frameNum < kFirstFrame || ((frameNum - kFirstFrame) % s_interval) != 0) return;
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    const uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* const el = gw->m_entityList;                    // +0xe8
     if (!el) return;
-    const uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
-    const int n = *reinterpret_cast<int32_t*>(el + 0x10);
+    ComponentEntity** const arr = el->masterArray.data;         // +0x08
+    const int n = el->masterArray.count;                        // +0x10
     const uint32_t tidWpc = WorkPlaceComponent::TypeId();
     const uint32_t tidWc  = WorkComponent::TypeId();
     if (!tidWpc || !arr) return;
 
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        void* wpcP = FindComp(ent, tidWpc);
+        Component* wpcP = FindComp(ent, tidWpc);
         if (!wpcP) continue;
-        const uintptr_t wpc = reinterpret_cast<uintptr_t>(wpcP);
-        const uint64_t key    = *reinterpret_cast<uint64_t*>(wpc + 0x48);
-        const int      accept = *reinterpret_cast<uint8_t*>(wpc + 0x50);
-        const int      roster = *reinterpret_cast<int32_t*>(wpc + 0x60);
-        void* wcP = FindComp(ent, tidWc);
+        WorkPlaceComponent* const wpc = static_cast<WorkPlaceComponent*>(wpcP);   // exact type id
+        // The profession pointer is the key and is printed as one.
+        const uint64_t key    = reinterpret_cast<uint64_t>(wpc->profession);  // +0x48  // CAST-OK: ptr_int
+        const int      accept = wpc->isAccepting;                // +0x50
+        const int      roster = wpc->workerCount;                // +0x60
+        // Found by exact type id.
+        WorkComponent* wcP = static_cast<WorkComponent*>(FindComp(ent, tidWc));
         // Capacity is filled lazily by FindAvailableBuilding / the citizen finder, so a
         // 0 here means "not computed yet", not "no seats". Ask for one seat in that case
         // and let the next pass see the real number.
-        int cap = wcP ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(wcP) + 0x30) : 0;
+        int cap = wcP ? wcP->workState : 0;                      // +0x30
         if (cap <= 0) cap = 1;
         // With UNSEAT armed a FULL workplace is still worth visiting — the point of that
         // mode is to drive the down-click, and a building at capacity is exactly where a
@@ -235,17 +243,17 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
                            (roster < cap || (EnvOnValue(Opt().autoStaffUnseat) && roster > 0));
         if (s_trace)
             std::fprintf(stderr, "[AutoStaff]   ent=%p key=0x%llx accepting=%d roster=%d cap=%d %s\n",
-                         ent, (unsigned long long)key, accept, roster, cap,
+                         static_cast<void*>(ent), (unsigned long long)key, accept, roster, cap,
                          wants ? "-> clicking" : "(skip)");
         if (!wants) continue;
 
         const int iconBefore = IconMask(ent);
         const int gained = SeatViaPanel(entityUI, ent, wpc, cap - roster);
         const int iconAfter  = IconMask(ent);
-        const int rosterNow  = *reinterpret_cast<int32_t*>(wpc + 0x60);
+        const int rosterNow  = wpc->workerCount;                 // +0x60
         if (gained > 0 || s_trace)
             std::fprintf(stderr, "[AutoStaff] frame %d: ent=%p key=0x%llx roster %d -> %d "
-                         "(cap %d) icon 0x%x -> 0x%x%s%s\n", frameNum, ent,
+                         "(cap %d) icon 0x%x -> 0x%x%s%s\n", frameNum, static_cast<void*>(ent),
                          (unsigned long long)key, roster, rosterNow, cap,
                          iconBefore, iconAfter,
                          gained == 0 ? "  <-- click made no seat (no idle laborer, or this "

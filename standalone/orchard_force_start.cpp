@@ -33,6 +33,9 @@
 #include "Component/OrchardComponent.h"
 #include "Dialog/OrchardUI.h"
 #include "Player/EditTool.h"
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
+#include "ui/DialogInstance.h"        // B4: the open dialog's controller array
 #include "Dialog/exe_bodies.h"   // EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp): EntityUI_SetEditMode_Impl
 
 // EditTool select-by-entity harness hook (standalone/tool_harness.cpp) — opens the
@@ -71,7 +74,7 @@ void Init() {
 // is what actually writes comp+0x60 in retail. Deliberately does NOT synthesize a
 // pointer: if any step in this real path fails, comp+0x60 is left alone and the
 // failure is logged, not papered over.
-bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
+bool TryAssignRealTreeType(void* entityUI, ComponentEntity* orchEnt, OrchardComponent* orchComp) {
     if (!entityUI) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: entityUI null\n");
         return false;
@@ -85,9 +88,11 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
     }
 
     int opened = EditTool_HarnessSelectEntity(tool, orchEnt);
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
+    // (+0x28, the open dialog) is a uint64_t in PLAYER's header.
+    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
     fprintf(stderr, "[OrchardForceStart]     select orchard ent=%p -> opened=%d dialog=%p\n",
-            orchEnt, opened, dialog);
+            static_cast<void*>(orchEnt), opened, static_cast<void*>(dialog));
     if (!dialog) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: no info dialog opened "
                         "for this orchard\n");
@@ -95,13 +100,13 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
     }
 
     const uint32_t tidOUI = OrchardUI::TypeId();
-    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-    int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
-    void* oui = nullptr;
+    UI::DialogController** ctrlArr = dialog->_controllers.GetData();   // +0x78
+    int cnt = dialog->_controllers.GetSize();                          // +0x80
+    OrchardUI* oui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; i++) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tidOUI) { oui = c; break; }   // B.3.8 bridge
+        if (c->Type() == tidOUI) { oui = static_cast<OrchardUI*>(c); break; }   // exact type id
     }
     if (!oui) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: no OrchardUI controller "
@@ -109,12 +114,14 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
         return false;
     }
 
-    void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x30);
-    int items = combo ? reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount() : -1;  // B.3.6 bridge
-    fprintf(stderr, "[OrchardForceStart]     OrchardUI=%p combo(+0x30)=%p items=%d\n", oui, combo, items);
+    UI::ComboElement* combo = oui->selectResource;                     // +0x30
+    int items = combo ? combo->GetItemCount() : -1;
+    fprintf(stderr, "[OrchardForceStart]     OrchardUI=%p combo(+0x30)=%p items=%d\n",
+            static_cast<void*>(oui), static_cast<void*>(combo), items);
     if (!combo || items <= 0) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: combo unusable "
-                        "(combo=%p items=%d) — refusing to synthesize a pointer\n", combo, items);
+                        "(combo=%p items=%d) — refusing to synthesize a pointer\n",
+                static_cast<void*>(combo), items);
         return false;
     }
     // VARIETY, not just "a tree": walk the combo instead of taking item 0 for every
@@ -125,69 +132,69 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
     static int s_treeTurn = 0;
     const int wantItem = s_treeTurn % items;
     ++s_treeTurn;
-    reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
+    combo->SetCurrentItem(wantItem);
     // Slot 9, OrchardUI's OnElementEvent (real class, ENDGAME B.3.8): the real
     // combo-change event, msg 0x14 elem 500. The combo element pointer goes in the
     // element argument exactly as the raw dispatch passed it.
-    reinterpret_cast<OrchardUI*>(oui)->OnElementEvent(                        // B.3.8 bridge
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,  // B.3.8 bridge
+    // LEFT: that argument is an InternalPtr<Element>* and the harness hands it the
+    // element itself (the old raw dispatch's value); naming it would change the value.
+    oui->OnElementEvent(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,
         0, 0, 0, nullptr);
 
-    uintptr_t comp = reinterpret_cast<uintptr_t>(orchComp);
-    uintptr_t treeTypeAfter = *reinterpret_cast<uintptr_t*>(comp + 0x60);
+    ComponentDescription* treeTypeAfter = orchComp->treeType;          // +0x60
     fprintf(stderr, "[OrchardForceStart]     drove combo item=%d via OrchardUI::Slot9 -> "
-                    "comp+0x60=%p (%s)\n", wantItem, reinterpret_cast<void*>(treeTypeAfter),
+                    "comp+0x60=%p (%s)\n", wantItem, static_cast<void*>(treeTypeAfter),
             treeTypeAfter ? "SET from real template" : "STILL NULL");
-    return treeTypeAfter != 0;
+    return treeTypeAfter != nullptr;
 }
 
 void FireForceStart(void* entityUI, int frameNum) {
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: gameWorld singleton null — cannot run\n", frameNum);
         return;
     }
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* entityList = gw->m_entityList;                   // +0xe8
     if (!entityList) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: EntityList (gw+0xe8) null — cannot run\n", frameNum);
         return;
     }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
+    ComponentEntity** arr = entityList->masterArray.data;        // +0x08
+    int       n   = entityList->masterArray.count;               // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: cannot scan (arr=%p n=%d "
-                        "tidOrchardComponent=%u)\n", frameNum, reinterpret_cast<void*>(arr), n, tidOrchardComp);
+                        "tidOrchardComponent=%u)\n", frameNum, static_cast<void*>(arr), n, tidOrchardComp);
         return;
     }
 
     int found = 0, switched = 0, typed = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
-        void* orchComp = nullptr;
+        int       cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        OrchardComponent* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
-                orchComp = comp;
+            if (comp->Type() == tidOrchardComp) {
+                orchComp = static_cast<OrchardComponent*>(comp);   // exact type id
                 break;
             }
         }
         if (!orchComp) continue;
         ++found;
 
-        uintptr_t comp = reinterpret_cast<uintptr_t>(orchComp);
-        uint8_t   switchBefore = *reinterpret_cast<uint8_t*>(comp + 0x48);
-        uintptr_t typeBefore   = *reinterpret_cast<uintptr_t*>(comp + 0x60);
+        OrchardComponent* comp = orchComp;
+        uint8_t   switchBefore = comp->enabled;                  // +0x48
+        ComponentDescription* typeBefore = comp->treeType;       // +0x60
 
         fprintf(stderr, "[OrchardForceStart] entity=%p comp=%p BEFORE: switch(+0x48)=%u "
-                        "treeType(+0x60)=%s\n", ent, orchComp, switchBefore,
+                        "treeType(+0x60)=%s\n", static_cast<void*>(ent),
+                static_cast<void*>(orchComp), switchBefore,
                 typeBefore ? "SET" : "UNTYPED");
 
         // 1. Fill the tree type via the real combo-select path if it's still null.
@@ -201,7 +208,7 @@ void FireForceStart(void* entityUI, int frameNum) {
         // off — measured: BEFORE switch=1, then `Command(2) toggle -> enabled=0`, and the
         // orchard sat in state 2 planting nothing. So: let the real path run first, and
         // only force the switch if it is still off afterwards.
-        bool hasType = (typeBefore != 0);
+        bool hasType = (typeBefore != nullptr);
         if (!hasType) {
             hasType = TryAssignRealTreeType(entityUI, ent, orchComp);
         } else {
@@ -210,8 +217,8 @@ void FireForceStart(void* entityUI, int frameNum) {
         if (hasType) ++typed;
 
         // 2. Only now, and only if the real path did not already do it.
-        if (*reinterpret_cast<uint8_t*>(comp + 0x48) == 0) {
-            *reinterpret_cast<uint8_t*>(comp + 0x48) = 1;
+        if (comp->enabled == 0) {                                // +0x48
+            comp->enabled = 1;
             ++switched;
             fprintf(stderr, "[OrchardForceStart]     switch still off after the type-select "
                             "path — forcing +0x48 = 1\n");
@@ -220,10 +227,11 @@ void FireForceStart(void* entityUI, int frameNum) {
                             "Command(2) path — no force needed\n");
         }
 
-        uint8_t   switchAfter = *reinterpret_cast<uint8_t*>(comp + 0x48);
-        uintptr_t typeAfter   = *reinterpret_cast<uintptr_t*>(comp + 0x60);
+        uint8_t   switchAfter = comp->enabled;                   // +0x48
+        ComponentDescription* typeAfter = comp->treeType;        // +0x60
         fprintf(stderr, "[OrchardForceStart] entity=%p comp=%p AFTER:  switch(+0x48)=%u "
-                        "treeType(+0x60)=%s\n", ent, orchComp, switchAfter,
+                        "treeType(+0x60)=%s\n", static_cast<void*>(ent),
+                static_cast<void*>(orchComp), switchAfter,
                 typeAfter ? "SET" : "STILL UNTYPED");
     }
 
@@ -244,6 +252,8 @@ void FireForceStart(void* entityUI, int frameNum) {
         // ~0.9 ms of UI update per frame (measured in the BANISHED_STRESS PostSim phase:
         // 0.95 ms vs 0.06 ms once it closed on its own thousands of frames later), which
         // is harness noise in a perf baseline. Close it the way a right-click does.
+        // LEFT: the void* tool and EditTool::entityRef's uint64_t (PLAYER's harness
+        // entry and header).
         if (void* tool = EditTool_HarnessAcquire(entityUI)) {
             uintptr_t dlg = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(tool) + 0x28);
             if (dlg) {

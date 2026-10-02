@@ -22,8 +22,14 @@
 // each teardown, and with BANISHED_OBJAUDIT=1 to watch the object tally.
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
-#include "Component/exe_bodies.h"
 #include "Game/exe_constants.h"
+#include "Entity/CitizenBehavior.h"           // B4: the town lists
+#include "Entity/ComponentEntity.h"           // B4: FindComponent<ResidenceComponent>
+#include "Component/CitizenComponent.h"       // B4: the citizen fields and members
+#include "Component/CitizenDescription.h"     // B4: the description thresholds
+#include "Component/ResidenceComponent.h"     // B4: IsFamilyFull
+#include "Component/ResidenceDescription.h"   // B4: _maxResidentsPerFamily
+#include "Component/CemeteryComponent.h"      // B4: plotCount
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -97,20 +103,20 @@ void Init() {
 }
 
 // The town citizen list: array at townMgr+0xa0, count at +0xa8.
-bool TownList(int64_t** outList, int* outCount, int64_t* outTownMgr) {
+bool TownList(CitizenComponent*** outList, int* outCount, CitizenBehavior** outTownMgr) {
     if (GameUpdateLoop::_singleton == nullptr) return false;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    CitizenBehavior* townMgr = gw->m_citizenList;      // +0xf0
     if (!townMgr) return false;
     *outTownMgr = townMgr;
-    *outList  = *reinterpret_cast<int64_t**>(townMgr + 0xa0);
-    *outCount = *reinterpret_cast<int*>(townMgr + 0xa8);
+    *outList  = townMgr->citizens;                     // +0xa0
+    *outCount = townMgr->citizenCount;                 // +0xa8
     return *outList != nullptr && *outCount > 0;
 }
 
-inline bool HasFamily(int64_t c) {
-    return c && (*reinterpret_cast<int64_t*>(c + 0x250) != 0 ||
-                 *reinterpret_cast<int64_t*>(c + 0x260) != 0);
+inline bool HasFamily(CitizenComponent* c) {
+    return c && (c->spouse != nullptr ||               // +0x250
+                 c->_firstChild != nullptr);           // +0x260
 }
 
 // ---- Birth-gate walk (BANISHED_BIRTH_TRACE=<n>) ------------------------------------
@@ -153,7 +159,7 @@ const char* const kGateName[12] = {
     "noDesc",           // 11
 };
 
-void BirthGate(int frameNum, int64_t* list, int n) {
+void BirthGate(int frameNum, CitizenComponent** list, int n) {
     if (s_birthTrace <= 0) return;
     // DAT_140172114 / DAT_140172100 (.rdata).
     const float hungerFrac = kRdata_140172114;
@@ -167,53 +173,49 @@ void BirthGate(int frameNum, int64_t* list, int n) {
     bool  haveDesc = false;
 
     for (int i = 0; i < n; i++) {
-        int64_t c = list[i];
+        CitizenComponent* c = list[i];
         if (!c) continue;
-        int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+        const CitizenDescription* desc = c->description;          // +0x288
         if (!desc) { tally[11]++; continue; }
 
-        const float hungerWarn = (*reinterpret_cast<float*>(desc + 0xD0) -
-                                  *reinterpret_cast<float*>(desc + 0xCC)) * hungerFrac +
-                                 *reinterpret_cast<float*>(desc + 0xCC);
-        const float warmthWarn = (*reinterpret_cast<float*>(desc + 0xF0) -
-                                  *reinterpret_cast<float*>(desc + 0xEC)) * warmthFrac +
-                                 *reinterpret_cast<float*>(desc + 0xEC);
+        const float hungerWarn = (desc->maxHunger - desc->_fcc) * hungerFrac +    // +0xD0, +0xCC
+                                 desc->_fcc;
+        const float warmthWarn = (desc->maxColdness - desc->_fec) * warmthFrac +  // +0xF0, +0xEC
+                                 desc->_fec;
         if (!haveDesc) {
             haveDesc = true;
             hWarn = hungerWarn; wWarn = warmthWarn;
-            bearMin = *reinterpret_cast<float*>(desc + 0x50);
-            bearMax = *reinterpret_cast<float*>(desc + 0x54);
-            timerSeed = *reinterpret_cast<float*>(desc + 0x58);
+            bearMin = desc->minPregnancyAge;                       // +0x50
+            bearMax = desc->maxPregnancyAge;                       // +0x54
+            timerSeed = desc->pregnancyTime;                       // +0x58
             // The occupant cap lives on the RESIDENCE description, not the citizen's —
             // filled in below from the first residence we successfully resolve.
         }
 
-        const float age    = *reinterpret_cast<float*>(c + 0x3c);
-        const float hunger = *reinterpret_cast<float*>(c + 0x44);
-        const float warmth = *reinterpret_cast<float*>(c + 0x48);
-        const float timer  = *reinterpret_cast<float*>(c + 0x4C);
-        const int64_t home = *reinterpret_cast<int64_t*>(c + 0x238);
-        const int   slotIdx = *reinterpret_cast<int32_t*>(c + 0x240);
+        const float age    = c->age;                               // +0x3c
+        const float hunger = c->hunger;                            // +0x44
+        const float warmth = c->coldness;                          // +0x48
+        const float timer  = c->pregnancyTimer;                    // +0x4C
+        ComponentEntity* const home = c->home;                     // +0x238
+        const int   slotIdx = c->homeSlot;                         // +0x240
 
         int gate = 0;
-        int64_t residence = 0;
-        if (*reinterpret_cast<int32_t*>(c + 0x38) != 0)                gate = 1;
-        else if (age < *reinterpret_cast<float*>(desc + 0x44))         gate = 2;
-        else if (*reinterpret_cast<int64_t*>(c + 0x208) != 0)          gate = 3;
+        ResidenceComponent* residence = nullptr;
+        if (c->gender != 0)                                            gate = 1;
+        else if (age < desc->adultAge)                                 gate = 2;
+        else if (c->school != nullptr)                                 gate = 3;
         else if (hungerWarn < hunger || warmthWarn < warmth)           gate = 4;
-        else if (*reinterpret_cast<int64_t*>(c + 0x250) == 0)          gate = 5;
-        else if (home == 0)                                            gate = 6;
+        else if (c->spouse == nullptr)                                 gate = 5;
+        else if (home == nullptr)                                      gate = 6;
         else if (timer != 0.0f)                                        gate = 7;
-        else if (age < *reinterpret_cast<float*>(desc + 0x50) ||
-                 age > *reinterpret_cast<float*>(desc + 0x54))         gate = 8;
+        else if (age < desc->minPregnancyAge ||
+                 age > desc->maxPregnancyAge)                          gate = 8;
         else {
             // 0x140008090 is Entity::FindComponent<ResidenceComponent> (NOT storage — 0x140006270
             // is the storage one; the two are a standing naming trap in this codebase).
-            int64_t outIBP = 0;
-            void* res = CitizenComp_Entity_FindComponent_Storage(home, &outIBP);
-            residence = res ? *reinterpret_cast<int64_t*>(res) : 0;
+            residence = home->FindComponent<ResidenceComponent>();
             if (!residence)                                            gate = 9;
-            else if (CitizenComp_helper_a4f0(residence, slotIdx))      gate = 10;
+            else if (residence->IsFamilyFull(slotIdx))                 gate = 10;   // 0x14012a4f0
         }
         tally[gate]++;
 
@@ -223,19 +225,20 @@ void BirthGate(int frameNum, int64_t* list, int n) {
             printed++;
             float cap = -1.0f;
             if (residence) {
-                int64_t rdesc = *reinterpret_cast<int64_t*>(residence + 0x18);
-                if (rdesc) {
-                    cap = static_cast<float>(*reinterpret_cast<int32_t*>(rdesc + 0x24));
+                // A ResidenceComponent's description is its ResidenceDescription.
+                if (Description* rdesc = residence->_description) {    // +0x18
+                    cap = static_cast<float>(
+                        static_cast<ResidenceDescription*>(rdesc)->_maxResidentsPerFamily);   // +0x24
                     if (occupantCap == 0.0f) occupantCap = cap;
                 }
             }
             std::fprintf(stderr,
                 "[BirthGate]   c=%p BLOCKED-AT=%s age=%.2f hunger=%.1f/%.1f warmth=%.1f/%.1f "
                 "timer(+0x4C)=%.2f score(+0x50)=%.2f spouse=%d home=%d slot=%d occupantCap=%.0f\n",
-                reinterpret_cast<void*>(c), kGateName[gate], age, hunger, hungerWarn,
-                warmth, warmthWarn, timer, *reinterpret_cast<float*>(c + 0x50),
-                *reinterpret_cast<int64_t*>(c + 0x250) != 0 ? 1 : 0,
-                home != 0 ? 1 : 0, slotIdx, cap);
+                static_cast<void*>(c), kGateName[gate], age, hunger, hungerWarn,
+                warmth, warmthWarn, timer, c->health,             // +0x50
+                c->spouse != nullptr ? 1 : 0,
+                home != nullptr ? 1 : 0, slotIdx, cap);
         }
     }
 
@@ -254,15 +257,13 @@ void BirthGate(int frameNum, int64_t* list, int n) {
     // -(rand * desc+0x60 + desc+0x5C), the post-attempt cooldown.
     if (haveDesc) {
         for (int i = 0; i < n; i++) {
-            int64_t c = list[i];
-            int64_t d = c ? *reinterpret_cast<int64_t*>(c + 0x288) : 0;
+            CitizenComponent* c = list[i];
+            const CitizenDescription* d = c ? c->description : nullptr;   // +0x288
             if (!d) continue;
             std::fprintf(stderr,
                 "[BirthGate]   roll consts: chanceLow(desc+0x68)=%.4f chanceHigh(desc+0x64)=%.4f "
                 "scoreMax(desc+0x70)=%.2f cooldownBase(desc+0x5C)=%.1f range(desc+0x60)=%.1f\n",
-                *reinterpret_cast<float*>(d + 0x68), *reinterpret_cast<float*>(d + 0x64),
-                *reinterpret_cast<float*>(d + 0x70), *reinterpret_cast<float*>(d + 0x5C),
-                *reinterpret_cast<float*>(d + 0x60));
+                d->_f68, d->_f64, d->maxHealth, d->_f5c, d->_f60);
             break;
         }
     }
@@ -270,7 +271,7 @@ void BirthGate(int frameNum, int64_t* list, int n) {
 }
 
 void Census(int frameNum) {
-    int64_t* list; int n; int64_t townMgr;
+    CitizenComponent** list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) {
         // TownList fails when the citizen array is null OR the count is 0 — i.e. an EXTINCT
         // town looks exactly like "no census at all". Silence then reads as a hung process
@@ -320,25 +321,25 @@ void Census(int frameNum) {
     int   overdue = 0, noMaxAge = 0;
     float maxAgeMin = 1e9f, maxAgeMax = -1e9f;
     for (int i = 0; i < n; i++) {
-        int64_t c = list[i];
+        CitizenComponent* c = list[i];
         if (!c) continue;
-        bool noSpouse = *reinterpret_cast<int64_t*>(c + 0x250) == 0;
+        bool noSpouse = c->spouse == nullptr;                  // +0x250
         if (!noSpouse) spouse++; else unmarried++;
-        if (*reinterpret_cast<int64_t*>(c + 0x260) != 0) ring++;
-        if (*reinterpret_cast<int64_t*>(c + 0x208) != 0) partner++;
-        bool guardianFree = *reinterpret_cast<int64_t*>(c + 0x258) == 0;
+        if (c->_firstChild != nullptr) ring++;                 // +0x260
+        if (c->school != nullptr) partner++;                   // +0x208
+        bool guardianFree = c->_parent == nullptr;             // +0x258
         if (!guardianFree) host++;
-        if (*reinterpret_cast<int32_t*>(c + 0x38) == 0) female++; else male++;
+        if (c->gender == 0) female++; else male++;             // +0x38
 
-        float hunger = *reinterpret_cast<float*>(c + 0x44);
-        float thirst = *reinterpret_cast<float*>(c + 0x48);
+        float hunger = c->hunger;                              // +0x44
+        float thirst = c->coldness;                            // +0x48 (row 121)
         hungerSum += hunger; thirstSum += thirst;
         if (hunger > hungerMax) hungerMax = hunger;
         if (thirst > thirstMax) thirstMax = thirst;
-        if (*reinterpret_cast<int64_t*>(c + 0x68) != 0) sick++;
+        if (c->disease != nullptr) sick++;                     // +0x68
 
-        const float cAge   = *reinterpret_cast<float*>(c + 0x3c);
-        const float cMaxAge = *reinterpret_cast<float*>(c + 0x40);
+        const float cAge   = c->age;                           // +0x3c
+        const float cMaxAge = c->maxAge;                       // +0x40
         if (cMaxAge <= 0.0f) noMaxAge++;
         else {
             if (cMaxAge < maxAgeMin) maxAgeMin = cMaxAge;
@@ -346,17 +347,17 @@ void Census(int frameNum) {
             if (cMaxAge <= cAge) overdue++;
         }
 
-        int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+        const CitizenDescription* desc = c->description;      // +0x288
         if (!desc) continue;
-        float age = *reinterpret_cast<float*>(c + 0x3c);
-        adultAge  = *reinterpret_cast<float*>(desc + 0x44);
-        marryAge  = *reinterpret_cast<float*>(desc + 0x48);
+        float age = c->age;                                    // +0x3c
+        adultAge  = desc->adultAge;                            // +0x44
+        marryAge  = desc->marriageAge;                         // +0x48
         if (age < youngest) youngest = age;
         if (age > oldest)   oldest   = age;
         if (age >= adultAge) adults++; else children++;
         if (!noSpouse) continue;                 // already married: not a candidate
         bool old_enough = age >= marryAge;
-        bool home       = *reinterpret_cast<int64_t*>(c + 0x238) != 0;
+        bool home       = c->home != nullptr;                  // +0x238
         if (old_enough)   overMarryAge++;
         if (guardianFree) noGuardian++;
         if (home)         hasHome++;
@@ -376,14 +377,14 @@ void Census(int frameNum) {
     // empty in standalone's start town, so report them next to the gate counts — an
     // "ELIGIBLE=0 / noGuardian=0" census means nothing without knowing whether the finder
     // it depends on had anything to find.
-    int64_t reg   = *reinterpret_cast<int64_t*>(townMgr + 0x20);
-    int     regN  = *reinterpret_cast<int32_t*>(townMgr + 0x28);
-    int64_t bst   = *reinterpret_cast<int64_t*>(townMgr + 0x100);
-    int     bldgN = *reinterpret_cast<int32_t*>(townMgr + 0x68);
+    ComponentEntity** reg = townMgr->field_0x20;           // +0x20
+    int     regN  = townMgr->field_0x28;                   // +0x28
+    void*   bst   = townMgr->field_0x100;                  // +0x100
+    int     bldgN = townMgr->attendanceComponentCount;     // +0x68
     std::fprintf(stderr, "[FamilyCensus]   townMgr=%p buildingRegistry(+0x20)=%p count(+0x28)=%d "
                  "profBST(+0x100)=%p bldgCount(+0x68)=%d\n",
-                 reinterpret_cast<void*>(townMgr), reinterpret_cast<void*>(reg), regN,
-                 reinterpret_cast<void*>(bst), bldgN);
+                 static_cast<void*>(townMgr), static_cast<void*>(reg), regN,
+                 bst, bldgN);
     std::fprintf(stderr, "[FamilyCensus]   ages: %d adult / %d child (min=%.2f max=%.2f "
                  "adultAge=%.2f marryAge=%.2f) — unmarried=%d of which overMarryAge=%d "
                  "noGuardian=%d hasHome=%d ELIGIBLE=%d\n",
@@ -394,10 +395,10 @@ void Census(int frameNum) {
     // read them off the last citizen's description so the numbers have a scale.
     float hungerDeath = 0.0f, thirstDeath = 0.0f;
     for (int i = 0; i < n; i++) {
-        int64_t c = list[i];
-        int64_t d = c ? *reinterpret_cast<int64_t*>(c + 0x288) : 0;
-        if (d) { hungerDeath = *reinterpret_cast<float*>(d + 0xd0);
-                 thirstDeath = *reinterpret_cast<float*>(d + 0xf0); break; }
+        CitizenComponent* c = list[i];
+        const CitizenDescription* d = c ? c->description : nullptr;   // +0x288
+        if (d) { hungerDeath = d->maxHunger;                          // +0xd0
+                 thirstDeath = d->maxColdness; break; }               // +0xf0
     }
     std::fprintf(stderr, "[FamilyCensus]   survival: hunger avg=%.1f max=%.1f (death %.1f) "
                  "thirst avg=%.1f max=%.1f (death %.1f) sick(+0x68)=%d\n",
@@ -437,34 +438,32 @@ void Census(int frameNum) {
 // keeps the residence roster count unchanged. It does NOT touch +0x250 or the age gate;
 // everything after this is the game's own code path.
 void MoveOutGrownChildren(int frameNum) {
-    int64_t* list; int n; int64_t townMgr;
+    CitizenComponent** list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) return;
     for (int i = 0; i < n && s_moved < s_marryHarness; i++) {
-        int64_t c = list[i];
+        CitizenComponent* c = list[i];
         if (!c) continue;
-        if (*reinterpret_cast<int64_t*>(c + 0x250) != 0) continue;   // already married
-        if (*reinterpret_cast<int64_t*>(c + 0x258) == 0) continue;   // already independent
-        int64_t home = *reinterpret_cast<int64_t*>(c + 0x238);
-        if (home == 0) continue;                                     // no home to move back into
-        int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+        if (c->spouse != nullptr) continue;                          // already married (+0x250)
+        if (c->_parent == nullptr) continue;                         // already independent (+0x258)
+        ComponentEntity* home = c->home;                             // +0x238
+        if (home == nullptr) continue;                               // no home to move back into
+        const CitizenDescription* desc = c->description;            // +0x288
         if (!desc) continue;
-        float age = *reinterpret_cast<float*>(c + 0x3c);
-        if (age < *reinterpret_cast<float*>(desc + 0x48)) continue;  // not old enough yet
+        float age = c->age;                                          // +0x3c
+        if (age < desc->marriageAge) continue;                       // not old enough yet (+0x48)
 
-        int slot = *reinterpret_cast<int32_t*>(c + 0x240);
-        int64_t nullIBP = 0;
-        CitizenComp_sub_1fa0(c, &nullIBP);
-        int64_t guardian = *reinterpret_cast<int64_t*>(c + 0x258);
-        int64_t homeIBP = home;
-        CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(c), &homeIBP, slot);
-        int64_t homeAfter = *reinterpret_cast<int64_t*>(c + 0x238);
+        int slot = c->homeSlot;                                      // +0x240
+        c->SetParent(nullptr);                                       // 0x140111fa0 (null IBP)
+        CitizenComponent* guardian = c->_parent;                     // +0x258
+        c->SetHome(home, slot);                                      // 0x1401163d0
+        ComponentEntity* homeAfter = c->home;                        // +0x238
         std::fprintf(stderr, "[MarryHarness] frame %d: moved out comp=%p age=%.2f gender=%d "
                      "— guardian(+0x258) %s, home(+0x238) %p -> %p\n", frameNum,
-                     reinterpret_cast<void*>(c), age, *reinterpret_cast<int32_t*>(c + 0x38),
-                     guardian == 0 ? "cleared" : "STILL SET",
-                     reinterpret_cast<void*>(home), reinterpret_cast<void*>(homeAfter));
+                     static_cast<void*>(c), age, c->gender,
+                     guardian == nullptr ? "cleared" : "STILL SET",
+                     static_cast<void*>(home), static_cast<void*>(homeAfter));
         std::fflush(stderr);
-        if (guardian == 0 && homeAfter != 0) ++s_moved;
+        if (guardian == nullptr && homeAfter != nullptr) ++s_moved;
     }
     if (s_moved >= s_marryHarness) {
         s_firedMarry = true;
@@ -501,7 +500,7 @@ void MoveOutGrownChildren(int frameNum) {
 
 namespace {
 void ForceBirths(int frameNum) {
-    int64_t* list; int n; int64_t townMgr;
+    CitizenComponent** list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) {
         std::fprintf(stderr, "[BirthHarness] frame %d: no town citizen list — nothing to do\n",
                      frameNum);
@@ -509,14 +508,14 @@ void ForceBirths(int frameNum) {
         return;
     }
     // Snapshot the mothers first: each birth appends to this very list.
-    int64_t mothers[16];
+    CitizenComponent* mothers[16];
     int want = 0;
     int skippedNoDesc = 0, skippedNoModel = 0;
     for (int i = 0; i < n && want < s_forceBirth && want < 16; i++) {
-        int64_t c = list[i];
+        CitizenComponent* c = list[i];
         if (!c) continue;
-        if (*reinterpret_cast<int64_t*>(c + 0x288) == 0) { skippedNoDesc++;  continue; }
-        if (*reinterpret_cast<int64_t*>(c + 0x278) == 0) { skippedNoModel++; continue; }
+        if (c->description == nullptr) { skippedNoDesc++;  continue; }   // +0x288
+        if (c->character == nullptr)   { skippedNoModel++; continue; }   // +0x278
         mothers[want++] = c;
     }
     std::fprintf(stderr, "[BirthHarness] frame %d: %d mother(s) selected from %d citizens "
@@ -525,16 +524,16 @@ void ForceBirths(int frameNum) {
     std::fflush(stderr);
     if (want == 0) return;
 
-    int before = *reinterpret_cast<int*>(townMgr + 0xa8);
+    int before = townMgr->citizenCount;                    // +0xa8
     for (int i = 0; i < want; i++) {
         std::fprintf(stderr, "[BirthHarness] delivering %d/%d from mother=%p\n",
-                     i + 1, want, reinterpret_cast<void*>(mothers[i]));
+                     i + 1, want, static_cast<void*>(mothers[i]));
         std::fflush(stderr);
-        CitizenComp_helper_1b90(mothers[i]);
+        mothers[i]->GiveBirth();                           // 0x140111b90
     }
     std::fprintf(stderr, "[BirthHarness] done — town citizen list %d -> %d "
                  "(+%d expected if CitizenComponent::OnAdd is live)\n",
-                 before, *reinterpret_cast<int*>(townMgr + 0xa8), want);
+                 before, townMgr->citizenCount, want);
     std::fflush(stderr);
 }
 }  // namespace
@@ -556,9 +555,9 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
 
     // Targeted kill: wait for family links to exist, then take those citizens.
     if (s_killFamily > 0 && !s_firedFamily && frameNum > 300 && (frameNum % 300) == 0) {
-        int64_t* list; int n; int64_t townMgr;
+        CitizenComponent** list; int n; CitizenBehavior* townMgr;
         if (TownList(&list, &n, &townMgr)) {
-            int64_t victims[16];
+            CitizenComponent* victims[16];
             int want = 0;
             for (int i = 0; i < n && want < s_killFamily && want < 16; i++)
                 if (HasFamily(list[i])) victims[want++] = list[i];
@@ -569,16 +568,16 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                              frameNum, want, n);
                 std::fflush(stderr);
                 for (int i = 0; i < want; i++) {
-                    int64_t v = victims[i];
+                    CitizenComponent* v = victims[i];
                     std::fprintf(stderr, "[DeathHarness] killing family citizen comp=%p "
-                                 "spouse=%p ring=%p\n", reinterpret_cast<void*>(v),
-                                 *reinterpret_cast<void**>(v + 0x250),
-                                 *reinterpret_cast<void**>(v + 0x260));
+                                 "spouse=%p ring=%p\n", static_cast<void*>(v),
+                                 static_cast<void*>(v->spouse),          // +0x250
+                                 static_cast<void*>(v->_firstChild));    // +0x260
                     std::fflush(stderr);
-                    CitizenComponent_HandleLifeEvent(reinterpret_cast<void*>(v), 3, nullptr);
+                    v->HandleLifeEvent(3, nullptr);                      // 0x140116dd0
                 }
                 std::fprintf(stderr, "[DeathHarness] family kill done — list = %d entries "
-                             "(was %d)\n", *reinterpret_cast<int*>(townMgr + 0xa8), n);
+                             "(was %d)\n", townMgr->citizenCount, n);    // +0xa8
                 std::fflush(stderr);
             }
         }
@@ -609,15 +608,15 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                 std::fflush(stderr);
         }
         if (s_waitCemetery) {
-            int64_t tm = 0; int64_t* l; int c;
+            CitizenBehavior* tm = nullptr; CitizenComponent** l; int c;
             int readyPlots = 0, cemN = 0;
             if (TownList(&l, &c, &tm) && tm) {
-                cemN = *reinterpret_cast<int*>(tm + 0x48);
-                int64_t arr = *reinterpret_cast<int64_t*>(tm + 0x40);
+                cemN = tm->cemeteryCount;                        // +0x48
+                CemeteryComponent** arr = tm->cemeteries;        // +0x40
                 for (int i = 0; i < cemN && arr; ++i) {
-                    int64_t comp = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
+                    CemeteryComponent* comp = arr[i];
                     if (!comp) continue;
-                    const int plots = *reinterpret_cast<int*>(comp + 0x50);
+                    const int plots = comp->plotCount;           // +0x50
                     if (plots > readyPlots) readyPlots = plots;
                 }
             }
@@ -638,7 +637,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
 
     s_fired = true;
 
-    int64_t* list; int n; int64_t townMgr;
+    CitizenComponent** list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) return;
     std::fprintf(stderr, "[DeathHarness] frame %d: town citizen list = %d entries\n",
                  frameNum, n);
@@ -652,19 +651,19 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
     // unreachable. Heap-allocate instead; the snapshot is transient and one qword per
     // citizen even for a whole town.
     int want = (s_count < n) ? s_count : n;
-    std::vector<int64_t> victims((size_t)(want > 0 ? want : 0));
+    std::vector<CitizenComponent*> victims((size_t)(want > 0 ? want : 0));
     for (int i = 0; i < want; i++) victims[(size_t)i] = list[i];
 
     for (int i = 0; i < want; i++) {
         if (!victims[i]) continue;
         std::fprintf(stderr, "[DeathHarness] killing citizen %d/%d comp=%p\n",
-                     i + 1, want, reinterpret_cast<void*>(victims[i]));
+                     i + 1, want, static_cast<void*>(victims[i]));
         std::fflush(stderr);
-        CitizenComponent_HandleLifeEvent(reinterpret_cast<void*>(victims[i]), 3, nullptr);
+        victims[i]->HandleLifeEvent(3, nullptr);           // 0x140116dd0
     }
 
     std::fprintf(stderr, "[DeathHarness] done — town citizen list = %d entries "
                  "(was %d; expect %d if OnRemove is live, unchanged if it is not)\n",
-                 *reinterpret_cast<int*>(townMgr + 0xa8), n, n - want);
+                 townMgr->citizenCount, n, n - want);      // +0xa8
     std::fflush(stderr);
 }

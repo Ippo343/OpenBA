@@ -113,6 +113,12 @@
 #include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "object/TypeInfo.h"                   // Object::IsDerivedFromNullSafe
 #include "Game/Disease.h"
+#include "Entity/CitizenBehavior.h"         // B4: the town registries
+#include "Entity/ComponentEntity.h"         // B4: the component array by name
+#include "Entity/EntityList.h"              // B4: GameUpdateLoop::m_entityList
+#include "Component/MapComponent.h"         // B4: the tile rect
+#include "Component/FireComponent.h"        // B4: fireTimer
+#include "Component/DiseaseComponent.h"     // B4: duration
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -192,29 +198,26 @@ void Init() {
 //   +0xA0 / +0xA8   citizens          (also death_harness.cpp TownList)
 //   +0xF0 / +0xF8   DiseaseComponents (Game_InfectRandomCitizen, 0x14005fe10 —
 //                   MISNAMED in Ghidra: this registry is the CROP/livestock one)
-uintptr_t GameWorld() {
-    if (GameUpdateLoop::_singleton == nullptr) return 0;
-    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
+GameUpdateLoop* GameWorld() {
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return GameUpdateLoop::_singleton;
 }
-uintptr_t TownMgr() {
-    uintptr_t gw = GameWorld();
-    if (!gw) return 0;
-    return *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+CitizenBehavior* TownMgr() {
+    GameUpdateLoop* gw = GameWorld();
+    if (!gw) return nullptr;
+    return gw->m_citizenList;                                   // +0xf0
 }
 
-// Read one registry: array of raw IBP values at townMgr+arrOff, count at townMgr+cntOff.
-bool Registry(uintptr_t arrOff, uintptr_t cntOff, void*** outArr, int* outCount) {
-    uintptr_t town = TownMgr();
+// Read one registry: the town's typed array and its count (the three registries
+// below: +0x20/+0x28, +0xA0/+0xA8, +0xF0/+0xF8).
+template <class T>
+bool Registry(T** CitizenBehavior::*arrField, int32_t CitizenBehavior::*cntField,
+              T*** outArr, int* outCount) {
+    CitizenBehavior* town = TownMgr();
     if (!town) return false;
-    *outArr   = *reinterpret_cast<void***>(town + arrOff);
-    *outCount = *reinterpret_cast<int*>(town + cntOff);
+    *outArr   = town->*arrField;
+    *outCount = town->*cntField;
     return *outArr != nullptr && *outCount > 0;
-}
-
-// Resolve one registry slot the way every retail caller does.
-void* RegistrySlot(void** arr, int idx) {
-    void* p = arr[idx];
-    return p;
 }
 
 // Find a component on an entity by REGISTERED NAME rather than by one of the
@@ -239,7 +242,7 @@ bool WarnedTypeId(const char* name) {
     return true;                                   // table full — stop warning
 }
 
-void* ComponentByName(void* entity, const char* typeName) {
+Component* ComponentByName(ComponentEntity* entity, const char* typeName) {
     if (!entity || !typeName) return nullptr;
     uint32_t want = ::Object::GetTypeIdByName(typeName);
     if (!want || want == 0xFFFFFFFFu) {
@@ -252,16 +255,14 @@ void* ComponentByName(void* entity, const char* typeName) {
         return nullptr;
     }
 
-    uint8_t* e = static_cast<uint8_t*>(entity);
-    const int count = *reinterpret_cast<int32_t*>(e + 0x38);
-    uintptr_t arr   = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    const int count = entity->_componentCount;                   // +0x38
+    Object::InternalPtr<Component>* arr = entity->_components;   // +0x30
     if (!arr || count <= 0) return nullptr;
 
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* comp = *slot;
+        Component* comp = arr[i].Get();
         if (!comp) continue;
-        if (reinterpret_cast<Object::Base*>(comp)->Type() == want) return comp;   // B.3.8 bridge
+        if (comp->Type() == want) return comp;
     }
     return nullptr;
 }
@@ -269,12 +270,12 @@ void* ComponentByName(void* entity, const char* typeName) {
 // Tile of an entity, from its MapComponent (+0x28 int16 x, +0x2a int16 y — the
 // offsets StartTown writes at starttown.cpp:1420). Returns false when the entity
 // has no MapComponent, which is normal for non-placed entities.
-bool EntityTile(void* entity, int* outX, int* outY) {
-    void* mc = ComponentByName(entity, "MapComponent");
+bool EntityTile(ComponentEntity* entity, int* outX, int* outY) {
+    Component* mc = ComponentByName(entity, "MapComponent");
     if (!mc) return false;
-    uint8_t* m = static_cast<uint8_t*>(mc);
-    *outX = *reinterpret_cast<int16_t*>(m + 0x28);
-    *outY = *reinterpret_cast<int16_t*>(m + 0x2a);
+    MapComponent* m = static_cast<MapComponent*>(mc);   // exact type id ("MapComponent")
+    *outX = m->tileX0;                                  // +0x28
+    *outY = m->tileY0;                                  // +0x2a
     return true;
 }
 
@@ -296,11 +297,11 @@ bool EntityTile(void* entity, int* outX, int* outY) {
 // The ignition itself is the retail leaf, through the same pointer the debug button
 // uses: fn_FireComponent_Ignite -> ResolveAddr(Exe, 0x140049610).
 
-struct Cand { void* entity; void* fire; int x; int y; long dist2; };
+struct Cand { ComponentEntity* entity; FireComponent* fire; int x; int y; long dist2; };
 
 void ForceFire(int frameNum, int want) {
-    void** arr = nullptr; int n = 0;
-    if (!Registry(0x20, 0x28, &arr, &n)) {
+    ComponentEntity** arr = nullptr; int n = 0;
+    if (!Registry(&CitizenBehavior::field_0x20, &CitizenBehavior::field_0x28, &arr, &n)) {
         DLOG("Fire", "frame %d: structure registry (townMgr+0x20/+0x28) empty or absent "
              "— nothing to ignite\n", frameNum);
         return;
@@ -312,10 +313,11 @@ void ForceFire(int frameNum, int want) {
     int  withFire = 0, withResidence = 0, noTile = 0;
 
     for (int i = 0; i < n && nCand < 64; ++i) {
-        void* ent = RegistrySlot(arr, i);
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        void* fire = ComponentByName(ent, "FireComponent");
-        void* res  = ComponentByName(ent, "ResidenceComponent");
+        // Exact type id ("FireComponent").
+        FireComponent* fire = static_cast<FireComponent*>(ComponentByName(ent, "FireComponent"));
+        Component* res  = ComponentByName(ent, "ResidenceComponent");
         if (fire) ++withFire;
         if (res)  ++withResidence;
         if (!fire || !res) continue;
@@ -371,12 +373,13 @@ void ForceFire(int frameNum, int want) {
     // Snapshot before igniting: FireComponent::Ignite can register the entity into
     // other lists, and SpreadToNeighbors may add more burning entities on later ticks.
     const int take = (want < nCand) ? want : nCand;
-    void* victims[64];
+    FireComponent* victims[64];
     for (int i = 0; i < take; ++i) victims[i] = cands[i].fire;
 
     for (int i = 0; i < take; ++i) {
         DLOG("Fire", "igniting %d/%d house entity=%p fireComp=%p tile=(%d,%d)\n",
-             i + 1, take, cands[i].entity, victims[i], cands[i].x, cands[i].y);
+             i + 1, take, static_cast<void*>(cands[i].entity), static_cast<void*>(victims[i]),
+             cands[i].x, cands[i].y);
         FireComponent_Ignite_610(victims[i]);
     }
 
@@ -386,7 +389,7 @@ void ForceFire(int frameNum, int want) {
     // failure from Ignite never having been called.
     int burning = 0;
     for (int i = 0; i < take; ++i)
-        if (*reinterpret_cast<int64_t*>(static_cast<uint8_t*>(victims[i]) + 0x30) != 0)
+        if (victims[i]->fireTimer._ticks != 0)              // +0x30
             ++burning;
     DLOG("Fire", "done — %d/%d house(s) now report a non-zero burn timer (+0x30). "
          "%d expected if Ignite is live; 0 means Ignite resolved but did not take.\n",
@@ -403,16 +406,16 @@ void ForceFire(int frameNum, int want) {
 // same code a real click would.
 
 void ForceTornado(int frameNum, int want) {
-    uintptr_t gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) { DLOG("Tornado", "frame %d: gameWorld null\n", frameNum); return; }
 
     // Preconditions, named individually — "nothing appeared" has three distinct causes
     // and they must not look alike in the log.
-    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
+    EntityList* entityList = gw->m_entityList;                  // +0xe8
     DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
          "RegisterEntity=%p entityList=%p\n", frameNum,
          reinterpret_cast<void*>(&ComponentEntity_CtorFromDescription),
-         reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl), entityList);
+         reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl), static_cast<void*>(entityList));
     if (!entityList) {
         DLOG("Tornado", "entityList null. Nothing spawned.\n");
         return;
@@ -420,14 +423,15 @@ void ForceTornado(int frameNum, int want) {
 
     // Approximate entity count (the same field gameupdateloop.cpp:886 reads for its
     // FPS line). Approximate is enough: we only need a before/after delta.
-    const int before = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(entityList) + 0x30);
+    // +0x30 is buckets[1].count in EntityList's header (row 124).
+    const int before = entityList->buckets[1].count;
 
     for (int i = 0; i < want; ++i) {
         DLOG("Tornado", "spawning %d/%d via DebugUI_Slot9(id=329)\n", i + 1, want);
         DebugUI_Slot9(nullptr, 0, /*msg=buttonClick*/0x12, /*id=spawnTornado*/329);
     }
 
-    const int after = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(entityList) + 0x30);
+    const int after = entityList->buckets[1].count;             // +0x30
     DLOG("Tornado", "done — entityList count %d -> %d (+%d expected if "
          "Template/Tornado.rsc resolved and RegisterEntity is live; +0 means the "
          "template did not resolve). A funnel that spawns but never MOVES means "
@@ -476,23 +480,21 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
     *outFound = 0; *outScanned = 0;
     *outTypeId = DiseaseExternalTypeId();
     *outListPresent = false;
-    uintptr_t gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return nullptr;
-    void* externalList = *reinterpret_cast<void**>(gw + 0xa8);
+    ::Object::ExternalList* externalList = gw->m_diseaseList;   // +0xa8
     if (!externalList) return nullptr;
     *outListPresent = true;
     if (!*outTypeId || *outTypeId == 0xFFFFFFFFu) return nullptr;
 
-    const int count = reinterpret_cast<const ::Object::ExternalList*>(externalList)  // B.3.3 bridge
-                          ->GetResourceCount();
+    const int count = externalList->GetResourceCount();
     *outScanned = count;
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(
-                        static_cast<uint8_t*>(externalList) + 0x20);
+    ::Object::External** arr = externalList->_resources;        // +0x20
     if (!arr) return nullptr;
 
     void* chosen = nullptr;
     for (int i = 0; i < count; ++i) {
-        void* res = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        void* res = arr[i];
         if (!res) continue;
         if (!Object::IsDerivedFromNullSafe(res, *outTypeId)) continue;
         if (*outFound == wantIdx) chosen = res;
@@ -534,8 +536,8 @@ void ForceSick(int frameNum, int want) {
         return;
     }
 
-    void** arr = nullptr; int n = 0;
-    if (!Registry(0xa0, 0xa8, &arr, &n)) {
+    CitizenComponent** arr = nullptr; int n = 0;
+    if (!Registry(&CitizenBehavior::citizens, &CitizenBehavior::citizenCount, &arr, &n)) {
         DLOG("Sick", "frame %d: citizen registry (townMgr+0xA0/+0xA8) empty — "
              "nobody infected\n", frameNum);
         return;
@@ -543,11 +545,11 @@ void ForceSick(int frameNum, int want) {
 
     // Snapshot: infecting can move a citizen between town lists.
     const int take = (want < n) ? want : n;
-    void* victims[64];
+    CitizenComponent* victims[64];
     const int cap = (take < 64) ? take : 64;
     int picked = 0;
     for (int i = 0; i < n && picked < cap; ++i) {
-        void* c = RegistrySlot(arr, i);
+        CitizenComponent* c = arr[i];
         if (c) victims[picked++] = c;
     }
     DLOG("Sick", "%d citizen(s) selected from a registry of %d\n", picked, n);
@@ -558,7 +560,7 @@ void ForceSick(int frameNum, int want) {
 
     for (int i = 0; i < picked; ++i) {
         DLOG("Sick", "infecting %d/%d citizen=%p disease=%p\n",
-             i + 1, picked, victims[i], disease);
+             i + 1, picked, static_cast<void*>(victims[i]), disease);
         CitizenComp_Infect(victims[i], disease);
     }
     DLOG("Sick", "done — %d infection call(s) made. Pair with the citizen-disease lane's "
@@ -601,8 +603,8 @@ void ForceSick(int frameNum, int want) {
 // "registry empty" and "infestation is broken" must never look alike in the log.
 
 void ForceInfest(int frameNum, int want) {
-    void** arr = nullptr; int n = 0;
-    if (!Registry(0xf0, 0xf8, &arr, &n)) {
+    DiseaseComponent** arr = nullptr; int n = 0;
+    if (!Registry(&CitizenBehavior::diseases, &CitizenBehavior::diseaseCount, &arr, &n)) {
         DLOG("Infest", "frame %d: DiseaseComponent registry (townMgr+0xF0/+0xF8) empty "
              "or absent — is BANISHED_LIVE_CROPDISEASE set? DiseaseComponent's slot 6 "
              "OnAdded is the ONLY thing that fills that registry, and it is installed "
@@ -611,22 +613,20 @@ void ForceInfest(int frameNum, int want) {
         return;
     }
 
-    void* picks[64];
+    DiseaseComponent* picks[64];
     int   pickTiles[64][2];
     int   nPick = 0, ownerless = 0, notCropField = 0, barren = 0;
 
     for (int i = 0; i < n && nPick < 64; ++i) {
-        void* comp = RegistrySlot(arr, i);
+        DiseaseComponent* comp = arr[i];
         if (!comp) continue;
         // comp+0x10 = owner entity IBP.
-        void** ownerSlot = reinterpret_cast<void**>(
-                               static_cast<uint8_t*>(comp) + 0x10);
-        void* owner = *ownerSlot;
+        ComponentEntity* owner = comp->_entity;
         if (!owner) { ++ownerless; continue; }
         if (!ComponentByName(owner, "CropFieldComponent")) { ++notCropField; continue; }
         // Nothing growing on it yet -> Infect would cure it in the same call. Count it
         // as its own outcome instead of letting it dilute the infestation result.
-        if (DiseaseComp_CheckCure(reinterpret_cast<DiseaseComponent*>(comp))) {
+        if (DiseaseComp_CheckCure(comp)) {
             ++barren;
             continue;
         }
@@ -661,15 +661,15 @@ void ForceInfest(int frameNum, int want) {
     const int take = (want < nPick) ? want : nPick;
     for (int i = 0; i < take; ++i) {
         DLOG("Infest", "infesting %d/%d diseaseComp=%p field tile=(%d,%d)\n",
-             i + 1, take, picks[i], pickTiles[i][0], pickTiles[i][1]);
-        DiseaseComp_Infect(reinterpret_cast<DiseaseComponent*>(picks[i]));   // B.3.x bridge
+             i + 1, take, static_cast<void*>(picks[i]), pickTiles[i][0], pickTiles[i][1]);
+        DiseaseComp_Infect(picks[i]);
     }
 
     // Outcome: retail FUN_140048840 (the active-disease tick) treats comp+0x30 > 0 as
     // "currently diseased" and routes to Cure when it drops below zero. Read it back.
     int active = 0;
     for (int i = 0; i < take; ++i)
-        if (*reinterpret_cast<int64_t*>(static_cast<uint8_t*>(picks[i]) + 0x30) > 0)
+        if (picks[i]->duration._ticks > 0)                  // +0x30
             ++active;
     DLOG("Infest", "done — %d/%d field(s) now report a positive disease timer (+0x30). "
          "%d expected if Infect is live; 0 means Infect resolved but did not take.\n",

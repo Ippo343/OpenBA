@@ -30,6 +30,13 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
 #include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050 (0x140003050)
+#include "Entity/CitizenBehavior.h"            // B4: GameUpdateLoop::m_citizenList
+#include "Entity/ComponentEntity.h"            // B4: the components by name, FindComponent<T>
+#include "Entity/EntityList.h"                 // B4: GameUpdateLoop::m_entityList
+#include "Component/WorkComponent.h"           // B4: workState
+#include "Component/WorkDescription.h"         // B4: the worker-count fields
+#include "Component/WorkPlaceComponent.h"      // B4: isAccepting / workerCount
+#include "Component/WorkPlaceDescription.h"    // B4: _profession0
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -90,24 +97,23 @@ bool AlreadySeated(void* comp) {
 }
 
 void Fire(int frameNum) {
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         std::fprintf(stderr, "[FoodWorkers] frame=%d: gameWorld null — cannot run\n", frameNum);
         return;
     }
-    uintptr_t gwB = reinterpret_cast<uintptr_t>(gw);
-    uintptr_t townMgr    = *reinterpret_cast<uintptr_t*>(gwB + 0xf0);
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(gwB + 0xe8);
+    CitizenBehavior* townMgr = gw->m_citizenList;            // +0xf0
+    EntityList* entityList   = gw->m_entityList;             // +0xe8
     if (!townMgr || !entityList) {
         std::fprintf(stderr, "[FoodWorkers] frame=%d: townMgr=%p entityList=%p — cannot run\n",
-                     frameNum, (void*)townMgr, (void*)entityList);
+                     frameNum, static_cast<void*>(townMgr), static_cast<void*>(entityList));
         return;
     }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
+    ComponentEntity** arr = entityList->masterArray.data;    // +0x08
+    int       n   = entityList->masterArray.count;           // +0x10
     if (!arr || n <= 0) {
         std::fprintf(stderr, "[FoodWorkers] frame=%d: cannot scan (arr=%p n=%d)\n",
-                     frameNum, (void*)arr, n);
+                     frameNum, static_cast<void*>(arr), n);
         return;
     }
 
@@ -119,19 +125,17 @@ void Fire(int frameNum) {
 
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t  cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
-        void*       foodComp = nullptr;
+        const int cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        Component*  foodComp = nullptr;
         const char* foodName = nullptr;
         for (int c = 0; c < cN && cA && !foodComp; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            const uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+            const uint32_t t = comp->Type();
             for (int k = 0; k < kClassCount; ++k)
                 if (tids[k] && t == tids[k]) { foodComp = comp; foodName = kClasses[k]; break; }
         }
@@ -152,35 +156,37 @@ void Fire(int frameNum) {
         {
             static long long s_dumpN = 0;
             if ((s_dumpN++ % 5) == 0) {
-                uint64_t wIBP = 0;
-                // 0x140003050 FindComponent_Work.
-                WorkBase_FindComponent_3050(reinterpret_cast<uintptr_t>(ent), &wIBP);
+                // 0x140003050 FindComponent_Work: ComponentEntity::FindComponent<WorkComponent>.
+                WorkComponent* wIBP = ent->FindComponent<WorkComponent>();
                 if (!wIBP) {
                     std::fprintf(stderr, "[JobArrowData] frame=%d: %s ent=%p has NO "
                                  "WorkComponent (0x140003050 found nothing) — the panel's "
-                                 "jobType would be null\n", frameNum, foodName, ent);
+                                 "jobType would be null\n", frameNum, foodName,
+                                 static_cast<void*>(ent));
                 } else {
-                    const uint64_t wd = *reinterpret_cast<uint64_t*>(wIBP + 0x18);
-                    const int32_t  cur = *reinterpret_cast<int32_t*>(wIBP + 0x30);
+                    // A WorkComponent's description is its WorkDescription.
+                    Description* wdBase = wIBP->_description;            // +0x18
+                    WorkDescription* wd = static_cast<WorkDescription*>(wdBase);
+                    const int32_t  cur = wIBP->workState;                 // +0x30
                     if (!wd) {
                         std::fprintf(stderr, "[JobArrowData] frame=%d: %s workComp=%p "
                                      "+0x30=%d but DESCRIPTION (+0x18) IS NULL — jobType "
                                      "null, arrows dead\n",
-                                     frameNum, foodName, (void*)wIBP, cur);
+                                     frameNum, foodName, static_cast<void*>(wIBP), cur);
                     } else {
-                        const int32_t dflt = *reinterpret_cast<int32_t*>(wd + 0x24);
-                        const int32_t mn   = *reinterpret_cast<int32_t*>(wd + 0x28);
-                        const int32_t mx   = *reinterpret_cast<int32_t*>(wd + 0x2c);
-                        const int32_t area = *reinterpret_cast<int32_t*>(wd + 0x30);
-                        const uint8_t allow = *reinterpret_cast<uint8_t*>(wd + 0x20);
-                        const uint8_t scale = *reinterpret_cast<uint8_t*>(wd + 0x34);
+                        const int32_t dflt = wd->_i24;                    // +0x24
+                        const int32_t mn   = wd->_i28;                    // +0x28
+                        const int32_t mx   = wd->_i2c;                    // +0x2c
+                        const int32_t area = wd->_i30;                    // +0x30
+                        const uint8_t allow = wd->_b20;                   // +0x20
+                        const uint8_t scale = wd->_b34;                   // +0x34
                         std::fprintf(stderr,
                             "[JobArrowData] frame=%d: %s workComp=%p desc=%p | "
                             "wpMax(+0x30)=%d | _allowCountChange(+0x20)=%d "
                             "_defaultWorkers(+0x24)=%d _minWorkerCount(+0x28)=%d "
                             "_maxWorkerCount(+0x2c)=%d _maxArea(+0x30)=%d "
                             "_scaleWithSize(+0x34)=%d -> upEnabled=%d downEnabled=%d%s\n",
-                            frameNum, foodName, (void*)wIBP, (void*)wd, cur,
+                            frameNum, foodName, static_cast<void*>(wIBP), static_cast<void*>(wd), cur,
                             (int)allow, dflt, mn, mx, area, (int)scale,
                             cur < mx ? 1 : 0, (cur != mn && cur > mn) ? 1 : 0,
                             (mn == 1 && mx == 100 && dflt == 0)
@@ -195,32 +201,37 @@ void Fire(int frameNum) {
         if (AlreadySeated(foodComp)) continue;
         ++considered;
 
-        uint64_t wpcIBP = 0;
-        AttendanceComponent_GetJobHostComponent(ent, &wpcIBP);   // 0x140002e10
+        // 0x140002e10 FindComponent_WorkPlace: ComponentEntity::FindComponent<WorkPlaceComponent>.
+        WorkPlaceComponent* wpcIBP = ent->FindComponent<WorkPlaceComponent>();
         if (!wpcIBP) {
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p has NO WorkPlaceComponent "
-                         "— cannot staff\n", frameNum, foodName, foodComp);
+                         "— cannot staff\n", frameNum, foodName, static_cast<void*>(foodComp));
             continue;
         }
-        if (*reinterpret_cast<char*>(wpcIBP + 0x50) == 0) {
+        if (wpcIBP->isAccepting == 0) {                          // +0x50
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p workplace=%p is OFF "
                          "(+0x50=0) — not staffable yet (state-13 enter turns it on)\n",
-                         frameNum, foodName, foodComp, (void*)wpcIBP);
+                         frameNum, foodName, static_cast<void*>(foodComp),
+                         static_cast<void*>(wpcIBP));
             continue;
         }
-        uint64_t desc    = *reinterpret_cast<uint64_t*>(wpcIBP + 0x18);
-        uint64_t profKey = desc ? *reinterpret_cast<uint64_t*>(desc + 0x20) : 0;
+        // The harness reads desc+0x20 whatever the description is: WorkPlaceDescription's layout.
+        const Description* descBase = wpcIBP->_description;     // +0x18
+        const WorkPlaceDescription* desc = static_cast<const WorkPlaceDescription*>(descBase);
+        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the town and the profession as integers.
+        uint64_t profKey = desc ? reinterpret_cast<uint64_t>(desc->_profession0) : 0;   // desc+0x20
         if (!profKey) {
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p workplace=%p has no "
                          "profession key (desc=%p) — cannot staff\n",
-                         frameNum, foodName, foodComp, (void*)wpcIBP, (void*)desc);
+                         frameNum, foodName, static_cast<void*>(foodComp),
+                         static_cast<void*>(wpcIBP), static_cast<const void*>(desc));
             continue;
         }
 
-        const int32_t before = *reinterpret_cast<int32_t*>(wpcIBP + 0x60);
-        const int seated = CitizenEmploy_SeatWorkers(static_cast<int64_t>(townMgr),
+        const int32_t before = wpcIBP->workerCount;              // +0x60
+        const int seated = CitizenEmploy_SeatWorkers(reinterpret_cast<int64_t>(townMgr),
                                                      profKey, s_count);
-        const int32_t after = *reinterpret_cast<int32_t*>(wpcIBP + 0x60);
+        const int32_t after = wpcIBP->workerCount;
 
         if (s_seatedCount < kMaxTracked) s_seated[s_seatedCount++] = foodComp;
 
@@ -229,7 +240,7 @@ void Fire(int frameNum) {
         // roster is what the rest of the chain actually reads.
         std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p workplace=%p profKey=0x%llx "
                      "cascade seated %d/%d — roster(+0x60) %d -> %d%s\n",
-                     frameNum, foodName, foodComp, (void*)wpcIBP,
+                     frameNum, foodName, static_cast<void*>(foodComp), static_cast<void*>(wpcIBP),
                      (unsigned long long)profKey, seated, s_count, before, after,
                      after > before ? "" :
                         "  <-- NO SEAT LANDED HERE (no idle laborer? the panel-staffing "

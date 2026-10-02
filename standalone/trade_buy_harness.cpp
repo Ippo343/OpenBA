@@ -46,7 +46,8 @@
 #include "Component/StorageComponent.h"
 #include "Component/TradeComponent.h"
 #include "Dialog/TradeUI.h"
-#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000 (0x14012d000)
+#include "Action/exe_bodies.h"   // StorageAdd (0x14012d000)
+#include "ui/DialogInstance.h"   // B4: the open dialog's controller array
 
 class TradeUI;
 void TradeUI_UpdateBuyTotals(TradeUI* self);
@@ -128,7 +129,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     const int n = entityList ? entityList->masterArray.count : 0;   // +0x10
     if (!arr || n <= 0 || !tidTrade) {
         std::fprintf(stderr, "[TradeSell] f=%d cannot scan (arr=%p n=%d tid=%u)\n",
-                     frameNum, reinterpret_cast<void*>(arr), n, tidTrade);
+                     frameNum, static_cast<void*>(arr), n, tidTrade);
         std::fflush(stderr);
         return;
     }
@@ -153,18 +154,20 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         return;                     // let the panel populate its rows first
     }
     s_openedAtFrame = -1;
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
+    // (+0x28, the open dialog) is a uint64_t in PLAYER's header.
+    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
     if (!dialog) { std::fprintf(stderr, "[TradeSell] f=%d post opened no dialog\n", frameNum);
                    std::fflush(stderr); return; }
 
     const uint32_t tidTradeUI = TradeUI::TypeId();
-    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-    const int cnt  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
-    void* tui = nullptr;
+    UI::DialogController** ctrlArr = dialog->_controllers.GetData();   // +0x78
+    const int cnt  = dialog->_controllers.GetSize();                   // +0x80
+    TradeUI* tui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; ++i) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tidTradeUI) tui = c;   // B.3.8 bridge
+        if (c->Type() == tidTradeUI) tui = static_cast<TradeUI*>(c);   // exact type id
     }
     if (!tui) {
         std::fprintf(stderr, "[TradeSell] f=%d panel opened but no TradeUI controller\n", frameNum);
@@ -172,7 +175,6 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         return;
     }
 
-    const uintptr_t s = reinterpret_cast<uintptr_t>(tui);
     const int creditBefore = townMgr->field_0x1AC;   // +0x1ac
 
     // Fill the SELL rows. self+0x30 array, count +0x38, stride 0x20, pending qty at
@@ -180,8 +182,8 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     // available stock (what the panel shows as sellable); cap the pending quantity to
     // it so the checkout never subtracts more than the post holds.
     int rowsFilled = 0, unitsQueued = 0;
-    const int sellCount = *reinterpret_cast<int*>(s + 0x38);
-    const uintptr_t sellBase = *reinterpret_cast<uintptr_t*>(s + 0x30);
+    const int sellCount = tui->_sellItems.GetSize();                    // +0x38
+    TradeUI::SellItem* const sellBase = tui->_sellItems.GetData();      // +0x30 (stride 0x20)
     // The row is {resEntity, valueDesc, resTypeComp, pendingQty} -- 0x20 bytes, the
     // shape RefreshSellTable pushes. entry+0x10 is resTypeComp, a COMPONENT POINTER,
     // not an available-stock count: reading it as one and skipping rows where it was 0
@@ -191,8 +193,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     // so queue a fixed per-row amount and let the ported checkout be the judge.
     const int perRow = (s_perRow > 0) ? s_perRow : 100;
     for (int i = 0; i < sellCount && sellBase; ++i) {
-        const uintptr_t entry = sellBase + static_cast<uintptr_t>(i) * 0x20;
-        *reinterpret_cast<int*>(entry + 0x18) = perRow;
+        sellBase[i].quantity = perRow;                                  // entry+0x18
         unitsQueued += perRow;
         ++rowsFilled;
     }
@@ -219,7 +220,8 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
             // StorageComponent instead (and reading storage+0x60 as a tree) produced a
             // successful-looking AddItem every tick, sellRows stuck at 0, and finally a
             // fault walking a field that was never a tree.
-            void* tradeComp = FindCompOnEntity(postEnt, tidTrade);
+            // Found by exact type id.
+            TradeComponent* tradeComp = static_cast<TradeComponent*>(FindCompOnEntity(postEnt, tidTrade));
             ComponentDescription** tmpls = townMgr->field_0x110;   // +0x110
             const int tmplN = townMgr->field_0x118;                 // +0x118
             if (tradeComp && tmpls && tmplN > 0) {
@@ -235,25 +237,25 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
             // achievements and both are needed. AddItem is retail 0x14012d000, the same
             // faithful storage-add the founding-house food seed uses.
             {
-                void* storage = FindCompOnEntity(postEnt, StorageComponent::TypeId());
+                // Found by exact type id.
+                StorageComponent* storage = static_cast<StorageComponent*>(
+                    FindCompOnEntity(postEnt, StorageComponent::TypeId()));
                 if (storage && tmpls) {
                     for (int i = 0; i < tmplN; ++i)
                         if (tmpls[i])
-                            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),
-                                                  reinterpret_cast<int64_t>(tmpls[i]), seedQty);
+                            StorageAdd(storage, tmpls[i], seedQty);   // 0x14012d000
                 }
             }
-            const uintptr_t hdr = reinterpret_cast<uintptr_t>(tradeComp) + 0x60;
             std::fprintf(stderr, "[TradeSell] f=%d seeded %d/%d resource(s) x%d into the "
                                  "TRADE stock (tradeComp=%p tree root=%p count=%d)\n",
-                         frameNum, seeded, tmplN, seedQty, tradeComp,
-                         tradeComp ? *reinterpret_cast<void**>(hdr) : nullptr,
-                         tradeComp ? *reinterpret_cast<int32_t*>(hdr + 8) : -1);
+                         frameNum, seeded, tmplN, seedQty, static_cast<void*>(tradeComp),
+                         tradeComp ? static_cast<void*>(tradeComp->stockRoot) : nullptr,   // +0x60
+                         tradeComp ? tradeComp->stockCount : -1);                          // +0x68
         }
         if (seeded > 0) {
-            TradeUI_RefreshSellTable(reinterpret_cast<TradeUI*>(tui));
-            TradeUI_RefreshBuyTable(reinterpret_cast<TradeUI*>(tui));
-            const int after = *reinterpret_cast<int*>(s + 0x38);
+            TradeUI_RefreshSellTable(tui);
+            TradeUI_RefreshBuyTable(tui);
+            const int after = tui->_sellItems.GetSize();                // +0x38
             std::fprintf(stderr, "[TradeSell] f=%d refreshed after seeding: sellRows %d -> %d\n",
                          frameNum, sellCount, after);
             std::fflush(stderr);
@@ -261,7 +263,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         }
         std::fprintf(stderr, "[TradeSell] f=%d TradeUI=%p sellRows=%d but every row has 0 "
                              "stock — nothing to sell%s\n",
-                     frameNum, tui, sellCount,
+                     frameNum, static_cast<void*>(tui), sellCount,
                      seeded ? " even after refresh" : " (set BANISHED_TRADE_SELL_SEED=<n>)");
         std::fflush(stderr);
         return;
@@ -269,10 +271,10 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
 
     // The checkout reads the sell TOTAL off the numberSellTotal element, not from the
     // rows, so the totals have to be recomputed before it runs or the credit is 0.
-    TradeUI_UpdateSellTotals(reinterpret_cast<TradeUI*>(tui));
-    TradeUI_UpdateBuyTotals(reinterpret_cast<TradeUI*>(tui));
+    TradeUI_UpdateSellTotals(tui);
+    TradeUI_UpdateBuyTotals(tui);
 
-    TradeUI_OnTradeButton(reinterpret_cast<TradeUI*>(tui), nullptr, nullptr, 0);
+    TradeUI_OnTradeButton(tui, nullptr, nullptr, 0);
 
     const int creditAfter = townMgr->field_0x1AC;    // +0x1ac
     s_totalSold += (creditAfter - creditBefore);

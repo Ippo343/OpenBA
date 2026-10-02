@@ -38,6 +38,10 @@
 #include "Component/StateMachineComponent.h"
 #include "Component/StorageComponent.h"
 #include "Component/WorkPlaceComponent.h"
+#include "Component/ComponentDescription.h"   // B4: the entity's sub-description list
+#include "Entity/ComponentEntity.h"           // B4: the component array by name
+#include "Entity/EntityList.h"                // B4: GameUpdateLoop::m_entityList
+#include "Game/Map.h"                         // B4: Map::size / cells, MapCell::occupant
 
 namespace {
 
@@ -66,51 +70,48 @@ struct ClassRow {
 // state id in its +0x0a byte. We read the StateMachineComponent instead, which is
 // where the id is actually published — comp+0x28 is only the node.
 // Find a component of type `tid` on an entity (the +0x30 array / +0x38 count pair).
-void* FindComp(void* ent, uint32_t tid) {
+Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
 
-void DumpStorage(int frame, uintptr_t arr, int n) {
+void DumpStorage(int frame, ComponentEntity** arr, int n) {
     const uint32_t tidStorage = StorageComponent::TypeId();
     if (!tidStorage || !arr || n <= 0) {
         std::fprintf(stderr, "[FoodDiag] frame=%d storage: CANNOT SCAN "
                      "(tid=%u entities=%d)\n", frame, tidStorage, n);
         return;
     }
-    struct Stack { uintptr_t rt; long long ct; };
+    struct Stack { const ComponentDescription* rt; long long ct; };
     Stack byType[32] = {};
     int types = 0, storages = 0, nonEmpty = 0;
     long long grand = 0;
 
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        const int cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() != tidStorage) continue;   // B.3.8 bridge
+            if (comp->Type() != tidStorage) continue;
             ++storages;
-            uintptr_t st = reinterpret_cast<uintptr_t>(comp);
-            const int stacks = *reinterpret_cast<int32_t*>(st + 0x30);
-            uintptr_t inv = *reinterpret_cast<uintptr_t*>(st + 0x28);
+            StorageComponent* st = static_cast<StorageComponent*>(comp);   // exact type id
+            const int stacks = st->slotCount;                    // +0x30
+            const StorageComponent::Item* inv = st->storageSlots;   // +0x28 (stride 0x10)
             if (stacks > 0) ++nonEmpty;
             for (int k = 0; inv && k < stacks; ++k) {
-                uintptr_t e = inv + static_cast<uintptr_t>(k) * 0x10;
-                uintptr_t rt = *reinterpret_cast<uintptr_t*>(e);
-                const int ct = *reinterpret_cast<int32_t*>(e + 8);
+                const StorageComponent::Item& e = inv[k];
+                const ComponentDescription* rt = e._resource;    // +0x00
+                const int ct = e._count;                         // +0x08
                 grand += ct;
                 int f = -1;
                 for (int t = 0; t < types; ++t) if (byType[t].rt == rt) { f = t; break; }
@@ -124,22 +125,22 @@ void DumpStorage(int frame, uintptr_t arr, int n) {
                  frame, storages, nonEmpty, types, grand);
     for (int t = 0; t < types; ++t)
         std::fprintf(stderr, "[FoodDiag]     resType=%p count=%lld\n",
-                     reinterpret_cast<void*>(byType[t].rt), byType[t].ct);
+                     static_cast<const void*>(byType[t].rt), byType[t].ct);
 }
 
 void DumpAll(int frame) {
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         std::fprintf(stderr, "[FoodDiag] frame=%d: gameWorld null\n", frame);
         return;
     }
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* entityList = gw->m_entityList;                  // +0xe8
     if (!entityList) {
         std::fprintf(stderr, "[FoodDiag] frame=%d: EntityList (gw+0xe8) null\n", frame);
         return;
     }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
+    ComponentEntity** arr = entityList->masterArray.data;       // +0x08
+    int       n   = entityList->masterArray.count;              // +0x10
 
     ClassRow rows[] = {
         { "CropFieldComponent", CropFieldComponent::TypeId(), 0 },
@@ -154,37 +155,37 @@ void DumpAll(int frame) {
     const uint32_t tidWPC = WorkPlaceComponent::TypeId();
 
     for (int i = 0; i < n && arr; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
         for (int r = 0; r < nRows; ++r) {
             if (!rows[r].tid) continue;
-            void* comp = FindComp(ent, rows[r].tid);
+            Component* comp = FindComp(ent, rows[r].tid);
             if (!comp) continue;
             ++rows[r].count;
 
             // StateMachineComponent: the live state id is the +0x51 byte of the
             // component (the node-local index the orchard panel path already reads).
             int stateId = -1;
-            if (void* smc = FindComp(ent, tidSM))
-                stateId = *reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(smc) + 0x51);
+            if (Component* smc = FindComp(ent, tidSM))   // exact type id
+                stateId = static_cast<StateMachineComponent*>(smc)->stateMachine.activeState;   // +0x51
 
             int staffed = -1, accepting = -1;
-            if (void* wpc = FindComp(ent, tidWPC)) {
-                uintptr_t w = reinterpret_cast<uintptr_t>(wpc);
-                staffed   = *reinterpret_cast<int32_t*>(w + 0x60);
-                accepting = *reinterpret_cast<uint8_t*>(w + 0x50);
+            if (Component* wpcBase = FindComp(ent, tidWPC)) {
+                WorkPlaceComponent* w = static_cast<WorkPlaceComponent*>(wpcBase);   // exact type id
+                staffed   = w->workerCount;                  // +0x60
+                accepting = w->isAccepting;                  // +0x50
             }
 
             std::fprintf(stderr, "[FoodDiag] frame=%d %-19s #%d comp=%p smStateIdx=%d "
                          "staffed=%d accepting=%d",
-                         frame, rows[r].name, rows[r].count, comp, stateId, staffed, accepting);
+                         frame, rows[r].name, rows[r].count, static_cast<void*>(comp),
+                         stateId, staffed, accepting);
             if (std::strcmp(rows[r].name, "FishingComponent") == 0) {
-                uintptr_t f = reinterpret_cast<uintptr_t>(comp);
+                // The row's type id is FishingComponent's.
+                FishingComponent* f = static_cast<FishingComponent*>(comp);
                 std::fprintf(stderr, " registered(+0x50)=%u rate(+0x54)=%.3f",
-                             (unsigned)*reinterpret_cast<uint8_t*>(f + 0x50),
-                             *reinterpret_cast<float*>(f + 0x54));
+                             (unsigned)f->fishingFlag, f->fishingRate);
             }
             // Gatherer's Hut and Hunter Lodge both search their RADIUS for something
             // that already exists in the world: HerbalistWork::Slot4 walks random cells
@@ -196,46 +197,40 @@ void DumpAll(int frame) {
             if (std::strcmp(rows[r].name, "HerbalistComponent") == 0 ||
                 std::strcmp(rows[r].name, "HuntComponent") == 0) {
                 int resInRange = -1;
-                void* gwp = (GameUpdateLoop::_singleton != nullptr)
+                GameUpdateLoop* gwp = (GameUpdateLoop::_singleton != nullptr)
                           ? GameUpdateLoop::_singleton : nullptr;
-                uint8_t* mapObj = gwp ? *reinterpret_cast<uint8_t**>(
-                    reinterpret_cast<uintptr_t>(gwp) + 0xf8) : nullptr;
-                uint8_t* grid = mapObj ? *reinterpret_cast<uint8_t**>(mapObj + 0x80) : nullptr;
-                const int mw = mapObj ? *reinterpret_cast<int32_t*>(mapObj) : 0;
+                Map* mapObj = gwp ? gwp->m_game : nullptr;           // +0xf8
+                MapCell* grid = mapObj ? mapObj->cells : nullptr;   // +0x80 (stride 0x30)
+                const int mw = mapObj ? mapObj->size : 0;           // +0x00
                 // Radius lives on the RadiusDescription in the entity's description
                 // list (entity+0x28), at +0x28 — the same read the work does.
                 int radius = 0;
                 const uint32_t tidRadius = RadiusDescription::TypeId();
-                uintptr_t dlist = *reinterpret_cast<uintptr_t*>(
-                    static_cast<uint8_t*>(ent) + 0x28);
+                ComponentDescription* dlist = ent->_description;    // +0x28
                 if (dlist && tidRadius) {
-                    const int dn = *reinterpret_cast<int32_t*>(dlist + 0x30);
-                    void** da = *reinterpret_cast<void***>(dlist + 0x28);
+                    const int dn = dlist->_subDescCount;            // +0x30
+                    Description** da = dlist->_subDescs;            // +0x28
                     for (int d = 0; d < dn && da; ++d)
                         if (da[d] && Object::IsDerivedFromNullSafe(da[d], tidRadius)) {
-                            radius = *reinterpret_cast<int32_t*>(
-                                reinterpret_cast<uintptr_t>(da[d]) + 0x28);
+                            radius = static_cast<RadiusDescription*>(da[d])->_radius;   // +0x28
                             break;
                         }
                 }
                 if (grid && mw > 0 && radius > 0) {
                     // Building tile centre, as the works compute it.
                     const uint32_t tidMap = MapComponent::TypeId();
-                    void* mc = FindComp(ent, tidMap);
-                    if (mc) {
-                        uintptr_t m = reinterpret_cast<uintptr_t>(mc);
-                        const int cx = (*reinterpret_cast<int16_t*>(m + 0x2c) >> 1) +
-                                        *reinterpret_cast<int16_t*>(m + 0x28);
-                        const int cy = (*reinterpret_cast<int16_t*>(m + 0x2e) >> 1) +
-                                        *reinterpret_cast<int16_t*>(m + 0x2a);
+                    Component* mcBase = FindComp(ent, tidMap);
+                    if (mcBase) {
+                        MapComponent* m = static_cast<MapComponent*>(mcBase);   // exact type id
+                        const int cx = (m->tileX1 >> 1) + m->tileX0;        // +0x2c, +0x28
+                        const int cy = (m->tileY1 >> 1) + m->tileY0;        // +0x2e, +0x2a
                         resInRange = 0;
                         for (int dy = -radius; dy < radius; ++dy)
                             for (int dx = -radius; dx < radius; ++dx) {
                                 if (dx * dx + dy * dy > radius * radius) continue;
                                 const int x = cx + dx, y = cy + dy;
                                 if (x < 0 || y < 0 || x >= mw || y >= mw) continue;
-                                if (*reinterpret_cast<uintptr_t*>(
-                                        grid + (size_t)(y * mw + x) * 0x30 + 8) != 0)
+                                if (grid[y * mw + x].occupant != nullptr)   // cell+0x08
                                     ++resInRange;
                             }
                     }
@@ -256,36 +251,32 @@ void DumpAll(int frame) {
                     // the port naming its local `s_typeId_WorkplaceComponent`. `comp` here
                     // is already that component.
                     const uint32_t tidHerbDesc = HerbalistDescription::TypeId();
-                    void* hdesc = nullptr;
+                    HerbalistDescription* hdesc = nullptr;
                     {
-                        void* d = *reinterpret_cast<void**>(
-                            reinterpret_cast<uintptr_t>(comp) + 0x18);
+                        Description* d = comp->_description;               // +0x18
                         if (d && tidHerbDesc &&
-                            Object::IsDerivedFromNullSafe(d, tidHerbDesc)) hdesc = d;
+                            Object::IsDerivedFromNullSafe(d, tidHerbDesc))
+                            hdesc = static_cast<HerbalistDescription*>(d);
                     }
                     int accepted = -1, listN = 0;
                     if (hdesc) {
-                        uintptr_t hd = reinterpret_cast<uintptr_t>(hdesc);
-                        listN = *reinterpret_cast<int32_t*>(hd + 0x28);
-                        uintptr_t* list = *reinterpret_cast<uintptr_t**>(hd + 0x20);
+                        listN = hdesc->_herbCount;                         // +0x28
+                        Object::External** list = hdesc->_herbs;           // +0x20
                         const uint32_t tidMap2 = MapComponent::TypeId();
-                        void* mc2 = FindComp(ent, tidMap2);
+                        Component* mc2 = FindComp(ent, tidMap2);
                         if (list && listN > 0 && mc2) {
-                            uintptr_t m2 = reinterpret_cast<uintptr_t>(mc2);
-                            const int cx = (*reinterpret_cast<int16_t*>(m2 + 0x2c) >> 1) +
-                                            *reinterpret_cast<int16_t*>(m2 + 0x28);
-                            const int cy = (*reinterpret_cast<int16_t*>(m2 + 0x2e) >> 1) +
-                                            *reinterpret_cast<int16_t*>(m2 + 0x2a);
+                            MapComponent* m2 = static_cast<MapComponent*>(mc2);   // exact type id
+                            const int cx = (m2->tileX1 >> 1) + m2->tileX0;   // +0x2c, +0x28
+                            const int cy = (m2->tileY1 >> 1) + m2->tileY0;   // +0x2e, +0x2a
                             accepted = 0;
                             for (int dy = -radius; dy < radius; ++dy)
                                 for (int dx = -radius; dx < radius; ++dx) {
                                     if (dx * dx + dy * dy > radius * radius) continue;
                                     const int x = cx + dx, y = cy + dy;
                                     if (x < 0 || y < 0 || x >= mw || y >= mw) continue;
-                                    uintptr_t re = *reinterpret_cast<uintptr_t*>(
-                                        grid + (size_t)(y * mw + x) * 0x30 + 8);
+                                    ComponentEntity* re = grid[y * mw + x].occupant;   // cell+0x08
                                     if (!re) continue;
-                                    const uintptr_t rd = *reinterpret_cast<uintptr_t*>(re + 0x28);
+                                    const Object::External* rd = re->_description;    // +0x28
                                     for (int t = 0; t < listN; ++t)
                                         if (list[t] == rd) { ++accepted; break; }
                                 }
@@ -295,9 +286,11 @@ void DumpAll(int frame) {
                 }
             }
             if (std::strcmp(rows[r].name, "HuntComponent") == 0) {
-                uintptr_t h = reinterpret_cast<uintptr_t>(comp);
+                // The row's type id is HuntComponent's.
+                HuntComponent* h = static_cast<HuntComponent*>(comp);
                 std::fprintf(stderr, " progress(+0x50)=%lld",
-                             (long long)*reinterpret_cast<int64_t*>(h + 0x50));
+                             (long long)h->huntProgress._ticks);
+
             }
             std::fprintf(stderr, "\n");
         }

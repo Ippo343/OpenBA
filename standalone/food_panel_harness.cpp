@@ -51,6 +51,14 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/ComponentEntity.h"          // B4: the component array by name
+#include "Entity/EntityList.h"               // B4: GameUpdateLoop::m_entityList
+#include "Entity/CitizenBehavior.h"          // B4: the town lists and the profession tree
+#include "Component/CitizenComponent.h"      // B4: age / school / care links / description
+#include "Component/CitizenDescription.h"    // B4: _professions[3], adultAge
+#include "Component/AttendanceDescription.h" // B4: AttendanceComponent's description
+#include "Game/ProfessionList.h"             // B4: GameUpdateLoop::m_professionList
+#include "ui/DialogInstance.h"               // B4: the open dialog's controller array
 
 // Both provided by the existing tool harness / dialog layer.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
@@ -110,8 +118,8 @@ bool  s_fired = false;
 // frame N should show students queuing some frames later, and if it does not, the defect
 // is downstream of this harness rather than in the seat. Report the queue over time so
 // the two are never conflated again.
-void*    s_seatComp   = nullptr;   // the workplace component we seated into
-void*    s_seatEntity = nullptr;
+WorkPlaceComponent* s_seatComp   = nullptr;   // the workplace component we seated into
+ComponentEntity*    s_seatEntity = nullptr;
 int      s_seatFrame  = 0;
 int      s_followsLeft = 0;
 int      s_nextFollow = 0;
@@ -133,15 +141,14 @@ void Init() {
 
 uint32_t Tid(const char* n) { return n ? ::Object::GetTypeIdByName(n) : 0; }
 
-void* FindCompOnEntity(void* ent, uint32_t tid) {
+Component* FindCompOnEntity(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
@@ -155,19 +162,18 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         return;
     }
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) { std::fprintf(stderr, "[FoodPanel] gameWorld null\n"); return; }
-    uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* el = gw->m_entityList;                 // +0xe8
     if (!el) { std::fprintf(stderr, "[FoodPanel] EntityList null\n"); return; }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
-    const int n = *reinterpret_cast<int32_t*>(el + 0x10);
+    ComponentEntity** arr = el->masterArray.data;      // +0x08
+    const int n = el->masterArray.count;               // +0x10
 
-    void* ent = nullptr; void* comp = nullptr;
+    ComponentEntity* ent = nullptr; Component* comp = nullptr;
     for (int i = 0; i < n && arr && !ent; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* e = *slot;
+        ComponentEntity* e = arr[i];
         if (!e) continue;
-        if (void* c = FindCompOnEntity(e, tid)) { ent = e; comp = c; }
+        if (Component* c = FindCompOnEntity(e, tid)) { ent = e; comp = c; }
     }
     if (!ent) {
         std::fprintf(stderr, "[FoodPanel] %-19s NO ENTITY in world (scanned %d) — set the "
@@ -179,8 +185,9 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // Slots 13/14 are CommandMask/Command, Component virtuals (real classes since
     // ENDGAME B.3.8, so neither slot can be null any more). `comp` is an element of the
     // entity's component array matched by Type().
-    Component* ccomp = reinterpret_cast<Component*>(comp);   // B.3.8 bridge
-    std::fprintf(stderr, "[FoodPanel] %-19s ent=%p comp=%p\n", fc.component, ent, comp);
+    Component* ccomp = comp;
+    std::fprintf(stderr, "[FoodPanel] %-19s ent=%p comp=%p\n", fc.component,
+                 static_cast<void*>(ent), static_cast<void*>(comp));
 
     {
         // Slot 13 does NOT have one signature across the family. Orchard/Pasture/CropField
@@ -263,8 +270,11 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         return;
     }
     const int opened = EditTool_HarnessSelectEntity(tool, ent);
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
-    std::fprintf(stderr, "[FoodPanel]   select -> opened=%d dialog=%p\n", opened, dialog);
+    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
+    // (+0x28, the open dialog) is a uint64_t in PLAYER's header (PLAYER running).
+    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
+    std::fprintf(stderr, "[FoodPanel]   select -> opened=%d dialog=%p\n", opened,
+                 static_cast<void*>(dialog));
     if (!dialog) {
         std::fprintf(stderr, "[FoodPanel]   NO DIALOG: this building has no info-panel UI "
                      "binding, or SelectEntity refused it\n");
@@ -272,15 +282,15 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
 
     // ── enumerate the dialog's controllers ────────────────────────────────────────
-    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-    const int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
+    UI::DialogController** ctrlArr = dialog->_controllers.GetData();   // +0x78
+    const int cnt = dialog->_controllers.GetSize();                    // +0x80
     const uint32_t wantUi = Tid(fc.uiClass);
     bool sawWanted = false;
     std::fprintf(stderr, "[FoodPanel]   %d controller(s):", cnt);
     for (int i = 0; ctrlArr && i < cnt; ++i) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) { std::fprintf(stderr, " [null]"); continue; }
-        const uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
+        const uint32_t t = c->Type();
         std::fprintf(stderr, " %08X", t);
         if (wantUi && t == wantUi) sawWanted = true;
     }
@@ -323,28 +333,31 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // report the roster DELTA. Everything downstream ("no teacher" -> "no students")
     // hangs off this one dispatch.
     if (ValOn(Opt().foodPanelSeat)) {
-        void* wpc = FindCompOnEntity(ent, WorkPlaceComponent::TypeId());
-        void* wc  = FindCompOnEntity(ent, WorkComponent::TypeId());
+        // Both found by exact type id: the downcasts stay inside Component's hierarchy.
+        Component* wpcBase = FindCompOnEntity(ent, WorkPlaceComponent::TypeId());
+        Component* wcBase  = FindCompOnEntity(ent, WorkComponent::TypeId());
+        WorkPlaceComponent* wpc = static_cast<WorkPlaceComponent*>(wpcBase);
+        WorkComponent* wc = static_cast<WorkComponent*>(wcBase);
         if (!wpc) {
             std::fprintf(stderr, "[FoodPanel]   seat: no WorkPlaceComponent on this entity — "
                          "not an employer, nothing to seat\n");
         } else {
-            const uintptr_t w = reinterpret_cast<uintptr_t>(wpc);
-            const uint64_t key   = *reinterpret_cast<uint64_t*>(w + 0x48);
-            const int      accept= *reinterpret_cast<uint8_t*>(w + 0x50);
-            const int      roster= *reinterpret_cast<int32_t*>(w + 0x60);
-            const int      cap   = wc ? *reinterpret_cast<int32_t*>(
-                                        reinterpret_cast<uintptr_t>(wc) + 0x30) : -1;
+            // The profession pointer is the tree's key and is printed as one.
+            const uint64_t key   = reinterpret_cast<uint64_t>(wpc->profession);  // +0x48  // CAST-OK: ptr_int
+            const int      accept= wpc->isAccepting;                            // +0x50
+            const int      roster= wpc->workerCount;                            // +0x60
+            const int      cap   = wc ? wc->workState : -1;                     // WC+0x30
 
             // Is the owner registered in the town profession BST under that key? An
             // unregistered workplace is invisible to BOTH finders, so a dead click
             // would otherwise be indistinguishable from a broken slot 9.
             int bucket = -1;
-            void* gw2 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-            uintptr_t townMgr = gw2 ? *reinterpret_cast<uintptr_t*>(
-                                    reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
+            GameUpdateLoop* gw2 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+            CitizenBehavior* townMgr = gw2 ? gw2->m_citizenList : nullptr;     // +0xf0
             if (townMgr && key) {
-                uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);
+                // LEFT: CitizenBehavior::field_0x100 is `void*` (its 0x38-byte node type is
+                // declared nowhere; W0-H1's header), so the node walk stays raw.
+                uint64_t* node = reinterpret_cast<uint64_t*>(townMgr->field_0x100);   // +0x100
                 while (node) {
                     if (key < node[0])      node = reinterpret_cast<uint64_t*>(node[4]);
                     else if (key > node[0]) node = reinterpret_cast<uint64_t*>(node[5]);
@@ -357,15 +370,17 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             // building never runs f670. If +0x18 is some other description, +0x20 is the
             // wrong field of the wrong object and the key matches nothing. Check the type.
             {
-                void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
+                Description* wpDesc = wpc->_description;                       // +0x18
                 const uint32_t tidWpd = WorkPlaceDescription::TypeId();
                 uint32_t got = 0;
-                if (wpDesc) got = reinterpret_cast<Object::Base*>(wpDesc)->Type();   // B.3.8 bridge
+                if (wpDesc) got = wpDesc->Type();
+                // The harness prints +0x20 whatever the description's type is (that is the
+                // point of the probe): read through WorkPlaceDescription's layout.
+                const WorkPlaceDescription* wpdView = static_cast<const WorkPlaceDescription*>(wpDesc);
                 std::fprintf(stderr, "[FoodPanel]   seat PRE: WPC+0x18 desc=%p typeId=%08X "
                              "(WorkPlaceDescription=%08X) desc+0x20=0x%llx  %s\n",
-                             wpDesc, got, tidWpd,
-                             (unsigned long long)(wpDesc ? *reinterpret_cast<uint64_t*>(
-                                 reinterpret_cast<uintptr_t>(wpDesc) + 0x20) : 0),
+                             static_cast<void*>(wpDesc), got, tidWpd,
+                             (unsigned long long)(wpDesc ? reinterpret_cast<uint64_t>(wpdView->_profession0) : 0),  // CAST-OK: ptr_int
                              !wpDesc              ? "NO DESCRIPTION"
                            : (got == tidWpd)      ? "type OK — +0x20 really is the work profession"
                                                   : "WRONG TYPE — +0x48 was seated from the wrong object");
@@ -384,10 +399,10 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             const uint32_t tidWpUi = WorkPlaceUI::TypeId();
             WorkPlaceUI* wpUi = nullptr;
             for (int i = 0; ctrlArr && i < cnt; ++i) {
-                void* c = ctrlArr[i];
+                UI::DialogController* c = ctrlArr[i];
                 if (!c) continue;
-                if (reinterpret_cast<Object::Base*>(c)->Type() == tidWpUi) {   // B.3.8 bridge
-                    wpUi = reinterpret_cast<WorkPlaceUI*>(c); break;           // B.3.8 bridge
+                if (c->Type() == tidWpUi) {
+                    wpUi = static_cast<WorkPlaceUI*>(c); break;   // exact type id
                 }
             }
             if (!wpUi) {
@@ -398,9 +413,8 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                     // msg 0x12 = button command, id 0x1450 = workerCountUp. WorkPlaceUI is a
                     // real class (ENDGAME B.3.8): slot 9 is its OnElementEvent override.
                     wpUi->OnElementEvent(nullptr, 0x12, 0x1450, 0, 0, 0, nullptr);
-                    const int rosterNow = *reinterpret_cast<int32_t*>(w + 0x60);
-                    const int capNow = wc ? *reinterpret_cast<int32_t*>(
-                                           reinterpret_cast<uintptr_t>(wc) + 0x30) : -1;
+                    const int rosterNow = wpc->workerCount;           // +0x60
+                    const int capNow = wc ? wc->workState : -1;       // WC+0x30
                     std::fprintf(stderr, "[FoodPanel]   seat CLICK workerCountUp(0x1450): "
                                  "roster %d -> %d, capacity %d -> %d   %s\n",
                                  roster, rosterNow, cap, capNow,
@@ -441,22 +455,20 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     const uint32_t tidRadius = RadiusUI::TypeId();
     RadiusUI* radius = nullptr;
     for (int i = 0; ctrlArr && i < cnt; ++i) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tidRadius) {   // B.3.8 bridge
-            radius = reinterpret_cast<RadiusUI*>(c); break;              // B.3.8 bridge
+        if (c->Type() == tidRadius) {
+            radius = static_cast<RadiusUI*>(c); break;   // exact type id
         }
     }
     if (!radius) {
         std::fprintf(stderr, "[FoodPanel]   teardown: no RadiusUI on this panel "
                      "(tid=%08X) — nothing to measure here\n", tidRadius);
     } else {
-        const int before = *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uintptr_t>(radius) + 0x30);
+        const int before = radius->highlightIndex;   // +0x30
         {
             radius->OnClosed();   // slot 6, RadiusUI's override (real class, ENDGAME B.3.8)
-            const int after = *reinterpret_cast<int32_t*>(
-                reinterpret_cast<uintptr_t>(radius) + 0x30);
+            const int after = radius->highlightIndex;
             std::fprintf(stderr, "[FoodPanel]   teardown: RadiusUI=%p overlay %d -> %d  %s\n",
                          static_cast<void*>(radius), before, after,
                          (after == -1)
@@ -477,10 +489,10 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         const uint32_t tidToolUI = ToolUI::TypeId();
         ToolUI* toolUi = nullptr;
         for (int i = 0; ctrlArr && i < cnt; ++i) {
-            void* c = ctrlArr[i];
+            UI::DialogController* c = ctrlArr[i];
             if (!c) continue;
             if (Object::IsDerivedFromNullSafe(c, tidToolUI)) {
-                toolUi = reinterpret_cast<ToolUI*>(c); break;   // B.3.8 bridge
+                toolUi = static_cast<ToolUI*>(c); break;   // derived from ToolUI
             }
         }
         // BANISHED_FOOD_PANEL_ARM_BUILDTOOL=1 — arm a BUILD tool while the panel is
@@ -494,6 +506,9 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                 std::fprintf(stderr, "[FoodPanel]   teardown: Pasture template unresolved — "
                              "build tool NOT armed\n");
             } else {
+                // LEFT: EntityUI_SetEditMode_Impl takes the template as a uint64_t
+                // (Dialog/exe_bodies.h, DLG); `entityUI` is the tool manager handed in as
+                // void* by gameupdateloop.cpp's declaration of FoodPanel_Tick (GAME).
                 EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
                 void* armed = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
                 std::fprintf(stderr, "[FoodPanel]   teardown: armed build tool %p at "
@@ -512,6 +527,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             // Re-read the CURRENT active tool: with ARM_BUILDTOOL the EditTool we
             // opened with has been destroyed by SetEditMode, so the captured `tool`
             // pointer is dangling and must not be dereferenced.
+            // LEFT: void* tool manager (above) and EditTool::entityRef uint64_t (PLAYER).
             void* nowTool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
             void* afterBtn = (nowTool && EditTool_IsEditTool(nowTool))
                 ? *reinterpret_cast<void**>(static_cast<uint8_t*>(nowTool) + 0x28) : nullptr;
@@ -525,6 +541,8 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
 
     // (b) the real close path.
+    // LEFT: EditTool_CloseInfoDialog takes the dialog as uintptr_t (Player/edittool_funcs.h,
+    // PLAYER running) and `tool` is the void* EditTool_HarnessAcquire returns.
     EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool), reinterpret_cast<uintptr_t>(dialog));
     void* after = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
     std::fprintf(stderr, "[FoodPanel]   teardown: CloseInfoDialog -> tool dialog=%p %s\n",
@@ -538,16 +556,17 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
 // does anything downstream (the school's student queue) move now that it is staffed?
 void FollowUp(int frameNum) {
     if (!s_seatComp) return;
-    const uintptr_t w = reinterpret_cast<uintptr_t>(s_seatComp);
-    const int roster = *reinterpret_cast<int32_t*>(w + 0x60);
+    WorkPlaceComponent* w = s_seatComp;
+    const int roster = w->workerCount;                 // +0x60
 
     // AttendanceComponent, when present: queue count at +0x30, capacity at desc+0x20.
     int queued = -1, capacity = -1;
-    if (void* att = FindCompOnEntity(s_seatEntity, AttendanceComponent::TypeId())) {
-        const uintptr_t a = reinterpret_cast<uintptr_t>(att);
-        queued = *reinterpret_cast<int32_t*>(a + 0x30);
-        if (void* d = *reinterpret_cast<void**>(a + 0x18))
-            capacity = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
+    if (Component* attBase = FindCompOnEntity(s_seatEntity, AttendanceComponent::TypeId())) {
+        AttendanceComponent* a = static_cast<AttendanceComponent*>(attBase);   // exact type id
+        queued = a->queueCount;                                                // +0x30
+        // An AttendanceComponent's description is its AttendanceDescription.
+        if (Description* d = a->_description)                                  // +0x18
+            capacity = static_cast<AttendanceDescription*>(d)->_i20;           // desc+0x20
     }
     std::fprintf(stderr, "[FoodPanel]   seat +%d frames: roster(+0x60)=%d%s",
                  frameNum - s_seatFrame, roster,
@@ -569,25 +588,24 @@ void FollowUp(int frameNum) {
     // key" vs "0 do" separates a broken finder from a town that simply has nobody
     // eligible, and those two have opposite fixes.
     if (queued == 0 && roster > 0) {
-        void* gw3 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-        uintptr_t tm = gw3 ? *reinterpret_cast<uintptr_t*>(
-                            reinterpret_cast<uintptr_t>(gw3) + 0xf0) : 0;
+        GameUpdateLoop* gw3 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+        CitizenBehavior* tm = gw3 ? gw3->m_citizenList : nullptr;          // +0xf0
         if (tm) {
-            const uint64_t key = *reinterpret_cast<uint64_t*>(w + 0x48);
-            uintptr_t czArr = *reinterpret_cast<uintptr_t*>(tm + 0xa0);
-            const int czN = *reinterpret_cast<int32_t*>(tm + 0xa8);
+            const Profession* keyP = w->profession;                         // +0x48
+            const uint64_t key = reinterpret_cast<uint64_t>(keyP);  // printed as the key  // CAST-OK: ptr_int
+            CitizenComponent** czArr = tm->citizens;                        // +0xa0
+            const int czN = tm->citizenCount;                               // +0xa8
             int total = 0, noRec = 0, k30 = 0, k28 = 0, linked228 = 0, linked230 = 0;
             for (int i = 0; i < czN && czArr; ++i) {
-                void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
-                uintptr_t cz = reinterpret_cast<uintptr_t>(*cs);
+                CitizenComponent* cz = czArr[i];
                 if (!cz) continue;
                 ++total;
-                uintptr_t rec = *reinterpret_cast<uintptr_t*>(cz + 0x288);
+                CitizenDescription* rec = cz->description;                  // +0x288
                 if (!rec) { ++noRec; continue; }
-                if (*reinterpret_cast<uint64_t*>(rec + 0x30) == key) ++k30;
-                if (*reinterpret_cast<uint64_t*>(rec + 0x28) == key) ++k28;
-                if (*reinterpret_cast<uint64_t*>(cz + 0x228)) ++linked228;
-                if (*reinterpret_cast<uint64_t*>(cz + 0x230)) ++linked230;
+                if (rec->_professions[2] == keyP) ++k30;                    // rec+0x30
+                if (rec->_professions[1] == keyP) ++k28;                    // rec+0x28
+                if (cz->careBuilding) ++linked228;                          // +0x228
+                if (cz->field_0x230) ++linked230;                           // +0x230
                 // "Nobody carries the key" has two very different causes: the town has
                 // no eligible citizens (faithful), or the record's key fields were never
                 // populated at all (a data-load gap). All-zero keys distinguish them, so
@@ -598,19 +616,21 @@ void FollowUp(int frameNum) {
                     // print all three next to the two professions we can already name
                     // (profReg+0x30 default/laborer, +0x38 builder). That turns three
                     // anonymous pointers into an identified map instead of a guess.
-                    uintptr_t pr = *reinterpret_cast<uintptr_t*>(
-                                       reinterpret_cast<uintptr_t>(gw3) + 0xb0);
+                    ProfessionList* pr = gw3->m_professionList;            // +0xb0
+                    // The profession pointers are printed as the keys they are.
+                    const unsigned long long rec20 = reinterpret_cast<uint64_t>(rec->_professions[0]);  // CAST-OK: ptr_int
+                    const unsigned long long rec28 = reinterpret_cast<uint64_t>(rec->_professions[1]);  // CAST-OK: ptr_int
+                    const unsigned long long rec30 = reinterpret_cast<uint64_t>(rec->_professions[2]);  // CAST-OK: ptr_int
+                    const unsigned long long pr30 = pr ? reinterpret_cast<uint64_t>(pr->field_0x30) : 0;  // CAST-OK: ptr_int
+                    const unsigned long long pr38 = pr ? reinterpret_cast<uint64_t>(pr->field_0x38) : 0;  // CAST-OK: ptr_int
                     std::fprintf(stderr, "[FoodPanel]       citizen[%d]=%p rec(+0x288)=%p\n"
                                  "[FoodPanel]         rec+0x20=0x%llx  rec+0x28=0x%llx  rec+0x30=0x%llx\n"
                                  "[FoodPanel]         schoolWPC+0x48=0x%llx  laborer(profReg+0x30)=0x%llx  "
                                  "builder(profReg+0x38)=0x%llx\n",
-                                 i, reinterpret_cast<void*>(cz), reinterpret_cast<void*>(rec),
-                                 (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x20),
-                                 (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x28),
-                                 (unsigned long long)*reinterpret_cast<uint64_t*>(rec + 0x30),
+                                 i, static_cast<void*>(cz), static_cast<void*>(rec),
+                                 rec20, rec28, rec30,
                                  (unsigned long long)key,
-                                 (unsigned long long)(pr ? *reinterpret_cast<uint64_t*>(pr + 0x30) : 0),
-                                 (unsigned long long)(pr ? *reinterpret_cast<uint64_t*>(pr + 0x38) : 0));
+                                 pr30, pr38);
                 }
             }
             // Name the two keys the citizen record actually carries by finding the
@@ -619,15 +639,14 @@ void FollowUp(int frameNum) {
             // student" pair — if neither resolves to this building, the mismatch is the
             // whole story and the owning building tells us which key is which.
             {
-                uintptr_t bArr = *reinterpret_cast<uintptr_t*>(tm + 0x60);
-                const int bN = *reinterpret_cast<int32_t*>(tm + 0x68);
-                uint64_t want[2] = {0, 0};
+                AttendanceComponent** bArr = tm->attendanceComponents;     // +0x60
+                const int bN = tm->attendanceComponentCount;                // +0x68
+                const Profession* want[2] = {nullptr, nullptr};
                 if (czArr && czN > 0) {
-                    void** cs0 = reinterpret_cast<void**>(czArr);
-                    if (uintptr_t cz0 = reinterpret_cast<uintptr_t>(*cs0)) {
-                        if (uintptr_t r0 = *reinterpret_cast<uintptr_t*>(cz0 + 0x288)) {
-                            want[0] = *reinterpret_cast<uint64_t*>(r0 + 0x28);
-                            want[1] = *reinterpret_cast<uint64_t*>(r0 + 0x30);
+                    if (CitizenComponent* cz0 = czArr[0]) {
+                        if (CitizenDescription* r0 = cz0->description) {    // +0x288
+                            want[0] = r0->_professions[1];                  // +0x28
+                            want[1] = r0->_professions[2];                  // +0x30
                         }
                     }
                 }
@@ -641,22 +660,24 @@ void FollowUp(int frameNum) {
                 std::fprintf(stderr, "[FoodPanel]       townMgr+0x60 attendance registry: %d entr%s\n",
                              bN, bN == 1 ? "y" : "ies");
                 bool selfListed = false;
+                const Component* seatComp = s_seatComp;
                 for (int i = 0; i < bN && bArr; ++i) {
-                    void** bs = reinterpret_cast<void**>(bArr + static_cast<uintptr_t>(i) * 8);
-                    uintptr_t b = reinterpret_cast<uintptr_t>(*bs);
+                    AttendanceComponent* b = bArr[i];
                     if (!b) continue;
-                    void* sub = *reinterpret_cast<void**>(b + 0x10);
-                    void* c = FindCompOnEntity(sub, tidWpc);
-                    const uint64_t k48 = c ? *reinterpret_cast<uint64_t*>(
-                                            reinterpret_cast<uintptr_t>(c) + 0x48) : 0;
-                    if (b == reinterpret_cast<uintptr_t>(s_seatComp) || sub == s_seatEntity)
+                    ComponentEntity* sub = b->_entity;                      // +0x10
+                    // Found by exact type id: a WorkPlaceComponent.
+                    WorkPlaceComponent* c = static_cast<WorkPlaceComponent*>(FindCompOnEntity(sub, tidWpc));
+                    const uint64_t k48 = c ? reinterpret_cast<uint64_t>(c->profession) : 0;  // +0x48  // CAST-OK: ptr_int
+                    const Component* bc = b;
+                    if (bc == seatComp || sub == s_seatEntity)
                         selfListed = true;
                     if (i < 8)
                         std::fprintf(stderr, "[FoodPanel]         [%d] comp=%p entity=%p wpc=%p "
                                      "wpc+0x48=0x%llx queue(+0x30)=%d\n",
-                                     i, reinterpret_cast<void*>(b), sub, c,
+                                     i, static_cast<void*>(b), static_cast<void*>(sub),
+                                     static_cast<void*>(c),
                                      (unsigned long long)k48,
-                                     *reinterpret_cast<int32_t*>(b + 0x30));
+                                     b->queueCount);                        // +0x30
                 }
                 std::fprintf(stderr, "[FoodPanel]       this schoolhouse listed in the registry: %s\n",
                              selfListed ? "YES"
@@ -665,22 +686,22 @@ void FollowUp(int frameNum) {
                     if (!want[k]) continue;
                     const char* owner = "NO BUILDING IN TOWN REQUIRES THIS KEY";
                     for (int i = 0; i < bN && bArr; ++i) {
-                        void** bs = reinterpret_cast<void**>(bArr + static_cast<uintptr_t>(i) * 8);
-                        uintptr_t b = reinterpret_cast<uintptr_t>(*bs);
+                        AttendanceComponent* b = bArr[i];
                         if (!b) continue;
-                        void* sub = *reinterpret_cast<void**>(b + 0x10);
-                        void* c = FindCompOnEntity(sub, tidWpc);
+                        ComponentEntity* sub = b->_entity;                  // +0x10
+                        WorkPlaceComponent* c = static_cast<WorkPlaceComponent*>(FindCompOnEntity(sub, tidWpc));
                         if (!c) continue;
-                        if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x48) != want[k])
+                        if (c->profession != want[k])                       // +0x48
                             continue;
                         owner = "a building exists with this key";
                         if (FindCompOnEntity(sub, AttendanceComponent::TypeId()))
                             owner = "an ATTENDANCE building (school/hospital) has this key";
                         break;
                     }
+                    const unsigned long long wantKey = reinterpret_cast<uint64_t>(want[k]);  // CAST-OK: ptr_int
                     std::fprintf(stderr, "[FoodPanel]       record key +0x%02x = 0x%llx -> %s%s\n",
-                                 k == 0 ? 0x28 : 0x30, (unsigned long long)want[k], owner,
-                                 want[k] == key ? "  == THIS building" : "");
+                                 k == 0 ? 0x28 : 0x30, wantKey, owner,
+                                 want[k] == keyP ? "  == THIS building" : "");
                 }
                 // The SCHOOL key is the third ref, +0x20, consumed by the misnamed
                 // CitizenComp_TryEnrolInSchool (0x140111840) — enrollment, which runs ONLY
@@ -689,13 +710,11 @@ void FollowUp(int frameNum) {
                 if (czArr && czN > 0) {
                     int minors = 0, students = 0;
                     for (int i = 0; i < czN; ++i) {
-                        void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
-                        uintptr_t cz = reinterpret_cast<uintptr_t>(*cs);
+                        CitizenComponent* cz = czArr[i];
                         if (!cz) continue;
-                        uintptr_t rec = *reinterpret_cast<uintptr_t*>(cz + 0x288);
-                        if (rec && *reinterpret_cast<float*>(cz + 0x3c)
-                                     < *reinterpret_cast<float*>(rec + 0x44)) ++minors;
-                        if (*reinterpret_cast<uint64_t*>(cz + 0x208)) ++students;
+                        CitizenDescription* rec = cz->description;          // +0x288
+                        if (rec && cz->age < rec->adultAge) ++minors;       // +0x3c < rec+0x44
+                        if (cz->school) ++students;                         // +0x208
                     }
                     std::fprintf(stderr, "[FoodPanel]       enrolment population: %d below adult age "
                                  "(+0x3c < rec+0x44), %d already enrolled (+0x208)%s\n",
@@ -710,15 +729,13 @@ void FollowUp(int frameNum) {
                     // sub_40f0 gate refuses" from "the edge simply has not fired yet",
                     // which a soak alone cannot separate.
                     if (minors > 0 && students == 0) {
-                        void* victim = nullptr;
+                        CitizenComponent* victim = nullptr;
                         for (int i = 0; i < czN && !victim; ++i) {
-                            void** cs = reinterpret_cast<void**>(czArr + static_cast<uintptr_t>(i) * 8);
-                            uintptr_t cz = reinterpret_cast<uintptr_t>(*cs);
+                            CitizenComponent* cz = czArr[i];
                             if (!cz) continue;
-                            uintptr_t rec = *reinterpret_cast<uintptr_t*>(cz + 0x288);
-                            if (rec && *reinterpret_cast<float*>(cz + 0x3c)
-                                         < *reinterpret_cast<float*>(rec + 0x44))
-                                victim = reinterpret_cast<void*>(cz);
+                            CitizenDescription* rec = cz->description;      // +0x288
+                            if (rec && cz->age < rec->adultAge)             // +0x3c < rec+0x44
+                                victim = cz;
                         }
                         if (!victim) {
                             std::fprintf(stderr, "[FoodPanel]       enrol probe: %s\n",
@@ -731,14 +748,12 @@ void FollowUp(int frameNum) {
                             int64_t seed = 0;
                             new (&seed) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                             // 0x140111840 (the enroller).
-                            const char ok = CitizenComp_TryEnrolInSchool(
-                                reinterpret_cast<CitizenComponent*>(victim), &seed);   // B.3.x bridge
-                            uintptr_t att = *reinterpret_cast<uintptr_t*>(
-                                                reinterpret_cast<uintptr_t>(victim) + 0x208);
+                            const char ok = CitizenComp_TryEnrolInSchool(victim, &seed);
+                            AttendanceComponent* att = victim->school;      // +0x208
                             std::fprintf(stderr, "[FoodPanel]       enrol probe on minor %p: "
                                          "returned %d, +0x208=%p, that component's queue(+0x30)=%d   %s\n",
-                                         victim, (int)ok, reinterpret_cast<void*>(att),
-                                         att ? *reinterpret_cast<int32_t*>(att + 0x30) : -1,
+                                         static_cast<void*>(victim), (int)ok, static_cast<void*>(att),
+                                         att ? att->queueCount : -1,
                                          ok ? "OK — enrolment works; the edge just had not fired"
                                             : "REFUSED — the finder or its sub_40f0 gate is the defect");
                         }
