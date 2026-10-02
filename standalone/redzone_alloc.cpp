@@ -383,26 +383,26 @@ int RedzoneAlloc_ValidateAll(const char* tag) {
 // BANISHED_REDZONE (so production runs are unaffected).
 extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
     // One live read (B3R STORAGE): the Engine dtor nulls _singleton.
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);
+    System::MemoryAllocator* alloc = System::MemoryAllocator::_singleton;
     if (!g_enabled || !alloc) return 0;
     if (IsBadReadPtr(alloc, 0x18)) return 0;
-    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
-    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    rt::system::MemoryRange* ranges   = alloc->ranges;   // +0x00
+    int      rangeCnt = alloc->rangeCount;   // +0x08
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return 0;
 
     auto inAnyRange = [&](uint8_t* a) -> bool {
         for (int r = 0; r < rangeCnt; ++r) {
-            uint8_t* rg = ranges + (size_t)r * 0x18;
+            rt::system::MemoryRange* rg = &ranges[r];
             if (IsBadReadPtr(rg, 0x18)) continue;
-            uint8_t* s = *reinterpret_cast<uint8_t**>(rg + 0x00);
-            uint8_t* e = *reinterpret_cast<uint8_t**>(rg + 0x08);
+            uint8_t* s = rg->base;
+            uint8_t* e = rg->end;
             if (s && e && a >= s && a < e) return true;
         }
         return false;
     };
 
     for (int bucket = 0; bucket < 0xC0; ++bucket) {
-        uint8_t* curFT = *reinterpret_cast<uint8_t**>(alloc + 0x28 + (size_t)bucket * 8);
+        uint8_t* curFT = reinterpret_cast<uint8_t*>(alloc->freeLists[bucket]);  // LEFT: freeLists is uint64_t (FreeTag*) in MemoryAllocator.h; alloc_header ceiling full
         uint8_t* prevFT = nullptr;
         int guard = 0;
         while (curFT && ++guard < 2000000) {
@@ -618,7 +618,7 @@ static void DumpMainThreadStack() {
 
 static int HeapCheckLocked(const char* tag, bool report) {
     // One live read (B3R STORAGE): the Engine dtor nulls _singleton.
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);
+    System::MemoryAllocator* alloc = System::MemoryAllocator::_singleton;
     if (!g_enabled || !alloc) return 0;
     // BANISHED_REDZONE_ABORT=0: after a report, keep quiet about THAT block (it stays
     // corrupt) but still report a different first-bad block (up to 8 reports).
@@ -627,7 +627,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
     if (g_reportedOnce && s_reports >= 8) return 0;
 
     // Serialize against concurrent alloc/free via the allocator's own lock.
-    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc + 0x640);
+    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc->lock);  // CAST-OK: win32
     EnterCriticalSection(cs);
 
     int bad = 0;
@@ -637,13 +637,13 @@ static int HeapCheckLocked(const char* tag, bool report) {
     size_t   badBytes = 0;
     int      badRange = -1;
 
-    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
-    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    rt::system::MemoryRange* ranges   = alloc->ranges;   // +0x00
+    int      rangeCnt = alloc->rangeCount;   // +0x08
     if (ranges && rangeCnt > 0 && rangeCnt < 4096) {
         for (int r = 0; r < rangeCnt && !bad; ++r) {
-            uint8_t* rng   = ranges + (size_t)r * 0x18;
-            uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
-            uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+            rt::system::MemoryRange* rng   = &ranges[r];
+            uint8_t* start = rng->base;
+            uint8_t* end   = rng->end;
             if (!start || !end || end <= start) continue;
 
             uint8_t* prev = nullptr;
@@ -839,18 +839,18 @@ extern "C" void RedzoneAlloc_SetDumpSink(void (*sink)(const char*)) {
 // which is what names the writer — the debug registers cannot help while the
 // victim address is unknown until after it has been written.
 extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    System::MemoryAllocator* alloc = System::MemoryAllocator::_singleton;   // one live read (B3R STORAGE)
     if (!alloc) return nullptr;
     if (IsBadReadPtr(alloc, 0x18)) return nullptr;
-    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
-    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    rt::system::MemoryRange* ranges   = alloc->ranges;   // +0x00
+    int      rangeCnt = alloc->rangeCount;   // +0x08
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return nullptr;
 
     for (int r = 0; r < rangeCnt; ++r) {
-        uint8_t* rng = ranges + (size_t)r * 0x18;
+        rt::system::MemoryRange* rng = &ranges[r];
         if (IsBadReadPtr(rng, 0x18)) continue;
-        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
-        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        uint8_t* start = rng->base;
+        uint8_t* end   = rng->end;
         if (!start || !end || end <= start) continue;
         uint8_t* p = start;
         int guard = 0;
@@ -878,14 +878,14 @@ extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
 }
 
 extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    System::MemoryAllocator* alloc = System::MemoryAllocator::_singleton;   // one live read (B3R STORAGE)
     if (!alloc) {
         RZOut("[REDZONE-DUMP] no allocator singleton\n"); fflush(stdout);
         return;
     }
     if (IsBadReadPtr(alloc, 0x18)) { RZOut("[REDZONE-DUMP] singleton unreadable\n"); return; }
-    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
-    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    rt::system::MemoryRange* ranges   = alloc->ranges;   // +0x00
+    int      rangeCnt = alloc->rangeCount;   // +0x08
     RZOut("[REDZONE-DUMP] '%s': allocator=%p ranges=%p cnt=%d\n",
            tag ? tag : "?", (void*)alloc, (void*)ranges, rangeCnt);
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) { fflush(stdout); return; }
@@ -925,10 +925,10 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
 
     int found = 0;
     for (int r = 0; r < rangeCnt; ++r) {
-        uint8_t* rng   = ranges + (size_t)r * 0x18;
+        rt::system::MemoryRange* rng   = &ranges[r];
         if (IsBadReadPtr(rng, 0x18)) continue;
-        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
-        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        uint8_t* start = rng->base;
+        uint8_t* end   = rng->end;
         if (!start || !end || end <= start) continue;
 
         uint8_t* prev = nullptr;
@@ -967,20 +967,20 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     RZOut("[REDZONE-DUMP] no tag corruption — validating free-list LINKS...\n");
     auto inAnyRange = [&](uint8_t* a) -> bool {
         for (int r = 0; r < rangeCnt; ++r) {
-            uint8_t* rg = ranges + (size_t)r * 0x18;
+            rt::system::MemoryRange* rg = &ranges[r];
             if (IsBadReadPtr(rg, 0x18)) continue;
-            uint8_t* s = *reinterpret_cast<uint8_t**>(rg + 0x00);
-            uint8_t* e = *reinterpret_cast<uint8_t**>(rg + 0x08);
+            uint8_t* s = rg->base;
+            uint8_t* e = rg->end;
             if (s && e && a >= s && a < e) return true;
         }
         return false;
     };
     auto dumpOverflower = [&](uint8_t* badBlock) {
         for (int r = 0; r < rangeCnt; ++r) {
-            uint8_t* rg = ranges + (size_t)r * 0x18;
+            rt::system::MemoryRange* rg = &ranges[r];
             if (IsBadReadPtr(rg, 0x18)) continue;
-            uint8_t* s = *reinterpret_cast<uint8_t**>(rg + 0x00);
-            uint8_t* e = *reinterpret_cast<uint8_t**>(rg + 0x08);
+            uint8_t* s = rg->base;
+            uint8_t* e = rg->end;
             if (!(s && e && badBlock >= s && badBlock < e)) continue;
             uint8_t* pp = s; uint8_t* prev = nullptr; int g2 = 0;
             while (pp < badBlock && ++g2 < 4000000) {
@@ -1001,7 +1001,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     };
 
     for (int bucket = 0; bucket < 0xC0 && !found; ++bucket) {
-        uint8_t* head = *reinterpret_cast<uint8_t**>(alloc + 0x28 + (size_t)bucket * 8);
+        uint8_t* head = reinterpret_cast<uint8_t*>(alloc->freeLists[bucket]);  // LEFT: freeLists is uint64_t (FreeTag*) in MemoryAllocator.h; alloc_header ceiling full
         if (!head) continue;
         uint8_t* curFT = head;  // FreeTag = block+8
         uint8_t* prevFT = nullptr;
@@ -1023,10 +1023,10 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
                     // it = the overflow source (names the class via its vtable).
                     uint64_t corruptLow = reinterpret_cast<uint64_t>(curFT) & 0xffffffffULL;  // CAST-OK: ptr_int
                     for (int rr = 0; rr < rangeCnt; ++rr) {
-                        uint8_t* rg2 = ranges + (size_t)rr * 0x18;
+                        rt::system::MemoryRange* rg2 = &ranges[rr];
                         if (IsBadReadPtr(rg2, 0x18)) continue;
-                        uint8_t* s2 = *reinterpret_cast<uint8_t**>(rg2 + 0x00);
-                        uint8_t* e2 = *reinterpret_cast<uint8_t**>(rg2 + 0x08);
+                        uint8_t* s2 = rg2->base;
+                        uint8_t* e2 = rg2->end;
                         if (!s2 || !e2) continue;
                         uint64_t hi = reinterpret_cast<uint64_t>(s2) & ~0xffffffffULL;  // CAST-OK: ptr_int
                         uint8_t* cand = reinterpret_cast<uint8_t*>(hi | corruptLow);  // CAST-OK: ptr_int
@@ -1088,27 +1088,27 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
 static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
     const int delayMs = (int)(intptr_t)param;  // CAST-OK: win32
     Sleep((DWORD)delayMs);
-    uint8_t* alloc    = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    System::MemoryAllocator* alloc = System::MemoryAllocator::_singleton;   // one live read (B3R STORAGE)
     if (!alloc) {
         printf("[REDZONE-SELFTEST] NO INJECTION — System::MemoryAllocator::_singleton is null\n");
         fflush(stdout);
         return 0;
     }
-    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
-    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    rt::system::MemoryRange* ranges   = alloc->ranges;   // +0x00
+    int      rangeCnt = alloc->rangeCount;   // +0x08
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) {
         printf("[REDZONE-SELFTEST] NO INJECTION — ranges=%p cnt=%d\n", (void*)ranges, rangeCnt);
         fflush(stdout);
         return 0;
     }
-    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc + 0x640);
+    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc->lock);  // CAST-OK: win32
     EnterCriticalSection(cs);
     uint8_t* victim = nullptr;
     uint64_t before = 0;
     {
-        uint8_t* rng   = ranges + 0x00;                       // range 0
-        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
-        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        rt::system::MemoryRange* rng   = &ranges[0];                       // range 0
+        uint8_t* start = rng->base;
+        uint8_t* end   = rng->end;
         uint8_t* p     = start;
         // Walk in a little way so the victim is a settled interior block rather
         // than the range header, then zero its size field: blkBytes becomes 0,
@@ -1214,10 +1214,10 @@ extern "C" void RedzoneAlloc_PrintBacktrace(const char* tag) {
 
 extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
     uint8_t* bad = static_cast<uint8_t*>(badV);  // CAST-OK: alloc_header
-    uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
+    System::MemoryAllocator* alloc = System::MemoryAllocator::_singleton;   // one live read (B3R STORAGE)
     if (!bad || !alloc) return;
-    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
-    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    rt::system::MemoryRange* ranges   = alloc->ranges;   // +0x00
+    int      rangeCnt = alloc->rangeCount;   // +0x08
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return;
 
     const uint64_t badTag = *reinterpret_cast<uint64_t*>(bad);  // CAST-OK: alloc_header
@@ -1233,9 +1233,9 @@ extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
     uint8_t* prev = nullptr;
     int badRange = -1;
     for (int r = 0; r < rangeCnt && badRange < 0; ++r) {
-        uint8_t* rng = ranges + (size_t)r * 0x18;
-        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
-        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        rt::system::MemoryRange* rng = &ranges[r];
+        uint8_t* start = rng->base;
+        uint8_t* end   = rng->end;
         if (!start || !end || end <= start || bad < start || bad >= end) continue;
         badRange = r;
         uint8_t* p = start; int guard = 0;
@@ -1278,9 +1278,9 @@ extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
     // payload for the user pointer (a DynArray header stores exactly that).
     int hits = 0;
     for (int r = 0; r < rangeCnt; ++r) {
-        uint8_t* rng = ranges + (size_t)r * 0x18;
-        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
-        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        rt::system::MemoryRange* rng = &ranges[r];
+        uint8_t* start = rng->base;
+        uint8_t* end   = rng->end;
         if (!start || !end || end <= start) continue;
         uint8_t* p = start; int guard = 0;
         while (p < end && ++guard < 4000000) {
