@@ -143,14 +143,14 @@ extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
     const uint64_t prevSize = *prev & 0x1ffffffffffull;
     const uint64_t hdr = *self;                       // re-read AFTER the OR
     if (prevSize > 4ull) {                            // JA — unsigned
-        const int64_t delta = reinterpret_cast<const uint8_t*>(self) -
-                              reinterpret_cast<const uint8_t*>(prev);
+        const int64_t delta = reinterpret_cast<const uint8_t*>(self) -  // CAST-OK: ptr_int
+                              reinterpret_cast<const uint8_t*>(prev);  // CAST-OK: ptr_int
         self[-1] = static_cast<uint64_t>(delta);
         *self = hdr & ~0xe0000000000ull;
         return;
     }
-    const int64_t delta = reinterpret_cast<const uint8_t*>(self) -
-                          reinterpret_cast<const uint8_t*>(prev);
+    const int64_t delta = reinterpret_cast<const uint8_t*>(self) -  // CAST-OK: ptr_int
+                          reinterpret_cast<const uint8_t*>(prev);  // CAST-OK: ptr_int
     const uint64_t packed = static_cast<uint64_t>(delta >> 2) << 0x29;  // SAR then SHL
     *self = ((packed ^ hdr) & 0xe0000000000ull) ^ hdr;
 }

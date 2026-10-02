@@ -194,7 +194,7 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 // whole file is built on, and `RtString_ReleaseInline` is String's own
 // primitive.
 inline void WideReleaseInline(System::WideString* self) {
-    RtString_ReleaseInline(reinterpret_cast<String*>(self));
+    RtString_ReleaseInline(reinterpret_cast<String*>(self));  // LEFT: POD String / Filename bridge (H10)
 }
 
 inline int WideLength(const wchar_t* d) {
@@ -354,7 +354,7 @@ void System::WideString::Set(const wchar_t* src) {
 // buffer loses that character rather than corrupting the output.
 System::String System::WideString::AsUTF8() const {
 
-    const uint8_t* p   = reinterpret_cast<const uint8_t*>(_data);
+    const uint8_t* p   = reinterpret_cast<const uint8_t*>(_data);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     const uint8_t* end = p + static_cast<size_t>(RtSystem::WideLength(_data)) * 2;
 
     int total = 0;
@@ -367,7 +367,7 @@ System::String System::WideString::AsUTF8() const {
         }
     }
 
-    uint8_t* buf = static_cast<uint8_t*>(
+    uint8_t* buf = static_cast<uint8_t*>(  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
         RtSystem::RtMemAlloc(static_cast<uint64_t>(total) + 1,
                              RtSystem::kStringAllocAlign));
     buf[total] = 0;
@@ -395,7 +395,7 @@ System::String System::WideString::AsUTF8() const {
     // so the member holds an ordinary local and returns it; the DOOR is what
     // still placement-constructs into a caller-supplied slot.
     System::String ret;
-    ret.Set(reinterpret_cast<const char*>(buf));
+    ret.Set(reinterpret_cast<const char*>(buf));  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     if (buf != nullptr) RtSystem::RtMemFree(buf);
 
     // `this` is const and nothing in the body touches it, so the shipped body
@@ -423,7 +423,7 @@ System::WideString::WideString(const System::String& s) {
     // still the null-guarded stored-length read this line used to spell by
     // hand; the POD-to-class conversion moved up into the door.
 
-    const uint8_t* p   = reinterpret_cast<const uint8_t*>(s._data);
+    const uint8_t* p   = reinterpret_cast<const uint8_t*>(s._data);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     const uint8_t* end = p + static_cast<size_t>(s.GetLength());
 
     int totalBytes = 0;
@@ -440,9 +440,9 @@ System::WideString::WideString(const System::String& s) {
     SetLength(chars);
 
     // Retail RE-READS `src->data` here rather than reusing `p`; kept.
-    const uint8_t* r    = reinterpret_cast<const uint8_t*>(s._data);
+    const uint8_t* r    = reinterpret_cast<const uint8_t*>(s._data);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     const uint8_t* rend = r + static_cast<size_t>(s.GetLength());
-    uint8_t* const base = reinterpret_cast<uint8_t*>(_data);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(_data);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     uint8_t*       out  = base;
     int            written = 0;
     for (const uint8_t* q = r; q < rend;) {
@@ -510,7 +510,7 @@ System::WideString::WideString(const char* src) {
     int srcLen = 0;
     while (src[srcLen] != 0) ++srcLen;
 
-    const uint8_t* const p   = reinterpret_cast<const uint8_t*>(src);
+    const uint8_t* const p   = reinterpret_cast<const uint8_t*>(src);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     const uint8_t* const end = p + static_cast<size_t>(srcLen);
 
     int totalBytes = 0;
@@ -532,9 +532,9 @@ System::WideString::WideString(const char* src) {
     int srcLen2 = 0;
     while (src[srcLen2] != 0) ++srcLen2;
 
-    const uint8_t* const r    = reinterpret_cast<const uint8_t*>(src);
+    const uint8_t* const r    = reinterpret_cast<const uint8_t*>(src);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     const uint8_t* const rend = r + static_cast<size_t>(srcLen2);
-    uint8_t* const base = reinterpret_cast<uint8_t*>(_data);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(_data);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     uint8_t*       out  = base;
     int            written = 0;
     for (const uint8_t* q = r; q < rend;) {

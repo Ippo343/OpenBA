@@ -61,7 +61,7 @@ using ArrayWithSpec = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 template <const ArraySpec* SPEC>
 inline ArrayWithSpec<SPEC>* AsArray(void* a) {
-    return reinterpret_cast<ArrayWithSpec<SPEC>*>(a);
+    return reinterpret_cast<ArrayWithSpec<SPEC>*>(a);  // LEFT: the AsArray bridge from a void* door to the hand-derived row (Collection core)
 }
 
 // The per-address specs, in the order of the parameterization table in

@@ -51,10 +51,10 @@ namespace RtSystem {
 // One reinterpret_cast, in one place, over two types that ARE the same bytes
 // (both are `{ char* }`, both static_asserted at 8). It goes with the PODs.
 static inline System::String*       AsSys(String* s) {
-    return reinterpret_cast<System::String*>(s);
+    return reinterpret_cast<System::String*>(s);  // LEFT: POD String / Filename bridge (H10)
 }
 static inline const System::String* AsSys(const String* s) {
-    return reinterpret_cast<const System::String*>(s);
+    return reinterpret_cast<const System::String*>(s);  // LEFT: POD String / Filename bridge (H10)
 }
 
 // ============================================================
@@ -657,7 +657,7 @@ struct StringArray {
 void StringArray_SetCountFromEmpty(StringArray* arr, int n) {
     arr->count = n;
     arr->capacity = n;
-    arr->data = static_cast<String*>(RtMemAlloc(static_cast<uint64_t>(n) * 8, 8));
+    arr->data = static_cast<String*>(RtMemAlloc(static_cast<uint64_t>(n) * 8, 8));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
     for (int i = 0; i < n; ++i)
         arr->data[i]._data = nullptr;
 }
@@ -902,7 +902,7 @@ struct RtSerializer { RtStream* stream; RtEncoding* encoding; };
 // IO::ReaderWriter, and it is called BY NAME below: SerializeUInt (+0x98),
 // SerializeUShortArray (+0x50), SerializeCharArray (+0x18).
 inline ::IO::ReaderWriter* Rw(RtEncoding* enc) {
-    return reinterpret_cast<::IO::ReaderWriter*>(enc);   // B.3.x bridge
+    return reinterpret_cast<::IO::ReaderWriter*>(enc);   // B.3.x bridge  // LEFT: Serialize's void* serializer (reserved for the closing wave)
 }
 
 // ---- the legacy UTF-16 branch --------------------------------------------
@@ -959,7 +959,7 @@ int Utf8EncodeOne(int32_t cp, char* dst) {
 
 // ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c9930
 void String::Serialize(void* serializerRaw) {
-    RtSerializer* ser = static_cast<RtSerializer*>(serializerRaw);
+    RtSerializer* ser = static_cast<RtSerializer*>(serializerRaw);  // LEFT: Serialize's void* serializer (reserved for the closing wave)
     RtEncoding* enc = ser->encoding;
 
     // Length INCLUDING the terminator, with bit 31 as the "UTF-8 payload"
@@ -985,9 +985,9 @@ void String::Serialize(void* serializerRaw) {
                 "converting with the spec decoder, not a transcription of the CRT helper\n");
         }
 
-        uint8_t* buf = static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));
+        uint8_t* buf = static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
         Rw(enc)->SerializeUShortArray(static_cast<int>(n),
-                                      reinterpret_cast<uint16_t*>(buf), nullptr);   // +0x50
+                                      reinterpret_cast<uint16_t*>(buf), nullptr);   // +0x50  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
 
         // Retail stops two bytes short: the trailing UTF-16 NUL is not decoded.
         uint8_t* const end = buf + (static_cast<int>(n) * 2 - 2);

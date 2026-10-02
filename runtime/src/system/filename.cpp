@@ -42,10 +42,10 @@ namespace RtSystem {
 // The transitional bridge from the POD the tree still uses to the class; one
 // cast, over two types that ARE the same bytes. It goes with the POD.
 static inline System::Filename*       AsSys(Filename* f) {
-    return reinterpret_cast<System::Filename*>(f);
+    return reinterpret_cast<System::Filename*>(f);  // LEFT: POD String / Filename bridge (H10)
 }
 static inline const System::Filename* AsSys(const Filename* f) {
-    return reinterpret_cast<const System::Filename*>(f);
+    return reinterpret_cast<const System::Filename*>(f);  // LEFT: POD String / Filename bridge (H10)
 }
 
 }  // namespace RtSystem
@@ -456,7 +456,7 @@ Filename Filename::GetPathDirectory() const {
 Filename Filename::GetPathExtension() const {
     RtSystem::Filename raw{nullptr};
     RtObject::RtSystem_Filename_GetPathExtension(
-        reinterpret_cast<const RtSystem::Filename*>(this), &raw);
+        reinterpret_cast<const RtSystem::Filename*>(this), &raw);  // LEFT: POD String / Filename bridge (H10)
     Filename out;
     out._data = raw.data;   // the C body built the value; take it whole, no refcount edit
     return out;
