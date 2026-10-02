@@ -129,7 +129,8 @@ class ProfessionList;
 extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x1400a90a0  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_arrays.cpp
-extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream);  // 0x1400988c0
+class PlayerController;
+extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
 extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);  // 0x14001baf0
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10

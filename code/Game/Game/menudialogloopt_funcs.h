@@ -7,6 +7,16 @@
 
 #include <cstdint>
 
+class MenuDialogLoopT;
+class MenuScene;
+struct MenuSceneMesh;
+namespace Graphics { class Scene; class GraphicsMesh; }
+
+// B.4 GAME-b: the loop is typed wherever the caller holds it typed (the slots in
+// standalone/menudialogloopt_stubs.cpp pass `this`); LoadSceneA1 / A3 and
+// PhaseB_InitState keep `void*` for chunked_scene_loader.cpp (STANDALONE), and the
+// frame time / context stay `void*` for the slots that hold them so.
+
 // MenuDialogLoopT_LoadScene_PhaseA — mirror the 3D-scene block of the original
 // MenuDLT::Load (exe 0x14009A930), up to and including the three Scene::AddGlobalObject
 // calls and the helper_a3a0/+0xb7c/+0xb80 transform copy. Skips:
@@ -26,7 +36,7 @@
 //
 // Returns true on success (scene allocated and added). Returns false if the
 // MenuScene resource fails to load (no scene background — UI-only menu).
-bool MenuDialogLoopT_LoadScene_PhaseA(void* self);
+bool MenuDialogLoopT_LoadScene_PhaseA(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_LoadSceneA1 — pre-PhaseB block of MenuDLT::Load. Loads the
 // random Game/MenuScene/SceneN.rsc, allocates the 5 scene-graph objects
@@ -58,18 +68,18 @@ void MenuDialogLoopT_LoadSceneA3(void* self);
 // menuScene is the loaded MenuScene External (self+0xb90).
 // scene     is the Graphics::Scene the meshes get added to (self+0xba0).
 // No-op if either pointer is null or required fn pointers are missing.
-void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* scene);
+void MenuDialogLoopT_LoadStaticMeshes_PhaseB(MenuDialogLoopT* self, MenuScene* menuScene, Graphics::Scene* scene);
 
 // PhaseB chunked-iteration state. Captured by InitState; advanced by
 // TickChunk one chunk at a time. Standalone uses this to spread the 542ms
 // loop across multiple Loading splash Update ticks so the splash animation
 // keeps running smoothly instead of freezing for a single long block.
 struct MenuDialogLoopT_PhaseBState {
-    void*    self;            // MenuDLT* — receives appended array data
-    void*    menuScene;       // MenuScene External (loaded by LoadSceneA1)
-    void*    scene;           // Graphics::Scene the meshes get added to
-    uint8_t* elemArr;         // MenuScene+0x30 — element array data ptr
-    void**   meshArr;         // MenuScene+0x40 — GraphicsMesh ExternalPtr array
+    MenuDialogLoopT* self;    // receives appended array data
+    MenuScene* menuScene;     // MenuScene External (loaded by LoadSceneA1)
+    Graphics::Scene* scene;   // the meshes get added to it
+    MenuSceneMesh* elemArr;   // MenuScene::meshes data
+    Graphics::GraphicsMesh** meshArr;   // MenuScene::meshResources data
     int32_t  meshArrCount;    // MenuScene+0x48 — bound for meshIdx
     int32_t  totalCount;      // MenuScene+0x38 — total elements (snapshot)
     int32_t  index;           // current iteration index (0..totalCount)
@@ -103,13 +113,13 @@ int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int
 // menuScene is the loaded MenuScene External (self+0xb90).
 // scene     is the Graphics::Scene the particles get added to (self+0xba0).
 // No-op if either pointer is null or required fn pointers are missing.
-void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* scene);
+void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menuScene, Graphics::Scene* scene);
 
 // MenuDialogLoopT_TickParticles — per-frame Update on each entry of the
 // particle-only array at MenuDLT+0xbd0. Calls vtable+0x08 (Update(Time*)) on
 // each particle so emitters spawn/age sprites. Caller is the per-frame
 // Stub_Update path after the camera derivation step.
-void MenuDialogLoopT_TickParticles(void* self, void* time);
+void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, void* time);
 
 // MenuDialogLoopT_DrawScene_PhaseA — mirror the 3D `if (self+0xb90)` block of
 // MenuDLT::Draw (exe 0x14009b440). Caller invokes this BEFORE UI::Draw.
@@ -118,7 +128,7 @@ void MenuDialogLoopT_TickParticles(void* self, void* time);
 // context is the live Video::Context (engine_singleton+0x10).
 //
 // No-op if self+0xb90 (the MenuScene External) is null.
-void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context);
+void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, void* context);
 
 // MenuDialogLoopT_TickAudio — per-frame Audio::Device::Update tick.
 //
@@ -161,7 +171,7 @@ void MenuDialogLoopT_TickAudio(void* time);
 // named no longer exists. The property being asserted is unchanged.)
 //
 // Returns true if the music External loaded (self+0xb88 non-null).
-bool MenuDialogLoopT_LoadMusic(void* self);
+bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_StartMusic — mirror the audio block of MenuDLT::Startup (exe
 // 0x14009b930), run AFTER Engine::DialogLoopT::Startup:
@@ -172,13 +182,13 @@ bool MenuDialogLoopT_LoadMusic(void* self);
 //
 // No-op'd safely if the music External (self+0xb88) is null or PlayEffect isn't
 // resolved. Call on the main thread (Startup), after LoadMusic populated +0xb88.
-void MenuDialogLoopT_StartMusic(void* self);
+void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_StopMusic — mirror the `Audio::Scene::StopAll(self+0xb30)` at
 // the tail of MenuDLT::Shutdown (exe 0x14009b280, call at 0x14009b41a). Stops the
 // streamed menu music BEFORE the next LoaderLoop's Loader::Load remounts the
 // packages; the body's banner says why that ordering is load-bearing.
-void MenuDialogLoopT_StopMusic(void* self);
+void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_BindUISounds — mirror the sound-binding block of
 // OptionsDialog_helper_9260 (exe 0x140099260). Copies five SoundEffect
@@ -194,7 +204,7 @@ void MenuDialogLoopT_StopMusic(void* self);
 // (and after the audio scene is wired at self+0xd0 == UI+0x90, set by
 // StartMusic). No-op if the KeyMap container isn't populated; copying a null
 // slot is harmless (Play ignores null sound entries).
-void MenuDialogLoopT_BindUISounds(void* self);
+void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_TickAudioScene — mirror the per-frame Audio::Scene::Update of
 // MenuDLT::Update (exe 0x14009b6e0): advance the embedded Audio::Scene (+0xb30)
@@ -207,7 +217,7 @@ void MenuDialogLoopT_BindUISounds(void* self);
 // Calls Audio::Scene::Update(scene@+0xb30, elapsedTime, Time(0),
 //   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f) as a member call. Caller passes
 // the frame's System::Time pointer.
-void MenuDialogLoopT_TickAudioScene(void* self, void* time);
+void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, void* time);
 
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
 // MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the
@@ -223,4 +233,4 @@ void MenuDialogLoopT_TickAudioScene(void* self, void* time);
 // the frame's deltaSeconds (time-as-seconds — see System::Time::AsSeconds).
 //
 // No-op if self+0xb90 (MenuScene) or self+0xbb8 (Transform) are null.
-void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds);
+void MenuDialogLoopT_UpdateCamera_PhaseA(MenuDialogLoopT* self, float deltaSeconds);
