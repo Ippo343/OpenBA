@@ -186,7 +186,7 @@ class MusicPlayer;   // Game/MusicPlayer.h
 extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)
 
 // ---- w2_takescreenshot.cpp
-extern "C" void GameUpdateLoop_TakeScreenshot(void* self);  // 0x140095da0
+extern "C" void GameUpdateLoop_TakeScreenshot(void* self);  // 0x140095da0  B4 FORWARD -> GameUpdateLoop::TakeScreenshot (2 outside calls: gameupdateloop.cpp)
 
 // ---- weather_particles.cpp
 extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
