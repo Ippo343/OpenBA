@@ -22,6 +22,11 @@
 #include "graphics/Geometry.h"   // Graphics::Geometry::AddDrawItems (B3X W0)
 #include "graphics/Mesh.h"       // RtGraphics_MeshInstance_AddDrawItems (B3R W2-RES)
 #include "object/VSlot.h"        // Object::SlotAddressOf
+#include "graphics/Scene.h"      // B4: Scene::_nodes, SceneNode
+#include "graphics/Camera.h"     // B4: Renderer, RendererDrawGroup
+#include "graphics/Material.h"   // B4: MaterialInstance::_material, Material::_passes
+#include "video/VideoProgram.h"  // B4: the pass's programs
+#include "video/ShaderProgram.h" // B4: ShaderProgram::_byteCode
 #include <windows.h>
 
 namespace {
@@ -49,7 +54,7 @@ std::unordered_map<uint32_t, Note>& Notes() {
 // pointer in MEM_PRIVATE memory means the object was freed and the block reused.
 bool VtableLooksLikeCode(void* vt) {
     static std::unordered_set<uintptr_t> good, bad;
-    const uintptr_t v = reinterpret_cast<uintptr_t>(vt);
+    const uintptr_t v = reinterpret_cast<uintptr_t>(vt);  // CAST-OK: ptr_int
     if (v < 0x10000 || (v & 7) != 0) return false;
     if (good.count(v)) return true;
     if (bad.count(v))  return false;
@@ -62,7 +67,7 @@ bool VtableLooksLikeCode(void* vt) {
 }
 
 bool Readable(void* p) {
-    const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+    const uintptr_t a = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
     return a >= 0x10000 && a < 0x00007FFFFFFFFFFFULL && (a & 7) == 0;
 }
 
@@ -112,7 +117,7 @@ void SceneWatch_Note(uint32_t sceneId, void* geometry, const char* who) {
     Notes()[sceneId] = Note{geometry, who, 0};
 }
 
-void SceneWatch_Check(void* scene) {
+void SceneWatch_Check(Graphics::Scene* scene) {
     if (!Enabled() || !scene) return;
 
     static long   s_frame  = 0;
@@ -120,9 +125,8 @@ void SceneWatch_Check(void* scene) {
     static bool   s_seen   = false;
     ++s_frame;
 
-    const uintptr_t s = reinterpret_cast<uintptr_t>(scene);
-    uint8_t* nodes = *reinterpret_cast<uint8_t**>(s + 0x10);
-    const int count = *reinterpret_cast<int*>(s + 0x18);
+    Graphics::SceneNode* nodes = scene->_nodes.GetData();   // +0x10
+    const int count = scene->_nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
     int bad = 0, firstBad = -1;
@@ -130,15 +134,16 @@ void SceneWatch_Check(void* scene) {
     void* firstVt  = nullptr;
 
     for (int i = 0; i < count; ++i) {
-        uint8_t* node = nodes + static_cast<size_t>(i) * 0x18;
-        if (*reinterpret_cast<int*>(node + 0x10) < 0) continue;   // free slot
-        void* obj = *reinterpret_cast<void**>(node);
+        const Graphics::SceneNode& node = nodes[i];
+        if (node._cell < 0) continue;   // free slot (+0x10)
+        void* obj = node._object;       // +0x00
         if (!Readable(obj)) {
             ++bad;
             if (firstBad < 0) { firstBad = i; firstObj = obj; firstVt = nullptr; }
             continue;
         }
-        void* vt = *reinterpret_cast<void**>(obj);
+        // The object's vtable word, read raw to tell a live object from a freed block.
+        void* vt = *reinterpret_cast<void**>(obj);  // CAST-OK: crash_walk
         if (VtableLooksLikeCode(vt)) continue;
         ++bad;
         if (firstBad < 0) { firstBad = i; firstObj = obj; firstVt = vt; }
@@ -172,17 +177,16 @@ void SceneWatch_Check(void* scene) {
         std::fprintf(stderr, "[SceneWatch]   obj dump:");
         for (int q = 0; q < 8; ++q)
             std::fprintf(stderr, " %016llx",
-                         (unsigned long long)*reinterpret_cast<uint64_t*>(
-                             reinterpret_cast<uintptr_t>(firstObj) + q * 8));
+                         (unsigned long long)*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(firstObj) + q * 8));  // CAST-OK: crash_walk
         std::fprintf(stderr, "\n");
         // Geometry is embedded at owner+0x28 on every drawable component in this
         // port, so dump the presumed owner header too (vtable, flags, owner IBP).
-        uintptr_t owner = reinterpret_cast<uintptr_t>(firstObj) - 0x28;
-        if (Readable(reinterpret_cast<void*>(owner))) {
+        uintptr_t owner = reinterpret_cast<uintptr_t>(firstObj) - 0x28;  // CAST-OK: crash_walk
+        if (Readable(reinterpret_cast<void*>(owner))) {  // CAST-OK: crash_walk
             std::fprintf(stderr, "[SceneWatch]   owner(obj-0x28) dump:");
             for (int q = 0; q < 6; ++q)
                 std::fprintf(stderr, " %016llx",
-                             (unsigned long long)*reinterpret_cast<uint64_t*>(owner + q * 8));
+                             (unsigned long long)*reinterpret_cast<uint64_t*>(owner + q * 8));  // CAST-OK: crash_walk
             std::fprintf(stderr, "\n");
         }
     }
@@ -210,15 +214,14 @@ constexpr float kJumpDist = 2.0f;
 
 } // namespace
 
-void SceneWatch_Census(void* scene) {
+void SceneWatch_Census(Graphics::Scene* scene) {
     if (!CensusEnabled() || !scene) return;
 
     static long s_frame = 0;
     ++s_frame;
 
-    const uintptr_t s = reinterpret_cast<uintptr_t>(scene);
-    uint8_t* nodes = *reinterpret_cast<uint8_t**>(s + 0x10);
-    const int count = *reinterpret_cast<int*>(s + 0x18);
+    Graphics::SceneNode* nodes = scene->_nodes.GetData();   // +0x10
+    const int count = scene->_nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
     static std::unordered_map<void*, GeoPos> s_last;
@@ -234,12 +237,12 @@ void SceneWatch_Census(void* scene) {
     float sbx0 = 0, sby0 = 0, sbz0 = 0, sbx1 = 0, sby1 = 0, sbz1 = 0;
 
     for (int i = 0; i < count; ++i) {
-        uint8_t* node = nodes + static_cast<size_t>(i) * 0x18;
-        if (*reinterpret_cast<int*>(node + 0x10) < 0) continue;   // free slot
-        void* obj = *reinterpret_cast<void**>(node);
+        const Graphics::SceneNode& node = nodes[i];
+        if (node._cell < 0) continue;   // free slot (+0x10)
+        Graphics::Geometry* geo = node._object;   // +0x00
+        void* obj = geo;
         if (!Readable(obj)) continue;
-        const uintptr_t g = reinterpret_cast<uintptr_t>(obj);
-        const int cell = *reinterpret_cast<int*>(node + 0x10);
+        const int cell = node._cell;
         ++live;
 
         // Graphics::Scene::Clean (0x1801023f0) is the per-frame refresh: for every live
@@ -250,16 +253,16 @@ void SceneWatch_Census(void* scene) {
         // whether the refresh actually runs. A world where things move but nothing is
         // ever re-bucketed culls them against the cell they were FIRST inserted into,
         // which on screen is a model that pops in and out as the view changes.
-        if (*reinterpret_cast<int32_t*>(g + 0x2c) != 0) ++dirty;
-        if (*reinterpret_cast<uint32_t*>(g + 0x30) == 0) ++layer0;
+        if (geo->_dirtyFlags != 0) ++dirty;               // +0x2c
+        if (geo->_materialTypeFlags == 0) ++layer0;       // +0x30
 
-        const float x = *reinterpret_cast<float*>(g + 0x94);
-        const float y = *reinterpret_cast<float*>(g + 0x98);
-        const float z = *reinterpret_cast<float*>(g + 0x9c);
+        const float x = geo->_transform.translation.x;    // +0x94
+        const float y = geo->_transform.translation.y;    // +0x98
+        const float z = geo->_transform.translation.z;    // +0x9c
         // Previous transform the renderer interpolates FROM (+0xB0..+0xB8).
-        const float ox = *reinterpret_cast<float*>(g + 0xb0);
-        const float oy = *reinterpret_cast<float*>(g + 0xb4);
-        const float oz = *reinterpret_cast<float*>(g + 0xb8);
+        const float ox = geo->_prevTransform.translation.x;
+        const float oy = geo->_prevTransform.translation.y;
+        const float oz = geo->_prevTransform.translation.z;
         const float pdx = x - ox, pdy = y - oy, pdz = z - oz;
         if (pdx * pdx + pdy * pdy + pdz * pdz > kJumpDist * kJumpDist) ++staleprev;
 
@@ -279,12 +282,12 @@ void SceneWatch_Census(void* scene) {
         // before dispatching vtable slot 4 — the box refresh. Zero there means the box
         // is never recomputed when the transform changes, which is one way to get a
         // stale box, so count it separately from the symptom.
-        const float bx0 = *reinterpret_cast<float*>(g + 0x4c);
-        const float by0 = *reinterpret_cast<float*>(g + 0x50);
-        const float bz0 = *reinterpret_cast<float*>(g + 0x54);
-        const float bx1 = *reinterpret_cast<float*>(g + 0x58);
-        const float by1 = *reinterpret_cast<float*>(g + 0x5c);
-        const float bz1 = *reinterpret_cast<float*>(g + 0x60);
+        const float bx0 = geo->_worldBounds.min.x;        // +0x4c
+        const float by0 = geo->_worldBounds.min.y;        // +0x50
+        const float bz0 = geo->_worldBounds.min.z;        // +0x54
+        const float bx1 = geo->_worldBounds.max.x;        // +0x58
+        const float by1 = geo->_worldBounds.max.y;        // +0x5c
+        const float bz1 = geo->_worldBounds.max.z;        // +0x60
         if (bx1 < bx0 || by1 < by0 || bz1 < bz0) {
             ++degenerate;
         } else if (bx0 == 0.0f && by0 == 0.0f && bz0 == 0.0f &&
@@ -304,8 +307,10 @@ void SceneWatch_Census(void* scene) {
                 }
             }
         }
-        detailSum += *reinterpret_cast<int32_t*>(g + 0x28);
-        if (*reinterpret_cast<int32_t*>(g + 0x20) == 0) ++noRefresh;
+        detailSum += geo->_detailId;                      // +0x28
+        // +0x20 is the size word of the header's `_attached` Array (+0x18); the
+        // harness's "refresh counter" reading is kept in its log text.
+        if (geo->_attached.GetSize() == 0) ++noRefresh;   // +0x20
 
         auto it = s_last.find(obj);
         if (it == s_last.end()) {
@@ -405,12 +410,13 @@ bool LodEnabled() {
 // today, exactly as before this change.
 bool IsMeshInstance(void* obj) {
     const uintptr_t addDrawItemsOurs =
-        reinterpret_cast<uintptr_t>(&RtGraphics_MeshInstance_AddDrawItems);
-    void** vt = *reinterpret_cast<void***>(obj);
+        reinterpret_cast<uintptr_t>(&RtGraphics_MeshInstance_AddDrawItems);  // CAST-OK: ptr_int
+    // The object's vtable word, read raw to tell a live object from a freed block.
+    void** vt = *reinterpret_cast<void***>(obj);  // CAST-OK: crash_walk
     if (!VtableLooksLikeCode(vt)) return false;
     // The table entry for Graphics::Geometry::AddDrawItems (retail slot 3,
     // +0x18), taken from the member rather than a literal index (object/VSlot.h).
-    const uintptr_t addDrawItems = reinterpret_cast<uintptr_t>(
+    const uintptr_t addDrawItems = reinterpret_cast<uintptr_t>(  // CAST-OK: ptr_int
         ::Object::SlotAddressOf(obj, &::Graphics::Geometry::AddDrawItems));
     return addDrawItems == addDrawItemsOurs;
 }
@@ -427,17 +433,19 @@ struct MeshInfo {
 
 } // namespace
 
-void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
+void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int variantIdx) {
     if (!LodEnabled() || !scene || !camera) return;
 
     static long s_frame = 0;
     ++s_frame;
 
-    const uintptr_t s = reinterpret_cast<uintptr_t>(scene);
-    uint8_t* nodes = *reinterpret_cast<uint8_t**>(s + 0x10);
-    const int count = *reinterpret_cast<int*>(s + 0x18);
+    Graphics::SceneNode* nodes = scene->_nodes.GetData();   // +0x10
+    const int count = scene->_nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
+    // LEFT: the camera is PlayerController::camera, raw H5 storage (uint8_t[0xD8]) in
+    // GAME's header, handed in as const void*; the eye is Camera::_cameraToWorld's
+    // translation (+0x64 + 0x24).
     const uintptr_t c = reinterpret_cast<uintptr_t>(camera);
     const float camX = *reinterpret_cast<const float*>(c + 0x88);
     const float camY = *reinterpret_cast<const float*>(c + 0x8c);
@@ -469,13 +477,15 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
     for (auto& kv : s_variants) kv.second.n = 0;
 
     for (int i = 0; i < count; ++i) {
-        uint8_t* node = nodes + static_cast<size_t>(i) * 0x18;
-        if (*reinterpret_cast<int*>(node + 0x10) < 0) continue;   // free slot
-        void* obj = *reinterpret_cast<void**>(node);
+        const Graphics::SceneNode& node = nodes[i];
+        if (node._cell < 0) continue;   // free slot (+0x10)
+        Graphics::Geometry* geo = node._object;   // +0x00
+        void* obj = geo;
         if (!Readable(obj) || !IsMeshInstance(obj)) continue;
-        const uintptr_t g = reinterpret_cast<uintptr_t>(obj);
+        // Its AddDrawItems slot is MeshInstance's: the downcast stays in Geometry's hierarchy.
+        Graphics::MeshInstance* mi = static_cast<Graphics::MeshInstance*>(geo);
 
-        void* mesh = *reinterpret_cast<void**>(g + 0xc0);
+        void* mesh = mi->_mesh.p;   // +0xc0 ExternalPtr<GraphicsMesh>, an untyped POD here
         if (!Readable(mesh)) continue;
         ++instances;
 
@@ -494,8 +504,8 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
             // transparent bucket. So this pair is a real per-object dissolve, and it is
             // the last thing left that can change a model's appearance while its mesh,
             // material and detail level all stay fixed.
-            const float a0 = *reinterpret_cast<float*>(g + 0x7c);
-            const float a1 = *reinterpret_cast<float*>(g + 0x80);
+            const float a0 = geo->_opacity;       // +0x7c
+            const float a1 = geo->_opacityPrev;   // +0x80
             if (a0 != 1.0f || a1 != 1.0f) ++faded;
             if (a0 < 0.999f) ++fadedOut;
             // +0x10c..+0x118 is the MeshInstance's own RGBA tint (1,1,1,1 from its ctor).
@@ -507,7 +517,7 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
             // the growth pass first reaches it. That snap is a tree changing size in one
             // frame, which is what "popping" looks like. Measure the step, not just the
             // count: an ease is content, a jump is the defect.
-            const float* vs = reinterpret_cast<const float*>(g + 0x10c);
+            const float* vs = mi->_color;         // +0x10c
             if (vs[0] != 1.0f || vs[1] != 1.0f || vs[2] != 1.0f || vs[3] != 1.0f)
                 ++tinted;
             {
@@ -527,9 +537,9 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
                     sit->second = vs[0];
                 }
             }
-            if (*reinterpret_cast<int32_t*>(g + 0x28) != 2) ++oddDetailId;
+            if (geo->_detailId != 2) ++oddDetailId;   // +0x28
 
-            void* matArr = *reinterpret_cast<void**>(g + 0xc8);
+            void* matArr = mi->_materials.GetData();  // +0xc8
             auto it2 = s_mesh.find(obj);
             if (it2 == s_mesh.end()) {
                 s_mesh.emplace(obj, MeshRef{mesh, matArr});
@@ -545,6 +555,9 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
             }
         }
 
+        // LEFT: MeshInstance::_mesh is the untyped RtGraphics::ExternalPtr POD (R-GFX's
+        // header), so the GraphicsMesh's level table (+0x50 / +0x58, stride 0xb0) is
+        // read raw from a void*.
         const uintptr_t m = reinterpret_cast<uintptr_t>(mesh);
         // BANISHED_FORCE_LOD0=1 — pin every mesh to its highest detail level.
         // Graphics::MeshInstance::AddDrawItems only runs the distance pick when
@@ -564,6 +577,11 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
         // description with exactly that pair, so a mesh reached by more than one pair, or
         // by a pair outside the description's range, is a mis-pick.
         {
+            // LEFT: these are the OWNING ModelComponent's fields (+0x164 / +0x166) read
+            // through its embedded MeshInstance (+0x28), which ModelComponent's header
+            // keeps as raw H5 storage (W0-H2); there is no typed way from the instance
+            // back to its owner.
+            const uintptr_t g = reinterpret_cast<uintptr_t>(obj);
             const int16_t vi = *reinterpret_cast<int16_t*>(g + 0x13c);
             const int16_t mv = *reinterpret_cast<int16_t*>(g + 0x13e);
             if (vi >= -1 && vi < 64 && mv >= -1 && mv < 64) {
@@ -611,32 +629,30 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
         // past a material's variant count drops every draw item using that material,
         // with no error anywhere - the model is simply absent.
         {
-            void** matInsts = *reinterpret_cast<void***>(g + 0xc8);
+            Object::ExternalPtr<Graphics::MaterialInstance>* matInsts = mi->_materials.GetData();  // +0xc8
             if (Readable(matInsts)) {
-                void* mi = matInsts[0];
-                if (Readable(mi)) {
-                    void* mat = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mi) + 0x28);
+                Graphics::MaterialInstance* minst = matInsts[0].Get();
+                if (Readable(minst)) {
+                    Graphics::Material* mat = minst->_material.Get();          // +0x28
                     if (Readable(mat)) {
-                        const uintptr_t mt = reinterpret_cast<uintptr_t>(mat);
-                        const int variants = *reinterpret_cast<int*>(mt + 0x30);
+                        const int variants = mat->_passes.GetSize();            // +0x30
                         if (variants >= 0 && variants < 8) ++variantHist[variants];
                         else                               ++variantHist[8];
                         if (variantIdx < 0 || variantIdx >= variants) {
                             ++variantMiss;
                         } else {
-                            void** arr = *reinterpret_cast<void***>(mt + 0x28);
-                            void*  v   = Readable(arr) ? arr[variantIdx] : nullptr;
+                            Object::ExternalPtr<Video::VideoProgram>* arr = mat->_passes.GetData();  // +0x28
+                            Video::VideoProgram* v = Readable(arr) ? arr[variantIdx].Get() : nullptr;
                             if (!Readable(v)) {
                                 ++variantNotReady;
                             } else {
-                                const uintptr_t vv = reinterpret_cast<uintptr_t>(v);
-                                void* p0 = *reinterpret_cast<void**>(vv + 0x20);
-                                void* p1 = *reinterpret_cast<void**>(vv + 0x28);
-                                void* p2 = *reinterpret_cast<void**>(vv + 0x30);
+                                Video::VertexLayout*  p0 = v->_vertexLayout.Get();    // +0x20
+                                Video::VertexProgram* p1 = v->_vertexProgram.Get();   // +0x28
+                                Video::PixelProgram*  p2 = v->_pixelProgram.Get();    // +0x30
                                 const bool ok =
                                     p0 && Readable(p1) && Readable(p2) &&
-                                    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(p1) + 0x48) > 0 &&
-                                    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(p2) + 0x48) > 0;
+                                    p1->_byteCode.GetSize() > 0 &&                  // +0x48
+                                    p2->_byteCode.GetSize() > 0;
                                 if (!ok) ++variantNotReady;
                             }
                         }
@@ -650,17 +666,18 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
 
         // Retail union: current world box geo+0x4c..+0x60 with the previous one
         // geo+0x64..+0x78.
-        const float* b = reinterpret_cast<const float*>(g + 0x4c);   // 12 floats
-        const float minx = b[0] < b[6]  ? b[0] : b[6];
-        const float miny = b[1] < b[7]  ? b[1] : b[7];
-        const float minz = b[2] < b[8]  ? b[2] : b[8];
-        const float maxx = b[3] > b[9]  ? b[3] : b[9];
-        const float maxy = b[4] > b[10] ? b[4] : b[10];
-        const float maxz = b[5] > b[11] ? b[5] : b[11];
+        const ::Box& cb = geo->_worldBounds;       // +0x4c
+        const ::Box& pb = geo->_prevWorldBounds;   // +0x64
+        const float minx = cb.min.x < pb.min.x ? cb.min.x : pb.min.x;
+        const float miny = cb.min.y < pb.min.y ? cb.min.y : pb.min.y;
+        const float minz = cb.min.z < pb.min.z ? cb.min.z : pb.min.z;
+        const float maxx = cb.max.x > pb.max.x ? cb.max.x : pb.max.x;
+        const float maxy = cb.max.y > pb.max.y ? cb.max.y : pb.max.y;
+        const float maxz = cb.max.z > pb.max.z ? cb.max.z : pb.max.z;
         // The ctor seeds the previous box with the empty sentinel (+/-1e8), so a
         // geometry whose Clean never rolled it still unions to the current box.
         // Count them anyway: it tells us whether the roll is happening at all.
-        if (b[6] > b[9]) ++prevBoxEmpty;
+        if (pb.min.x > pb.max.x) ++prevBoxEmpty;
 
         const float dx = camX - (minx + maxx) * 0.5f;
         const float dy = camY - (miny + maxy) * 0.5f;
@@ -770,23 +787,23 @@ void SceneWatch_LodCensus(void* scene, const void* camera, int variantIdx) {
     }
 }
 
-void SceneWatch_DrawItemCensus(void* renderer) {
+void SceneWatch_DrawItemCensus(Graphics::Renderer* renderer) {
     if (!LodEnabled() || !renderer) return;
 
     static long s_frame = 0;
     ++s_frame;
 
-    const uintptr_t r = reinterpret_cast<uintptr_t>(renderer);
-    uint8_t* groups = *reinterpret_cast<uint8_t**>(r + 0x10);
-    const int used = *reinterpret_cast<int*>(r + 0x38);
+    Graphics::RendererDrawGroup* groups = renderer->_drawGroups.GetData();   // +0x10
+    const int used = renderer->_drawGroupsUsed;                              // +0x38
     static int s_why = 0;
     if (!groups || used <= 0 || used > 64) {
         if (s_why < 3) {
             ++s_why;
             std::fprintf(stderr, "[DrawCensus] frame=%ld NO GROUPS: renderer=%p groups=%p "
                                  "used(+0x38)=%d cap(+0x18)=%d scenes(+0x8)=%d\n",
-                         s_frame, renderer, groups, used,
-                         *reinterpret_cast<int*>(r + 0x18), *reinterpret_cast<int*>(r + 8));
+                         s_frame, static_cast<void*>(renderer), static_cast<void*>(groups), used,
+                         renderer->_drawGroups.GetCapacity(),   // +0x18
+                         renderer->_sceneGroups.GetSize());     // +0x08
             std::fflush(stderr);
         }
         return;
@@ -796,10 +813,10 @@ void SceneWatch_DrawItemCensus(void* renderer) {
     if (s_frame == 120 || s_frame == 600) ++s_groupDump;
     int total = 0, mainGroup = 0;
     for (int g = 0; g < used; ++g) {
-        uint8_t* st = groups + static_cast<size_t>(g) * 0x1f0;
+        const Graphics::RendererDrawGroup& st = groups[g];   // stride 0x1f0
         int sum = 0;
         for (int k = 0; k < 3; ++k)
-            sum += *reinterpret_cast<int*>(st + 0x1c0 + static_cast<size_t>(k) * 0x10 + 8);
+            sum += st._items[k].GetSize();                  // +0x1c0 + k*0x10 + 8
         total += sum;
         if (g == 0) mainGroup = sum;
         // groupState+0x1b8 is BeginDrawGroup's param_4 — the shader-VARIANT index that
@@ -810,8 +827,8 @@ void SceneWatch_DrawItemCensus(void* renderer) {
         if (s_groupDump < 2) {
             std::fprintf(stderr, "[DrawCensus] group %d/%d variantIdx(+0x1b8)=%d mask(+0x1bc)=0x%x "
                                  "items=%d\n",
-                         g, used, *reinterpret_cast<int*>(st + 0x1b8),
-                         *reinterpret_cast<unsigned*>(st + 0x1bc), sum);
+                         g, used, st._shader,                // +0x1b8
+                         st._materialTypeFlags, sum);        // +0x1bc
         }
     }
 
