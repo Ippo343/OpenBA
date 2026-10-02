@@ -169,3 +169,9 @@ Metric at `c8d6a8d6`: **19,774** to remove.
 
 Metric at `af21c719`: **17,621** to remove. **B.4 PAUSED here by the user (2026-09-29): no agent is
 running, no merge is in progress, every handed-in block is merged and gated.**
+
+**Resumed 2026-10-02** (ACT-b, GAME-b, PLAYER, TUT). `ff3a8313`: `PlayerToolManager` +0x00 typed `UI::DialogInstance*` by the coordinator (asked by PLAYER; debug build, unit 918 / 0).
+
+| 32 | W1-GAME-b (first part) | `e36cb873` | Game b: goals serialize, MenuDialogLoopT, MenuScene, the Game dtor, MapGenerator, Minimap paint, pathfinder seed, MusicList, NameDatabase, Profession / ProfessionList, Scenario; WorkScheduler root and nodes typed: 1526 -> 639 in 44 files (geometry and serialize files still to do) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.84 ms/frame, p95 2.47 (agents building) | 0 |
+
+Metric at `e36cb873`: **16,728** to remove.
