@@ -22,7 +22,7 @@ long     s_rebuilds = 0, s_writes = 0, s_verified = 0, s_mismatch = 0;
 void Rebuild(const uint8_t* cells, int count) {
     if (count > s_bufCap) {
         std::free(s_buf);
-        s_buf = static_cast<uint8_t*>(std::malloc((size_t)count));
+        s_buf = static_cast<uint8_t*>(std::malloc((size_t)count));  // CAST-OK: win32
         s_bufCap = s_buf ? count : 0;
     }
     if (!s_buf) { g_terrainSC = nullptr; g_terrainSCBase = nullptr; g_terrainSCCount = 0; return; }
@@ -62,7 +62,7 @@ void TerrainNoteWrite(const uint8_t* cellPtr) {
     if (!g_terrainSC || !cellPtr) return;
     const uint8_t* base = g_terrainSCBase;
     if (cellPtr < base) return;
-    const size_t idx = (size_t)(cellPtr - base) / kStride;
+    const size_t idx = static_cast<size_t>(cellPtr - base) / kStride;
     if (idx >= (size_t)g_terrainSCCount) return;
     g_terrainSC[idx] = cellPtr[kTypeOff];
     ++s_writes;
