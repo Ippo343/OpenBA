@@ -29,11 +29,11 @@
 
 #include "ConsumeRawMaterial.h"
 #include "object/TypeInfo.h"
-#include "Entity/exe_bodies.h"
+#include "Component/StorageComponent.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_* helpers
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
-#include "Work/exe_bodies.h"     // WorkBase_FindComponent_6270 (moved consume-list append)
+#include "Entity/CitizenBehavior.h"   // professionResources (the +0x170 per-category counters)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
@@ -60,65 +60,58 @@
 //   v2+: consume mode flag(+0x38)
 // ============================================================
 void ConsumeRawMaterial::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status byte (+0x18)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Versioned serializer (version 2)
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge (Persist's stream is void*)
 
     // Serialize target entity (+0x20) with ComponentEntity type check
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field20, ComponentEntity::TypeId())) {
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), ComponentEntity::TypeId())) {
             _field20 = nullptr;
         }
     }
 
     // Check version for format selection
-    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
 
     if (version == 0) {
         // Legacy v0 format: single ExternalPtr + int (no material list)
-        uintptr_t legacyExtPtr = 0;
-        Reimpl_ExternalPtr_Serialize_StringTable(&legacyExtPtr, ser2);   // 0x140002340
-        uint32_t legacyCount;
-        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&legacyCount), nullptr);   // B.3.4 bridge
+        ComponentDescription* legacyMaterial = nullptr;
+        Reimpl_ExternalPtr_Serialize_StringTable(&legacyMaterial, &ser);   // 0x140002340
+        int legacyCount;
+        ser.Serialize(legacyCount, nullptr);
     } else {
         // v1+ format: material count + material list array
-        uint32_t matCount = *(uint32_t*)(s + 0x30);
-        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&matCount), nullptr);   // B.3.4 bridge
+        int matCount = _field30;
+        ser.Serialize(matCount, nullptr);
 
         // If loading, resize the material array
-        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(s + 0x28), (int)matCount);   // 0x14000da70
+        if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            // LEFT: the shared 16-byte Array SetSize 0x14000da70 is ACT-a's file-local body,
+            // reached only through its int64_t* forwarder.
+            ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&_field28), matCount);   // 0x14000da70
         }
 
         // Serialize each material entry (ExternalPtr + int count, 0x10 bytes each)
-        uintptr_t* matList = *(uintptr_t**)(s + 0x28);
-        if ((int)matCount > 0) {
+        Entry* entry = _field28;
+        if (matCount > 0) {
             uint64_t remaining = (uint64_t)matCount;
             do {
-                Reimpl_ExternalPtr_Serialize_StringTable(matList, ser2);   // 0x140002340
-                reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(((uintptr_t)matList + 8)), nullptr);   // B.3.4 bridge
-                matList = (uintptr_t*)((uintptr_t)matList + 0x10);
+                Reimpl_ExternalPtr_Serialize_StringTable(&entry->material, &ser);   // 0x140002340
+                ser.Serialize(entry->count, nullptr);
+                ++entry;
                 remaining--;
             } while (remaining != 0);
         }
     }
 
     // v2+: serialize consume mode flag (+0x38)
-    int ver2 = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    int ver2 = ser.GetVersion();
     if (ver2 > 1) {
-        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge
+        ser.Serialize(_field38, nullptr);
     }
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -135,41 +128,36 @@ void ConsumeRawMaterial::Persist(void* stream) {
 // ============================================================
 int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    int matCount = *(int*)(s + 0x30);
+    int matCount = _field30;
     if (matCount == 0) {
         return 2;
     }
 
     // Find StorageComponent on target entity (+0x20)
-    uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage(_field20, &storageIBP);
+    StorageComponent* storage = _field20->FindComponent<StorageComponent>();   // 0x140006270
 
     int matIdx = 0;
-    int64_t matOffset = 0;
 
     if (matCount <= 0) {
         return 0;
     }
 
     do {
-        uintptr_t matList = *(uintptr_t*)(s + 0x28);
-        int64_t* matEntry = (int64_t*)(matList + matOffset);
-        int requestedCount = (int)matEntry[1];
+        Entry* matEntry = &_field28[matIdx];
+        int requestedCount = matEntry->count;
 
-        if (_field38 == 0) {
+        if (!_field38) {
             // Check mode: verify sufficient availability
             int availableCount = 0;
-            int slotCount = *(int*)(storageIBP + 0x30);
+            int slotCount = storage->slotCount;
             if (slotCount > 0) {
-                int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
+                StorageComponent::Item* itemArray = storage->storageSlots;
                 for (int i = 0; i < slotCount; i++) {
-                    if (itemArray[i * 2] == matEntry[0]) {
+                    if (itemArray[i]._resource == matEntry->material) {
                         if (i >= 0) {
                             // available = count - reserved
-                            availableCount = (int)itemArray[i * 2 + 1] -
-                                           *(int*)((uintptr_t)itemArray + (uintptr_t)i * 0x10 + 0xc);
+                            availableCount = itemArray[i]._count - itemArray[i]._reserve;
                         }
                         break;
                     }
@@ -180,16 +168,15 @@ int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
             }
         } else {
             // Consume mode: subtract from reserved field
-            int slotCount = *(int*)(storageIBP + 0x30);
+            int slotCount = storage->slotCount;
             if (slotCount > 0) {
-                int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
+                StorageComponent::Item* itemArray = storage->storageSlots;
                 for (int i = 0; i < slotCount; i++) {
-                    if (itemArray[i * 2] == matEntry[0]) {
+                    if (itemArray[i]._resource == matEntry->material) {
                         if (i >= 0) {
-                            int* reservedPtr = (int*)((uintptr_t)itemArray + (uintptr_t)i * 0x10 + 0xc);
-                            *reservedPtr -= requestedCount;
-                            if (*(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)i * 0x10) < 0) {
-                                *(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)i * 0x10) = 0;
+                            itemArray[i]._reserve -= requestedCount;
+                            if (itemArray[i]._reserve < 0) {
+                                itemArray[i]._reserve = 0;
                             }
                         }
                         break;
@@ -199,24 +186,19 @@ int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
         }
 
         // SubtractItem from storage
-        void* storageComp = (void*)storageIBP;
-        ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storageComp), matEntry[0], requestedCount);   // 0x14012d150
+        StorageSubtract(storage, matEntry->material, requestedCount);   // 0x14012d150
 
-        // Update global resource tracker
-        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-        uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
-        int64_t consumedCount = matEntry[1];
+        // Update the town's per-category consumption counter
+        CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
+        int consumedCount = matEntry->count;
 
-        int categoryIndex = ActRm_GetResourceCategory_88f90(storageComp, static_cast<uintptr_t>(matEntry[0]));   // 0x140088f90
+        int categoryIndex = ResourceCategory(matEntry->material);   // 0x140088f90
         if (categoryIndex >= 0) {
-            int* trackerEntry = (int*)(*(uintptr_t*)(resourceTracker + 0x170) +
-                                       (int64_t)categoryIndex * 0x20 + 0xc);
-            *trackerEntry += (int)consumedCount;
+            town->professionResources[categoryIndex].field_0x0C += consumedCount;
         }
 
         matIdx++;
-        matOffset += 0x10;
-    } while (matIdx < *(int*)(s + 0x30));
+    } while (matIdx < _field30);
 
     return 0;
 }
@@ -227,42 +209,35 @@ int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
 // Iterates material list, subtracts reserved amounts from storage.
 // ============================================================
 void ConsumeRawMaterial::CheckEntity() {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-
     // Only undo if consume mode is active
-    if (_field38 == 0) {
+    if (!_field38) {
         return;
     }
 
     // Find StorageComponent on target entity (+0x20)
-    uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage(_field20, &storageIBP);
+    StorageComponent* storage = _field20->FindComponent<StorageComponent>();   // 0x140006270
 
-    int matCount = *(int*)(s + 0x30);
+    int matCount = _field30;
     if (matCount <= 0) return;
 
-    int64_t matOffset = 0;
     for (int i = 0; i < matCount; i++) {
-        uintptr_t matList = *(uintptr_t*)(s + 0x28);
+        const Entry& entry = _field28[i];
 
-        int slotCount = *(int*)(storageIBP + 0x30);
+        int slotCount = storage->slotCount;
         if (slotCount > 0) {
-            int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
+            StorageComponent::Item* itemArray = storage->storageSlots;
             for (int j = 0; j < slotCount; j++) {
-                if (itemArray[j * 2] == *(int64_t*)(matList + matOffset)) {
+                if (itemArray[j]._resource == entry.material) {
                     if (j >= 0) {
-                        int* reservedPtr = (int*)((uintptr_t)itemArray + (uintptr_t)j * 0x10 + 0xc);
-                        *reservedPtr -= *(int*)(matList + matOffset + 8);
-                        if (*(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)j * 0x10) < 0) {
-                            *(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)j * 0x10) = 0;
+                        itemArray[j]._reserve -= entry.count;
+                        if (itemArray[j]._reserve < 0) {
+                            itemArray[j]._reserve = 0;
                         }
                     }
                     break;
                 }
             }
         }
-
-        matOffset += 0x10;
     }
 }
 
@@ -271,9 +246,7 @@ void ConsumeRawMaterial::CheckEntity() {
 // Simple compare: returns true if param matches entity at +0x20.
 // ============================================================
 bool ConsumeRawMaterial::GetTarget(void* param) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-
-    return *(uintptr_t*)param == *(uintptr_t*)(s + 0x20);
+    return *(void**)param == _field20.Get();   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 }
 
 // ============================================================
@@ -289,8 +262,9 @@ bool ConsumeRawMaterial::GetTarget(void* param) {
 ConsumeRawMaterial::ConsumeRawMaterial()
     : _field20(nullptr),
       _field28(nullptr),
-      _field30(nullptr),
-      _field38(0),
+      _field30(0),
+      _field34(0),
+      _field38(false),
       _pad39{} {}
 
 // The dtor body of 0x140022130, between its own stamp and the Action stamp:
@@ -300,7 +274,8 @@ ConsumeRawMaterial::ConsumeRawMaterial()
 ConsumeRawMaterial::~ConsumeRawMaterial() {
     Object::detail::InternalMemFree(_field28);
     _field28 = nullptr;
-    _field30 = nullptr;
+    _field30 = 0;   // H7: retail clears count and capacity with one qword store
+    _field34 = 0;
 }
 
 // [3] 0x1400c6120
@@ -324,112 +299,115 @@ void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
 //   RCX=self, RDX=param_2.  vtable ConsumeRawMaterial; +0x20=*param_2, +0x28=0, +0x30=0.
 // ============================================================
 void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
-    // ENDGAME B.3.8 ACT: the real ctor (ConsumeRawMaterial.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(param_2));
+    // B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the entity as uint64_t*.
+    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
+        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(param_2)));
 }
 
-// 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (+0x38 untouched).
-ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage)
-    : _field20(reinterpret_cast<void*>(*storage)),
+// 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (one qword: count and capacity;
+// +0x38 untouched).
+ConsumeRawMaterial::ConsumeRawMaterial(const Object::InternalPtr<ComponentEntity>* storage)
+    : _field20(*storage),
       _field28(nullptr),
-      _field30(nullptr) {}
+      _field30(0),
+      _field34(0) {}
 
 // ============================================================
-// FUN_1400c64b0 — Entity_impl_64b0 — ConsumeRawMaterial consume-list append.
-// Adds a (resType, count) entry to the action's consume list (self+0x28 array,
-// +0x30 count, +0x34 capacity, stride 0x10: [+0]=resType u64, [+8]=count int,
-// [+0xc]=reserved int). If self+0x38 (the "reserve" flag) is set, first bumps the
-// matching Storage-component inventory's reserved field (+0xc) by `count`.
-//   param_1 = self (the ConsumeRawMaterial action), param_2 = resType, param_3 = count.
+// FUN_1400c64b0 — ConsumeRawMaterial::AddMaterial (the consume-list append).
+// Adds a (material, count) entry to the action's consume list (+0x28 array,
+// +0x30 count, +0x34 capacity, stride 0x10: material, count, reserved). If +0x38 (the
+// "reserve" flag) is set, first bumps the matching StorageComponent item's reserve by
+// `count`.
 // ============================================================
-void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
-    int64_t storageIbp = 0;
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x20), &storageIbp);
+void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) {
+    StorageComponent* storage = _field20->FindComponent<StorageComponent>();   // 0x140006270
 
-    if (*reinterpret_cast<char*>(self + 0x38) != '\0') {
-        int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
+    if (_field38) {
+        int invCount = storage->slotCount;
         if (0 < invCount) {
-            int64_t* arr = *reinterpret_cast<int64_t**>(storageIbp + 0x28);
+            StorageComponent::Item* p = storage->storageSlots;
             int idx = 0;
-            int64_t* p = arr;
             while (true) {
-                if (*p == resType) {
+                if (p->_resource == material) {
                     if (idx >= 0) {
-                        int64_t base = *reinterpret_cast<int64_t*>(storageIbp + 0x28);
-                        int* reserved = reinterpret_cast<int*>(base + (int64_t)idx * 0x10 + 0xc);
-                        *reserved += count;
+                        storage->storageSlots[idx]._reserve += count;
                     }
                     break;
                 }
                 idx++;
-                p += 2;
+                p++;
                 if ((int64_t)idx >= invCount) break;
             }
         }
     }
 
-    // append {resType, count} to self+0x28 (count +0x30, cap +0x34, stride 0x10)
-    uint32_t oldCount = *reinterpret_cast<uint32_t*>(self + 0x30);
+    // append {material, count} to +0x28 (count +0x30, cap +0x34, stride 0x10)
+    uint32_t oldCount = static_cast<uint32_t>(_field30);
     uint32_t newCount = oldCount + 1;
     if (newCount == oldCount) return;  // overflow guard (never)
 
-    // The new entry: [0]=resType, [8]=count, [0xc]=reserved(0).
-    int64_t newEntry[2];
-    newEntry[0] = resType;
-    reinterpret_cast<int*>(&newEntry[1])[0] = count;
-    reinterpret_cast<int*>(&newEntry[1])[1] = 0;
+    // The new entry: material, count, reserved 0.
+    Entry newEntry;
+    newEntry.material = material;
+    newEntry.count = count;
+    newEntry.reserved = 0;
 
-    void* oldArr = *reinterpret_cast<void**>(self + 0x28);
-    *reinterpret_cast<uint32_t*>(self + 0x30) = newCount;
-    if (*reinterpret_cast<int*>(self + 0x34) < (int)newCount) {
-        *reinterpret_cast<uint32_t*>(self + 0x34) = newCount;
-        if (oldCount != 0) *reinterpret_cast<uint32_t*>(self + 0x34) = newCount * 3;
-        void* na = System::MemoryAllocator::_singleton
-            ? System::MemoryAllocator::MemAlloc(
-                          (uint64_t)((int64_t)*reinterpret_cast<int*>(self + 0x34) << 4), 8)
+    Entry* oldArr = _field28;
+    _field30 = static_cast<int32_t>(newCount);
+    if (_field34 < (int)newCount) {
+        _field34 = static_cast<int32_t>(newCount);
+        if (oldCount != 0) _field34 = static_cast<int32_t>(newCount * 3);
+        _field28 = System::MemoryAllocator::_singleton
+            ? static_cast<Entry*>(System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)_field34 << 4), 8))
             : nullptr;
-        *reinterpret_cast<void**>(self + 0x28) = na;
     }
     int copyStart = 0;
-    if (oldArr == *reinterpret_cast<void**>(self + 0x28)) copyStart = (int)oldCount;
+    if (oldArr == _field28) copyStart = (int)oldCount;
     int64_t i = copyStart;
     if (i < (int)newCount) {
-        int64_t byteOff = i << 4;
         do {
-            int64_t* dst = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self + 0x28) + byteOff);
+            Entry* dst = &_field28[i];
             if (dst != nullptr) {
-                int64_t* src = (i < (int)oldCount)
-                    ? reinterpret_cast<int64_t*>((int64_t)i * 0x10 + reinterpret_cast<int64_t>(oldArr))
-                    : newEntry;
-                dst[0] = src[0];
-                dst[1] = src[1];
+                const Entry* src = (i < (int)oldCount) ? &oldArr[i] : &newEntry;
+                *dst = *src;
             }
             i++;
-            byteOff += 0x10;
         } while (i < (int)newCount);
     }
-    if (oldArr != *reinterpret_cast<void**>(self + 0x28) ) System::MemoryAllocator::MemFree(oldArr);
+    if (oldArr != _field28) System::MemoryAllocator::MemFree(oldArr);
+}
+
+// B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the action and the
+// material as integers.
+void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
+    reinterpret_cast<ConsumeRawMaterial*>(self)->AddMaterial(
+        reinterpret_cast<ComponentDescription*>(resType), count);
 }
 
 // ============================================================
 // FUN_1400c63b0 — ConsumeRawMaterial_Action_CopyCtor
-//   RCX=self, RDX=p2, R8=p3(resType), R9=p4(u64, unused), [stack]=p5(byte).
+//   RCX=self, RDX=p2, R8=p3(material), R9=p4(u64, unused), [stack]=p5(byte).
 //   +0x20=*p2 ; +0x28=0 ; +0x30=0 ; +0x38=p5(byte); then 64b0(self, p3, 1).
 // ============================================================
 void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
                                         uint64_t /*p4*/, uint8_t p5) {
-    // ENDGAME B.3.8 ACT: the real ctor (ConsumeRawMaterial.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(p2, p3, p5));
+    // B4 FORWARD: 3 outside callers (Component/citizenai_actionctors.cpp,
+    // Work/work_act_perform.cpp) hold the entity as uint64_t* and the material as an integer.
+    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
+        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(p2),
+        reinterpret_cast<ComponentDescription*>(p3), p5));
 }
 
-// 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 ; +0x38 = p5 (byte); then
-// the consume-list append 0x1400c64b0(this, resType, 1).
-ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage, int64_t resType, uint8_t reserve)
-    : _field20(reinterpret_cast<void*>(*storage)),
+// 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 (one qword) ; +0x38 = p5 (byte); then
+// the consume-list append 0x1400c64b0(this, material, 1) (R8D = 1, retail 0x1400c6412).
+ConsumeRawMaterial::ConsumeRawMaterial(const Object::InternalPtr<ComponentEntity>* storage,
+                                       ComponentDescription* material, bool reserve)
+    : _field20(*storage),
       _field28(nullptr),
-      _field30(nullptr),
+      _field30(0),
+      _field34(0),
       _field38(reserve) {
-    Entity_ConsumeListAppend_64b0(reinterpret_cast<int64_t>(this), resType, 1);
+    AddMaterial(material, 1);
 }
 
 DEFINE_EXE_TYPE(ConsumeRawMaterial, "Action")
