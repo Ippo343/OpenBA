@@ -106,9 +106,9 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (pmem) PlayAnimation();
             *reinterpret_cast<uint64_t*>(&a->_field20) = entityIBP;   // raw IBP copy, as retail
-            *reinterpret_cast<uint32_t*>(a->_pad28)    = 0;
+            a->animation                                = 0;
             *reinterpret_cast<int64_t*>(&a->_field30)  = timeStore;
-            a->_field38                                 = nullptr;
+            a->_field38._ticks                          = 0;
             animAction = pmem;
         }
         int64_t animIBP = 0;

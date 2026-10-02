@@ -15,6 +15,10 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+#include "system/Value.h"      // System::Time
+
+class ComponentEntity;   // Entity/ComponentEntity.h
 
 class PlayAnimation final : public Action {
     DECLARE_EXE_TYPE(PlayAnimation)
@@ -30,14 +34,16 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400423b0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 
-    uint8_t   _pad28[8];         // +0x28 gap
-    void*     _field30;          // +0x30 
-    void*     _field38;          // +0x38 
+    Object::InternalPtr<ComponentEntity> _field20;   // +0x20 the animated entity (Persist checks ComponentEntity)
+    int32_t   animation;         // +0x28 the animation SetAnimation plays (Persist: int)
+    uint8_t   _pad2C[4];         // +0x2C
+    System::Time _field30;       // +0x30 the duration (Persist: Time)
+    System::Time _field38;       // +0x38 the elapsed time Execute accumulates (Persist: Time)
 };
 
 static_assert(sizeof(PlayAnimation) == 0x40, "PlayAnimation is 0x40 (create 0x1400011f0 MemAlloc)");
 static_assert(alignof(PlayAnimation) == 8, "PlayAnimation is 8-aligned");
 static_assert(offsetof(PlayAnimation, _field20) == 0x20, "PlayAnimation +0x20");
+static_assert(offsetof(PlayAnimation, animation) == 0x28, "PlayAnimation +0x28");
 static_assert(offsetof(PlayAnimation, _field30) == 0x30, "PlayAnimation +0x30");
 static_assert(offsetof(PlayAnimation, _field38) == 0x38, "PlayAnimation +0x38");

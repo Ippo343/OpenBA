@@ -550,8 +550,7 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
         // The real ctor (Action(), fields zeroed; +0x28 animation = 0), then the stores.
         PlayAnimation* a = new (inlineObj) PlayAnimation();
         a->_field20 = entityInner;
-        // LEFT: PlayAnimation +0x30 is declared void* (ACT-b); it holds a System::Time.
-        a->_field30 = reinterpret_cast<void*>(timeVal._ticks);
+        a->_field30 = timeVal;   // PlayAnimation +0x30 is the System::Time (B.4 ACT-b)
         pa = inlineObj;
     }
     WA_IbpCtor(&ibpRes20, pa);

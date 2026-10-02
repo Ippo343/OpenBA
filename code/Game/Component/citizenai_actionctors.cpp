@@ -86,7 +86,7 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_constants.h"
-#include "system/Value.h"   // RtSystem_Time_Ctor
+#include "system/Value.h"   // RtSystem_Time_Ctor
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
@@ -810,9 +810,9 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (mem) PlayAnimation();
             *reinterpret_cast<uint64_t*>(&a->_field20) = entityIBP;   // raw IBP copy, as retail
-            *reinterpret_cast<uint32_t*>(a->_pad28)    = 0;
+            a->animation                                = 0;
             *reinterpret_cast<uint64_t*>(&a->_field30) = t;
-            a->_field38                                 = nullptr;
+            a->_field38._ticks                          = 0;
         }
         int64_t ibp = 0; new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
