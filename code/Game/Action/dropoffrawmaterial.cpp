@@ -30,8 +30,8 @@
 
 #include "DropOffRawMaterial.h"
 #include "object/TypeInfo.h"
-#include "Entity/exe_bodies.h"
-#include "Action/exe_bodies.h"        // Pf_DropOffExec_7620, Pf_SpillAllStorage_7570
+#include "Component/StorageComponent.h"
+#include "Action/exe_bodies.h"        // DropOffExec 0x1400c7620, SpillAllStorage 0x1400c7570
 #include "Game/exe_bodies.h"          // Reimpl_ExternalPtr_Serialize_StringTable
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -62,99 +62,81 @@
 // Serializes: status(+0x18), storage(+0x30), source(+0x38), resource(+0x28), flag(+0x20), count(+0x24)
 // ============================================================
 void DropOffRawMaterial::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status byte (+0x18)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs, resource type, flag, and count
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Serialize target storage entity ref (+0x30)
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field30 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field30, CitizenComponent::TypeId())) {
+    // The carrying citizen (+0x30)
+    _field30.InternalBasePtr::Serialize(ser);
+    if (_field30.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field30.Get(), CitizenComponent::TypeId())) {
             _field30 = nullptr;
         }
     }
 
-    // Serialize source entity ref (+0x38)
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field38 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field38, ComponentEntity::TypeId())) {
+    // The destination entity (+0x38)
+    _field38.InternalBasePtr::Serialize(ser);
+    if (_field38.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field38.Get(), ComponentEntity::TypeId())) {
             _field38 = nullptr;
         }
     }
 
     // Serialize resource type ExternalPtr (+0x28)
-    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x28, ser2);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field28, &ser);   // 0x140002340
 
     // Serialize flag (+0x20) and count (+0x24)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_field20, nullptr);
+    ser.Serialize(_field24, nullptr);
 }
 
 // ============================================================
 // AbstractImpl (0x1400c7300) — slot 4
 // Complex resource transfer logic.
-// If source entity (+0x38) is null: drops all inventory via Entity_impl_7570.
-// If resource type (+0x28) is specified: transfer that one type via sub_7620.
-// If resource type is null: enumerate all resource types in source entity's
-//   parent's storage, build array, transfer each via sub_7620.
+// If the destination (+0x38) is null: drops all inventory via SpillAllStorage (0x1400c7570).
+// If resource type (+0x28) is specified: transfer that one type via DropOffExec (0x1400c7620).
+// If resource type is null: enumerate every stack in the citizen's own storage, build an
+//   array, transfer each via DropOffExec.
 // Returns 1 (needs more work) or 2 (action pushed, e.g. MoveTo for full storage).
 // ============================================================
 int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    // LEFT: Action::AbstractImpl's parameter is void* (Action.h); it is the ActionStack.
+    ActionStack* stack = static_cast<ActionStack*>(actionStack);
 
-    { // [HAUL-DIAG] gated: did the citizen's executor actually RUN a dropoff?
-    }
-
-    // If source entity is null, drop all inventory items
-    if (_field38 == nullptr) {
-        Pf_SpillAllStorage_7570(reinterpret_cast<int64_t>(this));   // 0x1400c7570
+    // If the destination is null, drop all inventory items
+    if (_field38.Get() == nullptr) {
+        SpillAllStorage(this);   // 0x1400c7570
         return 1;
     }
 
-    // Find StorageComponent on source entity at +0x38
-    uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage(_field38, &storageIBP);
+    // The destination's StorageComponent
+    StorageComponent* storage = _field38->FindComponent<StorageComponent>();   // 0x140006270
 
     // If resource type (+0x28) is specified, transfer just that type
-    if (_field28 != 0) {
-        uint64_t result = Pf_DropOffExec_7620(reinterpret_cast<int64_t>(this),   // 0x1400c7620
-                                              static_cast<int64_t*>(actionStack), &storageIBP,
-                                              *(uint64_t*)(s + 0x28));
+    if (_field28 != nullptr) {
+        uint64_t result = DropOffExec(this, stack, &storage, _field28);   // 0x1400c7620
         if ((int)result == 2) {
             return 2;
         }
         return 1;
     }
 
-    // Resource type not specified: enumerate all items in the source entity's
-    // parent's storage component, then transfer each.
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x30);
-    uintptr_t parentEntity = *(uintptr_t*)(targetEntity + 0x10);
+    // Resource type not specified: copy every stack of the carrying citizen's own storage,
+    // then transfer each.
+    StorageComponent* parentStorage = _field30->_entity->FindComponent<StorageComponent>();   // 0x140006270
 
-    uintptr_t parentStorageIBP = 0;
-    fn_FindComponent_Storage((void*)parentEntity, &parentStorageIBP);
-
-    // Build dynamic array of (resourceType, count) pairs from parent's storage
-    uint64_t* itemArray = nullptr;
+    // Build dynamic array of (resourceType, count) pairs from the citizen's storage
+    StorageComponent::Item* itemArray = nullptr;
     uint32_t itemCount = 0;
     uint32_t itemCapacity = 0;
 
-    int numItems = *(int*)(parentStorageIBP + 0x30);
+    int numItems = parentStorage->slotCount;
 
     int srcIdx = 0;
     if (numItems > 0) {
         do {
-            uintptr_t inventoryArray = *(uintptr_t*)(parentStorageIBP + 0x28);
+            StorageComponent::Item* inventoryArray = parentStorage->storageSlots;
 
             uint32_t newCount = itemCount + 1;
             if (newCount != itemCount) {
@@ -164,8 +146,7 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
                     if (itemCount != 0) {
                         itemCapacity = newCount * 3;
                     }
-                    uint64_t* newArray = (uint64_t*)System::MemoryAllocator::MemAlloc(
-                        (int64_t)(int)itemCapacity * 16, 8);
+                    StorageComponent::Item* newArray = static_cast<StorageComponent::Item*>(System::MemoryAllocator::MemAlloc((int64_t)(int)itemCapacity * 16, 8));
 
                     // Copy existing and new entries
                     uint32_t copyStart = 0;
@@ -174,16 +155,15 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
                     }
                     for (uint32_t i = copyStart; (int)i < (int)newCount; i++) {
                         if (newArray != nullptr) {
-                            uint64_t* dst = newArray + (int64_t)(int)i * 2;
-                            uint64_t* src;
+                            StorageComponent::Item* dst = newArray + (int64_t)(int)i;
+                            const StorageComponent::Item* src;
                             if ((int)i < (int)itemCount) {
-                                src = itemArray + (int64_t)(int)i * 2;
+                                src = itemArray + (int64_t)(int)i;
                             } else {
                                 // New entry: copy from inventory
-                                src = (uint64_t*)(inventoryArray + (int64_t)srcIdx * 0x10);
+                                src = inventoryArray + (int64_t)srcIdx;
                             }
-                            dst[0] = src[0];
-                            dst[1] = src[1];
+                            *dst = *src;
                         }
                     }
 
@@ -195,10 +175,7 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
                     // Array has capacity, copy new entry at the end
                     for (uint32_t i = itemCount; (int)i < (int)newCount; i++) {
                         if (itemArray != nullptr) {
-                            uint64_t* dst = itemArray + (int64_t)(int)i * 2;
-                            uint64_t* src = (uint64_t*)(inventoryArray + (int64_t)srcIdx * 0x10);
-                            dst[0] = src[0];
-                            dst[1] = src[1];
+                            itemArray[(int64_t)(int)i] = inventoryArray[(int64_t)srcIdx];
                         }
                     }
                 }
@@ -206,21 +183,20 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
             }
 
             srcIdx++;
-        } while (srcIdx < *(int*)(parentStorageIBP + 0x30));
+        } while (srcIdx < parentStorage->slotCount);
     }
 
     // Transfer each resource type that has positive count
     bool anyPushed = false;
     if ((int)itemCount > 0) {
         uint64_t remaining = (uint64_t)itemCount;
-        uint64_t* ptr = itemArray;
+        StorageComponent::Item* ptr = itemArray;
         do {
-            if ((int)ptr[1] > 0) {
-                uint64_t result = Pf_DropOffExec_7620(reinterpret_cast<int64_t>(this),   // 0x1400c7620
-                                                      static_cast<int64_t*>(actionStack), &storageIBP, ptr[0]);
+            if (ptr->_count > 0) {
+                uint64_t result = DropOffExec(this, stack, &storage, ptr->_resource);   // 0x1400c7620
                 anyPushed = anyPushed || ((int)result == 2);
             }
-            ptr += 2;
+            ptr++;
             remaining--;
         } while (remaining != 0);
 
@@ -236,30 +212,26 @@ int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
 
 // ============================================================
 // CheckEntity (0x1400c72f0) — slot 8
-// JMP thunk to Entity_impl_7570 (drops off all inventory items).
+// JMP thunk to 0x1400c7570 (drops off all inventory items).
 // Only 5 bytes (JMP rel32), not hookable.
 // ============================================================
 void DropOffRawMaterial::CheckEntity() {
-    Pf_SpillAllStorage_7570(reinterpret_cast<int64_t>(this));   // 0x1400c7570
+    SpillAllStorage(this);   // 0x1400c7570
 }
 
 // ============================================================
 // GetTarget (0x1400c7270) — slot 9
-// Returns true if param matches source entity at +0x38, or
-// the target storage entity at +0x30's parent entity (+0x10).
+// Returns true if param matches the destination at +0x38, or the carrying citizen's
+// (+0x30) owning entity (Component +0x10).
 // ============================================================
 bool DropOffRawMaterial::GetTarget(void* param) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 
-    void* sourceEntity = _field38;
-
-    if (*(void**)param == sourceEntity) {
+    if (target == _field38.Get()) {
         return true;
     }
 
-    uintptr_t targetStorage = *(uintptr_t*)(s + 0x30);
-    uintptr_t parentEntity = *(uintptr_t*)(targetStorage + 0x10);
-    return parentEntity == *(uintptr_t*)param;
+    return _field30->_entity == target;
 }
 
 // ============================================================
@@ -273,7 +245,7 @@ bool DropOffRawMaterial::GetTarget(void* param) {
 // create 0x140022600 (inlined ctor). The tree's factory zeroed every field above
 // +0x10; kept (not a behaviour change of this step).
 DropOffRawMaterial::DropOffRawMaterial()
-    : _field20(0),
+    : _field20(false),
       _pad21{},
       _field24(0),
       _field28(nullptr),
@@ -303,17 +275,20 @@ void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3,
                                         uint64_t p4, uint32_t p5, uint8_t p6) {
-    // ENDGAME B.3.8 ACT: the real ctor (DropOffRawMaterial.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) DropOffRawMaterial(p2, p3, p4, p5, p6));
+    // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp, Work/work_act_path.cpp)
+    // hold the refs as uint64_t* and the material as an integer.
+    return static_cast<Object::Base*>(new (self) DropOffRawMaterial(
+        reinterpret_cast<CitizenComponent* const*>(p2), reinterpret_cast<ComponentEntity* const*>(p3),
+        reinterpret_cast<ComponentDescription*>(p4), p5, p6));
 }
 
 // 0x1400c7cd0: +0x20 = p6 (byte) ; +0x24 = p5 ; +0x28 = p4 ; +0x30 = *p2 ; +0x38 = *p3.
-DropOffRawMaterial::DropOffRawMaterial(uint64_t* storage, uint64_t* source, uint64_t resType,
-                                       uint32_t count, uint8_t flag)
+DropOffRawMaterial::DropOffRawMaterial(CitizenComponent* const* citizen, ComponentEntity* const* destination,
+                                       ComponentDescription* material, uint32_t count, bool flag)
     : _field20(flag),
       _field24(static_cast<int32_t>(count)),
-      _field28(reinterpret_cast<void*>(resType)),
-      _field30(reinterpret_cast<void*>(*storage)),
-      _field38(reinterpret_cast<void*>(*source)) {}
+      _field28(material),
+      _field30(*citizen),
+      _field38(*destination) {}
 
 DEFINE_EXE_TYPE(DropOffRawMaterial, "Action")

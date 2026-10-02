@@ -134,9 +134,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
 // because 78c0 mutates it (12d150 compacts the array).
 // ============================================================
 void SpillAllStorage(DropOffRawMaterial* self) {
-    // LEFT: DropOffRawMaterial::_field30 (block ACT-b's header) is declared void*; Persist
-    // 0x1400c7b10 validates it against CitizenComponent.
-    CitizenComponent* citizen = reinterpret_cast<CitizenComponent*>(self->_field30);
+    CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
     int n = storage->slotCount;
     while (0 < n) {
@@ -159,8 +157,7 @@ void SpillAllStorage(DropOffRawMaterial* self) {
 // ============================================================
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target,
                      ComponentDescription* material) {
-    // LEFT: DropOffRawMaterial::_field30 (block ACT-b's header) is declared void*.
-    CitizenComponent* citizen = reinterpret_cast<CitizenComponent*>(self->_field30);
+    CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     int iVar5 = Pf_StorageCountDelta_1167c0(citizen, material);   // 0x1401167c0
     int iVar8 = self->_field24;
     int iVar9 = iVar5;
