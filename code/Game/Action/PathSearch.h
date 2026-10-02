@@ -402,6 +402,10 @@ struct RegionGraph {
     void     RebuildBlock(uint32_t block);                    // 0x1400a80a0
     void     Flush();                                         // 0x1400a8a90
     int      PathLength(int start, uint32_t goal);            // 0x1400a8ba0
+
+    // region_graph_build.cpp (B.4 ACT-b): the body of the ctor 0x1400a8670 (map, the
+    // block counts; retail's R8 / R9 are not read).
+    void     Init(Map* map, uint32_t blocksWide, int blocksHigh);   // 0x1400a8670
 };
 static_assert(sizeof(RegionGraph) == 0x108, "RegionGraph is MemAlloc(0x108)");
 static_assert(offsetof(RegionGraph, search) == 0x00, "RegionGraph::search @ +0x00");
