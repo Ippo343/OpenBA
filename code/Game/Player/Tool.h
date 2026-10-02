@@ -45,6 +45,10 @@
 #include "object/Type.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
+class PlayerToolManager;      // Game/PlayerToolManager.h
+class ToolSetting;            // Player/ToolSetting.h
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class Tool : public Object::Internal {
     DECLARE_EXE_TYPE(Tool)
 
@@ -68,9 +72,17 @@ public:
     // ---- the 0x18 bytes Tool adds, retail order -----------------------------
     // PUBLIC while the slot bodies (free functions over the tool pointer) read
     // them by name (decision 1).
-    void* dialogPtr;        // +0x10 owner handle (SetEditMode writes it before [4])
-    void* toolSetting;      // +0x18 InternalBasePtr<ToolSetting> (ctor zeroes it)
-    void* descriptionPtr;   // +0x20 the tool's description entity (ctor zeroes it)
+    //
+    // B.4 PLAYER (types from SelectTool 0x140102b60, which installs a tool:
+    // 0x140102dc2 `MOV [tool+0x10],R13` (R13 = the PlayerToolManager `this`),
+    // 0x140102dca `MOV [tool+0x18],RBX` (the registry node's ToolSetting IBP,
+    // built from slot 11 and IsDerivedFrom(ToolSetting) 0x140102d89),
+    // 0x140102dc6 `MOV [tool+0x20],RAX` (the manager's +0x20 tool group)).
+    // The +0x10 NAME is the tree's: it is the owning manager, whose +0x00 is the
+    // open tool dialog's InternalBasePtr (known_port_issues 14f row 70).
+    PlayerToolManager*    dialogPtr;        // +0x10 the owning tool manager
+    ToolSetting*          toolSetting;      // +0x18 InternalPtr<ToolSetting> (ctor zeroes it)
+    ComponentDescription* descriptionPtr;   // +0x20 the tool group description (ctor zeroes it)
 
 protected:
     Tool() : Object::Internal(), dialogPtr(nullptr), toolSetting(nullptr), descriptionPtr(nullptr) {}
