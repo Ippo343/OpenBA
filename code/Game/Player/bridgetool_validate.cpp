@@ -33,38 +33,33 @@
 #include <cstdint>
 #include <cstdlib>
 #include "Player/exe_bodies.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Game/Map.h"
+#include "Action/PathAvl.h"
 
 namespace {
 
-inline uint32_t* MapGrid() {
-    void* gameWorld = GameUpdateLoop::_singleton;
+inline Map* MapGrid() {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return nullptr;
-    return *reinterpret_cast<uint32_t**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);
-}
-
-inline int64_t TerrainBase(uint32_t* mapGrid) {
-    return *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
-}
-
-inline uintptr_t CellAt(int64_t terrainBase, int cellIdx) {
-    return static_cast<uintptr_t>(terrainBase) + static_cast<int64_t>(cellIdx) * 0x30;
+    return gameWorld->m_game;
 }
 
 // 1 << (terrainType & 0x1f) — the bit each mask is tested against.
-inline uint32_t TerrainBit(uintptr_t cell) {
-    return 1u << (*reinterpret_cast<uint8_t*>(cell + 0x29) & 0x1f);
+inline uint32_t TerrainBit(const MapCell* cell) {
+    return 1u << (cell->terrainType & 0x1f);
 }
 
-// The pending/queued-cell BST at mapGrid+0xe8. Returns true if cellIdx is present,
-// which makes the cell unavailable. Node: key=+0x00, left=+0x10, right=+0x18.
-bool PendingContains(uint32_t* mapGrid, int cellIdx) {
-    int* node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(mapGrid) + 0xe8);
+// The pending/queued-cell BST at Map +0xE8 (AvlNode28: key +0x00, left +0x10,
+// right +0x18). Returns true if cellIdx is present, which makes the cell unavailable.
+bool PendingContains(const Map* mapGrid, int cellIdx) {
+    const AvlNode28* node = mapGrid->field_0xE8;
     while (node != nullptr) {
-        if (cellIdx < *node) {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x10);
+        if (cellIdx < node->key) {
+            node = node->left;
         } else {
-            if (cellIdx <= *node) return true;   // exact hit
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);
+            if (cellIdx <= node->key) return true;   // exact hit
+            node = node->right;
         }
     }
     return false;
@@ -78,13 +73,13 @@ bool PendingContains(uint32_t* mapGrid, int cellIdx) {
 // Constrains the drag's end cell to a straight run from the start cell: whichever of
 // the row/column deltas is smaller collapses, so a bridge is always axis-aligned.
 // Ties (|dRow| == |dCol|) snap to a horizontal run, matching retail's `<=`.
-extern "C" int BridgeTool_SnapEndCell_Impl(void* self, int endCell) {
-    uint32_t* mapGrid = MapGrid();
+extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell) {
+    Map* mapGrid = MapGrid();
     if (!mapGrid) return endCell;
-    const int width = static_cast<int>(mapGrid[0]);
+    const int width = mapGrid->size;
     if (width <= 0) return endCell;
 
-    const int startCell = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x2c);
+    const int startCell = self->startCell;   // DragTool +0x2c
     const int startRow = startCell / width;
     const int startCol = startCell % width;
     const int dCol = startCol - (endCell % width);
@@ -111,25 +106,25 @@ extern "C" int BridgeTool_SnapEndCell_Impl(void* self, int endCell) {
 //      must carry a maskNeighbor terrain bit.
 //
 // Returns nonzero when the bridge is placeable. outLength may be null.
-extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int endCell,
+extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell,
                                                  int* outLength) {
     uint32_t result = 1;
     if (outLength) *outLength = 0;
 
-    uint32_t* mapGrid = MapGrid();
+    Map* mapGrid = MapGrid();
     if (!mapGrid) return 0;
-    const int width = static_cast<int>(mapGrid[0]);
+    const int width = mapGrid->size;
     if (width <= 0) return 0;
-    const int64_t terrainBase = TerrainBase(mapGrid);
+    const MapCell* terrainBase = mapGrid->cells;
     if (!terrainBase) return 0;
 
-    const uintptr_t desc = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(self) + 0x38);
+    const CreateBridgeDescription* desc = self->bridgeDesc;
     if (!desc) return 0;
-    const uint32_t maskBody     = *reinterpret_cast<uint32_t*>(desc + 0x20);
-    const uint32_t maskApproach = *reinterpret_cast<uint32_t*>(desc + 0x24);
-    const uint32_t maskRequired = *reinterpret_cast<uint32_t*>(desc + 0x2c);
-    const uint32_t maskNeighbor = *reinterpret_cast<uint32_t*>(desc + 0x30);
-    const int      radius       = *reinterpret_cast<int*>(desc + 0x34);
+    const uint32_t maskBody     = desc->_u20;
+    const uint32_t maskApproach = desc->_u24;
+    const uint32_t maskRequired = desc->_u2c;
+    const uint32_t maskNeighbor = desc->_u30;
+    const int      radius       = desc->_i34;
 
     // Normalise the span to [minRow..maxRow] x [minCol..maxCol].
     int startRow = startCell / width, startCol = startCell % width;
@@ -151,9 +146,9 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int 
     if (minRow <= maxRow) {
         for (int row = minRow; row <= maxRow; row++) {
             if (minCol <= maxCol) {
-                uintptr_t cell = CellAt(terrainBase, width * row + minCol);
-                for (int n = maxCol - minCol + 1; n > 0; n--, cell += 0x30) {
-                    if (*reinterpret_cast<int64_t*>(cell) != 0)
+                const MapCell* cell = &terrainBase[width * row + minCol];
+                for (int n = maxCol - minCol + 1; n > 0; n--, cell++) {
+                    if (cell->blocker != nullptr)
                         result = 0;                     // cell already occupied
                     const uint32_t bit = TerrainBit(cell);
 
@@ -202,7 +197,7 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int 
             if (minCol <= maxCol) {
                 int idx = width * row + minCol;
                 for (int col = minCol; col <= maxCol; col++, idx++) {
-                    if (maskBody & TerrainBit(CellAt(terrainBase, idx))) {
+                    if (maskBody & TerrainBit(&terrainBase[idx])) {
                         hitIdx = idx; hitCol = col; hitRow = row;
                         break;
                     }
@@ -235,16 +230,16 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int 
                 }
                 const int idx = width * probeRow + probeCol;
                 if (idx < 0) { result = 0; continue; }
-                const uintptr_t cell = CellAt(terrainBase, idx);
+                const MapCell* cell = &terrainBase[idx];
                 const uint32_t  bit  = TerrainBit(cell);
 
                 if (off != 0 && (maskNeighbor & bit) == 0)
                     result = 0;
 
-                const bool free = (*reinterpret_cast<int64_t*>(cell) == 0)
+                const bool free = (cell->blocker == nullptr)
                                && ((bit & 2) == 0)
                                && ((bit & 1) == 0)
-                               && (*reinterpret_cast<int8_t*>(cell + 0x2a) == -1);
+                               && (static_cast<int8_t>(cell->field_0x2A) == -1);
                 if (!free || PendingContains(mapGrid, idx))
                     result = 0;
             }

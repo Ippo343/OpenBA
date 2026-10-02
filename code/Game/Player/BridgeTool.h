@@ -34,6 +34,8 @@
 #include "Player/dragtool.h"
 #include "Object/exe_type.h"
 
+class CreateBridgeDescription;   // Component/CreateBridgeDescription.h
+
 class BridgeTool final : public DragTool {
     DECLARE_EXE_TYPE(BridgeTool)
 
@@ -45,12 +47,12 @@ public:
     void Startup() override;                                               // [4]  0x1400fb7a0
     void Shutdown() override {}                                            // [5]  0x1400fb790 RET
     void Update(void*, char) override {}                                   // [7]  0x1400fb2c0 RET
-    void Draw(void* context, char active) override;                        // [8]  0x1400fadc0
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x1400fadc0
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x1400f9cd0
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,
                   int* outCostB, int* outCostA, int* outLength) override;  // [14] 0x1400facf0
 
-    void* bridgeDesc;   // +0x38 CreateBridgeDescription* — set by Startup
+    CreateBridgeDescription* bridgeDesc;   // +0x38 set by Startup (B4 PLAYER)
 };
 
 

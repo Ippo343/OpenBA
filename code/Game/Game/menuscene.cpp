@@ -50,8 +50,6 @@
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
 
 // M3.5 Path B session 8 — top-level Geometry serializers used by Serialize.
-extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream);
-extern "C" void Reimpl_TradeWork_impl_f1a0(void* self, void* stream);
 
 // FUN_14001b860 — the tree/map cleanup for +0x1C8 / +0x1E8 (game_leaf_helpers.cpp,
 // registered at that address in reg_game_leaf.cpp). Called directly: the old
@@ -261,8 +259,8 @@ bool MenuScene::Serialize(void* stream) {
     // fix for the intermittent menu heap crash.)
     RZ_CHECK("Slot5 before geometry deserialize");
     if (geometry) {
-        Reimpl_TradeWork_impl_04d0(geometry, stream);
-        Reimpl_TradeWork_impl_f1a0(geometry, stream);
+        geometry->Serialize(io);                 // 0x1400b04d0
+        geometry->SerializeLegacyBatches(io);    // 0x1400af1a0
     }
     RZ_CHECK("Slot5 after geometry deserialize");
 

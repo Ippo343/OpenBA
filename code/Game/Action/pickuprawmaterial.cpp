@@ -27,11 +27,12 @@
 
 #include "PickupRawMaterial.h"
 #include "object/TypeInfo.h"
-#include "Entity/exe_bodies.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/StorageComponent.h"
+#include "Entity/EntityList.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_*, ActHunt_* helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include "Component/CitizenComponent.h"
 #include "Entity/ComponentEntity.h"
 #include <cstdio>
@@ -60,100 +61,70 @@
 //             entity(+0x28) with type check ComponentEntity
 // ============================================================
 void PickupRawMaterial::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status byte (+0x18)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Serialize source building (+0x20) with type check
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {
+    // The carrying citizen (+0x20)
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
 
-    // Serialize source entity (+0x28) with ComponentEntity type check
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field28 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field28, ComponentEntity::TypeId())) {
+    // The raw-material pile entity (+0x28)
+    _field28.InternalBasePtr::Serialize(ser);
+    if (_field28.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field28.Get(), ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
 // PickupRawMaterial::AbstractImpl (0x1400c98d0) -- slot 4
-// Picks up raw material from source entity (+0x28):
-// 1. Finds RawMaterial description component on source entity's component array
-// 2. Gets quantity (+0x28 on that component) and item type
-// 3. Finds storage on source building (+0x20) -> parent (+0x10)
-// 4. Adds item to storage via FUN_14012d000
-// 5. Checks entity flags, marks entity for removal if needed
+// Picks up the raw-material pile (+0x28):
+// 1. Finds the pile's RawMaterialComponent (0x1400223c0)
+// 2. Its quantity and the pile's template (ComponentEntity::_description)
+// 3. Finds the StorageComponent on the citizen's (+0x20) entity
+// 4. Adds the material to the storage (0x14012d000)
+// 5. Marks the pile for removal and queues it on the EntityList's removal list
 // Returns 0 (action complete).
 // ============================================================
 int  PickupRawMaterial::AbstractImpl(void* actionStack) {
     (void)actionStack;
 
-    // Get source entity at +0x28
-    void* sourceEntity = _field28;
+    // The pile's RawMaterialComponent and its quantity
+    RawMaterialComponent* rawMaterial = _field28->FindComponent<RawMaterialComponent>();   // 0x1400223c0
+    int quantity = rawMaterial->quantity;
 
-    // Find RawMaterial description component on source entity via FUN_1400223c0
-    // This is a FindComponent variant using DAT_1401c7c80 type ID
-    uint8_t resultIBP[16]; // InternalBasePtr result
-    ActRm_FindComponent_223c0((uintptr_t)sourceEntity, resultIBP);   // 0x1400223c0
+    // The pile's template
+    ComponentDescription* itemType = _field28->_description;
 
-    // CheckPtr on the result to resolve lazy pointer
+    // The StorageComponent on the citizen's entity
+    StorageComponent* storage = _field20->_entity->FindComponent<StorageComponent>();   // 0x140006270
 
-    // Read quantity from the found component: *(int*)(component + 0x28)
-    void* rawMatDesc = *(void**)resultIBP;
-    int quantity = *(int*)((uintptr_t)rawMatDesc + 0x28);
+    // Add the material to the storage
+    StorageAdd(storage, itemType, quantity);   // 0x14012d000
 
-    // Read raw material type from source entity (+0x28 field = ExternalPtr)
-    int64_t itemType = *(int64_t*)((uintptr_t)(_field28) + 0x28);
-
-    // Navigate to source building (+0x20) -> parent entity (+0x10)
-    void* building = _field20;
-    void* parentEntity = *(void**)((uintptr_t)building + 0x10);
-
-    // Find StorageComponent on parent entity
-    uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage((void*)parentEntity, &storageIBP);
-
-    // CheckPtr + add item to storage
-    ActRm_StorageAdd_d000(storageIBP, itemType, quantity);   // 0x14012d000
-
-    // Get source entity again, check if it should be flagged for removal
-    void* entityRef = _field28;
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t worldList = *(uintptr_t*)(gameWorld + 0xe8);
+    // Check the pile entity again, flag it for removal if not yet flagged
+    ComponentEntity* entityRef = _field28.Get();
+    EntityList* worldList = GameUpdateLoop::_singleton->m_entityList;
 
     if (entityRef != nullptr) {
-        // Store entity ptr for flag check
-        uintptr_t localEntity = (uintptr_t)entityRef;
+        ComponentEntity* localEntity = entityRef;
 
-        // Check bit 10 of flags at +0x40
-        uint32_t flags = *(uint32_t*)(localEntity + 0x40);
+        // Check bit 10 of the entity flags (+0x40)
+        uint32_t flags = localEntity->_entityFlags;
         if (((flags >> 10) & 1) == 0) {
-            // Entity not yet flagged -- call entity flag set and add to world removal list
-            ActHunt_MarkEntityRemoval_c2ea0((void*)localEntity);   // 0x1400c2ea0
+            // Not yet flagged -- flag it and queue it on the removal list
+            MarkEntityForRemoval(localEntity);   // 0x1400c2ea0
 
-            // Push entity ref to world list at worldList + 0xd0.
-            // B.3.2 bridge: FUN_140003110 == Collection::Array<Ptr8>::SetSize(n,fill)
-            // (3-arg form; ActHunt_DynArraySetCount_3110 in action_base_hunt.cpp).
-            int currentCount = *(int*)(worldList + 0xd8);
-            GameColl::AsArray<GameColl::Ptr8>((void*)(worldList + 0xd0))
-                .SetSize(currentCount + 1,
-                         *reinterpret_cast<const GameColl::Ptr8*>(&localEntity));
+            // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
+            ActHunt_DynArraySetCount_3110(&worldList->removalList,   // 0x140003110
+                                          worldList->removalList.count + 1, &localEntity);
         }
     }
 
@@ -162,23 +133,17 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
 
 // ============================================================
 // PickupRawMaterial::GetTarget (0x1400c9860) -- slot 9
-// Returns true if param matches entity at +0x28, or
-// matches the parent entity (+0x10) of the building at +0x20.
+// Returns true if param matches the pile at +0x28, or the citizen's (+0x20) owning
+// entity (Component +0x10).
 // ============================================================
 bool PickupRawMaterial::GetTarget(void* param) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    void* paramVal = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 
-    // Check direct match with +0x28
-    uintptr_t paramVal = *(uintptr_t*)param;
-
-    if (*(uintptr_t*)(s + 0x28) == paramVal) {
+    if (_field28.Get() == paramVal) {
         return true;
     }
 
-    // Check match with +0x20's parent (+0x10)
-    uintptr_t building = *(uintptr_t*)(s + 0x20);
-    uintptr_t parentEntity = *(uintptr_t*)(building + 0x10);
-    return parentEntity == *(uintptr_t*)param;
+    return _field20->_entity == paramVal;
 }
 
 // ============================================================

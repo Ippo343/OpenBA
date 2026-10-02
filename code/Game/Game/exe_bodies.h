@@ -108,7 +108,9 @@ extern "C" void EntityUI_Dtor_1024d0(void* selfV);  // 0x1401024d0
 extern "C" void Tutorial_Dtor_f8ff0(void* selfV);  // 0x1400f8ff0
 
 // ---- geometry_serialize.cpp
-extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream);  // 0x1400b04d0
+class WorldGeometry;
+namespace IO { class Stream; }
+extern "C" void Reimpl_TradeWork_impl_04d0(WorldGeometry* self, IO::Stream* stream);  // 0x1400b04d0 WorldGeometry::Serialize  // B4 FORWARD: 1 outside caller(s)
 
 // ---- goals_serialize.cpp
 class WorkScheduler;
@@ -139,9 +141,11 @@ extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);  
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10
 extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount);  // 0x14000c520
-extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer, uint32_t count, void* arrayBase);  // 0x14001bbf0
-extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(void* serializer, int count, void* arrayBase);  // 0x14001bcc0
-extern "C" void Reimpl_Array_Serialize_External_Particle(void* serializer, int count, void* arrayBase);  // 0x14001bff0
+struct MenuSceneMesh;
+namespace IO { class Serializer; }
+extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0
+extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bcc0
+extern "C" void Reimpl_Array_Serialize_External_Particle(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bff0
 
 // ---- serialize_externals.cpp
 extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(void* refField, void* serializer);  // 0x14001b8e0
@@ -159,7 +163,7 @@ extern "C" void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, vo
 extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer);  // 0x1400194a0
 
 // ---- serialize_heightmap_mesh.cpp
-extern "C" void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row);  // 0x1400ae270
+extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
@@ -171,8 +175,6 @@ extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);  // 0x14001f250
 extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src);  // 0x14001f5e0
 extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
-extern "C" void* Reimpl_Struct60B_SubArrayCopyStride14(void* dst, const void* src);  // 0x14001fdb0
-extern "C" void* Reimpl_Struct60B_SubArrayCopyStride02(void* dst, const void* src);  // 0x14001fe60
 
 // ---- town_workplace_registry.cpp
 extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3);  // 0x1400895a0
@@ -267,8 +269,6 @@ void ResizeStride0x20(void* hdr, int n);  // 0x1400177c0
 // ---- B3R G-Game: bodies of this module called directly (formerly through local extern
 // prototypes in geometry_serialize.cpp / worldgen.cpp); not registered.
 // serialize_struct60b_serialize.cpp
-extern "C" void Reimpl_Struct60B_Serialize(void* serializer, int count, void* arrayBase);
-extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(void* serializer, int count, void* arrayBase);
 // serialize_heightmap_mesh.cpp
 extern "C" void Reimpl_TradeWork_sub_c1e0(void* self);
 // serialize_image_upload.cpp

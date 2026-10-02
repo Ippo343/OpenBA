@@ -38,27 +38,34 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
 
 // ============================================================
-// Helper: search entity component list for a specific type ID
+// Helper: search the tool group's sub-descriptions for T
 // ============================================================
-// Returns the first component matching targetTypeId, or nullptr.
-static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
+// Returns the first description whose Type() matches T's id and that IsDerivedFrom
+// it, or nullptr; a type match that fails IsDerivedFrom ends the search.
+template <class T>
+static T* FindToolDescription(const ComponentDescription* entity) {
     if (!entity) return nullptr;
+    const uint32_t targetTypeId = T::TypeId();
 
-    int count = *(int*)(entity + 0x30);
-    void** components = *(void***)(entity + 0x28);
+    int count = entity->_subDescCount;
+    Description** components = entity->_subDescs;
 
     for (int i = 0; i < count; i++) {
-        void* comp = components[i];
+        Description* comp = components[i];
         if (!comp) continue;
 
         // virtual slot 2 (+0x10): Type()
-        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-
-        if (typeId == targetTypeId) {
+        if (comp->Type() == targetTypeId) {
             if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
-                return comp;
+                return static_cast<T*>(comp);
             }
             break;
         }
@@ -69,40 +76,33 @@ static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
 // ============================================================
 // DragPlacementTool::Startup (vtable +0x20, Slot4)
 // ============================================================
-// Searches entity component list for two description types:
-//   1. CreateDragDescription (cell 0x1401c7430; the field name/global "CreatePlacementDescription"
-//      lies — D5, Table 1/3) -> self->placementDesc (+0x38)
-//   2. MapDescription (cell 0x1401c7a18; "AreaDescription" also lies) -> self->areaDesc (+0x40)
+// Searches the tool group's sub-descriptions for two types:
+//   1. CreateDragDescription (cell 0x1401c7430) -> this->placementDesc (+0x38)
+//   2. MapDescription (cell 0x1401c7a18) -> this->areaDesc (+0x40)
 //
 // Original: 0x1400fc3e0
 void DragPlacementTool::Startup() {
-    uintptr_t entity = (uintptr_t)descriptionPtr;
-
     // Find CreateDragDescription
-    void* foundPlacement = FindComponentByTypeId(entity, CreateDragDescription::TypeId());
+    CreateDragDescription* foundPlacement = FindToolDescription<CreateDragDescription>(descriptionPtr);
 
-    // Original re-reads entity pointer after first search
-    entity = (uintptr_t)descriptionPtr;
+    // Original re-reads the description pointer after the first search
     placementDesc = foundPlacement;
 
     // Find MapDescription
-    void* foundArea = FindComponentByTypeId(entity, MapDescription::TypeId());
-    areaDesc = foundArea;
+    areaDesc = FindToolDescription<MapDescription>(descriptionPtr);
 }
 
 // ============================================================
 // Helpers, called by name (Player/exe_bodies.h)
 // ============================================================
 
-// PlayerPath_CharComp_f5d0 (0x14009f5d0, CharacterComponent_impl_f5d0): terrain
-// validation for a single cell. Checks terrain mask, height constraints, overlap
-// flags. Params: (mapPtr, col, row, terrainMask, 0.0f, heightTol, 0.0f,
-// allowOverlap, hasExisting, entityTemplate). (Was a dropped-page typo 0x1400ff5d0,
-// mid-function inside MainMenuDialog_helper_eec0 — confirmed by the CALL at
-// 0x1400fbcac in DragPlacementTool_Slot14.)
-static inline bool TerrainValidate(int* mapPtr, uint32_t col, uint32_t row, uint32_t terrainMask,
+// PlayerPath_CharComp_f5d0 (0x14009f5d0): terrain validation for a single cell.
+// Checks terrain mask, height constraints, overlap flags. Params: (map, col, row,
+// terrainMask, 0.0f, heightTol, 0.0f, allowOverlap, hasExisting, entityTemplate).
+// (Confirmed by the CALL at 0x1400fbcac in DragPlacementTool::CalcCost.)
+static inline bool TerrainValidate(Map* mapPtr, uint32_t col, uint32_t row, uint32_t terrainMask,
                                    float p5, float heightTol, float p7, char allowOverlap,
-                                   bool hasExisting, int64_t entityTemplate) {
+                                   bool hasExisting, const ComponentDescription* entityTemplate) {
     return PlayerPath_CharComp_f5d0(mapPtr, (int)col, (int)row, terrainMask, p5, heightTol, p7,
                                     allowOverlap, (char)hasExisting, entityTemplate);
 }
@@ -121,15 +121,15 @@ static inline float HeightTolerance() {
 //
 // Converts start/end cells to grid coordinates, normalizes to min/max corners,
 // checks description size constraints, then validates each cell's terrain.
-// Finally checks for existing placement overlap.
+// Finally checks the owner's single-rectangle constraint.
 //
 // Return: 0=success, 1=too small, 2=too big, 3=invalid terrain/overlap
 // Original: 0x1400fbae0
 int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
                                 int* outCostA, int* outCostB, int* outLength) {
-    // Get map grid size pointer
-    int* mapPtr = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
-    int gridSize = *mapPtr;
+    // The map and its grid size
+    Map* mapPtr = GameUpdateLoop::_singleton->m_game;
+    int gridSize = mapPtr->size;
 
     // Convert cell indices to (col, row) grid coordinates
     int startRow = startCell / gridSize;
@@ -164,22 +164,22 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     float heightTol = HeightTolerance();
 
     // Read placement description fields
-    uintptr_t desc = (uintptr_t)placementDesc;
+    const CreateDragDescription* desc = placementDesc;
 
     // Check min size (desc +0x30 = minWidth, +0x34 = minHeight)
-    if (width < *(int*)(desc + 0x30) || height < *(int*)(desc + 0x34)) {
+    if (width < desc->_i30 || height < desc->_i34) {
         return 1;
     }
 
     // Check max size (desc +0x28 = maxWidth, +0x2C = maxHeight)
-    if (*(int*)(desc + 0x28) < width || *(int*)(desc + 0x2C) < height) {
+    if (desc->_i28 < width || desc->_i2c < height) {
         return 2;
     }
 
     // Validate terrain for each cell in the rectangle
-    uint32_t terrainMask = *(uint32_t*)(desc + 0x20);
-    char allowOverlap = *(char*)(desc + 0x24);
-    int64_t entityTemplate = *(int64_t*)(desc + 0x38);
+    uint32_t terrainMask = desc->_shape;
+    char allowOverlap = desc->_b24;
+    const ComponentDescription* entityTemplate = desc->_created;
 
     bool allValid = true;
     for (int row = minRow; row <= maxRow && allValid; row++) {
@@ -198,18 +198,14 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     }
 
     if (allValid) {
-        // Check for existing placement overlap via self->dialogPtr (+0x10)
-        // The IBP at +0x10 points to an object with:
-        //   +0x80: bool hasExistingPlacement
-        //   +0x98: int existingStartCell
-        //   +0x9c: int existingEndCell
-        uintptr_t dlg = (uintptr_t)dialogPtr;
-        if (dlg && *(char*)(dlg + 0x80) != '\0') {
-            int existGridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
-            int existStartCol = *(int*)(dlg + 0x98) % existGridSize;
-            int existStartRow = *(int*)(dlg + 0x98) / existGridSize;
-            int existEndCol = *(int*)(dlg + 0x9c) % existGridSize;
-            int existEndRow = *(int*)(dlg + 0x9c) / existGridSize;
+        // The owner's single-rectangle constraint (PlayerToolManager +0x80 / +0x98 / +0x9C)
+        const PlayerToolManager* dlg = dialogPtr;
+        if (dlg && dlg->field_0x80) {
+            int existGridSize = GameUpdateLoop::_singleton->m_game->size;
+            int existStartCol = dlg->field_0x98 % existGridSize;
+            int existStartRow = dlg->field_0x98 / existGridSize;
+            int existEndCol = dlg->field_0x9C % existGridSize;
+            int existEndRow = dlg->field_0x9C / existGridSize;
             if (minCol != existStartCol || minRow != existStartRow ||
                 existEndCol != maxCol || existEndRow != maxRow) {
                 return 3;
@@ -226,33 +222,13 @@ int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
 // PlayerTileRender_DrawOverlay_08c0 (the tile renderer).
 
 // ============================================================
-// Tile record: 0x14 bytes, used by CharacterComponent_impl_08c0
+// Tile records: ToolTileRecord (Player/Tool.h), variant 0 = normal, 2 = has existing.
+// ENDGAME B.3.2 step 2: a real `Collection::Array` (stride 0x14, align 4, byteCopy);
+// every append is one element, so the `(count == 0) ? n : n*3` rule is the
+// reference rule. Out-of-memory-only difference: the old push skipped the store
+// when the block came back null; SetSizeCore skips the null element address.
 // ============================================================
-struct TileRecord {
-    int32_t  col;    // +0x00
-    int32_t  row;    // +0x04
-    uint32_t flags;  // +0x08 (0=normal, 2=has existing)
-    uint32_t color;  // +0x0C (ARGB: 0xff00ff00=green, 0xffff0000=red, 0xffffff00=yellow)
-    int32_t  extra;  // +0x10
-};
-static_assert(sizeof(TileRecord) == 0x14, "TileRecord size mismatch");
-
-// ============================================================
-// Dynamic tile array: mirrors engine's grow pattern
-// ============================================================
-// ENDGAME B.3.2 step 2: this WAS a struct with a hand-written `push` (a copy of
-// rtcoll::SetSizeCore specialised to one append) and a `free` (a copy of
-// Collection::Array<T>::~Array). It is now the real template, trait-derived row:
-// stride 0x14, align 4, byteCopy, init == nullptr, destroy == nullptr. Compared arm
-// for arm before the swap: push always had newCount == count + 1, so its
-// `(count == 0) ? n : n*3` rule is the reference rule; MemAlloc(cap * 0x14, align 4);
-// prefix memcpy'd only into a freshly allocated block (== "only when the block
-// moved"); the old block freed on that same path; the new slot takes the fill;
-// `count = newCount` stored after the allocation here vs before it in SetSizeCore,
-// which nothing observes. `free` was MemFree + zero data/count/capacity == ~Array.
-// Out-of-memory-only difference: push skipped the store when the block came back
-// null; SetSizeCore skips the null element address per iteration. Same outcome.
-using TileArray = Collection::Array<TileRecord>;
+using TileArray = Collection::Array<ToolTileRecord>;
 
 // ============================================================
 // DragPlacementTool::Draw (vtable +0x40, Slot8)
@@ -260,63 +236,50 @@ using TileArray = Collection::Array<TileRecord>;
 // Renders colored tile overlays for a drag-based area placement tool.
 //
 // Two main sections:
-// 1. If an existing placement is recorded at dialog+0x80, render its
-//    footprint as yellow tiles (0xffffff00).
+// 1. If the owner holds a constraint rectangle (+0x80), render its footprint as
+//    yellow tiles (0xffffff00).
 // 2. If param3==0, render the current drag rectangle:
 //    - Get start/end cells from DragTool drag state or ScreenToCell
 //    - Normalize to min/max corners
 //    - Check area size against description constraints
 //    - Validate each cell's terrain, color green/red accordingly
-//    - Pass tile arrays to CharacterComponent_impl_08c0 for rendering
-//
-// Disassembly reference: 0x1400fbe40
-// Key sub-calls:
-//   0x1401008c0 = CharacterComponent_impl_08c0 (tile renderer)
-//   0x14009f5d0 = CharacterComponent_impl_f5d0 (terrain validate)
-//   0x140101270 = FUN_140101270 (ScreenToCell)
-// Uses: g_pGameWorldSingleton+0xf8 (map grid size pointer)
-//       placementDesc (+0x38) for terrain constraints
-//       dialog controller (+0x10) for existing placement info
+//    - Pass tile arrays to 0x1401008c0 for rendering
 //
 // Original: 0x1400fbe40
-void DragPlacementTool::Draw(void* context, char param3) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+void DragPlacementTool::Draw(Video::Context* context, char param3) {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // --- Section 1: Existing placement overlay (yellow tiles) ---
-    uintptr_t dialogCtrl = (uintptr_t)dialogPtr;
-    if (*(char*)(dialogCtrl + 0x80) != 0) {
-        int gridSize = **(int**)(gameWorld + 0xf8);
+    // --- Section 1: the constraint rectangle overlay (yellow tiles) ---
+    const PlayerToolManager* dialogCtrl = dialogPtr;
+    if (dialogCtrl->field_0x80) {
+        int gridSize = gameWorld->m_game->size;
 
-        int existStart = *(int*)(dialogCtrl + 0x98);
-        int existEnd = *(int*)(dialogCtrl + 0x9c);
+        int existStart = dialogCtrl->field_0x98;
+        int existEnd = dialogCtrl->field_0x9C;
 
         int existStartCol = existStart % gridSize;
         int existStartRow = existStart / gridSize;
         int existEndCol = existEnd % gridSize;
         int existEndRow = existEnd / gridSize;
 
-        // Build tile array for existing placement footprint
+        // Build tile array for the constraint footprint
         TileArray existArr;
         for (int row = existStartRow; row <= existEndRow; row++) {
             for (int col = existStartCol; col <= existEndCol; col++) {
-                TileRecord rec;
-                rec.col   = col;
-                rec.row   = row;
-                rec.flags = 0;                // no special flags
-                rec.color = 0xffffff00;       // yellow
-                rec.extra = 0;
+                ToolTileRecord rec;
+                rec.col     = col;
+                rec.row     = row;
+                rec.variant = 0;                // no special flags
+                rec.color   = 0xffffff00;       // yellow
+                rec.angle   = 0;
                 existArr.SetSize(existArr._size + 1, rec);
             }
         }
 
-        // Render existing placement tiles
-        // tileArray2 = existArr, tileArray1 = empty
-        TileArray empty;
-        // CharacterComponent_impl_08c0 signature: (unused, context, &arr1, &arr2)
-        // arr1 = 0x14-byte tile records, arr2 = 0x20-byte road-style records
-        // For placement tools, arr2 is always empty.
-        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&existArr),
-                                          reinterpret_cast<int64_t*>(&empty));
+        // Render: the 0x14-byte tile records, and an always-empty 0x20-byte
+        // segment array.
+        Collection::Array<ToolSegmentRecord> empty;
+        PlayerTileRender_DrawOverlay_08c0(nullptr, context, &existArr, &empty);
         // existArr / empty are released by ~Array at scope exit (no early return in scope).
     }
 
@@ -327,7 +290,7 @@ void DragPlacementTool::Draw(void* context, char param3) {
         // Get start/end cells based on drag state
         if (dragState == 0) {
             // Not dragging: use ScreenToCell for both
-            int cell = PlayerRay_ScreenToCell_101270(0);
+            int cell = PlayerRay_ScreenToCell_101270(nullptr);
             startCell = cell;
             endCell = cell;
         } else {
@@ -337,12 +300,12 @@ void DragPlacementTool::Draw(void* context, char param3) {
         }
 
         float heightTol = HeightTolerance();
-        int gridSize = **(int**)(gameWorld + 0xf8);
+        int gridSize = gameWorld->m_game->size;
 
         // Convert cell indices to (col, row)
         int startCol = startCell % gridSize;
         int startRow = startCell / gridSize;
-        int64_t gridSz64 = (int64_t)**(int**)(gameWorld + 0xf8);
+        int64_t gridSz64 = (int64_t)gameWorld->m_game->size;
         int endCol = (int)((int64_t)endCell % gridSz64);
         int endRow = (int)((int64_t)endCell / gridSz64);
 
@@ -365,37 +328,32 @@ void DragPlacementTool::Draw(void* context, char param3) {
         int height = (int)(maxRow - minRow) + 1;
 
         // Check area constraints from placement description
-        uintptr_t desc = (uintptr_t)placementDesc;
+        const CreateDragDescription* desc = placementDesc;
         bool tooBig = false;
         if (desc) {
-            if (*(int*)(desc + 0x28) < width || *(int*)(desc + 0x2C) < height) {
+            if (desc->_i28 < width || desc->_i2c < height) {
                 tooBig = true;
             }
         }
 
         // Read description fields for terrain validation
-        uint32_t terrainMask = desc ? *(uint32_t*)(desc + 0x20) : 0;
-        char allowOverlap = desc ? *(char*)(desc + 0x24) : 0;
-        int64_t entityTemplate = desc ? *(int64_t*)(desc + 0x38) : 0;
-        int* mapPtr = *(int**)(gameWorld + 0xf8);
+        uint32_t terrainMask = desc ? desc->_shape : 0;
+        char allowOverlap = desc ? desc->_b24 : 0;
+        const ComponentDescription* entityTemplate = desc ? desc->_created : nullptr;
+        Map* mapPtr = gameWorld->m_game;
 
         // Build tile array for drag area
         TileArray dragArr;
 
-        // The original code also reads an occupancy grid string from the map component.
-        // It's at `*(self+0x30)+0x28` passed to sub_1380, accessed as local_98.
-        // In DragPlacementTool::Draw, the occupancy check uses local_98 which is 0 (no grid).
+        // The original also reads an occupancy grid string (local_98); in
+        // DragPlacementTool::Draw it is always 0, so the occupancy check is false.
 
         uint32_t rowIdx = minRow;
         if ((int)minRow <= (int)maxRow) {
-            // The original code tracks a decrementing counter for occupancy grid indexing.
-            // Since local_98 is always 0 here, the occupancy check always returns false.
             do {
                 uint32_t colIdx = minCol;
                 if ((int)minCol <= (int)maxCol) {
                     do {
-                        // Occupancy check: in the original, checks local_98 string
-                        // Since local_98 == 0 in DragPlacementTool::Draw, bVar31 is always false
                         bool hasExisting = false;
 
                         // Validate terrain
@@ -412,12 +370,12 @@ void DragPlacementTool::Draw(void* context, char param3) {
                             color = 0xff00ff00;  // green
                         }
 
-                        TileRecord rec;
-                        rec.col   = (int32_t)colIdx;
-                        rec.row   = (int32_t)rowIdx;
-                        rec.flags = hasExisting ? 2u : 0u;
-                        rec.color = color;
-                        rec.extra = 0;
+                        ToolTileRecord rec;
+                        rec.col     = (int32_t)colIdx;
+                        rec.row     = (int32_t)rowIdx;
+                        rec.variant = hasExisting ? 2 : 0;
+                        rec.color   = color;
+                        rec.angle   = 0;
                         dragArr.SetSize(dragArr._size + 1, rec);
 
                         colIdx++;
@@ -428,9 +386,8 @@ void DragPlacementTool::Draw(void* context, char param3) {
         }
 
         // Render drag area tiles
-        TileArray empty;
-        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&dragArr),
-                                          reinterpret_cast<int64_t*>(&empty));
+        Collection::Array<ToolSegmentRecord> empty;
+        PlayerTileRender_DrawOverlay_08c0(nullptr, context, &dragArr, &empty);
         // dragArr / empty are released by ~Array at scope exit (no early return in scope).
     }
 }
@@ -445,15 +402,15 @@ void DragPlacementTool::Draw(void* context, char param3) {
 // ============================================================
 // DragPlacementTool::CalcPath (vtable +0x68, Slot13)
 // ============================================================
-// Creates a preview placement entity for the drag area.
+// Creates a placement entity for the drag area.
 //
 // Steps:
 //   1. Call CalcCost (vtable+0x70) to validate the area — if non-zero, fail
 //   2. Convert cell indices to grid coords, normalize min/max
-//   3. If dialog has constraints (+0x80), verify selection matches exactly
-//   4. Clear existing path entities via FUN_1401018d0
-//   5. Create a ComponentEntity copy from the description entity
-//   6. Find its BuildComponent and set placement coords + rotation
+//   3. If the owner has a constraint (+0x80), verify selection matches exactly
+//   4. Clear existing path entities via 0x1401018d0
+//   5. Create a ComponentEntity from the tool group's description
+//   6. Find its MapComponent and set placement coords + rotation
 //   7. Register entity with the entity list
 //
 // Rotation: 0x5a (90 degrees) if height >= width, else 0.
@@ -475,7 +432,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     }
 
     // Get map grid size
-    int gridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
+    int gridSize = GameUpdateLoop::_singleton->m_game->size;
 
     // Convert cell indices to grid coords
     int startRow = startCell / gridSize;
@@ -495,14 +452,14 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
         maxRow = startRow;
     }
 
-    // Check constraints from dialog (+0x10)
-    uintptr_t dlg = (uintptr_t)dialogPtr;
-    if (*(char*)(dlg + 0x80) != '\0') {
-        int cGridSize = **(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf8);
-        int cStartCol = *(int*)(dlg + 0x98) % cGridSize;
-        int cStartRow = *(int*)(dlg + 0x98) / cGridSize;
-        int cEndCol = *(int*)(dlg + 0x9c) % cGridSize;
-        int cEndRow = *(int*)(dlg + 0x9c) / cGridSize;
+    // Check the owner's constraint (+0x80 / +0x98 / +0x9C)
+    const PlayerToolManager* dlg = dialogPtr;
+    if (dlg->field_0x80) {
+        int cGridSize = GameUpdateLoop::_singleton->m_game->size;
+        int cStartCol = dlg->field_0x98 % cGridSize;
+        int cStartRow = dlg->field_0x98 / cGridSize;
+        int cEndCol = dlg->field_0x9C % cGridSize;
+        int cEndRow = dlg->field_0x9C / cGridSize;
 
         if (minCol != cStartCol || minRow != cStartRow ||
             cEndCol != maxCol || cEndRow != maxRow) {
@@ -513,33 +470,22 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     }
 
     // Clear existing path entities
-    uintptr_t placementDesc = (uintptr_t)this->placementDesc;
-    int64_t entityTemplate = *(int64_t*)(placementDesc + 0x38);
+    const ComponentDescription* entityTemplate = this->placementDesc->_created;
 
     DragPlacementTool_ClearPathEntities_1018d0(this, minCol, minRow, maxCol, maxRow, entityTemplate);
 
-    // Allocate and clone a ComponentEntity from description
-    void* newEntityMem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* newEntity = nullptr;
+    // Allocate and construct a ComponentEntity from the tool group's description
+    ComponentEntity* newEntityMem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* newEntity = nullptr;
     if (newEntityMem) {
-        newEntity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(newEntityMem),
-                                                        (void*)descriptionPtr);
+        newEntity = ComponentEntity_CtorFromDescription(newEntityMem, descriptionPtr);
     }
 
-    // Wrap in InternalBasePtr
-    void* entityIBP = nullptr;
-    {
-        new (&entityIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
-    }
+    // The entity's InternalBasePtr is its eight bytes
+    ComponentEntity* entityIBP = newEntity;
 
-    // Find BuildComponent on the entity
-
-    void* buildCompIBP = nullptr;
-    fn_FindComponent_Build((void*)entityIBP, &buildCompIBP);
-
-
-    uintptr_t buildComp = *(uintptr_t*)&buildCompIBP;
+    // Find its MapComponent (0x140004680, cell 0x1401c79e0)
+    MapComponent* buildComp = entityIBP->FindComponent<MapComponent>();
 
     // Determine rotation: 0x5a (90 degrees) if height >= width, else 0
     int rotation = 0;
@@ -547,16 +493,16 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
         rotation = 0x5a;  // 90 degrees
     }
 
-    // Set placement coordinates on BuildComponent
-    *(int16_t*)(buildComp + 0x28) = (int16_t)minCol;
-    *(int16_t*)(buildComp + 0x2a) = (int16_t)minRow;
-    *(int16_t*)(buildComp + 0x2c) = (int16_t)outCostA;  // width
-    *(int16_t*)(buildComp + 0x2e) = (int16_t)outCostB;  // height
-    *(int32_t*)(buildComp + 0x30) = rotation;
+    // Set placement coordinates on the MapComponent
+    buildComp->tileX0 = (int16_t)minCol;
+    buildComp->tileY0 = (int16_t)minRow;
+    buildComp->tileX1 = (int16_t)outCostA;  // width
+    buildComp->tileY1 = (int16_t)outCostB;  // height
+    buildComp->extraField = rotation;
 
     // Register entity with entity list
-    void* entityList = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xe8);
-    int categoryId = *(int*)((uintptr_t)descriptionPtr + 0x20);
+    EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
+    int categoryId = static_cast<int>(descriptionPtr->_category);
 
     EntityList_RegisterEntity_Impl(entityList, &entityIBP, categoryId);
 

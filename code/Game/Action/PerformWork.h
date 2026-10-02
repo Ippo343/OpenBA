@@ -15,14 +15,21 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+#include "system/Value.h"      // System::Time
+
+class CitizenComponent;   // Component/CitizenComponent.h
 
 class PerformWork final : public Action {
     DECLARE_EXE_TYPE(PerformWork)
 
 public:
     PerformWork();                                                   // create 0x140022b90
+    PerformWork(CitizenComponent* const* citizen, float facingYaw, uint32_t animationId, int64_t time,
+                bool useTool, int field44);   // 0x1400c9720
+    // B4 FORWARD: the untyped spelling for by-name outside sites (see performwork.cpp).
     PerformWork(void* entity, float facingYaw, uint32_t animationId, int64_t time, uint8_t useTool,
-                int field44);   // 0x1400c9720
+                int field44);
     ~PerformWork() override = default;                         // [0] 0x140022bd0
     void Persist(void* stream) override;                       // [3] 0x1400c9550
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c9420
@@ -32,12 +39,12 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400c92d0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     workTarget;        // +0x20 InternalBasePtr: work target entity
+    Object::InternalPtr<CitizenComponent> workTarget;   // +0x20 the working citizen (Persist checks CitizenComponent)
     float     facingYaw;         // +0x28 facing yaw (degrees)
     int32_t   animationId;       // +0x2C animation id
-    int64_t   requiredTime;      // +0x30 Time: required work duration
-    int64_t   elapsedTime;       // +0x38 Time: elapsed work time
-    uint8_t   useTool;           // +0x40 bool: decrement tool durability
+    System::Time requiredTime;   // +0x30 required work duration
+    System::Time elapsedTime;    // +0x38 elapsed work time
+    bool      useTool;           // +0x40 decrement tool durability (Persist: the bool overload)
     uint8_t   _pad41[3];         // +0x41 padding
     int32_t   field44;           // +0x44 -1 sentinel
 };

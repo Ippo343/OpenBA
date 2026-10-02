@@ -43,6 +43,10 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/Description.h"
+#include "Game/Map.h"
+#include "Game/PathfinderThread.h"
 #include "Component/PopulationComponent.h"
 #include "Component/CharacterDescription.h"   // CharacterDescription::TypeId() (moved ctor)
 #include "system/Value.h"      // System::Random (moved ctor)
@@ -132,73 +136,56 @@ static inline int WorldToCell(int mapSize, float worldX, float worldY) {
 //   +0x478 speedMultiplier
 // ============================================================
 void MoveTo::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser0[24];
-    alignas(8) uint8_t ser1[24];
-
-    // Version 0: serialize status byte at +0x18
-    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Version 1: serialize all movement data
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Target entity IBP (+0x28)
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-    if (_field28 != nullptr) {
-        bool valid = reinterpret_cast<Object::Base*>(_field28)->IsDerivedFrom(CharacterComponent::TypeId());   // B.3.x bridge
+    // The moving character (+0x28)
+    character.InternalBasePtr::Serialize(ser);
+    if (character.Get() != nullptr) {
+        bool valid = character->IsDerivedFrom(CharacterComponent::TypeId());
         if (!valid) {
-            _field28 = nullptr;
+            character = nullptr;
         }
     }
 
-    // Path description ExternalPtr (+0x30)
-    ActMv_ExternalPtrSerialize_22970(s + 0x30, ser1);   // 0x140022970
+    // The character's description ExternalPtr (+0x30)
+    ActMv_ExternalPtrSerialize_22970(&description, &ser);   // 0x140022970
 
     // Path node count (+0x64) and current index (+0x60) as ints
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
+    ser.Serialize(pathCount, nullptr);
+    ser.Serialize(pathIndex, nullptr);
 
     // Path node array (+0x68), count from +0x64
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*(int32_t*)(s + 0x64), reinterpret_cast<int*>(s + 0x68), nullptr);   // B.3.4 bridge
+    ser.Serialize(pathCount, path, nullptr);
 
     // Destination position (+0x38) as Vector3
-    reinterpret_cast<Math::Vector3*>(s + 0x38)->Serialize(ser1);   // B.3.1 bridge
+    destination.Serialize(&ser);
 
-    // Terrain flags (+0x5c) as uint
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x5c), nullptr);   // B.3.4 bridge
+    ser.Serialize(passFlags, nullptr);       // +0x5C uint
+    ser.Serialize(moveAnimation, nullptr);   // +0x468
+    ser.Serialize(stopAnimation, nullptr);   // +0x46C
 
-    // Idle animation ID (+0x468) as int
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x468), nullptr);   // B.3.4 bridge
-
-    // Walk animation ID (+0x46c) as int
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x46c), nullptr);   // B.3.4 bridge
-
-    // Version check for bridge flag
-    int version = reinterpret_cast<IO::Serializer*>(ser1)->GetVersion();   // B.3.4 bridge
+    // Version check for the movement profile
+    int version = ser.GetVersion();
     if (version == 0) {
         // Version 0 compatibility: deserialize and discard a legacy IBP field
-        void* tempIBP = nullptr;
-        reinterpret_cast<Object::InternalBasePtr*>(&tempIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-        if (tempIBP != nullptr) {
-            reinterpret_cast<Object::Base*>(tempIBP)->IsDerivedFrom(PopulationComponent::TypeId());   // B.3.x bridge
+        ::Object::InternalBasePtr tempIBP;
+        tempIBP.Serialize(ser);
+        if (tempIBP.Get() != nullptr) {
+            ::Object::IsDerivedFromNullSafe(tempIBP.Get(), PopulationComponent::TypeId());
         }
     } else {
-        // Version > 0: serialize bridge flag (+0x470)
-        version = reinterpret_cast<IO::Serializer*>(ser1)->GetVersion();   // B.3.4 bridge
+        // Version > 0: serialize the movement profile (+0x470)
+        version = ser.GetVersion();
         if (version > 0) {
-            reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x470), nullptr);   // B.3.4 bridge
+            ser.Serialize(movementProfile, nullptr);
         }
     }
 
-    // Road flag (+0x474) as bool
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x474), nullptr);   // B.3.4 bridge
-
-    // Speed multiplier (+0x478) as float
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(speedMultiplier, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(field_0x474, nullptr);       // +0x474 bool
+    ser.Serialize(speedMultiplier, nullptr);   // +0x478 float
 }
 
 // ============================================================
@@ -208,19 +195,15 @@ void MoveTo::Persist(void* stream) {
 // ============================================================
 int  MoveTo::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    // Get target entity's character component position
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    uintptr_t charComp = *(uintptr_t*)(targetEntity + 0x68);
-
-    // Current character position
-    float curX = *(float*)(charComp + 0x158);
-    float curY = *(float*)(charComp + 0x15c);
+    // Current character position (CharacterComponent -> ModelComponent translation)
+    const Math::Vector3& cur = character->modelComponent->transform.translation;
+    float curX = cur.x;
+    float curY = cur.y;
 
     // Destination position from MoveTo fields
-    float destX = *(float*)(s + 0x38);
-    float destY = *(float*)(s + 0x3c);
+    float destX = destination.x;
+    float destY = destination.y;
 
     // Compute 2D distance squared: (curX - destX)^2 + (curY - destY)^2
     float dx = curX - destX;
@@ -235,22 +218,21 @@ int  MoveTo::AbstractImpl(void* actionStack) {
     }
 
     // Get current position again (re-read since CheckPtr may update)
-    targetEntity = *(uintptr_t*)(s + 0x28);
-    charComp = *(uintptr_t*)(targetEntity + 0x68);
+    const Math::Vector3& cur2 = character->modelComponent->transform.translation;
 
     float worldPos[3];
-    worldPos[0] = *(float*)(charComp + 0x158);
-    worldPos[1] = *(float*)(charComp + 0x15c);
-    worldPos[2] = *(float*)(charComp + 0x160);
+    worldPos[0] = cur2.x;
+    worldPos[1] = cur2.y;
+    worldPos[2] = cur2.z;
 
     // Set up A* path from current position to destination
     // param3 reuses the vec2 pointer, param4 comes from actionStack (R9 in original)
     ActMv_PathSetup_c8c10(this, worldPos, &vec2, actionStack);   // 0x1400c8c10
 
     // Check path setup result
-    int32_t pathVersion = *(int32_t*)(s + 0x24);
-    int32_t pathSlotId = targetId;
-    int32_t pathIndex = _field60;
+    int32_t pathVersion = ticket.token;
+    int32_t pathSlotId = ticket.slot;
+    int32_t pathIndex = this->pathIndex;
 
 
     if (pathVersion == 0 || pathSlotId < 0) {
@@ -268,10 +250,8 @@ int  MoveTo::AbstractImpl(void* actionStack) {
     // Path is ready -- update facing direction toward first waypoint
     ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
-    // Set walk animation on the target entity
-    targetEntity = *(uintptr_t*)(s + 0x28);
-    uint32_t idleAnimId = *(uint32_t*)(s + 0x468);
-    ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
+    // Start the move animation
+    SetAnimation(character.Get(), static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 
     return 1;
 }
@@ -293,83 +273,63 @@ int  MoveTo::AbstractImpl(void* actionStack) {
 // store). ENDGAME B.3.1 step 2 (2026-09-13) retires the Math ones: Runtime-x64.dll is
 // gone, and the classes in runtime/types/math/Math.h now carry those same bodies —
 // Vector3::Dot still evaluates (y, x, z) in that order, so the float result is
-// unchanged to the bit. The Math transcriptions removed here were
-//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)           -> Math::Vector3(x, y, z)
-//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> Math::Vector3(Scalar) (unused)
-//   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> Math::Vector3::Dot   (unused here)
-//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> Math::Vector2::Dot
-//   ?Max@Scalar@Math@@ (0x18005ff60)                    -> Math::Scalar::Max    (unused)
-// InlBoxIsect stays: Volume::Box is not a Math value type and is not part of B.3.1.
-//   ?Intersect@Box@Volume@@ (0x180012160)               -> InlBoxIsect(a,b)
-static inline bool InlBoxIsect(const void* a, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
-}
+// unchanged to the bit.
 
 int  MoveTo::Execute(void* actionStack, void* time) {
     (void)time;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
+    Map* map = GameUpdateLoop::_singleton->m_game;
 
     // Get character's current world position
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    uintptr_t charComp = *(uintptr_t*)(targetEntity + 0x68);
+    const Math::Vector3& cur = character->modelComponent->transform.translation;
+    float curX = cur.x;
+    float curY = cur.y;
+    float curZ = cur.z;
 
-    float curX = *(float*)(charComp + 0x158);
-    float curY = *(float*)(charComp + 0x15c);
-    float curZ = *(float*)(charComp + 0x160);
-
-    int32_t pathIndex = _field60;
+    int32_t pathIndex = this->pathIndex;
 
     // ---- CASE 1: No active path segment (pathIndex == -1) ----
     if (pathIndex == -1) {
-        int32_t pathVersion = *(int32_t*)(s + 0x24);
+        int32_t pathVersion = ticket.token;
 
         if (pathVersion != 0) {
             // Have a cached path version -- try to retrieve from pathfinder
-            int32_t slotId = targetId;
+            int32_t slotId = ticket.slot;
             if (slotId >= 0) {
-                // Access pathfinder data structure
-                uintptr_t pathfinder = *(uintptr_t*)((uintptr_t)mapGrid + 0x68);
-
+                PathfinderThread* pathfinder = map->pathfinder;
 
                 // Check if slot is still valid
-                if (slotId >= *(int32_t*)(pathfinder + 0x168)) {
+                if (slotId >= pathfinder->results.size) {
                     return 1;  // Slot out of range, wait
                 }
 
                 // Verify path version matches
-                uintptr_t slotBase = *(uintptr_t*)(pathfinder + 0x160);
-                int32_t storedVersion = *(int32_t*)(slotBase + (int64_t)slotId * 0x18 + 4);
-                if (storedVersion != pathVersion) {
+                const PathResult& result = pathfinder->results.data[slotId];
+                if (result.token != pathVersion) {
                     return 1;  // Version mismatch, wait for re-query
                 }
 
                 // Check if path is ready (slot active flag)
-                if (*(char*)(slotBase + (int64_t)slotId * 0x18) == '\0') {
+                if (result.ready == 0) {
                     return 1;  // Path not yet computed
                 }
 
                 // Copy path nodes from pathfinder into our local array
-                int nodeCount = ActMv_CopyPathFromFinder_a6d50(   // 0x1400a6d50
-                    (void*)pathfinder, s + 0x20, s + 0x68, 0x100);
-                *(int32_t*)(s + 0x64) = nodeCount;
+                int nodeCount = pathfinder->TakePath(&ticket, path, 0x100);   // 0x1400a6d50
+                pathCount = nodeCount;
 
                 if (nodeCount == 0) {
                     return 2;  // Path found but empty -- no valid route
                 }
 
                 // Start traversal at index 1 (skip start cell)
-                _field60 = 1;
+                this->pathIndex = 1;
 
                 // Update facing direction
                 ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
 
-                // Set walk animation
-                targetEntity = *(uintptr_t*)(s + 0x28);
-                uint32_t walkAnimId = *(uint32_t*)(s + 0x468);
-                ActMv_SetAnimation_a1f0((void*)targetEntity, walkAnimId, kRdata_14017214c, kRdata_14017214c);
+                // Start the move animation
+                SetAnimation(character.Get(), static_cast<uint32_t>(moveAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
                 return 1;
             }
         }
@@ -384,11 +344,11 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     }
 
     // ---- CASE 2: Active path traversal (pathIndex >= 0) ----
-    int mapSize = *mapGrid;
+    int mapSize = map->size;
 
     // Compute destination cell from +0x38/+0x3c
-    float destX = *(float*)(s + 0x38);
-    float destY = *(float*)(s + 0x3c);
+    float destX = destination.x;
+    float destY = destination.y;
     int destCell = WorldToCell(mapSize, destX, destY);
 
     // Compute current position cell
@@ -397,7 +357,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     // Check if we've reached the destination cell
     if (curCell == destCell) {
         // At destination -- compute precise distance
-        float dz = curZ - *(float*)(s + 0x40);
+        float dz = curZ - destination.z;
         float dy2 = curY - destY;
         float dx2 = curX - destX;
         Math::Vector3 diffVec(dx2, dy2, dz);
@@ -414,7 +374,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
         // Not close enough yet -- compute direction and set facing
         float revDx = destX - curX;
         float revDy = destY - curY;
-        float revDz = *(float*)(s + 0x40) - curZ;
+        float revDz = destination.z - curZ;
         Math::Vector3 revVec(revDx, revDy, revDz);
 
         // Normalize the 2D direction.
@@ -423,8 +383,8 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 
         // Build 3D facing vector and set on character
         Math::Vector3 facing3d(dir2dN.x, dir2dN.y, 0.0f);
-        targetEntity = *(uintptr_t*)(s + 0x28);
-        *(uint8_t*)(targetEntity + 0x28) = 0;  // Clear animation lock flag
+        CharacterComponent* mover = character.Get();
+        mover->field_0x28 = false;  // Clear animation lock flag
 
         // Build normalized facing vector from 2D components
         float scalarX = facing3d.x;
@@ -434,19 +394,19 @@ int  MoveTo::Execute(void* actionStack, void* time) {
         Math::Vector3 normalized = tempVec.Normalize();
 
         // Write facing direction to character (+0x2c, +0x30, +0x34)
-        *(uint32_t*)(targetEntity + 0x2c) = *(uint32_t*)&normalized.x;
-        *(uint32_t*)(targetEntity + 0x30) = *(uint32_t*)&normalized.y;
-        *(uint32_t*)(targetEntity + 0x34) = *(uint32_t*)&normalized.z;
+        mover->field_0x2C.x = normalized.x;
+        mover->field_0x2C.y = normalized.y;
+        mover->field_0x2C.z = normalized.z;
 
         // Compute heading angle from facing direction
         float heading = facing3d.Heading();
-        *(float*)(targetEntity + 0x3c) = heading;
+        mover->field_0x3C = heading;
 
         return 1;
     }
 
     // Not at destination cell yet -- check if traversing path
-    int32_t nodeCount = *(int32_t*)(s + 0x64);
+    int32_t nodeCount = pathCount;
     if (nodeCount < 2) {
         // Path too short, just keep moving
         return 1;
@@ -454,11 +414,9 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 
     // Check if we've reached the end of the path nodes
     if (pathIndex >= nodeCount) {
-        // Path exhausted -- set idle animation and reset path
-        targetEntity = *(uintptr_t*)(s + 0x28);
-        uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
-        ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
-        _field60 = -1;
+        // Path exhausted -- stop animation and reset path
+        SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+        this->pathIndex = -1;
         return 1;
     }
 
@@ -468,28 +426,26 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     // destCell here samples the wrong tile's movement cost.
     // [PerfX] TERRAIN_SIDECAR: same byte, read through the 1-byte-per-cell mirror
     // (perf_terrain.h) instead of the 0x30-stride cell record -- raw read when off.
-    uintptr_t cellArrayBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-    uint8_t terrainType = PerfX::TerrainGet((const uint8_t*)cellArrayBase,
-                                            *(int32_t*)((uintptr_t)mapGrid + 0x88), curCell);
+    // LEFT: PerfX::TerrainGet (standalone/perf_terrain.h, STANDALONE) takes the cell array
+    // as bytes.
+    uint8_t terrainType = PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(map->cells),
+                                            map->cellCount, curCell);
 
     float speed;
-    bool onRoad = _field474 != 0;
+    bool onRoad = field_0x474;
 
     if (onRoad) {
-        // On road -- use road speed from path data (+0x30)
-        uintptr_t pathData = *(uintptr_t*)(s + 0x30);
-        speed = *(float*)(pathData + 0x30);
+        // Following: the description's +0x30 speed
+        speed = description->_f30;
     } else {
         // Check terrain type for road tiles
         // terrainType & ~0x08 in {1, 0} means road/path tile
         if (((terrainType - 1) & 0xFFFFFFF7) == 0) {
             // Road tile -- use road speed
-            uintptr_t pathData = *(uintptr_t*)(s + 0x30);
-            speed = *(float*)(pathData + 0x34);
+            speed = description->_f34;
         } else if (terrainType == 0) {
             // Normal terrain -- use normal speed
-            uintptr_t pathData = *(uintptr_t*)(s + 0x30);
-            speed = *(float*)(pathData + 0x38);
+            speed = description->_f38;
         } else {
             // Default speed (e.g., grass) -- use g_fUVScale (1.0)
             speed = kRdata_14017214c;
@@ -497,8 +453,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     }
 
     // Apply speed multiplier and set on character
-    targetEntity = *(uintptr_t*)(s + 0x28);
-    *(float*)(targetEntity + 0x38) = speed * speedMultiplier;
+    character->field_0x38 = speed * speedMultiplier;
 
     // Check if the citizen's CURRENT cell has reached the current waypoint cell.
     // Verified vs the real MoveTo::Execute (0x1400c8570): the comparison is
@@ -507,14 +462,14 @@ int  MoveTo::Execute(void* actionStack, void* time) {
     // pathIndex already pointed at the last node — intermediate waypoints never fired,
     // UpdateFacing was never re-called, and the citizen bee-lined in a fixed heading
     // past its target forever instead of steering along the A* path.
-    int32_t waypointCell = *(int32_t*)(s + 0x68 + (int64_t)pathIndex * 4);
+    int32_t waypointCell = path[pathIndex];
     if (curCell != waypointCell) {
         // Haven't reached the current waypoint yet, keep moving
         return 1;
     }
 
     // Reached the waypoint -- advance to next
-    _field60 = pathIndex + 1;
+    this->pathIndex = pathIndex + 1;
 
     // Update facing direction for next segment
     ActMv_UpdateFacing_c8d20(this);   // 0x1400c8d20
@@ -524,102 +479,79 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 
 // ============================================================
 // MoveTo::Enter (0x1400c8970)
-// Bridge detection: queries nearby entities for bridges. If a bridge
-// is found facing the same direction, sets the road flag (+0x474).
+// Queries the CharacterGrid for the nearest other character within 0.5; if one is found
+// at a higher address facing our way (dot > 0), sets +0x474.
 // ============================================================
 void MoveTo::Enter(void*, void*) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-
-    // Get target entity's character component position
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    uintptr_t charComp = *(uintptr_t*)(targetEntity + 0x68);
-
     // Read current position
+    const Math::Vector3& cur = character->modelComponent->transform.translation;
     float position[3];
-    position[0] = *(float*)(charComp + 0x158);
-    position[1] = *(float*)(charComp + 0x15c);
-    position[2] = *(float*)(charComp + 0x160);
+    position[0] = cur.x;
+    position[1] = cur.y;
+    position[2] = cur.z;
 
-    // Query for nearby bridge entities
-    float radius = kRdata_140172114;   // 0.5f search radius
-    uintptr_t bridgeResult = 0;
-    void* bridgeMgr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x88);
-    uintptr_t excludeEntity = *(uintptr_t*)(s + 0x28);
-    uint8_t bridgeExclude[8];
-    *(uintptr_t*)bridgeExclude = excludeEntity;
+    // Query for the nearest character
+    Math::Scalar radius(kRdata_140172114);   // 0.5f search radius
+    CharacterComponent* bridgeResult = nullptr;
+    CharacterGrid* bridgeMgr = GameUpdateLoop::_singleton->m_characterGrid;
+    CharacterComponent* bridgeExclude = character.Get();
 
-    Pf_SpatialProximityQuery_92260(static_cast<float*>(bridgeMgr), reinterpret_cast<int64_t*>(&bridgeResult),   // 0x140092260
-                                   position, &radius, 0, bridgeExclude);
+    QueryNearestCharacter(bridgeMgr, &bridgeResult,   // 0x140092260
+                          position, &radius, 0, &bridgeExclude);
 
-    if (bridgeResult != 0) {
-        // Found a nearby entity -- check if it's closer (not the target entity)
-        if (*(uintptr_t*)(s + 0x28) < bridgeResult) {
+    if (bridgeResult != nullptr) {
+        // Found a nearby character -- only one at a higher address than ours
+        if (character.Get() < bridgeResult) {
             // Compare facing directions via dot product
-            targetEntity = *(uintptr_t*)(s + 0x28);
+            CharacterComponent* mover = character.Get();
 
-            // Our entity's facing direction (+0x2c..+0x34)
-            Math::Vector3 myFacing(*(float*)(targetEntity + 0x2c),
-                                   *(float*)(targetEntity + 0x30),
-                                   *(float*)(targetEntity + 0x34));
+            // Our character's facing direction (+0x2c..+0x34)
+            Math::Vector3 myFacing(mover->field_0x2C.x,
+                                   mover->field_0x2C.y,
+                                   mover->field_0x2C.z);
 
-            // Bridge entity's facing direction
-            Math::Vector3 bridgeFacing(*(float*)(bridgeResult + 0x2c),
-                                       *(float*)(bridgeResult + 0x30),
-                                       *(float*)(bridgeResult + 0x34));
+            // The other character's facing direction
+            Math::Vector3 bridgeFacing(bridgeResult->field_0x2C.x,
+                                       bridgeResult->field_0x2C.y,
+                                       bridgeResult->field_0x2C.z);
 
             // this = bridgeFacing, other = myFacing (the original's RCX / R8).
             float dotOut = bridgeFacing.Dot(myFacing).v;
             if (dotOut > 0.0f) {
-                // Facing same direction as bridge -- set road flag
-                _field474 = 1;
+                field_0x474 = true;
                 return;
             }
         }
     }
 
-    // No bridge or wrong direction -- clear road flag
-    _field474 = 0;
+    // None, or facing away -- clear the flag
+    field_0x474 = false;
 }
 
 // ============================================================
 // MoveTo::Exit (0x1400c8520)
-// Reset character animation to idle (walk anim at +0x46c).
+// Plays the stop animation (+0x46c).
 // ============================================================
 void MoveTo::Exit(void* actionStack) {
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
-    ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
+    SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
 // MoveTo::CheckEntity (0x1400c84d0)
-// Same body as Exit -- reset character animation to idle.
+// Same body as Exit -- plays the stop animation.
 // ============================================================
 void MoveTo::CheckEntity() {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-    uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
-    ActMv_SetAnimation_a1f0((void*)targetEntity, idleAnimId, kRdata_14017214c, kRdata_14017214c);
+    SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
 // MoveTo::GetTarget (0x1400c8480)
-// Returns true if the given param (InternalBasePtr) matches
-// the entity at target->+0x10.
+// Returns true if the given param (InternalBasePtr) matches the character's owning
+// entity (Component +0x10).
 // ============================================================
 bool MoveTo::GetTarget(void* param) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-
-    uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
-
-    // Get entity reference at target->+0x10
-    uintptr_t entityRef = *(uintptr_t*)(targetEntity + 0x10);
-
-    return entityRef == *(uintptr_t*)param;
+    return character->_entity == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 }
 
 // ============================================================
@@ -634,19 +566,24 @@ bool MoveTo::GetTarget(void* param) {
 // the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the
 // fields retail leaves unwritten stay zero-filled (MemAlloc gives no guarantee).
 MoveTo::MoveTo()
-    : targetId(-1),
-      _field24(0),
-      _field28(nullptr),
-      _field30(nullptr),
-      _field38(nullptr),
-      _field40(nullptr),
-      _field48(nullptr),
-      _field50(nullptr),
-      _field58(nullptr),
-      _field60(-1),
-      _field64(0),
-      _pathData{},
-      _field474(0),
+    : ticket{-1, 0},
+      character(nullptr),
+      description(nullptr),
+      destination(),
+      field_0x44(0),
+      field_0x48(0),
+      field_0x4C(0),
+      field_0x50(0),
+      field_0x54(0),
+      field_0x58(0),
+      passFlags(0),
+      pathIndex(-1),
+      pathCount(0),
+      path{},
+      moveAnimation(0),
+      stopAnimation(0),
+      movementProfile(0),
+      field_0x474(false),
       _pad475{},
       speedMultiplier(1.0f),
       _pad47C{} {}
@@ -673,56 +610,58 @@ void* MoveTo::CreateInPlaceObject(void* storage) {
 // ============================================================
 // FUN_1400c9170 — MoveTo_Action Ctor
 // Base Internal ctor, Action -> MoveTo vtable; inits fields, copies destination vec3
-// (+0x38..+0x40), the entity IBP (+0x28 from param_2), resolves a derived component at
-// +0x30 (IsDerivedFrom obj, DAT_1401c70b0). Speed: if >=0 use it, else a randomised
-// default = RandFloatTol(world.random) * DAT_1401720e4 + DAT_14017214c.
+// (+0x38..+0x40), the character IBP (+0x28 from param_2), keeps the character's
+// description at +0x30 when it IsDerivedFrom CharacterDescription (DAT_1401c70b0). Speed:
+// if >=0 use it, else a randomised default = RandFloatTol(world.random) * DAT_1401720e4 +
+// DAT_14017214c.
 // Note: hidden float arg `speed` arrives in XMM (XMM2 per the prologue), param order
 // matches Ghidra (pathType, param_4, destination, param_6, param_7, speed).
 // ============================================================
 void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4,
                          float* destination, int param_6, int param_7, float speed) {
-    // ENDGAME B.3.8 ACT: the real ctor (MoveTo.h). A by-address door.
+    // B4 FORWARD: 13 outside caller files (the Component
+    // citizen / animal / nomad builders, the Work action builders) hold the character
+    // reference as void*.
     return static_cast<Object::Base*>(
-        new (self) MoveTo(param_2, pathType, param_4, destination, param_6, param_7, speed));
+        new (self) MoveTo(static_cast<CharacterComponent* const*>(param_2), pathType, param_4,
+                          destination, static_cast<uint32_t>(param_6), param_7, speed));
 }
 
-// 0x1400c9170 — the ctor body, moved from the door above; after Action() the
-// retail stores are kept verbatim at their raw offsets (the destination and the
-// path block have no named members yet).
-MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination, int param_6,
-               int param_7, float speed) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
-    *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *reinterpret_cast<uint64_t*>(param_2);
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<float*>(s + 0x38) = destination[0];
-    *reinterpret_cast<float*>(s + 0x3c) = destination[1];
-    *reinterpret_cast<float*>(s + 0x40) = destination[2];
-    *reinterpret_cast<uint64_t*>(s + 0x44) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x4c) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x54) = 0;
-    *reinterpret_cast<int*>(s + 0x5c) = param_6;
-    *reinterpret_cast<uint32_t*>(s + 0x60) = 0xffffffff;
-    *reinterpret_cast<uint32_t*>(s + 0x64) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x468) = pathType;
-    *reinterpret_cast<int*>(s + 0x46c) = param_4;
-    *reinterpret_cast<int*>(s + 0x470) = param_7;
-    s[0x474] = 0;
-    void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
+// 0x1400c9170 — the ctor body: after Action() the retail stores, in retail order.
+MoveTo::MoveTo(CharacterComponent* const* characterRef, uint32_t moveAnim, int stopAnim,
+               const float* dest, uint32_t passFlagsArg, int profile, float speed) {
+    ticket.slot = -1;
+    ticket.token = 0;
+    character = *characterRef;   // +0x28 (the InternalPtr's own ctor stored 0 first, as retail)
+    description = nullptr;
+    destination.x = dest[0];
+    destination.y = dest[1];
+    destination.z = dest[2];
+    // H7: retail zeroes +0x44..+0x5B with three qword stores.
+    field_0x44 = 0;
+    field_0x48 = 0;
+    field_0x4C = 0;
+    field_0x50 = 0;
+    field_0x54 = 0;
+    field_0x58 = 0;
+    passFlags = passFlagsArg;
+    pathIndex = -1;
+    pathCount = 0;
+    moveAnimation = static_cast<int32_t>(moveAnim);
+    stopAnimation = stopAnim;
+    movementProfile = profile;
+    field_0x474 = false;
+    Description* obj = character->_description;
     // DAT_1401c70b0 is CharacterDescription's type-id cell (Table 1).
     uint32_t charDescTid = CharacterDescription::TypeId();
     bool derived = charDescTid && ::Object::IsDerivedFromNullSafe(obj, charDescTid);
-    *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
+    description = derived ? static_cast<CharacterDescription*>(obj) : nullptr;
     if (0.0f <= speed) {
-        *reinterpret_cast<float*>(s + 0x478) = speed;
+        speedMultiplier = speed;
     } else {
-        void* random = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
-        float r = random ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        *reinterpret_cast<float*>(s + 0x478) =
-            r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c
+        System::Random* random = GameUpdateLoop::_singleton->m_random;
+        float r = random ? random->RandFloatTol() : 0.0f;
+        speedMultiplier = r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c
     }
 }
 

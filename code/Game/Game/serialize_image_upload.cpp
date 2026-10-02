@@ -58,6 +58,7 @@
 #include "video/Device.h"       // ENDGAME B.3.5 batch K1 — Video::Device::{Lock,Unlock}
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Game/WorldGeometry.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>
@@ -89,37 +90,37 @@ namespace {
 //   EDX        = 0  (ImageType)
 //   RCX        = self
 //
+} // namespace
+
 // ENDGAME B.3.5: the hand-inlined slot read and its typedef are GONE — +0x48 is
 // slot 9 of `Video::ImageBuffer` (B35_RULES 2.3 item 5), so this is a virtual
 // call on a PROVED receiver (0x68 bytes from MemAlloc, run through
-// `??0ImageBuffer@Video@@`, then given the exe's NoiseUI table). The virtual call
-// reads that live vptr at the same +0x48 the slot read did.
+// `??0ImageBuffer@Video@@`, then given the exe's table).
+//
+// B.4 GAME-b: the receiver is WorldGeometry (settled from retail's callers, see
+// WorldGeometryElements.h), so the body is WorldGeometry::UploadHeightImage and
+// reads _gridSize (+0xC0), _heightBytes (+0x140) and _heightImage (+0x148) by
+// name. The 2026-05-01 black-screen triage dumps of the ImageBuffer's raw qwords
+// (post-ctor, post-Create, final +0x60) went with it: they read the Runtime
+// class by offset.
 
-constexpr int kImageBufferSize        = 0x68;     // sizeof(Video::ImageBuffer)
-constexpr int kImageBufferAlign       = 8;
-constexpr int kImageBufferOffset      = 0x148;    // self+0x148 = ImageBuffer*
-constexpr int kHeightmapBytesOffset   = 0x140;    // self+0x140 = raw bytes
-constexpr int kGridSizeOffset         = 0xC0;     // self+0xC0 = grid edge
+namespace {
+constexpr int kImageBufferSize  = 0x68;     // sizeof(Video::ImageBuffer)
+constexpr int kImageBufferAlign = 8;
+} // namespace
 
 // ============================================================
-// Helper — TradeWork_impl_sub_c780 (image-buffer heightmap upload)
+// 0x1400ac780 — WorldGeometry::UploadHeightImage
 // ============================================================
 //
-// param_1 (self) : Geometry container (RCX)
-//
-// Field reads:
-//   self+0xC0 : int    width/height (square heightmap edge, e.g. 256)
-//   self+0x140: void*  raw heightmap bytes (4 bytes/cell, deserialized in step 5)
-// Field writes:
-//   self+0x148: ImageBuffer*  newly-allocated buffer wired to NoiseUI vtable
-extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
-    if (!self) return;
-
+// Allocates the 0x68-byte height ImageBuffer, stores it at _heightImage, creates
+// it (gridSize x gridSize, format 5) and copies the raw heightmap bytes into it.
+void WorldGeometry::UploadHeightImage() {
     if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[sub_c780] MemAlloc/singleton unavailable — skipping image upload "
-                   "(self=%p)\n", self);
+                   "(self=%p)\n", (void*)this);
             fflush(stdout);
             s_warned = true;
         }
@@ -137,11 +138,9 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
-
     // (1) Allocate a 0x68-byte ImageBuffer with 8-byte alignment.
-    void* img = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
-    if (!img) {
+    void* mem = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
+    if (!mem) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[sub_c780] MemAlloc(0x68) failed — skipping image upload\n");
@@ -153,29 +152,13 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
 
     // (2)+(3) Construct the real class: retail's imported ctor followed by the
     // exe's copy of the class's own table (ENDGAME B.3.9 EXA).
-    ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
+    Video::ImageBuffer* img = ::new (mem) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
 
-    // Diagnostic: dump ImageBuffer struct after ctor to verify
-    // PlatformConstruct populated +0x50/+0x58 (linked-list ptrs) and +0x60
-    // (ImageBufferData wrapper). Black-screen triage 2026-05-01.
-    {
-        const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);
-        printf("[sub_c780] post-ctor img=%p:\n", img);
-        printf("    +0x00..0x18 vtbl=%p q1=%p q2=%p q3=%p\n",
-               (void*)iq[0], (void*)iq[1], (void*)iq[2], (void*)iq[3]);
-        printf("    +0x20..0x40 (params)= %p %p %p %p\n",
-               (void*)iq[4], (void*)iq[5], (void*)iq[6], (void*)iq[7]);
-        printf("    +0x40..0x60 = %p %p %p %p\n",
-               (void*)iq[8], (void*)iq[9], (void*)iq[10], (void*)iq[11]);
-        printf("    +0x60 (ImageBufferData) = %p\n", (void*)iq[12]);
-        fflush(stdout);
-    }
+    // (4) Store on the geometry.
+    _heightImage = img;
 
-    // (4) Store on the Geometry container.
-    *reinterpret_cast<void**>(selfBytes + kImageBufferOffset) = img;
-
-    // (5) Read the heightmap edge length (width == height, square texture).
-    int width = *reinterpret_cast<int*>(selfBytes + kGridSizeOffset);
+    // (5) The heightmap edge length (width == height, square texture).
+    int width = _gridSize;
     if (width <= 0) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -188,11 +171,8 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
     }
 
     // (6) Slot 9 of Video::ImageBuffer — `Create` — which is what the exe's
-    //     hand-inlined vtable +0x48 dispatch was. Mirrors NoiseUI_Slot4 lines
-    //     290-299 and ModDialog lines 395-397 exactly.
-    //     The old `vtable == 0` and `fnCreate == null` tests were reads of the
-    //     slot itself, not object tests, and go with the slot read.
-    bool createOk = reinterpret_cast<Video::ImageBuffer*>(img)->Create(
+    //     hand-inlined vtable +0x48 dispatch was.
+    [[maybe_unused]] bool createOk = img->Create(
              /*type      */ 0,
              /*usage     */ 2,
              /*format    */ 5,
@@ -203,61 +183,39 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
              /*addressU  */ 1,
              /*addressV  */ 1,
              /*addressW  */ 1,
-             /*levels    */ nullptr);   // B.3.5 bridge
-
-    // Diagnostic: verify Create populated the buffer params/data slots.
-    {
-        const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);
-        printf("[sub_c780] post-Create img=%p createOk=%d width=%d:\n",
-               img, (int)createOk, width);
-        printf("    +0x20..0x40 (params)= %p %p %p %p\n",
-               (void*)iq[4], (void*)iq[5], (void*)iq[6], (void*)iq[7]);
-        printf("    +0x40..0x60 = %p %p %p %p\n",
-               (void*)iq[8], (void*)iq[9], (void*)iq[10], (void*)iq[11]);
-        printf("    +0x60 (ImageBufferData) = %p\n", (void*)iq[12]);
-        fflush(stdout);
-    }
+             /*levels    */ nullptr);
+    printf("[sub_c780] post-Create img=%p createOk=%d width=%d\n",
+           (void*)img, (int)createOk, width);
 
     // (7) Lock the device, copy heightmap bytes -> texture, unlock.
-    void* device = ::Video::Device::_singleton;
-    reinterpret_cast<Video::Device*>(device)->Lock();   // B.3.5 bridge
+    ::Video::Device::_singleton->Lock();
 
-    void* heightmapBytes = *reinterpret_cast<void**>(selfBytes + kHeightmapBytesOffset);
+    uint8_t* heightmapBytes = _heightBytes;
     printf("[sub_c780] CopyToTexture(img=%p, bytes=%p, w=%d, h=%d)\n",
-           img, heightmapBytes, width, width);
+           (void*)img, (void*)heightmapBytes, width, width);
     if (heightmapBytes) {
-        const uint8_t* hb = reinterpret_cast<const uint8_t*>(heightmapBytes);
+        [[maybe_unused]] const uint8_t* hb = heightmapBytes;
         printf("    first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x\n",
                hb[0], hb[1], hb[2], hb[3], hb[4], hb[5], hb[6], hb[7],
                hb[8], hb[9], hb[10], hb[11], hb[12], hb[13], hb[14], hb[15]);
     }
     fflush(stdout);
-    reinterpret_cast<Video::ImageBuffer*>(img)
-        ->CopyToTexture(heightmapBytes, width, width);   // B.3.5 bridge
+    img->CopyToTexture(heightmapBytes, width, width);
 
-    // Re-fetch — original disassembly reads `[0x140151a80]` then `[RAX]` again
-    // for the Unlock call; preserves the same indirection level we used above.
-    void* deviceForUnlock = ::Video::Device::_singleton;
-    reinterpret_cast<Video::Device*>(deviceForUnlock)->Unlock();   // B.3.5 bridge
+    // Re-fetch — the original reads `[0x140151a80]` then `[RAX]` again for the
+    // Unlock call.
+    ::Video::Device::_singleton->Unlock();
 
-    {
-        const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);
-        printf("[sub_c780] DONE img=%p — final +0x60=%p\n", img, (void*)iq[12]);
-        fflush(stdout);
-    }
+    printf("[sub_c780] DONE img=%p\n", (void*)img);
+    fflush(stdout);
 }
 
-} // namespace
-
 // ============================================================
-// Public reimpl entry point
+// The C entry point
 // ============================================================
-//
-// Tries the original exe address first (usable when the exe code page is
-// mapped). If that pointer is null (no exe code), falls through to our cleaned
-// C body. The cleaned body mirrors the original instruction-for-instruction so
-// a future A/B trace can verify equivalence.
-
+// B4 FORWARD: 1 outside caller (worldgen.cpp, GAME-c, holds the geometry as
+// void*). LEFT: that void*.
 extern "C" void Reimpl_TradeWork_sub_c780(void* self) {
-    TradeWork_impl_sub_c780_Body(self);
+    if (!self) return;
+    reinterpret_cast<WorldGeometry*>(self)->UploadHeightImage();
 }

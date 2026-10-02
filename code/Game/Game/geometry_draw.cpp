@@ -25,6 +25,7 @@
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "Game/WorldGeometry.h"
+#include "Game/WorldGeometryElements.h"
 #include "graphics/Geometry.h"
 #include "graphics/Camera.h"     // Graphics::Camera, Graphics::Renderer
 #include "graphics/Material.h"   // Graphics::MaterialInstance
@@ -69,11 +70,44 @@ std::atomic<bool> s_itemDrawLogged{false};
 
 
 // ============================================================
+// The nine _arrays headers by element type
+// ============================================================
+// LEFT (owner GAME-c): WorldGeometry::_arrays is nine untyped {data, size|cap}
+// headers; each accessor's cast is the one place a header is read as its
+// element type (WorldGeometryElements.h). Every caller reads them by name.
+RawArray<TerrainVertex>& WorldGeometry::ContourVertices() {
+    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);
+}
+RawArray<uint16_t>& WorldGeometry::ContourIndices() {
+    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);
+}
+RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesA() {
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);
+}
+RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesB() {
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);
+}
+RawArray<RawArray<Math::Vector2>>& WorldGeometry::ContourOutlines() {
+    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);
+}
+RawArray<GeometryBatch>& WorldGeometry::Decals() {
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);
+}
+RawArray<GeometryBatch>& WorldGeometry::RoadBatches() {
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);
+}
+RawArray<Object::External*>& WorldGeometry::BatchMaterials() {
+    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);
+}
+RawArray<int32_t>& WorldGeometry::BatchCounters() {
+    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);
+}
+
+// ============================================================
 // Slot +0x00 — destructor (B38 D9 #12)
 // ============================================================
 //
 // Callees, each the body registered at its retail address.
-extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
 extern "C" void ArrayOfArrays_Clear_175d0(void* hdr);                               // 0x1400175d0
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);                           // 0x140014c30
 
@@ -91,20 +125,19 @@ void FreeHeader(WorldGeometry::Header& h) {
 // compiler's.
 WorldGeometry::~WorldGeometry() {
     // +0x148: the height ImageBuffer, deleted through its own slot 0 with
-    // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]). Bridge: the
-    // field is untyped; the call is by name on the ImageBuffer.
+    // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]).
     if (_heightImage) {
-        delete reinterpret_cast<Video::ImageBuffer*>(_heightImage);   // B.3.x bridge (slot 0, free)
+        delete _heightImage;   // slot 0, free
     }
     Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
 
     FreeHeader(_arrays[8]);                                 // +0x220 ints
     FreeHeader(_arrays[7]);                                 // +0x210 External* refs
-    Reimpl_Struct60B_DtorRange(nullptr, _arrays[6].data,    // +0x200 decal elements
-                               static_cast<int>(_arrays[6].sizeCap));
+    // +0x200 / +0x1f0 batches: 0x14001fb80 over the elements (retail passes the
+    // header's low dword as the count), then the block.
+    GeometryBatch_DestroyRange(RoadBatches().data, RoadBatches().size);
     FreeHeader(_arrays[6]);
-    Reimpl_Struct60B_DtorRange(nullptr, _arrays[5].data,    // +0x1f0 decal elements
-                               static_cast<int>(_arrays[5].sizeCap));
+    GeometryBatch_DestroyRange(Decals().data, Decals().size);
     FreeHeader(_arrays[5]);
     ArrayOfArrays_Clear_175d0(&_arrays[4]);                 // +0x1e0 array of arrays
     FreeHeader(_arrays[3]);                                 // +0x1d0
@@ -120,9 +153,9 @@ WorldGeometry::~WorldGeometry() {
     _vertexBuffer.PlatformDestruct();                       // +0x100
 
     // +0xe8: the dirty-chunk tree — free both subtrees, then the root node.
-    if (void* root = _dirtyTreeRoot) {
-        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x10));
-        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x18));
+    if (AvlNode28* root = _dirtyTreeRoot) {
+        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, root->left);    // +0x10
+        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, root->right);   // +0x18
         Object::detail::InternalMemFree(root);
     }
     _dirtyTreeRoot = nullptr;
@@ -143,9 +176,7 @@ WorldGeometry::~WorldGeometry() {
 // VertexBuffer at self+0x100 via Video::VertexBuffer::Set.
 //
 // Body: WorldGeometry::RebuildDirtyChunks (0x1400aad50), in
-// serialize_heightmap_mesh.cpp next to the related helpers (FUN_1400ac880,
-// helper_e270, sub_c1e0). Caller batch CB6: the slot calls the member (it went
-// through the Reimpl_GeometryChunkUpdate door, which now delegates to it).
+// serialize_heightmap_mesh.cpp next to the related helpers.
 void WorldGeometry::Update(const System::Time& /*time*/) {
     RebuildDirtyChunks();
 }
@@ -155,88 +186,54 @@ void WorldGeometry::Update(const System::Time& /*time*/) {
 // ============================================================
 //
 // Decompiled from exe 0x1400AE490 (~300 instructions). Takes (self, scene, renderer);
-// the original ignores the scene. Walks the heightmap
-// chunk grid, frustum-culls each chunk, and calls Renderer::AddDrawItem for
-// each visible chunk + the SoA arrays at +0x1C0/+0x1D0/+0x1F0/+0x200.
+// the original ignores the scene. Walks the heightmap chunk grid, frustum-culls
+// each chunk, and calls Renderer::AddDrawItem for each visible chunk + the
+// contour ranges and the two batch arrays.
 void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
-                                 Graphics::Renderer& rendererRef) const {
-    void* self = const_cast<WorldGeometry*>(this);   // bridge: the body reads offsets
-    void* renderer = &rendererRef;
+                                 Graphics::Renderer& renderer) const {
+    // LEFT: the _arrays accessors are non-const members (the slot is const).
+    WorldGeometry& self = const_cast<WorldGeometry&>(*this);
 
     if (!s_collectLogged.exchange(true)) {
         printf("[GeomDraw_CollectDraw] first call self=%p renderer=%p\n",
-               self, renderer);
+               (const void*)this, (void*)&renderer);
         fflush(stdout);
     }
 
-    // The Volume::Frustum primitives (operator* 0x1800f9310, Contains 0x1800f8e80) are
-    // called by name: RtVolume_Frustum_MulTransform3 / RtVolume_Frustum_Contains.
+    int32_t gridSize   = _gridSize;
+    int32_t chunkSize  = _chunkSize;
+    int     chunkCount = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
 
-    auto* selfBytes = reinterpret_cast<uint8_t*>(self);
+    // 1. The cull camera's camera-to-world Transform3.
+    const Graphics::Camera& camera = renderer.GetCullCamera();
+    Math::Transform3 cameraTransform3 = camera._cameraToWorld;
 
-    int32_t  gridSize  = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
-    int32_t  chunkSize = *reinterpret_cast<int32_t*>(selfBytes + 0xC8);
-    int      chunkCount = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
-
-    // 1. Capture cull camera world transform as a Transform3 (camera+0x64
-    //    holds the camera-to-world Transform3, 48 bytes).
-    const void* camera = &reinterpret_cast<Graphics::Renderer*>(renderer)
-                              ->GetCullCamera();   // B.3.5 bridge
-    Math::Transform3 cameraTransform3;
-    if (camera) {
-        cameraTransform3 = *reinterpret_cast<const Math::Transform3*>(
-            reinterpret_cast<const uint8_t*>(camera) + 0x64);
-    }
-
-    // 2. Compute geometry-space frustum:
+    // 2. Geometry-space frustum:
     //    frustum_local = (camera_frustum * cameraToWorld * geometry_inverseTransform)
-    // B.3.5 bridge — `?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ` is a
-    // hidden-retslot door (B5-12) and `Graphics::Geometry::GetTransform` is NON-VIRTUAL,
-    // so the door body moves to the call site: exactly ONE construction, into the same
-    // caller storage the door was handed.
-    const Math::Transform selfTransform =
-        reinterpret_cast<const Graphics::Geometry*>(self)->GetTransform();   // B.3.5 bridge
+    const Math::Transform selfTransform = GetTransform();
     Math::Transform  selfInvTransform  = selfTransform.Inverse();
     Math::Transform3 selfInvTransform3 = selfInvTransform.AsTransform3();
 
-    // Get camera frustum, then transform it into geometry space.
-    // B.3.5: `alignas` added because the retslot door's caller storage is now
-    // placement-new'd into as a real `Volume::Frustum` (0x64 bytes of float). The
-    // retail door wrote the same bytes here through RDX.
-    alignas(16) uint8_t cameraFrustumBuf[256] = {0};   // 256 is a safe upper bound
-    uint8_t worldFrustumBuf[256]  = {0};
-    uint8_t localFrustumBuf[256]  = {0};
-    if (camera) {
-        // B.3.5 bridge — `?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ` is a
-        // hidden-retslot door; `Graphics::Camera::GetFrustum` is NON-VIRTUAL and returns
-        // `::Frustum` by value, so ONE construction into the SAME caller storage.
-        ::new (static_cast<void*>(cameraFrustumBuf))
-            ::Frustum(reinterpret_cast<const Graphics::Camera*>(camera)
-                          ->GetFrustum());   // B.3.5 bridge
-    }
+    const ::Frustum cameraFrustum = camera.GetFrustum();
+    ::Frustum worldFrustum = {};
+    ::Frustum localFrustum = {};
     // worldFrustum = cameraFrustum * cameraTransform3
-    RtVolume_Frustum_MulTransform3(reinterpret_cast<const ::Frustum*>(cameraFrustumBuf),
-                                   reinterpret_cast<::Frustum*>(worldFrustumBuf), &cameraTransform3);
-    PerfX::SetWorldFrustum(worldFrustumBuf);   // [PerfX] the sim-side off-screen test uses this frame's planes
+    RtVolume_Frustum_MulTransform3(&cameraFrustum, &worldFrustum, &cameraTransform3);
+    PerfX::SetWorldFrustum(&worldFrustum);   // [PerfX] the sim-side off-screen test uses this frame's planes
     // localFrustum = worldFrustum * geometryInverseTransform3
-    RtVolume_Frustum_MulTransform3(reinterpret_cast<const ::Frustum*>(worldFrustumBuf),
-                                   reinterpret_cast<::Frustum*>(localFrustumBuf), &selfInvTransform3);
+    RtVolume_Frustum_MulTransform3(&worldFrustum, &localFrustum, &selfInvTransform3);
 
-    // 3. Cached values from self.
+    // 3. Cached values.
     float    uvScale     = kRdata_14017214c;   // 0x14017214c
     float    fHalfGrid   = static_cast<float>(gridSize >> 1);
-    uint16_t materialKey = *reinterpret_cast<uint16_t*>(selfBytes + 0x28);
-    void*    matInst0    = *reinterpret_cast<void**>(selfBytes + 0xF8);
+    uint16_t materialKey = static_cast<uint16_t>(_detailId);   // +0x28 (low word)
+    const Graphics::MaterialInstance* matInst0 = _terrainMaterial;   // +0xF8
     float    chunkSizeF  = static_cast<float>(chunkSize);
 
     // 4. Per-chunk frustum cull + AddDrawItem.
-    //
-    // Chunk box in geometry space:
     //   xmin = j * chunkSize - halfGrid          xmax = xmin + chunkSize
     //   ymin = i * chunkSize - halfGrid          ymax = ymin + chunkSize
     //   zmin = -16.0f                             zmax = -16.0f + 32.0f = 16.0f
-    //
-    // Box layout passed to Frustum::Contains is 6 floats: {xmin,ymin,zmin, xmax,ymax,zmax}.
     float zMin = kChunkZMin;
     float zMax = kChunkZMin + kChunkZRange;
 
@@ -246,116 +243,79 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
             float ymin = static_cast<float>(i) * chunkSizeF - fHalfGrid;
             float xmax = xmin + chunkSizeF;
             float ymax = ymin + chunkSizeF;
+            const ::Box box = { { xmin, ymin, zMin }, { xmax, ymax, zMax } };
 
-            // Box layout passed to Frustum::Contains: {xmin,ymin,zmin, xmax,ymax,zmax}.
-            float box[6] = { xmin, ymin, zMin, xmax, ymax, zMax };
-
-            uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(localFrustumBuf), reinterpret_cast<const ::Box*>(box), 0x3F);
+            uint32_t r = RtVolume_Frustum_Contains(&localFrustum, &box, 0x3F);
             if (r != 0x40) {
                 uint16_t key2 = static_cast<uint16_t>((i << 6) | j);
-                reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-                    reinterpret_cast<const Graphics::Geometry*>(self),
-                    reinterpret_cast<const Graphics::MaterialInstance*>(matInst0),
-                    materialKey, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
+                renderer.AddDrawItem(this, matInst0, materialKey, key2, 0.0f, uvScale, 1, nullptr, 0);
             }
         }
     }
 
-    // 5. If the renderer's shader != 1 (i.e., not shadow-only pass), emit
-    //    the auxiliary draw items for the SoA arrays.
-    int shader = reinterpret_cast<const Graphics::Renderer*>(renderer)
-                     ->GetShader();   // B.3.5 bridge
-    if (shader == 1) return;
+    // 5. If the renderer's shader != 1 (i.e., not the shadow pass), emit
+    //    the auxiliary draw items for the contour ranges and the batches.
+    if (renderer.GetShader() == 1) return;
 
-    // --- WATER overlay (standalone): emit the flat sea-level water mesh (built
-    //     into VB+0x160/IB+0x180 by WorldGen_BuildWaterMesh). Main pass only
-    //     (we already returned on the shadow pass), so water casts no shadow —
-    //     matching the original (GetShader()!=1 guards the water draws). Mode
-    //     0xA000 routes to the water branch in ItemDraw. Material from +0x150
-    //     (or +0x158 via BANISHED_WATER_MAT=1). No-op if the mesh/material
-    //     wasn't built (VB data ptr null / material null).
-    // The real b260 contour mesh occupies VB+0x160/IB+0x180 and is drawn via the
-    // +0x1c8/+0x1d8 range tables (modes 0x6000/0x8000 below); there is no flat
-    // 0xA000 water sheet any more.
-
-    int count1C8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1C8);
-    void* matInst1 = *reinterpret_cast<void**>(selfBytes + 0x150);
-    for (int idx = 0; idx < count1C8; ++idx) {
+    // The b260 contour mesh occupies VB+0x160/IB+0x180 and is drawn via the
+    // +0x1c0/+0x1d0 range tables (modes 0x6000/0x8000).
+    int countA = self.ContourRangesA().size;
+    const Graphics::MaterialInstance* matInst1 = _waterMaterialA;    // +0x150
+    for (int idx = 0; idx < countA; ++idx) {
         uint16_t key1 = static_cast<uint16_t>(idx | 0x3900);
         uint16_t key2 = static_cast<uint16_t>(idx | 0x6000);
-        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(self),
-            reinterpret_cast<const Graphics::MaterialInstance*>(matInst1),
-            key1, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
+        renderer.AddDrawItem(this, matInst1, key1, key2, 0.0f, uvScale, 1, nullptr, 0);
     }
 
-    int count1D8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1D8);
-    void* matInst2 = *reinterpret_cast<void**>(selfBytes + 0x158);
-    for (int idx = 0; idx < count1D8; ++idx) {
+    int countB = self.ContourRangesB().size;
+    const Graphics::MaterialInstance* matInst2 = _waterMaterialB;    // +0x158
+    for (int idx = 0; idx < countB; ++idx) {
         uint16_t key1 = static_cast<uint16_t>(idx | 0x4000);
         uint16_t key2 = static_cast<uint16_t>(idx | 0x8000);
-        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(self),
-            reinterpret_cast<const Graphics::MaterialInstance*>(matInst2),
-            key1, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
+        renderer.AddDrawItem(this, matInst2, key1, key2, 0.0f, uvScale, 1, nullptr, 0);
     }
 
-    // 0x1F0 — array of 0x60-byte structs at +0x1F0 (count +0x1F8).
-    int count1F8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1F8);
-    uint8_t* base1F0 = *reinterpret_cast<uint8_t**>(selfBytes + 0x1F0);
-    for (int idx = 0; idx < count1F8; ++idx) {
-        uint64_t* elem = reinterpret_cast<uint64_t*>(base1F0 + (size_t)idx * 0x60);
-        if (elem[0] == 0) continue;
+    // +0x1F0 — the decals.
+    const RawArray<GeometryBatch>& decals = self.Decals();
+    for (int idx = 0; idx < decals.size; ++idx) {
+        const GeometryBatch& b = decals.data[idx];
+        if (b.material == nullptr) continue;
 
-        // Per-element box: read four ints at offsets +0x2C/+0x30/+0x34 and
-        // +offset 0x38/+0x3C (== elem[6]/elem[7] as packed qwords).
-        // Layout: elem[6] is the high 8 bytes — but the original walks via
-        // (uint8_t*)elem + 0x2C and elem[6]/elem[7]. Let's be explicit:
-        const uint8_t* elemBytes = reinterpret_cast<const uint8_t*>(elem);
-        float xmax = static_cast<float>(*reinterpret_cast<const int32_t*>(elemBytes + 0x34)) - fHalfGrid;
-        float ymax = static_cast<float>(static_cast<int32_t>(elem[7])) - fHalfGrid;
-        float xmin = static_cast<float>(*reinterpret_cast<const int32_t*>(elemBytes + 0x2C)) - fHalfGrid;
-        float ymin = static_cast<float>(static_cast<int32_t>(elem[6])) - fHalfGrid;
-        float box[6] = { xmin, ymin, 0.0f, xmax, ymax, 0.0f };
+        float xmax = static_cast<float>(b.maxX) - fHalfGrid;
+        float ymax = static_cast<float>(b.maxY) - fHalfGrid;
+        float xmin = static_cast<float>(b.minX) - fHalfGrid;
+        float ymin = static_cast<float>(b.minY) - fHalfGrid;
+        const ::Box box = { { xmin, ymin, 0.0f }, { xmax, ymax, 0.0f } };
 
-        uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(localFrustumBuf), reinterpret_cast<const ::Box*>(box), 0x3F);
+        uint32_t r = RtVolume_Frustum_Contains(&localFrustum, &box, 0x3F);
         if (r == 0x40) continue;
 
-        // key1 = 1 normally; 3 if (uint8_t)(elem + 0x5D) != 0.
-        uint16_t key1 = (elemBytes[0x5D] != 0) ? 3 : 1;
+        // key1 = 1 normally; 3 if +0x5D is set.
+        uint16_t key1 = b.alternateKey ? 3 : 1;
         uint16_t key2 = static_cast<uint16_t>(idx | 0x2000);
-        void* mat = reinterpret_cast<void*>(elem[0]);
-        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(self),
-            reinterpret_cast<const Graphics::MaterialInstance*>(mat),
-            key1, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
+        renderer.AddDrawItem(this, b.material,
+                             key1, key2, 0.0f, uvScale, 1, nullptr, 0);
     }
 
-    // 0x200 — same struct layout, count at +0x208. Differs in: filter is
-    // (elem[0] != 0) AND ((int)elem[2] != 0), key1 = 2.
-    int count208 = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
-    uint8_t* base200 = *reinterpret_cast<uint8_t**>(selfBytes + 0x200);
-    for (int idx = 0; idx < count208; ++idx) {
-        uint64_t* elem = reinterpret_cast<uint64_t*>(base200 + (size_t)idx * 0x60);
-        if (elem[0] == 0) continue;
-        if (static_cast<int32_t>(elem[2]) == 0) continue;
+    // +0x200 — the road batches; also skipped when the vertex count (+0x10) is 0, key1 = 2.
+    const RawArray<GeometryBatch>& roads = self.RoadBatches();
+    for (int idx = 0; idx < roads.size; ++idx) {
+        const GeometryBatch& b = roads.data[idx];
+        if (b.material == nullptr) continue;
+        if (b.vertices.size == 0) continue;
 
-        const uint8_t* elemBytes = reinterpret_cast<const uint8_t*>(elem);
-        float xmax = static_cast<float>(*reinterpret_cast<const int32_t*>(elemBytes + 0x34)) - fHalfGrid;
-        float ymax = static_cast<float>(static_cast<int32_t>(elem[7])) - fHalfGrid;
-        float xmin = static_cast<float>(*reinterpret_cast<const int32_t*>(elemBytes + 0x2C)) - fHalfGrid;
-        float ymin = static_cast<float>(static_cast<int32_t>(elem[6])) - fHalfGrid;
-        float box[6] = { xmin, ymin, 0.0f, xmax, ymax, 0.0f };
+        float xmax = static_cast<float>(b.maxX) - fHalfGrid;
+        float ymax = static_cast<float>(b.maxY) - fHalfGrid;
+        float xmin = static_cast<float>(b.minX) - fHalfGrid;
+        float ymin = static_cast<float>(b.minY) - fHalfGrid;
+        const ::Box box = { { xmin, ymin, 0.0f }, { xmax, ymax, 0.0f } };
 
-        uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(localFrustumBuf), reinterpret_cast<const ::Box*>(box), 0x3F);
+        uint32_t r = RtVolume_Frustum_Contains(&localFrustum, &box, 0x3F);
         if (r == 0x40) continue;
 
         uint16_t key2 = static_cast<uint16_t>(idx | 0x4000);
-        void* mat = reinterpret_cast<void*>(elem[0]);
-        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(self),
-            reinterpret_cast<const Graphics::MaterialInstance*>(mat),
-            2, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
+        renderer.AddDrawItem(this, b.material,
+                             2, key2, 0.0f, uvScale, 1, nullptr, 0);
     }
 }
 
@@ -368,218 +328,133 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 // where opacity (param5) is the interpolation alpha (Scalar) and a (param6) is the per-item
 // key (the 2nd ushort key passed to AddDrawItem above, packed with extra bits
 // in 0xE000 to choose draw mode).
-void WorldGeometry::Draw(Video::Context& contextRef, const Graphics::Camera& /*camera*/,
+void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*camera*/,
                          Graphics::ExternalPtrHandle /*material*/,
                          float param5, int a, int /*b*/, int /*c*/) const {
-    void* self = const_cast<WorldGeometry*>(this);   // bridge: the body reads offsets
-    void* context = &contextRef;
+    // LEFT: the _arrays accessors are non-const members, and the context binds
+    // this object's buffers through its non-const `void*` _indexBuffer.
+    WorldGeometry& self = const_cast<WorldGeometry&>(*this);
     const uint32_t param6 = static_cast<uint32_t>(a);
 
     if (!s_itemDrawLogged.exchange(true)) {
         printf("[GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
-               self, context, param5, param6);
+               (const void*)this, (void*)&context, param5, param6);
         fflush(stdout);
     }
 
-    auto* selfBytes = reinterpret_cast<uint8_t*>(self);
-
-    // ENDGAME B.3.5 closing pass: the LAST term of this readiness aggregate is gone
-    // with the door it tested. `fn_InterpolatedState_Transform_Lerp` was kept by two
-    // batches because "there is no `Graphics::InterpolatedState<T>` class in
-    // runtime/types/graphics at all" -- true then, and fixed rather than worked
-    // around: `runtime/types/graphics/InterpolatedState.h` declares it, the layout is
-    // read from retail three ways, and `Lerp` is ported. The whole early-return and
-    // its "context primitives unwired" printf went with the term; nothing else was
-    // in the condition.
-
-    // 1. Lerp the InterpolatedState<Transform> at self+0x84 with the alpha.
-    // B.3.5 bridge -- ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?A
-    // VTransform@Math@@AEBVScalar@4@@Z (0x18001aff0). A hidden-retslot door becomes a
-    // by-value C++ return: ONE construction, into the same named local the retbuf
-    // was. Retail stored the Scalar on its own stack at retbuf+0x28 and passed its
-    // address; `param5` is that float and the reference binds to it directly.
+    // 1. Lerp the InterpolatedState<Transform> at +0x84 (_transform, _prevTransform)
+    //    with the alpha. LEFT: Graphics::Geometry (R-GFX) holds the pair as two
+    //    Transforms, not as the InterpolatedState Lerp is a member of.
     const Math::Transform lerpedTransform =
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(
-            selfBytes + 0x84)->Lerp(
-                *reinterpret_cast<const Math::Scalar*>(&param5));   // B.3.5 bridge
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)
+            ->Lerp(Math::Scalar(param5));
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
-    //    ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ  retail 0x18001e5f0
     Math::Matrix matrixBuf = lerpedTransform.AsMatrix();
-    reinterpret_cast<Video::Context*>(context)
-        ->SetTransform(0, matrixBuf);   // B.3.5 bridge
+    context.SetTransform(0, matrixBuf);
 
-    // 3. SetColor(1,1,1, lerp(uvScaleA, uvScaleB)).
-    //    Layout from disasm: local_78/74/70 = 1.0f, local_6c = lerp result.
-    float color[4];
-    color[0] = 1.0f;
-    color[1] = 1.0f;
-    color[2] = 1.0f;
-    float uvA = *reinterpret_cast<float*>(selfBytes + 0x80);
-    float uvB = *reinterpret_cast<float*>(selfBytes + 0x7C);
+    // 3. SetColor(1,1,1, lerp(_opacityPrev, _opacity)).
     float uvScale = kRdata_14017214c;   // 0x14017214c
-    color[3] = (uvScale - param5) * uvA + param5 * uvB;
-    reinterpret_cast<Video::Context*>(context)->SetColor(
-        *reinterpret_cast<const Math::Vector4*>(color));   // B.3.5 bridge
+    const Math::Vector4 color(1.0f, 1.0f, 1.0f,
+                              (uvScale - param5) * _opacityPrev + param5 * _opacity);
+    context.SetColor(color);
 
     // 4. Branch on the high 3 bits (0xE000) of param6.
     uint32_t key = param6 & 0xFFFF1FFFu;     // local index
     uint32_t mode = param6 & 0xE000u;        // draw-mode selector
 
-    // Helper: indexed draw via per-element vert+idx pointers (used by 0x2000
-    // and 0x4000 branches).
-    auto IndexedDrawFromElem = [&](uint8_t* elem) {
-        int32_t  vertCount = *reinterpret_cast<int32_t*>(elem + 0x10);
-        int32_t  vertStride = 0x14;             // hardcoded in original
-        int32_t  idxCount  = *reinterpret_cast<int32_t*>(elem + 0x20);
-        bool     ok = reinterpret_cast<Video::Context*>(context)
-                          ->BeginIndexedVertices(vertCount, vertStride,
-                                                 idxCount);   // B.3.5 bridge
+    // Indexed draw of one batch's vertices and indices through the context's
+    // dynamic buffers (the 0x2000 and 0x4000 branches).
+    auto IndexedDrawFromBatch = [&](const GeometryBatch& batch) {
+        int32_t vertCount  = batch.vertices.size;
+        int32_t vertStride = 0x14;             // hardcoded in original
+        int32_t idxCount   = batch.indices.size;
+        bool ok = context.BeginIndexedVertices(vertCount, vertStride, idxCount);
         if (!ok) return;
 
-        // Memcpy vert data into context->stagingVertBuf at context+0x20E0,
-        // then advance the staging pointer.
-        void**    pStageVert = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x20E0);
-        int32_t*  pStageVertStride = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x20E8);
-        void**    pStageIdx  = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x20F0);
+        size_t vertBytes = static_cast<size_t>(vertCount) * static_cast<size_t>(context._dynamicVertexStride);
+        std::memcpy(context._dynamicVertexCursor, batch.vertices.data, vertBytes);
+        context._dynamicVertexCursor += vertBytes;
 
-        size_t vertBytes = static_cast<size_t>(vertCount) * static_cast<size_t>(*pStageVertStride);
-        std::memcpy(*pStageVert, *reinterpret_cast<void**>(elem + 8), vertBytes);
-        *pStageVert = reinterpret_cast<uint8_t*>(*pStageVert) + vertBytes;
-
+        // LEFT: Context +0x20f0 (the dynamic index cursor) is an integer in
+        // R-VIDEO's header (`_unknown20f0`).
         size_t idxBytes = static_cast<size_t>(idxCount) * 2;
-        std::memcpy(*pStageIdx, *reinterpret_cast<void**>(elem + 0x18), idxBytes);
-        *pStageIdx = reinterpret_cast<uint8_t*>(*pStageIdx) + idxBytes;
+        std::memcpy(reinterpret_cast<void*>(context._unknown20f0), batch.indices.data, idxBytes);
+        context._unknown20f0 += idxBytes;
 
-        reinterpret_cast<Video::Context*>(context)
-            ->EndIndexedVertices(0);   // B.3.5 bridge
+        context.EndIndexedVertices(0);
     };
 
     if (mode == 0x2000) {
-        // Element from 0x1F0-array; stride 0x60.
-        uint8_t* base = *reinterpret_cast<uint8_t**>(selfBytes + 0x1F0);
+        GeometryBatch* base = self.Decals().data;
         if (!base) return;
-        IndexedDrawFromElem(base + (size_t)static_cast<int>(key) * 0x60);
+        IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
     }
     if (mode == 0x4000) {
-        // Element from 0x200-array; stride 0x60.
-        uint8_t* base = *reinterpret_cast<uint8_t**>(selfBytes + 0x200);
+        GeometryBatch* base = self.RoadBatches().data;
         if (!base) return;
-        IndexedDrawFromElem(base + (size_t)static_cast<int>(key) * 0x60);
+        IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
     }
 
-    // Helper: SetVertexBuffer + dirty-IndexBuffer fields, then DrawIndexed using
-    // 4-int per-element pulls from a child array.
-    auto SetVB_BindIB_DrawIndexedFromArray = [&](void* vb, void* ibField,
-                                                 uint8_t* indexedArrayBase) {
-        reinterpret_cast<Video::Context*>(context)
-            ->SetVertexBuffer(vb, 0, 0, 0x10);   // B.3.5 bridge
-
-        // If context's bound IB != ourIB, dirty the bind.
-        void**    pCtxIB        = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
-        int32_t*  pCtxIBOffset  = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x1C0);
-        uint32_t* pCtxFlags     = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(context) + 0x10);
-        if (*pCtxIB != ibField || *pCtxIBOffset != 0) {
-            *pCtxFlags |= 0x10;
-            *pCtxIB = ibField;
-            *pCtxIBOffset = 0;
+    // Binds an index buffer the way the inlined SetIndexBuffer does: dirty bit
+    // 0x10 when the bound buffer or its offset differs.
+    auto BindIndexBuffer = [&](Video::IndexBuffer* ib) {
+        if (context._indexBuffer != ib || context._indexOffset != 0) {
+            context._dirty |= 0x10;
+            context._indexBuffer = ib;
+            context._indexOffset = 0;
         }
-        // Read 4 ints from indexedArrayBase[key*0x10 .. +0xC]; pass as DrawIndexed args.
-        int32_t* iarr = reinterpret_cast<int32_t*>(indexedArrayBase + (size_t)static_cast<int>(key) * 0x10);
-        int32_t a = iarr[0];
-        int32_t b = iarr[1];
-        int32_t c = iarr[2];
-        int32_t d = iarr[3];
-        // DrawIndexed(context, primType=0, b, c, a, d, 1)
+    };
+
+    // The contour vertex/index buffers, then DrawIndexed from one range record.
+    auto DrawContourRange = [&](const GeometryDrawRange* ranges) {
+        context.SetVertexBuffer(&_waterVertexBuffer, 0, 0, 0x10);
+        BindIndexBuffer(&self._waterIndexBuffer);
+        const GeometryDrawRange& range = ranges[static_cast<int>(key)];
+        // DrawIndexed(context, primType=0, [1], [2], [0], [3], 1)
         // Original order at LAB_1400aed0e: (param_2, 0, iVar7, iVar8, iVar9, iVar10, 1)
         //   iVar7 = arr[1], iVar8 = arr[2], iVar9 = arr[0], iVar10 = arr[3].
-        reinterpret_cast<Video::Context*>(context)
-            ->DrawIndexed(0, b, c, a, d, 1);   // B.3.5 bridge
+        context.DrawIndexed(0, range.values[1], range.values[2], range.values[0], range.values[3], 1);
     };
 
     if (mode == 0x8000) {
-        // VB at +0x160, IB at +0x180, indexed array at +0x1D0.
-        uint8_t* indexedArr = *reinterpret_cast<uint8_t**>(selfBytes + 0x1D0);
-        if (!indexedArr) return;
-        SetVB_BindIB_DrawIndexedFromArray(selfBytes + 0x160, selfBytes + 0x180,
-                                          indexedArr);
+        const GeometryDrawRange* ranges = self.ContourRangesB().data;   // +0x1D0
+        if (!ranges) return;
+        DrawContourRange(ranges);
         return;
     }
     if (mode == 0x6000) {
-        // VB at +0x160, IB at +0x180, indexed array at +0x1C0.
-        uint8_t* indexedArr = *reinterpret_cast<uint8_t**>(selfBytes + 0x1C0);
-        if (!indexedArr) return;
-        SetVB_BindIB_DrawIndexedFromArray(selfBytes + 0x160, selfBytes + 0x180,
-                                          indexedArr);
+        const GeometryDrawRange* ranges = self.ContourRangesA().data;   // +0x1C0
+        if (!ranges) return;
+        DrawContourRange(ranges);
         return;
     }
 
+    int32_t chunkSize     = _chunkSize;
+    int32_t scale         = _chunkIndexStride;   // +0xD4
+    int32_t gridSize      = _gridSize;
+    int32_t primCount     = chunkSize * chunkSize * 6;
+    int32_t chunksPerSide = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
+    int32_t row           = static_cast<int32_t>((key >> 6) & 0x3F);
+    int32_t col           = static_cast<int32_t>(key & 0x3F);
+    int32_t start         = (chunksPerSide * row + col) * scale;
+
     if (mode == 0xA000) {
         // Water overlay chunk — same chunk draw as terrain but from the water
-        // VB/IB (+0x160/+0x180) and WITHOUT the height-image bind (the water
-        // material binds its own _water_/_reflection_/_frame_ textures).
-        reinterpret_cast<Video::Context*>(context)
-            ->SetVertexBuffer(selfBytes + 0x160, 0, 0, 0x10);   // B.3.5 bridge
-
-        void**    pCtxIB       = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
-        int32_t*  pCtxIBOffset = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x1C0);
-        uint32_t* pCtxFlags    = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(context) + 0x10);
-        void*     ourIB        = selfBytes + 0x180;
-        if (*pCtxIB != ourIB || *pCtxIBOffset != 0) {
-            *pCtxFlags |= 0x10;
-            *pCtxIB = ourIB;
-            *pCtxIBOffset = 0;
-        }
-
-        int32_t chunkSize = *reinterpret_cast<int32_t*>(selfBytes + 0xC8);
-        int32_t scale     = *reinterpret_cast<int32_t*>(selfBytes + 0xD4);
-        int32_t gridSize  = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
-        int32_t primCount = chunkSize * chunkSize * 6;
-        int32_t chunksPerSide = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
-        int32_t row = static_cast<int32_t>((key >> 6) & 0x3F);
-        int32_t col = static_cast<int32_t>(key & 0x3F);
-        int32_t start = (chunksPerSide * row + col) * scale;
-        reinterpret_cast<Video::Context*>(context)
-            ->DrawIndexed(0, start, scale, 0, primCount, 1);   // B.3.5 bridge
+        // VB/IB (+0x160/+0x180) and WITHOUT the height-image bind.
+        context.SetVertexBuffer(&_waterVertexBuffer, 0, 0, 0x10);
+        BindIndexBuffer(&self._waterIndexBuffer);
+        context.DrawIndexed(0, start, scale, 0, primCount, 1);
         return;
     }
 
     // Default branch: terrain chunk draw.
-    //   SetImageBuffer(self+0x148, 6)
-    //   SetVertexBuffer(self+0x100, 0, 0, 0x10)
-    //   bind IB at self+0x120 (dirty if needed)
-    //   compute primCount = chunkSize*chunkSize*6, scaled by self+0xD4
-    //   start = ((gridSize/chunkSize)*((key>>6)&0x3F) + (key&0x3F)) * (self+0xD4)
-    //   DrawIndexed(context, 0, 0, primCount, 0, start, 1)
-    void* imgBuf = *reinterpret_cast<void**>(selfBytes + 0x148);
-    reinterpret_cast<Video::Context*>(context)
-        ->SetImageBuffer(imgBuf, 6);                              // B.3.5 bridge
-    reinterpret_cast<Video::Context*>(context)
-        ->SetVertexBuffer(selfBytes + 0x100, 0, 0, 0x10);          // B.3.5 bridge
-
-    void**    pCtxIB        = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
-    int32_t*  pCtxIBOffset  = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x1C0);
-    uint32_t* pCtxFlags     = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(context) + 0x10);
-    void*     ourIB         = selfBytes + 0x120;
-    if (*pCtxIB != ourIB || *pCtxIBOffset != 0) {
-        *pCtxFlags |= 0x10;
-        *pCtxIB = ourIB;
-        *pCtxIBOffset = 0;
-    }
-
-    int32_t chunkSize = *reinterpret_cast<int32_t*>(selfBytes + 0xC8);
-    int32_t scale     = *reinterpret_cast<int32_t*>(selfBytes + 0xD4);
-    int32_t gridSize  = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
-    int32_t primCount = chunkSize * chunkSize * 6;
-    int32_t chunksPerSide = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
-    int32_t row = static_cast<int32_t>((key >> 6) & 0x3F);
-    int32_t col = static_cast<int32_t>(key & 0x3F);
-    int32_t start = (chunksPerSide * row + col) * scale;
-
-    // Original arg order at LAB_1400aed0e:
-    //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
-    reinterpret_cast<Video::Context*>(context)
-        ->DrawIndexed(0, start, scale, 0, primCount, 1);   // B.3.5 bridge
+    //   SetImageBuffer(_heightImage, 6), SetVertexBuffer(+0x100, 0, 0, 0x10),
+    //   bind the IB at +0x120, DrawIndexed(0, start, scale, 0, primCount, 1).
+    context.SetImageBuffer(_heightImage, 6);
+    context.SetVertexBuffer(&_vertexBuffer, 0, 0, 0x10);
+    BindIndexBuffer(&self._indexBuffer);
+    context.DrawIndexed(0, start, scale, 0, primCount, 1);
 }

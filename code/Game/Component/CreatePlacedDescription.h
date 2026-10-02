@@ -47,7 +47,7 @@ public:
     int32_t _i44;                               // +0x44
     int32_t _i48;                               // +0x48
     uint8_t _pad4c[4];                          // +0x4c never written by the ctor
-    void* _created;                             // +0x50 ExternalRef: created description (weak)
+    class ComponentDescription* _created;       // +0x50 ExternalRef: created description (weak; B4 PLAYER H4: the entity template PlacementTool places, 0x1400fd71d)
 };
 
 static_assert(sizeof(CreatePlacedDescription) == 0x58, "CreatePlacedDescription is 0x58 (create 0x140032a60 MemAlloc(0x58))");

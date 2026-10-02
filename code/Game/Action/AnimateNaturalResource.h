@@ -15,13 +15,16 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class ComponentEntity;   // Entity/ComponentEntity.h
 
 class AnimateNaturalResource final : public Action {
     DECLARE_EXE_TYPE(AnimateNaturalResource)
 
 public:
     AnimateNaturalResource();                                                   // create 0x140021dc0
-    AnimateNaturalResource(uint64_t* entity, uint32_t animIndex, uint8_t waitForAnim);   // 0x1400c57d0
+    AnimateNaturalResource(ComponentEntity* const* entity, uint32_t animIndex, bool waitForAnim);   // 0x1400c57d0
     ~AnimateNaturalResource() override = default;              // [0] 0x140021e30
     void Persist(void* stream) override;                       // [3] 0x1400c5660
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5600
@@ -30,9 +33,9 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400c5560
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 entity ref (natural resource)
+    Object::InternalPtr<ComponentEntity> _field20;   // +0x20 the natural-resource entity (Persist checks ComponentEntity)
     int32_t   animIndex;         // +0x28 animation index
-    uint8_t   waitForAnim;       // +0x2C bool: wait for animation to complete
+    bool      waitForAnim;       // +0x2C wait for the animation (Persist 0x1400c5707: the bool overload)
     uint8_t   _pad2D[3];         // +0x2D padding
 };
 

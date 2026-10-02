@@ -15,33 +15,33 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Player/exe_bodies.h"
+#include "Player/FencedTool.h"
+#include "Player/RotationSetting.h"
+#include "Component/CreateFencedDescription.h"
+#include "Game/Map.h"
 
 // ============================================================
 // FUN_1400a0280 — EntityAtCell: get the entity occupying a world cell.
 // ============================================================
 // Closure: only fn_InternalBasePtr_Ctor (Runtime export). No exe sub-callees.
 //
-// Reads the cell record at (param_1 + 0x80)[cellIndex] (stride 0x30). cell[0] is
-// the primary occupant, cell[1] the secondary; the first non-null is wrapped into
-// the out InternalBasePtr (written raw, NOT via the Ctor) and returned. If both
-// are null, an empty IBP is constructed via fn_InternalBasePtr_Ctor.
-//
-// Caller (edittool.cpp / pathtool.cpp): void* fn(uintptr_t entityList, void* retIBP, int cellIndex)
-void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cellIndex) {
-    uintptr_t* cell = reinterpret_cast<uintptr_t*>(
-        static_cast<int64_t>(cellIndex) * 0x30 + *reinterpret_cast<uintptr_t*>(entityList + 0x80));
-    if (cell[0] != 0) {
-        // IBP layout: [0]=internal ptr, the high half zeroed first.
-        reinterpret_cast<uintptr_t*>(retIBP)[0] = 0;
-        reinterpret_cast<uintptr_t*>(retIBP)[0] = cell[0];
+// Reads the Map's cell [cellIndex] (+0x80, stride 0x30). The blocker (+0x00) is the
+// primary occupant, the occupant (+0x08) the secondary; the first non-null is stored
+// into the out InternalBasePtr (written raw, the slot zeroed first) and returned. If
+// both are null, the empty IBP (the ctor's null store).
+ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity** retIBP, int cellIndex) {
+    const MapCell* cell = &map->cells[cellIndex];
+    if (cell->blocker != nullptr) {
+        *retIBP = nullptr;
+        *retIBP = cell->blocker;
         return retIBP;
     }
-    if (cell[1] != 0) {
-        reinterpret_cast<uintptr_t*>(retIBP)[0] = 0;
-        reinterpret_cast<uintptr_t*>(retIBP)[0] = cell[1];
+    if (cell->occupant != nullptr) {
+        *retIBP = nullptr;
+        *retIBP = cell->occupant;
         return retIBP;
     }
-    new (retIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    *retIBP = nullptr;   // InternalBasePtr(nullptr) (0x140152a90)
     return retIBP;
 }
 
@@ -65,8 +65,7 @@ void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cell
 
 float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int p4, int p5) {
     // The original ignores its param_1 and reads g_pGameWorldSingleton directly.
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
+    Map* mapGrid = GameUpdateLoop::_singleton->m_game;
 
     const float halfCell = 0.5f;                 // DAT_140172114 (XMM7)
     const float uvScaleConst = kRdata_14017214c;  // DAT_14017214c (XMM6)
@@ -89,7 +88,7 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
     // (IMUL EAX,EBX[row]; ADD EAX,EDI[col]). So x=column lane, y=row lane.
     for (int row = p3; row <= p5; ++row) {       // EBX loop (param_3..param_5)
         for (int col = p2; col <= p4; ++col) {   // EDI loop (param_2..param_4)
-            int width = *mapGrid;                 // R8D = mapGrid[0]
+            int width = mapGrid->size;            // R8D = mapGrid[0]
             int idx = width * row + col;
             float halfW = static_cast<float>(width >> 1) - halfCell;
             float inPos[2];
@@ -129,19 +128,20 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
 //
 // Returns 1 if a valid rectangle was produced, 0 if too small.
 //
-// Caller (fencedtool.cpp):
-//   uint64_t fn(void* self, uint32_t* p2,p3,p4,p5, float* p6, uint32_t* p7)
+// Callers (fencedtool.cpp, fencedtool_calcpath.cpp): the tool, the four rect corners,
+// the world anchor out (Vector3), and the yaw out (param_7: retail stores the float's
+// bits as a dword constant).
 // (0x140101730 = PlayerEdit_AvgTerrainHeight_101730, above, called by name.)
 
-uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, uint32_t* param_3,
+uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* param_2, uint32_t* param_3,
                                            uint32_t* param_4, uint32_t* param_5,
                                            float* param_6, uint32_t* param_7) {
     const float halfCell = 0.5f;  // DAT_140172114
 
-    int startCell = *reinterpret_cast<int*>(self + 0x2c);
-    int endCell   = *reinterpret_cast<int*>(self + 0x30);
-    int* mapGrid  = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
-    int width     = *mapGrid;
+    int startCell = self->startCell;   // DragTool +0x2c
+    int endCell   = self->endCell;     // DragTool +0x30
+    Map* mapGrid  = GameUpdateLoop::_singleton->m_game;
+    int width     = mapGrid->size;
 
     *param_2 = static_cast<uint32_t>(startCell % width);
     *param_3 = static_cast<uint32_t>(startCell / width);
@@ -157,37 +157,37 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     }
 
     // Footprint reject: width must be >= config width (+0x60), depth >= config depth (+0x64).
-    uintptr_t config = *reinterpret_cast<uintptr_t*>(self + 0x38);
+    const CreateFencedDescription* config = self->fencedDesc;
     uint32_t spanW = (*param_4 - *param_2) + 1;
-    if (static_cast<int>(spanW) < *reinterpret_cast<int*>(config + 0x60)) {
+    if (static_cast<int>(spanW) < config->_i60) {
         return (static_cast<uint64_t>(spanW) >> 8) << 8;  // low byte 0 == false
     }
     uint32_t spanD = (*param_5 - *param_3) + 1;
-    if (static_cast<int>(spanD) < *reinterpret_cast<int*>(config + 0x64)) {
+    if (static_cast<int>(spanD) < config->_i64) {
         return (static_cast<uint64_t>(spanD) >> 8) << 8;
     }
 
-    // Orientation offset param_7 from the rotation IBP (self+0x50, +0x10 = rot 0..3).
-    int rot = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
+    // Orientation offset param_7 from the rotation setting (+0x50, rotation 0..3).
+    int rot = self->rotationSetting->rotation;
     if (rot == 0)      *param_7 = 0;
     else if (rot == 1) *param_7 = 0xc2b40000u;   // -90.0f
     else if (rot == 2) *param_7 = 0x43340000u;   //  180.0f
     else if (rot == 3) *param_7 = 0x42b40000u;   //   90.0f
 
     // Footprint dimensions, swapped for rotations 1/3.
-    int rotA = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
+    int rotA = self->rotationSetting->rotation;
     int fw, fd;
     if (rotA == 1 || rotA == 3) {
-        fw = *reinterpret_cast<int*>(self + 0x60);
-        fd = *reinterpret_cast<int*>(self + 0x5c);
+        fw = static_cast<int>(self->_field60);
+        fd = static_cast<int>(self->_field5C);
     } else {
-        fw = *reinterpret_cast<int*>(self + 0x5c);
-        fd = *reinterpret_cast<int*>(self + 0x60);
+        fw = static_cast<int>(self->_field5C);
+        fd = static_cast<int>(self->_field60);
     }
 
     // Snap the rectangle: branch on the "centered" flag (config +0x68).
-    if (*reinterpret_cast<char*>(config + 0x68) == '\0') {
-        int r = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
+    if (!config->_b68) {
+        int r = self->rotationSetting->rotation;
         if (r == 0) {
             *param_2 = (*param_4 - fw) + 1;
             *param_3 = (*param_5 - fd) + 1;
@@ -202,7 +202,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
             *param_4 = (*param_2 - 1) + fw;
         }
     } else {
-        int r = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(self + 0x50) + 0x10);
+        int r = self->rotationSetting->rotation;
         if (r == 0) {
             *param_5 = *param_3;
             uint32_t v = (static_cast<int>(*param_2 + *param_4) >> 1) - (fw >> 1);
@@ -228,12 +228,12 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
 
     // World-space anchor: average of the two corner cells' terrain positions, with
     // the mean height from the rect-average helper (0x140101730).
-    mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    mapGrid = GameUpdateLoop::_singleton->m_game;
     float avgHeight = PlayerEdit_AvgTerrainHeight_101730(GameUpdateLoop::_singleton,
                                        static_cast<int>(*param_2), static_cast<int>(*param_3),
                                        static_cast<int>(*param_4), static_cast<int>(*param_5));
 
-    int w0 = *mapGrid;
+    int w0 = mapGrid->size;
     int idx0 = static_cast<int>(*param_3) * w0 + static_cast<int>(*param_2);
     float half0 = static_cast<float>(w0 >> 1) - halfCell;
     float in0[3] = {static_cast<float>(idx0 % w0) - half0,
@@ -241,7 +241,7 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, ui
     float out0[3] = {0.0f, 0.0f, 0.0f};
     Reimpl_MapGetTerrainPos(mapGrid, out0, in0, '\0', nullptr);
 
-    int w1 = *mapGrid;
+    int w1 = mapGrid->size;
     int idx1 = w1 * static_cast<int>(*param_5) + static_cast<int>(*param_4);
     float half1 = static_cast<float>(w1 >> 1) - halfCell;
     float in1[3] = {static_cast<float>(idx1 % w1) - half1,

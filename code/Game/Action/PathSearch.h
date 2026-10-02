@@ -408,6 +408,9 @@ struct RegionGraph {
     void     Flush();                                         // 0x1400a8a90
     int      PathLength(int start, uint32_t goal);            // 0x1400a8ba0
 
+    // region_graph_build.cpp (B.4 ACT-b): the body of the ctor 0x1400a8670 (map, the
+    // block counts; retail's R8 / R9 are not read).
+    void     Init(Map* map, uint32_t blocksWide, int blocksHigh);   // 0x1400a8670
     // 0x1400a8570 (GAME-b, keystone_a_gamedtor.cpp): retail's destructor body,
     // run by Map's 0x14009ed60 before it MemFrees the graph (the tree never runs
     // a C++ destructor on it, so the body is a named member).
@@ -472,6 +475,8 @@ struct RegionPairCache {
 
     uint32_t Find(int a, int b) const;       // 0x1400a5ac0, 0xffffffff when absent
     void     Store(int a, int b, uint32_t distance);   // 0x1400a5b30
+    // region_paircache.cpp (B.4 ACT-b): advance the clock by *dt, expire old entries.
+    void     Expire(const int64_t* dt);                // 0x1400a5d10
 };
 static_assert(sizeof(RegionPairCache) == 0x38, "RegionPairCache is MemAlloc(0x38)");
 static_assert(offsetof(RegionPairCache, newestTime) == 0x00, "RegionPairCache::newestTime @ +0x00");

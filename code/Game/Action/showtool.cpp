@@ -23,7 +23,12 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
-#include "Entity/exe_bodies.h"
+#include "Entity/exe_bodies.h"      // fn_FindComponent_Storage (the guarded copy)
+#include "Component/CharacterComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Component/ModelComponent.h"
+#include "Component/StorageComponent.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActCt_HideTool_1176e0, ActCt_ShowToolOnEntity_1173b0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -64,18 +69,17 @@
 // Video/Graphics class has a real constructor (B35_RULES section 11 / B4b-2).
 
 
-// Scan an entity's component list (count@+0x30, IBP array@+0x28) for the first
-// component whose runtime type-id (vtable+0x10 == GetTypeId) equals `tid`. Faithful to
-// the two scan loops inside 73b0. Returns null if not found (SA-safe).
-static void* ShowTool_FindComponentByTid(void* hostP, uint32_t tid) {
-    if (!hostP || !tid) return nullptr;
-    uint8_t* host = reinterpret_cast<uint8_t*>(hostP);
-    int count = *reinterpret_cast<int*>(host + 0x30);
-    int64_t arr = *reinterpret_cast<int64_t*>(host + 0x28);
+// Scan a material template's sub-descriptions for the first one whose runtime type-id
+// (slot 2 Type()) equals `tid`. Faithful to the two scan loops inside 73b0, with the
+// tree's null-host / zero-tid / null-slot skips. Returns null if not found (SA-safe).
+static Description* ShowTool_FindComponentByTid(const ComponentDescription* host, uint32_t tid) {
+    if (!host || !tid) return nullptr;
+    int count = host->_subDescCount;
+    Description** arr = host->_subDescs;
     for (int i = 0; i < count; i++) {
-        void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        Description* comp = arr[i];
         if (!comp) continue;
-        uint32_t got = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+        uint32_t got = comp->Type();   // slot 2
         if (got == tid)
             return ::Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
     }
@@ -84,26 +88,19 @@ static void* ShowTool_FindComponentByTid(void* hostP, uint32_t tid) {
 
 // ============================================================
 // ShowTool::Serialize (0x140042780)
-// Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28)
+// Serializes: status(+0x18), citizen(+0x20) with type check, int(+0x28)
 // ============================================================
 void ShowTool::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
-
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {   // cell 0x1401c7158
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), CitizenComponent::TypeId())) {   // cell 0x1401c7158
             _field20 = nullptr;
         }
     }
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_field28, nullptr);   // +0x28 int
 }
 
 // ============================================================
@@ -116,116 +113,111 @@ void ShowTool::Persist(void* stream) {
 // RawMaterialDescription, which is exactly what crashed the retail function in SA)
 // simply shows no model instead of faulting.
 // ============================================================
-static void ShowTool_ShowCarried(void* entityV) {
-    uint8_t* e = reinterpret_cast<uint8_t*>(entityV);
-
-
-    // Skip if the entity is flagged for destruction (bit 10 of inner+0x40).
-    void* inner = *(void**)(e + 0x10);
+static void ShowTool_ShowCarried(CitizenComponent* citizen) {
+    // Skip if the entity is flagged for destruction (bit 10 of its +0x40 flags).
+    ComponentEntity* inner = citizen->_entity;
     if (!inner) return;
-    if (((*(uint32_t*)((uint8_t*)inner + 0x40)) >> 10) & 1) return;
+    if ((inner->_entityFlags >> 10) & 1) return;
 
     // Hide the previously-shown item first, if any.
-    if (*(int*)(e + 0x1dc) >= 0) ActCt_HideTool_1176e0(entityV);   // 0x1401176e0
+    if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);   // 0x1401176e0
 
-    // Character mesh holder = StateMachineComponent(+0x278) -> +0x68.
-    void* smComp = *(void**)(e + 0x278);
+    // Character mesh holder = CharacterComponent (+0x278) -> its ModelComponent (+0x68).
+    CharacterComponent* smComp = citizen->character;
     if (!smComp) return;
-    uintptr_t charMeshHolder = *(uintptr_t*)((uint8_t*)smComp + 0x68);
+    ModelComponent* charMeshHolder = smComp->modelComponent;
     if (!charMeshHolder) return;
 
     // --- Storage scan: pick the highest-count item in the citizen's storage. ---
-    uint64_t storageIBP[2] = {0, 0};
-    fn_FindComponent_Storage(*(void**)(e + 0x10), storageIBP);
-    uintptr_t storageComp = (uintptr_t)storageIBP[0];
+    StorageComponent* storageComp = nullptr;
+    fn_FindComponent_Storage(citizen->_entity, &storageComp);
     if (!storageComp) return;
-    int itemCount = *(int*)(storageComp + 0x30);
+    int itemCount = storageComp->slotCount;
 
     if (itemCount < 1) return;
-    void* bestItem = nullptr;
+    ComponentDescription* bestItem = nullptr;
     int bestCount = 0;
     for (int i = 0; i < itemCount; i++) {
-        uintptr_t itemArr = *(uintptr_t*)(storageComp + 0x28);
-        int cnt = *(int*)(itemArr + (int64_t)i * 0x10 + 8);
+        const StorageComponent::Item& item = storageComp->storageSlots[i];
+        int cnt = item._count;
         if (bestCount < cnt) {
             bestCount = cnt;
-            bestItem = *(void**)(itemArr + (int64_t)i * 0x10);
+            bestItem = item._resource;
         }
     }
 
     if (!bestItem) return;
     // --- Resolve the display mesh (ModelDescription) + carry-scale (RawMaterial). ---
-    void* modelDesc = ShowTool_FindComponentByTid(bestItem, ModelDescription::TypeId());   // cell 0x1401c7a88
-    if (!modelDesc) return;                       // SA guard: no display model -> nothing shown
-    void* rawMat = ShowTool_FindComponentByTid(bestItem, RawMaterialDescription::TypeId());   // cell 0x1401c7cb8
-    if (!rawMat) return;                          // SA guard
-    float carryScale = *(float*)((uint8_t*)rawMat + 0x50);
+    Description* modelFound = ShowTool_FindComponentByTid(bestItem, ModelDescription::TypeId());   // cell 0x1401c7a88
+    if (!modelFound) return;                      // SA guard: no display model -> nothing shown
+    const ModelDescription* modelDesc = static_cast<const ModelDescription*>(modelFound);
+    Description* rawFound = ShowTool_FindComponentByTid(bestItem, RawMaterialDescription::TypeId());   // cell 0x1401c7cb8
+    if (!rawFound) return;                        // SA guard
+    float carryScale = static_cast<const RawMaterialDescription*>(rawFound)->_carryScale;
 
-    // mesh = **( *(modelDesc+0x20) + 8 )  (faithful double-deref from 73b0).
-    uintptr_t meshGroup = *(uintptr_t*)((uint8_t*)modelDesc + 0x20);
+    // mesh = mesh 0 of mesh group 0 (faithful double-deref from 73b0).
+    const ModelMeshGroup* meshGroup = modelDesc->_meshGroups;
     if (!meshGroup) return;
-    uintptr_t meshSlot = *(uintptr_t*)(meshGroup + 8);
+    Graphics::GraphicsMesh** meshSlot = meshGroup->meshes;
     if (!meshSlot) return;
-    uint64_t mesh = *(uint64_t*)meshSlot;
+    Graphics::GraphicsMesh* mesh = *meshSlot;
 
-    // Ensure the held-item MeshInstance (entity+0xb8) is a constructed object.
+    // LEFT: CitizenComponent +0xB8 is raw storage for a Graphics::MeshInstance (H5, owned
+    // by CIT; declaring it makes its ctor / dtor run).
+    Graphics::MeshInstance* held = reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);
+
+    // Ensure the held-item MeshInstance (citizen +0xb8) is a constructed object.
     // Retail treats +0xb8 as an embedded, already-constructed Graphics::MeshInstance
     // and only SetMesh's it; but in standalone the character's held-item slot may
     // never have been initialized (this is the first carried item), leaving it
     // zeroed. SetMesh/Attach tolerate a zeroed object, but MeshInstance::Update is
     // then skipped (null vtable) and Graphics::Scene::AddObject faults on the
     // uninitialized geometry (READ of +0x40). Default-construct it in place — the
-    // same 0x128-byte MeshInstance default-ctor the StorageDisplayComponent pile
-    // renderer uses before its own SetMesh+AddObject — with sceneId(+0x120) = -1.
-    void** heldVt = *(void***)(e + 0xb8);
+    // same MeshInstance default-ctor the StorageDisplayComponent pile renderer uses
+    // before its own SetMesh+AddObject — and store -1 at +0xb8 + 0x120 (which is the
+    // citizen's toolId, +0x1D8).
+    void* heldVt = *reinterpret_cast<void* const*>(citizen->meshInstance);   // LEFT: H5 raw storage (vptr probe)
     if (!heldVt) {
-        ::new (static_cast<void*>(e + 0xb8)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
-        *(uint32_t*)(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1 (not yet in scene)
+        ::new (static_cast<void*>(citizen->meshInstance)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
+        citizen->toolId = -1;
     }
 
 
-    // --- Assign the mesh to the citizen's held-item MeshInstance (entity+0xb8). ---
-    reinterpret_cast<Graphics::MeshInstance*>(e + 0xb8)
-        ->SetMesh(Graphics::ExternalPtrHandle{(void*)mesh});   // B.3.5 bridge
+    // --- Assign the mesh to the citizen's held-item MeshInstance (+0xb8). ---
+    held->SetMesh(Graphics::ExternalPtrHandle{mesh});
 
-    // Scale Vector4 (splat carryScale) -> entity+0x1c4..0x1d0.
+    // Scale Vector4 (splat carryScale) -> MeshInstance::_color (+0x10c..+0x118).
     Math::Vector4 scaleVec((Math::Scalar(carryScale)));
-    *(float*)(e + 0x1c4) = scaleVec.x;
-    *(float*)(e + 0x1c8) = scaleVec.y;
-    *(float*)(e + 0x1cc) = scaleVec.z;
-    *(float*)(e + 0x1d0) = scaleVec.w;
+    held->_color[0] = scaleVec.x;
+    held->_color[1] = scaleVec.y;
+    held->_color[2] = scaleVec.z;
+    held->_color[3] = scaleVec.w;
 
     // Attach the held-item geometry to the character mesh's "tool" node/bone.
-    void* graphicsMesh = *(void**)(charMeshHolder + 0xe8);
+    Graphics::GraphicsMesh* graphicsMesh = charMeshHolder->meshInstance.GetMesh().Get();
     int nodeIdx = graphicsMesh
-                ? reinterpret_cast<const Graphics::GraphicsMesh*>(graphicsMesh)
-                      ->GetNodeIndexFromName("tool")   // B.3.5 bridge
+                ? graphicsMesh->GetNodeIndexFromName("tool")
                 : -1;
-    reinterpret_cast<Graphics::Geometry*>(charMeshHolder + 0x28)
-        ->Attach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8), nodeIdx);   // B.3.5 bridge
+    charMeshHolder->meshInstance.Attach(held, nodeIdx);
 
-    // MeshInstance::Update(entity+0xb8, &time0) — vtable slot idx1 (+0x8).
-    // B.3.5 bridge — slot 1 of `Graphics::Geometry` IS `Update(const System::Time&)`,
-    // and the receiver is a PROVED `Graphics::MeshInstance`: entity+0xb8 was just run
-    // through `??0MeshInstance@Graphics@@` above and SetMesh'd as one. The `meshVt`
-    // test stays: it tests the OBJECT (a never-constructed held-item slot is zeroed),
-    // not a door pointer.
-    uint8_t time0[16] = {0};
-    void** meshVt = *(void***)(e + 0xb8);
+    // MeshInstance::Update(held, &time0) — slot 1 of `Graphics::Geometry`. The receiver is
+    // a PROVED `Graphics::MeshInstance`: +0xb8 was just constructed above if it was not
+    // and SetMesh'd as one. The `meshVt` test stays: it tests the OBJECT (a
+    // never-constructed held-item slot is zeroed), not a door pointer.
+    const System::Time time0{0};
+    void* meshVt = *reinterpret_cast<void* const*>(citizen->meshInstance);   // LEFT: H5 raw storage (vptr probe)
     if (meshVt) {
-        reinterpret_cast<Graphics::Geometry*>(e + 0xb8)->Update(
-            *reinterpret_cast<const System::Time*>(time0));   // B.3.5 bridge
+        held->Update(time0);
     }
 
-    // Add the held-item geometry to the live Graphics::Scene (gameWorld+0x60).
-    void* scene = (GameUpdateLoop::_singleton != nullptr)
-                ? *(void**)((uint8_t*)GameUpdateLoop::_singleton + 0x60) : nullptr;
+    // Add the held-item geometry to the live Graphics::Scene (GameUpdateLoop +0x60).
+    Graphics::Scene* scene = (GameUpdateLoop::_singleton != nullptr)
+                           ? GameUpdateLoop::_singleton->m_graphicsScene : nullptr;
     uint32_t objId = scene
-                   ? reinterpret_cast<Graphics::Scene*>(scene)
-                         ->AddObject(reinterpret_cast<Graphics::Geometry*>(e + 0xb8))   // B.3.5 bridge
+                   ? scene->AddObject(held)
                    : 0xffffffff;
-    *(int*)(e + 0x1d8) = -2;                       // toolId (carry sentinel)
-    *(uint32_t*)(e + 0x1dc) = objId;               // scene object handle
+    citizen->toolId = -2;                          // carry sentinel
+    citizen->toolSceneId = static_cast<int32_t>(objId);   // scene object handle
 }
 
 // ============================================================
@@ -236,18 +228,17 @@ static void ShowTool_ShowCarried(void* entityV) {
 
 int  ShowTool::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uint32_t toolId = *(uint32_t*)(s + 0x28);
+    uint32_t toolId = static_cast<uint32_t>(_field28);
 
 
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
-        void* entity = _field20;
+        CitizenComponent* entity = _field20.Get();
         if (!entity) return 1;  // entity removed, nothing to do
-        ActCt_HideTool_1176e0(entity);   // 0x1401176e0
+        HideCitizenTool(entity);   // 0x1401176e0
         return 1;
     }
 
-    void* entity = _field20;
+    CitizenComponent* entity = _field20.Get();
     if (!entity) return 1;  // entity removed, nothing to do
 
     // toolId < 0 (e.g. 0xFFFFFFFE = -2) is the "carry" path: show the model of the
@@ -260,29 +251,28 @@ int  ShowTool::AbstractImpl(void* actionStack) {
         return 1;
     }
 
-    ActCt_ShowToolOnEntity_1173b0(entity, (int)toolId);   // 0x1401173b0
+    ShowCitizenTool(entity, (int)toolId);   // 0x1401173b0
     return 1;
 }
 
 // ============================================================
 // ShowTool::CheckEntity (0x1400426d0)
-// Hides tool on the entity at +0x20.
+// Hides tool on the citizen at +0x20.
 // ============================================================
 void ShowTool::CheckEntity() {
-    void* entity = _field20;
+    CitizenComponent* entity = _field20.Get();
     if (!entity) return;  // entity already gone
-    ActCt_HideTool_1176e0(entity);   // 0x1401176e0
+    HideCitizenTool(entity);   // 0x1401176e0
 }
 
 // ============================================================
 // ShowTool::GetTarget (0x140042680)
-// Returns true if entity at +0x20's parent (+0x10) matches the param.
+// Returns true if the citizen's (+0x20) owning entity (Component +0x10) matches the param.
 // ============================================================
 bool ShowTool::GetTarget(void* param) {
-    void* entity = _field20;
+    CitizenComponent* entity = _field20.Get();
     if (!entity) return false;  // entity gone, no match
-    void* entityParent = *(void**)((uint8_t*)entity + 0x10);
-    return entityParent == *(void**)param;
+    return entity->_entity == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 }
 
 // ============================================================
@@ -325,13 +315,16 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
 //   Base Internal ctor; Action vtable -> ShowTool vtable; +0x20 = *param_2; +0x28 = toolType.
 // ============================================================
 void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
-    // ENDGAME B.3.8 ACT: the real ctor (ShowTool.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) ShowTool(param_2, toolType));
+    // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp, the Work action
+    // builders) hold the citizen reference as void*.
+    return static_cast<Object::Base*>(
+        new (self) ShowTool(static_cast<CitizenComponent* const*>(param_2), toolType));
 }
 
 // 0x140042890: Action() (Internal, +0x10/+0x18 = 0), then +0x20 = *param_2 (the
-// door's double store `+0x20 = 0; +0x20 = *param_2` keeps only the second), +0x28.
-ShowTool::ShowTool(void* entity, int toolId)
-    : _field20(*static_cast<void**>(entity)), _field28(toolId) {}
+// door's double store `+0x20 = 0; +0x20 = *param_2`: the InternalPtr's own ctor stores
+// the 0), +0x28.
+ShowTool::ShowTool(CitizenComponent* const* citizen, int toolId)
+    : _field20(*citizen), _field28(toolId) {}
 
 DEFINE_EXE_TYPE(ShowTool, "Action")
