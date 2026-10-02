@@ -145,7 +145,6 @@ extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor);  // 0
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg);  // 0x140025740 B4 FORWARD -> Avl38Remove<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP);  // 0x14002c690 B4 FORWARD -> Avl38FindRemove<TrackedEntityNode>
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1);  // 0x1400666b0 B4 FORWARD -> EntityUI::SyncPin
-extern "C" void PlayerTrade_EditTool_66800(int64_t param_1);  // 0x140066800 -> EntityUI::SetPinned
 
 // The two rotations of the 0x38-byte AVL nodes (an 0x18-byte element; parent
 // +0x18, left +0x20, right +0x28, balance +0x30, height +0x32). Retail's one

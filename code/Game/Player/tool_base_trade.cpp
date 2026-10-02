@@ -354,8 +354,3 @@ void EntityUI::SetPinned() {
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
     reinterpret_cast<EntityUI*>(param_1)->SyncPin();   // LEFT: B4 FORWARD
 }
-
-// Until edittool.cpp holds its pin page typed (this block, below).
-extern "C" void PlayerTrade_EditTool_66800(int64_t param_1) {
-    reinterpret_cast<EntityUI*>(param_1)->SetPinned();   // LEFT: edittool.cpp's integer page handle
-}
