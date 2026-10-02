@@ -37,6 +37,8 @@
 #include "Player/dragtool.h"
 #include "Object/exe_type.h"
 
+class CreateFencedDescription;   // Component/CreateFencedDescription.h
+
 class FencedTool final : public DragTool {
     DECLARE_EXE_TYPE(FencedTool)
 
@@ -51,14 +53,14 @@ public:
     void Shutdown() override;                                              // [5]  0x1400dccc0
     char OnKey(char active) override;                                      // [6]  0x1400dcbe0
     void Update(void* time, char active) override;                         // [7]  0x1400dcad0
-    void Draw(void* context, char active) override;                        // [8]  0x1400dc440
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x1400dc440
     char OnCancel() override;                                              // [9]  0x1400dcd10
     Object::Type* GetSettingType(Object::Type* ret) const override;        // [11] 0x140026920
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x1400dae00
     int  CalcCost(int startCell, int endCell, uint32_t* outWidth,
                   int* outHeight, int* outDepth, int* outFenceSegments) override;  // [14] 0x1400db490
 
-    void*    fencedDesc;        // +0x38 CreateFencedDescription* (DAT_1401c4100)
+    CreateFencedDescription* fencedDesc;   // +0x38 cell 0x1401c4100 (B4 PLAYER)
     void*    areaDesc;          // +0x40 area description* (DAT_1401c7a18)
     void*    fenceDesc;         // +0x48 fence description* (DAT_1401c7a88)
     void*    rotationSetting;   // +0x50 InternalBasePtr<RotationSetting>

@@ -29,6 +29,8 @@
 #include "Player/dragtool.h"
 #include "Object/exe_type.h"
 
+class CreateRoadDescription;   // Component/CreateRoadDescription.h
+
 class RoadTool final : public DragTool {
     DECLARE_EXE_TYPE(RoadTool)
 
@@ -41,12 +43,12 @@ public:
     void Shutdown() override {}                                            // [5]  0x1401056d0 RET
     char OnKey(char active) override;                                      // [6]  0x140105690
     void Update(void*, char) override {}                                   // [7]  0x140105680 RET
-    void Draw(void* context, char active) override;                        // [8]  0x140105190
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x140105190
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x140104d30
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,
                   int* outCostB, int* outCostA, int* outLength) override;  // [14] 0x140104fe0
 
-    void*   roadDesc;       // +0x38 CreateRoadDescription* — set by Startup
+    CreateRoadDescription* roadDesc;   // +0x38 set by Startup (cell 0x1401c74d8 + IsDerivedFrom; B4 PLAYER)
     uint8_t modifierFlag;   // +0x40 0 = new road, 1 = upgrade (OnKey, KeyMap 0x16)
     uint8_t _pad41[7];      // +0x41 never written by retail (zeroed here)
 };

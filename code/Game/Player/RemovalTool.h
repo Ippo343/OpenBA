@@ -34,6 +34,9 @@
 #include "Player/dragtool.h"
 #include "Object/exe_type.h"
 
+class CreateRemovalDescription;   // Component/CreateRemovalDescription.h
+class ComponentEntity;            // Entity/ComponentEntity.h
+
 class RemovalTool final : public DragTool {
     DECLARE_EXE_TYPE(RemovalTool)
 
@@ -45,12 +48,19 @@ public:
     void Startup() override;                                               // [4]  0x140104bd0
     void Shutdown() override {}                                            // [5]  0x140104bc0 RET
     void Update(void*, char) override {}                                   // [7]  0x140104bb0 RET
-    void Draw(void* context, char active) override;                        // [8]  0x140104050
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x140104050
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x1401035e0
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,
                   int* outCostB, int* outCostA, int* outLength) override;  // [14] 0x140103ef0
 
-    void* removalDesc;   // +0x38 RemovalDescription* — set by Startup
+    // Eligibility checks Draw / CalcPath run per cell (bodies in tool_base_path.cpp);
+    // each reads this tool's description. AL = removable.
+    uint64_t CanRemoveBuilding(ComponentEntity* const* entity);                    // 0x140104670
+    uint64_t CanRemoveRoad(ComponentEntity* const* entity);                        // 0x140104770
+    uint64_t CanRemoveField(ComponentEntity* const* entity, int col, int row);     // 0x1401048a0
+
+    // B4 PLAYER: typed from Startup 0x140104bd0 (found by the cell 0x1401c74a0 + IsDerivedFrom).
+    CreateRemovalDescription* removalDesc;   // +0x38 set by Startup
 };
 
 

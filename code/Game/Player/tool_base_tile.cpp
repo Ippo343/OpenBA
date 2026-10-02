@@ -35,13 +35,21 @@
 #include <climits>                           // INT_MIN (reject-trace dedupe)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Player/exe_bodies.h"
+#include "Player/PlacementTool.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/MapDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
 
 // ============================================================
-// 0x140003870 — SetTransformFromYaw
+// 0x140003870 — ModelComponent::SetTransformFromYaw
 // ============================================================
 // Builds a Math::Transform from (yaw=param_3, pitch=0, offset=param_2) into
-// self+0x148, stores yaw at self+0x168, then Graphics::Geometry::SetTransform on
-// the Geometry sub-object at self+0x28.
+// this+0x148, stores yaw at this+0x168, then Graphics::Geometry::SetTransform on
+// the MeshInstance at this+0x28.
 //
 // Disasm-verified ABI (RCX=self, RDX=param_2 (offset Vector3*), XMM2=param_3 (yaw float)):
 //   MOV R9,RDX        ; R9 = param_2 -> the OFFSET (4th) arg of FromYawPitchOffset
@@ -54,18 +62,18 @@
 //
 // NOTE: the Ghidra decompile dropped R9/param_2 and showed a zeroed local as the
 // offset; the disasm passes param_2 through as the offset. Ported per the disasm.
+// B4 PLAYER: a ModelComponent member (every field it touches is the component's).
+void ModelComponent::SetTransformFromYaw(const Math::Vector3* offset, float yawDegrees) {
+    transform = Math::Transform::FromYawPitchOffset(yawDegrees, 0.0f, *offset);
+    yaw = yawDegrees;
+    meshInstance.SetTransform(transform);
+}
+
+// B4 FORWARD: 4 outside callers (Component/citizencomponent_lifecycle.cpp,
+// destroycomponent_states.cpp, herdcomponent.cpp, immigrationcomponent_states.cpp).
 void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float yaw) {
-    Math::Transform out = Math::Transform::FromYawPitchOffset(
-        yaw, 0.0f, *reinterpret_cast<const Math::Vector3*>(offset));
-    // Copy 7 dwords (0x148..0x160 inclusive of dword at +0x18 = byte 0x1c).
-    {
-        const uint32_t* src = reinterpret_cast<const uint32_t*>(&out);
-        uint32_t* dst = reinterpret_cast<uint32_t*>(self + 0x148);
-        for (int i = 0; i < 7; i++) dst[i] = src[i];
-    }
-    *reinterpret_cast<float*>(self + 0x168) = yaw;
-    reinterpret_cast<Graphics::Geometry*>(self + 0x28)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x148));   // B.3.5 bridge
+    reinterpret_cast<ModelComponent*>(self)->SetTransformFromYaw(            // B4 FORWARD: the callers' spelling
+        reinterpret_cast<const Math::Vector3*>(offset), yaw);
 }
 
 // ============================================================
@@ -73,22 +81,26 @@ void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float
 // ============================================================
 // Iterates a (param_4 x param_5) rectangle anchored at (param_2,param_3). For each
 // cell it computes, per the rotation code in param_14 (0x5a=90, 0xb4=180,
-// 0x10e=270, else 0=identity), an index into two string buffers:
-//   - param_13[0]  : a char map; '.' at the index sets the "isRoad"(?) flag (R10B)
-//   - param_8[0]   : a char map indexing into param_7 to override param_6 (the
-//                    placement code), when param_7[1] (count) > 0.
-// then calls CharacterComponent_impl_f5d0 (0x14009f5d0, registered round 1) per
-// cell; returns 0 on the first f5d0 == false, else 1.
+// 0x10e=270, else 0=identity), an index into two strings:
+//   - footprint (param_13, MapDescription +0x28): '.' at the index sets the flag
+//   - placeMap  (param_8,  CreatePlacedDescription +0x28): a char indexing the
+//                placement description's per-cell code array (+0x30) to override
+//                param_6 (the placement code), when that array is not empty.
+// then calls 0x14009f5d0 per cell; returns 0 on the first false, else 1.
+//
+// Only PlacementTool calls it (0x1400fd71d, 0x1400fe09e). Retail's param_7 is
+// the address of the description's embedded Array (+0x30); CreatePlacedDescription
+// (block COMP-c) declares that Array as its raw triple, so the description itself
+// is passed and the triple read by name (B4 PLAYER).
 //
 // 1:1 port of the Ghidra decompile (disasm-verified faithful). The index math and
 // the rotation switch are reproduced exactly.
-// f5d0 = PlayerPath_CharComp_f5d0 (Player/exe_bodies.h), called by name.
-
-unsigned long long ToolTile_FootprintValidity_d580(
-        int* param_1, int param_2, int param_3, int param_4, int param_5,
-        unsigned int param_6, long long* param_7, long long* param_8,
+uint64_t ToolTile_FootprintValidity_d580(
+        Map* param_1, int param_2, int param_3, int param_4, int param_5,
+        unsigned int param_6, const CreatePlacedDescription* param_7,
+        const System::String* param_8,
         float param_9, float param_10, float param_11, char param_12,
-        long long* param_13, int param_14, long long param_15) {
+        const System::String* param_13, int param_14, const ComponentDescription* param_15) {
     int iVar1 = param_3 + param_5;        // row end
     int iVar4 = iVar1;
     if (param_3 < iVar1) {
@@ -117,16 +129,15 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         iVar12 = param_5;
                     }
                     iVar8 = ((iVar7 - iVar6) + -1) * (iVar12 + 1) + iVar8;
-                    long long lVar2 = *param_13;
-                    if ((lVar2 != 0) && (*reinterpret_cast<int*>(lVar2 + -8) != 0)) {
-                        bVar13 = *reinterpret_cast<char*>(iVar8 + lVar2) == '.';
+                    const char* footprint = param_13->_data;
+                    if ((footprint != nullptr) && (param_13->GetLength() != 0)) {
+                        bVar13 = footprint[iVar8] == '.';
                     }
-                    if (((0 < static_cast<int>(param_7[1])) &&
-                         (lVar2 = *param_8, lVar2 != 0)) &&
-                        (*reinterpret_cast<int*>(lVar2 + -8) != 0)) {
-                        param_6 = *reinterpret_cast<unsigned int*>(
-                            *param_7 - 0xc0 +
-                            static_cast<long long>(*reinterpret_cast<char*>(iVar8 + lVar2)) * 4);
+                    const char* placeMap = param_8->_data;
+                    if (((0 < param_7->_placeCount) && (placeMap != nullptr)) &&
+                        (param_8->GetLength() != 0)) {
+                        // data - 0xc0 + c*4: the code array indexed by the char - '0'.
+                        param_6 = param_7->_placeArray[static_cast<long long>(placeMap[iVar8]) - 0x30];
                     }
                     bool ok = PlayerPath_CharComp_f5d0(param_1, iVar10, iVar14, param_6, param_9,
                                                        param_10, param_11, param_12,
@@ -144,268 +155,184 @@ unsigned long long ToolTile_FootprintValidity_d580(
 }
 
 // ============================================================
-// 0x1400fd650 — PlacementTool validate + create placed entity
+// 0x1400fd650 — PlacementTool::CreateAt (validate + create the placed entity)
 // ============================================================
 // Validates the rectangle via ToolTile_FootprintValidity_d580; on success spawns a
-// placed ComponentEntity (CopyCtor), writes its footprint cell rect (+0x28..+0x30),
-// orientation (+0x30 normalised into [0,0x168)), sets its transform via
-// ToolTile_SetTransformFromYaw_3870, fixes up its model component, registers it in
-// the world entity list, and runs the post-create hook.
+// placed ComponentEntity (0x1400c3720), writes its MapComponent footprint rect
+// (+0x28..+0x2E), orientation (+0x30 normalised into [0,0x168)), sets its
+// ModelComponent transform (0x140003870), fixes up its model, registers it in the
+// world entity list, and flips the tool's mesh variant (0x1400fd960).
 //
-// Whole exe-code closure registered: d580 + 003870 (this batch); 1018d0, c3720
-// (CopyCtor), 003f60 (ClearPathQueue), 004680, c48a0, c2b70 (ModelComponent helper),
-// fd960 (sub_d960) all registered in prior waves. Runtime deps: MemAlloc,
-// fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom.
-//
-// 1:1 port of the Ghidra decompile.
-// Called by name: 0x1401018d0 DragPlacementTool_ClearPathEntities_1018d0,
-// 0x1400fd960 PlacementToolPlace_FlipVariant_d960 (Player/exe_bodies.h);
-// 0x1400c3720 ComponentEntity_CtorFromDescription, 0x1400c48a0
-// EntityList_RegisterEntity_Impl (Entity/componententity_funcs.h); 0x140004680
-// FloorComponent_FindResData, 0x1400c2b70 ModelComponentNotify_Reimpl
-// (Component/exe_bodies.h); 0x140003f60 ActCNR_FindComponent_3f60 ("ClearPathQueue",
-// Action/exe_bodies.h).
+// 1:1 port of the Ghidra decompile. B4 PLAYER: a PlacementTool member (it reads
+// only this tool's fields and the world).
 
-// Scoped ModelComponent finder. The shared component finder 003f60 resolves its
-// target type-id from raw .rdata 0x1401c7a50 (= ModelComponent), which is NULL in
-// the standalone exe, so it returns a null component — and helper_d650 derefs that
-// null twice (SetTransformFromYaw target + the model-variant fixup). Mirror the
-// M-D pf_road scoped fallback: find the ModelComponent on the entity ourselves via
-// GetTypeIdByName. Kept SCOPED here (do NOT fill the shared c7a50 global — that
-// regresses the verified produce/animation callers of 003f60).
-static void* ToolTile_FindModelComponentScoped(long long entity) {
+// Scoped ModelComponent finder (the tree's): the exact-id walk without
+// IsDerivedFrom, kept beside FindComponent<ModelComponent>() (0x140003f60) as the
+// fallback the port has always had.
+static ModelComponent* ToolTile_FindModelComponentScoped(const ComponentEntity* entity) {
     const uint32_t s_tidModel = ModelComponent::TypeId();
     if (!entity || !s_tidModel) return nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    long long arr = *reinterpret_cast<long long*>(entity + 0x30);
+    int n = entity->_componentCount;
+    Object::InternalPtr<Component>* arr = entity->_components;
     for (int k = 0; k < n && arr; ++k) {
-        void* c = *reinterpret_cast<void**>(arr + static_cast<long long>(k) * 8);
+        Component* c = arr[k].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidModel) return c;  // B.3.8 bridge
+        if (c->Type() == s_tidModel) return static_cast<ModelComponent*>(c);
     }
     return nullptr;
 }
 
-// Standalone-only: show the COMPLETED building model on a freshly placed entity.
-// helper_d650 faithfully leaves the placed building's ModelComponent at "no
-// finished model" (+0x166 = -1) — the retail construction-site start state, which
-// retail advances to the completed sub-mesh when the BuildComponent finishes. That
-// component is inert in standalone, so a player-placed building would sit model-less
-// forever (rendered as the "(?)" status icon with no mesh). Mirror StartTown's
-// "show the completed building, not its foundation" fix (starttown.cpp ~L671 /
-// ApplyResourceModelVariant): keep the visual style helper_d650 chose (+0x164),
-// force the LAST sub-mesh = finished build (+0x166), SetMesh it, so the register-
-// time OnAddedPass -> ModelComponent::Draw submits the finished mesh to the scene.
-// modelDesc layout: +0x20 group array, +0x28 group count; each group is 0x18 bytes
-// with sub-count at +0x10 and sub-mesh array ptr at +0x08 (indexed by modelVariant).
-// Set the placed building's ModelComponent build frame (+0x166) and SetMesh it so the
-// register-time OnAddedPass renders it. `foundation`:
-//   false -> LAST sub-mesh (finished building) — used when the live construction pipeline
-//            is OFF, so a placed building isn't stuck model-less forever.
-//   true  -> FIRST sub-mesh (variant 0 = construction-start foundation) — used when
-//            BANISHED_LIVE_BUILDCTRL is on: the BuildComponent state machine then drives
-//            the model up through the build stages to completion (organic construction).
-static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
-    if (!modelComp) return;
-    uint8_t* m = reinterpret_cast<uint8_t*>(modelComp);
-    void* modelDesc = *reinterpret_cast<void**>(m + 0x18);
+// Standalone-only: show the placed building's model frame. CreateAt faithfully
+// leaves the placed building's ModelComponent at "no finished model" (+0x166 = -1)
+// — the retail construction-site start state, which retail advances when the
+// BuildComponent finishes. `foundation`:
+//   false -> LAST mesh of the group (finished building)
+//   true  -> FIRST mesh (the construction-start foundation): the BuildComponent
+//            state machine then drives the model up through the build stages.
+// Keeps the mesh group CreateAt chose (+0x164), clamped to a valid group.
+static void ToolTile_SetPlacedModel(ModelComponent* model, bool foundation) {
+    if (!model) return;
+    const ModelDescription* modelDesc = reinterpret_cast<const ModelDescription*>(model->_description);   // LEFT: ModelComponent::_description (block COMP) is void*
     if (!modelDesc) return;
-    uint8_t* d = reinterpret_cast<uint8_t*>(modelDesc);
-    uint8_t* groupArray = *reinterpret_cast<uint8_t**>(d + 0x20);
-    uint32_t groupCount = *reinterpret_cast<uint32_t*>(d + 0x28);
+    const ModelMeshGroup* groupArray = modelDesc->_meshGroups;
+    uint32_t groupCount = static_cast<uint32_t>(modelDesc->_meshGroupCount);
     if (!groupArray || groupCount == 0) return;
 
-    // Keep the variant style helper_d650 wrote to +0x164; clamp to a valid group.
-    int variantIdx = *reinterpret_cast<int16_t*>(m + 0x164);
+    int variantIdx = model->meshGroup;
     if (variantIdx < 0 || static_cast<uint32_t>(variantIdx) >= groupCount) variantIdx = 0;
-    uint8_t* group = groupArray + static_cast<int64_t>(variantIdx) * 0x18;
-    int subCount = *reinterpret_cast<int*>(group + 0x10);
-    // foundation -> first sub-mesh (0); else last sub-mesh (complete). A single-mesh group
+    const ModelMeshGroup* group = &groupArray[variantIdx];
+    int subCount = group->meshCount;
+    // foundation -> first mesh (0); else last mesh (complete). A single-mesh group
     // has no construction stages, so 0 == complete either way (harmless).
     int modelVariant = foundation ? 0 : ((subCount > 0) ? subCount - 1 : 0);
 
-    *reinterpret_cast<int16_t*>(m + 0x164) = static_cast<int16_t>(variantIdx);
-    *reinterpret_cast<int16_t*>(m + 0x166) = static_cast<int16_t>(modelVariant);
+    model->meshGroup = static_cast<int16_t>(variantIdx);
+    model->meshIndex = static_cast<int16_t>(modelVariant);
 
-    void* mesh = nullptr;
-    uint8_t* subArr = *reinterpret_cast<uint8_t**>(group + 0x08);
-    if (subArr) mesh = *reinterpret_cast<void**>(subArr + static_cast<int64_t>(modelVariant) * 8);
+    Graphics::GraphicsMesh* mesh = nullptr;
+    Graphics::GraphicsMesh** subArr = group->meshes;
+    if (subArr) mesh = subArr[modelVariant];
     if (mesh) {
-        reinterpret_cast<Graphics::MeshInstance*>(m + 0x28)
-            ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
-        // Re-apply the placement yaw after the mesh swap. Retail's model-variant
-        // setters (FUN_1401253d0/FUN_140125240) run a detach(+0x38)→SetMesh→Draw(+0x30)
-        // cycle, and ModelComponent::Draw (0x140125xxx) re-applies the +0x148 Transform
-        // via Graphics::Geometry::SetTransform — but ONLY when the model isn't already
-        // in the scene (+0x16c < 0). This bare SetMesh skips that cycle, and the placed
-        // entity is copy-constructed from a template (fd650), so its +0x16c can be a
-        // stale scene id → the register-time OnAdded→Draw skips the transform re-apply
-        // → the built building loses the rotation the ghost showed. +0x148 already holds
-        // the yaw (SetTransformFromYaw_3870 wrote it at fd650 before this call), so push
-        // it onto the MeshInstance geometry directly — exactly what Draw would do.
-        reinterpret_cast<Graphics::Geometry*>(m + 0x28)
-            ->SetTransform(*reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
+        model->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
+        // Re-apply the placement yaw after the mesh swap: ModelComponent::Draw
+        // re-applies +0x148 only when the model is not yet in the scene, and the
+        // copy-constructed entity's +0x16c can be a stale scene id. +0x148 already
+        // holds the yaw (SetTransformFromYaw wrote it), so push it directly.
+        model->meshInstance.SetTransform(model->transform);
     }
-
 }
 
 // (The placement path deliberately performs no occupancy write — see the note at the tail
-// of ValidateCreate_fd650. That belongs to MapComponent slot 12, driven by ClearArea's
+// of CreateAt. That belongs to MapComponent slot 12, driven by ClearArea's
 // state-2 event-1 broadcast.)
 
-
-unsigned long long ToolTile_ValidateCreate_fd650(
-        long long param_1, int param_2, int param_3, int param_4, int param_5,
-        const void* param_6, float param_7) {
-    // The exe global g_pGameWorldSingleton holds the gameWorld pointer value; in our
-    // type system that value is *g_pGameWorldSingleton (engine_funcs declares it void**).
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
+uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int param_5,
+                                 const Math::Vector3* param_6, float param_7) {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     // DAT_140172248 == 0x447a0000 == 250.0f (read from Ghidra).
     const float DAT_140172248 = 250.0f;
 
-    int* piVar10 = *reinterpret_cast<int**>(gameWorld + 0xf8);
+    Map* piVar10 = gameWorld->m_game;
     int iVar12 = (param_4 - param_2) + 1;   // width
     int iVar13 = (param_5 - param_3) + 1;   // height
-    long long lVar3 = *reinterpret_cast<long long*>(param_1 + 0x28);
+    const CreatePlacedDescription* lVar3 = descComponent;
     int iVar11 = static_cast<int>(param_7); // orientation
 
-    unsigned long long uVar7 = ToolTile_FootprintValidity_d580(
+    uint64_t uVar7 = ToolTile_FootprintValidity_d580(
         piVar10, param_2, param_3, iVar12, iVar13,
-        *reinterpret_cast<unsigned int*>(lVar3 + 0x20),
-        reinterpret_cast<long long*>(lVar3 + 0x30),
-        reinterpret_cast<long long*>(lVar3 + 0x28),
+        lVar3->_category,
+        lVar3,
+        &lVar3->_name,
         0.0f, DAT_140172248, 0.0f, '\0',
-        reinterpret_cast<long long*>(*reinterpret_cast<long long*>(param_1 + 0x30) + 0x28),
+        &mapComponent->_footprint,
         iVar11,
-        *reinterpret_cast<long long*>(lVar3 + 0x50));
+        lVar3->_created);
 
     if (static_cast<char>(uVar7) == '\0') {
         return uVar7 & 0xffffffffffffff00ULL;
     }
 
-    long long lvCfg = *reinterpret_cast<long long*>(param_1 + 0x10);
-    if (*reinterpret_cast<char*>(lvCfg + 0x80) != '\0') {
-        int iVar1 = **reinterpret_cast<int**>(gameWorld + 0xf8);
-        long long c98 = *reinterpret_cast<int*>(lvCfg + 0x98);
-        long long c9c = *reinterpret_cast<int*>(lvCfg + 0x9c);
+    const PlayerToolManager* lvCfg = dialogPtr;
+    if (lvCfg->field_0x80) {
+        int iVar1 = gameWorld->m_game->size;
+        long long c98 = lvCfg->field_0x98;
+        long long c9c = lvCfg->field_0x9C;
         int col0 = static_cast<int>(c98 % iVar1);
         int row0 = static_cast<int>(c98 / iVar1);
         int col1 = static_cast<int>(c9c % iVar1);
         int row1 = static_cast<int>(c9c / iVar1);
         if ((param_2 != col0) || (param_3 != row0) ||
             (col1 != param_4) || (row1 != param_5) ||
-            (*reinterpret_cast<int*>(lvCfg + 0xa0) != iVar11)) {
+            (lvCfg->field_0xA0 != iVar11)) {
             return uVar7 & 0xffffffffffffff00ULL;
         }
-        // piVar10 in the original is reused as (int*)col0 here, but it is only ever
-        // passed as the first arg of 1018d0 (a longlong); pass col0 to mirror it.
-        piVar10 = reinterpret_cast<int*>(static_cast<long long>(col0));
+        // Retail reuses piVar10's register for col0 here; it is only ever the
+        // first (never read) argument of 0x1401018d0.
     }
 
     DragPlacementTool_ClearPathEntities_1018d0(piVar10, param_2, param_3, param_4, param_5,
-                                               *reinterpret_cast<long long*>(
-                                                   *reinterpret_cast<long long*>(param_1 + 0x28) + 0x50));
+                                               descComponent->_created);
 
     // Allocate + copy-construct the placed ComponentEntity.
     void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* ptr = nullptr;
+    ComponentEntity* entity = nullptr;
     if (mem != nullptr) {
-        ptr = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
-                                                  *reinterpret_cast<void**>(param_1 + 0x20));
+        entity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
+                                                     descriptionPtr);
     }
 
-    long long local_res8 = 0;
-    void* local_48 = mem; // doubles as the out-IBP scratch (matches the exe stack reuse)
-    new (&local_res8) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-
-    // Resolve the placed-entity sub-component (004680) and write the footprint rect.
-    void* pIVar8 = FloorComponent_FindResData(reinterpret_cast<void*>(local_res8), &local_48);
-    lVar3 = *reinterpret_cast<long long*>(pIVar8);
-    *reinterpret_cast<short*>(lVar3 + 0x28) = static_cast<short>(param_2);
-    *reinterpret_cast<short*>(lVar3 + 0x2a) = static_cast<short>(param_3);
-    *reinterpret_cast<short*>(lVar3 + 0x2c) = static_cast<short>(iVar12);
-    *reinterpret_cast<short*>(lVar3 + 0x2e) = static_cast<short>(iVar13);
-    *reinterpret_cast<int*>(lVar3 + 0x30) = iVar11;
+    // Resolve the placed entity's MapComponent (0x140004680) and write the footprint rect.
+    MapComponent* mapComp = entity->FindComponent<MapComponent>();
+    mapComp->tileX0 = static_cast<short>(param_2);
+    mapComp->tileY0 = static_cast<short>(param_3);
+    mapComp->tileX1 = static_cast<short>(iVar12);
+    mapComp->tileY1 = static_cast<short>(iVar13);
+    mapComp->extraField = iVar11;
     if (iVar11 < 0) {
         do { iVar11 = iVar11 + 0x168; } while (iVar11 < 0);
-        *reinterpret_cast<int*>(lVar3 + 0x30) = iVar11;
+        mapComp->extraField = iVar11;
     }
 
-    // Resolve the model/geometry sub-component (ClearPathQueue == 003f60) and set its transform.
-    pIVar8 = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(local_res8), &local_48);
-    long long modelComp = pIVar8 ? *reinterpret_cast<long long*>(pIVar8) : 0;
-    // 003f60's c7a50 type-id is NULL in standalone → null component. Scoped fallback.
-    if (modelComp == 0) modelComp = reinterpret_cast<long long>(ToolTile_FindModelComponentScoped(local_res8));
-    if (modelComp != 0) ToolTile_SetTransformFromYaw_3870(modelComp, param_6, param_7);
+    // Resolve the ModelComponent (0x140003f60) and set its transform.
+    ModelComponent* modelComp = entity->FindComponent<ModelComponent>();
+    if (modelComp == nullptr) modelComp = ToolTile_FindModelComponentScoped(entity);
+    if (modelComp != nullptr) modelComp->SetTransformFromYaw(param_6, param_7);
 
-    // Resolve again (different out-IBP) and fix up the model component.
-    unsigned char local_38[16];
-    pIVar8 = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(local_res8), local_38);
-    long long* plVar4 = pIVar8 ? *reinterpret_cast<long long**>(pIVar8) : nullptr;
-    // Same c7a50-NULL fallback as the transform site above.
-    if (plVar4 == nullptr) plVar4 = reinterpret_cast<long long*>(ToolTile_FindModelComponentScoped(local_res8));
+    // Resolve again and fix up the model component.
+    ModelComponent* plVar4 = entity->FindComponent<ModelComponent>();
+    if (plVar4 == nullptr) plVar4 = ToolTile_FindModelComponentScoped(entity);
     if (plVar4 != nullptr) {
-        int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
-        (void)Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(plVar4[3]), ModelDescription::TypeId());
-        *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
-        if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {
-            reinterpret_cast<Component*>(plVar4)->OnRemove();   // B.3.x bridge (slot 7)
+        int uVar2 = meshVariant;
+        (void)Object::IsDerivedFromNullSafe(plVar4->_description, ModelDescription::TypeId());
+        plVar4->meshGroup = static_cast<int16_t>(uVar2);
+        if (-1 < plVar4->meshIndex) {
+            plVar4->OnRemove();   // slot 7
         }
-        *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
-        // With the live construction pipeline (BANISHED_LIVE_BUILDCTRL) the placed building
-        // is left at its FOUNDATION frame so the BuildComponent state machine drives it
-        // through organic gather -> build -> complete: BuildComponent_DemoGateSkip picks up
-        // any incomplete-model building when no demo foundation is seeded (BuildDemoIndex
-        // default = -1). Without the pipeline, force the finished mesh so the placed building
-        // renders (the original "no completion flow -> model-less forever" guard).
-        ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), true);
-        ModelComponentNotify_Reimpl(reinterpret_cast<void*>(plVar4[2]), 0);
+        plVar4->meshIndex = -1;   // retail stores the word 0xffff
+        // With the live construction pipeline the placed building is left at its
+        // FOUNDATION frame so the BuildComponent state machine drives it through
+        // organic gather -> build -> complete.
+        ToolTile_SetPlacedModel(plVar4, true);
+        plVar4->_entity->SendEvent(0);   // 0x1400c2b70
     }
 
     // Register the new entity in the world entity list.
-    local_48 = reinterpret_cast<void*>(local_res8);
-    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gameWorld + 0xe8), &local_48,
-                                   *reinterpret_cast<int*>(*reinterpret_cast<long long*>(param_1 + 0x20) + 0x20));
+    ComponentEntity* local_48 = entity;
+    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &local_48,
+                                   static_cast<int>(descriptionPtr->_category));
 
-    // Mesh-precise picking: register the placed building's (now-completed, forced above)
-    // model mesh into Picking::Scene so it's clickable anywhere on the model — the same
-    // fix start-town buildings get. Retail would drive this via PickingComponent::OnAdded
-    // during the build lifecycle, which is inert in standalone. Respects LIVE_PICKMESH.
-    //
-    // NB this is a NO-OP for a foundation, faithfully: PickingComponent::OnAdded bails on
-    // `modelVariant < 0`, and a just-registered building has -1 there (retail stamps it at
-    // fd650 above; ours is re-stamped by BuildComponent's OnAdded Stage 3). So the mesh
-    // route cannot select a foundation in retail either — the MAP-CELL route below is what
-    // does, which is why it is the load-bearing half.
-    PickingComponent_RegisterMeshForEntity(reinterpret_cast<void*>(local_res8));
+    // Mesh-precise picking: register the placed building's model mesh into
+    // Picking::Scene (the start-town fix). A NO-OP for a foundation, faithfully:
+    // PickingComponent::OnAdded bails on `modelVariant < 0`.
+    PickingComponent_RegisterMeshForEntity(entity);
 
-    // Cell-precise picking + navigation blocking: write the placed building's footprint
-    // into the region-map cell array (cell+0x08 = the entity), the half retail gets from
-    // RegisterEntity -> OnAddedPass -> MapComponent's vtable+0x30 -> sub_41b0 -> dc20.
-    // Standalone's MapComponent slot 6 only paints the minimap and the occupancy half is
-    // collapsed into per-site helpers (starttown.cpp) — the START-TOWN spawn and the
-    // upgrade-replacement path each call one, and the PLAYER PLACEMENT path had no
-    // equivalent. Consequence measured 2026-07-28: a hand-placed building holds 0 of its
-    // 16 footprint cells, so it is unclickable (EditTool_OnKey's cell pick reads cell+0x08
-    // and finds nothing, and the mesh pick above legitimately registered nothing), it does
-    // not block navigation, and its removal-side cell clear stays disarmed.
-    //
-    // NB there is deliberately NO map-cell occupancy write here. An earlier pass added one
-    // and it was wrong: retail's chain is MapComponent::Draw (slot 6) -> gate
-    // `MapDescription+0x30 != 0` -> 41b0 -> dc20, and +0x30 is **0** for a WoodHouse, so
-    // retail never writes cells at register time. Forcing it ran dc20's stale-occupant
-    // branch and MarkForRemoval'd 11 trees under one footprint — the opposite of the
-    // shipped game, where the trees stay and the building's dialog reads "remove X of Y".
-    //
-    // A building claims its cells LATER, when its ClearArea reaches state 2: that handler
-    // broadcasts event 1 (`MOV EDX,1; CALL 0x1400c2b70`) and MapComponent's slot 12 turns
-    // that into the 41b0 call. See MapComponent_Slot12VSlot (mapcomponent.cpp), which is
-    // where the occupancy write belongs.
+    // NB there is deliberately NO map-cell occupancy write here: retail's chain is
+    // MapComponent::Draw (slot 6) -> gate `MapDescription+0x30 != 0` -> 41b0 -> dc20,
+    // and +0x30 is 0 for a WoodHouse. A building claims its cells LATER, when its
+    // ClearArea reaches state 2 (MapComponent_Slot12VSlot, mapcomponent.cpp).
 
-    // 0x1400fd960's body is void: the door read the upper bytes of whatever it left in
-    // RAX. Every caller of this function reads only AL (= 1 here), so those bytes are 0.
-    PlacementToolPlace_FlipVariant_d960(reinterpret_cast<void*>(param_1));
-    unsigned long long uVar9 = 0;
+    // 0x1400fd960's body is void: every caller of this function reads only AL (= 1).
+    FlipVariant();
+    uint64_t uVar9 = 0;
     return (uVar9 & ~0xffULL) | 1ULL;
 }

@@ -19,6 +19,7 @@
 #include "Player/BridgeTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateBridgeDescription.h"
+#include "Component/ComponentDescription.h"
 #include "object/Internal.h"
 #include "Player/exe_bodies.h"
 #include "object/TypeInfo.h"
@@ -28,42 +29,33 @@
 // ============================================================
 // BridgeTool::Startup (vtable +0x20, Slot4)
 // ============================================================
-// Searches the entity's component list for a component matching the
-// CreateBridgeDescription type ID (DAT_1401c73f8). Stores the found
-// component pointer (or nullptr) in self->bridgeDesc (+0x38).
-//
-// The entity at self->entity (+0x20) is a ComponentEntity with:
-//   +0x28: void** componentArray  — array of component pointers
-//   +0x30: int    componentCount  — number of components
-//
-// Each component has a vtable with GetTypeId at +0x10 (returns uint32_t).
-// After finding a match by type ID, IsDerivedFrom confirms the cast.
+// Searches the tool group's sub-descriptions (+0x28 array, +0x30 count) for the
+// CreateBridgeDescription (cell 0x1401c73f8) and stores it (or nullptr) in
+// this->bridgeDesc (+0x38). A type match that fails IsDerivedFrom ends the search.
 //
 // Original: 0x1400fb7a0
 void BridgeTool::Startup() {
-    uintptr_t entity = (uintptr_t)descriptionPtr;
-    void* result = nullptr;
+    const ComponentDescription* entity = descriptionPtr;
+    CreateBridgeDescription* result = nullptr;
 
     if (!entity) {
         bridgeDesc = nullptr;
         return;
     }
 
-    int count = *(int*)(entity + 0x30);
-    void** components = *(void***)(entity + 0x28);
+    int count = entity->_subDescCount;
+    Description** components = entity->_subDescs;
     uint32_t targetTypeId = CreateBridgeDescription::TypeId();  // cell 0x1401c73f8
 
     for (int i = 0; i < count; i++) {
-        void* comp = components[i];
+        Description* comp = components[i];
         if (!comp) continue;
 
         // Virtual slot 2 (+0x10): Type()
-        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-
-        if (typeId == targetTypeId) {
+        if (comp->Type() == targetTypeId) {
             // Verify with IsDerivedFrom before casting
             if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
-                result = comp;
+                result = static_cast<CreateBridgeDescription*>(comp);
             }
             break;
         }

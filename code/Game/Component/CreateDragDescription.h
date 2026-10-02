@@ -43,7 +43,7 @@ public:
     int32_t _i2c;                               // +0x2c
     int32_t _i30;                               // +0x30
     int32_t _i34;                               // +0x34
-    void* _created;                             // +0x38 ExternalRef: created-resource description (weak)
+    class ComponentDescription* _created;       // +0x38 ExternalRef: created-resource description (weak; B4 PLAYER H4: the entity template DragPlacementTool / FencedTool place)
 };
 
 static_assert(sizeof(CreateDragDescription) == 0x40, "CreateDragDescription is 0x40 (create 0x140032970 MemAlloc(0x40))");

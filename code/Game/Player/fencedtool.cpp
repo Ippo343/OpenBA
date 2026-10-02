@@ -36,6 +36,7 @@
 #include "Component/MapDescription.h"
 #include "Component/ModelDescription.h"
 #include "Component/CreatePlacedDescription.h"
+#include "Component/ComponentDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -405,68 +406,14 @@ int FencedTool::CalcCost(int startCell, int endCell,
 }
 
 // ============================================================
-// Draw helper: dynamic array for 0x14-byte tile records
+// Draw helper: the 0x14-byte tile records 0x1401008c0 reads (ToolTileRecord,
+// Player/Tool.h: col, row, variant, color, angle) in a real Collection::Array
+// (stride 0x14, align 4, byteCopy). B4 PLAYER: the hand-written {data, count,
+// capacity} array and its toEngineFormat pack are gone. Its grow went to n*3 even
+// from empty (capacity 3 for the first record); SetSizeCore's reference rule gives
+// capacity 1 there. Allocation size only; no record differs.
 // ============================================================
-// TileRecord: { int col, int row, int flags, uint32_t color, int unused }
-// This is the layout expected by fn_TileRender (CharacterComponent_impl_08c0).
-// The array header is: { void* data, int count, int capacity } (24 bytes).
-
-struct TileRecord {
-    int col;
-    int row;
-    int flags;
-    uint32_t color;
-    int unused;
-};
-static_assert(sizeof(TileRecord) == 0x14, "TileRecord size mismatch");
-
-// A minimal growable array matching the engine's pattern.
-// The engine uses {ptr, count|capacity packed into int64} but we
-// manage it explicitly for clarity.
-struct TileArray {
-    TileRecord* data;
-    int count;
-    int capacity;
-
-    TileArray() : data(nullptr), count(0), capacity(0) {}
-
-    void push(const TileRecord& rec) {
-        int newCount = count + 1;
-        if (newCount > capacity) {
-            int newCap = (count == 0) ? newCount * 3 : newCount * 3;
-            TileRecord* newData = (TileRecord*)System::MemoryAllocator::MemAlloc(
-                (uint64_t)newCap * sizeof(TileRecord), 4);
-            if (data && newData) {
-                memcpy(newData, data, (uint64_t)count * sizeof(TileRecord));
-            }
-            if (data) System::MemoryAllocator::MemFree(data);
-            data = newData;
-            capacity = newCap;
-        }
-        if (data) {
-            data[count] = rec;
-        }
-        count = newCount;
-    }
-
-    // Returns the packed {ptr, count, capacity} layout the engine expects:
-    // 8 bytes ptr + 4 bytes count + 4 bytes capacity
-    void toEngineFormat(void* out) {
-        uintptr_t* p = (uintptr_t*)out;
-        p[0] = (uintptr_t)data;
-        // Pack count and capacity into a single 64-bit value (count in low 32, cap in high 32)
-        int32_t* ints = (int32_t*)&p[1];
-        ints[0] = count;
-        ints[1] = capacity;
-    }
-
-    void free() {
-        if (data) System::MemoryAllocator::MemFree(data);
-        data = nullptr;
-        count = 0;
-        capacity = 0;
-    }
-};
+using TileArray = Collection::Array<ToolTileRecord>;
 
 // ============================================================
 // Draw helpers: 0x140101270 PlayerRay_ScreenToCell_101270 (the cell under the
@@ -485,7 +432,7 @@ struct TileArray {
 //
 // Both phases build arrays of 0x14-byte TileRecords and call fn_TileRender.
 // Original: 0x1400dc440
-void FencedTool::Draw(void* context, char param3) {
+void FencedTool::Draw(Video::Context* context, char param3) {
     uintptr_t dialog = (uintptr_t)dialogPtr;
     int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
     int mapWidth = *mapGrid;
@@ -504,25 +451,20 @@ void FencedTool::Draw(void* context, char param3) {
 
         for (int r = startCol; r <= endCol; r++) {
             for (int c = startRow; c <= endRow; c++) {
-                TileRecord rec;
-                rec.col   = c;
-                rec.row   = r;
-                rec.flags = 0;
-                rec.color = 0xffffff00;  // yellow-ish marker
-                rec.unused = 0;
-                editTiles.push(rec);
+                ToolTileRecord rec;
+                rec.col     = c;
+                rec.row     = r;
+                rec.variant = 0;
+                rec.color   = 0xffffff00;  // yellow-ish marker
+                rec.angle   = 0;
+                editTiles.SetSize(editTiles._size + 1, rec);
             }
         }
 
-        // Build engine format arrays and render
-        uint8_t tileArrayBuf[16] = {0};
-        uint8_t lineArrayBuf[16] = {0};
-        editTiles.toEngineFormat(tileArrayBuf);
-
-        PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(tileArrayBuf),
-                                          reinterpret_cast<int64_t*>(lineArrayBuf));
-
-        editTiles.free();
+        // Render (the 0x20-byte segment array is always empty here)
+        Collection::Array<ToolSegmentRecord> lineArray;
+        PlayerTileRender_DrawOverlay_08c0(nullptr, context, &editTiles, &lineArray);
+        // editTiles / lineArray are released by ~Array at scope exit.
     }
 
     // ---- Phase 2: Preview (only when not param3 and actively dragging) ----
@@ -534,7 +476,7 @@ void FencedTool::Draw(void* context, char param3) {
         endCell   = this->endCell;
     } else {
         // Get cell under cursor
-        startCell = PlayerRay_ScreenToCell_101270((uintptr_t)Input::Configuration::_singleton->_keyMap);
+        startCell = PlayerRay_ScreenToCell_101270(Input::Configuration::_singleton->_keyMap);
         endCell = startCell;
     }
 
@@ -636,26 +578,21 @@ void FencedTool::Draw(void* context, char param3) {
             }
 after_check:
 
-            TileRecord rec;
+            ToolTileRecord rec;
             rec.col   = c;
             rec.row   = r;
-            rec.flags = alreadyPlaced ? 2 : 0;
+            rec.variant = alreadyPlaced ? 2 : 0;
             rec.color = (tooLarge || !valid) ? 0xffff0000u : 0xff00ff00u;
-            rec.unused = 0;
-            previewTiles.push(rec);
+            rec.angle = 0;
+            previewTiles.SetSize(previewTiles._size + 1, rec);
         }
         iterHeight--;
     }
 
-    // Render preview tiles
-    uint8_t tileArrayBuf[16] = {0};
-    uint8_t lineArrayBuf[16] = {0};
-    previewTiles.toEngineFormat(tileArrayBuf);
-
-    PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(tileArrayBuf),
-                                      reinterpret_cast<int64_t*>(lineArrayBuf));
-
-    previewTiles.free();
+    // Render preview tiles (the 0x20-byte segment array is always empty here)
+    Collection::Array<ToolSegmentRecord> lineArray;
+    PlayerTileRender_DrawOverlay_08c0(nullptr, context, &previewTiles, &lineArray);
+    // previewTiles / lineArray are released by ~Array at scope exit.
 }
 
 // ============================================================
@@ -664,31 +601,39 @@ after_check:
 
 
 // ============================================================
-// Helper: search entity component list for a specific type ID
+// Helper: search a description's sub-descriptions for T
 // ============================================================
-// Returns the first component matching targetTypeId, or nullptr.
-// Same pattern as DragPlacementTool's FindComponentByTypeId but local to this TU.
-static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
+// Returns the first sub-description whose Type() matches T's id and that
+// IsDerivedFrom it, or nullptr; a type match that fails IsDerivedFrom ends the
+// search. Same pattern as DragPlacementTool's FindToolDescription, local to this TU.
+template <class T>
+static T* FencedFindComponent(const ComponentDescription* entity) {
     if (!entity) return nullptr;
+    const uint32_t targetTypeId = T::TypeId();
 
-    int count = *(int*)(entity + 0x30);
-    void** components = *(void***)(entity + 0x28);
+    int count = entity->_subDescCount;
+    Description** components = entity->_subDescs;
 
     for (int i = 0; i < count; i++) {
-        void* comp = components[i];
+        Description* comp = components[i];
         if (!comp) continue;
 
         // virtual slot 2 (+0x10): Type()
-        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-
-        if (typeId == targetTypeId) {
+        if (comp->Type() == targetTypeId) {
             if (Object::IsDerivedFromNullSafe(comp, targetTypeId)) {
-                return comp;
+                return static_cast<T*>(comp);
             }
             break;
         }
     }
     return nullptr;
+}
+
+// The section-0 template of a CreateFencedDescription (+0x28, ExternalPtr[6]).
+// LEFT: block COMP-c declares `_refs` as `void*[6]` (its ctor loops over them as
+// `void*&`), so this one read is a reinterpret.
+static const ComponentDescription* FencedSection0(const CreateFencedDescription* desc) {
+    return reinterpret_cast<const ComponentDescription*>(desc->_refs[0]);
 }
 
 // ============================================================
@@ -699,21 +644,18 @@ static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
 // setting its mesh from the FenceDescription's model.
 //
 // Component lookups:
-//   1. CreateFencedDescription (cell 0x1401c4100) on self->entity -> self->fencedDesc (+0x38)
-//   2. MapDescription (cell 0x1401c7a18; global "AreaDescription" lies — D5) on
-//      self->entity -> self->areaDesc (+0x40)
-//   3. ModelDescription (cell 0x1401c7a88; global "FenceDescription" lies) on
-//      fencedDesc->entity -> self->fenceDesc (+0x48)
-//   4. CreatePlacedDescription (cell 0x1401c7468; global "SizeDescription" lies) on
-//      fencedDesc->entity -> self->_field5C, _field60
+//   1. CreateFencedDescription (cell 0x1401c4100) on the tool group -> this->fencedDesc (+0x38)
+//   2. MapDescription (cell 0x1401c7a18) on the tool group -> this->areaDesc (+0x40)
+//   3. ModelDescription (cell 0x1401c7a88) on fencedDesc's section 0 -> this->fenceDesc (+0x48)
+//   4. CreatePlacedDescription (cell 0x1401c7468) on fencedDesc's section 0 ->
+//      this->_field5C, _field60
 //
 // Also resolves RotationSetting IBP from toolSetting and allocates MeshInstance.
 // Original: 0x1400dcd50
 void FencedTool::Startup() {
 
-    // 1. Find CreateFencedDescription on self->entity (+0x20)
-    uintptr_t entity = (uintptr_t)descriptionPtr;
-    void* fencedDesc = FencedFindComponent(entity, CreateFencedDescription::TypeId());
+    // 1. Find CreateFencedDescription on the tool group (+0x20)
+    CreateFencedDescription* fencedDesc = FencedFindComponent<CreateFencedDescription>(descriptionPtr);
     this->fencedDesc = fencedDesc;
     // SA guard (retail would fault): without the CreateFencedDescription every
     // later step derefs null+0x28. Reachable when the 0x1401c4100 type-id
@@ -721,19 +663,17 @@ void FencedTool::Startup() {
     // createfenced block. Trace loudly — a silent bail here cost a crash-debug.
     if (!fencedDesc) {
         fprintf(stderr, "[FencedTool] Startup: no CreateFencedDescription on entity=%p "
-                "(tid=0x%x) — tool left un-wired\n", (void*)entity,
+                "(tid=0x%x) — tool left un-wired\n", static_cast<void*>(descriptionPtr),
                 CreateFencedDescription::TypeId());
         return;
     }
 
-    // 2. Find MapDescription on self->entity (+0x20)
-    entity = (uintptr_t)descriptionPtr;
-    void* areaDesc = FencedFindComponent(entity, MapDescription::TypeId());
+    // 2. Find MapDescription on the tool group (+0x20)
+    void* areaDesc = FencedFindComponent<MapDescription>(descriptionPtr);
     this->areaDesc = areaDesc;
 
-    // 3. Find ModelDescription on fencedDesc->entity (+0x28)
-    uintptr_t fencedDescEntity = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
-    void* fenceDesc = FencedFindComponent(fencedDescEntity, ModelDescription::TypeId());
+    // 3. Find ModelDescription on fencedDesc's section 0 (+0x28)
+    void* fenceDesc = FencedFindComponent<ModelDescription>(FencedSection0(this->fencedDesc));
     this->fenceDesc = fenceDesc;
 
     // 4. Resolve RotationSetting from toolSetting IBP (+0x18)
@@ -754,17 +694,17 @@ void FencedTool::Startup() {
         rotationSetting = localIBP;
     }
 
-    // 5. Find CreatePlacedDescription on fencedDesc->entity -> read +0x44 and +0x48
-    uintptr_t fencedDescEntity2 = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
-    void* sizeDesc1 = FencedFindComponent(fencedDescEntity2, CreatePlacedDescription::TypeId());
-    // Read field +0x44 from CreatePlacedDescription -> self->_field5C
-    _field5C = *(uint32_t*)((uintptr_t)sizeDesc1 + 0x44);
+    // 5. Find CreatePlacedDescription on fencedDesc's section 0 -> read +0x44 and +0x48
+    const CreatePlacedDescription* sizeDesc1 =
+        FencedFindComponent<CreatePlacedDescription>(FencedSection0(this->fencedDesc));
+    // Read field +0x44 from CreatePlacedDescription -> this->_field5C
+    _field5C = static_cast<uint32_t>(sizeDesc1->_i44);
 
     // Find CreatePlacedDescription again for +0x48 (original code does two separate lookups)
-    uintptr_t fencedDescEntity3 = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
-    void* sizeDesc2 = FencedFindComponent(fencedDescEntity3, CreatePlacedDescription::TypeId());
-    // Read field +0x48 from CreatePlacedDescription -> self->_field60
-    _field60 = *(uint32_t*)((uintptr_t)sizeDesc2 + 0x48);
+    const CreatePlacedDescription* sizeDesc2 =
+        FencedFindComponent<CreatePlacedDescription>(FencedSection0(this->fencedDesc));
+    // Read field +0x48 from CreatePlacedDescription -> this->_field60
+    _field60 = static_cast<uint32_t>(sizeDesc2->_i48);
 
     // 6. Allocate MeshInstance (0x120 bytes, alignment 8)
     void* meshMem = System::MemoryAllocator::MemAlloc(0x120, 8);

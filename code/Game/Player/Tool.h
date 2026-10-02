@@ -48,6 +48,7 @@
 class PlayerToolManager;      // Game/PlayerToolManager.h
 class ToolSetting;            // Player/ToolSetting.h
 class ComponentDescription;   // Component/ComponentDescription.h
+namespace Video { class Context; }
 
 class Tool : public Object::Internal {
     DECLARE_EXE_TYPE(Tool)
@@ -62,7 +63,7 @@ public:
     virtual void  Shutdown() = 0;                                      // [5]  pure
     virtual char  OnKey(char active) = 0;                              // [6]  pure
     virtual void  Update(void* time, char active) = 0;                 // [7]  pure
-    virtual void  Draw(void* context, char active) = 0;                // [8]  pure
+    virtual void  Draw(Video::Context* context, char active) = 0;      // [8]  pure (the frame's Video::Context, GameUpdateLoop::Draw)
     virtual char  OnCancel() = 0;                                      // [9]  pure
     virtual bool  IsSelected(uint64_t* entityRef);                     // [10] 0x1400268a0 false
     // [11] RETSLOT (B8-11): the ToolSetting type this tool wants, 0 = none.
@@ -88,6 +89,36 @@ protected:
     Tool() : Object::Internal(), dialogPtr(nullptr), toolSetting(nullptr), descriptionPtr(nullptr) {}
 };
 
+
+// ---- the overlay records the tools hand to 0x1401008c0 (B4 PLAYER) --------
+// The per-cell tile record (0x14 bytes, stride read at 0x1401008c0's second loop):
+// col, row, the texture-variant column, the ARGB colour, the angle in degrees.
+struct ToolTileRecord {
+    int32_t  col;       // +0x00
+    int32_t  row;       // +0x04
+    int32_t  variant;   // +0x08 texture-variant column (x 0.125 in u)
+    uint32_t color;     // +0x0C ARGB
+    int32_t  angle;     // +0x10 degrees
+};
+static_assert(sizeof(ToolTileRecord) == 0x14, "ToolTileRecord is the 0x14-byte 0x1401008c0 record");
+static_assert(offsetof(ToolTileRecord, color) == 0x0C, "ToolTileRecord::color @ +0x0C");
+static_assert(offsetof(ToolTileRecord, angle) == 0x10, "ToolTileRecord::angle @ +0x10");
+
+// The segment record (0x20 bytes, 0x1401008c0's first loop; PathTool's routes):
+// two cells, the variant, colour, angle, and the strip's half width.
+struct ToolSegmentRecord {
+    int32_t  col1;      // +0x00
+    int32_t  row1;      // +0x04
+    int32_t  variant;   // +0x08
+    uint32_t color;     // +0x0C ARGB
+    int32_t  angle;     // +0x10 degrees
+    int32_t  col2;      // +0x14
+    int32_t  row2;      // +0x18
+    float    width;     // +0x1C
+};
+static_assert(sizeof(ToolSegmentRecord) == 0x20, "ToolSegmentRecord is the 0x20-byte 0x1401008c0 record");
+static_assert(offsetof(ToolSegmentRecord, col2) == 0x14, "ToolSegmentRecord::col2 @ +0x14");
+static_assert(offsetof(ToolSegmentRecord, width) == 0x1C, "ToolSegmentRecord::width @ +0x1C");
 
 static_assert(sizeof(Tool) == 0x28, "Tool is 0x28 bytes (0x10 Internal + 0x18)");
 static_assert(alignof(Tool) == 8, "Tool is 8-aligned");

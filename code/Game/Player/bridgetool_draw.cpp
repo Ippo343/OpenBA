@@ -43,67 +43,48 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "collection/Collection.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Game/Map.h"
+#include "Action/PathAvl.h"
 #include <cstdint>
 #include <cstdio>
 
 namespace {
 
 // ---- map-grid accessors (see bridgetool_validate.cpp for the layout) --------
-inline uint32_t* MapGrid() {
-    void* gameWorld = GameUpdateLoop::_singleton;
+inline Map* MapGrid() {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return nullptr;
-    return *reinterpret_cast<uint32_t**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);
+    return gameWorld->m_game;
 }
-inline int64_t TerrainBase(uint32_t* mapGrid) {
-    return *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
+inline uint32_t TerrainBit(const MapCell* cell) {
+    return 1u << (cell->terrainType & 0x1f);
 }
-inline uintptr_t CellAt(int64_t terrainBase, int cellIdx) {
-    return static_cast<uintptr_t>(terrainBase) + static_cast<int64_t>(cellIdx) * 0x30;
-}
-inline uint32_t TerrainBit(uintptr_t cell) {
-    return 1u << (*reinterpret_cast<uint8_t*>(cell + 0x29) & 0x1f);
-}
-// Pending/queued-cell BST at mapGrid+0xe8. Node: key=+0x00, left=+0x10, right=+0x18.
-bool PendingContains(uint32_t* mapGrid, int cellIdx) {
-    int* node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(mapGrid) + 0xe8);
+// Pending/queued-cell BST at Map +0xE8 (AvlNode28: key +0x00, left +0x10, right +0x18).
+bool PendingContains(const Map* mapGrid, int cellIdx) {
+    const AvlNode28* node = mapGrid->field_0xE8;
     while (node != nullptr) {
-        if (cellIdx < *node) {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x10);
+        if (cellIdx < node->key) {
+            node = node->left;
         } else {
-            if (cellIdx <= *node) return true;
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);
+            if (cellIdx <= node->key) return true;
+            node = node->right;
         }
     }
     return false;
 }
 
-// ---- tile overlay array (same layout roadtool.cpp uses) --------------------
-struct TileRenderEntry {
-    uint32_t col;
-    uint32_t row;
-    uint32_t type;    // 1 = cell's terrain is in the bridge body mask, else 0
-    uint32_t color;   // ARGB
-    uint32_t extra;   // always 0
-};
-static_assert(sizeof(TileRenderEntry) == 0x14, "TileRenderEntry size mismatch");
+// ---- tile overlay array (ToolTileRecord, Player/Tool.h) ---------------------
+//   variant: 1 = the cell's terrain is in the bridge body mask, else 0; angle: 0.
+// ENDGAME B.3.2 step 2: the tile list is a real `Collection::Array` (stride 0x14,
+// align 4, byteCopy); PushTileEntry only ever appends ONE element, so its
+// `(count == 0) ? n : n*3` capacity rule is exactly SetSizeCore's. One
+// out-of-memory-only difference: the old body returned early when MemAlloc came back
+// null (count untouched), while SetSizeCore stores the new size and skips the null
+// element address instead.
+using TileArray = Collection::Array<ToolTileRecord>;
 
-// ENDGAME B.3.2 step 2: the tile list is a real `Collection::Array<TileRenderEntry>`
-// (trait-derived row: stride 0x14, align 4, byteCopy, init == nullptr, destroy ==
-// nullptr) and the hand-written grow that used to sit here is one `SetSize(n, fill)`.
-// Compared arm for arm with rtcoll::SetSizeCore before the swap: PushTileEntry only
-// ever appends ONE element (newCount == count + 1 by construction), so its
-// `(count == 0) ? n : n*3` capacity rule is exactly the reference's
-// `newSize == oldSize+1 && oldSize != 0 ? n*3 : n`; MemAlloc(cap * 0x14, align 4);
-// the preserved prefix copied only when the block moved (the grow path here always
-// allocates a fresh block); the new slot takes the fill; the old block freed when it
-// moved; the in-place path stores at [count]. One out-of-memory-only difference: the
-// old body returned early when MemAlloc came back null (count untouched), while
-// SetSizeCore stores the new size and skips the null element address instead.
-using TileArray = Collection::Array<TileRenderEntry>;
-
-// 1:1 with the inlined grow in retail: capacity goes to count*3 once past the first
-// element, allocation is MemAlloc(cap * 0x14, 4).
-void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
+void PushTileEntry(TileArray* arr, const ToolTileRecord* entry) {
     arr->SetSize(arr->_size + 1, *entry);
 }
 
@@ -118,14 +99,14 @@ constexpr uint32_t kGreen = 0xff00ff00u;
 // ============================================================
 // BridgeTool::Draw (vtable +0x40, Slot8) — 0x1400fadc0
 // ============================================================
-void BridgeTool::Draw(void* context, char skip) {
+void BridgeTool::Draw(Video::Context* context, char skip) {
     if (skip != '\0') return;
 
     // ---- 1. Resolve the span being previewed -------------------------------
     int startCell, endCell;
     if (dragState == '\0') {
         // Not dragging: preview the single cell under the cursor.
-        startCell = PlayerRay_ScreenToCell_101270(reinterpret_cast<uintptr_t>(this));
+        startCell = PlayerRay_ScreenToCell_101270(this);
         endCell   = startCell;
     } else {
         startCell = this->startCell;
@@ -134,21 +115,21 @@ void BridgeTool::Draw(void* context, char skip) {
     if (startCell < 0) return;
     if (endCell < 0) endCell = startCell;
 
-    uint32_t* mapGrid = MapGrid();
+    Map* mapGrid = MapGrid();
     if (!mapGrid) return;
-    const int width = static_cast<int>(*mapGrid);
+    const int width = mapGrid->size;
     if (width <= 0) return;
-    const int64_t terrainBase = TerrainBase(mapGrid);
+    const MapCell* terrainBase = mapGrid->cells;
     if (!terrainBase) return;
 
-    const uintptr_t desc = reinterpret_cast<uintptr_t>(bridgeDesc);
+    const CreateBridgeDescription* desc = bridgeDesc;
     if (!desc) return;
 
-    const uint32_t maskBody      = *reinterpret_cast<uint32_t*>(desc + 0x20);
-    const uint32_t maskApproach  = *reinterpret_cast<uint32_t*>(desc + 0x24);
-    const uint32_t maskBodyExtra = *reinterpret_cast<uint32_t*>(desc + 0x28);
-    const uint32_t maskNeighbor  = *reinterpret_cast<uint32_t*>(desc + 0x30);
-    const int      radius        = *reinterpret_cast<int*>(desc + 0x34);
+    const uint32_t maskBody      = desc->_u20;
+    const uint32_t maskApproach  = desc->_u24;
+    const uint32_t maskBodyExtra = desc->_u28;
+    const uint32_t maskNeighbor  = desc->_u30;
+    const int      radius        = desc->_i34;
     const uint32_t maskSpan      = maskBody | maskBodyExtra;
 
     // ---- 2. Bounding rect of the span --------------------------------------
@@ -180,7 +161,7 @@ void BridgeTool::Draw(void* context, char skip) {
             const int bodyIdx = width * row + col;
             if (bodyIdx < 0 || bodyIdx >= cellCount) continue;
 
-            const uintptr_t cell = CellAt(terrainBase, bodyIdx);
+            const MapCell* cell = &terrainBase[bodyIdx];
             const uint32_t  bit  = TerrainBit(cell);
 
             // type: is this cell's terrain part of the bridge body (i.e. water)?
@@ -191,7 +172,7 @@ void BridgeTool::Draw(void* context, char skip) {
             // its whole ring red. Faithful, if surprising.
             uint32_t color;
             if (!pathValid || (maskSpan & bit) == 0 ||
-                *reinterpret_cast<int64_t*>(cell) != 0) {
+                cell->blocker != nullptr) {
                 color = kRed;
             } else {
                 color = kGreen;
@@ -200,8 +181,7 @@ void BridgeTool::Draw(void* context, char skip) {
             // player can see where a bridge is allowed to start.
             if (!isDrag && (maskApproach & bit) != 0) color = kGreen;
 
-            TileRenderEntry entry = {static_cast<uint32_t>(col), static_cast<uint32_t>(row),
-                                     type, color, 0};
+            ToolTileRecord entry = {col, row, static_cast<int32_t>(type), color, 0};
             PushTileEntry(&tiles, &entry);
 
             if (!isDrag) continue;
@@ -222,21 +202,19 @@ void BridgeTool::Draw(void* context, char skip) {
                 const int idx = width * ringRow + ringCol;
                 if (idx < 0 || idx >= cellCount) continue;
 
-                const uintptr_t rCell = CellAt(terrainBase, idx);
+                const MapCell* rCell = &terrainBase[idx];
                 const uint32_t  rBit  = TerrainBit(rCell);
 
-                const bool free = (*reinterpret_cast<int64_t*>(rCell) == 0)
+                const bool free = (rCell->blocker == nullptr)
                                && ((rBit & 2) == 0)
                                && ((rBit & 1) == 0)
-                               && (*reinterpret_cast<int8_t*>(rCell + 0x2a) == -1);
+                               && (static_cast<int8_t>(rCell->field_0x2A) == -1);
                 if (!free || PendingContains(mapGrid, idx)) color = kRed;
 
                 if (color != kRed)
                     color = ((maskNeighbor & rBit) != 0) ? kGreen : kRed;
 
-                TileRenderEntry rEntry = {static_cast<uint32_t>(ringCol),
-                                          static_cast<uint32_t>(ringRow),
-                                          type, color, 0};
+                ToolTileRecord rEntry = {ringCol, ringRow, static_cast<int32_t>(type), color, 0};
                 PushTileEntry(&tiles, &rEntry);
             }
         }
@@ -244,9 +222,8 @@ void BridgeTool::Draw(void* context, char skip) {
 
     // ---- 4. Submit -----------------------------------------------------------
     // Retail passes an (uninitialised) RCX and a second, always-empty tile array in R9.
-    TileArray empty;
-    PlayerTileRender_DrawOverlay_08c0(0, context, reinterpret_cast<int64_t*>(&tiles),
-                                      reinterpret_cast<int64_t*>(&empty));   // 0x1401008c0
+    Collection::Array<ToolSegmentRecord> empty;
+    PlayerTileRender_DrawOverlay_08c0(nullptr, context, &tiles, &empty);   // 0x1401008c0
 
     // Report the first hover frame and the first real DRAG frame separately — a hover
     // only ever emits one tile, so "it renders" says nothing about the span loop.

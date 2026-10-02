@@ -60,13 +60,17 @@
 #include "system/MemoryAllocator.h"
 #include "system/Value.h"
 #include "object/TypeInfo.h"
+#include "Component/ComponentDescription.h"
+#include "Component/CreateRemovalDescription.h"
+#include "Component/StateMachineComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
+#include "Action/PathAvl.h"
+#include "Work/Work.h"
 
-// PlayerPath removability checks (sub_48a0/4770/4670) are defined with C++ linkage in
-// tool_base_path.cpp. Declare them at FILE SCOPE so the linkage matches — declaring them
-// inside the extern "C" bodies below gives them C linkage and the link fails.
-uint64_t PlayerPath_Sub_48a0(uintptr_t, void*, int, int);
-uint64_t PlayerPath_Sub_4770(uintptr_t, void*);
-uint64_t PlayerPath_Sub_4670(uintptr_t, void*);
+// (The removal-eligibility checks are RemovalTool members: tool_base_path.cpp.)
 
 // ============================================================
 // Exe helpers called by name (their declaring headers):
@@ -86,14 +90,11 @@ uint64_t PlayerPath_Sub_4670(uintptr_t, void*);
 // System::Time::Time(float) (RtSystem_Time_Ctor).
 // ============================================================
 
-// Type-id storage: each cell's class is Table 1's (INVENTORY_C), not the local
-// name below — 0x1401c79e0 is MapComponent's cell (not "BuildComponent"), and
-// 0x1401c8070 is WorkComponent's (not "StorageLocationComponent").
-static uint32_t s_tid_7430_v, s_tid_79e0_v, s_tid_75f0_v, s_tid_8070_v, s_tid_6860_v;
+// Type-id storage: 0x1401c7430 is CreateDragDescription's cell, 0x1401c6860
+// BuildRoad's (Table 1). The MapComponent / DestroyComponent / WorkComponent
+// lookups are FindComponent<T> (ComponentEntity.h) since B4 PLAYER.
+static uint32_t s_tid_7430_v, s_tid_6860_v;
 static const uint32_t* s_tid_7430 = &s_tid_7430_v;  // 0x1401c7430 -> CreateDragDescription
-static const uint32_t* s_tid_79e0 = &s_tid_79e0_v;  // 0x1401c79e0 -> MapComponent
-static const uint32_t* s_tid_75f0 = &s_tid_75f0_v;  // 0x1401c75f0 -> DestroyComponent
-static const uint32_t* s_tid_8070 = &s_tid_8070_v;  // 0x1401c8070 -> WorkComponent
 static const uint32_t* s_tid_6860 = &s_tid_6860_v;  // 0x1401c6860 -> BuildRoad
 
 static bool s_init = false;
@@ -101,53 +102,25 @@ static bool s_init = false;
 static void InitTypeIds() {
     if (s_init) return;
     s_tid_7430_v = CreateDragDescription::TypeId();
-    s_tid_79e0_v = MapComponent::TypeId();
-    s_tid_75f0_v = DestroyComponent::TypeId();
-    s_tid_8070_v = WorkComponent::TypeId();
     s_tid_6860_v = BuildRoad::TypeId();
     s_init = true;
 }
 
-// Component virtual slot 2 (+0x10) = Type(). Helper to read it.
-static inline uint32_t CompTypeId(void* comp) {
-    return reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-}
-
-// Shared FindComponent-by-type-id scan over an entity's component list
-// (ptr array at entity+0x30, count at entity+0x38). Returns the first component
-// whose GetTypeId matches *pTid and that IsDerivedFrom *pTid. Used by Slot13's
-// inline scans (the LAB_... blocks).
-static void* FindCompInEntity(uintptr_t entity, const uint32_t* pTid) {
-    if (!pTid) return nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < n; i++) {
-        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
-        if (CompTypeId(comp) == *pTid) {
-            void* c = *slot;
-            return Object::IsDerivedFromNullSafe(c, *pTid) ? c : nullptr;
-        }
-    }
-    return nullptr;
-}
-
 // ============================================================
 // 0x14002d960  RemovalTool_helper_d960
-// FindComponent-by-type over a *different* container layout: count at param_1+0x30,
-// ptr-array base at param_1+0x28 (byte offsets confirmed in disasm — the array is
-// indexed RSI=index*8 added to [param_1+0x28]). Type id DAT_1401c7430. Writes the
-// match (or 0) into *param_2 and returns param_2.
+// Find-description-by-type over a ComponentDescription's sub-descriptions (count
+// +0x30, array +0x28; byte offsets confirmed in disasm). Type id DAT_1401c7430
+// (CreateDragDescription). Writes the match (or 0) into *param_2 and returns param_2.
 // ============================================================
-extern "C" void* RemovalCalc_helper_d960(int64_t param_1, void** param_2) {
+extern "C" void* RemovalCalc_helper_d960(const ComponentDescription* param_1, void** param_2) {
     InitTypeIds();
     void* result = nullptr;
-    int n = *reinterpret_cast<int*>(param_1 + 0x30);
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(param_1 + 0x28);
+    int n = param_1->_subDescCount;
+    Description** base = param_1->_subDescs;
     for (int i = 0; i < n; i++) {
-        void* comp = *reinterpret_cast<void**>(base + static_cast<int64_t>(i) * 8);
-        if (s_tid_7430 && CompTypeId(comp) == *s_tid_7430) {
-            void* c = *reinterpret_cast<void**>(base + static_cast<int64_t>(i) * 8);
+        Description* comp = base[i];
+        if (s_tid_7430 && comp->Type() == *s_tid_7430) {
+            Description* c = base[i];
             if (s_tid_7430 && Object::IsDerivedFromNullSafe(c, *s_tid_7430))
                 result = c;
             break;
@@ -433,126 +406,114 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
 
 // ============================================================
 // 0x14009c700  RemovalTool_helper_c700
-// Road-removal cell handler. param_1 = map grid (RSI). Walks the road BST root at
-// byte +0xe8 by cell id param_2; on a found road node, resolves the BuildRoad
-// component (RemovalTool_helper_8d50 + IsA TypeInfo_BuildRoad), reads its
-// remove-kind fields (+0x60,+0x64,+0x68), notifies CitizenAI (FUN_1400f8e30) and
-// erases the BST node (CitizenAI_impl_a6e0). Then updates the map cell at +0x80
-// (stride 0x30): if cell+0x2a==0xff it dirties the region (FUN_1400a8c90) and
-// queues a worker job (FUN_1400a6fe0); else applies the removal (FUN_14009f2f0)
-// and rebuilds the road mesh (TradeWork_impl_f370). Returns bool.
-// int*-arith: +0x3a==byte 0xe8 root; +0x1c==0x70; +0x1a==0x68; +0x20==0x80.
+// Road-removal cell handler. param_1 = the Map. Walks the road BST (+0xE8) by cell
+// id param_2; on a found road node, resolves the BuildRoad work (RemovalTool_helper
+// _8d50 + IsA BuildRoad), reads its remove-kind fields (+0x60,+0x64,+0x68), notifies
+// the work scheduler (0x1400f8e30) and erases the BST node (0x14001a6e0). Then
+// updates the map cell (+0x80, stride 0x30): if cell+0x2a==0xff it dirties the
+// region (0x1400a8c90) and queues a worker job (0x1400a6fe0); else applies the
+// removal (0x14009f2f0) and rebuilds the road mesh (0x1400af370). Returns bool.
 // ============================================================
-extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
+extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     InitTypeIds();
-    int* root = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(param_1) + 0xe8);
-    void* ptr = nullptr;
-    uint64_t retLow = 2;
+    const AvlNode28* root = param_1->field_0xE8;
+    uint32_t retLow = 2;
     int removeKind = 0xff;   // iVar9 / R12D
-    uint8_t ebx = 0;         // local res @ +0x64 read (R13/EBX region) — overload note below
-    int32_t res8 = 0;        // local_res8 (InternalBasePtr storage)
-    int32_t resC = 0;        // uStackX_c
+    uint8_t ebx = 0;         // the +0x64 byte (road branch) / the IBP's low byte
     uint32_t res10 = 2;      // local_res10
     uint8_t r7 = 0;          // uVar7 byte
     bool found = false;      // bVar5
     uint8_t r13 = 1;         // bVar10 (subtract amount); EBP/R13 start = 1
     void* res18 = nullptr;   // local_res18 (InternalBasePtr)
 
-    int* node = root;
+    const AvlNode28* node = root;
     while (node != nullptr) {
-        if (param_2 < *node) {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x10);
-        } else if (*node < param_2) {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);
+        if (param_2 < node->key) {
+            node = node->left;
+        } else if (node->key < param_2) {
+            node = node->right;
         } else {
             // exact match — node found (key == param_2)
-            // RemovalTool_helper_8d50(gameWorld+0x118, &res18, param_2)
-            RemovalCalc_helper_8d50(
-                *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x118),
-                reinterpret_cast<void**>(&res18), param_2);
+            // RemovalTool_helper_8d50(the work scheduler, &res18, param_2)
+            // LEFT: 0x1400f8d50 (below) still takes the scheduler as an integer.
+            RemovalCalc_helper_8d50(reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_tutorial),
+                                    &res18, param_2);
             r13 = 1;  // bVar10 = true by default
+            BuildRoad* road = nullptr;
             if (res18 != nullptr) {
-                bool isRoad = s_tid_6860 ? reinterpret_cast<const Object::Base*>(res18)->IsA(*s_tid_6860) : false;   // B.3.x bridge
+                // LEFT: 0x1400f8d50 hands the work back untyped (the scheduler's
+                // node payload); IsA / IsDerivedFrom prove it a BuildRoad.
+                Object::Base* work = reinterpret_cast<Object::Base*>(res18);
+                bool isRoad = s_tid_6860 ? work->IsA(*s_tid_6860) : false;
                 if (isRoad) {
-                    void* base = res18;
-                    void* derived = (s_tid_6860 && Object::IsDerivedFromNullSafe(base, *s_tid_6860))
-                                    ? base : nullptr;
-                    int64_t bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
-                    {
-                        void* tmp = derived;
-                        // InternalBasePtr(&res8, derived)
-                        int64_t ibpBuf = 0;
-                        new (&ibpBuf) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(tmp));   // B.3.3 bridge
-                        res8 = (int32_t)(uint64_t)ibpBuf;
-                        resC = (int32_t)((uint64_t)ibpBuf >> 32);
-                    }
-                    bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
-                    removeKind = *reinterpret_cast<int*>(bp + 0x60);
-                    bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
-                    ebx = (uint8_t)*reinterpret_cast<uint32_t*>(bp + 0x64);  // ptr = *(uint*)(bp+100)
-                    bp = ((int64_t)(uint32_t)res8) | ((int64_t)resC << 32);
-                    res10 = *reinterpret_cast<uint32_t*>(bp + 0x68);
-                    ActCt_TaskCleanup_8e30(*reinterpret_cast<void**>((uintptr_t)GameUpdateLoop::_singleton + 0x118),
-                                           *reinterpret_cast<int*>((uintptr_t)res18 + 0x20));
+                    road = (s_tid_6860 && Object::IsDerivedFromNullSafe(work, *s_tid_6860))
+                           ? static_cast<BuildRoad*>(work) : nullptr;
+                    removeKind = road->field_60;
+                    ebx = (uint8_t)road->field_64;   // ptr = *(uint*)(bp+100)
+                    res10 = road->field_68;
+                    ActCt_TaskCleanup_8e30(GameUpdateLoop::_singleton->m_tutorial,
+                                           static_cast<Work*>(work)->field_20);
                     r13 = (removeKind == 0xff) ? 1 : 0;  // bVar10 = (removeKind==0xff)
                 } else {
-                    ebx = (uint8_t)(uint32_t)res8;
+                    ebx = 0;   // the low byte of the still-null IBP
                     r13 = 1;
                 }
             } else {
-                // LAB_14009c85e: res18 == null -> EBX = local_res8 low byte
-                ebx = (uint8_t)(uint32_t)res8;
+                // LAB_14009c85e: res18 == null -> EBX = the null IBP's low byte
+                ebx = 0;
             }
-            r7 = ebx;  // uVar7 = SUB81(ptr,0); ptr held the +0x64 byte for the road branch
+            r7 = ebx;  // uVar7 = the +0x64 byte for the road branch
 
-            // second BST pass: erase the matched node (CitizenAI_impl_a6e0)
-            int* n2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(param_1) + 0xe8);
+            // second BST pass: erase the matched node (0x14001a6e0)
+            AvlNode28* n2 = param_1->field_0xE8;
             while (n2 != nullptr) {
-                if (param_2 < *n2) {
-                    n2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n2) + 0x10);
-                } else if (*n2 < param_2) {
-                    n2 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n2) + 0x18);
+                if (param_2 < n2->key) {
+                    n2 = n2->left;
+                } else if (n2->key < param_2) {
+                    n2 = n2->right;
                 } else {
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(param_1) + 0xe8), n2);
+                    // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
+                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);
                     break;
                 }
             }
             retLow = res10;
             found = true;
-            (void)ptr; (void)res8;
             break;
         }
     }
 
     // ---- LAB_14009c8a0: apply to map cell ----
-    int64_t cell = (int64_t)param_2 * 0x30 + *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x80);
+    MapCell* cell = &param_1->cells[param_2];
     uint64_t result;
-    if (*reinterpret_cast<int8_t*>(cell + 0x2a) == (int8_t)0xff) {
-        uint8_t bVar1 = *reinterpret_cast<uint8_t*>(cell + 0x29);
+    if (static_cast<int8_t>(cell->field_0x2A) == (int8_t)0xff) {
+        uint8_t bVar1 = cell->terrainType;
         uint8_t setBit = ((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0 ? 1 : 0;
-        *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(param_1) + 0xa2) |= setBit;
-        *reinterpret_cast<uint8_t*>(cell + 0x29) = 2;
-        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror
+        param_1->field_0xA2 = param_1->field_0xA2 | (setBit != 0);
+        cell->terrainType = 2;
+        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (LEFT: block STANDALONE's perf_terrain.h takes the cell as bytes)
         if (((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0) {
-            int div = (int)*param_1;
-            Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x70),
+            int div = param_1->size;
+            // LEFT: 0x1400a8c90 / 0x1400a6fe0 are C doors in block ACT-b's
+            // Action/exe_bodies.h taking the region graph / pathfinder as integers.
+            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(param_1->regionGraph),
                                    param_2 % div, param_2 / div);
         }
         // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only; retail's R9 is not read.
-        Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x68),
+        Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(param_1->pathfinder),
                              static_cast<int>(param_2), 2);
         result = 0;  // uVar8 & 0xff..00
     } else {
         if (found) {
-            *reinterpret_cast<int8_t*>(cell + 0x28) -= (int8_t)r13;
-            *reinterpret_cast<int8_t*>(cell + 0x2a) = (int8_t)removeKind;
-            *reinterpret_cast<uint8_t*>(cell + 0x2b) = r7;
-            Pf_SetTileRoadFlag_9f2f0(reinterpret_cast<int*>(param_1), param_2, (uint32_t)retLow);
+            cell->footprintCount = static_cast<uint8_t>(cell->footprintCount - r13);
+            cell->field_0x2A = static_cast<uint8_t>(removeKind);
+            cell->field_0x2B = r7;
+            param_1->SetTerrainType(param_2, retLow);   // 0x14009f2f0
             if (removeKind == 0xff) {
                 result = 0;
             } else {
-                Pf_RoadMeshRebuild_f370(*reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x110), param_1);
+                Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_worldGeometry),
+                                        reinterpret_cast<uint32_t*>(param_1));   // LEFT: as above
                 result = 1;
             }
         } else {
@@ -684,17 +645,34 @@ extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
 }
 
 // ============================================================
-// 0x1401035e0  RemovalTool_Slot13 (CalcPath)
+// 0x1401035e0  RemovalTool::CalcPath (slot 13)
 // Walks the selection rectangle (param_2 corner, param_3 corner) over the tile
-// grid and, per cell, applies the active RemovalDescription. See file header.
-// Faithful to the decompile.
+// grid and, per cell, applies the active CreateRemovalDescription. See file header.
+// Faithful to the decompile; B4 PLAYER reads every field by name.
 // ============================================================
-bool RemovalTool::CalcPath(int param_2, int param_3) {
-    InitTypeIds();
 
+// A placed removal marker: a fresh entity of the description's +0x38 template whose
+// MapComponent covers the one cell, registered in the world entity list
+// (0x1400c3720 + FindComponent<MapComponent> 0x140004680 + 0x1400c48a0). Retail
+// inlines it twice in CalcPath.
+static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, int row) {
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* cloned = nullptr;
+    if (mem) cloned = ComponentEntity_CtorFromDescription(mem, desc->_ref38);
+    MapComponent* comp = cloned->FindComponent<MapComponent>();
+    comp->tileX0 = (int16_t)col;
+    comp->tileY0 = (int16_t)row;
+    comp->tileX1 = 1;   // +0x2c / +0x2e: one qword store of 0x10001 in retail (H7: two stores)
+    comp->tileY1 = 1;
+    ComponentEntity* local_70 = cloned;
+    EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &local_70,
+                                   static_cast<int>(desc->_ref38->_category));
+}
+
+bool RemovalTool::CalcPath(int param_2, int param_3) {
     // Decompile variable names preserved verbatim for offset-by-offset fidelity.
-    int* piVarDim = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
-    int dim = *piVarDim;
+    Map* piVarDim = GameUpdateLoop::_singleton->m_game;
+    int dim = piVarDim->size;
 
     int64_t uVar13 = (int64_t)param_2 / dim;   // row of corner A
     int64_t uVar26 = (int64_t)param_2 % dim;   // col of corner A
@@ -723,31 +701,29 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
         local_res20 = uVar9;
     }
 
-    // single-cell drag-snapshot validity (lVar21+0x80 flag)
-    int64_t lVar21 = reinterpret_cast<int64_t>(dialogPtr);
-    if (*reinterpret_cast<char*>(lVar21 + 0x80) != 0) {
+    // the owner's single-rectangle constraint (+0x80 flag)
+    const PlayerToolManager* lVar21 = dialogPtr;
+    if (lVar21->field_0x80) {
         int iVar24 = dim;
-        int64_t uVar16b = (int64_t)*reinterpret_cast<int*>(lVar21 + 0x9c) / iVar24;
-        if (((int)uVar4 != *reinterpret_cast<int*>(lVar21 + 0x98) % iVar24) ||
-            ((int)uVar26 != *reinterpret_cast<int*>(lVar21 + 0x98) / iVar24) ||
-            (*reinterpret_cast<int*>(lVar21 + 0x9c) % iVar24 != (int)uVar3) ||
+        int64_t uVar16b = (int64_t)lVar21->field_0x9C / iVar24;
+        if (((int)uVar4 != lVar21->field_0x98 % iVar24) ||
+            ((int)uVar26 != lVar21->field_0x98 / iVar24) ||
+            (lVar21->field_0x9C % iVar24 != (int)uVar3) ||
             ((int)uVar16b != (int)uVar13)) {
             return false;   // AL = 0 (retail: uVar16b & ~0xff in RAX; callers test AL)
         }
     }
 
-    // RemovalTool_helper_d960 on the active desc's container (desc+0x38), if any
-    if (*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) != 0) {
-        int64_t tmp58 = 0;
-        RemovalCalc_helper_d960(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38),
-                                reinterpret_cast<void**>(&tmp58));
+    // RemovalTool_helper_d960 on the description's +0x38 template, if any
+    if (removalDesc->_ref38 != nullptr) {
+        void* tmp58 = nullptr;
+        RemovalCalc_helper_d960(removalDesc->_ref38, &tmp58);
         uVar22 = (int64_t)local_res18;
     }
 
-    uint32_t* puVar18 = *reinterpret_cast<uint32_t**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
-    uint32_t* local_a0 = puVar18;
+    Map* puVar18 = GameUpdateLoop::_singleton->m_game;
+    Map* local_a0 = puVar18;
     bool bVar5 = false;          // roadMeshDirty
-    uint64_t uVar16ret = 0;
 
     if ((int)uVar26 <= (int)uVar13) {
         do {
@@ -757,160 +733,113 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                     int iVar23 = (int)uVar20;  // current col
                     int iRow = iVar24;
                     int iCol = iVar23;
-                    int cellId = (int)(*puVar18 * iVar24 + iVar23);
-                    int64_t* cellSlot = reinterpret_cast<int64_t*>(
-                        (int64_t)cellId * 0x30 + *reinterpret_cast<int64_t*>(puVar18 + 0x20));
+                    int cellId = (int)(puVar18->size * iVar24 + iVar23);
+                    const MapCell* cellSlot = &puVar18->cells[cellId];
 
-                    // resolve the entity occupying this cell into local_e8 (IBP)
-                    int64_t local_e8;
-                    if (cellSlot[0] == 0) {
-                        if (cellSlot[1] == 0) {
-                            int64_t buf = 0;
-                            new (&buf) ::Object::InternalBasePtr(
-                                nullptr);   // B.3.3 bridge
-                            local_e8 = buf;
+                    // resolve the entity occupying this cell (blocker, else occupant)
+                    ComponentEntity* local_e8;
+                    if (cellSlot->blocker == nullptr) {
+                        if (cellSlot->occupant == nullptr) {
+                            local_e8 = nullptr;   // the null InternalBasePtr
                         } else {
-                            local_e8 = cellSlot[1];
+                            local_e8 = cellSlot->occupant;
                         }
                     } else {
-                        local_e8 = cellSlot[0];
+                        local_e8 = cellSlot->blocker;
                     }
-                    int64_t local_e0 = local_e8;
+                    ComponentEntity* local_e0 = local_e8;
 
-                    // ---- building/item removal (sub_48a0) ----
-                    if ((char)PlayerPath_Sub_48a0(reinterpret_cast<uintptr_t>(this), &local_e0, iCol, iRow) != 0) {
-                        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-                        void* cloned = nullptr;
-                        if (mem) cloned = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
-                            *reinterpret_cast<void**>(reinterpret_cast<int64_t>(removalDesc) + 0x38));
-                        int64_t local_90 = 0;
-                        new (&local_90) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(cloned));   // B.3.3 bridge
-                        void* comp = FindCompInEntity(local_90, s_tid_79e0);
-                        int64_t local_b0 = 0;
-                        new (&local_b0) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                        *reinterpret_cast<int16_t*>(local_b0 + 0x28) = (int16_t)iVar23;
-                        *reinterpret_cast<int16_t*>(local_b0 + 0x2a) = (int16_t)iVar24;
-                        *reinterpret_cast<int64_t*>(local_b0 + 0x2c) = 0x10001;
-                        int64_t local_70 = local_90;
-                        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>((uintptr_t)GameUpdateLoop::_singleton + 0xe8),
-                                                       &local_70,
-                                                       *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) + 0x20));
+                    // ---- field removal (0x1401048a0) ----
+                    if ((char)CanRemoveField(&local_e0, iCol, iRow) != 0) {
+                        PlaceRemovalMarker(removalDesc, iVar23, iVar24);
                         puVar18 = local_a0;
                     }
 
                     // ---- road removal (flag desc+0x40) ----
-                    int* piVar15 = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
-                    if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(removalDesc) + 0x40) != 0) {
-                        int cid = *piVar15 * iRow + iCol;
-                        int64_t cl = (int64_t)cid * 0x30 + *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(piVar15) + 0x80);
-                        uint32_t mask = 1u << (*reinterpret_cast<uint8_t*>(cl + 0x29) & 0x1f);
+                    Map* piVar15 = GameUpdateLoop::_singleton->m_game;
+                    if (removalDesc->_b40) {
+                        int cid = piVar15->size * iRow + iCol;
+                        const MapCell* cl = &piVar15->cells[cid];
+                        uint32_t mask = 1u << (cl->terrainType & 0x1f);
                         bool hit = false;
-                        if (((mask & 2) == 0) && ((mask & 1) == 0) && (*reinterpret_cast<int8_t*>(cl + 0x2a) == (int8_t)-1)) {
-                            int* bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(piVar15) + 0xe8); // piVar15+0x3a
+                        if (((mask & 2) == 0) && ((mask & 1) == 0) && (static_cast<int8_t>(cl->field_0x2A) == (int8_t)-1)) {
+                            const AvlNode28* bn = piVar15->field_0xE8;
                             while (bn != nullptr) {
-                                if (cid < *bn) {
-                                    bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(bn) + 0x10); // +4
-                                } else if (*bn < cid) {
-                                    bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(bn) + 0x18); // +6
+                                if (cid < bn->key) {
+                                    bn = bn->left;
+                                } else if (bn->key < cid) {
+                                    bn = bn->right;
                                 } else { hit = true; break; }
                             }
                         } else {
                             hit = true;
                         }
                         if (hit) {
-                            uint64_t rc = RemovalCalc_helper_c700(reinterpret_cast<uint32_t*>(piVar15),
-                                                                  *piVar15 * iRow + iCol);
+                            uint64_t rc = RemovalCalc_helper_c700(piVar15, piVar15->size * iRow + iCol);
                             if ((char)rc == 0) {
                                 bVar5 = true;
                             } else {
-                                void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-                                void* cloned = nullptr;
-                                if (mem) cloned = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
-                                    *reinterpret_cast<void**>(reinterpret_cast<int64_t>(removalDesc) + 0x38));
-                                int64_t local_a8 = 0;
-                                new (&local_a8) ::Object::InternalBasePtr(
-                                    reinterpret_cast<RtObject::Internal*>(cloned));   // B.3.3 bridge
-                                void* comp = FindCompInEntity(local_a8, s_tid_79e0);
-                                int64_t local_98 = 0;
-                                new (&local_98) ::Object::InternalBasePtr(
-                                    reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                                *reinterpret_cast<int16_t*>(local_98 + 0x28) = (int16_t)iVar23;
-                                *reinterpret_cast<int16_t*>(local_98 + 0x2a) = (int16_t)iVar24;
-                                *reinterpret_cast<int64_t*>(local_98 + 0x2c) = 0x10001;
-                                int64_t local_78 = local_a8;
-                                EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>((uintptr_t)GameUpdateLoop::_singleton + 0xe8),
-                                                               &local_78,
-                                                               *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) + 0x20));
+                                PlaceRemovalMarker(removalDesc, iVar23, iVar24);
                             }
                         }
                     }
 
-                    // ---- mark-for-removal of resident entity (sub_4770) ----
+                    // ---- mark-for-removal of the resident entity (0x140104770) ----
                     local_e0 = local_e8;
-                    if ((char)PlayerPath_Sub_4770(reinterpret_cast<uintptr_t>(this), &local_e0) != 0) {
-                        if (*reinterpret_cast<int64_t*>(local_e8 + 0x28) ==
-                            *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38)) {
+                    if ((char)CanRemoveRoad(&local_e0) != 0) {
+                        if (local_e8->_description == removalDesc->_ref38) {
                             local_e0 = local_e8;
-                            int64_t lst = *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0xe8);
-                            if ((*reinterpret_cast<uint32_t*>(local_e0 + 0x40) >> 10 & 1) == 0) {
-                                ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(local_e0));
-                                ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(lst + 0xd0),
-                                                              *reinterpret_cast<int*>(lst + 0xd8) + 1, &local_e0);
+                            EntityList* lst = GameUpdateLoop::_singleton->m_entityList;
+                            if ((local_e0->_entityFlags >> 10 & 1) == 0) {
+                                MarkEntityForRemoval(local_e0);
+                                ActHunt_DynArraySetCount_3110(&lst->removalList,
+                                                              lst->removalList.count + 1, &local_e0);
                             }
                         } else {
-                            void* comp = FindCompInEntity(local_e8, s_tid_75f0);
-                            int64_t local_80 = 0;
-                            new (&local_80) ::Object::InternalBasePtr(
-                                reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                            if (local_80 != 0) {
-                                int64_t local_60[16] = {0};
-                                int64_t* pi = reinterpret_cast<int64_t*>((PlayerPath_FindComponent_5780(static_cast<uintptr_t>(local_e8), local_60), local_60));
-                                if ((char)PlayerPath_Sub_11e710(static_cast<uintptr_t>(*pi)) != 0) {   // the door read AL
-                                    int64_t local_50[16] = {0};
-                                    int64_t* pi2 = reinterpret_cast<int64_t*>((PlayerPath_FindComponent_5780(static_cast<uintptr_t>(local_e8), local_50), local_50));
-                                    int64_t lr = *pi2;
-                                    int64_t local_88buf = 0;
-                                    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(lr + 0x10), &local_88buf);
-                                    int64_t* head = *reinterpret_cast<int64_t**>(local_88buf + 0x48);
+                            DestroyComponent* comp = local_e8->FindComponent<DestroyComponent>();
+                            if (comp != nullptr) {
+                                DestroyComponent* pi = local_e8->FindComponent<DestroyComponent>();
+                                if (pi->InRemovalState()) {   // 0x14011e710 (the door read AL)
+                                    DestroyComponent* lr = local_e8->FindComponent<DestroyComponent>();
+                                    StateMachineComponent* machine =
+                                        lr->_entity->FindComponent<StateMachineComponent>();
+                                    // the current node's slot 2 (+0x10): (node, &machine, active, 0)
+                                    // LEFT: the state-node slots are dispatched by offset here
+                                    // (ControllerComponent::Controller's slot names are block
+                                    // COMP's; this site keeps the tree's call form).
+                                    int64_t* head = reinterpret_cast<int64_t*>(machine->stateMachine.current);
                                     (*reinterpret_cast<void(**)(int64_t*, void*, int, int)>(*head + 0x10))(
-                                        head, reinterpret_cast<void*>(local_88buf + 0x48),
-                                        (int)*reinterpret_cast<char*>(local_88buf + 0x51), 0);
+                                        head, &machine->stateMachine,
+                                        (int)machine->stateMachine.activeState, 0);
                                 }
                             }
                         }
                     }
 
-                    // ---- StateMachine kick (sub_4670) ----
-                    int64_t local_b8 = local_e8;
-                    if ((char)PlayerPath_Sub_4670(reinterpret_cast<uintptr_t>(this), &local_b8) != 0) {
-                        void* comp = FindCompInEntity(local_e8, s_tid_75f0);
-                        int64_t local_c0 = 0;
-                        new (&local_c0) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                        RemovalCalc_StateMachine_dfa0(local_c0);
+                    // ---- StateMachine kick (0x140104670) ----
+                    ComponentEntity* local_b8 = local_e8;
+                    if ((char)CanRemoveBuilding(&local_b8) != 0) {
+                        DestroyComponent* comp = local_e8->FindComponent<DestroyComponent>();
+                        // LEFT: 0x14011dfa0 (below) still takes the component as an integer;
+                        // three outside callers bind that C signature.
+                        RemovalCalc_StateMachine_dfa0(reinterpret_cast<int64_t>(comp));
                     }
 
                     // ---- citizen-AI notify (flag desc+0x43) ----
                     local_e0 = local_e8;
-                    if ((*reinterpret_cast<char*>(reinterpret_cast<int64_t>(removalDesc) + 0x43) != 0) &&
-                        (local_e8 != 0)) {
-                        void* comp = FindCompInEntity(local_e0, s_tid_8070);
-                        int64_t local_d0 = 0;
-                        new (&local_d0) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-                        if (local_d0 != 0) {
-                            if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(local_d0))) {
-                                void* comp2 = FindCompInEntity(local_e8, s_tid_8070);
-                                int64_t local_d8 = 0;
-                                new (&local_d8) ::Object::InternalBasePtr(
-                                    reinterpret_cast<RtObject::Internal*>(comp2));   // B.3.3 bridge
-                                if (local_d8 != 0) {
-                                    int* bn = *reinterpret_cast<int**>(*reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x118) + 0x30);
+                    if (removalDesc->_b43 && (local_e8 != nullptr)) {
+                        WorkComponent* comp = local_e0->FindComponent<WorkComponent>();
+                        if (comp != nullptr) {
+                            if (comp->IsWorkPosted()) {   // 0x14012ead0
+                                WorkComponent* comp2 = local_e8->FindComponent<WorkComponent>();
+                                if (comp2 != nullptr) {
+                                    // LEFT: the scheduler's +0x30 work BST (WorkScheduler,
+                                    // block GAME-a) and 0x1400f9ad0's receiver are read as
+                                    // the tree's raw node walk.
+                                    WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
+                                    int* bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(sched) + 0x30);
                                     int64_t local_c8 = 0;
-                                    bool gotC8 = false;
-                                    int key = *reinterpret_cast<int*>(local_d8 + 0x28);
+                                    int key = comp2->workId;
                                     while (bn != nullptr) {
                                         if (key < *bn) {
                                             bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(bn) + 0x18); // +6
@@ -918,18 +847,11 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                                             bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(bn) + 0x20); // +8
                                         } else {
                                             local_c8 = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(bn) + 8); // bn+2
-                                            gotC8 = true;
                                             break;
                                         }
                                     }
-                                    if (!gotC8) {
-                                        new (&local_c8) ::Object::InternalBasePtr(
-                                            nullptr);   // B.3.3 bridge
-                                    }
                                     if (local_c8 != 0) {
-                                        RemovalCalc_CitizenAI_9ad0(
-                                            *reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x118),
-                                            *reinterpret_cast<int*>(local_d8 + 0x28));
+                                        RemovalCalc_CitizenAI_9ad0(reinterpret_cast<int64_t>(sched), comp2->workId);
                                     }
                                 }
                             }
@@ -946,15 +868,15 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
             uVar26 = (int64_t)(iVar24 + 1);
         } while ((int)uVar26 <= (int)uVar13);  // uVar26 == iVar24+1 here
 
-        uVar16ret = 0;
-        // Pf_RoadMeshRebuild_f370 is void; the door read a uint64_t nobody uses.
+        // 0x1400af370 is void; the door read a uint64_t nobody uses.
+        // LEFT: its C door (block ACT-b) takes the decal system as an integer.
         if (bVar5)
-            Pf_RoadMeshRebuild_f370(*reinterpret_cast<int64_t*>((uintptr_t)GameUpdateLoop::_singleton + 0x110), puVar18);
+            Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_worldGeometry),
+                                    reinterpret_cast<uint32_t*>(puVar18));
     }
 
     // FIX(lead-verify): faithful CONCAT71 — roadMesh return in the upper bytes, low byte 1.
     // ENDGAME B.3.8: slot 13 is `bool` (the callers test AL), so only the low byte is
-    // returned; the upper bytes retail leaves in RAX are not part of the slot's contract.
-    (void)uVar16ret;
+    // returned.
     return true;
 }

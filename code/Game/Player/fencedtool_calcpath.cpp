@@ -44,6 +44,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Player/exe_bodies.h"
+#include "Component/ComponentDescription.h"
+#include "Component/CreateFencedDescription.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
@@ -365,8 +367,7 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(masterIBP), &multiIBP);
 
     {
-        int64_t clearTmpl = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(fencedDesc) + 0x70);
+        const ComponentDescription* clearTmpl = fencedDesc->_ref70;
         DragPlacementTool_ClearPathEntities_1018d0(reinterpret_cast<void*>(masterIBP), minCol, minRow,
                                                    maxCol, maxRow, clearTmpl);
     }

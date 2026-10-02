@@ -42,140 +42,124 @@
 #include "Component/CreateDragDescription.h"
 #include "Player/exe_bodies.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
-
-// ============================================================
-// type-ID storage: 0x1401c7430 is CreateDragDescription's cell (Table 1).
-// (0x1401c75f0 / 0x1401c7d98 were cached here for the two finders below; those
-// are ComponentEntity::FindComponent<T>, which reads T's cell live as retail does.)
-// ============================================================
-static uint32_t s_pTid_7430_v;
-static const uint32_t* s_pTid_7430 = &s_pTid_7430_v;  // CreateDragDescription
-static bool s_tidInit = false;
-
-static void InitTypeIds() {
-    if (s_tidInit) return;
-    s_pTid_7430_v = CreateDragDescription::TypeId();
-    s_tidInit = true;
-}
+#include "Component/NaturalResourceComponent.h"
+#include "Component/CreateRemovalDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Player/RemovalTool.h"
+#include "Game/Map.h"
 
 // ============================================================
 // FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
 // These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
 // ============================================================
-// Reimpl of FUN_140005780 — FindComponent (type-ID DWORD_1401c75f0)
+// Reimpl of FUN_140005780 — FindComponent<DestroyComponent> (type-ID DWORD_1401c75f0)
 void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<DestroyComponent>(
         reinterpret_cast<ComponentEntity*>(entity)->FindComponent<DestroyComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
-// Reimpl of FUN_140003ea0 — FindComponent (type-ID DWORD_1401c7d98)
+// Reimpl of FUN_140003ea0 — FindComponent<StateMachineComponent> (type-ID DWORD_1401c7d98)
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<StateMachineComponent>(
         reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StateMachineComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
-// FUN_1400052c0 (FindComponent, type-ID DAT_1401c7b30) is ported elsewhere
-// (WorkBase_FindComponent_52c0, Work/exe_bodies.h). sub_48a0 needs it; call that
-// body so we stay 1:1 (do NOT duplicate the body).
-static void* FindComponent_AreaSelf(uintptr_t entity, void* retIBP) {
-    return WorkBase_FindComponent_52c0(entity, retIBP);
+// The state a StateMachine reports: the pending state, else the input (+0x52,
+// fallback +0x50 when negative) — the read 0x14011e710 / 0x140104670 inline.
+static int8_t RequestedState(const StateMachineComponent* machine) {
+    int8_t s = machine->stateMachine.pendingState;
+    if (s < 0) s = machine->stateMachine.currentInput;
+    return s;
 }
 
 // ============================================================
-// FUN_14011e710 — "is removable child" check.
-// CheckPtr(entity+0x10), FUN_140003ea0 on entity+0x10, then reads the result's
-// state byte (+0x52, fallback +0x50 when negative) and returns 1 iff it is
-// 3, 4, or 5.  Signature: undefined8 fn(longlong param_1)
+// FUN_14011e710 — DestroyComponent::InRemovalState ("is removable child" check).
+// CheckPtr(this+0x10), FindComponent<StateMachineComponent> (0x140003ea0) on the
+// owning entity, then reads the state byte (+0x52, fallback +0x50 when negative)
+// and returns 1 iff it is 3, 4, or 5. No null check on the found component:
+// retail has none. B4 PLAYER: a DestroyComponent member (it reads the component's
+// owner, +0x10).
 // ============================================================
-uint64_t PlayerPath_Sub_11e710(uintptr_t param_1) {
-    uint64_t resIBP[4] = {0};
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), resIBP);
+bool DestroyComponent::InRemovalState() {
+    StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
 
-    char cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x52);
-    if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x50);
-    if (cVar1 != 3) {
-        cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x52);
-        if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x50);
-        if (cVar1 != 4) {
-            cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x52);
-            if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(resIBP[0] + 0x50);
-            if (cVar1 != 5) return 0;
+    if (RequestedState(machine) != 3) {
+        if (RequestedState(machine) != 4) {
+            if (RequestedState(machine) != 5) return false;
         }
     }
-    return 1;
+    return true;
+}
+
+// B4 FORWARD: 2 outside callers (Component/firecomponent_ignite.cpp,
+// Component/workplacecomponent.cpp).
+uint64_t PlayerPath_Sub_11e710(uintptr_t param_1) {
+    return reinterpret_cast<DestroyComponent*>(param_1)->InRemovalState() ? 1 : 0;   // B4 FORWARD: the callers' spelling
 }
 
 // ============================================================
-// CharacterComponent_impl_f5d0 (0x14009f5d0) — single-cell terrain/height test
-// used by RemovalTool_sub_48a0. Validates cell (param_2,param_3) against
-// pass-mask param_4, ownership param_10, override flags param_8/param_9, then
-// runs CharacterComponent_impl_f3e0 (already registered) and compares the
-// returned height to param_5/param_6/param_7.
+// CharacterComponent_impl_f5d0 (0x14009f5d0) — single-cell terrain/height test.
+// Validates cell (param_2,param_3) against pass-mask param_4, ownership param_10
+// (the blocker's description), override flags param_8/param_9, then runs the
+// 0x14009f3e0 terrain query and compares the returned height to
+// param_5/param_6/param_7.
 //
 // Faithful 1:1 port. DAT_140172114 = 0.5f. Math::Scalar::Abs(x) == fabsf(x).
-// Cell stride 0x30; cell array base at byte +0x80 of the map grid (param_1).
-// f3e0 writes its result Vector3 (x,y,z) into outPos; the decompile's
-// 'local_28' (compared to param_5) is the y term, 'local_18' (compared with
-// param_7) is the z term.
-//
-// Signature: bool fn(int* p1, int p2, int p3, uint p4, float p5, float p6,
-//                    float p7, char p8, char p9, longlong p10)
+// f3e0 writes its result Vector3 (x,y,z) into outPos; 'local_28' (compared to
+// param_5) is the 5th-argument vector's z term.
+// The map's header (Map.h) is block GAME-b's: a free function over the typed map.
 // ============================================================
-// (CharacterComponent_impl_f3e0 0x14009f3e0 = Reimpl_MapGetTerrainPos, Game/exe_bodies.h.)
-
-bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t param_4,
+bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4,
                               float param_5, float param_6, float param_7,
-                              char param_8, char param_9, int64_t param_10) {
+                              char param_8, char param_9, const ComponentDescription* param_10) {
     const float kHalf = 0.5f;  // DAT_140172114
-    uintptr_t p1 = reinterpret_cast<uintptr_t>(param_1);
 
-    if (!((-1 < param_2) && (param_2 < *param_1) && (-1 < param_3) && (param_3 < *param_1)))
+    if (!((-1 < param_2) && (param_2 < param_1->size) && (-1 < param_3) && (param_3 < param_1->size)))
         return false;
 
-    int iVar2 = (*param_1) * param_3 + param_2;
-    uintptr_t cell = static_cast<int64_t>(iVar2) * 0x30 + *reinterpret_cast<int64_t*>(p1 + 0x80);
+    int iVar2 = param_1->size * param_3 + param_2;
+    const MapCell* cell = &param_1->cells[iVar2];
 
-    uint8_t passByte = *reinterpret_cast<uint8_t*>(cell + 0x29);
+    uint8_t passByte = cell->terrainType;
     if ((~param_4 & (1u << (passByte & 0x1f))) != 0)
         return false;
 
-    int64_t owner = *reinterpret_cast<int64_t*>(cell);  // *self
+    const ComponentEntity* owner = cell->blocker;
     bool ownOk;
-    if (param_10 != 0) {
-        if (owner == 0) {
+    if (param_10 != nullptr) {
+        if (owner == nullptr) {
             ownOk = true;
         } else {
-            owner = *reinterpret_cast<int64_t*>(cell);
-            ownOk = (*reinterpret_cast<int64_t*>(owner + 0x28) == param_10);
+            owner = cell->blocker;
+            ownOk = (owner->_description == param_10);
         }
     } else {
         ownOk = false;
     }
-    if (!(ownOk || (param_8 != 0) || (*reinterpret_cast<int64_t*>(cell) == 0)))
+    if (!(ownOk || (param_8 != 0) || (cell->blocker == nullptr)))
         return false;
 
-    // (char)self[5] -> byte at cell+0x28
-    char cellFlag = *reinterpret_cast<char*>(cell + 0x28);
+    // the footprint count byte at cell+0x28
+    char cellFlag = static_cast<char>(cell->footprintCount);
     if (!((param_9 != 0) || (cellFlag == 0)))
         return false;
 
     // Contiguous Vector3 locals. f3e0 writes a Vector3 to BOTH the main output
     // (2nd arg, = decompile local_20) AND the 5th-arg buffer (= local_30); the
-    // 5th buffer must be a full Vector3 (3 floats), since local_28 (compared with
-    // param_5) is its 3rd float ([RSP+0x50] = local_30+8). Verified from disasm
+    // 5th buffer must be a full Vector3 (3 floats). Verified from disasm
     // 0x14009f6ea-0x14009f725.
     float outPos[3]   = {0.0f, 0.0f, 0.0f};   // main output vec (local_20)
     float queryPos[2];                         // input pos (local_40/local_3c)
     float extraOut[3] = {0.0f, 0.0f, 0.0f};    // 5th-arg output vec (local_30)
 
-    float base = (float)(*param_1 >> 1) - kHalf;
-    queryPos[0] = (float)(iVar2 % *param_1) - base;
-    queryPos[1] = (float)(iVar2 / *param_1) - base;
+    float base = (float)(param_1->size >> 1) - kHalf;
+    queryPos[0] = (float)(iVar2 % param_1->size) - base;
+    queryPos[1] = (float)(iVar2 / param_1->size) - base;
 
     Reimpl_MapGetTerrainPos(param_1, outPos, queryPos, '\0', extraOut);
 
     // param_5 ([RSP+0xa0]) <= extraOut.z ([RSP+0x50]); then outPos.z ([RSP+0x60])
-    // - param_7, Abs, <= param_6 ([RSP+0xa8]).  (P4 draft used outPos[1] here — wrong lane.)
+    // - param_7, Abs, <= param_6 ([RSP+0xa8]).
     if (param_5 <= extraOut[2]) {
         float diff = outPos[2] - param_7;
         return fabsf(diff) <= param_6;
@@ -183,39 +167,37 @@ bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t p
     return false;
 }
 
+// B4 FORWARD: 3 outside callers (Component/growthcomponent.cpp,
+// Component/spawncomponent.cpp, Work/foresterwork.cpp) pass the map as int*.
+bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t param_4,
+                              float param_5, float param_6, float param_7,
+                              char param_8, char param_9, int64_t param_10) {
+    return PlayerPath_CharComp_f5d0(reinterpret_cast<Map*>(param_1),   // B4 FORWARD: the callers' spelling
+                                    param_2, param_3, param_4, param_5, param_6, param_7,
+                                    param_8, param_9,
+                                    reinterpret_cast<const ComponentDescription*>(param_10));   // B4 FORWARD
+}
+
 // ============================================================
-// RemovalTool_sub_4670 (0x140104670) — building-removal eligibility.
-// self+0x38 -> removalDesc; checks flag desc[0x41]; if entity present and its
-// owner (+0x28) differs from desc[0x38], finds the DestroyComponent
-// (FUN_140005780) and the MapComponent variant (FUN_140003ea0), then reads the
-// state byte (+0x52 / +0x50 fallback) and returns 1 when state is not 3/4/5.
-// Signature: ulonglong fn(longlong param_1, InternalBasePtr* param_2)
+// RemovalTool::CanRemoveBuilding (0x140104670) — building-removal eligibility.
+// this+0x38 -> CreateRemovalDescription; checks flag +0x41; if the entity is
+// present and its description differs from the description's +0x38 template,
+// finds the DestroyComponent (0x140005780) and the StateMachineComponent
+// (0x140003ea0), then reads the state byte (+0x52 / +0x50 fallback) and returns 1
+// when the state is not 3/4/5.
 // ============================================================
-uint64_t PlayerPath_Sub_4670(uintptr_t param_1, void* param_2) {
-    uintptr_t desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-    void* result = nullptr;  // pIVar2
+uint64_t RemovalTool::CanRemoveBuilding(ComponentEntity* const* param_2) {
+    if (removalDesc->_b41 && (*param_2 != nullptr)) {
+        ComponentEntity* entity = *param_2;
+        if (entity->_description != removalDesc->_ref38) {
+            DestroyComponent* destroy = (*param_2)->FindComponent<DestroyComponent>();
 
-    if ((*reinterpret_cast<uint8_t*>(desc + 0x41) != 0) &&
-        (*reinterpret_cast<int64_t*>(param_2) != 0)) {
-        desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-        uintptr_t entity = *reinterpret_cast<uintptr_t*>(param_2);
-        if (*reinterpret_cast<int64_t*>(entity + 0x28) != *reinterpret_cast<int64_t*>(desc + 0x38)) {
-            uint64_t ibp18[2] = {0};
-            PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(param_2), ibp18);
+            StateMachineComponent* machine = (*param_2)->FindComponent<StateMachineComponent>();
 
-            uint64_t ibpRes = 0;
-            PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_2), &ibpRes);
-
-            if (ibp18[0] != 0) {
-                char cVar1 = *reinterpret_cast<char*>(ibpRes + 0x52);
-                if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(ibpRes + 0x50);
-                if (cVar1 != 3) {
-                    cVar1 = *reinterpret_cast<char*>(ibpRes + 0x52);
-                    if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(ibpRes + 0x50);
-                    if (cVar1 != 4) {
-                        cVar1 = *reinterpret_cast<char*>(ibpRes + 0x52);
-                        if (cVar1 < 0) cVar1 = *reinterpret_cast<char*>(ibpRes + 0x50);
-                        if (cVar1 != 5) {
+            if (destroy != nullptr) {
+                if (RequestedState(machine) != 3) {
+                    if (RequestedState(machine) != 4) {
+                        if (RequestedState(machine) != 5) {
                             return 1;
                         }
                     }
@@ -223,118 +205,97 @@ uint64_t PlayerPath_Sub_4670(uintptr_t param_1, void* param_2) {
             }
         }
     }
-    return reinterpret_cast<uint64_t>(result) & 0xffffffffffffff00ull;
+    return 0;
 }
 
 // ============================================================
-// RemovalTool_sub_4770 (0x140104770) — road/path-removal eligibility.
-// self+0x38 -> removalDesc; checks flag desc[0x42]; owner-compare; if the
-// entity's DestroyComponent (FUN_140005780) is present, runs FUN_14011e710 on
-// it and returns 1 when that says removable (or owner matches).
-// Signature: undefined8 fn(longlong param_1, InternalBasePtr* param_2)
+// RemovalTool::CanRemoveRoad (0x140104770) — road/path-removal eligibility.
+// this+0x38 -> CreateRemovalDescription; checks flag +0x42; template compare; if
+// the entity's DestroyComponent (0x140005780) is present, runs 0x14011e710 on it
+// and returns 1 when that says removable (or the template matches).
 // ============================================================
-uint64_t PlayerPath_Sub_4770(uintptr_t param_1, void* param_2) {
-    uintptr_t desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-    void* ret = nullptr;  // pIVar1
-
-    if ((*reinterpret_cast<uint8_t*>(desc + 0x42) != 0) &&
-        (*reinterpret_cast<int64_t*>(param_2) != 0)) {
-        desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-        uintptr_t entity = *reinterpret_cast<uintptr_t*>(param_2);
-        if (*reinterpret_cast<int64_t*>(entity + 0x28) == *reinterpret_cast<int64_t*>(desc + 0x38)) {
+uint64_t RemovalTool::CanRemoveRoad(ComponentEntity* const* param_2) {
+    if (removalDesc->_b42 && (*param_2 != nullptr)) {
+        ComponentEntity* entity = *param_2;
+        if (entity->_description == removalDesc->_ref38) {
             return 1;  // LAB_1401047aa
         }
-        uint64_t comp[8] = {0};
-        PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(param_2), comp);
-        if (comp[0] != 0) {
-            uint64_t comp2[8] = {0};
-            PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(param_2), comp2);
-            uint64_t r = PlayerPath_Sub_11e710(comp2[0]);
-            if ((char)r != 0) return 1;  // goto LAB_1401047aa
-            ret = reinterpret_cast<void*>(r);
+        DestroyComponent* comp = (*param_2)->FindComponent<DestroyComponent>();
+        if (comp != nullptr) {
+            DestroyComponent* comp2 = (*param_2)->FindComponent<DestroyComponent>();
+            if (comp2->InRemovalState()) return 1;  // goto LAB_1401047aa
         }
     }
-    return reinterpret_cast<uint64_t>(ret) & 0xffffffffffffff00ull;
+    return 0;
 }
 
 // ============================================================
-// RemovalTool_sub_48a0 (0x1401048a0) — crop/field-area removability check.
-// Finds the crop description component (DAT_1401c7430) on self+0x38; if present,
-// the desc flag (+0x20) set, and the target entity (param_2) belongs to this
-// field (its area-self component FUN_1400052c0 matches a slot at desc+0x28), it
-// tests the single field cell (param_3,param_4) via CharacterComponent_impl_f5d0
-// (0x14009f5d0). Returns 1 when the cell passes.
+// RemovalTool::CanRemoveField (0x1401048a0) — crop/field-area removability check.
+// Finds the CreateDragDescription (cell 0x1401c7430) among the sub-descriptions of
+// the removal description's +0x38 template; if present, the description's flag
+// (+0x20) set, and the target entity (param_2) carries a NaturalResourceComponent
+// (0x1400052c0) and its description is one of the removal description's +0x28
+// list (or that list is empty), it tests the single cell (param_3,param_4) via
+// 0x14009f5d0. Returns 1 when the cell passes.
 //
 // Faithful 1:1 port. DAT_140172208 = 100.0f. The original's string-cleanup
-// branch operates on zero-initialized locals; reproduced as null-safe frees.
-// Signature: ulonglong fn(longlong p1, InternalBasePtr* p2, int p3, int p4)
+// branch operates on zero-initialized locals; reproduced as a null free.
 // ============================================================
-uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int param_4) {
-    InitTypeIds();
+uint64_t RemovalTool::CanRemoveField(ComponentEntity* const* param_2, int param_3, int param_4) {
+    const uint32_t tidDrag = CreateDragDescription::TypeId();
     const float kHundred = 100.0f;  // DAT_140172208
 
-    // Ghidra's 'g_pGameWorldSingleton' is the GameWorld base pointer; our extern
-    // is void** holding the slot, so deref once: *g_pGameWorldSingleton.
-    int* local_78 = *reinterpret_cast<int**>((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
+    Map* local_78 = GameUpdateLoop::_singleton->m_game;
 
-    // Scan self+0x38 entity's component list for the crop-desc type id.
-    void* matched = nullptr;  // pvVar9
+    // Scan the +0x38 template's sub-descriptions for the CreateDragDescription.
+    CreateDragDescription* matched = nullptr;  // pvVar9
     {
-        uintptr_t selfEnt = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-        if (s_pTid_7430 && *reinterpret_cast<int64_t*>(selfEnt + 0x38) != 0) {
-            uintptr_t lst = *reinterpret_cast<uintptr_t*>(selfEnt + 0x38);
-            int n = *reinterpret_cast<int*>(lst + 0x30);
+        const ComponentDescription* lst = removalDesc->_ref38;
+        if (lst != nullptr) {
+            int n = lst->_subDescCount;
             int idx = 0;
-            uintptr_t cur = 0;
             while (idx < n) {
-                void* comp = *reinterpret_cast<void**>(cur + *reinterpret_cast<int64_t*>(lst + 0x28));
-                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                if (t == *s_pTid_7430) {
-                    void* c = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lst + 0x28) + (int64_t)idx * 8);
-                    if (Object::IsDerivedFromNullSafe(c, *s_pTid_7430)) matched = c;
+                Description* comp = lst->_subDescs[idx];
+                if (comp->Type() == tidDrag) {
+                    Description* c = lst->_subDescs[idx];
+                    if (Object::IsDerivedFromNullSafe(c, tidDrag))
+                        matched = static_cast<CreateDragDescription*>(c);
                     break;
                 }
                 idx++;
-                cur += 8;
             }
         }
     }
 
-    uintptr_t desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-    void* retFail = nullptr;  // pIVar4, masked low byte on fail
-
-    if ((*reinterpret_cast<uint8_t*>(desc + 0x20) != 0) && (matched != nullptr) &&
-        (*reinterpret_cast<int64_t*>(param_2) != 0)) {
-        uint64_t ibp88[4] = {0};
-        FindComponent_AreaSelf(*reinterpret_cast<uintptr_t*>(param_2), ibp88);
-        if (ibp88[0] != 0) {
-            desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-            int compCount = *reinterpret_cast<int*>(desc + 0x30);
+    if (removalDesc->_b20 && (matched != nullptr) && (*param_2 != nullptr)) {
+        NaturalResourceComponent* resource = (*param_2)->FindComponent<NaturalResourceComponent>();
+        if (resource != nullptr) {
+            int compCount = removalDesc->_refCount;
             int iVar12 = compCount;  // captured before the loop (decompile semantics)
 
             // Determine whether param_2's entity belongs to this field.
+            // LEFT: CreateRemovalDescription::_refs (+0x28) is `void*` raw Array storage
+            // in block COMP-c's header (its Serialize resizes it through GameColl::AsArray).
             bool atWorkBlock = false;
             {
                 int idx = 0;
-                uintptr_t cur = 0;
                 while (idx < compCount) {
-                    int64_t lv = *reinterpret_cast<int64_t*>(cur + *reinterpret_cast<int64_t*>(desc + 0x28));
-                    if (lv == *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x28)) {
+                    const ComponentDescription* lv =
+                        reinterpret_cast<ComponentDescription* const*>(removalDesc->_refs)[idx];
+                    if (lv == (*param_2)->_description) {
                         atWorkBlock = true;  // LAB_140104a0f
                         break;
                     }
                     idx++;
-                    desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
-                    compCount = *reinterpret_cast<int*>(desc + 0x30);
-                    cur += 8;
+                    compCount = removalDesc->_refCount;
                 }
             }
             if (!atWorkBlock && iVar12 == 0) atWorkBlock = true;  // 'if (iVar12 == 0) goto LAB_140104a0f'
 
             bool ok = false;
             if (atWorkBlock) {
-                char cVar1 = *reinterpret_cast<char*>((uintptr_t)matched + 0x24);   // override flag
-                uint32_t passMask = *reinterpret_cast<uint32_t*>((uintptr_t)matched + 0x20);
+                char cVar1 = static_cast<char>(matched->_b24);   // override flag
+                uint32_t passMask = matched->_shape;
 
                 // The y/x loops each run exactly once: y in [param_4,param_4],
                 // x in [param_3,param_3].
@@ -343,7 +304,7 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
                     for (int x = param_3; x < param_3 + 1; x++) {
                         // param_9 (string '.' check) is always false: local_90==0.
                         bool cell = PlayerPath_CharComp_f5d0(
-                            local_78, x, y, passMask, 0.0f, kHundred, 0.0f, cVar1, '\0', 0);
+                            local_78, x, y, passMask, 0.0f, kHundred, 0.0f, cVar1, '\0', nullptr);
                         if (!cell) { all = false; break; }
                     }
                     if (!all) break;
@@ -352,11 +313,10 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
             }
 
             // Original cleanup branch (string state) runs on zero locals.
-            // local_a0 / local_88 / local_90 are all 0 -> null-safe.
             System::MemoryAllocator::MemFree(nullptr);
 
             if (ok) return 1;
         }
     }
-    return reinterpret_cast<uint64_t>(retFail) & 0xffffffffffffff00ull;
+    return 0;
 }
