@@ -121,13 +121,13 @@ Tornado::Tornado() {
     _particleScaleSize   = 30.0f;   // 0x41f00000  clamped into [start, end]
     // Two System::Colors -- START and END tint -- all-0xFF = opaque white at both
     // ends; Update divides their bytes by 255.0 (DAT_14017222c).
-    _startColor = 0xFFFFFFFFu;
-    _endColor   = 0xFFFFFFFFu;
+    _startColor._value = 0xFFFFFFFFu;
+    _endColor._value   = 0xFFFFFFFFu;
     // Two System::Time fields seeded with g_fUVScale (= 1.0f): fade-in and fade-out.
     {
         float uv = kRdata_14017214c;   // 0x14017214c
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&_particleFadeIn), uv);
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&_particleFadeOut), uv);
+        RtSystem_Time_Ctor(&_particleFadeIn, uv);
+        RtSystem_Time_Ctor(&_particleFadeOut, uv);
     }
 }
 
@@ -164,24 +164,23 @@ bool Tornado::Serialize(void* stream) {
     (void)Graphics::Particle::Serialize(stream);
 
     // Caller batch CB6: the fields are read by name (was `s + off` over `this`).
-    alignas(8) uint8_t ser[32] = {};
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (slot 5's stream is void*)  // LEFT: the virtual's void* stream
 
     // +0x48 .. +0x6c in retail's stream order (+0x54 comes later).
     for (float* f : {&_tornadoWidth, &_tornadoHeight, &_funnelWidth, &_particleSpinSpeed,
                      &_emissionRate, &_particleLifeTime, &_particleLifeTimeTol,
                      &_particleStartSize, &_particleEndSize})
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*f, nullptr);   // B.3.4 bridge
+        ser.Serialize(*f, nullptr);
 
-    reinterpret_cast<System::Color*>(&_startColor)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // +0x74 start tint  B.3.4b bridge
-    reinterpret_cast<System::Color*>(&_endColor)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));     // +0x78 end tint  B.3.4b bridge
-    reinterpret_cast<System::Time*>(&_particleFadeIn)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));    // +0x80 fade in  B.3.4b bridge
-    reinterpret_cast<System::Time*>(&_particleFadeOut)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // +0x88 fade out  B.3.4b bridge
+    _startColor.Serialize(ser);        // +0x74 start tint
+    _endColor.Serialize(ser);          // +0x78 end tint
+    _particleFadeIn.Serialize(ser);    // +0x80 fade in
+    _particleFadeOut.Serialize(ser);   // +0x88 fade out
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(_funnelSpin, nullptr);          // +0x54  B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(_particleScaleSize, nullptr);   // +0x70  B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_funnelSpin, nullptr);          // +0x54
+    ser.Serialize(_particleScaleSize, nullptr);   // +0x70
+    }   // ~Serializer, where retail destroys it
 
     // Outcome, once. The ctor defaults are 4.0 / 20.0 / 5.0 at +0x48/+0x4c/+0x50; if the
     // .rsc body was really read these become its values (Tornado.rsc: 20 / 75 / 26).
@@ -227,7 +226,7 @@ Object::External* Tornado::Construct() {
 // ---------------------------------------------------------------------------
 // Graphics::ParticleInstance() and the 0x1401601e0 stamp are the compiler's.
 TornadoInstance::TornadoInstance() {
-    *reinterpret_cast<int32_t*>(&_funnelSpinDegrees) = 0;   // retail: dword 0 at +0xd8
+    _funnelSpinDegrees = 0.0f;   // retail: dword 0 at +0xd8 (the bits of 0.0f)
 }
 
 // ---------------------------------------------------------------------------
@@ -262,36 +261,13 @@ TornadoInstance::TornadoInstance() {
 // Tornado.rsc uses greys (0xFFC0C0C0 / 0x80909090) so the run cannot distinguish the
 // two; only the alpha half is proven, by the measured 1.00 -> 0.50 fade.
 // ---------------------------------------------------------------------------
+// The pool is ParticleInstance::_boundsPtr, RtGraphics::ParticleBoundsRecord
+// (graphics/ParticleInstance.h): the Box handed to SetBounds, the 0x58-byte
+// ParticleRecord array (+0x18; its _size +0x20 is the pool's capacity), the live
+// count +0x28 and the two tick accumulators +0x30 / +0x38.
 namespace {
-struct TornadoParticle {          // 0x58, stride proven by `imul $0x58`
-    int64_t lifetime;             // +0x00
-    int64_t age;                  // +0x08
-    float   pos[3];               // +0x10
-    float   prevPos[3];           // +0x1c
-    float   color[3];             // +0x28
-    float   prevColor[3];         // +0x34
-    float   alpha;                // +0x40
-    float   prevAlpha;            // +0x44
-    float   angle;                // +0x48
-    float   prevAngle;            // +0x4c
-    float   size;                 // +0x50
-    float   prevSize;             // +0x54
-};
-static_assert(sizeof(TornadoParticle) == 0x58, "TornadoParticle stride");
-static_assert(offsetof(TornadoParticle, angle) == 0x48, "TornadoParticle angle");
-
-struct TornadoPool {
-    float            box[6];      // +0x00  min xyz / max xyz -- IS the Box for SetBounds
-    TornadoParticle* items;       // +0x18
-    int32_t          maxCount;    // +0x20
-    int32_t          pad24;
-    int32_t          liveCount;   // +0x28
-    int32_t          pad2c;
-    int64_t          spawnAccum;  // +0x30
-    int64_t          totalAccum;  // +0x38
-};
-static_assert(offsetof(TornadoPool, items) == 0x18, "TornadoPool items");
-static_assert(offsetof(TornadoPool, spawnAccum) == 0x30, "TornadoPool spawnAccum");
+using TornadoParticle = RtGraphics::ParticleRecord;
+using TornadoPool     = RtGraphics::ParticleBoundsRecord;
 
 // Runtime leaves, called by name (B3R): Object::Base::IsDerivedFrom (the member;
 // `resource` is tested non-null first), ??0Time@System@@QEAA@M@Z -> RtSystem_Time_Ctor
@@ -306,7 +282,6 @@ void TornadoInstance::Update(const System::Time& time) {
 
     // Caller batch CB6: the instance's fields (ParticleInstance's +0xc0/+0xc8, the
     // class's +0xd8) and the resource's (a proved Tornado, below) are read by name.
-    const int64_t* dtPtr = reinterpret_cast<const int64_t*>(&time);   // B.3.4b bridge: Time is one int64 tick count
 
     // Base ParticleInstance::Update is the frame gate: it returns false when this
     // instance has already been stepped this frame.
@@ -315,8 +290,8 @@ void TornadoInstance::Update(const System::Time& time) {
     // overload, not slot 1's `Update(const Time&)`).
     if (!Graphics::ParticleInstance::Update()) return;
 
-    void*        resource = _resource;                                  // +0xc0
-    TornadoPool* pool     = reinterpret_cast<TornadoPool*>(_boundsPtr);  // +0xc8
+    Graphics::Particle* resource = _resource;                          // +0xc0
+    TornadoPool*        pool     = _boundsPtr;                         // +0xc8
 
     // Retail: `cmovne rbx,rsi` -- rsi is the resource only when IsDerivedFrom(Tornado)
     // holds, else 0, and every later read (`divss 0x5c(%rsi)`) would fault on it. In
@@ -325,52 +300,56 @@ void TornadoInstance::Update(const System::Time& time) {
     // this is a DELIBERATE deviation: bail loudly instead of faulting on a null we
     // manufactured ourselves.
     const uint32_t tornadoTid = Tornado::TypeId();
-    if (!resource || !reinterpret_cast<const Object::Base*>(resource)->IsDerivedFrom(tornadoTid)) {   // B.3.x bridge
+    if (!resource || !resource->IsDerivedFrom(tornadoTid)) {
         if (!s_updateBailSaid.exchange(true)) {
             fprintf(stderr, "[Tornado/particle] Update bailed: resource=%p is not a Tornado "
                     "(tid=%u). Retail cannot reach this -- Tornado::Type() must "
-                    "be reporting the base Particle again.\n", resource, tornadoTid);
+                    "be reporting the base Particle again.\n", static_cast<void*>(resource), tornadoTid);
             fflush(stderr);
         }
         return;
     }
     const Tornado* const res = static_cast<const Tornado*>(resource);   // proved just above
 
-    const int64_t dt = *dtPtr;
-    pool->spawnAccum += dt;
-    pool->totalAccum += dt;
+    const int64_t dt = time._ticks;
+    pool->_spawnAccum += dt;
+    pool->_totalTicks += dt;
 
     // ---- spawn ------------------------------------------------------------
-    int64_t period = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&period), 1.0f / res->_emissionRate);       // 1 / _emissionRate, in ticks
+    System::Time periodTime{0};
+    RtSystem_Time_Ctor(&periodTime, 1.0f / res->_emissionRate);       // 1 / _emissionRate, in ticks
+    const int64_t period = periodTime._ticks;
 
-    const uint8_t* cStart = reinterpret_cast<const uint8_t*>(&res->_startColor);   // +0x74
-    const uint8_t* cEnd   = reinterpret_cast<const uint8_t*>(&res->_endColor);     // +0x78
+    // The Colors' bytes B, G, R, A (+0..+3 of the packed 0xAARRGGBB value).
+    const uint32_t cStartV = res->_startColor._value;   // +0x74
+    const uint32_t cEndV   = res->_endColor._value;     // +0x78
+    const uint8_t cStart[4] = { uint8_t(cStartV), uint8_t(cStartV >> 8), uint8_t(cStartV >> 16), uint8_t(cStartV >> 24) };
+    const uint8_t cEnd[4]   = { uint8_t(cEndV),   uint8_t(cEndV >> 8),   uint8_t(cEndV >> 16),   uint8_t(cEndV >> 24) };
 
-    while (pool->spawnAccum > period) {
-        if (pool->liveCount >= pool->maxCount) break;
-        pool->spawnAccum -= period;
+    while (pool->_spawnAccum > period) {
+        if (pool->_liveCount >= pool->_records._size) break;
+        pool->_spawnAccum -= period;
 
-        TornadoParticle* p = &pool->items[pool->liveCount++];
-        p->age = 0;
+        TornadoParticle* p = &pool->_records._data[pool->_liveCount++];
+        p->_age = 0;
 
-        int64_t life = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&life), res->_particleLifeTime + Graphics::Particle::_rng.RandFloatTol() * res->_particleLifeTimeTol);
-        p->lifetime = life;
+        System::Time life{0};
+        RtSystem_Time_Ctor(&life, res->_particleLifeTime + Graphics::Particle::_rng.RandFloatTol() * res->_particleLifeTimeTol);
+        p->_lifetime = life._ticks;
 
-        p->alpha = p->prevAlpha = 0.0f;                 // retail: one 8-byte zero at +0x40
+        p->_alpha = p->_alphaPrev = 0.0f;               // retail: one 8-byte zero at +0x40
 
-        p->color[0] = p->prevColor[0] = cStart[2] / 255.0f;
-        p->color[1] = p->prevColor[1] = cStart[1] / 255.0f;
-        p->color[2] = p->prevColor[2] = cStart[0] / 255.0f;
+        p->_color.x = p->_colorPrev.x = cStart[2] / 255.0f;
+        p->_color.y = p->_colorPrev.y = cStart[1] / 255.0f;
+        p->_color.z = p->_colorPrev.z = cStart[0] / 255.0f;
 
         Math::Vector3 z((Math::Scalar(0.0f)));   // Vector3(const Scalar&) splat
-        p->pos[0] = p->prevPos[0] = z.x;
-        p->pos[1] = p->prevPos[1] = z.y;
-        p->pos[2] = p->prevPos[2] = z.z;
+        p->_pos.x = p->_posPrev.x = z.x;
+        p->_pos.y = p->_posPrev.y = z.y;
+        p->_pos.z = p->_posPrev.z = z.z;
 
-        p->angle = p->prevAngle = Graphics::Particle::_rng.RandFloatTol() * 180.0f;
-        p->size  = p->prevSize  = res->_particleStartSize;      // _particleStartSize
+        p->_rot  = p->_rotPrev  = Graphics::Particle::_rng.RandFloatTol() * 180.0f;
+        p->_size = p->_sizePrev = res->_particleStartSize;      // _particleStartSize
     }
 
     // ---- the growth box is rebuilt from scratch every frame, starting at the
@@ -378,16 +357,16 @@ void TornadoInstance::Update(const System::Time& time) {
     {
         Math::Vector3 z1((Math::Scalar(0.0f)));
         Math::Vector3 z2((Math::Scalar(0.0f)));
-        pool->box[0] = z2.x; pool->box[1] = z2.y; pool->box[2] = z2.z;
-        pool->box[3] = z1.x; pool->box[4] = z1.y; pool->box[5] = z1.z;
+        pool->_bounds.min.x = z2.x; pool->_bounds.min.y = z2.y; pool->_bounds.min.z = z2.z;
+        pool->_bounds.max.x = z1.x; pool->_bounds.max.y = z1.y; pool->_bounds.max.z = z1.z;
     }
 
-    const float startColor[3] = { cStart[2] / 255.0f, cStart[1] / 255.0f, cStart[0] / 255.0f };
-    const float endColor[3]   = { cEnd[2]   / 255.0f, cEnd[1]   / 255.0f, cEnd[0]   / 255.0f };
+    const Math::Vector3 startColor(cStart[2] / 255.0f, cStart[1] / 255.0f, cStart[0] / 255.0f);
+    const Math::Vector3 endColor(cEnd[2]   / 255.0f, cEnd[1]   / 255.0f, cEnd[0]   / 255.0f);
     const float startAlpha    = cStart[3] / 255.0f;
     const float endAlpha      = cEnd[3]   / 255.0f;
 
-    const float dtSec = reinterpret_cast<const System::Time*>(dtPtr)->AsSeconds();   // B.3.4b bridge
+    const float dtSec = time.AsSeconds();
 
     // The whole funnel rotates: +0xd8 accumulates degrees at the resource's spin rate.
     const float spin = _funnelSpinDegrees + dtSec * res->_funnelSpin;  // +0xd8, _funnelSpin
@@ -407,14 +386,15 @@ void TornadoInstance::Update(const System::Time& time) {
     const float sizeFloor  = res->_particleStartSize;   // _particleStartSize -- clamp LOW
     const float sizeCeil   = res->_particleEndSize;   // _particleEndSize   -- clamp HIGH
     const float sizeScale  = res->_particleScaleSize;   // _particleScaleSize
-    const int64_t fadeOutTicks = res->_particleFadeOut;   // +0x88
+    const int64_t fadeOutTicks = res->_particleFadeOut._ticks;   // +0x88
 
     // ---- per particle, walked BACKWARDS (retail counts down from liveCount-1) ----
-    for (int i = pool->liveCount - 1; i >= 0; --i) {
-        TornadoParticle* p = &pool->items[i];
-        p->age += dt;
+    for (int i = pool->_liveCount - 1; i >= 0; --i) {
+        TornadoParticle* p = &pool->_records._data[i];
+        p->_age += dt;
 
-        const float t = reinterpret_cast<const System::Time*>(&p->age)->AsSeconds() / reinterpret_cast<const System::Time*>(&p->lifetime)->AsSeconds();   // B.3.4b bridge
+        // The record's two tick counts are System::Time values (ParticleRecord keeps them int64).
+        const float t = System::Time{p->_age}.AsSeconds() / System::Time{p->_lifetime}.AsSeconds();
 
         // Lateral swirl: a cosine wobble that grows with age, biased so young
         // particles start inside the funnel (the -0.33 is retail's).
@@ -433,59 +413,57 @@ void TornadoInstance::Update(const System::Time& time) {
         const float sinA = sinf(a);
         const float cosA = cosf(a);
 
-        p->prevPos[0] = p->pos[0];
-        p->prevPos[1] = p->pos[1];
-        p->prevPos[2] = p->pos[2];
+        p->_posPrev.x = p->_pos.x;
+        p->_posPrev.y = p->_pos.y;
+        p->_posPrev.z = p->_pos.z;
 
         const float px = width * (sinA * rad) + offX;
         const float py = width * (cosA * rad) + offY;
         // The billboard's own spin angle also lifts it: retail folds |angle|/40 into z.
-        const float pz = fabsf(p->angle) / 40.0f + t * height;
+        const float pz = fabsf(p->_rot) / 40.0f + t * height;
 
-        p->pos[0] = px;
-        p->pos[1] = py;
-        p->pos[2] = pz;
+        p->_pos.x = px;
+        p->_pos.y = py;
+        p->_pos.z = pz;
 
         {
-            const float v[3] = { px, py, pz };
-            float retBox[6];
-            const float* nb = reinterpret_cast<const float*>(RtVolume_Box_Extend(
-                reinterpret_cast<const ::Box*>(pool->box), reinterpret_cast<::Box*>(retBox),
-                reinterpret_cast<const Math::Vector3*>(v)));
-            for (int k = 0; k < 6; ++k) pool->box[k] = nb[k];
+            const Math::Vector3 v(px, py, pz);
+            ::Box retBox;
+            const ::Box* nb = RtVolume_Box_Extend(&pool->_bounds, &retBox, &v);
+            pool->_bounds.min.x = nb->min.x; pool->_bounds.min.y = nb->min.y; pool->_bounds.min.z = nb->min.z;
+            pool->_bounds.max.x = nb->max.x; pool->_bounds.max.y = nb->max.y; pool->_bounds.max.z = nb->max.z;
         }
 
-        float newAngle = spinDelta + p->angle;
+        float newAngle = spinDelta + p->_rot;
         if (newAngle > 180.0f) newAngle -= 360.0f;
-        p->prevAngle = p->angle;
-        p->angle     = newAngle;
+        p->_rotPrev = p->_rot;
+        p->_rot     = newAngle;
 
         // Retail recomputes the age ratio here; the age has not changed since, so it is
         // the same value of t, reused as the colour/alpha interpolant.
-        const float u = reinterpret_cast<const System::Time*>(&p->age)->AsSeconds() / reinterpret_cast<const System::Time*>(&p->lifetime)->AsSeconds();   // B.3.4b bridge
+        const float u = System::Time{p->_age}.AsSeconds() / System::Time{p->_lifetime}.AsSeconds();
 
         float sz = rad * sizeScale;
         if (sizeFloor > sz)      sz = sizeFloor;
         else if (sz > sizeCeil)  sz = sizeCeil;
-        p->prevSize = p->size;
-        p->size     = sz;
+        p->_sizePrev = p->_size;
+        p->_size     = sz;
 
         {
-            Math::Vector3 cc = reinterpret_cast<const Math::Vector3*>(startColor)->Lerp(
-                *reinterpret_cast<const Math::Vector3*>(endColor), u);
-            p->prevColor[0] = p->color[0];
-            p->prevColor[1] = p->color[1];
-            p->prevColor[2] = p->color[2];
-            p->color[0] = cc.x;
-            p->color[1] = cc.y;
-            p->color[2] = cc.z;
+            Math::Vector3 cc = startColor.Lerp(endColor, u);
+            p->_colorPrev.x = p->_color.x;
+            p->_colorPrev.y = p->_color.y;
+            p->_colorPrev.z = p->_color.z;
+            p->_color.x = cc.x;
+            p->_color.y = cc.y;
+            p->_color.z = cc.z;
         }
 
         // Alpha envelope: fade in over resource +0x80, then fade out over +0x88
         // measured backwards from death. Retail computes BOTH and picks with a compare.
-        const float   fadeInT  = reinterpret_cast<const System::Time*>(&p->age)->AsSeconds() / reinterpret_cast<const System::Time*>(&res->_particleFadeIn)->AsSeconds();   // B.3.4b bridge
-        const int64_t outAge   = fadeOutTicks - p->lifetime + p->age;
-        const float   fadeOutT = reinterpret_cast<const System::Time*>(&outAge)->AsSeconds() / reinterpret_cast<const System::Time*>(&res->_particleFadeOut)->AsSeconds();   // B.3.4b bridge
+        const float   fadeInT  = System::Time{p->_age}.AsSeconds() / res->_particleFadeIn.AsSeconds();
+        const int64_t outAge   = fadeOutTicks - p->_lifetime + p->_age;
+        const float   fadeOutT = System::Time{outAge}.AsSeconds() / res->_particleFadeOut.AsSeconds();
 
         float env = (1.0f < fadeInT) ? (1.0f - fadeOutT) : fadeInT;
         if (env > 1.0f)      env = 1.0f;
@@ -493,13 +471,13 @@ void TornadoInstance::Update(const System::Time& time) {
 
         Math::Scalar a0(startAlpha);
         Math::Scalar la = a0.Lerp(Math::Scalar(endAlpha), Math::Scalar(u));
-        p->alpha = p->prevAlpha = env * la.v;
+        p->_alpha = p->_alphaPrev = env * la.v;
     }
 
     // B.3.5 bridge — ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z. The
     // door took `(void* geometry, const void* box)` and retail hands it the pool
     // pointer: the accumulated `Volume::Box` is the pool's first 0x18 bytes.
-    SetBounds(*reinterpret_cast<const ::Box*>(pool));   // B.3.5 bridge (the pool's Box)
+    SetBounds(pool->_bounds);   // the pool's Box
 
     // Outcome trace, budgeted. "the swirl is running" is not observable from the
     // absence of a crash: a pool that never spawns, a period that came out infinite
@@ -512,26 +490,26 @@ void TornadoInstance::Update(const System::Time& time) {
         const int ticks = s_updateTicks.fetch_add(1) + 1;
         if (s_updateTraceBudget.load() < 8 && (ticks <= 2 || ticks % 120 == 0)) {
             s_updateTraceBudget.fetch_add(1);
-            const TornadoParticle* s = (pool->liveCount > 0) ? &pool->items[0] : nullptr;
+            const TornadoParticle* s = (pool->_liveCount > 0) ? &pool->_records._data[0] : nullptr;
             fprintf(stderr, "[Tornado/particle] tick %d: live=%d/%d period=%lld ticks "
                     "spin=%.1fdeg box=(%.2f,%.2f,%.2f)-(%.2f,%.2f,%.2f) p0=(%.2f,%.2f,%.2f) "
                     "size=%.2f alpha=%.2f\n",
-                    ticks, pool->liveCount, pool->maxCount, (long long)period, spin,
-                    pool->box[0], pool->box[1], pool->box[2],
-                    pool->box[3], pool->box[4], pool->box[5],
-                    s ? s->pos[0] : 0.0f, s ? s->pos[1] : 0.0f, s ? s->pos[2] : 0.0f,
-                    s ? s->size : 0.0f, s ? s->alpha : 0.0f);
+                    ticks, pool->_liveCount, pool->_records._size, (long long)period, spin,
+                    pool->_bounds.min.x, pool->_bounds.min.y, pool->_bounds.min.z,
+                    pool->_bounds.max.x, pool->_bounds.max.y, pool->_bounds.max.z,
+                    s ? s->_pos.x : 0.0f, s ? s->_pos.y : 0.0f, s ? s->_pos.z : 0.0f,
+                    s ? s->_size : 0.0f, s ? s->_alpha : 0.0f);
             fflush(stderr);
         }
     }
 
     // ---- reap: erase every particle whose age reached its lifetime, shifting the
     //      tail down one slot. Retail re-tests the same index after a removal. ----
-    for (int i = 0; i < pool->liveCount; ++i) {
-        TornadoParticle* arr = pool->items;
-        if (arr[i].age < arr[i].lifetime) continue;
-        --pool->liveCount;
-        for (int j = i; j < pool->liveCount; ++j) pool->items[j] = pool->items[j + 1];
+    for (int i = 0; i < pool->_liveCount; ++i) {
+        TornadoParticle* arr = pool->_records._data;
+        if (arr[i]._age < arr[i]._lifetime) continue;
+        --pool->_liveCount;
+        for (int j = i; j < pool->_liveCount; ++j) pool->_records._data[j] = pool->_records._data[j + 1];
         --i;
     }
 }

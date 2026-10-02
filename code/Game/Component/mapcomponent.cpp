@@ -234,7 +234,7 @@ static void MapComponent_ApplyOccupancy_41b0(MapComponent* mc) {
 // shape/classify/write logic shared with the spawn-side mark.
 // LEFT: a second body of 0x140124750 (keystone_a_map.cpp's CreateNaturalResource_impl_4750,
 // the faithful one) exists; this is the one the tree runs.
-extern "C" void StartTown_UnmarkResourceCellGrid(void* game, void* ownerEntity, int tileX,
+extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* ownerEntity, int tileX,
                                                  int tileY, int w, int h, const char* shape, int rot);
 
 void MapComponent::RemoveFromMap() {
@@ -242,7 +242,7 @@ void MapComponent::RemoveFromMap() {
     uint32_t flags = self->_flags;
     if (((flags >> 20) & 1) == 0) return;          // occupancy not written
     if (GameUpdateLoop::_singleton == nullptr) return;
-    void* game = GameUpdateLoop::_singleton->m_game;
+    Map* game = GameUpdateLoop::_singleton->m_game;
     if (!game) return;
 
     // Owner entity (comp+0x10) — dee0 compares it against cell+0x00 for

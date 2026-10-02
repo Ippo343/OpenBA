@@ -27,6 +27,7 @@
 #include <cstddef>
 #include "graphics/ParticleInstance.h"
 #include "graphics/Particle.h"
+#include "system/Value.h"            // System::Color, System::Time
 #include "Object/exe_type.h"
 
 class Tornado final : public Graphics::Particle {
@@ -57,11 +58,11 @@ public:
     float    _particleStartSize;     // +0x68  0.2
     float    _particleEndSize;       // +0x6c  3
     float    _particleScaleSize;     // +0x70  30
-    uint32_t _startColor;            // +0x74  System::Color, 0xFFFFFFFF
-    uint32_t _endColor;              // +0x78  System::Color, 0xFFFFFFFF
+    System::Color _startColor;       // +0x74  0xFFFFFFFF (Serialize: Color)
+    System::Color _endColor;         // +0x78  0xFFFFFFFF (Serialize: Color)
     uint32_t _pad7c;                 // +0x7c
-    int64_t  _particleFadeIn;        // +0x80  System::Time
-    int64_t  _particleFadeOut;       // +0x88  System::Time
+    System::Time  _particleFadeIn;   // +0x80  (Serialize: Time; ctor Time(1.0f))
+    System::Time  _particleFadeOut;  // +0x88  (Serialize: Time; ctor Time(1.0f))
 };
 
 static_assert(sizeof(Tornado) == 0x90, "Tornado is MemAlloc(0x90)");

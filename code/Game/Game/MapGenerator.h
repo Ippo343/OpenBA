@@ -35,9 +35,13 @@ public:
         uint8_t  _pad0C[4];     // +0x0C: padding
         void*    resolved;      // +0x10: resolved External* pointer
     };
-    // Generic dynamic array header: data + count + capacity (0x10).
+    // Generic dynamic array header: data + count + capacity (0x10), typed by its
+    // element (B.4 GAME-c: the element per pool is the stride retail's dtor
+    // 0x14001aea0 destroys it with: 0x14001b030 = 0x18 ExternalRef, 0x14001b0a0 =
+    // 0x30 InitialStructure).
+    template <class T>
     struct DynArrayHeader {
-        void*    data;          // +0x00: pointer to element array
+        T*       data;          // +0x00: pointer to element array
         int32_t  count;         // +0x08: number of elements
         int32_t  capacity;      // +0x0C: allocated capacity
     };
@@ -86,13 +90,13 @@ public:
     InitialFamily* boolIntArray; // +0x60: data
     uint64_t boolIntCount;       // +0x68: count (serialized as int32)
 
-    DynArrayHeader refArray1;    // +0x70: ExternalRef (0x18) pool
-    DynArrayHeader refArray2;    // +0x80: InitialStructure (0x30) pool
-    DynArrayHeader refArray3;    // +0x90: ExternalRef pool
-    DynArrayHeader refArray4;    // +0xA0: ExternalRef pool
-    DynArrayHeader refArray5;    // +0xB0: ExternalRef pool
-    DynArrayHeader refArray6;    // +0xC0: ExternalRef pool
-    DynArrayHeader refArray7;    // +0xD0: ExternalRef pool
+    DynArrayHeader<ExternalRef>      refArray1;   // +0x70: ExternalRef (0x18) pool (dtor 0x14001af41 -> 0x14001b030)
+    DynArrayHeader<InitialStructure> refArray2;   // +0x80: InitialStructure (0x30) pool (dtor 0x14001af37 -> 0x14001b0a0)
+    DynArrayHeader<ExternalRef>      refArray3;   // +0x90: ExternalRef pool (dtor 0x14001af2a -> 0x14001b030)
+    DynArrayHeader<ExternalRef>      refArray4;   // +0xA0: ExternalRef pool (dtor 0x14001af1d -> 0x14001b030)
+    DynArrayHeader<ExternalRef>      refArray5;   // +0xB0: ExternalRef pool (dtor 0x14001af10 -> 0x14001b030)
+    DynArrayHeader<ExternalRef>      refArray6;   // +0xC0: ExternalRef pool (dtor 0x14001af03 -> 0x14001b030)
+    DynArrayHeader<ExternalRef>      refArray7;   // +0xD0: ExternalRef pool (dtor 0x14001aef6 -> 0x14001b030)
 
     // +0xE0: Scalar generation parameters
     int32_t  paramE0;            // +0xE0
@@ -122,7 +126,10 @@ public:
 };
 
 static_assert(sizeof(MapGenerator::ExternalRef) == 0x18, "ExternalRef is 0x18");
-static_assert(sizeof(MapGenerator::DynArrayHeader) == 0x10, "DynArrayHeader is 0x10");
+static_assert(sizeof(MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>) == 0x10, "DynArrayHeader is 0x10");
+static_assert(sizeof(MapGenerator::DynArrayHeader<MapGenerator::InitialStructure>) == 0x10, "DynArrayHeader is 0x10");
+static_assert(sizeof(MapGenerator::ExternalRef) == 0x18, "ExternalRef stride 0x18 (0x14001b030)");
+static_assert(sizeof(MapGenerator::InitialStructure) == 0x30, "InitialStructure stride 0x30 (0x14001b0a0)");
 static_assert(sizeof(MapGenerator) == 0x178, "MapGenerator is 0x178");
 static_assert(alignof(MapGenerator) == 8, "qword-aligned");
 static_assert(offsetof(MapGenerator, _field20) == 0x20, "+0x20");

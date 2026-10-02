@@ -205,3 +205,14 @@ R-CORE (row 38) routes at `06c62180`: ui ok · tools ok · `sa-stress` exit 0, u
 | 39 | W2-STANDALONE (first part) | `7229ae9e` | standalone: the four game-logic files moved to `code/Game/Game`; autostart, modal_driver, mouse_inject, stress_harness, main and ten harnesses by name: 1746 -> 1286 in 78 files (tool_harness and 17 harnesses still to do) | exit 0 · 918 / 0 · 0 (the gate counted 10: the moved files' standing warnings under their new paths; baseline paths updated) | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.80 ms/frame, p95 2.41 (agents building) | 0 |
 
 Metric at `7229ae9e`: **11,063** to remove.
+
+| 40 | W1-PLAYER (second and third parts) | `558bbe9a` | Player: PathTool arrays are `Collection::Array` members (retail dtor 0x1400de950, ctor 0x1400de9e0, grows 0x140026ba0 / 0x1400de2f0 / 0x1400de400), `PathTool::SetSelected` 0x1400dd710, the 0x38-node AVL templates, edittool, tool_base_trade, fencedtool_calcpath, the removal CalcPath helpers are `WorkScheduler` / `DestroyComponent` members, `AddDecal`: 2230 -> 287 in 49 files (highlight tess and render left for the second pass) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 2.15 ms/frame, p95 3.24 (agents building) | 0 |
+
+Metric at `558bbe9a`: **10415** to remove.
+
+| 41 | W1-GAME-c (other files) | `2149b438` | Game c: the range and coastline stages, town storage seed, the workplace registry, `MusicPlayer::Update` 0x1400a40e0, `GameUpdateLoop::TakeScreenshot` 0x140095da0, tornado, uifade, toolbar, terraingenerator, worldsetup reload: 512 -> 71 in 20 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | routes with row 42 | 0 |
+| 42 | W1-GAME-c (starttown) | `d27d421e` | Game c: starttown's start config, map, entity list, spawn passes, founding-house list, residence bring-up, storage wiring; MapGenerator pools `DynArrayHeader<T>` (retail dtor 0x14001aea0); eight doors replaced by their members: 545 -> 195 in starttown.cpp (citizen-side functions left for the second pass) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.81 ms/frame, p95 2.34 (agents building) | 0 |
+
+Metric at `d27d421e`: **9,619** to remove.
+
+| 43 | W2-TESTS | `31b50bd5` | tests: InterpolatedState components by name, a real `IO::Stream` subclass for FakeStream, `Time` built by field, a literal copied instead of `const_cast`: tests row 813 -> 796 (the rest is the tests' subject, or waits on the runtime POD mirrors and the minted IO tables) | exit 0 · 918 / 0 · 0 | ok | 5/5 | — (tests only) | 0 |

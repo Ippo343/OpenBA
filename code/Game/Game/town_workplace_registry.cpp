@@ -33,6 +33,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "Game/exe_bodies.h"
+#include "Entity/CitizenBehavior.h"   // the town manager (GameUpdateLoop +0xF0)
+#include "Entity/ComponentEntity.h"
 
 // Called by name:
 //   0x140017230 ResidenceComponent_impl_7230 -- Keystone-A insert wrapper; returns param_2
@@ -53,23 +55,53 @@ namespace {
 // for the first component whose GetTypeId (vtable +0x10) equals `typeId`. Mirrors
 // FUN_14008d100's two inline scan loops exactly: it stops at the first GetTypeId
 // match and returns it only if IsDerivedFrom(comp, typeId) also holds — otherwise
-// null (it does NOT keep scanning past a GetTypeId hit).
-void* FindComponentByTypeId(int64_t entity, uint32_t typeId) {
+// null (it does NOT keep scanning past a GetTypeId hit). (Not FindComponent<T>:
+// the tree skips a null slot; known_port_issues 14d.)
+Component* FindComponentByTypeId(const ComponentEntity* entity, uint32_t typeId) {
     int i = 0;
-    while (i < *reinterpret_cast<int*>(entity + 0x38)) {           // count re-read (faithful)
-        void* elem = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
-        void* comp = *reinterpret_cast<void**>(elem);
+    while (i < entity->_componentCount) {                          // count re-read (faithful)
+        Component* comp = entity->_components[i].Get();
         if (comp == nullptr) { ++i; continue; }
-        // Slot 2 on an entity component-array element (proved Object::Base).
-        uint32_t tid = reinterpret_cast<const Object::Base*>(comp)->Type();   // B.3.8 bridge
+        // Slot 2 on an entity component-array element.
+        uint32_t tid = comp->Type();
         if (tid == typeId) {
-            void* elem2 = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
-            void* compVal = *reinterpret_cast<void**>(elem2);
+            Component* compVal = entity->_components[i].Get();
             return (::Object::IsDerivedFromNullSafe(compVal, typeId)) ? compVal : nullptr;
         }
         ++i;
     }
     return nullptr;
+}
+
+// One node of CitizenBehavior's +0x100 profession tree (0x38 bytes, key
+// ExternalPtr<Profession> compared as an unsigned qword; the node's value is an
+// Array<InternalPtr<ComponentEntity>> of workplace buildings). The same record
+// Dialog/townhall_helpers.cpp declares for its reader; CitizenBehavior::field_0x100
+// is `void*` (WORK-a's header types no node), hence the one view below.
+struct ProfessionTreeNode {
+    uint64_t             key;              // +0x00
+    ComponentEntity**    workplaces;       // +0x08 Array<InternalPtr<ComponentEntity>> data
+    int32_t              workplaceCount;   // +0x10
+    int32_t              workplaceCap;     // +0x14
+    ProfessionTreeNode*  parent;           // +0x18
+    ProfessionTreeNode*  left;             // +0x20
+    ProfessionTreeNode*  right;            // +0x28
+    int32_t              balance;          // +0x30
+    int32_t              _pad34;           // +0x34
+};
+static_assert(sizeof(ProfessionTreeNode) == 0x38, "profession tree node 0x38");
+static_assert(offsetof(ProfessionTreeNode, workplaces) == 0x08, "node +0x08");
+static_assert(offsetof(ProfessionTreeNode, workplaceCount) == 0x10, "node +0x10");
+static_assert(offsetof(ProfessionTreeNode, left) == 0x20, "node +0x20");
+static_assert(offsetof(ProfessionTreeNode, right) == 0x28, "node +0x28");
+
+// The town manager arrives as the int64_t its outside callers hold (Component,
+// Dialog, starttown); the tree root is CitizenBehavior::field_0x100.
+CitizenBehavior* TownOf(int64_t townMgr) {
+    return reinterpret_cast<CitizenBehavior*>(townMgr);   // LEFT: int64_t town parameter of outside callers
+}
+ProfessionTreeNode* TreeRoot(const CitizenBehavior* town) {
+    return reinterpret_cast<ProfessionTreeNode*>(town->field_0x100);   // LEFT: CitizenBehavior::field_0x100 is void* (no node type in the header)
 }
 } // namespace
 
@@ -83,18 +115,19 @@ void* FindComponentByTypeId(int64_t entity, uint32_t typeId) {
 // workplace against the node's entity array; append if absent. Faithful 1:1.
 // ============================================================
 extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3) {
+    CitizenBehavior* town = TownOf(param_1);
 
     // BST search for the key (key<node -> left[+0x20]; key>node -> right[+0x28]; == -> found).
-    uint64_t* node = *reinterpret_cast<uint64_t**>(param_1 + 0x100);   // root
-    uint64_t* found = nullptr;                                         // puVar3
+    ProfessionTreeNode* node = TreeRoot(town);                         // root
+    ProfessionTreeNode* found = nullptr;                               // puVar3
     while (node != nullptr) {
-        if (param_3 < node[0]) {                       // *node = key at +0x00
-            node = reinterpret_cast<uint64_t*>(node[4]);               // left (+0x20)
-        } else if (param_3 <= node[0]) {
+        if (param_3 < node->key) {                     // *node = key at +0x00
+            node = node->left;                                         // left (+0x20)
+        } else if (param_3 <= node->key) {
             found = node;                                              // exact match
             break;
         } else {
-            node = reinterpret_cast<uint64_t*>(node[5]);               // right (+0x28)
+            node = node->right;                                        // right (+0x28)
         }
     }
 
@@ -103,24 +136,25 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uin
         void* out = nullptr;
         int64_t emptyRec[2] = { 0, 0 };   // array record: +0x00 data / +0x08 count+cap
         uint64_t key = param_3;
-        ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(param_1 + 0x100),
+        ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(&town->field_0x100),   // LEFT: 0x140017230's int64_t* root parameter (Component block's declaration)
                                      &out, &key, emptyRec);
-        found = reinterpret_cast<uint64_t*>(out);     // *out = the new node
+        found = reinterpret_cast<ProfessionTreeNode*>(out);     // *out = the new node  // LEFT: 0x140017230 returns the node as void*
         if (found == nullptr) return;
     }
 
     // Dedup the workplace ref against the node's entity array (base +0x08, count +0x10).
-    int count = static_cast<int>(found[2]);           // +0x10 count (low dword)
-    int64_t arrBase = static_cast<int64_t>(found[1]); // +0x08 array data
+    // param_2 points at the caller's InternalPtr<ComponentEntity> local.
+    int count = found->workplaceCount;                // +0x10 count
+    ComponentEntity** arrBase = found->workplaces;    // +0x08 array data
+    ComponentEntity* const* ref = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: void* parameter of outside callers
     for (int i = 0; i < count; ++i) {
-        if (*reinterpret_cast<int64_t*>(arrBase + static_cast<int64_t>(i) * 8) ==
-            *reinterpret_cast<int64_t*>(param_2)) {
+        if (arrBase[i] == *ref) {
             return;   // already registered — no duplicate
         }
     }
 
     // Append: 003110(&node.array (node+0x08), count+1, workplaceRef).
-    ActHunt_DynArraySetCount_3110(reinterpret_cast<int64_t*>(found + 1), count + 1, param_2);   // 0x140003110
+    ActHunt_DynArraySetCount_3110(&found->workplaces, count + 1, param_2);   // 0x140003110
 }
 
 // ------------------------------------------------------------
@@ -131,9 +165,10 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uin
 // ------------------------------------------------------------
 extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp) {
     if (townMgr == 0 || workplaceComp == nullptr) return;
-    uint64_t key = *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(workplaceComp) + 0x48);
+    const WorkPlaceComponent* wpc = reinterpret_cast<const WorkPlaceComponent*>(workplaceComp);   // LEFT: void* parameter of outside callers
+    uint64_t key = reinterpret_cast<uint64_t>(wpc->profession);   // CAST-OK: ptr_int (the tree key is the pointer compared unsigned)
     if (key == 0) return;   // no profession -> not an employer workplace
-    int64_t refLocal = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(workplaceComp) + 0x10);
+    ComponentEntity* refLocal = wpc->_entity;
     ResidenceComponent_impl_95a0(townMgr, &refLocal, key);
 }
 
@@ -164,29 +199,28 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
     if (townMgr == 0 || GameUpdateLoop::_singleton == nullptr) return;
 
     // BST search for the key (same walk as the reader below).
-    uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);
-    uint64_t* found = nullptr;
+    ProfessionTreeNode* node = TreeRoot(TownOf(townMgr));
+    ProfessionTreeNode* found = nullptr;
     while (node != nullptr) {
-        if (professionKey < node[0])       node = reinterpret_cast<uint64_t*>(node[4]);  // left
-        else if (professionKey <= node[0]) { found = node; break; }
-        else                               node = reinterpret_cast<uint64_t*>(node[5]);  // right
+        if (professionKey < node->key)       node = node->left;   // left
+        else if (professionKey <= node->key) { found = node; break; }
+        else                                 node = node->right;  // right
     }
     if (found == nullptr) return;
 
-    uint32_t count = static_cast<uint32_t>(found[2]);        // +0x10 count (low dword)
+    uint32_t count = static_cast<uint32_t>(found->workplaceCount);   // +0x10 count
     if (static_cast<int>(count) < 2) return;                 // 0/1 entries -> nothing to do
 
-    void* rng = GameUpdateLoop::_singleton->m_random;
+    System::Random* rng = GameUpdateLoop::_singleton->m_random;
     if (!rng) return;
 
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {
-        uint32_t j = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
+        uint32_t j = rng->Rand(static_cast<uint32_t>(count));
         if (static_cast<uint32_t>(i) == j) continue;
-        int64_t base = static_cast<int64_t>(found[1]);       // +0x08 array data
-        int64_t tmp = *reinterpret_cast<int64_t*>(base + i * 8);
-        *reinterpret_cast<int64_t*>(base + i * 8) =
-            *reinterpret_cast<int64_t*>(base + static_cast<int64_t>(static_cast<int>(j)) * 8);
-        *reinterpret_cast<int64_t*>(base + static_cast<int64_t>(static_cast<int>(j)) * 8) = tmp;
+        ComponentEntity** base = found->workplaces;          // +0x08 array data
+        ComponentEntity* tmp = base[i];
+        base[i] = base[static_cast<int>(j)];
+        base[static_cast<int>(j)] = tmp;
     }
 }
 
@@ -213,16 +247,16 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
 
     // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
     // key>node -> right[+0x28]; == -> found).
-    uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);   // root
-    uint64_t* found = nullptr;
+    ProfessionTreeNode* node = TreeRoot(TownOf(townMgr));   // root
+    ProfessionTreeNode* found = nullptr;
     while (node != nullptr) {
-        if (professionKey < node[0]) {                    // *node = key at +0x00
-            node = reinterpret_cast<uint64_t*>(node[4]);  // left  (+0x20)
-        } else if (professionKey <= node[0]) {
+        if (professionKey < node->key) {                  // *node = key at +0x00
+            node = node->left;                            // left  (+0x20)
+        } else if (professionKey <= node->key) {
             found = node;                                 // exact match
             break;
         } else {
-            node = reinterpret_cast<uint64_t*>(node[5]);  // right (+0x28)
+            node = node->right;                           // right (+0x28)
         }
     }
 
@@ -234,58 +268,54 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
     }
 
     // Step 3: scan the profession node's building array (base +0x08, count +0x10).
-    int count = static_cast<int>(found[2]);                // +0x10 count (low dword)
+    int count = found->workplaceCount;                     // +0x10 count
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
-        int64_t buildingIBP = *reinterpret_cast<int64_t*>(static_cast<int64_t>(found[1]) + (int64_t)i * 8);
-        int64_t building = buildingIBP;
-        if (building == 0) continue;
+        ComponentEntity* buildingIBP = found->workplaces[i];
+        ComponentEntity* building = buildingIBP;
+        if (building == nullptr) continue;
 
         // 3a: find its WorkPlaceComponent; wrap in an IBP (matches original).
-        void* wpc = FindComponentByTypeId(building, s_tidWorkPlace);
-        int64_t wpcIBP = 0;
-        new (&wpcIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(wpc));   // B.3.3 bridge
-        int64_t wpcPtr = wpcIBP;
-        if (wpcPtr == 0) continue;                        // defensive (never in valid data)
+        ::Object::InternalPtr<WorkPlaceComponent> wpcIBP(
+            static_cast<WorkPlaceComponent*>(FindComponentByTypeId(building, s_tidWorkPlace)));
+        WorkPlaceComponent* wpcPtr = wpcIBP.Get();
+        if (wpcPtr == nullptr) continue;                  // defensive (never in valid data)
 
-        int workerCount = *reinterpret_cast<int*>(wpcPtr + 0x60);   // WPC+0x60 = live workers
+        int workerCount = wpcPtr->workerCount;            // WPC+0x60 = live workers
 
         // owning entity is the embedded IBP at WPC+0x10 — CheckPtr then deref.
-        int64_t owner = *reinterpret_cast<int64_t*>(wpcPtr + 0x10);
-        if (owner == 0) continue;                         // defensive
+        ComponentEntity* owner = wpcPtr->_entity;
+        if (owner == nullptr) continue;                   // defensive
 
         // 3b: find the WorkComponent on the owning entity; wrap in an IBP.
-        void* wc = FindComponentByTypeId(owner, s_tidWork);
-        int64_t wcIBP = 0;
-        new (&wcIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(wc));   // B.3.3 bridge
-        int64_t wcPtr = wcIBP;
-        if (wcPtr == 0) continue;                         // defensive
+        ::Object::InternalPtr<WorkComponent> wcIBP(
+            static_cast<WorkComponent*>(FindComponentByTypeId(owner, s_tidWork)));
+        WorkComponent* wcPtr = wcIBP.Get();
+        if (wcPtr == nullptr) continue;                   // defensive
 
         // capacity = WorkComponent+0x30; lazily compute+cache via CalcMaxWorkers.
-        int capRaw = *reinterpret_cast<int*>(wcPtr + 0x30);
+        int capRaw = wcPtr->workState;
         int capacity = capRaw;
         if (capacity == 0) {
-            capacity = WorkComponent_CalcMaxWorkers(static_cast<uintptr_t>(wcPtr));   // 0x14012e5c0
-            *reinterpret_cast<int*>(wcPtr + 0x30) = capacity;
+            // The B4 FORWARD (its two guards before the member's body stay: known_port_issues row 80).
+            capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(wcPtr));   // 0x14012e5c0  // LEFT: the forwarder's uintptr_t receiver (TUT block)
+            wcPtr->workState = capacity;
         }
 
         // 3c: room available -> reachability probe; if reachable, this is our pick.
         char accepting = -1;
         bool reachOk = false;
         if (workerCount < capacity) {
-            int64_t tmpIBP[2] = { 0, 0 };                 // 16-byte scratch IBP (matches local_50)
+            ::Object::InternalPtr<WorkPlaceComponent> host;   // the 16-byte scratch (matches local_50)
             {
-                // 0x140002e10 returns its return buffer (the IBP*).
-                void* reach = AttendanceComponent_GetJobHostComponent(
-                    reinterpret_cast<void*>(building), tmpIBP);
+                // 0x140002e10 = FindComponent<WorkPlaceComponent> into its return buffer.
+                void* reach = AttendanceComponent_GetJobHostComponent(building, &host);
                 if (reach) {
-                    accepting = *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50);
+                    accepting = host->isAccepting;
                     reachOk = (accepting != 0);
                 }
                 if (reachOk) {
-                    *reinterpret_cast<int64_t*>(out) = building;   // *out = building entity ptr
+                    new (out) ::Object::InternalPtr<ComponentEntity>(building);   // *out = building entity ptr
                     return out;
                 }
             }

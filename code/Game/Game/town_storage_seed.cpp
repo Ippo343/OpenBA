@@ -83,6 +83,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/CitizenBehavior.h"        // the town manager (GameUpdateLoop +0xF0)
+#include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Game/MapGenerator.h"             // the start config (GameUpdateLoop::m_mapConfig)
 
 // ============================================================
 // Type-ids: 0x1401c7cb8/7e78/7eb0/79e0 are these four classes' cells (Table 1).
@@ -100,15 +105,15 @@ static uint32_t TidMapComponent()           { return MapComponent::TypeId(); }
 //   0x140088f90 ActRm_GetResourceCategory_88f90   (Action/exe_bodies.h)
 // ============================================================
 
-static inline void* TownMgr() {
+static inline CitizenBehavior* TownMgr() {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
     return GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
 }
 
 // Slot 2. Every caller passes an element of an entity's component array or a
-// template's description array (proved Object::Base-derived exe objects).
-static inline uint32_t GetTypeIdOf(void* obj) {
-    return reinterpret_cast<const Object::Base*>(obj)->Type();   // B.3.8 bridge
+// template's description array (Object::Base-derived exe objects).
+static inline uint32_t GetTypeIdOf(const Object::Base* obj) {
+    return obj->Type();
 }
 
 // ============================================================
@@ -116,18 +121,18 @@ static inline uint32_t GetTypeIdOf(void* obj) {
 // ============================================================
 
 // FUN_140002ff0-family description scan: find the RawMaterialDescription on a
-// TEMPLATE entity (descriptions at +0x28 raw-pointer array, count +0x30) — the
+// TEMPLATE (a ComponentDescription: sub-descriptions at +0x28, count +0x30) — the
 // exact inline loop of Game_SpawnResources / cd80 / c560 / QueryCount.
-static void* FindRawMatDescOnTemplate(int64_t tmplEntity) {
-    if (!tmplEntity) return nullptr;
+static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescription* tmpl) {
+    if (!tmpl) return nullptr;
     const uint32_t tid = TidRawMaterialDescription();
-    int count = *reinterpret_cast<int*>(tmplEntity + 0x30);
-    int64_t arr = *reinterpret_cast<int64_t*>(tmplEntity + 0x28);
+    int count = tmpl->_subDescCount;
+    Description** arr = tmpl->_subDescs;
     for (int i = 0; i < count; i++) {
-        void* desc = *reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+        Description* desc = arr[i];
         if (GetTypeIdOf(desc) == tid) {
             // Original: IsDerivedFrom-narrow, break either way.
-            return ::Object::IsDerivedFromNullSafe(desc, tid) ? desc : nullptr;
+            return ::Object::IsDerivedFromNullSafe(desc, tid) ? static_cast<RawMaterialDescription*>(desc) : nullptr;
         }
     }
     return nullptr;
@@ -135,60 +140,59 @@ static void* FindRawMatDescOnTemplate(int64_t tmplEntity) {
 
 // Entity_FindComponent_Storage (FUN_140006270) equivalent: scan a live entity's
 // component-IBP array (+0x30 array / +0x38 count, CheckPtr each slot) for the
-// StorageComponent. Returns raw component pointer or null.
-static void* FindStorageOnEntity(int64_t entity) {
+// StorageComponent. Returns the component or null. (Not FindComponent<T>: this
+// copy keeps the tree's null-entity and null-slot skips; known_port_issues 14d.)
+static StorageComponent* FindStorageOnEntity(const ComponentEntity* entity) {
     if (!entity) return nullptr;
     const uint32_t tid = TidStorageComponent();
-    int count = *reinterpret_cast<int*>(entity + 0x38);
+    int count = entity->_componentCount;
     for (int i = 0; i < count; i++) {
-        void** slot = reinterpret_cast<void**>(
-            *reinterpret_cast<int64_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
+        Component* comp = entity->_components[i].Get();
         if (!comp) continue;
         if (GetTypeIdOf(comp) == tid) {
-            return (::Object::IsDerivedFromNullSafe(comp, tid)) ? comp : nullptr;
+            return (::Object::IsDerivedFromNullSafe(comp, tid)) ? static_cast<StorageComponent*>(comp) : nullptr;
         }
     }
     return nullptr;
 }
 
 // StorageComponent::QueryCount (0x14012cf10) — VOLUME-weighted total:
-// sum over slots (comp+0x28, stride 0x10) of RawMaterialDescription(+0x48) *
-// slotCount(+0x08). (Slot material entity at slot+0x00.)
-static int Seed_QueryCount(int64_t storageComp) {
+// sum over the items (+0x28, stride 0x10) of RawMaterialDescription::_weight *
+// the item's count. (The item's material template at item+0x00.)
+static int Seed_QueryCount(const StorageComponent* storageComp) {
     int total = 0;
-    int slots = *reinterpret_cast<int*>(storageComp + 0x30);
-    int64_t arr = *reinterpret_cast<int64_t*>(storageComp + 0x28);
+    int slots = storageComp->slotCount;
+    const StorageComponent::Item* arr = storageComp->storageSlots;
     for (int i = 0; i < slots; i++) {
-        int64_t slot = arr + static_cast<int64_t>(i) * 0x10;
-        void* desc = FindRawMatDescOnTemplate(*reinterpret_cast<int64_t*>(slot));
+        const StorageComponent::Item* slot = &arr[i];
+        RawMaterialDescription* desc = FindRawMatDescOnTemplate(slot->_resource);
         // Standalone-inert guard: retail reads desc+0x48 unguarded.
-        int unitVol = desc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x48) : 0;
-        total += unitVol * *reinterpret_cast<int*>(slot + 0x08);
+        int unitVol = desc ? desc->_weight : 0;
+        total += unitVol * slot->_count;
     }
     return total;
 }
 
 // StorageComponent_helper_c560 (0x14012c560): does the storage's material-flag
 // mask (+0x3c) intersect the material's RawMaterialDescription flags (+0x5c)?
-static int Seed_FlagTest_c560(int64_t storageComp, int64_t matTemplEntity) {
-    void* desc = FindRawMatDescOnTemplate(matTemplEntity);
+static int Seed_FlagTest_c560(const StorageComponent* storageComp, const ComponentDescription* matTempl) {
+    RawMaterialDescription* desc = FindRawMatDescOnTemplate(matTempl);
     // Standalone-inert guard: retail reads *(NULL+0x5c) when no description.
     if (!desc) return 0;
-    uint32_t compMask  = *reinterpret_cast<uint32_t*>(storageComp + 0x3c);
-    uint32_t descFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(desc) + 0x5c);
+    uint32_t compMask  = storageComp->rawMaterialFlags;
+    uint32_t descFlags = desc->_flags;
     return ((compMask & descFlags) != 0) ? 1 : 0;
 }
 
 // StorageComponent_impl_cd80 (0x14012cd80): accept check —
 // c560 flag gate && (unitVolume * n + QueryCount) <= capacity(+0x38).
-static int Seed_CanAccept_cd80(int64_t storageComp, int64_t matTemplEntity, int n) {
-    if (!Seed_FlagTest_c560(storageComp, matTemplEntity)) return 0;
+static int Seed_CanAccept_cd80(const StorageComponent* storageComp, const ComponentDescription* matTempl, int n) {
+    if (!Seed_FlagTest_c560(storageComp, matTempl)) return 0;
     int current = Seed_QueryCount(storageComp);
-    void* desc = FindRawMatDescOnTemplate(matTemplEntity);
+    RawMaterialDescription* desc = FindRawMatDescOnTemplate(matTempl);
     if (!desc) return 0;  // standalone-inert guard (retail reads *(NULL+0x48))
-    int unitVol = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x48);
-    return (unitVol * n + current <= *reinterpret_cast<int*>(storageComp + 0x38)) ? 1 : 0;
+    int unitVol = desc->_weight;
+    return (unitVol * n + current <= storageComp->capacity) ? 1 : 0;
 }
 
 // ============================================================
@@ -198,14 +202,15 @@ static int Seed_CanAccept_cd80(int64_t storageComp, int64_t matTemplEntity, int 
 // town storage-location list (townMgr+0x00 base / +0x08 count / +0x0c cap)
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
 extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) {
-    void* townMgr = TownMgr();
+    CitizenBehavior* townMgr = TownMgr();
     if (!townMgr || !storageLocationComp) {
         return;
     }
-    uint64_t entityRef = *reinterpret_cast<uint64_t*>(
-        reinterpret_cast<uintptr_t>(storageLocationComp) + 0x10);
-    int newCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8) + 1;
-    ActHunt_DynArraySetCount_3110(townMgr, newCount, &entityRef);   // 0x140003110
+    // LEFT: the void* parameter of the outside callers (storagelocationcomponent.cpp,
+    // starttown.cpp); the object is a Component (its +0x10 entity).
+    ComponentEntity* entityRef = reinterpret_cast<const Component*>(storageLocationComp)->_entity;   // LEFT: void* parameter of outside callers
+    int newCount = townMgr->field_0x08 + 1;
+    ActHunt_DynArraySetCount_3110(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
@@ -219,88 +224,79 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
 // passes the BuildComponent; the StorageComponent itself works — same layout).
 extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     if (!componentWithEntity) return;
-    uintptr_t p = reinterpret_cast<uintptr_t>(componentWithEntity);
+    // LEFT: the void* parameter of the outside caller (starttown.cpp); the object
+    // is a Component (its +0x10 entity).
+    const Component* p = reinterpret_cast<const Component*>(componentWithEntity);   // LEFT: void* parameter of outside caller
 
-    int64_t entity = *reinterpret_cast<int64_t*>(p + 0x10);
-    void* storageComp = FindStorageOnEntity(entity);
-    if (!storageComp) {
+    ComponentEntity* entity = p->_entity;
+    StorageComponent* sc = FindStorageOnEntity(entity);
+    if (!sc) {
         return;
     }
-    int64_t sc = reinterpret_cast<int64_t>(storageComp);
-    void* townMgr = TownMgr();
+    CitizenBehavior* townMgr = TownMgr();
 
     // Credit existing (construction-delivery) slot contents to the town stock
-    // table at townMgr+0x170 (+0xc field per 0x20-stride row, index FUN_140088f90).
-    // No-op for a freshly spawned building (0 slots).
-    int slots = *reinterpret_cast<int*>(sc + 0x30);
-    if (slots > 0 && townMgr &&
-        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(townMgr) + 0x170)) {
-        int64_t arr = *reinterpret_cast<int64_t*>(sc + 0x28);
+    // table at townMgr+0x170 (the currentCount... +0xc field per 0x20-stride row,
+    // index FUN_140088f90). No-op for a freshly spawned building (0 slots).
+    int slots = sc->slotCount;
+    if (slots > 0 && townMgr && townMgr->professionResources) {
+        StorageComponent::Item* arr = sc->storageSlots;
         for (int i = 0; i < slots; i++) {
-            int64_t slot = arr + static_cast<int64_t>(i) * 0x10;
-            int cnt = *reinterpret_cast<int*>(slot + 8);
-            int idx = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(arr),
-                                                      *reinterpret_cast<uintptr_t*>(slot));   // 0x140088f90
+            StorageComponent::Item* slot = &arr[i];
+            int cnt = slot->_count;
+            int idx = ResourceCategory(slot->_resource);   // 0x140088f90
             if (idx >= 0) {
-                int* cell = reinterpret_cast<int*>(
-                    static_cast<int64_t>(idx) * 0x20 + 0xc +
-                    *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(townMgr) + 0x170));
+                int* cell = &townMgr->professionResources[idx].field_0x0C;
                 *cell += cnt;
             }
         }
     }
 
     // StorageDescription (comp+0x18, IsDerivedFrom-narrowed).
-    void* descObj = *reinterpret_cast<void**>(sc + 0x18);
-    void* desc = nullptr;
+    Description* descObj = sc->_description;
+    StorageDescription* desc = nullptr;
     if (descObj && ::Object::IsDerivedFromNullSafe(descObj, TidStorageDescription()))
-        desc = descObj;
+        desc = static_cast<StorageDescription*>(descObj);
     if (!desc) {
         return;  // standalone-inert guard (retail reads *(NULL+0x20))
     }
-    uintptr_t d = reinterpret_cast<uintptr_t>(desc);
 
     // _areaBasedLimit (+0x20): multiply _volumeLimit by the MapComponent footprint.
     int tileArea = 1;
-    if (*reinterpret_cast<uint8_t*>(d + 0x20) != 0) {
-        int64_t ent2 = *reinterpret_cast<int64_t*>(sc + 0x10);
+    if (desc->_flagA) {
+        ComponentEntity* ent2 = sc->_entity;
         // Find the MapComponent (typeid 0x1401c79e0) on the entity.
-        void* mapComp = nullptr;
+        MapComponent* mapComp = nullptr;
         const uint32_t tidMap = TidMapComponent();
-        int compCount = ent2 ? *reinterpret_cast<int*>(ent2 + 0x38) : 0;
+        int compCount = ent2 ? ent2->_componentCount : 0;
         for (int i = 0; i < compCount; i++) {
-            void** slot = reinterpret_cast<void**>(
-                *reinterpret_cast<int64_t*>(ent2 + 0x30) + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
+            Component* comp = ent2->_components[i].Get();
             if (comp && GetTypeIdOf(comp) == tidMap) {
-                mapComp = (::Object::IsDerivedFromNullSafe(comp, tidMap)) ? comp : nullptr;
+                mapComp = (::Object::IsDerivedFromNullSafe(comp, tidMap)) ? static_cast<MapComponent*>(comp) : nullptr;
                 break;
             }
         }
         // Original wraps in an IBP (fn_InternalBasePtr_Ctor) then CheckPtr's it.
-        uintptr_t mapIBP = 0;
-        new (&mapIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
+        ::Object::InternalPtr<MapComponent> mapIBP(mapComp);
         if (mapIBP) {
-            tileArea = static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2e)) *
-                       static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2c));
+            tileArea = static_cast<int>(mapIBP->tileY1) *
+                       static_cast<int>(mapIBP->tileX1);
         } else {
         }
     }
 
-    int volumeLimit    = *reinterpret_cast<int*>(d + 0x24);
-    uint32_t storageFlags = *reinterpret_cast<uint32_t*>(d + 0x28);
-    StorageComponent_DynArrayResize(reinterpret_cast<void*>(sc + 0x28), 0);   // 0x14000f090
-    *reinterpret_cast<uint32_t*>(sc + 0x3c) = storageFlags;
-    *reinterpret_cast<int*>(sc + 0x38) = volumeLimit * tileArea;
+    int volumeLimit    = desc->_pickupValue;
+    uint32_t storageFlags = desc->_rawMaterialFlags;
+    StorageComponent_DynArrayResize(&sc->storageSlots, 0);   // 0x14000f090
+    sc->rawMaterialFlags = storageFlags;
+    sc->capacity = volumeLimit * tileArea;
 
 }
 
 // ============================================================
 // 0x140091660 — Game_SpawnResources(townMgr, mask, count)
 // ============================================================
-extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, int count) {
-    int64_t* townMgr = reinterpret_cast<int64_t*>(townMgrV);
+extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint32_t mask, int count) {
     if (!townMgr) return;
 
     // ---- Phase A: filter the raw-material template list (+0x110/+0x118) ----
@@ -315,16 +311,16 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
     // is vacuous for the same reason; prefix copied only when the block moved,
     // fill at the old count, old block freed only when it moved. Only the
     // `if (!matched) break` out-of-memory bail is gone.
-    Collection::Array<int64_t> matched;
+    Collection::Array<ComponentDescription*> matched;
 
-    int tmplCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 0x118);
-    int64_t tmplArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(townMgr) + 0x110);
+    int tmplCount = townMgr->field_0x118;
+    ComponentDescription** tmplArr = townMgr->field_0x110;
     for (int t = 0; t < tmplCount; t++) {
-        int64_t tmpl = *reinterpret_cast<int64_t*>(tmplArr + static_cast<int64_t>(t) * 8);
-        void* desc = FindRawMatDescOnTemplate(tmpl);
+        ComponentDescription* tmpl = tmplArr[t];
+        RawMaterialDescription* desc = FindRawMatDescOnTemplate(tmpl);
         // Standalone-inert guard: retail reads *(desc+0x5c) unguarded.
         if (!desc) continue;
-        if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(desc) + 0x5c) & mask) == 0)
+        if ((desc->_flags & mask) == 0)
             continue;
         // Faithful grow-append (8-byte entries; cap = n+1, tripled when growing
         // a non-empty array; copy survivors; free the old buffer).
@@ -337,21 +333,18 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
     if (matchedCount > 0 && count > 0) {
         for (;;) {
             bool progress = false;
-            int locCount = static_cast<int>(townMgr[1]);   // +0x08
+            int locCount = townMgr->field_0x08;   // +0x08 (retail: the low dword of the qword)
             if (locCount < 1) break;
             for (int i = 0; i < locCount; i++) {
-                int64_t entityRef = *reinterpret_cast<int64_t*>(
-                    townMgr[0] + static_cast<int64_t>(i) * 8);
-                void* storage = FindStorageOnEntity(entityRef);
+                ComponentEntity* entityRef = townMgr->field_0x00[i];
+                StorageComponent* storage = FindStorageOnEntity(entityRef);
                 // Original wraps the found component in an IBP before use.
-                uintptr_t compIBP = 0;
-                new (&compIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(storage));   // B.3.3 bridge
+                ::Object::InternalPtr<StorageComponent> compIBP(storage);
                 if (placed < count) {
-                    int64_t tmpl = matched[placed % matchedCount];
+                    ComponentDescription* tmpl = matched[placed % matchedCount];
                     if (compIBP &&
-                        Seed_CanAccept_cd80(static_cast<int64_t>(compIBP), tmpl, 1)) {
-                        ActRm_StorageAdd_d000(compIBP, tmpl, 1);   // 0x14012d000
+                        Seed_CanAccept_cd80(compIBP.Get(), tmpl, 1)) {
+                        StorageAdd(compIBP.Get(), tmpl, 1);   // 0x14012d000
                         placed++;
                         progress = true;
                     }
@@ -367,22 +360,24 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
 // 0x1400a1f00 — StartTown_SeedStartingResources(startConfig)
 // ============================================================
 extern "C" void StartTown_SeedStartingResources(void* startConfig) {
-    void* townMgr = TownMgr();
+    CitizenBehavior* townMgr = TownMgr();
     if (!startConfig || !townMgr) {
         return;
     }
-    uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
+    // LEFT: the void* parameter of the outside caller (starttown.cpp, which passes
+    // GameUpdateLoop::m_mapConfig): the seven counts are MapGenerator +0xFC..+0x114.
+    const MapGenerator* sc = reinterpret_cast<const MapGenerator*>(startConfig);   // LEFT: void* parameter of outside caller
     // Mask labels corrected 2026-07-19 (binary-verified flag values, see
     // engine/types/RawMaterialDescription.h): 0x20 = EDIBLE food, 0x40 = FUEL
     // firewood. The 0x400/0x800/0x1000/0x200/0x4000 class names below are the
     // best current guesses for the remaining start-resource classes
     // (logs/stone/iron/tools/clothing) — amounts and masks are exe-faithful
     // regardless of naming.
-    TownStorage_SpawnResources_91660(townMgr, 0x400,  *reinterpret_cast<int*>(sc + 0xfc));
-    TownStorage_SpawnResources_91660(townMgr, 0x800,  *reinterpret_cast<int*>(sc + 0x100));
-    TownStorage_SpawnResources_91660(townMgr, 0x1000, *reinterpret_cast<int*>(sc + 0x104));
-    TownStorage_SpawnResources_91660(townMgr, 0x200,  *reinterpret_cast<int*>(sc + 0x108));
-    TownStorage_SpawnResources_91660(townMgr, 0x20,   *reinterpret_cast<int*>(sc + 0x10c));
-    TownStorage_SpawnResources_91660(townMgr, 0x40,   *reinterpret_cast<int*>(sc + 0x110));
-    TownStorage_SpawnResources_91660(townMgr, 0x4000, *reinterpret_cast<int*>(sc + 0x114));
+    TownStorage_SpawnResources_91660(townMgr, 0x400,  sc->paramFC);
+    TownStorage_SpawnResources_91660(townMgr, 0x800,  sc->param100);
+    TownStorage_SpawnResources_91660(townMgr, 0x1000, sc->param104);
+    TownStorage_SpawnResources_91660(townMgr, 0x200,  sc->param108);
+    TownStorage_SpawnResources_91660(townMgr, 0x20,   sc->param10C);
+    TownStorage_SpawnResources_91660(townMgr, 0x40,   sc->param110);
+    TownStorage_SpawnResources_91660(townMgr, 0x4000, sc->param114);
 }

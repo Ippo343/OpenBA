@@ -142,8 +142,10 @@ struct RbSplashLoop final : Engine::DialogLoaderLoopT {
             Object::InternalPtr<UI::DialogInstance>* ret) override { return ret; }
 };
 
-const System::Time& TimeOf(const int64_t& ticks) {
-    return *reinterpret_cast<const System::Time*>(&ticks);   // one int64 at +0
+System::Time TimeOf(int64_t ticks) {
+    System::Time t;
+    t._ticks = ticks;   // one int64 at +0
+    return t;
 }
 
 // ===========================================================================
