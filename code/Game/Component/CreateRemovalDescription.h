@@ -41,7 +41,7 @@ public:
     void* _refs;                                // +0x28 heap ExternalPtr array (8-byte elements)
     int32_t _refCount;                          // +0x30
     int32_t _refCap;                            // +0x34
-    void* _ref38;                               // +0x38 ExternalPtr (a raw pointer)
+    class ComponentDescription* _ref38;         // +0x38 ExternalPtr (B4 PLAYER H4: the template RemovalTool compares entity descriptions with, 0x140104670)
     bool _b40;                                  // +0x40
     bool _b41;                                  // +0x41
     bool _b42;                                  // +0x42

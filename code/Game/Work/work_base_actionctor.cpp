@@ -319,8 +319,8 @@ void* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, void* p2, void* p3) {
     // The real ctor (Action(): Internal, +0x10/+0x18 = 0; +0x20/+0x28 zeroed), then
     // the two field copies.
     PickupRawMaterial* a = new (self) PickupRawMaterial();
-    a->_field20 = p2 ? *reinterpret_cast<void**>(p2) : nullptr;
-    a->_field28 = p3 ? *reinterpret_cast<void**>(p3) : nullptr;
+    a->_field20 = p2 ? *reinterpret_cast<CitizenComponent**>(p2) : nullptr;
+    a->_field28 = p3 ? *reinterpret_cast<ComponentEntity**>(p3) : nullptr;
     return static_cast<Object::Base*>(a);
 }
 
@@ -550,8 +550,7 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
         // The real ctor (Action(), fields zeroed; +0x28 animation = 0), then the stores.
         PlayAnimation* a = new (inlineObj) PlayAnimation();
         a->_field20 = entityInner;
-        // LEFT: PlayAnimation +0x30 is declared void* (ACT-b); it holds a System::Time.
-        a->_field30 = reinterpret_cast<void*>(timeVal._ticks);
+        a->_field30 = timeVal;   // PlayAnimation +0x30 is the System::Time (B.4 ACT-b)
         pa = inlineObj;
     }
     WA_IbpCtor(&ibpRes20, pa);

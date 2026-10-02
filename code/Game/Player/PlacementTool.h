@@ -32,13 +32,21 @@
 #include "Player/Tool.h"
 #include "Object/exe_type.h"
 
+class CreatePlacedDescription;   // Component/CreatePlacedDescription.h
+class MapDescription;            // Component/MapDescription.h
+class ModelDescription;          // Component/ModelDescription.h
+class RadiusDescription;         // Component/RadiusDescription.h
+class RotationSetting;           // Player/RotationSetting.h
+namespace Graphics { class MeshInstance; }
+namespace Math { class Vector3; }
+
 class PlacementTool final : public Tool {
     DECLARE_EXE_TYPE(PlacementTool)
 
 public:
     PlacementTool()                                                        // 0x1400fe850
         : descComponent(nullptr), mapComponent(nullptr), createComponent(nullptr),
-          radiusComponent(nullptr), rotationIBP(0), lastStartCol(-1), lastStartRow(-1),
+          radiusComponent(nullptr), rotationIBP(nullptr), lastStartCol(-1), lastStartRow(-1),
           lastCenterCell(-1), radiusDisplayIdx(-1), sceneObjectIdx(-1), meshVariant(0),
           meshInstance(nullptr) {}
 
@@ -48,30 +56,49 @@ public:
     void Shutdown() override;                                              // [5]  0x1400fe4e0
     char OnKey(char active) override;                                      // [6]  0x1400fe2a0
     void Update(void* time, char active) override;                         // [7]  0x1400fdee0
-    void Draw(void* context, char active) override;                        // [8]  0x1400fdcc0
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x1400fdcc0
     char OnCancel() override { return 0; }                                 // [9]  0x1400fe4d0
     Object::Type* GetSettingType(Object::Type* ret) const override;        // [11] 0x140026920
     int  GetCursor() const override { return 5; }                          // [12] 0x1400fe800
 
-    void*    descComponent;     // +0x28 CreatePlacedDescription (DAT_1401c7468)
-    void*    mapComponent;      // +0x30 MapDescription (DAT_1401c7a18)
-    void*    createComponent;   // +0x38 ModelDescription (mesh; Startup derefs +0x28 UNGUARDED)
-    void*    radiusComponent;   // +0x40 RadiusDescription (DAT_1401c4870)
-    uint64_t rotationIBP;       // +0x48 InternalBasePtr<RotationSetting>
+    // 0x1400fda00: the footprint under the cursor (cells, world centre, yaw);
+    // AL = the footprint lies on the map. Reads only this tool's fields (B4 PLAYER;
+    // body in tool_base_ray.cpp).
+    uint8_t GetPlacement(int* startCol, int* startRow, int* endCol, int* endRow,
+                         Math::Vector3* pos, float* yaw);
+    // 0x1400fd650: validate the footprint and create the placed entity; AL = placed
+    // (body in tool_base_tile.cpp).
+    uint64_t CreateAt(int startCol, int startRow, int endCol, int endRow,
+                      const Math::Vector3* pos, float yaw);
+    // 0x1400fd960: advance the preview's mesh variant and re-add it to the scene
+    // (body in tool_base_place.cpp).
+    void FlipVariant();
+
+    // B4 PLAYER: typed from Startup 0x1400fe580 (each found by its type id + IsDerivedFrom).
+    CreatePlacedDescription* descComponent;    // +0x28 CreatePlacedDescription (cell 0x1401c7468)
+    MapDescription*          mapComponent;     // +0x30 MapDescription (cell 0x1401c7a18)
+    ModelDescription*        createComponent;  // +0x38 ModelDescription (mesh; Startup derefs +0x28 UNGUARDED)
+    RadiusDescription*       radiusComponent;  // +0x40 RadiusDescription (cell 0x1401c4870)
+    RotationSetting*         rotationIBP;      // +0x48 InternalPtr<RotationSetting> (IsDerivedFrom 0x1401c63c8)
     int32_t  lastStartCol;      // +0x50 tick-sound change detection
     int32_t  lastStartRow;      // +0x54
     int32_t  lastCenterCell;    // +0x58 radius display
     int32_t  radiusDisplayIdx;  // +0x5c -1 = none
     int32_t  sceneObjectIdx;    // +0x60 Graphics::Scene object index, -1 = none
     int32_t  meshVariant;       // +0x64 mesh variant / rotation index
-    void*    meshInstance;      // +0x68 Graphics::MeshInstance* (preview)
+    Graphics::MeshInstance* meshInstance;   // +0x68 the preview (Startup MemAlloc(0x120) + ctor)
 };
 
 
 static_assert(sizeof(PlacementTool) == 0x70, "PlacementTool is 0x70 (create 0x14002dc40 MemAlloc(0x70))");
 static_assert(alignof(PlacementTool) == 8, "PlacementTool is 8-aligned");
 static_assert(offsetof(PlacementTool, descComponent)    == 0x28, "PlacementTool +0x28 (ctor 0x1400fe88b)");
+static_assert(offsetof(PlacementTool, mapComponent)     == 0x30, "PlacementTool +0x30");
+static_assert(offsetof(PlacementTool, createComponent)  == 0x38, "PlacementTool +0x38");
+static_assert(offsetof(PlacementTool, radiusComponent)  == 0x40, "PlacementTool +0x40");
 static_assert(offsetof(PlacementTool, rotationIBP)      == 0x48, "PlacementTool +0x48");
+static_assert(offsetof(PlacementTool, lastStartRow)     == 0x54, "PlacementTool +0x54");
+static_assert(offsetof(PlacementTool, radiusDisplayIdx) == 0x5c, "PlacementTool +0x5c");
 static_assert(offsetof(PlacementTool, lastStartCol)     == 0x50, "PlacementTool +0x50 qword -1 (0x1400fe89f)");
 static_assert(offsetof(PlacementTool, lastCenterCell)   == 0x58, "PlacementTool +0x58 qword -1 (0x1400fe8a7)");
 static_assert(offsetof(PlacementTool, sceneObjectIdx)   == 0x60, "PlacementTool +0x60 = -1 (0x1400fe8af)");

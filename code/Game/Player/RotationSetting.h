@@ -36,7 +36,7 @@ public:
     // 0x1400dea40: no body
     ~RotationSetting() override = default;                 // [0] 0x140026dd0
 
-    uint32_t rotation;   // +0x10 0..3 (the ctor writes 0)
+    int32_t  rotation;   // +0x10 0..3 (the ctor writes 0); signed: PlacementTool::OnKey 0x1400fe2a0 wraps it on `< 0` (B4 PLAYER)
     uint32_t _pad14;     // +0x14 never written by retail (zeroed here)
 };
 

@@ -15,13 +15,16 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;   // Component/CitizenComponent.h
 
 class ShowTool final : public Action {
     DECLARE_EXE_TYPE(ShowTool)
 
 public:
     ShowTool();                                                   // create 0x1400013b0
-    ShowTool(void* entity, int toolId);   // 0x140042890
+    ShowTool(CitizenComponent* const* citizen, int toolId);   // 0x140042890
     ~ShowTool() override = default;                            // [0] 0x140001420
     void Persist(void* stream) override;                       // [3] 0x140042780
     int  AbstractImpl(void* actionStack) override;             // [4] 0x140042710
@@ -30,7 +33,7 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x140042680
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 entity IBP
+    Object::InternalPtr<CitizenComponent> _field20;   // +0x20 the citizen (Persist checks CitizenComponent)
     int32_t   _field28;          // +0x28 tool id (-1 = the carried resource)
     uint8_t   _pad2C[4];         // +0x2C padding
 };

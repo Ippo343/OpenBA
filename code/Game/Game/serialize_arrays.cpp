@@ -47,6 +47,8 @@
 #include <atomic>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Game/serialize_externals.h"
+#include "Game/MenuScene.h"
 
 // ============================================================
 // Helper #1 — Geometry init (FUN_1400b00e0)
@@ -82,14 +84,14 @@ WorldGeometry::WorldGeometry() {
     _dirtyTreeCount = 0;                // dword +0xf0
     _terrainMaterial = nullptr;         // +0xf8
 
-    Video_VertexBuffer_Ctor(reinterpret_cast<Video::VertexBuffer*>(&_vertexBuffer));   // +0x100 (ctor body, B4b-2)
-    Video_IndexBuffer_Ctor(reinterpret_cast<Video::IndexBuffer*>(&_indexBuffer));      // +0x120
+    Video_VertexBuffer_Ctor(&_vertexBuffer);   // +0x100 (ctor body, B4b-2)
+    Video_IndexBuffer_Ctor(&_indexBuffer);     // +0x120
 
     _waterMaterialA = nullptr;          // +0x150
     _waterMaterialB = nullptr;          // +0x158
 
-    Video_VertexBuffer_Ctor(reinterpret_cast<Video::VertexBuffer*>(&_waterVertexBuffer));   // +0x160
-    Video_IndexBuffer_Ctor(reinterpret_cast<Video::IndexBuffer*>(&_waterIndexBuffer));      // +0x180
+    Video_VertexBuffer_Ctor(&_waterVertexBuffer);   // +0x160
+    Video_IndexBuffer_Ctor(&_waterIndexBuffer);     // +0x180
 
     for (Header& h : _arrays) { h.data = nullptr; h.sizeCap = 0; }   // +0x1a0..+0x228
 
@@ -227,10 +229,17 @@ using Ptr8ZeroArray = Collection::Array<GameColl::Ptr8>;
 // @8, float maxSpawnAge @0xc}, stride 0x10, align 8. Whole-stride copy; the
 // tail seed is {0, 0.0f, 10.0f} — see the banner above
 // Reimpl_Array_Resize_Stride10_Spawn for why 10.0f is load-bearing.
+struct SpawnEntry {
+    void*  ref;           // +0x00 ExternalPtr
+    float  minSpawnAge;   // +0x08
+    float  maxSpawnAge;   // +0x0C
+};
+static_assert(sizeof(SpawnEntry) == 0x10, "SpawnEntry stride 0x10");
+// The new element written into the row's raw storage (the three stores of
+// 0x14000c520's unrolled arms).
 void InitSpawnEntry(uint8_t* e) {
-    *reinterpret_cast<uint64_t*>(e + 0x00) = 0;      // ExternalPtr
-    *reinterpret_cast<float*>(e + 0x08)    = 0.0f;   // minSpawnAge
-    *reinterpret_cast<float*>(e + 0x0c)    = 10.0f;  // maxSpawnAge (0x41200000)
+    static const SpawnEntry kNew = { nullptr, 0.0f, 10.0f };   // maxSpawnAge 0x41200000
+    std::memcpy(e, &kNew, sizeof(SpawnEntry));
 }
 // stays explicit: `init` is a patterned fill (maxSpawnAge = 10.0f at +0x0c), not
 // the zero/as-found tail any element type's `T()` would write.
@@ -319,50 +328,36 @@ extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCou
 //
 // In the decompile pfVar1 is offset to (base+8) so the relative writes are
 // pfVar1[-2..+4] = 7 floats and pfVar1[+5] / +0x16 = the two shorts.
-extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
+extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
                                                 uint32_t count,
-                                                void* arrayBase) {
-    if (!serializer || !arrayBase || count == 0) return;
+                                                MenuSceneMesh* meshes) {
+    if (!serializer || !meshes || count == 0) return;
 
-    // ENDGAME B.3.4a closing: the `!g_fn_Serialize_Bool` probe (it never called
-    // that door, it only "confirmed serialize plumbing") and its soft-fail arm
-    // are gone with the door.
-    auto* base = reinterpret_cast<uint8_t*>(arrayBase);
     for (uint32_t i = 0; i < count; ++i) {
-        uint8_t* elem = base + static_cast<size_t>(i) * 0x20;
-        // Use Serialize_Uint with a float* cast — both serialize 4-byte fields
-        // through the same encoder-vtable slot for raw types. Original passes
-        // them as floats, but the wire format is identical for (uint32, float).
+        // The port writes the record as eight uint32 words: retail's seven
+        // floats and two shorts (FUN_14001bbf0) are the same bytes in the binary
+        // encoding. LEFT (known_port_issues 14, row 63): the word view of the record.
+        uint32_t* words = reinterpret_cast<uint32_t*>(&meshes[i]);
         for (int off = 0; off < 7; ++off) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
-                *reinterpret_cast<uint32_t*>(elem + off * 4), nullptr);   // B.3.4 bridge
+            serializer->Serialize(words[off], nullptr);   // position, color, yaw
         }
-        // Two shorts at +0x1c and +0x1e — Serializer has a short overload
-        // (slot vtable+0x80 in the original). For lack of a dedicated wired
-        // primitive, treat them as a single uint32 for now. This is a TODO
-        // if tests reveal endianness issues.
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
-            *reinterpret_cast<uint32_t*>(elem + 0x1c), nullptr);   // B.3.4 bridge
+        serializer->Serialize(words[7], nullptr);         // meshIndex | skinIndex << 16
     }
 }
 
 // ============================================================
-// Generic shared body for ExternalPtr-array serialize (#7 / #8)
+// Helpers #7 / #8 — Array_Serialize_External (CASCADE)
 // ============================================================
 //
-// Identical to the single-ref helper (in serialize_externals.cpp) but loops
-// `count` times, treating param_3 as an array of External* at stride 8.
-//
-// Cascade safety: when typeIdPtr is null OR the underlying typeId is 0 (Runtime
-// hasn't registered the type yet), we skip the FindOrLoad call and the
-// IsDerivedFrom validation. This prevents NullFactory crashes during early
-// load and matches the "graceful no-op" pattern from
-// feedback_factory_cascade_strategy.md.
+// The per-reference body is the shared typed SerializeExternalRef
+// (serialize_externals.cpp), looped `count` times over an array of External*
+// (stride 8). Cascade safety: when the type id is 0 (not registered yet) the
+// name is resolved lazily; when that fails too, the IsDerivedFrom validation is
+// skipped.
 namespace {
 
-void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
-                                   const uint32_t* typeIdPtr,
-                                   const char* typeName) {
+void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* arrayBase,
+                                   uint32_t typeId, const char* typeName) {
     if (!serializer || count <= 0 || !arrayBase) return;
 
     // Required Runtime primitives. If any are missing, log once and bail.
@@ -378,21 +373,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
         return;
     }
 
-    void* factory = ::Object::ExternalFactory::_singleton;
-    // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
-    // The singleton is still read through the EXISTING door, so the guards
-    // above still gate the same cell and the same registered body still runs.
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-
-    // Resolve typeId — null/zero means "type not yet registered". Skip
-    // IsDerivedFrom validation in that case.
-    uint32_t typeId = 0;
-    bool typeIdResolved = false;
-    if (typeIdPtr) {
-        typeId = *typeIdPtr;
-        typeIdResolved = (typeId != 0);
-    }
+    bool typeIdResolved = (typeId != 0);
     // Lazy resolution path — see serialize_externals.cpp for rationale.
     if (!typeIdResolved && typeName) {
         const char* simple = typeName;
@@ -413,145 +394,27 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
         }
     }
 
-    // Encoding state. Slot vtable+0x10 returns 3 for "saving in
-    // export-by-path" mode where we walk existing pointers through GetPath +
-    // FindOrLoad without serializing anything.
-    IO::Encoding* encoding = const_cast<IO::Encoding*>(
-        &reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
-    if (!encoding) return;
-    // Encoding vtable +0x10 is slot 2 == IO::Encoding::GetKind() (B34_RULES
-    // §1.1: the Encoding table has NO destructor slot, so IsBinary/IsText/
-    // GetKind are slots 0/1/2). Unlike `serializer + 8`, this really IS the
-    // Encoding, so the member call is the same dispatch, not a different one.
-    int encState = encoding->GetKind();   // B.3.4 bridge  (+0x10 = Encoding::GetKind)
-
-    // Each element of arrayBase is an External* slot (8 bytes).
-    auto* slots = reinterpret_cast<void**>(arrayBase);
-    for (int i = 0; i < count; ++i) {
-        void** slot = &slots[i];
-
-        if (encState == 3) {
-            // Path-export mode: only walk existing pointers, never write.
-            if (!*slot) continue;
-            // `GetPath` returns by value through a hidden return slot and the
-            // callee CONSTRUCTS into it; copy-initialising the local is the
-            // same store.
-            System::Filename pathBuf =
-                reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
-            const void* found = efactory->FindOrLoad(pathBuf);
-            if (found && typeIdResolved) {
-                ::Object::IsDerivedFromOrTrust(const_cast<void*>(found), typeId);
-            }
-            continue;
-        }
-
-        // Load/save mode. Build a temporary Filename used to round-trip the
-        // path through the serializer.
-        System::Filename fnameBuf;
-
-        bool refMode = efactory->IsReferenceModeEnabled();
-
-        if (refMode) {
-            // Reference-mode: serialize a uint reference id.
-            uint32_t refId = 0xFFFFFFFFu;
-            if (*slot) {
-                refId = efactory->GetReferenceId(
-                    reinterpret_cast<const ::Object::External*>(*slot));   // B.3.3 bridge
-            }
-
-            // Branch decision matches original's:
-            //   if (slot==NULL || *(int*)(*serializer + 8) != 0 || refId != UINT_MAX)
-            //       Serialize(refId)
-            //       if (refId != UINT_MAX) {
-            //           if loading: GetPathForReferenceId + Filename::operator=
-            //           goto loadPathBranch
-            //       }
-            //   else Serialize(refId)  // also UINT_MAX
-            int serializerInner = *reinterpret_cast<int*>(
-                reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
-
-            bool needsPathSerialize = false;
-            if (!*slot || serializerInner != 0 || refId != 0xFFFFFFFFu) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
-                if (refId != 0xFFFFFFFFu) {
-                    if (serializerInner == 0) {
-                        // Loading path: ask the factory for the actual path
-                        // and assign into our temp Filename.
-                        System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
-                        fnameBuf = tmpFn;
-                    }
-                    needsPathSerialize = true;
-                }
-            } else {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
-            }
-
-            if (needsPathSerialize) {
-                int innerCheck = *reinterpret_cast<int*>(
-                    reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
-                if (innerCheck == 0) {
-                    void* loaded = const_cast<::Object::External*>(
-                        efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
-                    void* result = nullptr;
-                    if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
-                        result = loaded;
-                    }
-                    *slot = result;
-                }
-            }
-        } else {
-            // Plain mode: serialize a bool flag, then a string path if true.
-            bool hasRef = (*slot != nullptr);
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
-            if (hasRef) {
-                if (*slot) {
-                    System::Filename pathBuf =
-                        reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
-                    fnameBuf = pathBuf;
-                }
-                fnameBuf.AsString().Serialize(serializer);
-
-                int innerCheck = *reinterpret_cast<int*>(
-                    reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
-                if (innerCheck == 0) {
-                    void* loaded = const_cast<::Object::External*>(
-                        efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
-                    void* result = nullptr;
-                    if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
-                        result = loaded;
-                    }
-                    *slot = result;
-                }
-            }
-        }
-
-    }
+    // LEFT: the callers hold the reference arrays with their own element types
+    // (description / mesh / particle tables) and pass them as void*.
+    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);
+    for (int i = 0; i < count; ++i)
+        SerializeExternalRef(slots[i], *serializer, typeId, typeIdResolved);
 }
 
 } // namespace
 
-// ============================================================
-// Helpers #7 / #8 — Array_Serialize_External (CASCADE)
-// ============================================================
-//
 // #7 GraphicsMesh exref array (typeInfo @ slot 0x140151f20)
 extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
-    void* serializer, int count, void* arrayBase) {
-
-
-    const uint32_t tid = Graphics::GraphicsMesh::TypeId();   // ENDGAME B.3.9 TR
+    IO::Serializer* serializer, int count, void* arrayBase) {
     ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  tid ? &tid : nullptr, "Graphics::GraphicsMesh");
+                                  Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh");
 }
 
 // #8 Particle exref array (typeInfo @ slot 0x140151420)
 extern "C" void Reimpl_Array_Serialize_External_Particle(
-    void* serializer, int count, void* arrayBase) {
-
-
-    const uint32_t tid = Graphics::Particle::TypeId();   // ENDGAME B.3.9 TR
+    IO::Serializer* serializer, int count, void* arrayBase) {
     ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  tid ? &tid : nullptr, "Graphics::Particle");
+                                  Graphics::Particle::TypeId(), "Graphics::Particle");
 }
 
 // ============================================================

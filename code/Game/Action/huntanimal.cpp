@@ -31,7 +31,13 @@
 #include "HuntAnimal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // ActHunt_*, Pf_* helpers
+#include "Action/exe_bodies.h"   // HuntIsReady, QueryNearestCharacter, RemoveAnimalActions, HerdStartMigration
+#include "Game/Map.h"
+#include "Component/AnimalComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
 #include "Work/exe_bodies.h"     // WorkGrid_FindCell_9ccf0, WorkBase_ValidateCell_a00f0
 #include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"  // kRdata_*
@@ -81,38 +87,29 @@
 //             herd entity(+0x28) with type check, huntStarted flag(+0x38).
 // ============================================================
 void HuntAnimal::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[16];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status byte (+0x18)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs and hunt flag
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Serialize animal entity ref (+0x20) with AnimalEntity type check
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field20, HuntComponent::TypeId())) {
+    // The HuntComponent (+0x20)
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), HuntComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
 
-    // Serialize herd entity ref (+0x28) with HerdEntity type check
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field28 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field28, CitizenComponent::TypeId())) {
+    // The hunting citizen (+0x28)
+    _field28.InternalBasePtr::Serialize(ser);
+    if (_field28.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field28.Get(), CitizenComponent::TypeId())) {
             _field28 = nullptr;
         }
     }
 
     // Serialize hunt started flag (+0x38)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_field38, nullptr);
 }
 
 // ============================================================
@@ -121,7 +118,7 @@ void HuntAnimal::Persist(void* stream) {
 // ============================================================
 int  HuntAnimal::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    return (_field38 == 0) ? 1 : 0;
+    return (!_field38) ? 1 : 0;
 }
 
 // ============================================================
@@ -131,7 +128,7 @@ int  HuntAnimal::AbstractImpl(void* actionStack) {
 int  HuntAnimal::Execute(void* actionStack, void* time) {
     (void)actionStack;
     (void)time;
-    return (_field38 == 0) ? 1 : 0;
+    return (!_field38) ? 1 : 0;
 }
 
 // ============================================================
@@ -139,114 +136,90 @@ int  HuntAnimal::Execute(void* actionStack, void* time) {
 //
 // Algorithm:
 // 1. If huntStarted is already set, return early
-// 2. Check if the animal at +0x20 is ready (held long enough)
-// 3. Get herd's CharacterComponent position from +0x28 -> +0x278 -> +0x68 -> +0x158
-// 4. Do a spatial query to find a nearby entity of the hunt type
-// 5. Verify the found entity's model component doesn't have bit 20 set (not in use)
-// 6. Get the found entity's model component
-// 7. Calculate grid cell positions for path finding
-// 8. Check path cost and validity between animal and found entity
-// 9. If path is valid:
-//    a. Get model description from found entity's model component
+// 2. Check if the HuntComponent at +0x20 is ready (held long enough)
+// 3. The hunter's position: +0x28 citizen -> character (+0x278) -> modelComponent (+0x68)
+//    -> transform.translation (+0x158)
+// 4. Query the CharacterGrid for the nearest WildAnimalComponent character
+// 5. Verify the found animal's AnimalComponent doesn't have bit 20 set (not in use)
+// 6. Calculate grid cell positions for path finding
+// 7. Check path cost and validity between hunter and animal
+// 8. If path is valid:
+//    a. The AnimalComponent's description (an AnimalDescription)
 //    b. Convert grid position to world position
-//    c. Spawn a corpse action (RemoveAnimal_Action_Ctor)
-//    d. Find HerdComponent from the found entity
-//    e. Start herd migration
+//    c. Build the removal actions (0x1400bbea0)
+//    d. Find the WildAnimalComponent and start its herd's migration
 
 void HuntAnimal::Enter(void*, void*) {
 
     // If hunt already started, return early
-    if (_field38 != 0) {
+    if (_field38) {
         return;
     }
 
-    // Check if the animal at +0x20 is ready to be hunted
-    void* animalEntity = _field20;
-    if (!ActHunt_IsAnimalReady_2a80(animalEntity)) {   // 0x140122a80
+    // Check if the hunt component at +0x20 is ready
+    if (!HuntIsReady(_field20.Get())) {   // 0x140122a80
         return;
     }
 
     // Set up search radius
-    float searchRadius = kRdata_1401721a8;  // 8.0f
+    Math::Scalar searchRadius(kRdata_1401721a8);  // 8.0f
 
-    // Initialize output IBP for spatial query
-    void* queryOutIBP = nullptr;
-    new (&queryOutIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    // Initialize the excluded character (an InternalBasePtr in retail) and the result
+    CharacterComponent* queryOutIBP = nullptr;
 
     // Get the search type ID
     int searchTypeId = static_cast<int>(WildAnimalComponent::TypeId());
 
-    // Get herd entity's CharacterComponent position
-    // Follow chain: herdEntity(+0x28) -> +0x278 -> +0x68 -> position at +0x158
-    void* herdEntity = _field28;
-
-    void* charComp = *(void**)((uint8_t*)herdEntity + 0x278);
-
-    void* posHolder = *(void**)((uint8_t*)charComp + 0x68);
-
-    // Read position (3 floats at +0x158, +0x15c, +0x160)
+    // The hunter's position
+    const Math::Vector3& hunterPos = _field28->character->modelComponent->transform.translation;
     float searchPos[3];
-    searchPos[0] = *(float*)((uint8_t*)posHolder + 0x158);
-    searchPos[1] = *(float*)((uint8_t*)posHolder + 0x15c);
-    searchPos[2] = *(float*)((uint8_t*)posHolder + 0x160);
+    searchPos[0] = hunterPos.x;
+    searchPos[1] = hunterPos.y;
+    searchPos[2] = hunterPos.z;
 
-    // Spatial query: find nearby entity
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    void* gridPtr = *(void**)(gameWorld + 0x88);
-    void* queryResult = nullptr;
+    // Spatial query: find the nearest wild animal
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    CharacterComponent* queryResult = nullptr;
 
-    Pf_SpatialProximityQuery_92260(static_cast<float*>(gridPtr), reinterpret_cast<int64_t*>(&queryResult),   // 0x140092260
-                                   searchPos, &searchRadius, searchTypeId, &queryOutIBP);
+    QueryNearestCharacter(gameWorld->m_characterGrid, &queryResult,   // 0x140092260
+                          searchPos, &searchRadius, searchTypeId, &queryOutIBP);
 
     // If no result found, bail
     if (queryResult == nullptr) {
         return;
     }
 
-    // Get the found entity from query result
-    void* foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
-
-    // Check if the found entity's model component has bit 20 set (in use)
-    void* tempIBP = nullptr;
-    tempIBP = foundEntityParent;
-    void* modelCompIBP1[2] = {nullptr, nullptr};
-    ActHunt_FindComponent_5500(reinterpret_cast<uintptr_t>(tempIBP), modelCompIBP1);   // 0x140005500
-    uint32_t modelFlags = *(uint32_t*)((uint8_t*)(modelCompIBP1[0]) + 0x20);
+    // Check if the found animal's AnimalComponent has flag bit 20 set (in use)
+    AnimalComponent* animal1 = queryResult->_entity->FindComponent<AnimalComponent>();   // 0x140005500
+    uint32_t modelFlags = animal1->_flags;
 
     if ((modelFlags >> 20) & 1) {
         // Entity already in use, bail
         return;
     }
 
-    // Get model component from the found entity (second call for later use)
-    foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
-    tempIBP = foundEntityParent;
-    void* modelCompIBP2[2] = {nullptr, nullptr};
-    ActHunt_FindComponent_5500(reinterpret_cast<uintptr_t>(tempIBP), modelCompIBP2);   // 0x140005500
+    // The AnimalComponent again (second call for later use)
+    AnimalComponent* animal2 = queryResult->_entity->FindComponent<AnimalComponent>();   // 0x140005500
 
-    // Get map pointer from game world for grid calculations
-    int* mapPtr = *(int**)(gameWorld + 0xf8);
+    // The map, for grid calculations
+    Map* map = gameWorld->m_game;
 
-    // Get found entity's position for grid cell calculation
-    void* foundEntity2 = queryResult;
-    void* foundPosHolder = *(void**)((uint8_t*)foundEntity2 + 0x68);
+    // The animal's position for grid cell calculation
+    const Math::Vector3& foundPos = queryResult->modelComponent->transform.translation;
+    float foundPosX = foundPos.x;
+    float foundPosY = foundPos.y;
 
-    float foundPosX = *(float*)((uint8_t*)foundPosHolder + 0x158);
-    float foundPosY = *(float*)((uint8_t*)foundPosHolder + 0x15c);
+    // The hunter's position again for its grid cell
+    const Math::Vector3& hunterPos2 = _field28->character->modelComponent->transform.translation;
 
-    // Get herd position again for the herd's grid cell
-    herdEntity = _field28;
-    charComp = *(void**)((uint8_t*)herdEntity + 0x278);
-    posHolder = *(void**)((uint8_t*)charComp + 0x68);
-
-    int mapSize = *mapPtr;
-    float herdPosX2 = *(float*)((uint8_t*)posHolder + 0x158);
-    float herdPosY2 = *(float*)((uint8_t*)posHolder + 0x15c);
+    int mapSize = map->size;
+    float herdPosX2 = hunterPos2.x;
+    float herdPosY2 = hunterPos2.y;
 
     // Convert world positions to grid cell indices
     float halfSize = (float)(mapSize >> 1);
 
-    // Herd position -> grid cell (toCell)
+    // Hunter position -> grid cell (toCell)
     int herdCellX = (int)(herdPosX2 + halfSize);
     int herdCellY = (int)(herdPosY2 + halfSize);
     if (herdCellX < 0) herdCellX = 0;
@@ -255,7 +228,7 @@ void HuntAnimal::Enter(void*, void*) {
     if (herdCellY >= mapSize) herdCellY = mapSize - 1;
     int toCell = mapSize * herdCellY + herdCellX;
 
-    // Found entity position -> grid cell (fromCell)
+    // Animal position -> grid cell (fromCell)
     int foundCellX = (int)(foundPosX + halfSize);
     int foundCellY = (int)(foundPosY + halfSize);
     if (foundCellX < 0) foundCellX = 0;
@@ -264,15 +237,18 @@ void HuntAnimal::Enter(void*, void*) {
     if (foundCellY >= mapSize) foundCellY = mapSize - 1;
     int fromCell = mapSize * foundCellY + foundCellX;
 
+    // LEFT: 0x14009ccf0 / 0x1400a00f0 are declared in Work/exe_bodies.h (WORK) taking int*.
+    int* mapGrid = reinterpret_cast<int*>(map);
+
     // Check path cost between the two cells
-    uint32_t pathCost = (uint32_t)WorkGrid_FindCell_9ccf0(mapPtr, fromCell, toCell, 0xe1f);   // 0x14009ccf0
+    uint32_t pathCost = (uint32_t)WorkGrid_FindCell_9ccf0(mapGrid, fromCell, toCell, 0xe1f);   // 0x14009ccf0
     if ((int)pathCost < 0) {
         // No valid path, bail
         return;
     }
 
     // Check path validity
-    uint64_t pathValid = WorkBase_ValidateCell_a00f0(mapPtr, 0xe1f, pathCost, toCell);   // 0x1400a00f0
+    uint64_t pathValid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, pathCost, toCell);   // 0x1400a00f0
     if ((char)pathValid == 0) {
         // Path not valid, bail
         return;
@@ -280,13 +256,13 @@ void HuntAnimal::Enter(void*, void*) {
 
     // Path is valid -- proceed with corpse spawning
 
-    // Get description from the found entity's model component
-    void* descObj = *(void**)((uint8_t*)(modelCompIBP2[0]) + 0x18);
+    // The animal's description, when it is an AnimalDescription
+    Description* descObj = animal2->_description;
     bool isModelDesc = ::Object::IsDerivedFromNullSafe(descObj, AnimalDescription::TypeId());
-    void* modelDesc = isModelDesc ? descObj : nullptr;
+    const AnimalDescription* modelDesc = isModelDesc ? static_cast<const AnimalDescription*>(descObj) : nullptr;
 
-    // Store model component IBP for corpse entity ref
-    void* corpseModelIBP = modelCompIBP2[0];
+    // The animal reference for the removal actions
+    Component* corpseModelIBP = animal2;
 
     // Convert grid cell to world position
     float worldPos[3];
@@ -297,61 +273,39 @@ void HuntAnimal::Enter(void*, void*) {
                           (float)(cellIdx / mapSize) - halfFloat,
                           0.0f);
 
-    Reimpl_MapGetTerrainPos(mapPtr, worldPos, reinterpret_cast<float*>(&gridPos), 0, nullptr);   // B.3.1 bridge
+    Reimpl_MapGetTerrainPos(map, worldPos, &gridPos.x, 0, nullptr);   // 0x14009f3e0 reads x, y
 
-    // Spawn the corpse -- call RemoveAnimal_Action_Ctor
-    // Params: herdIBP(+0x28), animIndex(-1), worldPos, fromCell, corpseIBP, descPtr, flags(0)
-    void* herdRef = _field28;
-    void* herdIBP_local[2];
-    herdIBP_local[0] = herdRef;
+    // Build the removal actions on the hunter: citizen, task -1, worldPos, fromCell, the
+    // animal, its description, gate 0
+    CitizenComponent* herdIBP_local = _field28.Get();
 
-    void* corpseIBP_local[2];
-    corpseIBP_local[0] = corpseModelIBP;
+    RemoveAnimalActions(&herdIBP_local, (uint32_t)-1, worldPos, fromCell,   // 0x1400bbea0
+                        &corpseModelIBP, modelDesc, 0);
 
-    Pf_RemoveAnimalCtor_bbea0(herdIBP_local, (uint32_t)-1, reinterpret_cast<uint32_t*>(worldPos), fromCell,   // 0x1400bbea0
-                              corpseIBP_local, reinterpret_cast<int64_t>(modelDesc), 0);
+    // The animal's WildAnimalComponent; start its herd's migration
+    WildAnimalComponent* wild = queryResult->_entity->FindComponent<WildAnimalComponent>();   // 0x1400227e0
 
-    // Find HerdComponent from the found entity and start migration
-    foundEntityParent = *(void**)((uint8_t*)queryResult + 0x10);
-    tempIBP = foundEntityParent;
+    HerdStartMigration(wild->herd.Get());   // 0x140122340
 
-    void* herdCompIBP[2] = {nullptr, nullptr};
-    ActHunt_FindComponent_27e0(reinterpret_cast<uintptr_t>(tempIBP), herdCompIBP);   // 0x1400227e0
+    // Clear the hunt component's progress and set hunt started flag
+    _field20->huntProgress._ticks = 0;
 
-
-    // Read herd component IBP at +0x28 from the resolved object
-    // herdCompIBP[0] IS the resolved object pointer after CheckPtr (no extra deref)
-    void* migrationTarget = *(void**)((uintptr_t)herdCompIBP[0] + 0x28);
-
-    Pf_HerdStartMigration_122340(migrationTarget);   // 0x140122340
-
-    // Clear the animal entity's time at +0x50 and set hunt started flag
-    animalEntity = _field20;
-    *(uint64_t*)((uint8_t*)animalEntity + 0x50) = 0;
-
-    _field38 = 1;
+    _field38 = true;
 }
 
 // ============================================================
 // Slot 9: GetTarget (0x1400c7d60)
-// Returns true if param matches the herd entity's parent (+0x28->+0x10)
-// or the animal entity's parent (+0x20->+0x10).
+// Returns true if param matches the hunter's entity (+0x28 -> +0x10)
+// or the hunt component's entity (+0x20 -> +0x10).
 // ============================================================
 bool HuntAnimal::GetTarget(void* param) {
+    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 
-    // Check herd entity's parent at +0x28 -> +0x10
-    void* herdEntity = _field28;
-    void* herdParent = *(void**)((uint8_t*)herdEntity + 0x10);
-
-    if (herdParent == *(void**)param) {
+    if (_field28->_entity == target) {
         return true;
     }
 
-    // Check animal entity's parent at +0x20 -> +0x10
-    void* animalEntity = _field20;
-    void* animalParent = *(void**)((uint8_t*)animalEntity + 0x10);
-
-    if (animalParent == *(void**)param) {
+    if (_field20->_entity == target) {
         return true;
     }
 
@@ -372,7 +326,7 @@ HuntAnimal::HuntAnimal()
     : _field20(nullptr),
       _field28(nullptr),
       _field30(nullptr),
-      _field38(0),
+      _field38(false),
       _pad39{} {}
 
 // [3] 0x1400c8260
@@ -397,15 +351,16 @@ void* HuntAnimal::CreateInPlaceObject(void* storage) {
 //   RCX=self, RDX=p2, R8=p3.  +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0(byte).
 // ============================================================
 void* ActChild_HuntAnimalCopyCtor_c8400(void* self, uint64_t* p2, uint64_t* p3) {
-    // ENDGAME B.3.8 ACT: the real ctor (HuntAnimal.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) HuntAnimal(p2, p3));
+    // B4 FORWARD: 1 outside caller (Work/work_act_hunt.cpp) holds the refs as uint64_t*.
+    return static_cast<Object::Base*>(new (self) HuntAnimal(
+        reinterpret_cast<CitizenComponent* const*>(p2), reinterpret_cast<HuntComponent* const*>(p3)));
 }
 
 // 0x1400c8400: +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0 (byte).
-HuntAnimal::HuntAnimal(uint64_t* herd, uint64_t* animal)
-    : _field20(reinterpret_cast<void*>(*animal)),
-      _field28(reinterpret_cast<void*>(*herd)),
+HuntAnimal::HuntAnimal(CitizenComponent* const* hunter, HuntComponent* const* hunt)
+    : _field20(*hunt),
+      _field28(*hunter),
       _field30(nullptr),
-      _field38(0) {}
+      _field38(false) {}
 
 DEFINE_EXE_TYPE(HuntAnimal, "Action")

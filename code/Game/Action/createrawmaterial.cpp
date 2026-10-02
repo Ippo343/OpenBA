@@ -24,12 +24,17 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"            // Pf_FindPlacementCell_bd40, ActRm_* helpers
-#include "Work/exe_bodies.h"              // WorkAcc_FindComponent_22520, WorkBase_FindComponent_3050
 #include "Game/exe_bodies.h"              // Reimpl_ExternalPtr_Serialize_StringTable
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
+#include "Component/AutoPickupComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Component/WorkComponent.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -57,52 +62,24 @@
 //   0x140003050 WorkBase_FindComponent_3050 -- find component on entity (ResourceDescription?)
 // ============================================================
 
-// Constant: rotation scale factor (90.0f) at 0x140172204
+/// Constant: rotation scale factor (90.0f) at 0x140172204
 static const float ROTATION_SCALE = 90.0f;
 
 // ============================================================
-// Helper: find RawMaterialDescription component in description entity
-// Searches the component array at desc+0x28 (count at desc+0x30)
-// for a component matching type TypeId_RawMaterialDescription.
+// The RawMaterialDescription among a template's sub-descriptions (retail inlines the
+// walk: slot 2 Type(), then IsDerivedFrom).
 // ============================================================
-static void* FindRawMaterialDesc(void* descEntity) {
-    uintptr_t desc = (uintptr_t)descEntity;
-    int count = *(int*)(desc + 0x30);
-    uintptr_t compArray = *(uintptr_t*)(desc + 0x28);
+static RawMaterialDescription* FindRawMaterialDesc(const ComponentDescription* descEntity) {
+    int count = descEntity->_subDescCount;
+    Description** subDescs = descEntity->_subDescs;
 
     for (int i = 0; i < count; i++) {
-        void* comp = *(void**)(compArray + (int64_t)i * 8);
-        // slot 2 Type()
-        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+        Description* comp = subDescs[i];
+        uint32_t typeId = comp->Type();   // slot 2
         if (typeId == RawMaterialDescription::TypeId()) {
             // Verify with IsDerivedFrom
             if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
-                return comp;
-            }
-        }
-    }
-    return nullptr;
-}
-
-// ============================================================
-// Helper: find component by type ID on new entity
-// Searches the component array at entity+0x30 (count at entity+0x38)
-// using InternalBasePtr for each component.
-// ============================================================
-static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
-    int count = *(int*)(entity + 0x38);
-    uintptr_t compArray = *(uintptr_t*)(entity + 0x30);
-
-    for (int i = 0; i < count; i++) {
-        void* compIBP = (void*)(compArray + (int64_t)i * 8);
-        void* comp = *(void**)compIBP;
-
-        // slot 2 Type()
-        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (compTypeId == typeId) {
-            comp = *(void**)compIBP;
-            if (::Object::IsDerivedFromNullSafe(comp, typeId)) {
-                return comp;
+                return static_cast<RawMaterialDescription*>(comp);
             }
         }
     }
@@ -115,104 +92,78 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
 // Version gates at 0, 1, 2, and 3 control which fields are serialized.
 // ============================================================
 void CreateRawMaterial::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status (version 0)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize resource data (version 3)
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge (Persist's stream is void*)
 
     // Type reference (+0x20)
-    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x20, ser2);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_StringTable(&descEntity, &ser);   // 0x140002340
 
-    // Source building IBP (+0x28)
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (sourceBuilding != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(sourceBuilding, CitizenComponent::TypeId())) {
+    // The working citizen (+0x28)
+    sourceBuilding.InternalBasePtr::Serialize(ser);
+    if (sourceBuilding.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(sourceBuilding.Get(), CitizenComponent::TypeId())) {
             sourceBuilding = nullptr;
         }
     }
 
-    // Material type index (+0x44) as int
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
-
-    // Yield multiplier (+0x4c) as float
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(yieldMultiplier, nullptr);   // B.3.4 bridge
-
-    // Natural resource flag (+0x50) as bool
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
-
-    // Total quantity (+0x40) as int
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-
-    // Place near flag (+0x51) as bool
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x51), nullptr);   // B.3.4 bridge
+    ser.Serialize(materialCellIdx, nullptr);   // +0x44
+    ser.Serialize(yieldMultiplier, nullptr);   // +0x4C
+    ser.Serialize(naturalResFlag, nullptr);    // +0x50
+    ser.Serialize(totalQuantity, nullptr);     // +0x40
+    ser.Serialize(placeNearFlag, nullptr);     // +0x51
 
     // Version > 0: secondary entity IBP (+0x30)
-    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version > 0) {
-        reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-        if (secondaryEntity != nullptr) {
-            if (!::Object::IsDerivedFromNullSafe(secondaryEntity, ComponentEntity::TypeId())) {
+        secondaryEntity.InternalBasePtr::Serialize(ser);
+        if (secondaryEntity.Get() != nullptr) {
+            if (!::Object::IsDerivedFromNullSafe(secondaryEntity.Get(), ComponentEntity::TypeId())) {
                 secondaryEntity = nullptr;
             }
         }
     }
 
     // Version < 2: default placement flags; >= 2: serialize uint (+0x48)
-    version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    version = ser.GetVersion();
     if (version < 2) {
         placementFlags = 4;
     } else {
-        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x48), nullptr);   // B.3.4 bridge
+        ser.Serialize(placementFlags, nullptr);
     }
 
     // Version > 2: tertiary entity IBP (+0x38)
-    version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    version = ser.GetVersion();
     if (version > 2) {
-        reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-        if (tertiaryEntity != nullptr) {
-            if (!::Object::IsDerivedFromNullSafe(tertiaryEntity, ComponentEntity::TypeId())) {
+        tertiaryEntity.InternalBasePtr::Serialize(ser);
+        if (tertiaryEntity.Get() != nullptr) {
+            if (!::Object::IsDerivedFromNullSafe(tertiaryEntity.Get(), ComponentEntity::TypeId())) {
                 tertiaryEntity = nullptr;
             }
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 
 int  CreateRawMaterial::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // Get description entity at +0x20
-    uintptr_t descEntity = *(uintptr_t*)(s + 0x20);
+    // The material template at +0x20
+    ComponentDescription* descEntity = this->descEntity;
 
-    // Find RawMaterialDescription component in the description
-    void* rawMatDesc = FindRawMaterialDesc((void*)descEntity);
+    // Find RawMaterialDescription among the template's sub-descriptions
+    RawMaterialDescription* rawMatDesc = FindRawMaterialDesc(descEntity);
 
-    // Check building maturity to determine yield
-    uintptr_t building = *(uintptr_t*)(s + 0x28);
+    // The working citizen's education picks the yield
+    CitizenComponent* citizen = sourceBuilding.Get();
 
     int yield;
-    // Compare building age (+0x210) with maturity threshold from description (+0x288 -> +0x118)
-    int buildingAge = *(int*)(building + 0x210);
-    uintptr_t buildDesc = *(uintptr_t*)(building + 0x288);
-    int maturityAge = *(int*)(buildDesc + 0x118);
-
-    if (buildingAge < maturityAge) {
-        // Young: use yield at +0x40
-        yield = *(int*)((uintptr_t)rawMatDesc + 0x40);
+    if (citizen->education < citizen->description->maxEducation) {
+        yield = rawMatDesc->_lowCreateCount;    // +0x40
     } else {
-        // Mature: use yield at +0x44
-        yield = *(int*)((uintptr_t)rawMatDesc + 0x44);
+        yield = rawMatDesc->_highCreateCount;   // +0x44
     }
 
     // Apply yield multiplier
@@ -242,8 +193,8 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
     // as MOV R12D,[RAX+0x38] and 0x1400bed9f stores it to RSP+0x30 = arg7; our ported site
     // in action_pf_roots_drop.cpp does the same). So this is "how many whole units fit in
     // the hauler", which is why it caps the per-entity batch.
-    int unitVolume = *(int*)((uintptr_t)rawMatDesc + 0x48);
-    int carrierVolume = *(int*)(s + 0x40);
+    int unitVolume = rawMatDesc->_weight;   // +0x48
+    int carrierVolume = totalQuantity;      // +0x40
     // STANDALONE-ONLY TRIPWIRE (retail has no equivalent and needs none). Retail's IDIV
     // relies on +0x48 being non-zero and its cap being >= 1; a cap of 0 makes batchSize 0,
     // the loop tail's `SUB R13D,EDI` subtract nothing, and 0x1400c6efa jump back forever —
@@ -269,25 +220,20 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
         }
 
         // Check if natural resource flag needs to be set
-        if (*(char*)(s + 0x50) == '\0') {
+        if (!naturalResFlag) {
             int32_t matIdx = materialCellIdx;
-            uintptr_t mapGrid = *(uintptr_t*)(gameWorld + 0xf8);
-            uintptr_t cellArrayBase = *(uintptr_t*)(mapGrid + 0x80);
-            int64_t existingEntity = *(int64_t*)(cellArrayBase + 8 + (int64_t)matIdx * 0x30);
-            if (existingEntity != 0) {
-                naturalResFlag = 1;
+            if (gameWorld->m_game->cells[matIdx].occupant != nullptr) {
+                naturalResFlag = true;
             }
         }
 
         // Find placement cell
         int32_t matIdx = materialCellIdx;
         int cellIndex;
-        if (*(char*)(s + 0x50) != '\0') {
+        if (naturalResFlag) {
             // Natural resource placement: use helper
-            void* thirdEntity = tertiaryEntity;
-            cellIndex = Pf_FindPlacementCell_bd40(   // 0x14009bd40
-                *(int**)(gameWorld + 0xf8), matIdx, '\x01',
-                (int64_t*)&thirdEntity, placementFlags);
+            ComponentEntity* thirdEntity = tertiaryEntity.Get();
+            cellIndex = gameWorld->m_game->FindPlacementCell(matIdx, '\x01', &thirdEntity, placementFlags);   // 0x14009bd40
         } else {
             cellIndex = matIdx;
         }
@@ -297,39 +243,31 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
             batchSize = batchSize;  // keep batchSize as is
         } else {
             // Allocate new ComponentEntity from description
-            void* newEntityMem = System::MemoryAllocator::MemAlloc(0x48, 8);
-            void* newEntity = nullptr;
+            ComponentEntity* newEntityMem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+            ComponentEntity* newEntity = nullptr;
             if (newEntityMem != nullptr) {
-                newEntity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(newEntityMem), (void*)descEntity);   // 0x1400c3720
+                newEntity = ComponentEntity_CtorFromDescription(newEntityMem, descEntity);   // 0x1400c3720
             }
 
-            // Wrap in InternalBasePtr
-            int64_t entityIBP = 0;
-            new (&entityIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
+            // The new entity's reference (an InternalBasePtr in retail)
+            ComponentEntity* entityIBP = newEntity;
 
-            // Find component on new entity (DAT_1401c7c80 type)
-            void* comp = FindComponentOnEntity(entityIBP, RawMaterialComponent::TypeId());
-
-            // Wrap component in IBP
-            int64_t compIBP = 0;
-            new (&compIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
+            // The RawMaterialComponent on the new entity (an inlined FindComponent)
+            RawMaterialComponent* comp = entityIBP->FindComponent<RawMaterialComponent>();
 
             // Position entity at cell with random rotation
-            void* randomPtr = *(void**)(gameWorld + 0xd8);
-            int randVal = reinterpret_cast<System::Random*>(randomPtr)->RandTol(2);   // B.3.4b bridge
-            ActRm_PositionEntity_9760(compIBP, cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
+            int randVal = gameWorld->m_random->RandTol(2);
+            PositionRawMaterial(comp, cellIndex, (float)randVal * ROTATION_SCALE);   // 0x140129760
 
             // Handle secondary entity (+0x30) if present
-            if (*(int64_t*)(s + 0x30) != 0) {
-                uintptr_t secondaryEntity = *(uintptr_t*)(s + 0x30);
-                uintptr_t secDesc = *(uintptr_t*)(secondaryEntity + 0x28);
+            if (secondaryEntity.Get() != nullptr) {
+                const ComponentDescription* secDesc = secondaryEntity->_description;
 
-                // Search secondary entity's description for DAT_1401c8118 component
-                int secCount = *(int*)(secDesc + 0x30);
+                // Search secondary entity's description for its WorkPlaceDescription
+                int secCount = secDesc->_subDescCount;
                 for (int i = 0; i < secCount; i++) {
-                    void* secComp = *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8);
-                    uint32_t secTypeId = reinterpret_cast<Object::Base*>(secComp)->Type();   // B.3.8 bridge
+                    Description* secComp = secDesc->_subDescs[i];
+                    uint32_t secTypeId = secComp->Type();   // slot 2
                     if (secTypeId == WorkPlaceDescription::TypeId()) {
                         ::Object::IsDerivedFromNullSafe(secComp, WorkPlaceDescription::TypeId());
                         break;
@@ -338,39 +276,26 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
             }
 
             // Set quantity on new entity component
-            *(int32_t*)(compIBP + 0x28) = batchSize;
-            *(int64_t*)(compIBP + 0x30) = 0;
+            comp->quantity = batchSize;
+            comp->profession = nullptr;
 
-
-            // Register raw material with resource tracker
-            int64_t sourceIBP = *(int64_t*)(s + 0x30);
-            ActRm_RegisterRawMaterial_88ef0(   // 0x140088ef0
-                *(int64_t*)(gameWorld + 0xf0), &sourceIBP,
-                *(char*)(s + 0x51), descEntity, batchSize);
+            // Register raw material with the town
+            ComponentEntity* sourceIBP = secondaryEntity.Get();
+            RegisterRawMaterial(   // 0x140088ef0
+                gameWorld->m_citizenList, &sourceIBP,
+                placeNearFlag, descEntity, batchSize);
 
             // Register entity with entity list
-            int64_t entityRef = entityIBP;
-            int typeGroup = *(int*)(descEntity + 0x20);
-            EntityList_RegisterEntity_Impl(*(void**)(gameWorld + 0xe8), &entityRef, typeGroup);   // 0x1400c48a0
+            ComponentEntity* entityRef = entityIBP;
+            int typeGroup = static_cast<int>(descEntity->_category);
+            gameWorld->m_entityList->RegisterEntity(&entityRef, typeGroup);   // 0x1400c48a0
 
-            // Handle place-near behavior: link to secondary entity
-            if (*(char*)(s + 0x51) != '\0' && *(int64_t*)(s + 0x30) != 0) {
-                int64_t childIBP = 0;
-                WorkAcc_FindComponent_22520(*(uintptr_t*)(s + 0x30), &childIBP);   // 0x140022520
-                if (childIBP != 0) {
-                    void* rdCompIBP = nullptr;
-                    WorkBase_FindComponent_3050(static_cast<uintptr_t>(entityIBP), &rdCompIBP);   // 0x140003050
-                    uint32_t rdValue = *(uint32_t*)(*(uintptr_t*)&rdCompIBP + 0x28);
-
-                    // B.3.2 bridge: FUN_140044810 == Collection::Array<int32>::
-                    // SetSize(n, fill) (3-arg form; ActRm_DynArrayPush4_44810 in
-                    // action_base_rawmat.cpp), gated on the byte flag at +0x28 and
-                    // appending rdValue as the new tail element.
-                    if (*reinterpret_cast<char*>(childIBP + 0x28) != 0) {
-                        int newCount = *reinterpret_cast<int*>(childIBP + 0x38) + 1;
-                        GameColl::AsArray<GameColl::I32>(reinterpret_cast<void*>(childIBP + 0x30))
-                            .SetSize(newCount, GameColl::I32{ static_cast<int32_t>(rdValue) });
-                    }
+            // Handle place-near behavior: queue the pile's work id on the secondary's auto pickup
+            if (placeNearFlag && secondaryEntity.Get() != nullptr) {
+                AutoPickupComponent* autoPickup = secondaryEntity->FindComponent<AutoPickupComponent>();   // 0x140022520
+                if (autoPickup != nullptr) {
+                    WorkComponent* work = entityIBP->FindComponent<WorkComponent>();   // 0x140003050
+                    AutoPickupAppend(autoPickup, static_cast<uint32_t>(work->workId));   // 0x140044810
                 }
             }
         }
@@ -383,29 +308,23 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
 
 // ============================================================
 // GetTarget (0x1400c6aa0)
-// Returns true if param matches entity at +0x28->+0x10, or +0x30, or +0x38.
+// Returns true if param matches the citizen's entity (+0x28 -> +0x10), or +0x30, or +0x38.
 // ============================================================
 bool CreateRawMaterial::GetTarget(void* param) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 
-    // Check +0x28 -> building entity -> +0x10 (the actual target entity)
-    uintptr_t building = *(uintptr_t*)(s + 0x28);
-    uintptr_t targetEntity = *(uintptr_t*)(building + 0x10);
-
-    // Use a local IBP to CheckPtr the target
-    uintptr_t targetIBP = targetEntity;
-
-    if (*(uintptr_t*)param == targetIBP) {
+    // The citizen's owning entity (Component +0x10)
+    if (target == sourceBuilding->_entity) {
         return 1;
     }
 
     // Check +0x30 (secondary entity)
-    if (*(int64_t*)(s + 0x30) == *(int64_t*)param) {
+    if (secondaryEntity.Get() == target) {
         return 1;
     }
 
     // Check +0x38 (tertiary entity)
-    if (*(int64_t*)(s + 0x38) == *(int64_t*)param) {
+    if (tertiaryEntity.Get() == target) {
         return 1;
     }
 
@@ -431,8 +350,8 @@ CreateRawMaterial::CreateRawMaterial()
       materialCellIdx(0),
       placementFlags(0),
       yieldMultiplier(0.0f),
-      naturalResFlag(0),
-      placeNearFlag(0),
+      naturalResFlag(false),
+      placeNearFlag(false),
       _pad52{} {}
 
 // [3] 0x1400c6f30
@@ -461,26 +380,31 @@ void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float p
                                         uint64_t* param_4, uint64_t* param_5, uint64_t param_6,
                                         uint32_t param_7, uint32_t param_8, uint8_t param_9,
                                         uint64_t* param_10, uint32_t param_11) {
-    // ENDGAME B.3.8 ACT: the real ctor (CreateRawMaterial.h). A by-address door.
+    // B4 FORWARD: outside callers (Work/work_act_consume.cpp,
+    // Work/work_act_rawmat.cpp) hold the template as an integer and the refs as uint64_t*.
     return static_cast<Object::Base*>(new (param_1) CreateRawMaterial(
-        param_2, param_3, param_4, param_5, param_6, param_7, param_8, param_9, param_10, param_11));
+        reinterpret_cast<ComponentDescription*>(param_2), param_3,
+        reinterpret_cast<CitizenComponent* const*>(param_4),
+        reinterpret_cast<ComponentEntity* const*>(param_5), param_6, param_7, param_8, param_9,
+        reinterpret_cast<ComponentEntity* const*>(param_10), param_11));
 }
 
 // 0x1400c71a0: +0x20 = param_2 (raw) ; +0x28/+0x30/+0x38 = *param_4 / *param_5 /
 // *param_10 ; +0x40/+0x44/+0x48 = param_7/8/11 ; +0x4c = param_3 (MOVSS, the XMM2
 // float) ; +0x50 = param_9 ; +0x51 = 1. param_6 is not read.
-CreateRawMaterial::CreateRawMaterial(uint64_t desc, float yield, uint64_t* source, uint64_t* secondary,
-                                     uint64_t /*unused6*/, uint32_t quantity, uint32_t cellIdx,
-                                     uint8_t naturalRes, uint64_t* tertiary, uint32_t placement)
-    : descEntity(reinterpret_cast<void*>(desc)),
-      sourceBuilding(reinterpret_cast<void*>(*source)),
-      secondaryEntity(reinterpret_cast<void*>(*secondary)),
-      tertiaryEntity(reinterpret_cast<void*>(*tertiary)),
+CreateRawMaterial::CreateRawMaterial(ComponentDescription* desc, float yield, CitizenComponent* const* source,
+                                     ComponentEntity* const* secondary, uint64_t /*unused6*/,
+                                     uint32_t quantity, uint32_t cellIdx, bool naturalRes,
+                                     ComponentEntity* const* tertiary, uint32_t placement)
+    : descEntity(desc),
+      sourceBuilding(*source),
+      secondaryEntity(*secondary),
+      tertiaryEntity(*tertiary),
       totalQuantity(static_cast<int32_t>(quantity)),
       materialCellIdx(static_cast<int32_t>(cellIdx)),
       placementFlags(placement),
       yieldMultiplier(yield),
       naturalResFlag(naturalRes),
-      placeNearFlag(1) {}
+      placeNearFlag(true) {}
 
 DEFINE_EXE_TYPE(CreateRawMaterial, "Action")

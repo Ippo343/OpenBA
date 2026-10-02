@@ -42,7 +42,7 @@ class PathTool final : public Tool {
 public:
     PathTool()                                                             // 0x1400de9e0
         : selectedEntity(0), _field30(nullptr), _field38(nullptr), _field40(nullptr),
-          _field48(0), _pad4C{}, _field50(nullptr), _field58(0), _pad5C{} {}
+          _field48(0), _field4C(0), _field50(nullptr), _field58(0), _field5C(0) {}
 
     // 0x1400de950: releases the three Collection::Array buffers (+0x50, +0x40,
     // +0x30, in that order) — the inlined ~Array bodies. The hand-rolled tree
@@ -52,7 +52,7 @@ public:
     void Shutdown() override;                                              // [5]  0x1400de930
     char OnKey(char active) override;                                      // [6]  0x1400de6b0
     void Update(void*, char) override {}                                   // [7]  0x1400dd700 RET
-    void Draw(void* context, char active) override;                        // [8]  0x1400dd3b0
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x1400dd3b0
     char OnCancel() override { return 0; }                                 // [9]  0x1400de920
     bool IsSelected(uint64_t* ref) override;                               // [10] 0x1400de8d0
     int  GetCursor() const override { return 4; }                         // [12] 0x1400de910
@@ -64,12 +64,12 @@ public:
     uint64_t selectedEntity;   // +0x28 InternalBasePtr: the selected entity
     void*    _field30;         // +0x30 array data (freed by the retail dtor)
     void*    _field38;         // +0x38 its size/capacity pair
-    void*    _field40;         // +0x40 int[] path-point cells
+    int32_t* _field40;         // +0x40 int[] path-point cells (B4 PLAYER)
     int32_t  _field48;         // +0x48 path-point count
-    uint8_t  _pad4C[4];        // +0x4c
-    void*    _field50;         // +0x50 int-pair[] line segments
+    int32_t  _field4C;         // +0x4c capacity of the +0x40 array (B4 PLAYER)
+    int32_t* _field50;         // +0x50 int-pair[] line segments (B4 PLAYER)
     int32_t  _field58;         // +0x58 segment count
-    uint8_t  _pad5C[4];        // +0x5c
+    int32_t  _field5C;         // +0x5c capacity of the +0x50 array (B4 PLAYER)
 };
 
 

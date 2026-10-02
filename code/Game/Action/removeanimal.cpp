@@ -23,9 +23,11 @@
 #include "RemoveAnimal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // ActHunt_* helpers
+#include "Action/exe_bodies.h"   // MarkEntityForRemoval, NotifyEntityChanged, the 0x140003110 forwarder
+#include "Component/AnimalComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include "Component/FireDescription.h"
 #include <cstdio>
 #include <cstdlib>
@@ -58,38 +60,30 @@
 // type validation on deserialization.
 // ============================================================
 void RemoveAnimal::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t localSerializer1[16];
-    alignas(8) uint8_t localSerializer2[24];
-
-    // Serialize status byte (+0x18)
-    ::new (static_cast<void*>(localSerializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(localSerializer1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(localSerializer1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity ref at +0x20
-    ::new (static_cast<void*>(localSerializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(localSerializer2));   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    _field20.InternalBasePtr::Serialize(ser);
 
-    // Type-check: if the deserialized ptr is not a ComponentEntity, null it
-    void* entityRef = _field20;
+    // Type-check: retail tests ComponentEntity (cell 0x1401c5d70 at 0x1400ca8e1); the tree
+    // tests FireDescription (known_port_issues 14a row 52), kept.
+    ComponentEntity* entityRef = _field20.Get();
     if (entityRef != nullptr) {
         if (!::Object::IsDerivedFromNullSafe(entityRef, FireDescription::TypeId())) {
             _field20 = nullptr;
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(localSerializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
 // Slot 4: AbstractImpl (0x1400ca7f0) -- DISABLED hook (RIP-relative MOV in prologue)
-// Marks the animal entity at +0x20 for removal, queues to cleanup list.
+// Marks the animal entity at +0x20 for removal, queues it on the removal list.
 // Returns 0 (action complete).
 // ============================================================
 int  RemoveAnimal::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    void* entityRef = _field20;
+    ComponentEntity* entityRef = _field20.Get();
 
     // ~310 kills produced ZERO component dumps below, and the dump sits inside the
     // `entityRef != nullptr` arm — so "RemoveAnimal never ran" and "RemoveAnimal ran with
@@ -101,27 +95,23 @@ int  RemoveAnimal::AbstractImpl(void* actionStack) {
         if (!entityRef) ++s_null;
     }
 
-    // Get cleanup manager from game world singleton
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    void* cleanupMgr = *(void**)(gameWorld + 0xe8);
+    // The world's EntityList
+    EntityList* cleanupMgr = GameUpdateLoop::_singleton->m_entityList;
 
     if (entityRef != nullptr) {
         // Copy to local for CheckPtr
-        void* localRef = entityRef;
+        ComponentEntity* localRef = entityRef;
 
-        // Check bit 10 of flags at entity+0x40 (already marked for removal?)
-        uint32_t flags = *(uint32_t*)((uint8_t*)localRef + 0x40);
+        // Check bit 10 of the entity flags (already marked for removal?)
+        uint32_t flags = localRef->_entityFlags;
         if (((flags >> 10) & 1) == 0) {
 
             // Mark entity for removal
-            ActHunt_MarkEntityRemoval_c2ea0(localRef);   // 0x1400c2ea0
+            MarkEntityForRemoval(localRef);   // 0x1400c2ea0
 
-            // Push to cleanup array.
-            // B.3.2 bridge: FUN_140003110 == Collection::Array<Ptr8>::SetSize(n,fill)
-            // (3-arg form; ActHunt_DynArraySetCount_3110 in action_base_hunt.cpp).
-            int count = *(int*)((uint8_t*)cleanupMgr + 0xd8);
-            GameColl::AsArray<GameColl::Ptr8>((uint8_t*)cleanupMgr + 0xd0)
-                .SetSize(count + 1, *reinterpret_cast<const GameColl::Ptr8*>(&localRef));
+            // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
+            ActHunt_DynArraySetCount_3110(&cleanupMgr->removalList,   // 0x140003110
+                                          cleanupMgr->removalList.count + 1, &localRef);
         }
     }
     return 0;
@@ -129,28 +119,22 @@ int  RemoveAnimal::AbstractImpl(void* actionStack) {
 
 // ============================================================
 // Slot 8: CheckEntity (0x1400ca760) -- DISABLED hook (RIP-relative CALL in prologue)
-// Clears "in use" bit (bit 20) on entity's model component flags.
-// If the low 16 bits of flags changed, notifies parent entity.
+// Clears the "in use" bit (bit 20) of the animal's AnimalComponent flags.
+// If the low 16 bits of flags changed, notifies the owning entity.
 // ============================================================
 void RemoveAnimal::CheckEntity() {
-    void* localIBP[4];
+    AnimalComponent* animal = _field20->FindComponent<AnimalComponent>();   // 0x140005500
 
-    void* entity20 = _field20;
-    ActHunt_FindComponent_5500(reinterpret_cast<uintptr_t>(entity20), localIBP);   // 0x140005500
-
-    uint8_t* modelComp = (uint8_t*)(localIBP[0]);
-    uint32_t flagsOld = *(uint32_t*)(modelComp + 0x20);
+    uint32_t flagsOld = animal->_flags;
 
     if ((flagsOld >> 20) & 1) {
-        // Re-read (CheckPtr may have updated)
-        modelComp = (uint8_t*)(localIBP[0]);
-        flagsOld = *(uint32_t*)(modelComp + 0x20);
+        flagsOld = animal->_flags;
         uint32_t flagsNew = flagsOld & 0xFFEFFFFF;  // clear bit 20
-        *(uint32_t*)(modelComp + 0x20) = flagsNew;
+        animal->_flags = flagsNew;
 
         if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
-            if (*(void**)(modelComp + 0x10) != nullptr) {
-                ActHunt_NotifyEntityChanged_c3470(*(void**)(modelComp + 0x10));   // 0x1400c3470
+            if (animal->_entity != nullptr) {
+                NotifyEntityChanged(animal->_entity);   // 0x1400c3470
             }
         }
     }
@@ -161,7 +145,7 @@ void RemoveAnimal::CheckEntity() {
 // Returns true if *param matches the entity at +0x20.
 // ============================================================
 bool RemoveAnimal::GetTarget(void* param) {
-    return *(void**)param == _field20;
+    return *(void**)param == _field20.Get();   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 }
 
 // ============================================================
@@ -179,8 +163,8 @@ RemoveAnimal::RemoveAnimal()
 
 // Retail has no out-of-line RemoveAnimal ctor: 0x1400bbea0 inlines it
 // (Internal(), Action stamp, +0x10/+0x18 = 0, RemoveAnimal stamp, +0x20 = animal).
-RemoveAnimal::RemoveAnimal(uint64_t animal)
-    : _field20(reinterpret_cast<void*>(animal)) {}
+RemoveAnimal::RemoveAnimal(ComponentEntity* animal)
+    : _field20(animal) {}
 
 // [3] 0x1400ca870
 // [4] 0x1400ca7f0

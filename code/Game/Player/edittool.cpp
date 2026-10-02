@@ -39,6 +39,9 @@
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Entity/ComponentEntity.h"
+#include "Game/WorldGeometry.h"
+#include "Game/Map.h"
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -126,41 +129,34 @@ static uint32_t ModelComponentTypeId() {
 // whose last 3 floats (+0x158/+0x15c/+0x160) are the world x/y/z — and projects it
 // through the camera. Returns false (caller leaves the panel at its default position)
 // if the component is missing or the point is behind the camera.
-static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* outY) {
+static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* outX, float* outY) {
     if (!entityObj) return false;
 
-    // Scan the entity's component list (entity+0x30 = array of component IBPs,
-    // entity+0x38 = count) for its ModelComponent. This mirrors 0x140003f60 but with a
-    // type-id that actually resolves in standalone (0x140003f60's registered reimpl reads
-    // the raw .rdata ModelComponent id, which is null in SA, so it never matches).
+    // Scan the entity's components (+0x30 array, +0x38 count) for its ModelComponent.
+    // This mirrors 0x140003f60 with the type id taken from the factory tree.
     const uint32_t modelTid = ModelComponentTypeId();
     if (!modelTid) return false;
 
-    uintptr_t modelComp = 0;
-    int count = *(int32_t*)(entityObj + 0x38);
-    uintptr_t arr = *(uintptr_t*)(entityObj + 0x30);
+    const ModelComponent* modelComp = nullptr;
+    int count = entityObj->_componentCount;
     for (int i = 0; i < count; i++) {
-        uint64_t* slot = (uint64_t*)(arr + (int64_t)i * 8);
-        void* comp = *(void**)slot;
+        Component* comp = entityObj->_components[i].Get();
         if (!comp) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (tid == modelTid) {
-            if (Object::IsDerivedFromNullSafe(comp, modelTid)) modelComp = (uintptr_t)comp;
+        if (comp->Type() == modelTid) {
+            if (Object::IsDerivedFromNullSafe(comp, modelTid)) modelComp = static_cast<const ModelComponent*>(comp);
             break;
         }
     }
     if (!modelComp) return false;
 
     // World position = ModelComponent transform translation (+0x148 + 0x10).
-    float* pos = (float*)(modelComp + 0x158);
-    float worldPos[3] = { pos[0], pos[1], pos[2] };
+    const Math::Vector3 worldPos = modelComp->transform.translation;
 
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t camHolder = *(uintptr_t*)(gameWorld + 0xe0);
+    PlayerController* camHolder = GameUpdateLoop::_singleton->m_playerController;
     if (!camHolder) return false;
 
     float screen[2] = { 0.0f, 0.0f };
-    if (!PlayerScreenRect_WorldToScreen_098210(camHolder, worldPos, screen)) return false;
+    if (!PlayerScreenRect_WorldToScreen_098210(camHolder, &worldPos, screen)) return false;
     *outX = screen[0];
     *outY = screen[1];
     return true;
@@ -382,7 +378,7 @@ void EditTool::Update(void*, char) {
     // QoL addition, guarded so it never runs when 0380 already produced a rect.)
     if (!gotRect) {
         float sx = 0.0f, sy = 0.0f;
-        if (TryProjectEntityModelPos(entityObj, &sx, &sy)) {
+        if (TryProjectEntityModelPos(reinterpret_cast<const ComponentEntity*>(entityObj), &sx, &sy)) {   // LEFT: entityObj is read raw from the PageToggleUI controller (+0x30) above
             *(float*)&rectangle[0] = sx;   // left
             *(float*)&rectangle[4] = sy;   // top
             *(float*)&rectangle[8] = sx;   // right (== left -> midX = sx, centred)
@@ -525,7 +521,7 @@ char EditTool::OnKey(char param2) {
 
     // Get world data pointers
     uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
+    Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8 (the tree called it the entity list)
 
     // Compute camera ray from mouse position
     // rayOrigin = 12 bytes (Vector3), rayDir = 12 bytes (Vector3)
@@ -562,7 +558,7 @@ char EditTool::OnKey(char param2) {
     float hitPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     uintptr_t foundEntity = 0;
 
-    uintptr_t mapComponent = *(uintptr_t*)(gameWorld + 0x110);
+    WorldGeometry* mapComponent = GameUpdateLoop::_singleton->m_worldGeometry;
     int* mapSize = *(int**)(gameWorld + 0xf8);
 
     if (mapComponent) {
@@ -590,9 +586,9 @@ char EditTool::OnKey(char param2) {
             int cellIndex = gridSize * cellY + cellX;
 
             if (cellIndex > 0) {
-                uintptr_t retIBP = 0;
-                void* result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
-                if (result) foundEntity = *(uintptr_t*)result;
+                ComponentEntity* retIBP = nullptr;
+                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                if (result) foundEntity = (uintptr_t)*result;   // LEFT: foundEntity is the tree's integer IBP (EditTool::OnKey not yet converted)
             }
             if (SelDiagOn())
                 printf("[SelDiag] mapHit=1 hitPos=(%.2f,%.2f) cell=(%d,%d) cellEntity=%p\n",
@@ -838,7 +834,7 @@ extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
 
     uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
+    Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8
     int* mapSize = *(int**)(gameWorld + 0xf8);
     int gridSize = (mapSize && *mapSize > 0) ? *mapSize : 256;
     int tried = 0, found = 0;
@@ -855,9 +851,9 @@ extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
                 int cellIndex = gridSize * cy + cx;
                 if (cellIndex <= 0) continue;
 
-                uintptr_t retIBP = 0;
-                void* result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
-                uintptr_t entity = result ? *(uintptr_t*)result : 0;
+                ComponentEntity* retIBP = nullptr;
+                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                uintptr_t entity = result ? (uintptr_t)*result : 0;   // LEFT: as above
                 if (!entity) continue;
                 found++;
 

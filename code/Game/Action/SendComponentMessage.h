@@ -15,26 +15,32 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class ComponentEntity;   // Entity/ComponentEntity.h
 
 class SendComponentMessage final : public Action {
     DECLARE_EXE_TYPE(SendComponentMessage)
 
 public:
     SendComponentMessage();                                                   // create 0x140023070
-    SendComponentMessage(uint64_t* target, uint32_t* compTypeId, uint32_t message, uint64_t* second,
-                         uint32_t arg);   // 0x1400cb1d0
+    SendComponentMessage(ComponentEntity* const* target, const uint32_t* compTypeId, uint32_t message,
+                         ComponentEntity* const* second, uint32_t arg);   // 0x1400cb1d0
     ~SendComponentMessage() override = default;                // [0] 0x1400230f0
     void Persist(void* stream) override;                       // [3] 0x1400cb000
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400caef0
     bool GetTarget(void* param) override;                      // [9] 0x1400cae80
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 target entity IBP
-    void*     _field28;          // +0x28 second IBP
-    uint32_t  _field30;          // +0x30 component type id
-    int32_t   _field34;          // +0x34 message id
-    void*     _field38;          // +0x38 message arg (+0x38) / 0 (+0x3c)
+    Object::InternalPtr<ComponentEntity> _field20;   // +0x20 target entity (Persist checks ComponentEntity)
+    Object::InternalPtr<ComponentEntity> _field28;   // +0x28 source entity handed to OnMessage (Persist checks ComponentEntity)
+    uint32_t  _field30;          // +0x30 component type id (Object::Type::Serialize)
+    int32_t   _field34;          // +0x34 message id (Persist: int)
+    uint32_t  _field38;          // +0x38 message arg (Persist: uint)
+    uint32_t  _field3C;          // +0x3C second message arg, ctor 0 (Persist: uint)
 };
+
+static_assert(offsetof(SendComponentMessage, _field3C) == 0x3C, "SendComponentMessage +0x3C");
 
 static_assert(sizeof(SendComponentMessage) == 0x40, "SendComponentMessage is 0x40 (create 0x140023070 MemAlloc)");
 static_assert(alignof(SendComponentMessage) == 8, "SendComponentMessage is 8-aligned");
