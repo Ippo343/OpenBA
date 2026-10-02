@@ -63,30 +63,10 @@
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
-// ============================================================
-// Heightfield scratch-struct field offsets (blueprint §1.1).
-// (mirrors worldgen.cpp; kept local to this TU)
-// ============================================================
-static constexpr int HF_GRIDSIZE   = 0x00;   // int  dim (== sizeRow[0]*2)
-static constexpr int HF_PATHLIST   = 0x18;   // array-of-arrays of polylines (cc850 deep-appends here)
-static constexpr int HF_PATHCOUNT  = 0x20;   // int  count of paths in HF_PATHLIST (branch-select bound)
-static constexpr int HF_BASINSTAMPS = 0x38;  // radial carve stamps (0xC elem {x,y,radius}) -> maskC, SUBTRACTED
-static constexpr int HF_BASIN_CNT   = 0x40;  // int  count of the above
-static constexpr int HF_WATERFEATS  = 0x48;  // b260 phase-2 tarn features (0xC elem {x,y,radius=bandX})
-static constexpr int HF_WATERFEATS_CNT = 0x50;   // int  count of the above
-static constexpr int HF_RANDOM     = 0x58;   // System::Random
-static constexpr int HF_SIZEROW    = 0xa28;  // int* size-table row
-
-// SizeRow word indices used here (blueprint §1.2). sizeRow is int*, so [k] == byte k*4.
-//   [0]    = +0x00 dim
-//   +0x20  = numSecondaryPaths
-//   [0x0a] = +0x28 minRangeCount
-//   [0x0b] = +0x2c maxRangeCount
-//   [0x0c] = +0x30 minBandX
-//   [0x0d] = +0x34 maxBandX
-//   +0x38  = satellitesPerRange
-//   +0x3c  = radiusMax
-//   +0x40  = radiusMin
+// The heightfield record and its size row are TerrainHeightfield / TerrainSizeRow
+// (TerrainHeightfield.h): gridSize +0x00, paths +0x18 (the polylines cc850
+// deep-appends), basinStamps +0x38 (radial carve stamps -> maskC, SUBTRACTED),
+// waterFeatures +0x48 (b260 phase-2 tarn features), random +0x58, sizeRow +0xA28.
 
 // ============================================================
 // .rdata float constants (verified via read_memory; address=value).
@@ -118,9 +98,9 @@ static constexpr float kOne = 1.0f;
 // This adapter calls the real member and copies its result back into `self` so
 // the in-place call sites below (vec2_normalize2) don't change (B3R: called by
 // name; the pointer cache and its init went).
-static float* vec2_normalize_real(float* self) {
-    Math::Vector2 out = reinterpret_cast<const Math::Vector2*>(self)->Normalize();
-    *reinterpret_cast<Math::Vector2*>(self) = out;
+static Math::Vector2* vec2_normalize_real(Math::Vector2* self) {
+    Math::Vector2 out = self->Normalize();
+    *self = out;
     return self;
 }
 
@@ -131,14 +111,14 @@ static inline float fneg(float x) {
     float r; __builtin_memcpy(&r, &u, 4); return r;
 }
 // Vector2::Normalize in place.
-static inline void vec2_normalize2(float* v) {
+static inline void vec2_normalize2(Math::Vector2* v) {
     vec2_normalize_real(v);
 }
-static inline float rftol(void* rng) {
-    return reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+static inline float rftol(System::Random* rng) {
+    return rng->RandFloatTol();
 }
-static inline float rfloat(void* rng) {
-    return reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+static inline float rfloat(System::Random* rng) {
+    return rng->RandFloat();
 }
 
 // ============================================================
@@ -158,15 +138,11 @@ static inline float rfloat(void* rng) {
 // prefix copied only when the block moved, fill for every index at or past the
 // old count, old block freed only when it moved. The only dropped line was the
 // `if (!data) return` out-of-memory bail.
+// The record is TerrainStamp {x, y, radius}; the lists are the heightfield's
+// basinStamps (+0x38) and waterFeatures (+0x48).
 // ============================================================
-struct WgVec3Rec { float x, y, z; };
-static_assert(sizeof(WgVec3Rec) == 0x0c && alignof(WgVec3Rec) == 4, "0xC-stride record");
-using WgVec3Array = Collection::Array<WgVec3Rec>;
-
-static void AppendVec3(void* hdr, int newCount, const float* src /*x,y,z*/) {
-    // B.3.2 bridge: hf+0x38 / hf+0x48 are still raw {data,count,cap} triples.
-    reinterpret_cast<WgVec3Array*>(hdr)->SetSize(newCount,
-                                                *reinterpret_cast<const WgVec3Rec*>(src));
+static void AppendVec3(Collection::Array<TerrainStamp>* list, int newCount, const TerrainStamp& src) {
+    list->SetSize(newCount, src);
 }
 
 // ============================================================
@@ -174,25 +150,23 @@ static void AppendVec3(void* hdr, int newCount, const float* src /*x,y,z*/) {
 // dst{data,count,cap}@dst <- src{data,count,cap}@src (frees dst's old data,
 // allocates count*0x1c, copies each 0x1C-byte element).
 // ============================================================
-static void CopyVec1c(void* dstHdr, void* srcHdr) {
-    if (dstHdr == srcHdr) return;
-    uint8_t* d = (uint8_t*)dstHdr;
-    uint8_t* s = (uint8_t*)srcHdr;
-    if (*(void**)(d + 0x00)) System::MemoryAllocator::MemFree(*(void**)(d + 0x00));
-    *(void**)(d + 0x00) = nullptr;
-    *(int*)(d + 0x08) = 0;
-    int cnt = *(int*)(s + 0x08);
-    *(int*)(d + 0x08) = cnt;
-    void* nd = nullptr;
+static void CopyVec1c(RawArray<TerrainPathPoint>* d, const RawArray<TerrainPathPoint>* s) {
+    if (d == s) return;
+    if (d->data) System::MemoryAllocator::MemFree(d->data);
+    d->data = nullptr;
+    d->size = 0;
+    int cnt = s->size;
+    d->size = cnt;
+    TerrainPathPoint* nd = nullptr;
     if (cnt > 0) {
-        *(int*)(d + 0x0c) = cnt;
-        nd = System::MemoryAllocator::MemAlloc((uint64_t)cnt * 0x1c, 4);
-        *(void**)(d + 0x00) = nd;
+        d->capacity = cnt;
+        nd = static_cast<TerrainPathPoint*>(System::MemoryAllocator::MemAlloc((uint64_t)cnt * sizeof(TerrainPathPoint), 4));
+        d->data = nd;
     }
     if (!nd) return;
-    uint8_t* sd = *(uint8_t**)(s + 0x00);
+    const TerrainPathPoint* sd = s->data;
     for (int i = 0; i < cnt; ++i)
-        __builtin_memcpy((uint8_t*)nd + (size_t)i*0x1c, sd + (size_t)i*0x1c, 0x1c);
+        nd[i] = sd[i];
 }
 
 // ============================================================
@@ -215,38 +189,47 @@ static void CopyVec1c(void* dstHdr, void* srcHdr) {
 // (TryPlacePath, below) passes newCount = count + 1, so the array never shrinks
 // here. The row carries retail's arm.
 // ============================================================
+// The row's callbacks receive the element as the bytes rtcoll::ArraySpec hands
+// them; each takes ONE typed view of its element (LEFT: the callback signature
+// is Collection.h's). The element is RawArray<TerrainPathPoint>, the zero
+// stores of the header are its three fields (H7: retail's two qword stores).
 static void AssignRgPathVec(uint8_t* d, const uint8_t* s) {
-    *(void**)d = nullptr;
-    *(uint64_t*)(d + 8) = 0;
-    CopyVec1c(d, const_cast<uint8_t*>(s));
-}
-static void InitRgPathVec(uint8_t* d) {              // Collection::Array's ctor; no site here reaches it
-    *(uint64_t*)(d + 0) = 0;
-    *(uint64_t*)(d + 8) = 0;
+    RawArray<TerrainPathPoint>* dst = (RawArray<TerrainPathPoint>*)d;              // LEFT: ArraySpec callback (uint8_t*)
+    const RawArray<TerrainPathPoint>* src = (const RawArray<TerrainPathPoint>*)s;  // LEFT: ArraySpec callback (uint8_t*)
+    dst->data = nullptr;
+    dst->size = 0;
+    dst->capacity = 0;
+    CopyVec1c(dst, src);
 }
 static void DestroyRgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
+    RawArray<TerrainPathPoint>* slots = (RawArray<TerrainPathPoint>*)base;         // LEFT: ArraySpec callback (uint8_t*)
     for (int i = 0; i < count; ++i) {
-        uint8_t* slot = base + (size_t)i * 0x10;
-        rtcoll::MemFree(*(void**)slot);               // null-guarded inside
-        *(void**)slot = nullptr;
-        *(uint64_t*)(slot + 8) = 0;
+        RawArray<TerrainPathPoint>* slot = &slots[i];
+        rtcoll::MemFree(slot->data);                  // null-guarded inside
+        slot->data = nullptr;
+        slot->size = 0;
+        slot->capacity = 0;
     }
 }
 // stays explicit: `assign` deep-copies the inner vector (CopyVec1c) and
 // `destroy` frees its buffer — byteCopy=false plus a destroy, which no C++
-// element type can express.
+// element type can express. `init` (Collection::Array's ctor, the header's
+// zero stores; no site here reaches it) is the value-initialising TInit.
 static const rtcoll::ArraySpec kSpec_RgPathVec = {  // exe 0x140024460
     "Array<Array<PathPoint>>", 0x10, 8,
-    &AssignRgPathVec, &InitRgPathVec, &DestroyRgPathVec, /*byteCopy*/false,
+    &AssignRgPathVec, &rtcoll::TInit<RawArray<TerrainPathPoint>>, &DestroyRgPathVec, /*byteCopy*/false,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
-using RgPathVecArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+using RgPathVecArray = Collection::Array<RawArray<TerrainPathPoint>, Collection::DefaultAllocator,
                                          Collection::ExplicitSpec<&kSpec_RgPathVec>>;
 
-static void DeepAppendAoA(void* hdr, int newCount, void* srcVec) {
-    // B.3.2 bridge: hf+0x18 is still a raw {data,count,cap} triple.
-    reinterpret_cast<RgPathVecArray*>(hdr)->SetSizeFill(newCount, srcVec);
+// The heightfield's `paths` is a TerrainPathList (coastline's kSpec_WgPathVec
+// row); this file drives the same list through its own twin row so that the
+// deep copy stays this file's CopyVec1c (it keeps an out-of-memory return the
+// coastline twin lacks). One view of the list under the twin row.
+static void DeepAppendAoA(TerrainPathList* paths, int newCount, const void* srcVec) {
+    reinterpret_cast<RgPathVecArray*>(paths)->SetSizeFill(newCount, srcVec);   // LEFT: twin spec row of TerrainPathList (kSpec_RgPathVec vs kSpec_WgPathVec)
 }
 
 // ============================================================
@@ -275,14 +258,22 @@ static void DeepAppendAoA(void* hdr, int newCount, void* srcVec) {
 // which stays explicit because "leave the whole stride as found" is a probe
 // contract; this one is an element type.
 // ============================================================
-using WgPathPointElem = GameColl::Bytes<0x1c, 4>;   // exe 0x140023b70, ranges arm
-static_assert(sizeof(WgPathPointElem)  == 0x1c, "WgPathPointElem stride");
-static_assert(alignof(WgPathPointElem) == 4,    "WgPathPointElem align");
-using WgPathPointArray = Collection::Array<WgPathPointElem>;
+// B.4: the element is TerrainPathPoint. Its row is the one
+// `SpecFor<GameColl::Bytes<0x1C,4>>()` derived (whole-stride byte copy, the new
+// tail value-initialised = zeroed, no destroy), spelled for the named record:
+// TerrainPathPoint is trivially default-constructible, so its own trait-derived
+// row would leave the tail untouched (coastline's arm), not this site's.
+static const rtcoll::ArraySpec kSpec_RgPathPointZeroInit = {  // exe 0x140023b70, ranges arm
+    "Array<PathPoint> (tail zeroed)", sizeof(TerrainPathPoint), alignof(TerrainPathPoint),
+    &rtcoll::TAssign<TerrainPathPoint>, &rtcoll::TInit<TerrainPathPoint>, nullptr, /*byteCopy*/true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using WgPathPointArray = Collection::Array<TerrainPathPoint, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&kSpec_RgPathPointZeroInit>>;
 
-static void ResizeVec1c(void* hdr, int newCount) {
-    // B.3.2 bridge: the caller's header is still a raw {data,count,cap} triple.
-    reinterpret_cast<WgPathPointArray*>(hdr)->SetSize(newCount);
+static void ResizeVec1c(WgPathPointArray* pts, int newCount) {
+    pts->SetSize(newCount);
 }
 
 // ============================================================
@@ -300,25 +291,25 @@ static void ResizeVec1c(void* hdr, int newCount) {
 //   Store candidate at the midpoint index, then recurse on both halves with the
 //   displacement amplitude halved (param6*0.5). Terminates when span <= 1.
 // ============================================================
-static void SubdivideSeg(int32_t* param_1, int32_t** vec, int param_3, int param_4,
+static void SubdivideSeg(TerrainHeightfield* hf, WgPathPointArray* vec, int param_3, int param_4,
                          float param_5, float param_6) {
     int span = param_4 - param_3;
     if (span <= 1) return;
 
-    void* rng = (uint8_t*)param_1 + HF_RANDOM;
-    uint8_t* base = *(uint8_t**)vec;
-    float* a = (float*)(base + (size_t)param_3 * 0x1c);   // endpoint A {x,y}
-    float* b = (float*)(base + (size_t)param_4 * 0x1c);   // endpoint B {x,y}
-    float ax = a[0], ay = a[1];
-    float bx = b[0], by = b[1];
+    System::Random* rng = &hf->random;
+    TerrainPathPoint* base = vec->_data;
+    TerrainPathPoint* a = &base[param_3];   // endpoint A {x,y}
+    TerrainPathPoint* b = &base[param_4];   // endpoint B {x,y}
+    float ax = a->x, ay = a->y;
+    float bx = b->x, by = b->y;
     float dirX = bx - ax;                 // local_120
     float dirY = by - ay;                 // local_11c
     float midX = (bx + ax) * kHalf;       // fVar11
     float midY = (by + ay) * kHalf;       // fVar12
 
     // half-plane normal: (-dir.y, dir.x), normalized.  (local_128 = dir.y ^ sign)
-    float perp[2] = { fneg(dirY), dirX };
-    vec2_normalize2(perp);
+    Math::Vector2 perp(fneg(dirY), dirX);
+    vec2_normalize2(&perp);
 
     float limit = fneg(param_5);           // fVar9 = -param5
 
@@ -326,14 +317,14 @@ static void SubdivideSeg(int32_t* param_1, int32_t** vec, int param_3, int param
     int safety = 0;
     do {
         float t = rftol(rng) * param_6 * kMidAmp;   // displacement magnitude
-        candX = perp[0] * t + midX;        // fVar8
-        candY = perp[1] * t + midY;        // fVar7
+        candX = perp.x * t + midX;         // fVar8
+        candY = perp.y * t + midY;         // fVar7
 
-        float dB[2] = { bx - candX, by - candY };   // local_f8/local_f4
-        float dA[2] = { ax - candX, ay - candY };   // local_f0/local_ec
-        vec2_normalize2(dB);
-        vec2_normalize2(dA);
-        float facing = dA[0]*dB[0] + dA[1]*dB[1];    // dot (pfVar4 . pfVar5)
+        Math::Vector2 dB(bx - candX, by - candY);   // local_f8/local_f4
+        Math::Vector2 dA(ax - candX, ay - candY);   // local_f0/local_ec
+        vec2_normalize2(&dB);
+        vec2_normalize2(&dA);
+        float facing = dA.x*dB.x + dA.y*dB.y;        // dot (pfVar4 . pfVar5)
 
         // reject conditions transcribed verbatim:
         //   while (cand.x < limit);
@@ -350,12 +341,12 @@ static void SubdivideSeg(int32_t* param_1, int32_t** vec, int param_3, int param
     } while (true);
 
     int mid = (span >> 1) + param_3;
-    float* m = (float*)(base + (size_t)mid * 0x1c);
-    m[0] = candX; m[1] = candY;
+    TerrainPathPoint* m = &base[mid];
+    m->x = candX; m->y = candY;
 
     float halfAmp = param_6 * kHalf;
-    SubdivideSeg(param_1, vec, param_3, mid, param_5, halfAmp);
-    SubdivideSeg(param_1, vec, mid, param_4, param_5, halfAmp);
+    SubdivideSeg(hf, vec, param_3, mid, param_5, halfAmp);
+    SubdivideSeg(hf, vec, mid, param_4, param_5, halfAmp);
 }
 
 // ============================================================
@@ -363,13 +354,15 @@ static void SubdivideSeg(int32_t* param_1, int32_t** vec, int param_3, int param
 // `param_2` points (closed ring if branchSel<0, else a branch off the existing
 // path[branchSel]) via SubdivideSeg, validate it has no self-intersections and
 // no crossings with existing paths (segment intersection params both in (0,1)),
-// and on success deep-append it to the array-of-arrays at param_1+0x18.
+// and on success deep-append it to the heightfield's paths (+0x18).
 // Returns 1 on success (placed), 0 on reject.
+// param_4..8 are the five per-point brush values (stored verbatim into
+// TerrainPathPoint +0x08..+0x18).
 // ============================================================
-static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_3 /*scale*/,
-                        uint32_t param_4, uint32_t param_5, uint32_t param_6,
-                        uint32_t param_7, uint32_t param_8, float param_9 /*branchSel*/) {
-    void* rng = (uint8_t*)param_1 + HF_RANDOM;
+static int TryPlacePath(TerrainHeightfield* hf, int param_2 /*nptCount*/, float param_3 /*scale*/,
+                        float param_4, float param_5, float param_6,
+                        float param_7, float param_8, float param_9 /*branchSel*/) {
+    System::Random* rng = &hf->random;
 
     // ENDGAME B.3.2 step 2: a real Collection::Array with RAII; the manual free
     // at the single exit below is the destructor now (the early `return 0` on
@@ -378,15 +371,15 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
     ResizeVec1c(&pts, param_2);
     if (!pts._data) return 0;
 
-    uint8_t* pd = (uint8_t*)pts._data;
+    TerrainPathPoint* pd = pts._data;
     // seed band params into bytes [8..0x1c) of every element
     for (int i = 0; i < param_2; ++i) {
-        uint8_t* e = pd + (size_t)i * 0x1c;
-        *(uint32_t*)(e + 0x08) = param_4;
-        *(uint32_t*)(e + 0x0c) = param_5;
-        *(uint32_t*)(e + 0x10) = param_6;
-        *(uint32_t*)(e + 0x14) = param_7;
-        *(uint32_t*)(e + 0x18) = param_8;
+        TerrainPathPoint* e = &pd[i];
+        e->strength     = param_4;
+        e->innerRadius  = param_5;
+        e->innerFalloff = param_6;
+        e->outerRadius  = param_7;
+        e->outerFalloff = param_8;
     }
 
     int lo, hi;
@@ -395,62 +388,62 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
     if ((int)param_9 < 0) {
         // ---- CLOSED RING ----
         int last = pts._size - 1;
-        float* p0 = (float*)pd;
-        p0[0] = 0.0f; p0[1] = param_3 * kNegHalf;     // first: {0, scale*-0.5}
+        TerrainPathPoint* p0 = &pd[0];
+        p0->x = 0.0f; p0->y = param_3 * kNegHalf;     // first: {0, scale*-0.5}
 
-        uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(3);   // B.3.4b bridge
-        float* pl = (float*)(pd + (size_t)last * 0x1c);
+        uint32_t r = rng->Rand(3);
+        TerrainPathPoint* pl = &pd[last];
         if (r == 0) {
-            pl[0] = 0.0f; pl[1] = param_3 * kHalf;    // {0, scale*0.5}
+            pl->x = 0.0f; pl->y = param_3 * kHalf;    // {0, scale*0.5}
         } else {
             float v = (r == 1) ? (param_3 * kHalf)    // {scale*0.5, 0}
                                : (param_3 * kNegHalf);// r==2: {scale*-0.5, 0}
-            pl[0] = v; pl[1] = 0.0f;
+            pl->x = v; pl->y = 0.0f;
         }
         // midpoint jitter: pts[count/2] = (RandFloatTol*scale*0.125, RandFloatTol*scale*0.125)
         float jy = rftol(rng) * param_3 * kEighth;
         float jx = rftol(rng) * param_3 * kEighth;
-        float* pm = (float*)(pd + (size_t)(pts._size >> 1) * 0x1c);
-        pm[0] = jx; pm[1] = jy;
+        TerrainPathPoint* pm = &pd[pts._size >> 1];
+        pm->x = jx; pm->y = jy;
 
         subAmp2 = param_3 * kQuarter;                 // fVar22
         subAmp  = param_3 * kHalf;                    // fVar24
-        SubdivideSeg(param_1, (int32_t**)&pts, 0, pts._size >> 1, subAmp, subAmp2);
+        SubdivideSeg(hf, &pts, 0, pts._size >> 1, subAmp, subAmp2);
         lo = pts._size >> 1;
         hi = pts._size - 1;
     } else {
         // ---- BRANCH off existing path[branchSel] ----
-        void* aoa = *(void**)((uint8_t*)param_1 + HF_PATHLIST);   // hf+0x18 data
-        uint8_t* selHdr = (uint8_t*)aoa + (size_t)(int)param_9 * 0x10;
-        int selCount = *(int*)(selHdr + 0x08);
+        RawArray<TerrainPathPoint>* selHdr = &hf->paths._data[(int)param_9];
+        int selCount = selHdr->size;
         int q = (selCount + ((selCount >> 31) & 3)) >> 2;          // selCount/4 (toward 0)
-        int startIdx = reinterpret_cast<System::Random*>(rng)->Rand(q, q * 3);   // B.3.4b bridge
-        uint8_t* selData = *(uint8_t**)(selHdr + 0x00);
-        *(uint64_t*)pd = *(uint64_t*)(selData + (size_t)startIdx * 0x1c);  // first pt = selected pt {x,y}
+        int startIdx = rng->Rand(q, q * 3);
+        const TerrainPathPoint* sel = &selHdr->data[startIdx];
+        pd[0].x = sel->x;                             // first pt = selected pt {x,y}
+        pd[0].y = sel->y;                             // (retail: one qword copy; H7)
 
         float jitter = rftol(rng) * param_3 * kHalf;  // fVar17
         int last = pts._size - 1;
-        float* pl = (float*)(pd + (size_t)last * 0x1c);
-        uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(4);   // B.3.4b bridge
+        TerrainPathPoint* pl = &pd[last];
+        uint32_t r = rng->Rand(4);
         float half = param_3 * kHalf;                 // fVar24 = scale*0.5
-        // CONCAT44(hi,lo) -> pl[0]=lo, pl[1]=hi
-        if (r == 0)      { pl[0] = jitter;            pl[1] = half;             } // {jitter, scale*0.5}
-        else if (r == 1) { pl[0] = half;             pl[1] = jitter;           } // {scale*0.5, jitter}
-        else if (r == 2) { pl[0] = param_3*kNegHalf; pl[1] = jitter;           } // {scale*-0.5, jitter}
-        else /* r==3 */  { pl[0] = jitter;           pl[1] = param_3*kNegHalf; } // {jitter, scale*-0.5}
+        // CONCAT44(hi,lo) -> x=lo, y=hi
+        if (r == 0)      { pl->x = jitter;            pl->y = half;             } // {jitter, scale*0.5}
+        else if (r == 1) { pl->x = half;              pl->y = jitter;           } // {scale*0.5, jitter}
+        else if (r == 2) { pl->x = param_3*kNegHalf;  pl->y = jitter;           } // {scale*-0.5, jitter}
+        else /* r==3 */  { pl->x = jitter;            pl->y = param_3*kNegHalf; } // {jitter, scale*-0.5}
 
         subAmp2 = param_3 * kQuarter;
         subAmp  = param_3 * kHalf;
         lo = 0;
         hi = pts._size - 1;
     }
-    SubdivideSeg(param_1, (int32_t**)&pts, lo, hi, subAmp, subAmp2);
+    SubdivideSeg(hf, &pts, lo, hi, subAmp, subAmp2);
 
     // ---- VALIDATION ----
     // Then: self-intersection + cross-path intersection; reject if both
     // intersection parameters are strictly in (0,1).
     int n = pts._size;
-    uint8_t* P = (uint8_t*)pts._data;
+    const TerrainPathPoint* P = pts._data;
     bool reject = false;
 
     // Nearest-neighbour adjacency pre-pass (retail FUN_1400cc850 first loop, the
@@ -464,12 +457,12 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         for (int i = 0; i < n && !reject; ++i) {
             int   bestIdx = -2;
             float best    = 1e6f;                     // DAT_140172268
-            float* pa = (float*)(P + (size_t)i * 0x1c);
+            const TerrainPathPoint* pa = &P[i];
             for (int j = 0; j < n; ++j) {
                 if (i == j) continue;
-                float* pb = (float*)(P + (size_t)j * 0x1c);
-                float dvx = pa[0] - pb[0];
-                float dvy = pa[1] - pb[1];
+                const TerrainPathPoint* pb = &P[j];
+                float dvx = pa->x - pb->x;
+                float dvy = pa->y - pb->y;
                 float lensq = dvx * dvx + dvy * dvy;  // Math::Vector2::LengthSquared
                 if (lensq < best) { best = lensq; bestIdx = j; }
             }
@@ -479,17 +472,17 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
     }
 
     for (int i = 0; i < n - 1 && !reject; ++i) {
-        float* a0 = (float*)(P + (size_t)i * 0x1c);
-        float* a1 = (float*)(P + (size_t)(i + 1) * 0x1c);
-        float ax = a0[0], ay = a0[1];
-        float dAx = a1[0] - ax, dAy = a1[1] - ay;
+        const TerrainPathPoint* a0 = &P[i];
+        const TerrainPathPoint* a1 = &P[i + 1];
+        float ax = a0->x, ay = a0->y;
+        float dAx = a1->x - ax, dAy = a1->y - ay;
 
         // self vs other (non-adjacent) segments of this path
         for (int j = 0; j < n - 1 && !reject; ++j) {
             if (j == i || j + 1 == i || j == i + 1 || j + 1 == i + 1) continue;
-            float* b0 = (float*)(P + (size_t)j * 0x1c);
-            float* b1 = (float*)(P + (size_t)(j + 1) * 0x1c);
-            float dBx = b1[0] - b0[0], dBy = b1[1] - b0[1];
+            const TerrainPathPoint* b0 = &P[j];
+            const TerrainPathPoint* b1 = &P[j + 1];
+            float dBx = b1->x - b0->x, dBy = b1->y - b0->y;
             // denom/t/u transcribed byte-faithfully from FUN_1400cc850's self-
             // intersection block (the puVar12 loop): denom = dAx*dBy - dBx*dAy,
             // t = (dBx*wy - wx*dBy)/denom, u = (dAx*wy - wx*dAy)/denom. The prior
@@ -498,7 +491,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
             // rejected nearly every candidate -> ccf60 placed 0 of numSecondary.
             float denom = dAx * dBy - dBx * dAy;       // fVar18
             if (denom != 0.0f) {
-                float wx = ax - b0[0], wy = ay - b0[1];
+                float wx = ax - b0->x, wy = ay - b0->y;
                 float t = (dBx * wy - wx * dBy) / denom;   // fVar20
                 float u = (dAx * wy - wx * dAy) / denom;   // fVar18
                 if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; }
@@ -506,24 +499,24 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
         }
         if (reject) break;
 
-        // vs existing paths (hf+0x18, count at hf+0x20)
-        int pathCount = *(int*)((uint8_t*)param_1 + HF_PATHCOUNT);
+        // vs existing paths (hf->paths)
+        int pathCount = hf->paths._size;
         if (pathCount > 0) {
-            void* aoa = *(void**)((uint8_t*)param_1 + HF_PATHLIST);
+            const RawArray<TerrainPathPoint>* aoa = hf->paths._data;
             for (int pi = 0; pi < pathCount && !reject; ++pi) {
-                uint8_t* hdr = (uint8_t*)aoa + (size_t)pi * 0x10;
-                int pc = *(int*)(hdr + 0x08);
-                uint8_t* pdat = *(uint8_t**)(hdr + 0x00);
+                const RawArray<TerrainPathPoint>* hdr = &aoa[pi];
+                int pc = hdr->size;
+                const TerrainPathPoint* pdat = hdr->data;
                 for (int k = 0; k < pc - 1 && !reject; ++k) {
-                    float* q0 = (float*)(pdat + (size_t)k * 0x1c);
-                    float* q1 = (float*)(pdat + (size_t)(k + 1) * 0x1c);
-                    float dBx = q1[0] - q0[0], dBy = q1[1] - q0[1];
+                    const TerrainPathPoint* q0 = &pdat[k];
+                    const TerrainPathPoint* q1 = &pdat[k + 1];
+                    float dBx = q1->x - q0->x, dBy = q1->y - q0->y;
                     // Same canonical crossing test as FUN_1400cc850's puVar13 loop
                     // (cross-path): denom = dAx*dBy - dBx*dAy, t = (dBx*wy - wx*dBy)/denom,
                     // u = (dAx*wy - wx*dAy)/denom. (Was sign-flipped denom + wrong u.)
                     float denom = dAx * dBy - dBx * dAy;   // fVar20
                     if (denom != 0.0f) {
-                        float wx = ax - q0[0], wy = ay - q0[1];
+                        float wx = ax - q0->x, wy = ay - q0->y;
                         float t = (dBx * wy - wx * dBy) / denom;   // fVar21
                         float u = (dAx * wy - wx * dAy) / denom;   // fVar20
                         if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; }
@@ -537,8 +530,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
     if (reject) {
         result = 0;
     } else {
-        DeepAppendAoA((uint8_t*)param_1 + HF_PATHLIST,
-                      *(int*)((uint8_t*)param_1 + HF_PATHCOUNT) + 1, &pts);
+        DeepAppendAoA(&hf->paths, hf->paths._size + 1, &pts);
         result = 1;
     }
     return result;
@@ -572,21 +564,21 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
 //   strength 2.0, SUBTRACTED). Carve radius = the "radius" fields above.
 // ============================================================
 void wg_f390_ranges(TerrainHeightfield* hf) {
-    void* rng = (uint8_t*)hf + HF_RANDOM;
+    System::Random* rng = &hf->random;
 
-    int32_t* sizeRow = *(int32_t**)((uint8_t*)hf + HF_SIZEROW);
+    TerrainSizeRow* sizeRow = hf->sizeRow;
     if (!sizeRow) return;
-    int dim          = sizeRow[0];
-    int minRangeCnt  = sizeRow[0x0a];                       // +0x28
-    int maxRangeCnt  = sizeRow[0x0b];                       // +0x2c
-    int minBandX     = sizeRow[0x0c];                       // +0x30
-    int maxBandX     = sizeRow[0x0d];                       // +0x34
-    int satPerRange  = *(int*)((uint8_t*)sizeRow + 0x38);
-    int radiusMax    = *(int*)((uint8_t*)sizeRow + 0x3c);
-    int radiusMin    = *(int*)((uint8_t*)sizeRow + 0x40);
+    int dim          = sizeRow->mapSize;
+    int minRangeCnt  = sizeRow->minRangeCount;              // +0x28
+    int maxRangeCnt  = sizeRow->maxRangeCount;              // +0x2c
+    int minBandX     = sizeRow->minRangeBand;               // +0x30
+    int maxBandX     = sizeRow->maxRangeBand;               // +0x34
+    int satPerRange  = sizeRow->basinsPerRange;             // +0x38
+    int radiusMax    = sizeRow->basinRadiusMax;             // +0x3c
+    int radiusMin    = sizeRow->basinRadiusMin;             // +0x40
 
-    uint32_t rRange = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(maxRangeCnt - minRangeCnt + 1));   // B.3.4b bridge
-    uint32_t rBand  = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(maxBandX - minBandX));   // B.3.4b bridge
+    uint32_t rRange = rng->Rand((uint32_t)(maxRangeCnt - minRangeCnt + 1));
+    uint32_t rBand  = rng->Rand((uint32_t)(maxBandX - minBandX));
     int bandX       = (int)rBand + minBandX;                // iVar10
     int rangeCount  = (int)rRange + minRangeCnt;            // uVar8 + iVar2
     if (rangeCount <= 0) return;
@@ -611,25 +603,24 @@ void wg_f390_ranges(TerrainHeightfield* hf) {
 
             // random unit direction. The original packs {local_res18, fVar17}:
             //   local_res18 = RandFloatTol() (drawn AFTER fVar17), local_res1c = fVar17.
-            float dir[2];
-            dir[1] = t3;                                    // local_res1c = fVar17
-            dir[0] = rftol(rng);                            // local_res18 (4th RandFloatTol)
-            vec2_normalize2(dir);
+            //   {x = local_res18 (4th RandFloatTol), y = local_res1c = fVar17}
+            Math::Vector2 dir(rftol(rng), t3);
+            vec2_normalize2(&dir);
 
             float reach = fBandX - radius;                  // fVar18 = fVar21 - radius
-            float satX = reach * dir[0] * amp + dy;         // local_res20
-            float satY = reach * dir[1] * amp + dx;         // fStackX_24
-            float rec[3] = { satX, satY, radius };
-            AppendVec3((uint8_t*)hf + HF_BASINSTAMPS, *(int*)((uint8_t*)hf + HF_BASIN_CNT) + 1, rec);
+            float satX = reach * dir.x * amp + dy;          // local_res20
+            float satY = reach * dir.y * amp + dx;          // fStackX_24
+            TerrainStamp rec = { satX, satY, radius };
+            AppendVec3(&hf->basinStamps, hf->basinStamps._size + 1, rec);
         }
 
         // range center -> radial carve stamps (+0x38): {dy, dx, bandX - radiusMin}
-        float center[3] = { dy, dx, (float)(bandX - radiusMin) };
-        AppendVec3((uint8_t*)hf + HF_BASINSTAMPS, *(int*)((uint8_t*)hf + HF_BASIN_CNT) + 1, center);
+        TerrainStamp center = { dy, dx, (float)(bandX - radiusMin) };
+        AppendVec3(&hf->basinStamps, hf->basinStamps._size + 1, center);
 
         // per-range record -> b260 phase-2 tarn features (+0x48): {dy, dx, bandX}
-        float detail[3] = { dy, dx, fBandX };
-        AppendVec3((uint8_t*)hf + HF_WATERFEATS, *(int*)((uint8_t*)hf + HF_WATERFEATS_CNT) + 1, detail);
+        TerrainStamp detail = { dy, dx, fBandX };
+        AppendVec3(&hf->waterFeatures, hf->waterFeatures._size + 1, detail);
     }
 }
 
@@ -653,40 +644,33 @@ void wg_f390_ranges(TerrainHeightfield* hf) {
 //   mask) — secondary channels/valleys branching off the main paths.
 // ============================================================
 void wg_f390_paths(TerrainHeightfield* hf) {
-    int32_t* p = (int32_t*)hf;
-
-    int32_t* sizeRow = *(int32_t**)((uint8_t*)hf + HF_SIZEROW);
+    TerrainSizeRow* sizeRow = hf->sizeRow;
     if (!sizeRow) return;
-    int numSecondary = *(int*)((uint8_t*)sizeRow + 0x20);
+    int numSecondary = sizeRow->secondaryPathCount;
     if (numSecondary <= 0) return;
 
-    void* rng = (uint8_t*)hf + HF_RANDOM;
-    int dim = *(int*)((uint8_t*)hf + HF_GRIDSIZE);   // *param_1 (== mapDim*2, set by f390)
+    System::Random* rng = &hf->random;
+    int dim = hf->gridSize;   // *param_1 (== mapDim*2, set by f390)
 
-    // float path params, packed to the uint32 ABI cc850 expects (it stores them
-    // verbatim into the per-point band fields).
+    // the path params cc850 stores verbatim into the per-point brush fields.
     const float P4 = kPathP47;   // 1.5  (0x140172160)
     const float P5 = kPathP5;    // 8.0  (0x1401721a8)
     const float P6 = kPathP46;   // 1.25 (0x140172158)
     const float P7 = kPathP47;   // 1.5  (0x140172160)
     const float P8 = kPathP8;    // 16.0 (0x1401721c0)
-    uint32_t u4, u5, u6, u7, u8;
-    __builtin_memcpy(&u4, &P4, 4); __builtin_memcpy(&u5, &P5, 4);
-    __builtin_memcpy(&u6, &P6, 4); __builtin_memcpy(&u7, &P7, 4);
-    __builtin_memcpy(&u8, &P8, 4);
 
     for (int i = 0; i < numSecondary; ++i) {
         for (int attempt = 0; attempt < 1000; ++attempt) {
-            int pathCount = *(int*)((uint8_t*)hf + HF_PATHCOUNT);
+            int pathCount = hf->paths._size;
             // Defensive: secondary paths branch off an existing path. If none exists
             // (coastline ring not placed), there is nothing to branch from — skip
             // rather than null-deref the empty patchList in TryPlacePath's branch path.
             if (pathCount <= 0) break;
-            float branchSel = (float)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)pathCount);   // B.3.4b bridge
-            int ok = TryPlacePath(p, dim + 1, (float)dim, u4, u5, u6, u7, u8, branchSel);
+            float branchSel = (float)rng->Rand((uint32_t)pathCount);
+            int ok = TryPlacePath(hf, dim + 1, (float)dim, P4, P5, P6, P7, P8, branchSel);
             if (ok) break;
         }
         // re-read the loop bound each outer iteration (matches the original).
-        numSecondary = *(int*)((uint8_t*)sizeRow + 0x20);
+        numSecondary = sizeRow->secondaryPathCount;
     }
 }
