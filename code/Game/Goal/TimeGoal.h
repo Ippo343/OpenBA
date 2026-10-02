@@ -43,7 +43,7 @@ public:
 
 public:
     int32_t  requiredYears;        // +0x30: years to survive (default 1; x 3600 seconds)
-    uint8_t  requireOtherGoalsMet; // +0x34: (default 0)
+    bool     requireOtherGoalsMet; // +0x34: (default 0; Serialize(bool&))
     uint8_t  _pad35[3];            // +0x35: padding
 };
 

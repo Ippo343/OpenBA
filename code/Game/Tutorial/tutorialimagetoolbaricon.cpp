@@ -68,7 +68,8 @@ TutorialImageToolbarIcon::~TutorialImageToolbarIcon() {
 // The resolved Toolbar entry (NamedExternalRef::ResolveToolbar validated the
 // type: a downcast within Object::External's hierarchy).
 static const Toolbar* ResolvedToolbar(const NamedExternalRef& ref) {
-    return static_cast<const Toolbar*>(ref.resolved);
+    const Object::External* found = ref.resolved;
+    return static_cast<const Toolbar*>(found);
 }
 
 // ============================================================

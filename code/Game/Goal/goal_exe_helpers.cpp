@@ -90,7 +90,9 @@ void NamedExternalRef::Resolve() {
         }
     }
 
-    resolved = result;
+    // The factory hands out const Externals; the reference holds them mutable
+    // (retail's ExternalPtr<T> is a plain T*).
+    resolved = const_cast<::Object::External*>(result);
     // Re-read the generation: a FindOrLoad that actually loaded bumps it, and
     // stamping the pre-load value would make the next call redo the whole
     // lookup for nothing.

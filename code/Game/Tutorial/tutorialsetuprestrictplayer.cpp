@@ -28,7 +28,6 @@
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "object/TypeInfo.h"
-#include "Dialog/exe_bodies.h"   // 0x140102b60 Toolbar_ShowGroup_Impl
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -36,6 +35,8 @@
 #include <cstdlib>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "Component/ComponentDescription.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
 
 // ============================================================
 // ENDGAME B.3.8: the String::Serialize / Filename ctor+dtor dispatch-slot
@@ -70,16 +71,15 @@
 // Retail would fault on neither (it never has the null), so this is not a guard
 // over a faithful crash: it is the standalone resource-environment gap. The real
 // fix is to make the preload populate the ExternalFactory the way retail's does.
-static void TutRestrict_ResolveRefOrLoad(void* ref) {
+static void TutRestrict_ResolveRefOrLoad(NamedExternalRef* ref) {
     if (!ref) return;
     ResolveExternalByName_Impl(ref);            // faithful find-only path first
-    uintptr_t r = (uintptr_t)ref;
-    if (*(void**)(r + 0x10)) return;            // hit — nothing to do
+    if (ref->resolved) return;                  // hit — nothing to do
 
-    if (!::Object::ExternalFactory::_singleton) return;
-    void* factory = ::Object::ExternalFactory::_singleton;
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    if (!efactory) return;
 
-    const char* name = *(const char* const*)r;
+    const char* name = ref->Name()._data;
     if (!name || !name[0]) return;
 
     // Only the LOADER rejects backslashes; the factory's key comparison
@@ -90,23 +90,21 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
         normalized[k] = (name[k] == '\\') ? '/' : name[k];
     normalized[k] = 0;
 
-    void* found = nullptr;
+    const ::Object::External* found = nullptr;
     {
         System::String   normStr(normalized);
         System::Filename normFile(normStr);
-        ::Object::ExternalFactory* efactory =
-            reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-        found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(normFile)));
+        found = efactory->FindOrLoad(normFile);
     }
 
-    void* result = nullptr;
+    const ::Object::External* result = nullptr;
     if (found) {
         if (Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;
         }
     }
-    *(void**)(r + 0x10) = result;
-
+    // The factory hands out const Externals; the reference holds them mutable.
+    ref->resolved = const_cast<::Object::External*>(result);
 }
 
 
@@ -120,14 +118,14 @@ TutorialSetupRestrictPlayer::TutorialSetupRestrictPlayer()
     : restrictMinX(-1), restrictMinChunkRow(-1),      // one qword store of -1
       restrictMaxX(-1), restrictMaxChunkCol(-1),      // one qword store of -1
       restrictToolFlags(0), _pad34{},
-      toolRefString(0), toolRefStamp(-1), _pad44{}, toolRefCached(nullptr),
-      cameraRefString(0), cameraRefStamp(-1), _pad5C{}, cameraRefCached(nullptr) {}
+      toolRef{{}, -1, {}, nullptr},
+      cameraRef{{}, -1, {}, nullptr} {}
 
 // The dtor inside [0] 0x140028bb0: ~String +0x50, ~String +0x38; the compiler
 // re-stamps TutorialSetup and runs ~External.
 TutorialSetupRestrictPlayer::~TutorialSetupRestrictPlayer() {
-    reinterpret_cast<System::String*>(&cameraRefString)->~String();   // B.3.1 bridge
-    reinterpret_cast<System::String*>(&toolRefString)->~String();     // B.3.1 bridge
+    cameraRef.Name().~String();
+    toolRef.Name().~String();
 }
 
 // ============================================================
@@ -136,18 +134,16 @@ TutorialSetupRestrictPlayer::~TutorialSetupRestrictPlayer() {
 // 5 int32 restriction fields and 2 ExternalRef strings; on load (serializer
 // mode == 0) each ExternalRef is resolved by name.
 bool TutorialSetupRestrictPlayer::Serialize(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    // Create serializer on stack
-    alignas(8) uint8_t serializer[32];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize 5 int32 fields: +0x20, +0x24, +0x28, +0x2C, +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
+    serializer.Serialize(restrictMinX, nullptr);
+    serializer.Serialize(restrictMinChunkRow, nullptr);
+    serializer.Serialize(restrictMaxX, nullptr);
+    serializer.Serialize(restrictMaxChunkCol, nullptr);
+    serializer.Serialize(restrictToolFlags, nullptr);
 
     // Serialize ExternalRef1 (tool restriction) at +0x38, inside the Filename
     // stack temporary retail's compiler emitted.
@@ -155,12 +151,11 @@ bool TutorialSetupRestrictPlayer::Serialize(void* stream) {
         System::Filename tempFilename;
         (void)tempFilename;
 
-        reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);   // B.3.1 bridge
+        toolRef.Name().Serialize(&serializer);
 
         // On load: resolve external by name
-        void* serializerBase = *(void**)serializer;
-        if (serializerBase && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
+        if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            TutRestrict_ResolveRefOrLoad(&toolRef);
         }
     }
 
@@ -169,17 +164,13 @@ bool TutorialSetupRestrictPlayer::Serialize(void* stream) {
         System::Filename tempFilename;
         (void)tempFilename;
 
-        reinterpret_cast<System::String*>(s + 0x50)->Serialize(serializer);   // B.3.1 bridge
+        cameraRef.Name().Serialize(&serializer);
 
         // On load: resolve external by name
-        void* serializerBase = *(void**)serializer;
-        if (serializerBase && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            TutRestrict_ResolveRefOrLoad((void*)(s + 0x50));
+        if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            TutRestrict_ResolveRefOrLoad(&cameraRef);
         }
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;
 }
 
@@ -192,105 +183,105 @@ Object::External* TutorialSetupRestrictPlayer::Reconstruct() {
 }
 void TutorialSetupRestrictPlayer::Destruct() { this->~TutorialSetupRestrictPlayer(); }
 
+// A copy of a by-name reference, resolved; the External it names (retail
+// copies the 0x18 reference to the stack and resolves the copy).
+static Object::External* ResolveCopy(const NamedExternalRef& ref) {
+    NamedExternalRef local{};
+    new (local.name) System::String(ref.Name());
+    local.generation = ref.generation;
+    local.resolved   = ref.resolved;
+    TutRestrict_ResolveRefOrLoad(&local);
+    Object::External* ptr = local.resolved;
+    local.Name().~String();
+    return ptr;
+}
+
+// The resolved reference as the ComponentDescription it was validated as
+// (TutRestrict_ResolveRefOrLoad / 0x14001b1d0 keep only a ComponentDescription).
+static ComponentDescription* AsDescription(Object::External* e) {
+    return static_cast<ComponentDescription*>(e);
+}
+
 // ============================================================
 // TutorialSetupRestrictPlayer::Begin (vtable +0x40, 0x1400e2f20)
 // ============================================================
-// Applies player restrictions to the PlayerController at GameWorld+0x120.
-//
+// Applies player restrictions to the PlayerToolManager at GameWorld+0x120.
 // Flow:
 // 1. Compute absolute min/max positions: chunkRow * cellSize + cellX
 // 2. Copy ExternalRef2 (+0x50) into a local, resolve it, get cached ptr
 // 3. Copy ExternalRef1 (+0x38) into a local, resolve it, get cached ptr
-// 4. Write restriction state to PlayerController (+0x80..+0xA0)
+// 4. Write restriction state to the manager (+0x80..+0xA0)
 // 5. Resolve original toolRef (+0x38) and if it has a cached ptr,
 //    also set camera restriction bounds (+0xA4..+0xAC)
 void TutorialSetupRestrictPlayer::Begin() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // Get map cell size from WorldGrid at +0xF8
-    int32_t** gridPtr = reinterpret_cast<int32_t**>(gameWorld + 0xF8);
-    if (!gridPtr || !*gridPtr) return;
-    int32_t cellSize = **gridPtr;
+    // The map edge in cells (Map +0x00, the loop's +0xF8)
+    Map* grid = gameWorld->m_game;
+    if (!grid) return;
+    int32_t cellSize = grid->size;
 
     // Compute absolute positions
-    int32_t absMin = *(int32_t*)(s + 0x24) * cellSize + *(int32_t*)(s + 0x20);
-    int32_t absMax = *(int32_t*)(s + 0x2C) * cellSize + *(int32_t*)(s + 0x28);
+    int32_t absMin = restrictMinChunkRow * cellSize + restrictMinX;
+    int32_t absMax = restrictMaxChunkCol * cellSize + restrictMaxX;
 
     // Copy ExternalRef2 (+0x50) into local, resolve, get cached ptr
-    // Local layout: String(8) + stamp(4) + pad(4) + ptr(8) = 24 bytes
-    uint8_t localRef2[24];
-    memset(localRef2, 0, sizeof(localRef2));
-    new (localRef2) System::String(*reinterpret_cast<const System::String*>(s + 0x50));
-    *(int32_t*)(localRef2 + 8) = *(int32_t*)(s + 0x58);
-    *(uint64_t*)(localRef2 + 16) = *(uint64_t*)(s + 0x60);
-    TutRestrict_ResolveRefOrLoad(localRef2);
-    uint64_t cameraRefPtr = *(uint64_t*)(localRef2 + 16);
-    reinterpret_cast<System::String*>(localRef2)->~String();
+    Object::External* cameraRefPtr = ResolveCopy(cameraRef);
 
     // Copy ExternalRef1 (+0x38) into local, resolve, get cached ptr
-    uint8_t localRef1[24];
-    memset(localRef1, 0, sizeof(localRef1));
-    new (localRef1) System::String(*reinterpret_cast<const System::String*>(s + 0x38));
-    *(int32_t*)(localRef1 + 8) = *(int32_t*)(s + 0x40);
-    *(uint64_t*)(localRef1 + 16) = *(uint64_t*)(s + 0x48);
-    TutRestrict_ResolveRefOrLoad(localRef1);
-    uint64_t toolRefPtr = *(uint64_t*)(localRef1 + 16);
-    reinterpret_cast<System::String*>(localRef1)->~String();
+    Object::External* toolRefPtr = ResolveCopy(toolRef);
 
-    // Write restriction state to PlayerController at GameWorld+0x120
-    uintptr_t playerCtrl = *(uintptr_t*)(gameWorld + 0x120);
+    // Write restriction state to the PlayerToolManager at GameWorld+0x120
+    PlayerToolManager* playerCtrl = gameWorld->m_toolManager;
     if (!playerCtrl) return;
 
-    int32_t toolFlags = *(int32_t*)(s + 0x30);
+    int32_t toolFlags = restrictToolFlags;
 
-    *(uint8_t*)(playerCtrl + 0x80) = 1;            // restrictions active
-    *(uint64_t*)(playerCtrl + 0x88) = toolRefPtr;   // resolved tool description
-    *(uint64_t*)(playerCtrl + 0x90) = cameraRefPtr; // resolved camera description
-    *(int32_t*)(playerCtrl + 0x98) = absMin;        // min bound
-    *(int32_t*)(playerCtrl + 0x9C) = absMax;        // max bound
-    *(int32_t*)(playerCtrl + 0xA0) = toolFlags;     // tool restriction flags
+    playerCtrl->field_0x80 = true;                         // restrictions active
+    playerCtrl->field_0x88 = AsDescription(toolRefPtr);    // resolved tool description
+    playerCtrl->field_0x90 = cameraRefPtr;                 // resolved camera description
+    playerCtrl->field_0x98 = absMin;                       // min bound
+    playerCtrl->field_0x9C = absMax;                       // max bound
+    playerCtrl->field_0xA0 = toolFlags;                    // tool restriction flags
 
     // Resolve toolRef on original (+0x38) and if it has a cached External ptr,
     // also set camera restriction bounds
-    TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
-    if (*(uint64_t*)(s + 0x48) != 0) {
-        uintptr_t playerCtrl2 = *(uintptr_t*)(gameWorld + 0x120);
-        *(int32_t*)(playerCtrl2 + 0xA8) = absMin;
-        *(int32_t*)(playerCtrl2 + 0xAC) = absMax;
-        *(uint8_t*)(playerCtrl2 + 0xA4) = 1;
+    TutRestrict_ResolveRefOrLoad(&toolRef);
+    if (toolRef.resolved != nullptr) {
+        PlayerToolManager* playerCtrl2 = gameWorld->m_toolManager;
+        playerCtrl2->field_0xA8 = absMin;
+        playerCtrl2->field_0xAC = absMax;
+        playerCtrl2->field_0xA4 = true;
     }
 }
 
 // ============================================================
 // TutorialSetupRestrictPlayer::End (vtable +0x50, 0x1400e2e90)
 // ============================================================
-// Clears all player restrictions from the PlayerController at GameWorld+0x120.
-// If toolRef has a cached External, calls SetEditMode(playerController, 0).
+// Clears all player restrictions from the PlayerToolManager at GameWorld+0x120.
+// If toolRef has a cached External, calls SelectTool(nullptr).
 void TutorialSetupRestrictPlayer::End() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    uintptr_t playerCtrl = *(uintptr_t*)(gameWorld + 0x120);
+    PlayerToolManager* playerCtrl = gameWorld->m_toolManager;
     if (!playerCtrl) return;
 
-    // Clear restriction state
-    *(uint8_t*)(playerCtrl + 0x80) = 0;
-    *(uint64_t*)(playerCtrl + 0x88) = 0;
-    *(uint64_t*)(playerCtrl + 0x90) = 0;
-    *(uint64_t*)(playerCtrl + 0x98) = 0xFFFFFFFFFFFFFFFFULL;  // -1 (both min/max int32s)
-    *(int32_t*)(playerCtrl + 0xA0) = -1;                      // tool flags cleared
+    // Clear restriction state (+0x98 / +0x9C: one qword store of -1, H7)
+    playerCtrl->field_0x80 = false;
+    playerCtrl->field_0x88 = nullptr;
+    playerCtrl->field_0x90 = nullptr;
+    playerCtrl->field_0x98 = -1;
+    playerCtrl->field_0x9C = -1;
+    playerCtrl->field_0xA0 = -1;                      // tool flags cleared
 
     // Resolve toolRef on original (+0x38) and if it has a cached External,
-    // call SetEditMode(playerController, 0) to clear tool selection
-    TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
-    if (*(uint64_t*)(s + 0x48) != 0) {
-        uintptr_t playerCtrl2 = *(uintptr_t*)(gameWorld + 0x120);
-        Toolbar_ShowGroup_Impl((void*)playerCtrl2, 0);   // 0x140102b60 (the door was named SetEditMode)
+    // clear the tool selection (SelectTool(nullptr), 0x140102b60)
+    TutRestrict_ResolveRefOrLoad(&toolRef);
+    if (toolRef.resolved != nullptr) {
+        PlayerToolManager* playerCtrl2 = gameWorld->m_toolManager;
+        playerCtrl2->SelectTool(nullptr);   // 0x140102b60 (the door was named SetEditMode)
     }
 }
 

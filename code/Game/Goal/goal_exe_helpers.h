@@ -24,7 +24,7 @@ struct NamedExternalRef {
     uint8_t  name[8];
     int32_t  generation;            // +0x08 ExternalFactory generation (-1: never resolved)
     uint8_t  _pad0C[4];             // +0x0C written by neither the ctor nor the resolver
-    const Object::External* resolved;   // +0x10 the cached External (null when not found)
+    Object::External* resolved;     // +0x10 the cached External (null when not found)
 
     System::String&       Name();          // goal_exe_helpers.cpp
     const System::String& Name() const;

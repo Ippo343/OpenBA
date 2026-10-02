@@ -20,6 +20,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include "engine/UpdateLoop.h"  // ENDGAME B.3.7 callers (K2): UpdateLoop::IsRunning
+#include "Entity/CitizenBehavior.h"
 #include <new>
 
 // ctor 0x1400d78f0: Goal(), the vptr, targetPop = 100.
@@ -33,15 +34,12 @@ bool PopulationGoal::Serialize(void* stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize targetPop at +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(targetPop, nullptr);   // B.3.4 bridge
-
-    // Destroy Serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    serializer.Serialize(targetPop, nullptr);
 
     return true;
 }
@@ -65,20 +63,20 @@ void PopulationGoal::Destruct() { this->~PopulationGoal(); }
 //   return false;
 Achievement::Goal::GoalState PopulationGoal::CheckGoalState() const {
     if (GameUpdateLoop::_singleton == nullptr) return static_cast<GoalState>(0);
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (gameWorld == nullptr) return static_cast<GoalState>(0);
 
     // Check IsRunning — Engine::UpdateLoop::IsRunning (import slot 0x140152850),
     // non-virtual. The door's null-`this` test is covered by the check above.
-    bool running = reinterpret_cast<const Engine::UpdateLoop*>(gameWorld)->IsRunning();   // B.3.7 bridge
+    bool running = gameWorld->IsRunning();
     if (!running) return static_cast<GoalState>(0);
 
-    // Read world data pointer at game+0xF0
-    uintptr_t worldData = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-    if (worldData == 0) return static_cast<GoalState>(0);
+    // The citizen list at game+0xF0
+    CitizenBehavior* worldData = gameWorld->m_citizenList;
+    if (worldData == nullptr) return static_cast<GoalState>(0);
 
-    // Compare population at worldData+0xA8 against targetPop
-    int currentPop = *(int*)(worldData + 0xA8);
+    // Compare the citizen count (+0xA8) against targetPop
+    int currentPop = worldData->citizenCount;
     return static_cast<GoalState>((currentPop >= targetPop) ? 1 : 0);
 }
 

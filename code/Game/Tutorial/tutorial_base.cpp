@@ -154,7 +154,9 @@ void NamedExternalRef::ResolveToolbar() {
         }
     }
 
-    resolved   = result;
+    // The factory hands out const Externals; the reference holds them mutable
+    // (retail's ExternalPtr<T> is a plain T*).
+    resolved   = const_cast<::Object::External*>(result);
     generation = factoryGen;
 }
 

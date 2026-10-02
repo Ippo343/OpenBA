@@ -131,7 +131,8 @@ bool TutorialSetupDialog::Serialize(void* stream) {
             System::Filename filenameBuf(toolbarRef.Name());
             const ::Object::External* found = efactory->Find(filenameBuf);
             bool valid = found && Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId());
-            toolbarRef.resolved = valid ? found : nullptr;
+            // The factory hands out const Externals; the reference holds them mutable.
+            toolbarRef.resolved = valid ? const_cast<::Object::External*>(found) : nullptr;
             toolbarRef.generation = efactory->_generation;
         }
     }

@@ -25,6 +25,7 @@
 #include <cstdint>
 #include "Tutorial/TutorialSetup.h"
 #include "Object/exe_type.h"
+#include "Goal/goal_exe_helpers.h"   // NamedExternalRef
 
 class TutorialSetupRestrictPlayer final : public TutorialSetup {
     DECLARE_EXE_TYPE(TutorialSetupRestrictPlayer)
@@ -49,23 +50,19 @@ public:
     int32_t  restrictMaxChunkCol;// +0x2C: chunk col for max pos
     int32_t  restrictToolFlags;  // +0x30: tool restriction bitmask (0 = none)
     uint8_t  _pad34[4];          // +0x34: padding
-    // ExternalRef1 (tool restriction description)
-    uint64_t toolRefString;      // +0x38: System::String data ptr
-    int32_t  toolRefStamp;       // +0x40: generation stamp (-1 = unresolved)
-    uint8_t  _pad44[4];          // +0x44: padding
-    void*    toolRefCached;      // +0x48: cached External* from factory lookup
-    // ExternalRef2 (camera restriction description)
-    uint64_t cameraRefString;    // +0x50: System::String data ptr
-    int32_t  cameraRefStamp;     // +0x58: generation stamp (-1 = unresolved)
-    uint8_t  _pad5C[4];          // +0x5C: padding
-    void*    cameraRefCached;    // +0x60: cached External* from factory lookup
+    // +0x38 / +0x50: the tool and camera restriction templates, by name (String,
+    //   generation -1 = unresolved, cached External*; resolved by 0x14001b1d0)
+    NamedExternalRef toolRef;    // +0x38
+    NamedExternalRef cameraRef;  // +0x50
 };
 
 static_assert(offsetof(TutorialSetupRestrictPlayer, restrictMinX) == 0x20, "+0x20");
 static_assert(offsetof(TutorialSetupRestrictPlayer, restrictToolFlags) == 0x30, "+0x30");
-static_assert(offsetof(TutorialSetupRestrictPlayer, toolRefString) == 0x38, "+0x38");
-static_assert(offsetof(TutorialSetupRestrictPlayer, toolRefCached) == 0x48, "+0x48");
-static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRefString) == 0x50, "+0x50");
-static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRefCached) == 0x60, "+0x60");
+static_assert(offsetof(TutorialSetupRestrictPlayer, toolRef) == 0x38, "+0x38");
+static_assert(offsetof(TutorialSetupRestrictPlayer, toolRef) + offsetof(NamedExternalRef, generation) == 0x40, "+0x40");
+static_assert(offsetof(TutorialSetupRestrictPlayer, toolRef) + offsetof(NamedExternalRef, resolved) == 0x48, "+0x48");
+static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRef) == 0x50, "+0x50");
+static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRef) + offsetof(NamedExternalRef, generation) == 0x58, "+0x58");
+static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRef) + offsetof(NamedExternalRef, resolved) == 0x60, "+0x60");
 static_assert(sizeof(TutorialSetupRestrictPlayer) == 0x68, "TutorialSetupRestrictPlayer is 0x68 (create 0x140028b40)");
 static_assert(alignof(TutorialSetupRestrictPlayer) == 8, "qword-aligned");
