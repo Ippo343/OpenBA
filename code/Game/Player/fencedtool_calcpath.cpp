@@ -78,12 +78,9 @@
 //   0x140004740 FindComponent<MultiObjectComponent>
 namespace {
 
-// A section template of the fence description (CreateFencedDescription +0x28).
-// LEFT: block COMP-c declares `_refs` as `void*[6]` (its ctor loops over them as
-// void*&), so the typed template is reached through this one cast.
-ComponentDescription* SectionTemplate(const CreateFencedDescription* desc, int idx) {
-    return reinterpret_cast<ComponentDescription*>(desc->_refs[idx]);
-}
+// The section templates are CreateFencedDescription::_refs (+0x28). LEFT: block
+// COMP-c declares them `void*[6]` (its ctor loops over them as void*&), so the two
+// reads below cast.
 
 // Stamp cell rect + rotation onto a MapComponent (+0x28 shorts, +0x30 degrees
 // normalised into [0,360) by repeated +360 exactly like retail).
@@ -166,7 +163,7 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     centre[1] = (a[1] + b[1]) * 0.5f;
     centre[2] = 0.0f;                       // retail zeroes z (0x1400dbdfa)
 
-    ComponentDescription* sectionTmpl = SectionTemplate(self->fencedDesc, sectionIdx);
+    ComponentDescription* sectionTmpl = reinterpret_cast<ComponentDescription*>(self->fencedDesc->_refs[sectionIdx]);
     if (!sectionTmpl) return;
 
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
@@ -365,7 +362,7 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     }
 
     // 5. Shelter entity from sections[0].
-    ComponentDescription* shelterTmpl = SectionTemplate(fencedDesc, 0);
+    ComponentDescription* shelterTmpl = reinterpret_cast<ComponentDescription*>(fencedDesc->_refs[0]);
     ComponentEntity* smem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* shelter = (smem && shelterTmpl) ? ComponentEntity_CtorFromDescription(smem, shelterTmpl) : nullptr;
     if (shelter) {
