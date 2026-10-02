@@ -100,7 +100,7 @@ static void EnsureCursorsLoaded() {
         return;
     }
 
-    auto loadAndStore = [&](Object::ExternalPtr<UI::Cursor>& slot, size_t offset,
+    auto loadAndStore = [&](Object::ExternalPtr<UI::Cursor>& slot, [[maybe_unused]] size_t offset,
                             const char* name) {
         const System::Filename fn(name);
         // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
@@ -154,7 +154,7 @@ static void EnsureUISoundsLoaded() {
         return;
     }
 
-    auto loadAndStore = [&](Object::ExternalPtr<Audio::SoundEffect>& slot, size_t offset,
+    auto loadAndStore = [&](Object::ExternalPtr<Audio::SoundEffect>& slot, [[maybe_unused]] size_t offset,
                             const char* name) {
         const System::Filename fn(name);
         // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
@@ -216,7 +216,7 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     // and +0xb8/+0xc0 ("SaveLoadEmpty"). The Sprite is built in a stack copy
     // whose pad0C is zeroed (as the old zeroed byte buffer's was) and copied
     // into the container whole (16 bytes).
-    auto buildSprite = [&](UI::Sprite& slot, size_t kmOffset, const char* name) {
+    auto buildSprite = [&](UI::Sprite& slot, [[maybe_unused]] size_t kmOffset, const char* name) {
         UI::Sprite spriteBuf;
         spriteBuf.pad0C = 0;
         const System::String nameStr(name);

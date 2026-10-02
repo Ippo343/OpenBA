@@ -28,6 +28,8 @@
 #pragma once
 #include <cstdint>
 
+class GameUpdateLoop;
+
 extern "C" {
 
 // WinMain, before anything reads env vars: applies the default env bundle.
@@ -40,7 +42,7 @@ int  StressHarness_FoodMult();
 
 // GameUpdateLoop::Update / Draw brackets (gameupdateloop.cpp).
 void StressHarness_UpdateBegin(int frameNum);
-void StressHarness_UpdateEnd(void* gameUpdateLoop, int frameNum);
+void StressHarness_UpdateEnd(GameUpdateLoop* gameUpdateLoop, int frameNum);
 void StressHarness_DrawBegin();
 void StressHarness_DrawEnd();
 
