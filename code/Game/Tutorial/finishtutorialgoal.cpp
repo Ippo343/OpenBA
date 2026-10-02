@@ -33,15 +33,12 @@ bool FinishTutorialGoal::Serialize(void* stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize the tutorial External* at +0x30
-    TutWave_SerializeTutorialRef(static_cast<void*>(&_field30), serializer);   // 0x1400262b0
-
-    // Destroy Serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    TutWave_SerializeTutorialRef(&_field30, &serializer);   // 0x1400262b0
 
     return true;
 }

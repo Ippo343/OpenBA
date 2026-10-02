@@ -227,7 +227,7 @@ UNIT_TEST(tutorialsetup_family_is_retail) {
     CHECK_EQ(sizeof(TutorialSetupCamera),         (size_t)0x30);
     CHECK_EQ(sizeof(TutorialSetupGameSpeed),      (size_t)0x28);
     CHECK_EQ(sizeof(TutorialSetupRestrictPlayer), (size_t)0x68);
-    CHECK_EQ(offsetof(TutorialSetupRestrictPlayer, cameraRefCached), (size_t)0x60);
+    CHECK_EQ(offsetof(TutorialSetupRestrictPlayer, cameraRef) + offsetof(NamedExternalRef, resolved), (size_t)0x60);
 }
 
 // ===========================================================================
@@ -258,7 +258,7 @@ UNIT_TEST(tutorialimage_family_is_retail) {
     CHECK_EQ(sizeof(TutorialImageInputKey),    (size_t)0x38);
     CHECK_EQ(sizeof(TutorialImageToolbarIcon), (size_t)0x48);
     CHECK_EQ(offsetof(TutorialImage, imageWidth), (size_t)0x28);
-    CHECK_EQ(offsetof(TutorialImageToolbarIcon, _toolbarRef), (size_t)0x40);
+    CHECK_EQ(offsetof(TutorialImageToolbarIcon, _toolbarRef) + offsetof(NamedExternalRef, resolved), (size_t)0x40);
 }
 
 // ===========================================================================
@@ -304,8 +304,8 @@ UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
 UNIT_TEST(tutorialgoaldialog_is_retail_10_slots_and_0x40) {
     CheckTutorialGoalLeaf<TutorialGoalDialog>();
     CHECK_EQ(sizeof(TutorialGoalDialog), (size_t)0x40);
-    CHECK_EQ(offsetof(TutorialGoalDialog, targetStamp), (size_t)0x30);
-    CHECK_EQ(offsetof(TutorialGoalDialog, targetDescription), (size_t)0x38);
+    CHECK_EQ(offsetof(TutorialGoalDialog, target) + offsetof(NamedExternalRef, generation), (size_t)0x30);
+    CHECK_EQ(offsetof(TutorialGoalDialog, target) + offsetof(NamedExternalRef, resolved), (size_t)0x38);
 }
 
 // ===========================================================================
@@ -317,7 +317,7 @@ UNIT_TEST(tutorialsetupdialog_is_retail_12_slots_and_0x78) {
     CheckTutorialSetupLeaf<TutorialSetupDialog>();
     CHECK_EQ(sizeof(TutorialSetupDialog), (size_t)0x78);
     CHECK_EQ(offsetof(TutorialSetupDialog, highlightDialog), (size_t)0x50);
-    CHECK_EQ(offsetof(TutorialSetupDialog, toolbarStamp), (size_t)0x60);
+    CHECK_EQ(offsetof(TutorialSetupDialog, toolbarRef) + offsetof(NamedExternalRef, generation), (size_t)0x60);
     CHECK_EQ(offsetof(TutorialSetupDialog, toolbarIndex), (size_t)0x70);
 }
 

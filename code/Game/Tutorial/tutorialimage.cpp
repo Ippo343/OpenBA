@@ -44,17 +44,15 @@ TutorialImage::TutorialImage() : imageRef(nullptr), imageWidth(0), imageHeight(0
 // ============================================================
 // imageWidth (+0x28), imageHeight (+0x2C), then the ExternalPtr at +0x20.
 bool TutorialImage::Serialize(void* stream) {
-    // Create Serializer on stack (24 bytes), version=0
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer, version 0. LEFT: External::Serialize hands the stream in
+    // as void* (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(imageWidth, nullptr);    // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(imageHeight, nullptr);   // B.3.4 bridge
+    serializer.Serialize(imageWidth, nullptr);
+    serializer.Serialize(imageHeight, nullptr);
 
     // Serialize ExternalPtr (imageRef) at +0x20
-    TutBase_SerializeImageRef(static_cast<void*>(&imageRef), serializer);
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    TutBase_SerializeImageRef(&imageRef, &serializer);
     return true;
 }
 
@@ -78,13 +76,11 @@ Object::External* TutorialImage::Construct() {
 // TutorialImage::CreateElement (vtable +0x48, 0x1400e0300)
 // ============================================================
 // Dialog::CreateElement(dialog, retval, imageRef); returns the RETBUF (retail
-// `return param_2`). NOT cosmetic: TutWave_RefreshStepUI feeds the return
-// value straight to TableElement::SetChild as the child pointer.
-void* TutorialImage::CreateElement(void* ret, void* dialog) {
-    ::new (ret) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(imageRef))));
+// `return param_2`). NOT cosmetic: TutorialInstance::RefreshStepUI feeds the
+// return value straight to TableElement::SetChild as the child pointer.
+Object::InternalPtr<UI::Element>* TutorialImage::CreateElement(Object::InternalPtr<UI::Element>* ret,
+                                                               const UI::Dialog* dialog) {
+    *ret = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(imageRef));
     return ret;
 }
 

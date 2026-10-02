@@ -15,6 +15,10 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;   // Component/CitizenComponent.h
+class ComponentEntity;    // Entity/ComponentEntity.h
 
 class PickupRawMaterial final : public Action {
     DECLARE_EXE_TYPE(PickupRawMaterial)
@@ -28,8 +32,8 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400c9860
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 
-    void*     _field28;          // +0x28 
+    Object::InternalPtr<CitizenComponent> _field20;   // +0x20 the carrying citizen (Persist checks CitizenComponent)
+    Object::InternalPtr<ComponentEntity>  _field28;   // +0x28 the raw-material pile (Persist checks ComponentEntity)
 };
 
 static_assert(sizeof(PickupRawMaterial) == 0x30, "PickupRawMaterial is 0x30 (create 0x140022c60 MemAlloc)");

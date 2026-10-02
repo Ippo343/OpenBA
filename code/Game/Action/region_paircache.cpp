@@ -6,23 +6,16 @@
 // CreateNaturalResource_impl_sub_e8c0 @ 0x14009e8c0 (the region-system builder).
 #include "Action/exe_bodies.h"
 //
-// The pair-cache caches region-to-region path lengths. It is a 0x38-byte object:
-//   q[0]  (qword) seq/link
-//   q[1]  (qword) Time-value staleness seed   <-- see DEVIATION below
-//   q[2]  (ints)  ring head/cap
-//   q[3]  (ptr)   ring buffer base            <-- the Vector header lives here (+0x18)
-//   q[4]            (count/cap ints of the ring Vector)
-//   q[5]  (ptr)   pair-BST root
-//   *(int32*)(q+6)  trailing int = 0
-// The ring buffer Vector header is the sub-object at byte offset +0x18 (= q+3), whose
-// fields are: +0x00 base ptr (qword), +0x08 count (int), +0x0c capacity (int).
-// FUN_14001cca0 resizes that ring to 0x20000 entries of stride 0x18 (~6 MB), which is
-// faithful/correct.
+// The pair-cache caches region-to-region path lengths: RegionPairCache (Action/PathSearch.h,
+// 0x38 bytes) — the clock, the lifetime, the ring's write / expiry indices, the ring
+// (RawArray<RegionPairEntry> at +0x18) and the AVL index at +0x28. FUN_14001cca0 resizes
+// the ring to 0x20000 entries of stride 0x18 (~6 MB), which is faithful/correct.
 //
-// q[1] is seeded via System::Time::Time(&tmp, DAT_140172210) with DAT_140172210 = 120.0f
-// (see the builder below).
+// The lifetime is seeded via System::Time::Time(&tmp, DAT_140172210) with
+// DAT_140172210 = 120.0f (see the builder below).
 
 #include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60
+#include "Action/PathSearch.h"        // RegionPairCache, RegionPairEntry
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/Value.h"             // RtSystem_Time_Ctor
 #include <cstdint>
@@ -31,66 +24,59 @@
 
 // 0x14001ca60 - the shared intrusive-AVL delete, WorkCellBST_Remove_ca60 (Work/exe_bodies.h).
 
-// ---- FUN_14001cca0: resize the region-pair ring buffer to 0x20000 entries (stride 0x18).
-// param_1 is the ring Vector header: [0]=base ptr, +0x08=count(int), +0x0c=capacity(int).
-void Pf_RegionPairRingResize_cca0(int64_t* param_1) {
-    int iVar1 = (int)param_1[1];
+// ---- FUN_14001cca0: resize the region-pair ring to 0x20000 entries (stride 0x18): the
+// exe's Array<RegionPairEntry>::SetSize(0x20000), new entries {-1, -1, -1, <0x0C>, 0}.
+static void RegionPairRingResize(RawArray<RegionPairEntry>* ring) {
+    int iVar1 = ring->size;
     if (iVar1 != 0x20000) {
-        void* pvVar2 = (void*)*param_1;
-        *(uint32_t*)(param_1 + 1) = 0x20000;
-        if (*(int*)((int64_t)param_1 + 0xc) < 0x20000) {
-            *(uint32_t*)((int64_t)param_1 + 0xc) = 0x20000;
+        RegionPairEntry* pvVar2 = ring->data;
+        ring->size = 0x20000;
+        if (ring->capacity < 0x20000) {
+            ring->capacity = 0x20000;
             if (iVar1 == 0x1ffff) {
-                *(uint32_t*)((int64_t)param_1 + 0xc) = 0x60000;
+                ring->capacity = 0x60000;
             }
-            void* pvVar4 = System::MemoryAllocator::MemAlloc(
-                                       (int64_t)*(int*)((int64_t)param_1 + 0xc) * 0x18, 8);
-            *param_1 = (int64_t)pvVar4;
+            ring->data = static_cast<RegionPairEntry*>(System::MemoryAllocator::MemAlloc((int64_t)ring->capacity * 0x18, 8));
         }
         int iVar3 = 0;
-        if (pvVar2 == (void*)*param_1) {
+        if (pvVar2 == ring->data) {
             iVar3 = iVar1;
         }
         int64_t lVar7 = (int64_t)iVar3;
         if (lVar7 < 0x20000) {
-            int64_t lVar5 = lVar7 * 0x18;
             do {
+                RegionPairEntry* puVar6 = &ring->data[lVar7];
                 if (lVar7 < iVar1) {
-                    uint64_t* puVar6 = (uint64_t*)(*param_1 + lVar5);
                     if (puVar6 != nullptr) {
-                        puVar6[0] = *(uint64_t*)(lVar5 + (int64_t)pvVar2);
-                        puVar6[1] = *(uint64_t*)(lVar5 + 8 + (int64_t)pvVar2);
-                        puVar6[2] = *(uint64_t*)(lVar5 + 0x10 + (int64_t)pvVar2);
+                        *puVar6 = pvVar2[lVar7];
                     }
                 } else {
-                    uint64_t* puVar6 = (uint64_t*)(*param_1 + lVar5);
                     if (puVar6 != nullptr) {
-                        puVar6[0] = 0xffffffffffffffffULL;
-                        *(uint32_t*)(puVar6 + 1) = 0xffffffff;
-                        puVar6[2] = 0;
+                        puVar6->regionA = -1;          // H7: one qword store of -1 in retail
+                        puVar6->regionB = -1;
+                        puVar6->distance = -1;
+                        puVar6->time = 0;
                     }
                 }
-                lVar5 = lVar5 + 0x18;
                 lVar7 = lVar7 + 1;
-            } while (lVar5 < 0x300000);
+            } while (lVar7 < 0x20000);
         }
-        if (pvVar2 != (void*)*param_1) {
+        if (pvVar2 != ring->data) {
             System::MemoryAllocator::MemFree(pvVar2);
         }
     }
 }
 
-// ---- Builder: allocate + init the whole 0x38-byte pair-cache object.
+// ---- Builder: allocate + init the whole 0x38-byte pair cache.
 // Replicates the snippet in CreateNaturalResource_impl_sub_e8c0 (0x14009e8c0).
 // Returns null on allocation failure (caller then zeroes Map+0x78 fields).
 extern "C" void* Pf_RegionPairCache_Build() {
-    void* pc = System::MemoryAllocator::MemAlloc(0x38, 4);
+    RegionPairCache* pc = static_cast<RegionPairCache*>(System::MemoryAllocator::MemAlloc(0x38, 4));
     if (pc == nullptr) {
         return nullptr;
     }
-    int64_t* q = (int64_t*)pc;
-    q[0] = 0;       // [0] seq/link
-    // [1] +0x08 = the cache RETENTION WINDOW, in Time units. Retail seeds it with
+    pc->newestTime = 0;
+    // +0x08 = the cache RETENTION WINDOW, in Time units. Retail seeds it with
     // Time::Time(DAT_140172210) where DAT_140172210 = 120.0f, i.e. 120 seconds.
     // This was previously seeded 0 as a flagged deviation. That is NOT inert: the
     // evictor at 0x1400a5d10 drops every entry for which
@@ -98,131 +84,129 @@ extern "C" void* Pf_RegionPairCache_Build() {
     // so a 0 window evicts each entry on the first tick after it is inserted and
     // defeats the cache entirely. Fixed 2026-08-30 alongside LANE1 row 41.
     {
-        int64_t window = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&window), 120.0f);   // slot 0x140152b00
-        q[1] = window;
+        System::Time window{0};
+        RtSystem_Time_Ctor(&window, 120.0f);   // slot 0x140152b00
+        pc->lifetime = window._ticks;
     }
-    q[2] = 0;       // [2] ring head/cap ints
-    q[3] = 0;       // [3] ring buffer base ptr (Vector header at +0x18)
-    q[4] = 0;       // [4] ring Vector count/cap
-    q[5] = 0;       // [5] pair-BST root
-    *(int32_t*)(q + 6) = 0;  // [6] trailing int
+    pc->newest = 0;              // the ring write index
+    pc->oldest = 0;              // the ring expiry index
+    pc->ring.data = nullptr;
+    pc->ring.size = 0;
+    pc->ring.capacity = 0;
+    pc->index.root = nullptr;
+    pc->index.count = 0;         // the tree's trailing int (+0x30)
 
-    // Init the ring buffer at byte +0x18 (= q+3): resizes to 0x20000 entries of stride 0x18.
-    Pf_RegionPairRingResize_cca0((int64_t*)((char*)pc + 0x18));
+    // Init the ring at +0x18: 0x20000 entries of stride 0x18.
+    RegionPairRingResize(&pc->ring);   // 0x14001cca0
 
     return pc;
 }
 
 // ============================================================
-// 0x1400a5d10 - Pf_RegionPairCacheTick_5d10(cache, time)
+// 0x1400a5d10 - RegionPairCache::Expire(dt)
 // ============================================================
 // The pair-cache's per-sim-tick STALENESS SWEEP. Called from GameUpdateLoop::Update
-// (retail 0x140096380 +0x7e) once per simulation iteration as
-//   Pf_RegionPairCacheTick_5d10(*(Game* + 0x78), time)
-// where Game is gameWorld+0xF8.
+// (retail 0x140096380 +0x7e) once per simulation iteration on Map +0x78.
 //
 // Our source called this "Game::UpdateTimedEvents" / fn_Game_UpdateTimedEvents. That is a
-// MISNOMER - there is no timed-event queue. param_1 is the region-pair distance cache built
-// by Pf_RegionPairCache_Build above (retail: the tail of 0x14009e8c0), and this function
-// only ages entries out of it.
+// MISNOMER - there is no timed-event queue. The receiver is the region-pair distance cache
+// built by Pf_RegionPairCache_Build above (retail: the tail of 0x14009e8c0), and this
+// function only ages entries out of it.
 //
 // Two distinct jobs, and the FIRST one is easy to miss:
 //
-//  1. `cache[0] += *time` - cache[0] IS THE CACHE'S CLOCK. Nothing else in the binary
-//     advances it. Pf_RegionPairCacheInsert_5b30 stamps every new entry's timestamp
-//     (ring slot +0x10) with the then-current cache[0]. So while this function was
-//     unported the clock sat at 0, every entry was stamped 0, and no entry could ever
-//     be considered stale.
-//  2. Evict from the ring tail while the oldest entry is older than the retention
-//     window at cache+0x08 (120 game-seconds; see Pf_RegionPairCache_Build). For each
-//     evicted slot: erase its (keyA,keyB) from the pair BST at cache+0x28 via the AVL
-//     delete 0x14001ca60, reset the slot to {-1,-1,<pad>,0}, and advance the tail with
-//     wraparound at the capacity in cache+0x20.
+//  1. `newestTime += *dt` - THE CACHE'S CLOCK. Nothing else in the binary advances it.
+//     RegionPairCache::Store (0x1400a5b30) stamps every new entry's time with the
+//     then-current clock. So while this function was unported the clock sat at 0, every
+//     entry was stamped 0, and no entry could ever be considered stale.
+//  2. Evict from the ring's oldest index while the oldest entry is older than `lifetime`
+//     (120 game-seconds; see Pf_RegionPairCache_Build). For each evicted slot: erase its
+//     (regionA, regionB) from the index tree via the AVL delete 0x14001ca60, reset the
+//     slot to {-1,-1,-1,<pad>,0}, and advance the oldest index with wraparound at the
+//     ring size.
 //
-// Note the insert already evicts on ring-FULL (head==tail), so the ring cannot overflow
+// Note the insert already evicts on ring-FULL (newest==oldest), so the ring cannot overflow
 // without this. What this adds is AGE-based invalidation: without it a cached region-to-
 // region distance survives until 0x20000 (131072) further inserts push it out, so distances
 // stay stale across bridges/roads/terrain edits that re-split or re-merge regions.
 //
 // Faithfulness notes:
-//  - Ring entry stride 0x18: +0x00 int keyA, +0x04 int keyB, +0x08 uint value,
-//    +0x10 int64 insertion timestamp.
-//  - BST node: +0x00 int keyA, +0x04 int keyB, +0x18 left child, +0x20 right child.
-//    (Ghidra renders these as piVar[6] / piVar[8] on an int*.)
-//  - Naming follows Pf_RegionPairCacheInsert_5b30 above: cache+0x10 is the WRITE HEAD
-//    (advanced by the insert) and cache+0x14 the READ TAIL (advanced here); the sweep
-//    stops when the read tail catches the write head.
-//    the capacity the int at cache+0x20 - all ints inside a qword-typed array, exactly as
-//    in Pf_RegionPairCacheInsert_5b30 above.
 //  - Retail's slot reset stores 8 bytes at entry+0x08 whose low half is 0xFFFFFFFF and
 //    whose high half is an uninitialized stack slot (the decompiler's uStack_1c). We
 //    transcribe the pad as 0, matching how the insert port handles its uStack_3c.
-//  - The outer test is `> window` (retail JLE skips the whole loop), and the loop repeats
+//  - The outer test is `> lifetime` (retail JLE skips the whole loop), and the loop repeats
 //    on the same strict `>` after advancing - so an entry exactly AT the window survives.
-void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
-    if (param_1 == nullptr || param_2 == nullptr) return;
-
+void RegionPairCache::Expire(const int64_t* dt) {
     // 1) advance the cache clock.
-    param_1[0] += *param_2;
+    newestTime += *dt;
 
-    const int64_t window = param_1[1];
-    int64_t ringBase = param_1[3];
-    if (ringBase == 0) return;
+    const int64_t window = lifetime;
+    RegionPairEntry* ringBase = ring.data;
+    if (ringBase == nullptr) return;
 
-    int head = *(int*)((int64_t)param_1 + 0x14);
-    if (param_1[0] - *(int64_t*)(ringBase + (int64_t)head * 0x18 + 0x10) <= window) {
+    int head = oldest;
+    if (newestTime - ringBase[head].time <= window) {
         return;
     }
 
     do {
-        // stop when the read tail catches the write head (+0x10)
-        if (head == *(int*)((int64_t)param_1 + 0x10)) {
+        // stop when the expiry index catches the write index
+        if (head == newest) {
             return;
         }
 
-        int64_t entry = ringBase + (int64_t)head * 0x18;
+        const RegionPairEntry* entry = &ringBase[head];
 
-        // 2a) erase this pair from the BST at cache+0x28
-        int* node = (int*)param_1[5];
+        // 2a) erase this pair from the index tree
+        AvlNode30* node = index.root;
         if (node != nullptr) {
-            const int keyA = *(int*)entry;
+            const int keyA = entry->regionA;
             do {
-                const int nodeA = *node;
+                const int nodeA = node->key0;
                 if (keyA < nodeA) {
-                    node = *(int**)(node + 6);          // left
+                    node = node->left;
                 } else {
                     if (keyA <= nodeA) {
-                        const int keyB = *(int*)(entry + 4);
-                        if (keyB < node[1]) {
-                            node = *(int**)(node + 6);  // left
+                        const int keyB = entry->regionB;
+                        if (keyB < node->key1) {
+                            node = node->left;
                             if (node == nullptr) break;
                             continue;
                         }
-                        if (keyB <= node[1]) {
-                            WorkCellBST_Remove_ca60((uintptr_t*)(param_1 + 5), node);   // 0x14001ca60
+                        if (keyB <= node->key1) {
+                            // LEFT: 0x14001ca60 is declared in Work/exe_bodies.h (WORK) taking the
+                            // tree head as uintptr_t*.
+                            WorkCellBST_Remove_ca60((uintptr_t*)&index, node);   // 0x14001ca60
                             break;
                         }
                     }
-                    node = *(int**)(node + 8);          // right
+                    node = node->right;
                 }
             } while (node != nullptr);
         }
 
         // 2b) reset the slot
-        uint64_t* slot = (uint64_t*)(ringBase + (int64_t)*(int*)((int64_t)param_1 + 0x14) * 0x18);
-        const uint32_t pad = 0;   // retail's uninitialized uStack_1c high half
-        slot[0] = 0xffffffffffffffffULL;
-        slot[1] = ((uint64_t)pad << 32) | (uint64_t)0xffffffffu;
-        slot[2] = 0;
+        RegionPairEntry* slot = &ringBase[oldest];
+        slot->regionA = -1;          // H7: one qword store of -1 in retail
+        slot->regionB = -1;
+        slot->distance = -1;         // H7: one qword store {-1, pad} in retail
+        slot->field_0x0C = 0;        // retail's uninitialized uStack_1c high half
+        slot->time = 0;
 
-        // 2c) advance the read cursor, wrapping at capacity (cache+0x20)
-        int next = *(int*)((int64_t)param_1 + 0x14) + 1;
-        if (*(int*)(param_1 + 4) <= next) next = 0;
-        *(int*)((int64_t)param_1 + 0x14) = next;
+        // 2c) advance the expiry index, wrapping at the ring size
+        int next = oldest + 1;
+        if (ring.size <= next) next = 0;
+        oldest = next;
         head = next;
 
-        ringBase = param_1[3];
-    } while (param_1[0] - *(int64_t*)(ringBase + (int64_t)head * 0x18 + 0x10) > window);
+        ringBase = ring.data;
+    } while (newestTime - ringBase[head].time > window);
 
+}
+
+// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp) holds the cache as int64_t*.
+void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
+    if (param_1 == nullptr || param_2 == nullptr) return;
+    // LEFT: GAME-a (Game/gameupdateloop.cpp holds the cache as int64_t*).
+    ((RegionPairCache*)param_1)->Expire(param_2);
 }

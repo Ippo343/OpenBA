@@ -35,6 +35,9 @@
 #include "ui/Sprite.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Component/ToolbarDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Game/Toolbar.h"
 
 // ============================================================
 // Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5). The External ctor
@@ -54,52 +57,52 @@
 // ctor 0x1400e0c30: External(), TutorialImage's stamp + zeroed fields
 // (TutorialImage()), the own stamp, then String +0x30 = 0, tag -1, ref null.
 TutorialImageToolbarIcon::TutorialImageToolbarIcon()
-    : _toolbarString(nullptr), _toolbarStringTag(-1), _pad3C{}, _toolbarRef(nullptr) {}
+    : _toolbarRef{{}, -1, {}, nullptr} {}
 
 // The dtor inside [0] 0x140028090: ~String +0x30; the compiler re-stamps
 // TutorialImage and runs ~External.
 TutorialImageToolbarIcon::~TutorialImageToolbarIcon() {
-    reinterpret_cast<System::String*>(&_toolbarString)->~String();   // B.3.1 bridge
+    _toolbarRef.Name().~String();
+}
+
+// The resolved Toolbar entry (NamedExternalRef::ResolveToolbar validated the
+// type: a downcast within Object::External's hierarchy).
+static const Toolbar* ResolvedToolbar(const NamedExternalRef& ref) {
+    const Object::External* found = ref.resolved;
+    return static_cast<const Toolbar*>(found);
 }
 
 // ============================================================
 // Slot5: Serialize (0x1400e0af0)
 // ============================================================
+// LEFT (both blocks): External::Serialize hands the stream in as void* (the
+// runtime base's signature).
 bool TutorialImageToolbarIcon::Serialize(void* stream) {
-    auto p = reinterpret_cast<uint8_t*>(this);
-
     // First serializer block: serialize +0x28, +0x2C as ints, then ExternalPtr at +0x20
-    alignas(8) uint8_t serializerBuf[32] = {};
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
-
-    TutBase_SerializeImageRef(p + 0x20, serializerBuf);
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    {
+        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+        serializer.Serialize(imageWidth, nullptr);
+        serializer.Serialize(imageHeight, nullptr);
+        TutBase_SerializeImageRef(&imageRef, &serializer);
+    }
 
     // Second serializer block: Filename ctor, String::Serialize, conditional toolbar resolve
-    alignas(8) uint8_t serializerBuf2[32] = {};
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Filename temp retail's compiler emitted for this scope.
     System::Filename filenameBuf;
     (void)filenameBuf;
 
     // String::Serialize on +0x30
-    reinterpret_cast<System::String*>(p + 0x30)->Serialize(serializerBuf2);   // B.3.1 bridge
+    _toolbarRef.Name().Serialize(&serializer2);
 
     // If loading (serializer stream mode == 0), resolve toolbar
-    void* innerStream = *(void**)(serializerBuf2 + 0x00);
-    if (innerStream) {
-        int streamMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (serializer2._stream) {
+        int streamMode = static_cast<int>(serializer2.GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
         if (streamMode == 0) {
-            TutBase_ResolveToolbarRef(p + 0x30);
+            _toolbarRef.ResolveToolbar();
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
     return true;
 }
 
@@ -115,120 +118,105 @@ Object::External* TutorialImageToolbarIcon::Construct() {
 }
 
 // ============================================================
-// Slot9: Slot9/Update (0x1400e0940)
+// Slot9: CreateElement (0x1400e0940)
 // ============================================================
 // Creates a UI element from imageRef, finds an ImageElement child,
 // resolves toolbar ref, constructs a Sprite from the toolbar icon data,
 // and sets the sprite on the ImageElement.
-//
-// If field40->+0x58 is null (no component list), uses field40->+0x28
-// (spriteSheet) and field40->+0x38 (spriteName) directly.
-// If non-null, iterates the component list to find a matching
-// ToolbarDescription and uses its +0x20/+0x28.
+// If the Toolbar's +0x58 template is null, uses its +0x28 (spriteSheet) and
+// +0x38 (spriteName) directly. Otherwise walks the template's
+// sub-descriptions for its ToolbarDescription and uses its +0x20/+0x28.
 // Returns retIBP, exactly as retail does (every TutorialImage*::Slot9 ends
-// `return param_2`). This is NOT cosmetic: TutWave_RefreshStepUI feeds the
-// return value straight to TableElement::SetChild as the child pointer, so a
-// void return leaves whatever the last call left in RAX and the table gets a
-// garbage child, which faults later inside UI::UserInterface::Update.
-void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
-    auto p = reinterpret_cast<uint8_t*>(this);
-
+// `return param_2`). This is NOT cosmetic: TutorialInstance::RefreshStepUI
+// feeds the return value straight to TableElement::SetChild as the child
+// pointer, so a void return leaves whatever the last call left in RAX and the
+// table gets a garbage child, which faults later inside UI::UserInterface::Update.
+Object::InternalPtr<UI::Element>* TutorialImageToolbarIcon::CreateElement(Object::InternalPtr<UI::Element>* retIBP,
+                                                                          const UI::Dialog* dialog) {
     // 1. Create UI element from imageRef at +0x20
-    ::new (retIBP) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(*(void**)(p + 0x20)))));
+    *retIBP = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(imageRef));
 
     // 2. CheckPtr on the returned IBP
 
     // 3. FindElementType — find ImageElement child
-    void* element = *(void**)retIBP;
-    uint8_t foundIBP[16] = {};
-    ::new (foundIBP) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::Element*>(element)->FindElementType(UI::ImageElement::TypeId()));  // B.3.6 bridge
+    UI::Element* element = retIBP->Get();
+    UI::Element* foundObj = element->FindElementType(UI::ImageElement::TypeId()).Get();
 
     // 4. CheckPtr on found element
 
     // 5. IsDerivedFrom check — verify it's an ImageElement
-    void* foundObj = *(void**)foundIBP;
-    void* imageElement = nullptr;
+    UI::ImageElement* imageElem = nullptr;
     if (foundObj) {
         if (Object::IsDerivedFromNullSafe(foundObj, UI::ImageElement::TypeId()))
-            imageElement = foundObj;
+            imageElem = static_cast<UI::ImageElement*>(foundObj);
     }
 
-    // 6. Wrap in InternalBasePtr
-    void* imageRef = nullptr;
-    new (&imageRef) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(imageElement));   // B.3.3 bridge
-
     // 7. Resolve toolbar ref from String at +0x30
-    TutBase_ResolveToolbarRef(p + 0x30);
+    _toolbarRef.ResolveToolbar();
 
     // 8. Get resolved toolbar object at +0x40
-    uintptr_t toolbar = *(uintptr_t*)(p + 0x40);
-    uint64_t spriteSheet = 0;
-    const void* spriteName = nullptr;
+    const Toolbar* toolbar = ResolvedToolbar(_toolbarRef);
+    UI::SpriteSheet* spriteSheet = nullptr;
+    const System::String* spriteName = nullptr;
 
     if (toolbar) {
-        uintptr_t componentList = *(uintptr_t*)(toolbar + 0x58);
+        const ComponentDescription* componentList = toolbar->_field58;
 
-        if (componentList == 0) {
-            // No component list — use toolbar's direct sprite data
-            TutBase_ResolveToolbarRef(p + 0x30);
-            TutBase_ResolveToolbarRef(p + 0x30);
+        if (componentList == nullptr) {
+            // No template — use toolbar's direct sprite data
+            _toolbarRef.ResolveToolbar();
+            _toolbarRef.ResolveToolbar();
 
-            toolbar = *(uintptr_t*)(p + 0x40); // re-read after resolve
-            spriteSheet = *(uint64_t*)(toolbar + 0x28);
-            spriteName = (const void*)(toolbar + 0x38);
+            toolbar = ResolvedToolbar(_toolbarRef); // re-read after resolve
+            spriteSheet = toolbar->_field28;
+            // LEFT: Toolbar's +0x38 String is `void*` (DLG-d's header, H5).
+            spriteName = reinterpret_cast<const System::String*>(&toolbar->_field38);
         } else {
-            // Has component list — iterate to find ToolbarDescription
-            TutBase_ResolveToolbarRef(p + 0x30);
+            // Has a template — walk it for its ToolbarDescription
+            _toolbarRef.ResolveToolbar();
 
-            componentList = *(uintptr_t*)(toolbar + 0x58);
-            int count = *(int*)(componentList + 0x30);
-            uintptr_t arrayData = *(uintptr_t*)(componentList + 0x28);
+            componentList = toolbar->_field58;
+            int count = componentList->_subDescCount;
+            Description** arrayData = componentList->_subDescs;
 
-            void* matchedComp = nullptr;
+            const ToolbarDescription* matchedComp = nullptr;
             for (int i = 0; i < count; i++) {
-                void* comp = *(void**)(arrayData + i * 8);
+                Description* comp = arrayData[i];
                 if (!comp) continue;
 
-                // Call GetTypeId (vtable +0x10)
-                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                // GetTypeId (vtable +0x10)
+                uint32_t typeId = comp->Type();
 
                 if (typeId == ToolbarDescription::TypeId()) {
                     // IsDerivedFrom check
                     if (Object::IsDerivedFromNullSafe(comp, ToolbarDescription::TypeId())) {
-                        matchedComp = comp;
+                        matchedComp = static_cast<const ToolbarDescription*>(comp);
                     }
                     break;
                 }
             }
 
             if (matchedComp) {
-                spriteSheet = *(uint64_t*)((uintptr_t)matchedComp + 0x20);
-                spriteName = (const void*)((uintptr_t)matchedComp + 0x28);
+                spriteSheet = matchedComp->_spriteSheet;
+                spriteName = &matchedComp->_name;
             } else {
                 // Fallback: use toolbar's direct data (matchedComp stays null)
-                spriteSheet = *(uint64_t*)(toolbar + 0x28);
-                spriteName = (const void*)(toolbar + 0x38);
+                spriteSheet = toolbar->_field28;
+                // LEFT: as above.
+                spriteName = reinterpret_cast<const System::String*>(&toolbar->_field38);
             }
         }
     }
 
-    // 9. Construct Sprite from spriteSheet + spriteName
-    uint8_t spriteBuf[16] = {};
+    // 9. Construct Sprite from spriteSheet + spriteName ({null, 0} otherwise,
+    // the tree's zeroed buffer)
+    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(nullptr), 0);
     if (spriteName)
-        ::new (spriteBuf) UI::Sprite(
-            Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
-            *static_cast<const System::String*>(spriteName));
-
+        sprite = UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(spriteSheet), *spriteName);
 
     // 10. Set sprite on the ImageElement
-    if (imageRef)
-        reinterpret_cast<UI::ImageElement*>(imageRef)->SetSprite(  // B.3.6 bridge
-            reinterpret_cast<const UI::Sprite*>(spriteBuf));
+    if (imageElem)
+        imageElem->SetSprite(&sprite);
     return retIBP;
 }
 

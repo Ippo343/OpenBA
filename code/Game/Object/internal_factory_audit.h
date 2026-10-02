@@ -40,16 +40,18 @@
 #include <cstdint>
 #include <cstddef>
 
+namespace Object { class InternalFactory; class Internal; }
+
 namespace ObjAudit {
 
 // The live InternalFactory (nullptr before the Runtime engine is up).
-void* Factory();
+::Object::InternalFactory* Factory();
 
 // Current registered-object count, or -1 if the factory is not reachable.
 int Count();
 
 // True when `obj`'s self-index (+0x08) is in range AND table[idx] == obj — i.e.
 // the object is genuinely present in the handle table.
-bool IsRegistered(const void* obj);
+bool IsRegistered(const ::Object::Internal* obj);
 
 }  // namespace ObjAudit

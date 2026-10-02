@@ -30,6 +30,7 @@
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "ui/String.h"
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -54,29 +55,21 @@ TutorialImageInputKey::TutorialImageInputKey() {}
 // Slot5: Serialize (0x1400e07f0)
 // ============================================================
 bool TutorialImageInputKey::Serialize(void* stream) {
-    auto p = reinterpret_cast<uint8_t*>(this);
-
+    // LEFT (both blocks): External::Serialize hands the stream in as void* (the
+    // runtime base's signature).
     // First serializer block: serialize +0x28, +0x2C as ints, then ExternalPtr at +0x20
-    alignas(8) uint8_t serializerBuf[32] = {};
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    {
+        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+        serializer.Serialize(imageWidth, nullptr);
+        serializer.Serialize(imageHeight, nullptr);
+        TutBase_SerializeImageRef(&imageRef, &serializer);
+    }
 
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
-
-    TutBase_SerializeImageRef(p + 0x20, serializerBuf);
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-
-    // Second serializer block: serialize +0x30 (inputId) via stream vtable +0x98
-    alignas(8) uint8_t serializerBuf2[32] = {};
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // +0x30 (inputId) through the UINT door. Serializer+0x08 is NOT "the
-    // internal stream": the Stream is at Serializer+0x00, and +0x08 is the
-    // READERWRITER, whose vtable +0x98 is rw_vtbl::kScalarUInt.
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(*reinterpret_cast<unsigned int*>(p + 0x30), nullptr);   // B.3.4 bridge  (0x98 = uint door)
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
+    // Second serializer block: +0x30 (inputId) through the UINT door. Serializer
+    // +0x08 is NOT "the internal stream": the Stream is at Serializer+0x00, and
+    // +0x08 is the READERWRITER, whose vtable +0x98 is rw_vtbl::kScalarUInt.
+    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    serializer2.Serialize(_inputId, nullptr);
     return true;
 }
 
@@ -92,83 +85,65 @@ Object::External* TutorialImageInputKey::Construct() {
 }
 
 // ============================================================
-// Slot9: Slot9/Update (0x1400e06e0)
+// Slot9: CreateElement (0x1400e06e0)
 // ============================================================
 // Creates a UI element from imageRef, finds a TextElement child,
 // looks up the bound key name from KeyMap using inputId at +0x30,
 // and sets the display text on the TextElement.
-//
-// Params (Win64 ABI):
-//   self = TutorialImageInputKey*
-//   retIBP = InternalBasePtr* (return buffer, also output)
-//   dialog = Dialog* (parent dialog)
 // Returns retIBP, exactly as retail does (every TutorialImage*::Slot9 ends
-// `return param_2`). This is NOT cosmetic: TutWave_RefreshStepUI feeds the
-// return value straight to TableElement::SetChild as the child pointer, so a
-// void return leaves whatever the last call left in RAX and the table gets a
-// garbage child, which faults later inside UI::UserInterface::Update.
-void* TutorialImageInputKey::CreateElement(void* retIBP, void* dialog) {
-    auto p = reinterpret_cast<uint8_t*>(this);
-
+// `return param_2`). This is NOT cosmetic: TutorialInstance::RefreshStepUI
+// feeds the return value straight to TableElement::SetChild as the child
+// pointer, so a void return leaves whatever the last call left in RAX and the
+// table gets a garbage child, which faults later inside UI::UserInterface::Update.
+Object::InternalPtr<UI::Element>* TutorialImageInputKey::CreateElement(Object::InternalPtr<UI::Element>* retIBP,
+                                                                       const UI::Dialog* dialog) {
     // 1. Create UI element from imageRef at +0x20
-    ::new (retIBP) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(*(void**)(p + 0x20)))));
+    *retIBP = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(imageRef));
 
     // 2. CheckPtr on the returned IBP
 
     // 3. FindElementType — find TextElement child
-    void* element = *(void**)retIBP;
-    uint8_t foundIBP[16] = {};
-    ::new (foundIBP) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::Element*>(element)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
+    UI::Element* element = retIBP->Get();
+    UI::Element* foundObj = element->FindElementType(UI::TextElement::TypeId()).Get();
 
     // 4. CheckPtr on found element
 
     // 5. IsDerivedFrom check — verify it's a TextElement
-    void* foundObj = *(void**)foundIBP;
-    void* textElement = nullptr;
+    UI::TextElement* textRef = nullptr;
     if (foundObj) {
         if (Object::IsDerivedFromNullSafe(foundObj, UI::TextElement::TypeId()))
-            textElement = foundObj;
+            textRef = static_cast<UI::TextElement*>(foundObj);
     }
 
-    // 6. Wrap in InternalBasePtr
-    void* textRef = nullptr;
-    new (&textRef) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
-
-    // 7. Get actual KeyMap object (triple deref from exref)
-    void* keymap = nullptr;
+    // 7. The KeyMap (Input::Configuration +0x00)
+    const Input::KeyMap* keymap = nullptr;
     if (Input::Configuration::_singleton != nullptr) {
-        void* step2 = Input::Configuration::_singleton;
-        if (step2) keymap = *(void**)step2;
+        Input::Configuration* step2 = Input::Configuration::_singleton;
+        if (step2) keymap = step2->_keyMap;
     }
 
     // 8. Get device type and input index for inputId at +0x30
-    int inputId = *(int*)(p + 0x30);
+    int inputId = static_cast<int>(_inputId);
     int deviceType = 0;
     if (keymap)
-        deviceType = reinterpret_cast<const Input::KeyMap*>(keymap)->GetDeviceForId(inputId, 0);  // B.3.7 bridge
+        deviceType = keymap->GetDeviceForId(inputId, 0);
 
     int inputIndex = 0;
     if (keymap)
-        inputIndex = reinterpret_cast<const Input::KeyMap*>(keymap)->GetInputForId(inputId, 0);  // B.3.7 bridge
+        inputIndex = keymap->GetInputForId(inputId, 0);
 
-    // 9. Get key name as UI::String
-    uint8_t uiStr[16] = {};
+    // 9. Get key name as UI::String (a zeroed buffer, as the tree's was)
+    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(nullptr), 0);
     // LANE1 row 36: 0x140099c20 is unregistered, so fn_GetInputKeyName was
     // permanently null and every tutorial key name rendered blank. The function is
     // already ported byte-for-byte as Hotkey_BuildKeyName (hotkeytooltipui.cpp);
     // retail's param_1 is the KeyMap container and that port looks up the same
     // *g_pKeyMapSingleton, so this is the identical call, not a fourth copy.
-    Game::Hotkey_BuildKeyName(uiStr, deviceType, inputIndex);
+    Game::Hotkey_BuildKeyName(&uiStr, deviceType, inputIndex);
 
     // 10. Set text on the TextElement
     if (textRef)
-        reinterpret_cast<UI::TextElement*>(textRef)->SetText(  // B.3.6 bridge
-            reinterpret_cast<const UI::String*>(uiStr));
+        textRef->SetText(&uiStr);
     return retIBP;
 }
 

@@ -17,6 +17,8 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"
+#include "Game/Map.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -37,14 +39,14 @@ TutorialGoalGameSpeed::TutorialGoalGameSpeed() : targetSpeed(1), _pad24{} {}
 //           MOV RDX,[RAX+0x120]; CMP [RDX+0x34],ECX; SETZ AL; RET
 bool TutorialGoalGameSpeed::IsComplete(void* /*time*/, void* /*instance*/) {
     if (GameUpdateLoop::_singleton == nullptr) return false;
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
-    // game+0x120 = time/speed controller
-    uintptr_t timeCtrl = *(uintptr_t*)(game + 0x120);
-    if (timeCtrl == 0) return false;
+    // game+0x120 = the PlayerToolManager (the speed controller)
+    PlayerToolManager* timeCtrl = game->m_toolManager;
+    if (timeCtrl == nullptr) return false;
 
-    // time controller +0x34 = current game speed
-    int32_t currentSpeed = *(int32_t*)(timeCtrl + 0x34);
+    // its +0x34 = current game speed
+    int32_t currentSpeed = timeCtrl->field_0x34;
 
     return currentSpeed == targetSpeed;
 }
@@ -57,13 +59,12 @@ bool TutorialGoalGameSpeed::IsComplete(void* /*time*/, void* /*instance*/) {
 bool TutorialGoalGameSpeed::Serialize(void* stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-    alignas(8) uint8_t ser[32];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize targetSpeed (+0x20) — int
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(targetSpeed, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(targetSpeed, nullptr);
     return true;
 }
 

@@ -15,13 +15,16 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class ComponentEntity;   // Entity/ComponentEntity.h
 
 class RemoveAnimal final : public Action {
     DECLARE_EXE_TYPE(RemoveAnimal)
 
 public:
     RemoveAnimal();                                                   // create 0x140022e70
-    explicit RemoveAnimal(uint64_t animal);   // inlined in 0x1400bbea0 (action_pf_roots_drop.cpp)
+    explicit RemoveAnimal(ComponentEntity* animal);   // inlined in 0x1400bbea0 (action_pf_roots_drop.cpp)
     ~RemoveAnimal() override = default;                        // [0] 0x140022ee0
     void Persist(void* stream) override;                       // [3] 0x1400ca870
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400ca7f0
@@ -29,7 +32,7 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400ca720
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 animal entity
+    Object::InternalPtr<ComponentEntity> _field20;   // +0x20 the animal entity
 };
 
 static_assert(sizeof(RemoveAnimal) == 0x28, "RemoveAnimal is 0x28 (create 0x140022e70 MemAlloc)");

@@ -30,6 +30,11 @@
 #include <cstdint>
 #include "Tutorial/TutorialSetup.h"
 #include "Object/exe_type.h"
+#include "Goal/goal_exe_helpers.h"   // NamedExternalRef
+#include "object/Internal.h"         // Object::InternalPtr
+
+namespace System { class String; }
+namespace UI { class Dialog; class DialogInstance; class Element; }
 
 class TutorialSetupDialog final : public TutorialSetup {
     DECLARE_EXE_TYPE(TutorialSetupDialog)
@@ -48,25 +53,34 @@ public:
     void              End() override;                              // [10] 0x1400e2460
     virtual Object::External* Construct();                         // [11] 0x1400285f0
 
+    // ---- non-virtual members (tutorial_wave.cpp) ----
+    // 0x1400e2250: show / hide an element tree (retail passes this through unread).
+    void SetElementFlagsRecursive(Object::InternalPtr<UI::Element>* elem, char show);
+    void SetAllDialogFlags(char show);                             // 0x1400e2330
+    Object::InternalPtr<UI::DialogInstance> FindHighlightDialog(); // 0x1400e24f0
+    void OpenHighlightDialog(char checkExisting);                  // 0x1400e2700
+    void ShowListedElements();                                     // 0x1400e29f0
+
+    // The +0x40 String (H5 raw storage). Defined in tutorialsetupdialog.cpp.
+    System::String& HighlightPath();
+
 public:
     // Collection::Array<System::String>: element paths ("Dialog.Element") left
     // visible while everything else is hidden.
-    uint64_t shownPaths;         // +0x20: String* data
+    System::String* shownPaths;  // +0x20: Array<String> data (H5 raw triple)
     uint32_t shownPathCount;     // +0x28: size
     uint32_t shownPathCapacity;  // +0x2C: capacity
     // Collection::Array<System::String>: dialog names Begin() walks.
-    uint64_t dialogNames;        // +0x30: String* data
+    System::String* dialogNames; // +0x30: Array<String> data (H5 raw triple)
     uint32_t dialogNameCount;    // +0x38: size
     uint32_t dialogNameCapacity; // +0x3C: capacity
     uint64_t highlightPath;      // +0x40: System::String — the element to highlight
     int32_t  arrowRotation;      // +0x48: degrees, lands at highlight +0xD8
     uint8_t  _pad4C[4];          // +0x4C: padding
-    void*    highlightDialog;    // +0x50: ExternalPtr<UI::Dialog> — the highlight .rsc
-    // +0x58..+0x6f: an ExternalRef {String name, int generation, External* cached}
-    uint64_t toolbarName;        // +0x58: System::String
-    int32_t  toolbarStamp;       // +0x60: factory generation (-1 = unresolved)
-    uint8_t  _pad64[4];          // +0x64: padding
-    void*    toolbarCached;      // +0x68: cached External*
+    const UI::Dialog* highlightDialog; // +0x50: ExternalPtr<UI::Dialog> — the highlight .rsc
+    // +0x58..+0x6f: the toolbar template, by name: String, factory generation
+    //   (-1 = unresolved), cached External* (resolved by 0x14001b1d0)
+    NamedExternalRef toolbarRef;
     int32_t  toolbarIndex;       // +0x70: the toolbar cell to point at
     uint8_t  _pad74[4];          // +0x74: padding
 };
@@ -78,9 +92,9 @@ static_assert(offsetof(TutorialSetupDialog, dialogNameCount) == 0x38, "+0x38");
 static_assert(offsetof(TutorialSetupDialog, highlightPath) == 0x40, "+0x40");
 static_assert(offsetof(TutorialSetupDialog, arrowRotation) == 0x48, "+0x48");
 static_assert(offsetof(TutorialSetupDialog, highlightDialog) == 0x50, "+0x50");
-static_assert(offsetof(TutorialSetupDialog, toolbarName) == 0x58, "+0x58");
-static_assert(offsetof(TutorialSetupDialog, toolbarStamp) == 0x60, "+0x60");
-static_assert(offsetof(TutorialSetupDialog, toolbarCached) == 0x68, "+0x68");
+static_assert(offsetof(TutorialSetupDialog, toolbarRef) == 0x58, "+0x58");
+static_assert(offsetof(TutorialSetupDialog, toolbarRef) + offsetof(NamedExternalRef, generation) == 0x60, "+0x60");
+static_assert(offsetof(TutorialSetupDialog, toolbarRef) + offsetof(NamedExternalRef, resolved) == 0x68, "+0x68");
 static_assert(offsetof(TutorialSetupDialog, toolbarIndex) == 0x70, "+0x70");
 static_assert(sizeof(TutorialSetupDialog) == 0x78, "TutorialSetupDialog is 0x78 (create 0x1400285b0)");
 static_assert(alignof(TutorialSetupDialog) == 8, "qword-aligned");

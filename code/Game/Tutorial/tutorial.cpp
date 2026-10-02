@@ -37,7 +37,7 @@
 // ctor 0x1400deb90 (inlined in create 0x140026e50 / createInPlace 0x140026eb0):
 // External(), the stamp (the compiler's), then the fields.
 Tutorial::Tutorial()
-    : setup(nullptr), steps(nullptr), stepCount(0), currentStep(-1), _pad3C{} {}
+    : setup(nullptr), steps(nullptr), stepCount(0), stepCapacity(0), currentStep(-1), _pad3C{} {}
 
 // The dtor inside [0] 0x140026f50: free the steps array (+0x28 data, +0x30
 // size, +0x34 capacity) — an inlined Collection::Array<T>::~Array (MemFree
@@ -75,33 +75,27 @@ Object::External* Tutorial::Construct() {
 //   4. the ExternalPtr at +0x20 via helper (0x140002340)
 //   5. int currentStep at +0x38
 bool Tutorial::Serialize(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // 1. Serialize step count (+0x30)
-    int32_t localCount = *reinterpret_cast<int32_t*>(s + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    int32_t localCount = stepCount;
+    serializer.Serialize(localCount, nullptr);
 
     // 2. On load: resize steps array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        Reimpl_Array_Resize_Stride08(reinterpret_cast<void*>(s + 0x28), localCount);   // 0x140001bb0
+    if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        Reimpl_Array_Resize_Stride08(&steps, localCount);   // 0x140001bb0
     }
 
     // 3. Serialize steps array (ExternalPtr<TutorialStep>[])
-    void* stepsData = *reinterpret_cast<void**>(s + 0x28);
-    TutBase_SerializeStepArray(serializer, localCount, stepsData, nullptr);   // 0x140026fb0
+    TutBase_SerializeStepArray(&serializer, localCount, steps, nullptr);   // 0x140026fb0
 
     // 4. Serialize the ExternalPtr at +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(s + 0x20), serializer);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_StringTable(&setup, &serializer);   // 0x140002340
 
     // 5. Serialize currentStep at +0x38
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(currentStep, nullptr);   // B.3.4 bridge
-
-    // Destroy Serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    serializer.Serialize(currentStep, nullptr);
     return true;
 }
 

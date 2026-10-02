@@ -271,6 +271,10 @@ public:
     // B4 WORK-b; body in Work/pickup_gate.cpp: does a storage location in the +0x00 list
     // accept `amount` of `resource`? (Pickup::Execute's gate)
     bool HasStorageFor(ComponentDescription* resource, int amount);  // 0x14008d3c0
+    // B4 TUT; bodies in Tutorial/tutorial_base.cpp: the entity count of one bucket
+    // of the +0x160 (template) / +0x100 (profession) tree, 0 when absent.
+    uint32_t CountByTemplate(const ComponentDescription* key) const;    // 0x140092010
+    uint32_t CountByProfession(const class Profession* key) const;      // 0x1400910a0
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

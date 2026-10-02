@@ -36,45 +36,33 @@
 // message ID, and two uint params.
 // ============================================================
 void SendComponentMessage::Persist(void* stream) {
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status (version 0)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&this->_status), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs + message fields (version 0)
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
     // Target entity ref (+0x20) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(this->_field20, ComponentEntity::TypeId())) {
-            this->_field20 = nullptr;
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), ComponentEntity::TypeId())) {
+            _field20 = nullptr;
         }
     }
 
     // Source entity ref (+0x28) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&this->_field28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->_field28 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(this->_field28, ComponentEntity::TypeId())) {
-            this->_field28 = nullptr;
+    _field28.InternalBasePtr::Serialize(ser);
+    if (_field28.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field28.Get(), ComponentEntity::TypeId())) {
+            _field28 = nullptr;
         }
     }
 
     // Component type (+0x30) — Object::Type::Serialize
-    RtObject::RtObject_Type_Serialize(&this->_field30, ser2);   // slot 0x1401516b0
+    RtObject::RtObject_Type_Serialize(&_field30, &ser);   // slot 0x1401516b0
 
-    // Message ID (+0x34) — int
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->_field34), nullptr);   // B.3.4 bridge
-
-    // Message params (+0x38, +0x3c) — uint
-    // Note: _field38 is void* in struct but actually two uint32s packed
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>((reinterpret_cast<uint8_t*>(this) + 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>((reinterpret_cast<uint8_t*>(this) + 0x3c)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_field34, nullptr);   // +0x34 message id (int)
+    ser.Serialize(_field38, nullptr);   // +0x38 message param (uint)
+    ser.Serialize(_field3C, nullptr);   // +0x3C message param (uint)
 }
 
 // ============================================================
@@ -86,11 +74,11 @@ void SendComponentMessage::Persist(void* stream) {
 int  SendComponentMessage::AbstractImpl(void* actionStack) {
     (void)actionStack;
 
-    uint32_t componentTypeId = this->_field30;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    uint32_t componentTypeId = _field30;
 
     // CheckPtr on target entity
-    uintptr_t entity = reinterpret_cast<uintptr_t>(_field20);
+    ComponentEntity* target = _field20.Get();
+    uintptr_t entity = reinterpret_cast<uintptr_t>(target);  // CAST-OK: ptr_int
 
     // SA-guard: the target at +0x20 is a WEAK ref, and nothing invalidates it when the
     // entity is freed (CheckPtr is an empty function in the shipping Runtime). A citizen
@@ -118,17 +106,17 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
     // buildings that are mid-teardown. Same aliveness test the dialog controllers already
     // use (SA_DialogEntityAlive / destroyui.cpp DataSourceAlive).
     const bool dying = canonical &&
-        ForceWork::Readable(reinterpret_cast<void*>(entity), 0x44) &&
-        ((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0;
+        ForceWork::Readable(target, 0x44) &&
+        ((target->_entityFlags >> 10) & 1) != 0;
     if (!entity || !canonical || dying ||
-        !ForceWork::Readable(reinterpret_cast<void*>(entity), 0x40) ||
-        !ForceWork::Readable(*reinterpret_cast<void**>(entity + 0x30), 8)) {
+        !ForceWork::Readable(target, 0x40) ||
+        !ForceWork::Readable(target->_components, 8)) {
         static int s_reported = 0;
         if (s_reported++ < 20) {
             std::fprintf(stderr, "[SendCompMsg] ABORT: target entity=%p is not live "
                          "(canonical=%d dying=%d msgId=%d compType=%u) — action dropped "
                          "instead of reading freed memory\n",
-                         reinterpret_cast<void*>(entity), (int)canonical, (int)dying,
+                         static_cast<void*>(target), (int)canonical, (int)dying,
                          _field34, componentTypeId);
             std::fflush(stderr);
         }
@@ -136,26 +124,26 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
     }
 
     // Search entity's component array for matching type
-    int32_t compCount = *(int32_t*)(entity + 0x38);
-    uintptr_t compArray = *(uintptr_t*)(entity + 0x30);
-    uintptr_t foundComp = 0;
+    int32_t compCount = target->_componentCount;
+    Object::InternalPtr<Component>* compArray = target->_components;
+    Component* foundComp = nullptr;
 
     for (int i = 0; i < compCount; i++) {
-        uintptr_t compIBP = compArray + (uintptr_t)i * 8;
-        uintptr_t comp = *(uintptr_t*)compIBP;
+        Component* comp = compArray[i].Get();
 
         // Backstop for the same sentinel one level down: an entity that is NOT marked for
         // removal can still carry an individually released slot. Retail derefs this
         // unguarded and is right to — it never puts a sentinel in a live entity's array —
         // so skip the slot rather than clamping it, and keep the scan going.
-        if (comp < 0x10000 || comp > 0x00007FFFFFFFFFFFULL) continue;
+        uintptr_t compAddr = reinterpret_cast<uintptr_t>(comp);  // CAST-OK: ptr_int
+        if (compAddr < 0x10000 || compAddr > 0x00007FFFFFFFFFFFULL) continue;
 
         // Get component type ID via vtable+0x10
-        int typeId = static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type());   // B.3.8 bridge
+        int typeId = static_cast<int>(comp->Type());   // slot 2
 
         if (typeId == (int)componentTypeId) {
             // Found matching component
-            foundComp = *(uintptr_t*)(compArray + (uintptr_t)i * 8);
+            foundComp = compArray[i].Get();
             break;
         }
     }
@@ -174,30 +162,21 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
         if (componentTypeId == OrchardComponent::TypeId() && s_seen[bucket]++ < 8) {
             std::fprintf(stderr, "[SendCompMsg] entity=%p compType=%u msg=%d p1=%u -> "
                          "scanned %d components, found=%p\n",
-                         reinterpret_cast<void*>(entity), componentTypeId,
-                         _field34, *(uint32_t*)(s + 0x38), compCount,
-                         reinterpret_cast<void*>(foundComp));
+                         static_cast<void*>(target), componentTypeId,
+                         _field34, _field38, compCount,
+                         static_cast<void*>(foundComp));
             std::fflush(stderr);
         }
     }
 
-    // If not found, create null IBP
-    if (foundComp == 0) {
-        new (&foundComp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    }
-
-    if (foundComp == 0) {
+    if (foundComp == nullptr) {
         return 2;
     }
 
-    // Call component's message handler (vtable+0x78)
-    uintptr_t compObj = foundComp;
-
-    // Build call args: component, msgId, &sourceEntity, param1, param2
-    uintptr_t sourceEntityRef = *(uintptr_t*)(s + 0x28);
-    // slot 15 (vtable +0x78) Component::OnMessage on the component the type scan found
-    reinterpret_cast<Component*>(compObj)->OnMessage(_field34, &sourceEntityRef,   // B.3.8 bridge
-                                                     *(uint32_t*)(s + 0x38), *(uint32_t*)(s + 0x3c));
+    // Call the component's message handler (slot 15, vtable+0x78):
+    // component, msgId, &sourceEntity, param1, param2
+    ComponentEntity* sourceEntityRef = _field28.Get();
+    foundComp->OnMessage(_field34, &sourceEntityRef, _field38, _field3C);
 
     return 0;
 }
@@ -208,12 +187,12 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
 // ============================================================
 bool SendComponentMessage::GetTarget(void* param) {
     // CheckPtr on +0x20, then compare [param] directly (no CheckPtr on param)
-    if (*(void**)param == this->_field20) {
+    if (*(void**)param == _field20.Get()) {   // LEFT: Action::GetTarget's parameter is void* (Action.h)
         return true;
     }
 
     // CheckPtr on +0x28, then compare [param]
-    return *(void**)param == this->_field28;
+    return *(void**)param == _field28.Get();   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 }
 
 // ============================================================
@@ -232,7 +211,8 @@ SendComponentMessage::SendComponentMessage()
       _field28(nullptr),
       _field30(0),
       _field34(-1),
-      _field38(nullptr) {}
+      _field38(0),
+      _field3C(0) {}
 
 // [3] 0x1400cb000
 // [4] 0x1400caef0
@@ -256,18 +236,21 @@ void* SendComponentMessage::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3,
                                            uint32_t param_4, uint64_t* param_5, uint32_t param_6) {
-    // ENDGAME B.3.8 ACT: the real ctor (SendComponentMessage.h). A by-address door.
+    // B4 FORWARD: outside callers (Action/action_pf_ctors.cpp, the
+    // Component citizen builders, the Work action builders) hold the refs as uint64_t*.
     return static_cast<Object::Base*>(
-        new (param_1) SendComponentMessage(param_2, param_3, param_4, param_5, param_6));
+        new (param_1) SendComponentMessage(reinterpret_cast<ComponentEntity* const*>(param_2), param_3,
+                                           param_4, reinterpret_cast<ComponentEntity* const*>(param_5),
+                                           param_6));
 }
 
-// 0x1400cb1d0 — the ctor body, moved from the door above: +0x20 = *param_2,
-// +0x28 = *param_5, then the retail stores (and the tree's typeid heal) verbatim.
-SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3, uint32_t param_4,
-                                           uint64_t* param_5, uint32_t param_6)
-    : _field20(reinterpret_cast<void*>(*param_2)),
-      _field28(reinterpret_cast<void*>(*param_5)) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+// 0x1400cb1d0 — the ctor body: +0x20 = *param_2, +0x28 = *param_5, then the retail stores
+// (and the tree's typeid heal).
+SendComponentMessage::SendComponentMessage(ComponentEntity* const* param_2, const uint32_t* param_3,
+                                           uint32_t param_4, ComponentEntity* const* param_5,
+                                           uint32_t param_6)
+    : _field20(*param_2),
+      _field28(*param_5) {
     uint32_t compTypeId = *param_3;
     // [ECONOMY M-D — BANISHED_LIVE_STORAGE typeid heal]
     // The eat push (PerformWork_Action_Ctor6, citizenai_actionctors.cpp) reads the
@@ -283,10 +266,10 @@ SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3,
     if (compTypeId == 0 && param_4 == 2) {
         compTypeId = CitizenComponent::TypeId();
     }
-    *reinterpret_cast<uint32_t*>(s + 0x30) = compTypeId;
-    *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;
-    *reinterpret_cast<uint32_t*>(s + 0x38) = param_6;
-    *reinterpret_cast<uint32_t*>(s + 0x3c) = 0;
+    _field30 = compTypeId;
+    _field34 = static_cast<int32_t>(param_4);
+    _field38 = param_6;
+    _field3C = 0;
 }
 
 DEFINE_EXE_TYPE(SendComponentMessage, "Action")

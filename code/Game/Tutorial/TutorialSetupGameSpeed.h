@@ -42,7 +42,7 @@ public:
 
 public:
     int32_t  speed;              // +0x20: game speed to set (default 1)
-    uint8_t  _field24;           // +0x24: bool — also clear the controller's +0x30 byte
+    bool     _field24;           // +0x24: also clear the controller's +0x30 byte (Serialize(bool&))
     uint8_t  _pad25[3];          // +0x25: padding
 };
 

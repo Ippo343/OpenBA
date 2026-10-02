@@ -37,12 +37,18 @@
 // ctor 0x1400dee90 (inlined in create 0x140027290 / createInPlace 0x140027300):
 // External(), the TutorialGoal and TutorialGoalButton stamps (the compiler's),
 // then the two fields zeroed.
-TutorialGoalButton::TutorialGoalButton() : elementPath(0), invertCheck(0), _pad29{} {}
+TutorialGoalButton::TutorialGoalButton() : elementPath(0), invertCheck(false), _pad29{} {}
+
+// LEFT H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor
+// destroys it by hand).
+System::String& TutorialGoalButton::ElementPath() {
+    return *reinterpret_cast<System::String*>(&elementPath);
+}
 
 // The dtor inside [0] 0x1400273b0: ~String on +0x20; the compiler re-stamps
 // TutorialGoal and runs ~External.
 TutorialGoalButton::~TutorialGoalButton() {
-    reinterpret_cast<System::String*>(&elementPath)->~String();   // B.3.1 bridge
+    ElementPath().~String();
 }
 
 // ============================================================
@@ -53,17 +59,15 @@ TutorialGoalButton::~TutorialGoalButton() {
 bool TutorialGoalButton::Serialize(void* stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-    // Create serializer for our fields
-    alignas(8) uint8_t ser[32];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer for our fields. LEFT: External::Serialize hands the
+    // stream in as void* (the runtime base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize elementPath (+0x20)
-    reinterpret_cast<System::String*>(&elementPath)->Serialize(ser);   // B.3.1 bridge
+    // elementPath (+0x20)
+    ElementPath().Serialize(&ser);
 
-    // Serialize invertCheck (+0x28) — bool
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&invertCheck), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    // invertCheck (+0x28) — bool
+    ser.Serialize(invertCheck, nullptr);
     return true;
 }
 
@@ -83,32 +87,25 @@ void TutorialGoalButton::Destruct() { this->~TutorialGoalButton(); }
 // Finds the UI element by path, checks its flag bits.
 bool TutorialGoalButton::IsComplete(void* /*time*/, void* /*instance*/) {
     // Find UI element by elementPath (+0x20)
-    uintptr_t elementIBP = 0;
-    FindUIElementByPath_Impl(&elementIBP, static_cast<void*>(&elementPath), nullptr);   // 0x1400e1870
+    Object::InternalPtr<UI::Element> elementIBP;
+    FindUIElementByPath_Impl(&elementIBP, &ElementPath(), nullptr);   // 0x1400e1870
 
-    if (elementIBP == 0) {
+    UI::Element* element = elementIBP.Get();
+    if (element == nullptr) {
         return false;
     }
 
-    // Check if element IsDerivedFrom UI::Element
-    uintptr_t element = elementIBP;
-    bool isDerived = Object::IsDerivedFromNullSafe((void*)element, UI::Element::TypeId());
-    void* validElement = isDerived ? (void*)element : nullptr;
-
-    // Wrap in another InternalBasePtr
-    uintptr_t wrappedIBP = 0;
-    new (&wrappedIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(validElement));   // B.3.3 bridge
-
-    if (wrappedIBP == 0) {
+    // Check the element IsDerivedFrom UI::Element
+    bool isDerived = Object::IsDerivedFromNullSafe(element, UI::Element::TypeId());
+    UI::Element* validElement = isDerived ? element : nullptr;
+    if (validElement == nullptr) {
         return false;
     }
 
-    // Read flags from element+0x34
-    uintptr_t elem = wrappedIBP;
-    uint32_t flags = *(uint32_t*)(elem + 0x34);
+    // The element's flags (+0x34)
+    uint32_t flags = validElement->_flags;
 
-    if (invertCheck != 0) {
+    if (invertCheck) {
         // Bit 23 NOT set = success
         return ((~(flags >> 23)) & 1) != 0;
     }

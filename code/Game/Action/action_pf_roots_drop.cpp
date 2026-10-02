@@ -52,7 +52,12 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Action/Action.h"                 // ActionStack
+#include "Action/CompleteTask.h"
+#include "Action/CreateRawMaterial.h"
 #include "Action/DropOffRawMaterial.h"
+#include "Action/MoveTo.h"
+#include "Action/PerformWork.h"
+#include "Action/SendComponentMessage.h"
 #include "Action/PathSearch.h"             // RawArray (the drop-target lists)
 #include "Component/AnimalDescription.h"
 #include "Component/CharacterComponent.h"
@@ -134,9 +139,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
 // because 78c0 mutates it (12d150 compacts the array).
 // ============================================================
 void SpillAllStorage(DropOffRawMaterial* self) {
-    // LEFT: DropOffRawMaterial::_field30 (block ACT-b's header) is declared void*; Persist
-    // 0x1400c7b10 validates it against CitizenComponent.
-    CitizenComponent* citizen = reinterpret_cast<CitizenComponent*>(self->_field30);
+    CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
     int n = storage->slotCount;
     while (0 < n) {
@@ -159,8 +162,7 @@ void SpillAllStorage(DropOffRawMaterial* self) {
 // ============================================================
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target,
                      ComponentDescription* material) {
-    // LEFT: DropOffRawMaterial::_field30 (block ACT-b's header) is declared void*.
-    CitizenComponent* citizen = reinterpret_cast<CitizenComponent*>(self->_field30);
+    CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     int iVar5 = Pf_StorageCountDelta_1167c0(citizen, material);   // 0x1401167c0
     int iVar8 = self->_field24;
     int iVar9 = iVar5;
@@ -178,7 +180,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
         Map* map = world->m_game;
         float dropPos[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};   // local_50
-        void* ptr = nullptr;
+        Action* ptr = nullptr;
         ComponentEntity* exclude = nullptr;   // local_res8
         ComponentEntity* found = nullptr;     // local_70
 
@@ -202,13 +204,12 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         self->_field38 = found;
         void* mem = MemAlloc(0x480, 8);
         if (mem != nullptr) {
-            ::Object::InternalPtr<CharacterComponent> character(
-                citizen->_entity->FindComponent<CharacterComponent>());   // 0x1400012d0
-            ptr = Pf_MoveToCtor_9170(mem, &character, /*Slow*/1, 0, dropPos, 0xe1f, 0,   // 0x1400c9170
-                                     kRdata_140172280);
+            CharacterComponent* character =
+                citizen->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
+            ptr = new (mem) MoveTo(&character, /*Slow*/1, 0, dropPos, 0xe1f, 0,   // 0x1400c9170
+                                   kRdata_140172280);
         }
-        // LEFT: 0x1400c9170's C declaration (moveto.cpp, block ACT-b) returns void*.
-        ::Object::InternalPtr<Action> pushed(reinterpret_cast<Action*>(ptr));
+        ::Object::InternalPtr<Action> pushed(ptr);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
     }
     return 1;
@@ -238,37 +239,27 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         WorkBase_TaskListCleanup_c5400(stack);   // 0x1400c5400
         // --- SendComponentMessage child action ---
         void* mem = MemAlloc(0x40, 8);
-        void* message = nullptr;
+        Action* message = nullptr;
         if (mem != nullptr) {
-            int64_t nullIBP = 0;
-            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            ComponentEntity* nullIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             ComponentEntity* entity = citizen->_entity;
-            // LEFT: 0x1400cb1d0's C declaration (sendcomponentmessage.cpp, block ACT-b)
-            // takes the IBPs as uint64_t*.
-            message = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&entity),   // 0x1400cb1d0
-                                                           &msgId, 0, reinterpret_cast<uint64_t*>(&nullIBP), 0);
+            message = new (mem) SendComponentMessage(&entity, &msgId, 0, &nullIBP, 0);   // 0x1400cb1d0
         }
         if (character->field_0x58 != nullptr) {
             // LEFT: CharacterComponent::field_0x58 is declared Action*, not InternalPtr<Action>.
             reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();   // B.3.3 bridge
         }
-        // LEFT: 0x1400cb1d0 returns void*.
-        character->field_0x58 = reinterpret_cast<Action*>(message);
+        character->field_0x58 = message;
         // --- CompleteTask child action ---
         void* mem2 = MemAlloc(0x38, 8);
-        void* complete = nullptr;
+        Action* complete = nullptr;
         if (mem2 != nullptr) {
             ComponentEntity* animalEntity = (*animal)->_entity;
             CitizenComponent* self = *citizenIBP;
-            // LEFT: 0x1400c5da0's C declaration (completetask.cpp, block ACT-b) takes the
-            // IBPs as uint64_t*.
-            complete = Pf_CompleteTaskCopyCtor_5da0(mem2, task,   // 0x1400c5da0
-                                                    reinterpret_cast<uint64_t*>(&self),
-                                                    reinterpret_cast<uint64_t*>(&animalEntity), 0);
+            complete = new (mem2) CompleteTask(task, &self, &animalEntity, 0);   // 0x1400c5da0
         }
-        // LEFT: 0x1400c5da0 returns void*.
-        ::Object::InternalPtr<Action> pushed(reinterpret_cast<Action*>(complete));
+        ::Object::InternalPtr<Action> pushed(complete);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
     }
 
@@ -288,7 +279,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         int i = 0;
         do {
             void* mem = MemAlloc(0x58, 8);
-            void* create = nullptr;
+            Action* create = nullptr;
             if (mem != nullptr) {
                 // Disasm-verified arg setup (Ghidra's bbea0 decompile aliased the integer
                 // args; the disassembly is ground truth):
@@ -300,20 +291,16 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
                 ComponentEntity* workplace2 = citizen->workplace;
                 CitizenComponent* self = citizen;
                 ComponentEntity* workplace = citizen->workplace;
-                // LEFT: 0x1400c71a0's C declaration (createrawmaterial.cpp, block ACT-b)
-                // takes the template as an integer and the IBPs as uint64_t*.
-                create = Pf_CreateRawMaterialCopyCtor_71a0(   // 0x1400c71a0
-                    mem,
-                    reinterpret_cast<uint64_t>(templates[i]),
+                create = new (mem) CreateRawMaterial(   // 0x1400c71a0
+                    templates[i],
                     fVar6,   // float arg3 -> XMM2 (ctor MOVSS to +0x4c); pass the value, not its bits
-                    reinterpret_cast<uint64_t*>(&self),
-                    reinterpret_cast<uint64_t*>(&workplace),
+                    &self,
+                    &workplace,
                     0 /*arg6 uninitialized — unused by ctor*/,
-                    capacity /*arg7 = R12D*/, createFlag /*arg8 = R13D*/, 1,
-                    reinterpret_cast<uint64_t*>(&workplace2), 0xc);
+                    capacity /*arg7 = R12D*/, createFlag /*arg8 = R13D*/, true,
+                    &workplace2, 0xc);
             }
-            // LEFT: 0x1400c71a0 returns void*.
-            ::Object::InternalPtr<Action> pushed(reinterpret_cast<Action*>(create));
+            ::Object::InternalPtr<Action> pushed(create);
             ActionStackPush(stack, &pushed);   // 0x1400c54e0
             i = i + 1;
         } while (i < description->_refCount);
@@ -324,8 +311,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         RemoveAnimal* remove = static_cast<RemoveAnimal*>(MemAlloc(0x28, 8));
         if (remove != nullptr) {
             // ENDGAME B.3.8 ACT: the real ctor (RemoveAnimal.h) — retail inlines it here.
-            // LEFT: RemoveAnimal's ctor (block ACT-b's header) takes the entity as an integer.
-            new (remove) RemoveAnimal(reinterpret_cast<uint64_t>((*animal)->_entity));
+            new (remove) RemoveAnimal((*animal)->_entity);
         }
         ::Object::InternalPtr<Action> pushed(remove);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
@@ -334,34 +320,32 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     // --- PerformWork action ---
     {
         void* mem = MemAlloc(0x48, 8);
-        void* perform = nullptr;
+        Action* perform = nullptr;
         if (mem != nullptr) {
             CitizenComponent* self = *citizenIBP;
             System::Time time = {};
             RtSystem_Time_Ctor(&time, kRdata_140172194);   // 0x140172194
-            perform = Pf_PerformWorkCtor7_9720(mem, &self,   // 0x1400c9720
-                                               RdataF(kRdata_1401722a8),   // 0x1401722a8
-                                               0xb /*Fast|ShowGroup*/, time._ticks,
-                                               1, 2);
+            perform = new (mem) PerformWork(&self,   // 0x1400c9720
+                                            RdataF(kRdata_1401722a8),   // 0x1401722a8
+                                            0xb /*Fast|ShowGroup*/, time._ticks,
+                                            true, 2);
         }
-        // LEFT: 0x1400c9720's C declaration (performwork.cpp, block ACT-b) returns void*.
-        ::Object::InternalPtr<Action> pushed(reinterpret_cast<Action*>(perform));
+        ::Object::InternalPtr<Action> pushed(perform);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
     }
 
     // --- MoveTo action toward the destination ---
     {
         void* mem = MemAlloc(0x480, 8);
-        void* moveTo = nullptr;
+        Action* moveTo = nullptr;
         if (mem != nullptr) {
-            ::Object::InternalPtr<CharacterComponent> characterIBP(
-                citizen->_entity->FindComponent<CharacterComponent>());   // 0x1400012d0
-            moveTo = Pf_MoveToCtor_9170(mem, &characterIBP, /*Slow*/1, 0,   // 0x1400c9170
-                                        destination, 0xe1f, 0,
-                                        kRdata_140172280);
+            CharacterComponent* characterIBP =
+                citizen->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
+            moveTo = new (mem) MoveTo(&characterIBP, /*Slow*/1, 0,   // 0x1400c9170
+                                      destination, 0xe1f, 0,
+                                      kRdata_140172280);
         }
-        // LEFT: 0x1400c9170's C declaration (moveto.cpp, block ACT-b) returns void*.
-        ::Object::InternalPtr<Action> pushed(reinterpret_cast<Action*>(moveTo));
+        ::Object::InternalPtr<Action> pushed(moveTo);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
     }
 

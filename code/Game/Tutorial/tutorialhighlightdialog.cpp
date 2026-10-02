@@ -42,8 +42,8 @@ TutorialHighlightDialog::TutorialHighlightDialog()
 // when `dialog` was null; retail never does.
 TutorialHighlightDialog::TutorialHighlightDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                                                  Object::InternalPtr<UI::DialogInstance> parent,
-                                                 void* targetElementArg, int32_t rotationArg,
-                                                 void* targetEntityArg)
+                                                 UI::Element* targetElementArg, int32_t rotationArg,
+                                                 ComponentEntity* targetEntityArg)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
       elapsedTicks(0), glowGroup(nullptr), glow(nullptr), arrow(nullptr),
       rotation(rotationArg), targetElement(targetElementArg), targetEntity(targetEntityArg) {}
@@ -52,18 +52,20 @@ TutorialHighlightDialog::TutorialHighlightDialog(UI::UserInterface* ui, const UI
 // TutorialHighlightDialog::OnOpened (vtable +0x20, 0x1400e0020)
 // ============================================================
 // Finds "glowGroup", "glow", "arrow" by name and keeps them at +0xC0, +0xC8, +0xD0.
+// The two images are kept as the elements found (retail stores the
+// InternalPtr<Element> into the ImageElement slots unchecked).
 void TutorialHighlightDialog::OnOpened() {
-    struct { const char* name; void** slot; } elements[] = {
-        { "glowGroup", &glowGroup },
-        { "glow",      &glow },
-        { "arrow",     &arrow },
-    };
-
-    for (auto& e : elements) {
-        System::String nameStr(e.name);
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));
-        *e.slot = *reinterpret_cast<void**>(retBuf);
+    {
+        System::String nameStr("glowGroup");
+        glowGroup = FindElement(nameStr).Get();
+    }
+    {
+        System::String nameStr("glow");
+        glow = static_cast<UI::ImageElement*>(FindElement(nameStr).Get());
+    }
+    {
+        System::String nameStr("arrow");
+        arrow = static_cast<UI::ImageElement*>(FindElement(nameStr).Get());
     }
 }
 
@@ -78,7 +80,6 @@ void TutorialHighlightDialog::OnUpdate(const System::Time& time) {
 
 // ===========================================================================
 // The two positioning helpers behind slot 6, and slot 6 itself.
-//
 // Field map (TutorialHighlightDialog, 0xF0, base UI::DialogInstance):
 //   +0x10  UI::UserInterface*        (base) — +0xDC on it is the UI scale
 //   +0xB8  System::Time              accumulated dt (slot 7 adds to it)
@@ -88,7 +89,6 @@ void TutorialHighlightDialog::OnUpdate(const System::Time& time) {
 //   +0xD8  int32                     arrow rotation, degrees (0/90/180/270)
 //   +0xE0  IBP UI::Element*          UI-element target   (element-path branch)
 //   +0xE8  IBP entity                world-entity target (toolbar-cell branch)
-//
 // Constants read out of .rdata: 0x140172114 = 0.5f, 0x140172184 = pi,
 // 0x1401721a8 = 8.0f. FUN_140131c90 is sinf (an inlined CRT sin), so the
 // arrow's bob is  sinf(elapsedSeconds * pi) * 8  pixels.
@@ -99,6 +99,11 @@ void TutorialHighlightDialog::OnUpdate(const System::Time& time) {
 #include "Game/exe_bodies.h"        // 0x14009f3e0 Reimpl_MapGetTerrainPos
 #include "Player/exe_bodies.h"      // 0x140100380 PlayerScreenRect_Entity_0380
 #include "Object/factory_registration.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/ModelComponent.h"
+#include "Component/MapComponent.h"
+#include "Game/Map.h"
+#include "volume/Volume.h"
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -112,8 +117,10 @@ namespace {
 // passes the rectangle itself there.
 
 // sinf(elapsed * pi) * 8 — the shared bob offset both helpers apply.
-float ArrowBob(uintptr_t self) {
-    float t = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(self + 0xB8))->AsSeconds();   // B.3.4 bridge
+float ArrowBob(const TutorialHighlightDialog* self) {
+    System::Time elapsed{};
+    elapsed._ticks = self->elapsedTicks;
+    float t = elapsed.AsSeconds();
     return std::sin(t * 3.14159274f) * 8.0f;
 }
 
@@ -126,21 +133,17 @@ float ArrowBob(uintptr_t self) {
 // puts the arrow on the corner selected by the rotation field.
 // ---------------------------------------------------------------------------
 void TutorialHighlightDialog::PlaceOnElement() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    void* targetIBP = reinterpret_cast<void*>(s + 0xE0);
-    uintptr_t elem = *reinterpret_cast<uintptr_t*>(targetIBP);
+    UI::Element* elem = targetElement;
     if (!elem) return;
 
-    // Element rect: +0x68 left, +0x6C top, +0x70 right, +0x74 bottom.
-    int left   = *reinterpret_cast<int32_t*>(elem + 0x68);
-    int top    = *reinterpret_cast<int32_t*>(elem + 0x6C);
-    int width  = *reinterpret_cast<int32_t*>(elem + 0x70) - left;
-    int height = *reinterpret_cast<int32_t*>(elem + 0x74) - top;
+    // Element layout rect: +0x68 left, +0x6C top, +0x70 right, +0x74 bottom.
+    int left   = elem->_layoutLeft;
+    int top    = elem->_layoutTop;
+    int width  = elem->_layoutRight - left;
+    int height = elem->_layoutBottom - top;
 
-    void* glow = *reinterpret_cast<void**>(s + 0xC8);
     if (glow)
-        reinterpret_cast<UI::ImageElement*>(glow)->SetWidthHeight(width + 0x1A, height + 0x1A);  // B.3.6 bridge
+        glow->SetWidthHeight(width + 0x1A, height + 0x1A);
 
     int padLeft = left - 13;
     int padTop  = top  - 13;
@@ -152,54 +155,49 @@ void TutorialHighlightDialog::PlaceOnElement() {
     // — one deref short lands on the holder and reads garbage dimensions, which
     // is exactly what mis-sizes and mis-places the glow ring.
     int screenW = 0, screenH = 0;
-    if (void* device = ::Video::Device::_singleton) {
-        screenW = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(device) + 4);
-        screenH = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(device) + 8);
+    if (const ::Video::Device* device = ::Video::Device::_singleton) {
+        screenW = device->backBufferWidth;
+        screenH = device->backBufferHeight;
     }
     float scale = 1.0f;
-    uintptr_t ui = *reinterpret_cast<uintptr_t*>(s + 0x10);
-    if (ui) scale = *reinterpret_cast<float*>(ui + 0xDC);
+    UI::UserInterface* ui = _ui;
+    if (ui) scale = ui->_uiScale;
 
-    void* glowGroup = *reinterpret_cast<void**>(s + 0xC0);
     if (glowGroup) {
-        reinterpret_cast<UI::Element*>(glowGroup)->SetPadding(  // B.3.6 bridge
-                              padLeft,
+        glowGroup->SetPadding(padLeft,
                               (static_cast<int>(static_cast<float>(screenW) * scale) - padLeft) - width - 0x1A,
                               padTop,
                               (static_cast<int>(static_cast<float>(screenH) * scale) - padTop) - height - 0x1A);
-        reinterpret_cast<UI::Element*>(glowGroup)->SetNeedsSizeCalc();  // B.3.6 bridge
+        glowGroup->SetNeedsSizeCalc();
     }
 
     // Arrow: corner + sign pair chosen by the rotation.
-    void* arrowIBP = reinterpret_cast<void*>(s + 0xD0);
-    void* arrow = *reinterpret_cast<void**>(arrowIBP);
-    if (!arrow) return;
+    UI::ImageElement* arrowElem = arrow;
+    if (!arrowElem) return;
 
-    uint8_t sprite[16] = {};
-    ::new (sprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(arrow)->GetSprite());  // B.3.6 bridge
-    int arrowW = reinterpret_cast<const UI::Sprite*>(sprite)->Width();  // B.3.6 bridge
+    UI::Sprite sprite = arrowElem->GetSprite();
+    int arrowW = sprite.Width();
 
-    int rot = *reinterpret_cast<int32_t*>(s + 0xD8);
+    int rot = rotation;
     int x, y, signX, signY;
     if (rot == 90) {
         x = left - arrowW;                                    signX = 1;
-        y = *reinterpret_cast<int32_t*>(elem + 0x74);         signY = -1;
+        y = elem->_layoutBottom;                              signY = -1;
     } else if (rot == 180) {
-        x = *reinterpret_cast<int32_t*>(elem + 0x70);         signX = -1;
-        y = *reinterpret_cast<int32_t*>(elem + 0x74);         signY = -1;
+        x = elem->_layoutRight;                               signX = -1;
+        y = elem->_layoutBottom;                              signY = -1;
     } else if (rot == 270) {
-        x = *reinterpret_cast<int32_t*>(elem + 0x70);         signX = -1;
+        x = elem->_layoutRight;                               signX = -1;
         y = top - arrowW;                                     signY = 1;
     } else {
         x = left - arrowW;                                    signX = 1;
         y = top - arrowW;                                     signY = 1;
     }
 
-    float bob = ArrowBob(s);
-    reinterpret_cast<UI::Element*>(arrow)->SetPadding(  // B.3.6 bridge
-                          static_cast<int>(static_cast<float>(signX) * bob + static_cast<float>(x)), 0,
+    float bob = ArrowBob(this);
+    arrowElem->SetPadding(static_cast<int>(static_cast<float>(signX) * bob + static_cast<float>(x)), 0,
                           static_cast<int>(static_cast<float>(signY) * bob + static_cast<float>(y)), 0);
-    reinterpret_cast<UI::ImageElement*>(arrow)->SetRotation(static_cast<float>(-rot));  // B.3.6 bridge
+    arrowElem->SetRotation(static_cast<float>(-rot));
 }
 
 // ---------------------------------------------------------------------------
@@ -211,46 +209,47 @@ void TutorialHighlightDialog::PlaceOnElement() {
 // ---------------------------------------------------------------------------
 namespace {
 
-// Member-ABI FindComponent helpers the screen-rect path uses:
-//   0x140003f60 -> ModelComponent (body ActCNR_FindComponent_3f60), 0x140004680 ->
-//   MapComponent (body FloorComponent_FindResData). Both are (entity, &outIBP) -> &outIBP.
+// The FindComponent<T> instances the screen-rect path uses: 0x140003f60 ->
+// ModelComponent, 0x140004680 -> MapComponent.
 // 0x14009f3e0 Reimpl_MapGetTerrainPos — grid cell -> world position (real terrain z).
 
 // The diagnostic's reprint-on-change filter (main thread only: OnUpdateLayout).
-uint64_t s_diagLastEntity = 0;
+const ComponentEntity* s_diagLastEntity = nullptr;
 int      s_diagLastRect[4] = { -12345, 0, 0, 0 };
 
-void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
+void TutHLDiag(const ComponentEntity* entity, bool ok, const Rectangle& rect) {
 
-    uint64_t modelIBP = 0, mapIBP = 0;
-    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entity), &modelIBP);            // 0x140003f60
-    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &mapIBP);            // 0x140004680
+    ModelComponent* model = entity->FindComponent<ModelComponent>();   // 0x140003f60
+    MapComponent* map = entity->FindComponent<MapComponent>();         // 0x140004680
 
     int16_t placed = -1;
     float xf[7] = {0,0,0,0,0,0,0};
     float box[6] = {0,0,0,0,0,0};
-    if (modelIBP) {
-        placed = *reinterpret_cast<int16_t*>(modelIBP + 0x166);
-        for (int i = 0; i < 7; ++i) xf[i]  = *reinterpret_cast<float*>(modelIBP + 0x148 + i * 4);
-        for (int i = 0; i < 6; ++i) box[i] = *reinterpret_cast<float*>(modelIBP + 0x5c + i * 4);
+    if (model) {
+        placed = model->meshIndex;
+        const Math::Transform& t = model->transform;
+        xf[0] = t.rotation.x; xf[1] = t.rotation.y; xf[2] = t.rotation.z; xf[3] = t.rotation.w;
+        xf[4] = t.translation.x; xf[5] = t.translation.y; xf[6] = t.translation.z;
+        const ::Box& b = model->meshInstance._localBounds;
+        box[0] = b.min.x; box[1] = b.min.y; box[2] = b.min.z;
+        box[3] = b.max.x; box[4] = b.max.y; box[5] = b.max.z;
     }
 
     int rx = 0, ry = 0, rw = 0, rh = 0;
-    if (mapIBP) {
-        rx = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
-        ry = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
-        rw = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
-        rh = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
+    if (map) {
+        rx = map->tileX0;
+        ry = map->tileY0;
+        rw = map->tileX1;
+        rh = map->tileY1;
     }
 
     // Footprint centre through the same grid->world conversion the outline uses.
     int   g = 0;
     float centreWorld[3] = {0,0,0};
     if (GameUpdateLoop::_singleton != nullptr) {
-        int* grid = *reinterpret_cast<int**>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+        Map* grid = GameUpdateLoop::_singleton->m_game;
         if (grid) {
-            g = grid[0];
+            g = grid->size;
             float bias = static_cast<float>(g >> 1) - 0.5f;
             float in[3] = { static_cast<float>(rx + (rw >> 1)) - bias,
                             static_cast<float>(ry + (rh >> 1)) - bias, 0.0f };
@@ -260,27 +259,20 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
 
     // Only reprint when something actually changes.
     // The reprint-on-change filter lives at namespace scope (s_diagLast*).
-    uint64_t& lastEntity = s_diagLastEntity;
+    const ComponentEntity*& lastEntity = s_diagLastEntity;
     int* lastRect = s_diagLastRect;
     if (entity == lastEntity && rx == lastRect[0] && ry == lastRect[1] &&
         rw == lastRect[2] && rh == lastRect[3]) return;
     lastEntity = entity;
     lastRect[0] = rx; lastRect[1] = ry; lastRect[2] = rw; lastRect[3] = rh;
 
-    // Type names (vtable+0x08) so we know we are looking at the components we
-    // think we are, and the MeshInstance's OWN transform (model+0x28, +0x84) —
-    // that is what the renderer actually draws from, so it is the oracle for
-    // what +0x148 should have held.
-    // Type identity via the registry (vtable slot 1 returns null on our inert
-    // component vtables, so the NAME slot is not a usable oracle here).
-    auto typeName = [](uint64_t obj) -> const char* {
+    // Type names so we know we are looking at the components we think we are,
+    // and the MeshInstance's OWN transform (model +0x28, +0x84) — that is what
+    // the renderer actually draws from, so it is the oracle for what +0x148
+    // should have held.
+    auto typeName = [](const Object::Base* obj) -> const char* {
         if (!obj) return "(null)";
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);
-        if (!vt) return "(no vtable)";
-        if (!::Object::SlotAddressOf(reinterpret_cast<void*>(obj), &::Object::Base::Type))
-            return "(no GetTypeId)";
-        const char* n = ::Object::GetTypeNameById(
-            reinterpret_cast< ::Object::Base*>(obj)->Type());   // B.3.x bridge (slot 2)
+        const char* n = ::Object::GetTypeNameById(obj->Type());   // slot 2
         return n ? n : "(unknown id)";
     };
     // The entity's whole component roster (+0x30 array / +0x38 count). Print
@@ -288,70 +280,74 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
     // the FIRST match, so if a type appears twice the lookups and the renderer
     // can be looking at different objects.
     {
-        int n = *reinterpret_cast<int32_t*>(entity + 0x38);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        std::fprintf(stderr, "[TutHLDiag] entity=%016llX roster count=%d\n",
-                     (unsigned long long)entity, n);
+        int n = entity->_componentCount;
+        Object::InternalPtr<Component>* arr = entity->_components;
+        std::fprintf(stderr, "[TutHLDiag] entity=%p roster count=%d\n",
+                     static_cast<const void*>(entity), n);
         for (int i = 0; i < n && arr; ++i) {
-            uint64_t c = *reinterpret_cast<uint64_t*>(arr + (uintptr_t)i * 8);
+            Component* c = arr[i].Get();
             const char* nm = typeName(c);
             char extra[128]; extra[0] = 0;
-            if (c && std::strcmp(nm, "MapComponent") == 0)
+            if (c && std::strcmp(nm, "MapComponent") == 0) {
+                const MapComponent* mc = static_cast<const MapComponent*>(c);
                 std::snprintf(extra, sizeof(extra), " cell=(%u,%u)..(%u,%u)",
-                    *reinterpret_cast<uint16_t*>(c + 0x28), *reinterpret_cast<uint16_t*>(c + 0x2a),
-                    *reinterpret_cast<uint16_t*>(c + 0x2c), *reinterpret_cast<uint16_t*>(c + 0x2e));
-            else if (c && std::strcmp(nm, "ModelComponent") == 0)
+                    static_cast<uint16_t>(mc->tileX0), static_cast<uint16_t>(mc->tileY0),
+                    static_cast<uint16_t>(mc->tileX1), static_cast<uint16_t>(mc->tileY1));
+            } else if (c && std::strcmp(nm, "ModelComponent") == 0) {
+                const ModelComponent* mo = static_cast<const ModelComponent*>(c);
                 std::snprintf(extra, sizeof(extra), " pos=(%.2f,%.2f,%.2f) variant=%d modelId=%d",
-                    *reinterpret_cast<float*>(c + 0x158), *reinterpret_cast<float*>(c + 0x15c),
-                    *reinterpret_cast<float*>(c + 0x160),
-                    (int)*reinterpret_cast<int16_t*>(c + 0x166),
-                    *reinterpret_cast<int32_t*>(c + 0x16C));
-            std::fprintf(stderr, "[TutHLDiag]   [%2d] %016llX %s%s\n",
-                         i, (unsigned long long)c, nm, extra);
+                    mo->transform.translation.x, mo->transform.translation.y,
+                    mo->transform.translation.z,
+                    (int)mo->meshIndex, mo->modelId);
+            }
+            std::fprintf(stderr, "[TutHLDiag]   [%2d] %p %s%s\n",
+                         i, static_cast<void*>(c), nm, extra);
         }
         std::fflush(stderr);
     }
     float mi[7] = {0,0,0,0,0,0,0};
-    if (modelIBP)
-        for (int i = 0; i < 7; ++i)
-            mi[i] = *reinterpret_cast<float*>(modelIBP + 0x28 + 0x84 + i * 4);
+    if (model) {
+        const Math::Transform& t = model->meshInstance._transform;
+        mi[0] = t.rotation.x; mi[1] = t.rotation.y; mi[2] = t.rotation.z; mi[3] = t.rotation.w;
+        mi[4] = t.translation.x; mi[5] = t.translation.y; mi[6] = t.translation.z;
+    }
     std::fprintf(stderr,
         "[TutHLDiag] names: entity=%s model=%s map=%s  meshInstXform pos=(%.2f,%.2f,%.2f)"
         " quat=(%.3f,%.3f,%.3f,%.3f)\n",
-        typeName(entity), typeName(modelIBP), typeName(mapIBP),
+        typeName(entity), typeName(model), typeName(map),
         mi[4], mi[5], mi[6], mi[0], mi[1], mi[2], mi[3]);
 
 
     std::fprintf(stderr,
-        "[TutHLDiag] entity=%016llX model=%016llX placed(+0x166)=%d map=%016llX\n"
+        "[TutHLDiag] entity=%p model=%p placed(+0x166)=%d map=%p\n"
         "            modelXform pos=(%.2f,%.2f,%.2f) quat=(%.3f,%.3f,%.3f,%.3f)\n"
         "            modelBox min=(%.2f,%.2f,%.2f) max=(%.2f,%.2f,%.2f)\n"
         "            footprint cell=(%d,%d) %dx%d  grid=%d  centreWorld=(%.2f,%.2f,%.2f)\n"
         "            branch=%s screenRect ok=%d (%.1f,%.1f)-(%.1f,%.1f)\n",
-        (unsigned long long)entity, (unsigned long long)modelIBP, (int)placed,
-        (unsigned long long)mapIBP,
+        static_cast<const void*>(entity), static_cast<void*>(model), (int)placed,
+        static_cast<void*>(map),
         xf[4], xf[5], xf[6], xf[0], xf[1], xf[2], xf[3],
         box[0], box[1], box[2], box[3], box[4], box[5],
         rx, ry, rw, rh, g, centreWorld[0], centreWorld[1], centreWorld[2],
         (placed >= 0) ? "MODEL-BOX" : "FOOTPRINT-FALLBACK",
-        (int)ok, rect[0], rect[1], rect[2], rect[3]);
+        (int)ok, rect.min.x, rect.min.y, rect.max.x, rect.max.y);
     std::fflush(stderr);
 }
 
 }  // namespace
 
 void TutorialHighlightDialog::PlaceOnEntity() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    if (void* glowGroup = *reinterpret_cast<void**>(s + 0xC0))
-        reinterpret_cast<UI::Element*>(glowGroup)->SetFlagsOnOff(1, 0);   // hide  // B.3.6 bridge
+    if (glowGroup)
+        glowGroup->SetFlagsOnOff(1, 0);   // hide
 
     // Volume::Rectangle rect; ok = EntityScreenRect(rect, &entityIBP, &rect)
-    alignas(16) uint8_t rect[16] = {};
-    RtVolume_Rectangle_Ctor(reinterpret_cast<struct Rectangle*>(rect));
-    uint64_t entityIBP = *reinterpret_cast<uint64_t*>(s + 0xE8);
-    bool ok = PlayerScreenRect_Entity_0380(reinterpret_cast<uintptr_t>(rect), &entityIBP,
-                                           reinterpret_cast<uint64_t*>(rect)) != 0;   // 0x140100380
+    alignas(16) struct Rectangle rect;
+    RtVolume_Rectangle_Ctor(&rect);
+    ComponentEntity* entityIBP = targetEntity;
+    // LEFT: 0x140100380's port takes the rectangle as uintptr_t / uint64_t*
+    // (Player's signature).
+    bool ok = PlayerScreenRect_Entity_0380(reinterpret_cast<uintptr_t>(&rect), &entityIBP,
+                                           reinterpret_cast<uint64_t*>(&rect)) != 0;   // 0x140100380
 
     // [diag] BANISHED_TUTHL_DIAG — where the arrow thinks the target is.
     //
@@ -363,37 +359,32 @@ void TutorialHighlightDialog::PlaceOnEntity() {
     // still draws from its Transform — exactly the symptom. Print both sources
     // side by side; whichever disagrees with the drawn building is the culprit.
     // Rate-limited by CHANGE (the entity + rect tuple), never by a fixed budget.
-    TutHLDiag(s, entityIBP, ok, reinterpret_cast<const float*>(rect));
+    TutHLDiag(entityIBP, ok, rect);
 
-    void* arrowIBP = reinterpret_cast<void*>(s + 0xD0);
-    void* arrow = *reinterpret_cast<void**>(arrowIBP);
+    UI::ImageElement* arrowElem = arrow;
     if (!ok) {
-        if (arrow) reinterpret_cast<UI::Element*>(arrow)->SetFlagsOnOff(1, 0);   // hide  // B.3.6 bridge
+        if (arrowElem) arrowElem->SetFlagsOnOff(1, 0);   // hide
         return;
     }
-    if (!arrow) return;
-    reinterpret_cast<UI::Element*>(arrow)->SetFlagsOnOff(0, 1);                  // show  // B.3.6 bridge
+    if (!arrowElem) return;
+    arrowElem->SetFlagsOnOff(0, 1);                  // show
 
-    uint8_t sprite[16] = {};
-    ::new (sprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(arrow)->GetSprite());  // B.3.6 bridge
-    int arrowW = reinterpret_cast<const UI::Sprite*>(sprite)->Width();  // B.3.6 bridge
-    ::new (sprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(arrow)->GetSprite());  // B.3.6 bridge
-    int arrowH = reinterpret_cast<const UI::Sprite*>(sprite)->Height();  // B.3.6 bridge
+    UI::Sprite sprite = arrowElem->GetSprite();
+    int arrowW = sprite.Width();
+    sprite = arrowElem->GetSprite();
+    int arrowH = sprite.Height();
 
     // Rectangle is four floats: minX, minY, maxX, maxY.
-    const float* r = reinterpret_cast<const float*>(rect);
-    float centreX = (r[0] + r[2]) * 0.5f;
-    float centreY = (r[1] + r[3]) * 0.5f;
+    float centreX = (rect.min.x + rect.max.x) * 0.5f;
+    float centreY = (rect.min.y + rect.max.y) * 0.5f;
 
-    float bob = ArrowBob(s);
+    float bob = ArrowBob(this);
     // Retail multiplies the horizontal bob by 0.0 — the arrow bobs vertically
     // only. Kept literal rather than "simplified" away: the term is in the
     // shipped code and dropping it would hide a future edit to that constant.
-    reinterpret_cast<UI::Element*>(arrow)->SetPadding(  // B.3.6 bridge
-                          static_cast<int>(static_cast<float>(static_cast<int>(centreX) - (arrowW >> 1)) + bob * 0.0f), 0,
+    arrowElem->SetPadding(static_cast<int>(static_cast<float>(static_cast<int>(centreX) - (arrowW >> 1)) + bob * 0.0f), 0,
                           static_cast<int>(static_cast<float>(static_cast<int>(centreY) - arrowH) + bob), 0);
-    reinterpret_cast<UI::ImageElement*>(arrow)->SetRotation(  // B.3.6 bridge
-        static_cast<float>(-*reinterpret_cast<int32_t*>(s + 0xD8)));
+    arrowElem->SetRotation(static_cast<float>(-rotation));
 }
 
 // TutorialHighlightDialog::OnUpdateLayout (0x1400DFFE0) — vtable slot 6.

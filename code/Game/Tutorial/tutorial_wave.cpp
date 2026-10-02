@@ -44,12 +44,13 @@
 #include "system/String.h"
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
-#include "Dialog/exe_bodies.h"   // 0x140014890 / 0x140100270
+#include "Dialog/exe_bodies.h"   // 0x140014890
 #include "Object/factory_registration.h"
 #include "Tutorial/TutorialSetupRestrictPlayer.h"
 #include "Tutorial/TutorialHighlightDialog.h"
 #include "Tutorial/TutorialUI.h"
 #include "Game/serialize_externals.h"
+#include "Game/PlayerToolManager.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
 #include <cstddef>
@@ -63,24 +64,22 @@
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Tutorial/Tutorial.h"
+#include "Tutorial/TutorialInstance.h"
+#include "Tutorial/TutorialStep.h"
 #include "Tutorial/TutorialSetup.h"
+#include "Tutorial/TutorialSetupDialog.h"
 #include "Tutorial/TutorialGoal.h"
 #include "Tutorial/TutorialImage.h"
 #include "Tutorial/exe_bodies.h"
-
-// Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
-// Defined in tutorial_next_scenario.cpp.
-extern "C" void TutWave_LoadNextScenario(void* self);
+#include "Entity/CitizenBehavior.h"
+#include "Component/ComponentDescription.h"
 
 namespace {
 
-
-inline uintptr_t GameWorld() {
-    return GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-}
 inline UI::UserInterface* UserInterface() {
-    uintptr_t gw = GameWorld();
-    return gw ? *reinterpret_cast<UI::UserInterface**>(gw + 0x98) : nullptr;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    return gw ? gw->m_userInterface : nullptr;
 }
 
 // TutorialHighlightDialog type id (retail DAT_1401C6550) — the class's own
@@ -91,27 +90,21 @@ uint32_t HighlightTypeId() { return TutorialHighlightDialog::TypeId(); }
 // narrow fail and the step panel is never bound.
 uint32_t TutorialUITypeId() { return TutorialUI::TypeId(); }
 
-// A BST node in the (gameWorld+0xF0)+0x160 map, and in the FinishTutorialGoal
-// tree at goal+0x50. Same shape both places:
-//   +0x00 key (External* / uint64)   +0x08 payload ptr
-//   +0x10 count / value              +0x20 left   +0x28 right
-struct BstNode {
-    uint64_t key;
-    void*    payload;
-    uint32_t count;
-    uint32_t _pad14;
-    uint64_t _pad18;
-    BstNode* left;
-    BstNode* right;
-};
-
-BstNode* BstFind(BstNode* node, uint64_t key) {
+// The CitizenBehavior +0x160 template tree (Goal/goal_exe_helpers.h): key
+// +0x00, entities +0x08, count +0x10, left +0x20, right +0x28.
+TemplateBucketNode* BstFind(TemplateBucketNode* node, const Object::External* key) {
     while (node) {
-        if (key < node->key)      node = node->left;
-        else if (node->key < key) node = node->right;
-        else                      return node;
+        const Object::External* nodeKey = node->key;
+        if (key < nodeKey)      node = node->left;
+        else if (nodeKey < key) node = node->right;
+        else                    return node;
     }
     return nullptr;
+}
+
+// A System::String is empty when it has no data or its length (data - 8) is 0.
+inline bool HasText(const System::String& s) {
+    return s._data != nullptr && s.GetLength() != 0;
 }
 
 }  // namespace
@@ -131,6 +124,7 @@ BstNode* BstFind(BstNode* node, uint64_t key) {
 // serialize skipped its Dialog ExternalPtr, which does not merely lose the
 // field — it mis-advances the stream cursor for everything that follows
 // ([[reference-unresolved-rdata-const-deletes-guarded-test]] family).
+// LEFT: ExternalPtrSerializeGeneric (Game/serialize_externals.h) takes void**.
 // ===========================================================================
 extern "C" void TutWave_SerializeTutorialRef(void* field, void* serializer) {
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,
@@ -143,34 +137,34 @@ extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
 }
 
 // ===========================================================================
-// 0x1401001F0 — FinishTutorialGoal tutorial-tree insert.
+// 0x1401001F0 — the tutorial's insert into the PlayerToolManager's +0x50
+// tracked set (a PlayerToolManager member in retail; GAME-b's class, kept
+// free here).
 //
-// Upsert into the BST at goal+0x50 keyed by the tutorial's External id.
-// Existing node: payload byte at +0x10 = 1, dword +0x08 = value, dword +0x0C =
-// 0x20. Absent: build that same 0x18-byte record on the stack and hand it to
-// the shared BST inserter at 0x140014890 (already registered by
-// standalone/reg_toolbar_utility.cpp; ToolbarUtility_BstInsert_4890).
+// Upsert keyed by the tutorial's setup description. Existing node: active
+// byte at +0x10 = 1, dword +0x08 = value, dword +0x0C = 0x20. Absent: build
+// that same 0x18-byte record on the stack and hand it to the shared BST
+// inserter at 0x140014890 (ToolbarUtility_BstInsert_4890).
 // ===========================================================================
-extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
-                                           void* /*param3*/, uint32_t value) {
+void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDescription* tutorialId,
+                                void* /*param3*/, uint32_t value) {
     if (!treeOwner) return;
-    uintptr_t owner = reinterpret_cast<uintptr_t>(treeOwner);
-    int64_t* root = reinterpret_cast<int64_t*>(owner + 0x50);
+    const void* key = tutorialId;
 
-    // Walk. NB the retail node here is the 0x14-payload flavour, so the byte /
-    // dword offsets below are relative to the node base, not to BstNode.
-    uint64_t* node = *reinterpret_cast<uint64_t**>(root);
+    // Walk. The node is TrackedEntityNode (Game/PlayerToolManager.h), keyed by
+    // address.
+    TrackedEntityNode* node = treeOwner->field_0x50;
     while (node) {
-        if (tutorialId < node[0]) { node = reinterpret_cast<uint64_t*>(node[4]); continue; }
-        if (node[0] < tutorialId) { node = reinterpret_cast<uint64_t*>(node[5]); continue; }
-        uint8_t* n = reinterpret_cast<uint8_t*>(node);
-        *reinterpret_cast<uint8_t*>(n + 0x10)  = 1;
-        *reinterpret_cast<uint32_t*>(n + 0x08) = value;
-        *reinterpret_cast<uint32_t*>(n + 0x0C) = 0x20;
+        const void* nodeKey = node->key;
+        if (key < nodeKey) { node = node->left; continue; }
+        if (nodeKey < key) { node = node->right; continue; }
+        node->active = 1;
+        node->x      = static_cast<int32_t>(value);
+        node->y      = 0x20;
         return;
     }
 
-    struct { uint64_t key; uint32_t value; uint32_t flags; uint8_t on; uint8_t _pad[7]; } rec;
+    struct { const ComponentDescription* key; uint32_t value; uint32_t flags; uint8_t on; uint8_t _pad[7]; } rec;
     rec.key   = tutorialId;
     rec.value = value;
     rec.flags = 0x20;
@@ -178,7 +172,10 @@ extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
     for (int i = 0; i < 7; ++i) rec._pad[i] = 0;
 
     void* out[4] = {};
-    ToolbarUtility_BstInsert_4890(root, out, reinterpret_cast<uint64_t*>(&rec));   // 0x140014890
+    // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record
+    // as uint64_t* (DLG-d's B4 FORWARD signature).
+    ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&treeOwner->field_0x50), out,
+                                  reinterpret_cast<uint64_t*>(&rec));   // 0x140014890
 }
 
 // ===========================================================================
@@ -190,30 +187,26 @@ extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
 // fetch is only a null test, the second is the one that is recursed into, and
 // ChildCount is re-read every iteration because a child may add siblings.
 // ===========================================================================
-extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char show) {
+void TutorialSetupDialog::SetElementFlagsRecursive(Object::InternalPtr<UI::Element>* elemIBP, char show) {
     if (!elemIBP) return;
 
-    void* elem = *reinterpret_cast<void**>(elemIBP);
+    UI::Element* elem = elemIBP->Get();
     if (!elem) return;
 
     uint32_t hideFlags = show ? 0u : 0x1000000u;
     uint32_t showFlags = show ? 0x1000000u : 0u;
-    reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
+    elem->SetFlagsOnOff(hideFlags, showFlags);
 
     int i = 0;
-    int n = reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->ChildCount();  // B.3.6 bridge
+    int n = elemIBP->Get()->ChildCount();
     while (i < n) {
-        uint64_t probe = 0;
-        ::new (&probe) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->Child(i));  // B.3.6 bridge
-        if (probe != 0) {
-            uint64_t child = 0;
-            ::new (&child) Object::InternalPtr<UI::Element>(
-                reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->Child(i));  // B.3.6 bridge
-            TutWave_SetElementFlagsRecursive(self, &child, show);
+        Object::InternalPtr<UI::Element> probe = elemIBP->Get()->Child(i);
+        if (probe.Get() != nullptr) {
+            Object::InternalPtr<UI::Element> child = elemIBP->Get()->Child(i);
+            SetElementFlagsRecursive(&child, show);
         }
         ++i;
-        n = reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->ChildCount();  // B.3.6 bridge
+        n = elemIBP->Get()->ChildCount();
     }
 }
 
@@ -224,7 +217,7 @@ extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char
 // with show=0 it hides the entire UI, and ShowListed (0x1400E29F0) then unhides
 // only the paths named in the step's first string vector.
 // ===========================================================================
-extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
+void TutorialSetupDialog::SetAllDialogFlags(char show) {
     UI::UserInterface* ui = UserInterface();
     if (!ui) return;
 
@@ -233,31 +226,27 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
     // pointer, so `it.node` is what retail hands to CheckPtr.
     int dialogs = 0;
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        uint64_t rootIBP = 0;
-        ::new (&rootIBP) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetRoot());  // B.3.6 bridge
-        if (rootIBP) {
+        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
+        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::Element* root = dialog->GetRoot().Get();
+        if (root) {
             // Retail applies the flags to the root itself and then walks the
             // children — the root pass is inlined here, the children go through
             // the shared recursive helper (same code, same order).
             uint32_t hideFlags = show ? 0u : 0x1000000u;
             uint32_t showFlags = show ? 0x1000000u : 0u;
-            reinterpret_cast<UI::Element*>(rootIBP)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
+            root->SetFlagsOnOff(hideFlags, showFlags);
 
             int i = 0;
-            int n = reinterpret_cast<UI::Element*>(rootIBP)->ChildCount();  // B.3.6 bridge
+            int n = root->ChildCount();
             while (i < n) {
-                uint64_t probe = 0;
-                ::new (&probe) Object::InternalPtr<UI::Element>(
-                    reinterpret_cast<UI::Element*>(rootIBP)->Child(i));  // B.3.6 bridge
-                if (probe != 0) {
-                    uint64_t child = 0;
-                    ::new (&child) Object::InternalPtr<UI::Element>(
-                        reinterpret_cast<UI::Element*>(rootIBP)->Child(i));  // B.3.6 bridge
-                    TutWave_SetElementFlagsRecursive(self, &child, show);
+                Object::InternalPtr<UI::Element> probe = root->Child(i);
+                if (probe.Get() != nullptr) {
+                    Object::InternalPtr<UI::Element> child = root->Child(i);
+                    SetElementFlagsRecursive(&child, show);
                 }
                 ++i;
-                n = reinterpret_cast<UI::Element*>(rootIBP)->ChildCount();  // B.3.6 bridge
+                n = root->ChildCount();
             }
         }
         ++dialogs;
@@ -273,64 +262,51 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
 // null too. Otherwise it scans the open-dialog list for one whose IsA matches
 // the TutorialHighlightDialog type id.
 // ===========================================================================
-extern "C" void* TutWave_FindHighlightDialog(void* self, void* outIBP) {
-    if (!outIBP) return outIBP;
-    *reinterpret_cast<uint64_t*>(outIBP) = 0;
-    if (!self) return outIBP;
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    uintptr_t pathStr = *reinterpret_cast<uintptr_t*>(s + 0x40);
-    bool havePath = (pathStr != 0) && (*reinterpret_cast<int*>(pathStr - 8) != 0);
-    bool haveDialog = (*reinterpret_cast<uint64_t*>(s + 0x50) != 0);
+Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog() {
+    bool havePath = HasText(HighlightPath());
+    bool haveDialog = (highlightDialog != nullptr);
     if (!havePath && !haveDialog) {
-        // FUN_14001B1D0 — reimplemented inline in engine_funcs.h; the exe address
-        // itself is on Lane 1's list, but the body is already ours.
-        ResolveExternalByName_Impl(reinterpret_cast<void*>(s + 0x58));
-        if (*reinterpret_cast<uint64_t*>(s + 0x68) == 0) return outIBP;
+        // FUN_14001B1D0 (ResolveExternalByName_Impl).
+        ResolveExternalByName_Impl(&toolbarRef);
+        if (toolbarRef.resolved == nullptr) return nullptr;
     }
 
     UI::UserInterface* ui = UserInterface();
-    if (!ui) return outIBP;
+    if (!ui) return nullptr;
     uint32_t tid = HighlightTypeId();
-    if (!tid) return outIBP;   // type not registered yet — a safe no-match
+    if (!tid) return nullptr;   // type not registered yet — a safe no-match
 
     // Same list, same order as retail's GetFirstDialog walk (see above).
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        if (reinterpret_cast<const Object::Base*>(it.node->element)->IsA(tid)) {   // B.3.x bridge
-            *reinterpret_cast<uint64_t*>(outIBP) =
-                reinterpret_cast<uint64_t>(it.node->element);
-            return outIBP;
+        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
+        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        if (dialog->IsA(tid)) {
+            return dialog;
         }
     }
-    return outIBP;
+    return nullptr;
 }
 
 // ===========================================================================
-// 0x14001AF90 — copy-construct an ExternalRef {String, generation, cached*}.
+// 0x14001AF90 — copy-construct a NamedExternalRef {String, generation, cached*}.
 // 0x14001AFE0 — resolve one and hand back the cached External*, destroying the
 //               temporary String the copy owns.
-// Used as a pair by OpenHighlightDialog to look the toolbar/dialog External up
+// Used as a pair by OpenHighlightDialog to look the toolbar External up
 // without disturbing the setup's own cached reference.
 // ===========================================================================
-extern "C" void* TutWave_ExternalRefCopy(void* dst, void* src) {
+static NamedExternalRef* TutWave_ExternalRefCopy(NamedExternalRef* dst, const NamedExternalRef* src) {
     if (!dst || !src) return dst;
-    // B.3.1 bridge: the ExternalRef triple is still untyped bytes.
-    new (dst) System::String(*reinterpret_cast<const System::String*>(src));
-    uintptr_t d = reinterpret_cast<uintptr_t>(dst);
-    uintptr_t s = reinterpret_cast<uintptr_t>(src);
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<uint64_t*>(s + 0x10);
+    new (dst->name) System::String(src->Name());
+    dst->generation = src->generation;
+    dst->resolved   = src->resolved;
     return dst;
 }
 
-extern "C" void* TutWave_ExternalRefResolve(void* out, void* ref) {
-    if (!out) return out;
-    *reinterpret_cast<uint64_t*>(out) = 0;
-    if (!ref) return out;
+static const Object::External* TutWave_ExternalRefResolve(NamedExternalRef* ref) {
+    if (!ref) return nullptr;
     ResolveExternalByName_Impl(ref);
-    *reinterpret_cast<uint64_t*>(out) = *reinterpret_cast<uint64_t*>(
-        reinterpret_cast<uintptr_t>(ref) + 0x10);
-    reinterpret_cast<System::String*>(ref)->~String();
+    const Object::External* out = ref->resolved;
+    ref->Name().~String();
     return out;
 }
 
@@ -341,10 +317,10 @@ extern "C" void* TutWave_ExternalRefResolve(void* out, void* ref) {
 // UserInterface::AddDialog:
 //
 //  A. TOOLBAR-CELL branch, taken when the setup's cached External at +0x68 is
-//     non-null AND the toolbar's element count exceeds the setup's index
-//     (+0x70). The element comes out of the BST at (gameWorld+0xF0)+0x160,
-//     keyed by that External: node+0x08 is the element array, node+0x10 the
-//     count. Ctor gets parent=0, +0xE0=0, +0xD8=setup+0x48, +0xE8=element.
+//     non-null AND the template's entity count exceeds the setup's index
+//     (+0x70). The entity comes out of the CitizenBehavior +0x160 tree, keyed
+//     by that External: node+0x08 is the entity array, node+0x10 the count.
+//     Ctor gets parent=0, +0xE0=0, +0xD8=setup+0x48, +0xE8=entity.
 //  B. ELEMENT-PATH branch otherwise: FindUIElementByPath(&elem, setup+0x40,
 //     &dialog); bail if the element is not found. Ctor gets parent=dialog,
 //     +0xE0=element, +0xD8=setup+0x48, +0xE8=0.
@@ -355,55 +331,48 @@ extern "C" void* TutWave_ExternalRefResolve(void* out, void* ref) {
 // that is already adding dialogs). `checkExisting` non-zero additionally skips
 // when a highlight dialog is already open.
 // ===========================================================================
-extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    uintptr_t pathStr = *reinterpret_cast<uintptr_t*>(s + 0x40);
-    bool havePath = (pathStr != 0) && (*reinterpret_cast<int*>(pathStr - 8) != 0);
-    bool haveDialog = (*reinterpret_cast<uint64_t*>(s + 0x50) != 0);
+void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
+    bool havePath = HasText(HighlightPath());
+    bool haveDialog = (highlightDialog != nullptr);
     if (!havePath && !haveDialog) {
-        ResolveExternalByName_Impl(reinterpret_cast<void*>(s + 0x58));
-        if (*reinterpret_cast<uint64_t*>(s + 0x68) == 0) return;
+        ResolveExternalByName_Impl(&toolbarRef);
+        if (toolbarRef.resolved == nullptr) return;
     }
 
-    void* ui = UserInterface();
+    UI::UserInterface* ui = UserInterface();
     if (!ui) return;
-    if (reinterpret_cast<UI::UserInterface*>(ui)->GetAddDialogCount() > 0) return;  // B.3.6 bridge
+    if (ui->GetAddDialogCount() > 0) return;
 
-    uint64_t existing = 0;
-    TutWave_FindHighlightDialog(self, &existing);
-    if (checkExisting != 0 && existing != 0) return;
+    Object::InternalPtr<UI::DialogInstance> existing = FindHighlightDialog();
+    if (checkExisting != 0 && existing.Get() != nullptr) return;
 
-    ResolveExternalByName_Impl(reinterpret_cast<void*>(s + 0x58));
+    ResolveExternalByName_Impl(&toolbarRef);
 
-    uint64_t targetElem = 0;     // -> ctor arg that lands at +0xE8 (branch A)
-    uint64_t parentIBP  = 0;     // -> ctor R9 parent
-    uint64_t elemIBP    = 0;     // -> ctor arg that lands at +0xE0 (branch B)
+    ComponentEntity* targetElem = nullptr;          // -> ctor arg that lands at +0xE8 (branch A)
+    UI::DialogInstance* parentIBP = nullptr;        // -> ctor R9 parent
+    Object::InternalPtr<UI::Element> elemIBP;       // -> ctor arg that lands at +0xE0 (branch B)
     bool     branchA    = false;
 
-    if (*reinterpret_cast<uint64_t*>(s + 0x68) != 0) {
-        uintptr_t gw = GameWorld();
-        uintptr_t mgr = gw ? *reinterpret_cast<uintptr_t*>(gw + 0xF0) : 0;
-        BstNode* root = mgr ? *reinterpret_cast<BstNode**>(mgr + 0x160) : nullptr;
+    if (toolbarRef.resolved != nullptr) {
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+        CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
+        TemplateBucketNode* root = mgr ? TemplateTreeRoot(mgr) : nullptr;
 
-        uint8_t refCopy[0x18] = {};
-        TutWave_ExternalRefCopy(refCopy, reinterpret_cast<void*>(s + 0x58));
-        uint64_t key = 0;
-        TutWave_ExternalRefResolve(&key, refCopy);
+        NamedExternalRef refCopy{};
+        TutWave_ExternalRefCopy(&refCopy, &toolbarRef);
+        const Object::External* key = TutWave_ExternalRefResolve(&refCopy);
 
-        BstNode* found = BstFind(root, key);
-        int count = found ? static_cast<int>(found->count) : 0;
-        int index = *reinterpret_cast<int32_t*>(s + 0x70);
+        TemplateBucketNode* found = BstFind(root, key);
+        int count = found ? found->count : 0;
+        int index = toolbarIndex;
 
         if (count > index) {
-            uint8_t refCopy2[0x18] = {};
-            TutWave_ExternalRefCopy(refCopy2, reinterpret_cast<void*>(s + 0x58));
-            uint64_t key2 = 0;
-            TutWave_ExternalRefResolve(&key2, refCopy2);
-            BstNode* found2 = BstFind(root, key2);
-            if (found2 && found2->payload) {
-                targetElem = reinterpret_cast<uint64_t*>(found2->payload)[index];
+            NamedExternalRef refCopy2{};
+            TutWave_ExternalRefCopy(&refCopy2, &toolbarRef);
+            const Object::External* key2 = TutWave_ExternalRefResolve(&refCopy2);
+            TemplateBucketNode* found2 = BstFind(root, key2);
+            if (found2 && found2->entities) {
+                targetElem = found2->entities[index];
             }
             branchA = true;
         }
@@ -411,62 +380,56 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
 
     if (!branchA) {
         // Branch B: FindUIElementByPath (exe 0x1400E1870).
-        FindUIElementByPath_Impl(&elemIBP, reinterpret_cast<void*>(s + 0x40), &parentIBP);
-        if (elemIBP == 0) return;
+        FindUIElementByPath_Impl(&elemIBP, &HighlightPath(), &parentIBP);
+        if (elemIBP.Get() == nullptr) return;
     }
 
     // MemAlloc(0xF0) + TutorialHighlightDialog::TutorialHighlightDialog
     // (0x1400E01D0) — the real class now (ENDGAME B.3.8).
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(TutorialHighlightDialog), 8);
-    void* dlg = nullptr;
+    TutorialHighlightDialog* dlg = nullptr;
     if (mem) {
-        int32_t valD8 = *reinterpret_cast<int32_t*>(s + 0x48);
-        const UI::Dialog* dialog = *reinterpret_cast<const UI::Dialog* const*>(s + 0x50);
-        UI::UserInterface* uiObj = reinterpret_cast<UI::UserInterface*>(ui);
+        int32_t valD8 = arrowRotation;
+        const UI::Dialog* dialog = highlightDialog;
         if (branchA) {
-            dlg = ::new (mem) TutorialHighlightDialog(uiObj, dialog,
+            dlg = ::new (mem) TutorialHighlightDialog(ui, dialog,
                                                       Object::InternalPtr<UI::DialogInstance>(),
                                                       nullptr, valD8,
-                                                      reinterpret_cast<void*>(targetElem));
+                                                      targetElem);
         } else {
-            dlg = ::new (mem) TutorialHighlightDialog(uiObj, dialog,
-                                                      Object::InternalPtr<UI::DialogInstance>(
-                                                          reinterpret_cast<UI::DialogInstance*>(parentIBP)),
-                                                      reinterpret_cast<void*>(elemIBP), valD8,
+            dlg = ::new (mem) TutorialHighlightDialog(ui, dialog,
+                                                      Object::InternalPtr<UI::DialogInstance>(parentIBP),
+                                                      elemIBP.Get(), valD8,
                                                       nullptr);
         }
     }
 
-    uint64_t dlgIBP = reinterpret_cast<uint64_t>(dlg);
-    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(  // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgIBP));
+    Object::InternalPtr<UI::DialogInstance> dlgIBP(dlg);
+    ui->AddDialog(&dlgIBP);
 }
 
 // ===========================================================================
 // 0x1400E29F0 — hide everything, then unhide the paths this setup names.
 //
-// The first string vector (+0x20 data / +0x28 count) holds dotted element paths
-// ("DialogType.ElementName"); each resolves through FindUIElementByPath and is
-// re-shown recursively. This is the whole "the tutorial greys out the UI except
-// the button it wants you to press" effect.
+// The first string vector (+0x20 data / +0x28 count) holds element paths;
+// each resolves through FindUIElementByPath and is re-shown recursively. This
+// is the whole "the tutorial greys out the UI except the button it wants you
+// to press" effect.
 // ===========================================================================
-extern "C" void TutWave_ShowListedElements(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+void TutorialSetupDialog::ShowListedElements() {
+    SetAllDialogFlags('\0');
 
-    TutWave_SetAllDialogFlags(self, '\0');
-
-    int count = *reinterpret_cast<int32_t*>(s + 0x28);
+    int count = static_cast<int32_t>(shownPathCount);
     if (count <= 0) return;
 
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(s + 0x20);
+    System::String* arr = shownPaths;
     if (!arr) return;
     for (int i = 0; i < count; ++i) {
-        uint64_t elem = 0;
-        FindUIElementByPath_Impl(&elem, reinterpret_cast<void*>(arr + static_cast<uintptr_t>(i) * 8), nullptr);
-        if (elem != 0) {
-            uint64_t copy = elem;
-            TutWave_SetElementFlagsRecursive(self, &copy, '\x01');
+        Object::InternalPtr<UI::Element> elem;
+        FindUIElementByPath_Impl(&elem, &arr[i], nullptr);
+        if (elem.Get() != nullptr) {
+            Object::InternalPtr<UI::Element> copy = elem;
+            SetElementFlagsRecursive(&copy, '\x01');
         }
     }
 }
@@ -490,98 +453,86 @@ extern "C" void TutWave_ShowListedElements(void* self) {
 //   5. every image in step (+0x40 data / +0x48 count): vtable slot 9 builds an
 //      element against the dialog at ui+0x18, placed with
 //      TableElement::SetChild(elem, image+0x2C, image+0x28)
+// The text elements are UI::TextElements and the image table a
+// UI::TableElement (TutorialUI stores them as Elements; retail calls the
+// subclass members on them directly).
 // ===========================================================================
-extern "C" void TutWave_RefreshStepUI(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    uintptr_t tutorial = *reinterpret_cast<uintptr_t*>(s + 0x30);
+void TutorialInstance::RefreshStepUI() {
+    Tutorial* tutorial = tutorialDef;
     if (!tutorial) return;
-    uintptr_t steps = *reinterpret_cast<uintptr_t*>(tutorial + 0x28);
+    TutorialStep** steps = tutorial->steps;
     if (!steps) return;
-    int idx = *reinterpret_cast<int32_t*>(s + 0x10);
-    uintptr_t step = *reinterpret_cast<uintptr_t*>(steps + static_cast<uintptr_t>(idx) * 8);
+    int idx = currentStep;
+    TutorialStep* step = steps[idx];
     if (!step) return;
 
     // 1. setup objects — vtable slot 8 (+0x40)
     {
-        int n = *reinterpret_cast<int32_t*>(step + 0x58);
-        uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x50);
+        int n = step->setupCount;
+        TutorialSetup** data = step->setups;
         for (int i = 0; i < n && data; ++i) {
-            void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
+            TutorialSetup* obj = data[i];
             if (!obj) continue;
-            reinterpret_cast<TutorialSetup*>(obj)->Begin();   // slot 8; B.3.8 bridge
+            obj->Begin();   // slot 8
         }
     }
 
-    uintptr_t ui = *reinterpret_cast<uintptr_t*>(s + 0x20);
+    TutorialUI* ui = stepUI;
     if (!ui) return;   // no TutorialUI controller attached yet
 
     // 2/3. the two text elements
     {
-        uint64_t stringTable = *reinterpret_cast<uint64_t*>(step + 0x28);
-        struct UIStr { uint64_t a, b; };
+        UI::StringTable* stringTable = step->stringTable;
 
-        const struct { uintptr_t srcString; uintptr_t uiField; } texts[2] = {
-            { step + 0x30, ui + 0x38 },
-            { step + 0x38, ui + 0x40 },
+        const struct { System::String* srcString; UI::Element* elem; } texts[2] = {
+            { &step->TitleText(), ui->preText },
+            { &step->DescText(),  ui->postText },
         };
         for (const auto& t : texts) {
-            uint8_t retbuf[32] = {};
-            void* r = ::new (retbuf) UI::String(
-                Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
-                *reinterpret_cast<const System::String*>(t.srcString));
-            UIStr tmp = *reinterpret_cast<UIStr*>(r ? r : retbuf);
-            void* elem = *reinterpret_cast<void**>(t.uiField);
+            UI::String tmp(Object::ExternalPtr<UI::StringTable>(stringTable), *t.srcString);
+            UI::Element* elem = t.elem;
             if (!elem) continue;
-            reinterpret_cast<UI::TextElement*>(elem)->SetText(  // B.3.6 bridge
-                reinterpret_cast<const UI::String*>(&tmp));
+            static_cast<UI::TextElement*>(elem)->SetText(&tmp);
         }
         for (const auto& t : texts) {
-            void* elem = *reinterpret_cast<void**>(t.uiField);
+            UI::Element* elem = t.elem;
             if (!elem) continue;
-            UIStr cur;
-            cur.a = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(elem) + 0xD8);
-            cur.b = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(elem) + 0xE0);
-            bool valid = reinterpret_cast<const UI::String*>(&cur)->IsValid();  // B.3.6 bridge
-            reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(valid ? 0u : 1u, valid ? 1u : 0u);  // B.3.6 bridge
+            UI::String cur = static_cast<UI::TextElement*>(elem)->GetText();
+            bool valid = cur.IsValid();
+            elem->SetFlagsOnOff(valid ? 0u : 1u, valid ? 1u : 0u);
         }
     }
 
     // 4. clear + re-grow the image table
-    void* table = nullptr;
+    UI::Element* table = nullptr;
     {
-        table = *reinterpret_cast<void**>(ui + 0x48);
+        table = ui->imageTable;
         if (table) {
-            int n = reinterpret_cast<UI::Element*>(table)->ChildCount();  // B.3.6 bridge
-            reinterpret_cast<UI::Element*>(table)->RemoveChildren();  // B.3.6 bridge
+            int n = table->ChildCount();
+            table->RemoveChildren();
             for (int i = 0; i < n; ++i) {
-                uint64_t nullChild = 0;
-                new (&nullChild) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                reinterpret_cast<UI::Element*>(table)->AddChild(  // B.3.6 bridge
-                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullChild));
+                Object::InternalPtr<UI::Element> nullChild;
+                table->AddChild(&nullChild);
             }
         }
     }
 
     // 5. images — vtable slot 9 (+0x48) builds each element
     {
-        int n = *reinterpret_cast<int32_t*>(step + 0x48);
-        uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x40);
+        int n = step->imageCount;
+        TutorialImage** data = step->images;
         if (n > 0 && data && table) {
-            uintptr_t dlgIBP = *reinterpret_cast<uintptr_t*>(ui + 0x18);
-            void* dialog = dlgIBP ? *reinterpret_cast<void**>(dlgIBP + 0x18) : nullptr;
+            UI::DialogInstance* dlgIBP = ui->_dialog;
+            const UI::Dialog* dialog = dlgIBP ? dlgIBP->_dialog : nullptr;
             for (int i = 0; i < n; ++i) {
-                void* img = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
+                TutorialImage* img = data[i];
                 if (!img) continue;
-                int32_t col = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(img) + 0x28);
-                int32_t row = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(img) + 0x2C);
-                uint8_t retbuf[16] = {};
-                // slot 9, retslot shape (RCX this, RDX ret, R8 dialog); B.3.8 bridge
-                void* elemPtr = reinterpret_cast<TutorialImage*>(img)->CreateElement(retbuf, dialog);
-                reinterpret_cast<UI::TableElement*>(table)->SetChild(  // B.3.6 bridge
-                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr ? elemPtr : retbuf),
-                    row, col);
+                int32_t col = img->imageWidth;    // +0x28
+                int32_t row = img->imageHeight;   // +0x2C
+                Object::InternalPtr<UI::Element> retbuf;
+                // slot 9, retslot shape (RCX this, RDX ret, R8 dialog)
+                Object::InternalPtr<UI::Element>* elemPtr = img->CreateElement(&retbuf, dialog);
+                static_cast<UI::TableElement*>(table)->SetChild(elemPtr ? elemPtr : &retbuf, row, col);
             }
         }
     }
@@ -593,8 +544,8 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
 // the current step's setups, polls its goals, and advances when all goals pass.
 //
 //   if self+0x18 (dialog IBP) is empty:
-//       find the dialog hosting the tutorial's Dialog External
-//         (FindDialogByControllerType, exe 0x140100270 — already registered)
+//       find the dialog hosting the tutorial's setup description
+//         (PlayerToolManager::FindUtilityDialog, exe 0x140100270)
 //       self+0x20 = that dialog's controller, if it IsDerivedFrom TutorialUI
 //       RefreshStepUI(self)
 //   step = tutorial->steps[self->stepIndex]
@@ -604,15 +555,12 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
 //       for each setup: vtable slot 10 (+0x50)(setup)
 //       ++stepIndex
 //       if more steps: RefreshStepUI(self)
-//       else:          <tutorial complete>  (TutWave_LoadNextScenario below)
+//       else:          <tutorial complete>  (LoadNextScenario below)
 // ===========================================================================
 extern "C" { int g_TutUndoDepth = 0; int g_TutUndoIndex = -1; }
 
-extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint64_t param4) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    uintptr_t tutorial = *reinterpret_cast<uintptr_t*>(s + 0x30);
+void TutorialInstance::StepExecute(void* param2, void* param3, uint64_t param4) {
+    Tutorial* tutorial = tutorialDef;
     if (!tutorial) {
         // Both of retail's early returns are silent, which is fine in retail and
         // useless here: "the tutorial never appears" looks identical whether the
@@ -626,27 +574,23 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
         return;
     }
 
-    if (*reinterpret_cast<uint64_t*>(s + 0x18) == 0) {
-        uint64_t dlg = 0;
-        ToolbarUtility_FindDialogByControllerType_0270(self, &dlg,
-                                                       *reinterpret_cast<uint64_t*>(tutorial + 0x20));   // 0x140100270
-        *reinterpret_cast<uint64_t*>(s + 0x18) = dlg;
-        if (dlg == 0) {
+    if (stepDialog == nullptr) {
+        UI::DialogInstance* dlg = PlayerToolManager::FindUtilityDialog(tutorial->setup);   // 0x140100270
+        stepDialog = dlg;
+        if (dlg == nullptr) {
             static bool once = false;
             if (!once) { once = true;
                 fprintf(stderr, "[Tutorial] StepExecute BAILED: FindDialogByControllerType found no "
                                 "dialog for tutorial=%p dialogExt=%p\n",
-                        reinterpret_cast<void*>(tutorial),
-                        *reinterpret_cast<void**>(tutorial + 0x20));
+                        static_cast<void*>(tutorial),
+                        static_cast<const void*>(tutorial->setup));
                 fflush(stderr); }
             return;
         }
 
         uint32_t uiTid = TutorialUITypeId();
-        void* controller = nullptr;
-        void* ctrlRaw = nullptr;   // whatever GetController handed back, before narrowing
+        TutorialUI* controller = nullptr;
         {
-            uint64_t ctrl = 0;
             // Third arg is a TYPE FILTER, not padding: retail is
             //   MOV R8D,[0x1401c67f0]   ; TutorialUI type id
             //   CALL [0x140151768]      ; DialogInstance::GetController
@@ -655,51 +599,47 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             // the TutorialUI narrow below could not run, and RefreshStepUI had no panel
             // to write into — the tutorial panel rendered as a bare title and two "Ok"
             // rows. Measured as `ctrl=0 tid=0 (?) wantTutorialUI=857087488`.
-            ::new (&ctrl) Object::InternalPtr<UI::DialogController>(
-                reinterpret_cast<UI::DialogInstance*>(dlg)->GetController(uiTid));  // B.3.6 bridge
-            ctrlRaw = reinterpret_cast<void*>(ctrl);
-            if (ctrl && uiTid && Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(ctrl), uiTid)) {
-                controller = reinterpret_cast<void*>(ctrl);
+            UI::DialogController* ctrl = dlg->GetController(uiTid).Get();
+            if (ctrl && uiTid && Object::IsDerivedFromNullSafe(ctrl, uiTid)) {
+                controller = static_cast<TutorialUI*>(ctrl);
             }
         }
-        *reinterpret_cast<uint64_t*>(s + 0x20) = reinterpret_cast<uint64_t>(controller);
-        TutWave_RefreshStepUI(self);
+        stepUI = controller;
+        RefreshStepUI();
     }
 
-    int stepIndex = *reinterpret_cast<int32_t*>(s + 0x10);
-    int stepCount = *reinterpret_cast<int32_t*>(tutorial + 0x30);
+    int stepIndex = currentStep;
+    int stepCount = tutorial->stepCount;
 
     if (stepIndex >= stepCount) return;
 
-    uintptr_t steps = *reinterpret_cast<uintptr_t*>(tutorial + 0x28);
+    TutorialStep** steps = tutorial->steps;
     if (!steps) return;
-    uintptr_t step = *reinterpret_cast<uintptr_t*>(steps + static_cast<uintptr_t>(stepIndex) * 8);
+    TutorialStep* step = steps[stepIndex];
     if (!step) return;
 
     // setups: slot 9
     {
-        int n = *reinterpret_cast<int32_t*>(step + 0x58);
-        uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x50);
+        int n = step->setupCount;
+        TutorialSetup** data = step->setups;
         for (int i = 0; i < n && data; ++i) {
-            void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
+            TutorialSetup* obj = data[i];
             if (!obj) continue;
-            reinterpret_cast<TutorialSetup*>(obj)->Update(param2);   // slot 9; B.3.8 bridge
+            obj->Update(param2);   // slot 9
         }
     }
 
     // goals: slot 8, counts the ones that report complete
     int passed = 0;
-    int goalCount = *reinterpret_cast<int32_t*>(step + 0x68);
+    int goalCount = step->goalCount;
     {
-        uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x60);
+        TutorialGoal** data = step->goals;
         for (int i = 0; i < goalCount && data; ++i) {
-            void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
+            TutorialGoal* obj = data[i];
             if (!obj) continue;
-            uint64_t selfIBP = 0;
-            new (&selfIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            // slot 8; B.3.8 bridge
-            bool ok = reinterpret_cast<TutorialGoal*>(obj)->IsComplete(param2, &selfIBP);
+            Object::InternalPtr<TutorialInstance> selfIBP(this);
+            // slot 8
+            bool ok = obj->IsComplete(param2, &selfIBP);
             if (ok) ++passed;
         }
     }
@@ -730,32 +670,32 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
     //   Undoing the restriction first means that drain sees no restriction at all, which
     //   is the same state retail's drain sees.
     {
-        int n = *reinterpret_cast<int32_t*>(step + 0x58);
-        uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x50);
+        int n = step->setupCount;
+        TutorialSetup** data = step->setups;
         // ENDGAME B.3.8: the class's own record (was a lazy GetTypeIdByName cache).
         const uint32_t s_restrictTid = TutorialSetupRestrictPlayer::TypeId();
 
         for (int pass = 0; pass < 2; ++pass) {
             for (int i = 0; i < n && data; ++i) {
-                void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
+                TutorialSetup* obj = data[i];
                 if (!obj) continue;
-                uint32_t tid = reinterpret_cast<TutorialSetup*>(obj)->Type();   // B.3.8 bridge
+                uint32_t tid = obj->Type();
                 const bool isRestrict = (s_restrictTid && tid == s_restrictTid);
                 if ((pass == 0) != isRestrict) continue;
                 // g_TutUndoDepth lets the toolbar trace say out loud when a UI command
                 // is dispatched from inside this loop (see above).
                 ++g_TutUndoDepth;
                 g_TutUndoIndex = i;
-                reinterpret_cast<TutorialSetup*>(obj)->End();   // slot 10; B.3.8 bridge
+                obj->End();   // slot 10
                 --g_TutUndoDepth;
             }
         }
     }
 
-    *reinterpret_cast<int32_t*>(s + 0x10) = stepIndex + 1;
+    currentStep = stepIndex + 1;
 
     if (stepIndex + 1 < stepCount) {
-        TutWave_RefreshStepUI(self);
+        RefreshStepUI();
         return;
     }
 
@@ -771,5 +711,5 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
     // opener). That one is still unported and is NOT on this path's critical
     // line -- 0D70 replaces the whole loop, dialogs included -- so it stays out.
     (void)param3; (void)param4;
-    TutWave_LoadNextScenario(self);
+    LoadNextScenario();
 }

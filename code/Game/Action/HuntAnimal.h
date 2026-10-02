@@ -15,13 +15,17 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class CitizenComponent;   // Component/CitizenComponent.h
+class HuntComponent;      // Component/HuntComponent.h
 
 class HuntAnimal final : public Action {
     DECLARE_EXE_TYPE(HuntAnimal)
 
 public:
     HuntAnimal();                                                   // create 0x140022700
-    HuntAnimal(uint64_t* herd, uint64_t* animal);   // 0x1400c8400
+    HuntAnimal(CitizenComponent* const* hunter, HuntComponent* const* hunt);   // 0x1400c8400
     ~HuntAnimal() override = default;                          // [0] 0x140022770
     void Persist(void* stream) override;                       // [3] 0x1400c8260
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c8250
@@ -30,10 +34,13 @@ public:
     bool GetTarget(void* param) override;                      // [9] 0x1400c7d60
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     _field20;          // +0x20 animal entity
-    void*     _field28;          // +0x28 herd entity
-    void*     _field30;          // +0x30 
-    uint8_t   _field38;          // +0x38 hunt started flag
+    // +0x20: the HuntComponent (Persist checks HuntComponent; Enter tests HuntIsReady and clears
+    // its huntProgress). +0x28: the HUNTING CITIZEN (Persist checks CitizenComponent; its
+    // character's position seeds the query). The tree called them "animal" and "herd".
+    Object::InternalPtr<HuntComponent>    _field20;
+    Object::InternalPtr<CitizenComponent> _field28;
+    void*     _field30;          // +0x30 ctor 0; read by no slot
+    bool      _field38;          // +0x38 hunt started flag (Persist: the bool overload)
     uint8_t   _pad39[7];         // +0x39 padding
 };
 

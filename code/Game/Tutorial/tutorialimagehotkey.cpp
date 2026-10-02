@@ -33,6 +33,15 @@
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "ui/String.h"
+#include "Game/Toolbar.h"
+
+// The resolved Toolbar entry (NamedExternalRef::ResolveToolbar validated the
+// type: a downcast within Object::External's hierarchy).
+static const Toolbar* ResolvedToolbar(const NamedExternalRef& ref) {
+    const Object::External* found = ref.resolved;
+    return static_cast<const Toolbar*>(found);
+}
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -54,12 +63,12 @@ namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex
 // ctor 0x1400e0680: External(), the TutorialImage stamp + its two zeroed
 // fields (TutorialImage()), the own stamp, then the derived fields.
 TutorialImageHotKey::TutorialImageHotKey()
-    : hotkeyName(0), _field38(-1), _pad3C{}, _field40(nullptr) {}
+    : hotkeyRef{{}, -1, {}, nullptr} {}
 
 // The dtor inside [0] 0x140027d70: ~String +0x30; the compiler re-stamps
 // TutorialImage and runs ~External.
 TutorialImageHotKey::~TutorialImageHotKey() {
-    reinterpret_cast<System::String*>(&hotkeyName)->~String();   // B.3.1 bridge
+    hotkeyRef.Name().~String();
 }
 
 // ============================================================
@@ -67,34 +76,28 @@ TutorialImageHotKey::~TutorialImageHotKey() {
 // ============================================================
 // Phase 1: the TutorialImage fields (int +0x28, int +0x2c, external ref +0x20)
 // Phase 2: the hot key string +0x30, resolved on load
+// LEFT (both phases): External::Serialize hands the stream in as void* (the
+// runtime base's signature).
 bool TutorialImageHotKey::Serialize(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     // Phase 1: Base TutorialImage fields
-    alignas(8) uint8_t ser1[32];
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
-
-    TutBase_SerializeImageRef((void*)(s + 0x20), ser1);
-
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
-
-    // Phase 2: HotKey-specific fields
-    alignas(8) uint8_t ser2[32];
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize String at +0x30
-    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser2);   // B.3.1 bridge
-
-    // If loading (version == 0), resolve the hotkey string to an External ref
-    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
-    if (version == 0) {
-        TutBase_ResolveToolbarRef((void*)(s + 0x30));
+    {
+        IO::Serializer ser1(*reinterpret_cast<IO::Stream*>(stream), 0);
+        ser1.Serialize(imageWidth, nullptr);
+        ser1.Serialize(imageHeight, nullptr);
+        TutBase_SerializeImageRef(&imageRef, &ser1);
     }
 
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    // Phase 2: HotKey-specific fields
+    IO::Serializer ser2(*reinterpret_cast<IO::Stream*>(stream), 0);
+
+    // Serialize String at +0x30
+    hotkeyRef.Name().Serialize(&ser2);
+
+    // If loading (version == 0), resolve the hotkey string to an External ref
+    int version = ser2.GetVersion();
+    if (version == 0) {
+        hotkeyRef.ResolveToolbar();
+    }
     return true;
 }
 
@@ -115,85 +118,67 @@ Object::External* TutorialImageHotKey::Construct() {
 // Creates a UI element from imageRef, finds a TextElement child,
 // resolves the hotkey ref, looks up the bound key name from KeyMap,
 // and sets the display text on the TextElement.
-//
-// Params (Win64 ABI, reordered from original):
-//   param_1 = self (TutorialImageHotKey*)
-//   param_2 = retIBP (InternalBasePtr* — return buffer, also output)
-//   param_3 = dialog (Dialog* — parent dialog to create element in)
-void* TutorialImageHotKey::CreateElement(void* retIBP, void* dialog) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
+Object::InternalPtr<UI::Element>* TutorialImageHotKey::CreateElement(Object::InternalPtr<UI::Element>* retIBP,
+                                                                     const UI::Dialog* dialog) {
     // 1. Create UI element from imageRef at +0x20
-    ::new (retIBP) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(*(void**)(s + 0x20)))));
+    *retIBP = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(imageRef));
 
     // 2. CheckPtr on the returned IBP
 
     // 3. FindElementType — find TextElement child
-    void* element = *(void**)retIBP;
-    uint8_t foundIBP[16] = {};
-    ::new (foundIBP) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::Element*>(element)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
+    UI::Element* element = retIBP->Get();
+    UI::Element* foundObj = element->FindElementType(UI::TextElement::TypeId()).Get();
 
     // 4. CheckPtr on found element
 
     // 5. IsDerivedFrom check — verify it's a TextElement
-    void* foundObj = *(void**)foundIBP;
-    void* textElement = nullptr;
+    UI::TextElement* textRef = nullptr;
     if (foundObj) {
         if (Object::IsDerivedFromNullSafe(foundObj, UI::TextElement::TypeId()))
-            textElement = foundObj;
+            textRef = static_cast<UI::TextElement*>(foundObj);
     }
-
-    // 6. Wrap in InternalBasePtr
-    void* textRef = nullptr;
-    new (&textRef) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
 
     // 7. Resolve hotkey ref from string at +0x30
-    TutBase_ResolveToolbarRef((void*)(s + 0x30));
+    hotkeyRef.ResolveToolbar();
 
-    // 8. Get actual KeyMap object (triple deref from exref)
-    void* keymap = nullptr;
+    // 8. The KeyMap (Input::Configuration +0x00)
+    const Input::KeyMap* keymap = nullptr;
     if (Input::Configuration::_singleton != nullptr) {
-        void* step2 = Input::Configuration::_singleton;
-        if (step2) keymap = *(void**)step2;
+        Input::Configuration* step2 = Input::Configuration::_singleton;
+        if (step2) keymap = step2->_keyMap;
     }
 
-    // 9. Read key ID from resolved ref at field40->+0x40
-    void* resolvedRef = *(void**)(s + 0x40);
+    // 9. Read key ID from the resolved Toolbar's +0x40
+    const Toolbar* resolvedRef = ResolvedToolbar(hotkeyRef);
     int keyId = 0;
     if (resolvedRef)
-        keyId = *(int*)((uintptr_t)resolvedRef + 0x40);
+        keyId = resolvedRef->_field40;
 
     // 10. Get device type for this key
     int deviceType = 0;
     if (keymap)
-        deviceType = reinterpret_cast<const Input::KeyMap*>(keymap)->GetDeviceForId(keyId, 0);  // B.3.7 bridge
+        deviceType = keymap->GetDeviceForId(keyId, 0);
 
     // 11. Resolve hotkey ref again (matches original)
-    TutBase_ResolveToolbarRef((void*)(s + 0x30));
+    hotkeyRef.ResolveToolbar();
 
     // 12. Get input index for this key
     int inputIndex = 0;
     if (keymap)
-        inputIndex = reinterpret_cast<const Input::KeyMap*>(keymap)->GetInputForId(keyId, 0);  // B.3.7 bridge
+        inputIndex = keymap->GetInputForId(keyId, 0);
 
-    // 13. Get key name as UI::String
-    uint8_t uiStr[16] = {};
+    // 13. Get key name as UI::String (a zeroed buffer, as the tree's was)
+    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(nullptr), 0);
     // LANE1 row 36: 0x140099c20 is unregistered, so fn_GetInputKeyName was
     // permanently null and every tutorial key name rendered blank. The function is
     // already ported byte-for-byte as Hotkey_BuildKeyName (hotkeytooltipui.cpp);
     // retail's param_1 is the KeyMap container and that port looks up the same
     // *g_pKeyMapSingleton, so this is the identical call, not a fourth copy.
-    Game::Hotkey_BuildKeyName(uiStr, deviceType, inputIndex);
+    Game::Hotkey_BuildKeyName(&uiStr, deviceType, inputIndex);
 
     // 14. Set text on the TextElement
     if (textRef)
-        reinterpret_cast<UI::TextElement*>(textRef)->SetText(  // B.3.6 bridge
-            reinterpret_cast<const UI::String*>(uiStr));
+        textRef->SetText(&uiStr);
 
     return retIBP;
 }

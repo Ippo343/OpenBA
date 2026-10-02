@@ -15,21 +15,26 @@
 #include <cstddef>
 #include "Action/Action.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class ComponentDescription;   // Component/ComponentDescription.h
+class ComponentEntity;        // Entity/ComponentEntity.h
 
 class CreateNaturalResource final : public Action {
     DECLARE_EXE_TYPE(CreateNaturalResource)
 
 public:
     CreateNaturalResource();                                                   // create 0x1400221d0
-    CreateNaturalResource(uint64_t desc, uint64_t* parent, uint32_t cellIndex);   // 0x1400c6a20
+    CreateNaturalResource(ComponentDescription* desc, ComponentEntity* const* parent,
+                          uint32_t cellIndex);                                 // 0x1400c6a20
     ~CreateNaturalResource() override = default;               // [0] 0x140022240
     void Persist(void* stream) override;                       // [3] 0x1400c6890
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6650
     bool GetTarget(void* param) override;                      // [9] 0x1400c6610
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
-    void*     descEntity;        // +0x20 description (ExternalPtr)
-    void*     parentEntity;      // +0x28 InternalBasePtr (parent entity)
+    ComponentDescription* descEntity;   // +0x20 ExternalPtr<ComponentDescription>: the resource template
+    Object::InternalPtr<ComponentEntity> parentEntity;   // +0x28 parent entity (Persist checks ComponentEntity)
     int32_t   cellIndex;         // +0x30 map cell index / resource slot
     uint8_t   _pad34[4];         // +0x34 padding
 };

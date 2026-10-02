@@ -44,6 +44,8 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"
+#include "runtime/types/ui/DialogController.h"
 #include <new>
 #include "Tutorial/exe_bodies.h"
 
@@ -74,30 +76,25 @@ int SplitPath(const System::String& path, System::String* parts) {
     return count;
 }
 
-// 0x1400105B0 — narrow a Base* to ComponentEntity, or null.
-void* NarrowComponentEntity(void* obj) {
+/// 0x1400105B0 — narrow a Base* to ComponentEntity, or null.
+ComponentEntity* NarrowComponentEntity(Object::Base* obj) {
     if (!obj) return nullptr;
-    return Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()) ? obj : nullptr;
+    return Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()) ? static_cast<ComponentEntity*>(obj) : nullptr;
 }
 
 // The 4-part tail: does this dialog's entity come from the named resource file?
 // Retail compares the entity description's path filename (extension stripped)
 // against parts[3] and SKIPS the dialog when they differ.
-bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
-    void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(dialog) + 0x30);
+bool ResourceNameMismatch(const UI::DialogInstance* dialog, const System::String& wantName) {
+    Object::Base* owner = dialog->_dataSource;
     if (!owner) return false;
-    void* entity = NarrowComponentEntity(owner);
+    ComponentEntity* entity = NarrowComponentEntity(owner);
+    if (entity == nullptr) return false;
 
-    uintptr_t entityIBP = 0;
-    new (&entityIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    if (entityIBP == 0) return false;
-
-
-    void* description = *reinterpret_cast<void**>(entityIBP + 0x28);
+    const ComponentDescription* description = entity->_description;
     if (!description) return false;
 
-    System::Filename fullPath =
-        reinterpret_cast<const ::Object::External*>(description)->GetPath();  // B.3.3 bridge
+    System::Filename fullPath = description->GetPath();
     System::Filename leafName = fullPath.GetPathFilename(true);
     System::String   nameStr(leafName.AsString());
 
@@ -106,98 +103,88 @@ bool ResourceNameMismatch(void* dialog, const System::String& wantName) {
 
 }  // namespace
 
-extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, uint64_t* outDialog) {
-    if (!outElementIBP) return outElementIBP;
-    uint64_t* out = reinterpret_cast<uint64_t*>(outElementIBP);
-    *out = 0;
+Object::InternalPtr<UI::Element>* FindUIElementByPath_Impl(Object::InternalPtr<UI::Element>* out,
+                                                          const System::String* pathStr,
+                                                          UI::DialogInstance** outDialog) {
+    if (!out) return out;
+    *out = nullptr;
 
-    if (!pathStr) return outElementIBP;
-    const System::String& path = *reinterpret_cast<const System::String*>(pathStr);
+    if (!pathStr) return out;
+    const System::String& path = *pathStr;
     if (path._data == nullptr || path.GetLength() == 0) {
-        return outElementIBP;
+        return out;
     }
 
     System::String parts[kMaxParts];
     int partCount = SplitPath(path, parts);
     // Fewer than two parts is not a path — retail returns a null InternalBasePtr.
     if (partCount < 2) {
-        return outElementIBP;
+        return out;
     }
 
     if (GameUpdateLoop::_singleton == nullptr) {
-        return outElementIBP;
+        return out;
     }
-    void* factory = ::Object::Factory::_singleton;
-    if (!factory) return outElementIBP;
+    const ::Object::Factory* factory = ::Object::Factory::_singleton;
+    if (!factory) return out;
 
-    uint32_t dialogTypeId = reinterpret_cast<const ::Object::Factory*>(factory)->GetTypeIdFromName(
-        parts[0]._data, true);   // B.3.3 bridge
+    uint32_t dialogTypeId = factory->GetTypeIdFromName(parts[0]._data, true);
     if (dialogTypeId == 0) {
-        return outElementIBP;
+        return out;
     }
 
     uint32_t controllerTypeId = 0;
     if (partCount >= 3)
-        controllerTypeId = reinterpret_cast<const ::Object::Factory*>(factory)->GetTypeIdFromName(
-            parts[1]._data, true);   // B.3.3 bridge
+        controllerTypeId = factory->GetTypeIdFromName(parts[1]._data, true);
 
-    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
+    UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
     if (!ui) {
-        return outElementIBP;
+        return out;
     }
 
     // The open-dialog list. `_dialogs.GetFirst()` IS retail's GetFirstDialog
     // (0x180031150 = `*retval = this->_dialogs._head`), and the iterator is the
     // bare node pointer, so `it.node` is the same address retail hands to
     // CheckPtr and `it.node->element` the InternalBasePtr(DialogInstance*).
-    uint64_t found = 0;
-    for (auto it = ui->_dialogs.GetFirst(); it && found == 0; ++it) {
-        void* dialog = it.node->element;
-        if (!dialog ||
-            !reinterpret_cast<const Object::Base*>(dialog)->IsA(dialogTypeId)) continue;   // B.3.x bridge
+    UI::Element* found = nullptr;
+    for (auto it = ui->_dialogs.GetFirst(); it && found == nullptr; ++it) {
+        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
+        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        if (!dialog || !dialog->IsA(dialogTypeId)) continue;
 
         if (controllerTypeId == 0 || partCount < 3) {
             // "Dialog:element" — the element is looked up on the dialog itself.
-            if (outDialog) *outDialog = reinterpret_cast<uint64_t>(dialog);
-            uint64_t elemIBP = 0;
-            ::new (&elemIBP) Object::InternalPtr<UI::Element>(
-                reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(parts[1]));  // B.3.6 bridge
-            if (elemIBP) found = elemIBP;
+            if (outDialog) *outDialog = dialog;
+            UI::Element* elem = dialog->FindElement(parts[1]).Get();
+            if (elem) found = elem;
             continue;
         }
 
         // "Dialog:Controller:element[:resource]"
-        uint64_t controller = 0;
-        ::new (&controller) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(controllerTypeId));  // B.3.6 bridge
-        if (controller == 0) continue;
+        UI::DialogController* controller = dialog->GetController(controllerTypeId).Get();
+        if (controller == nullptr) continue;
 
         if (partCount == 4) {
-            if (ResourceNameMismatch(it.node->element, parts[3])) continue;
+            if (ResourceNameMismatch(dialog, parts[3])) continue;
         }
 
-        if (outDialog) *outDialog = reinterpret_cast<uint64_t>(dialog);
+        if (outDialog) *outDialog = dialog;
 
         // The controller's container first...
-        uint64_t elemIBP = 0;
+        UI::Element* elem = nullptr;
         {
-            uint64_t containerIBP = 0;
-            ::new (&containerIBP) Object::InternalPtr<UI::Element>(
-                reinterpret_cast<UI::DialogController*>(controller)->GetContainer());  // B.3.6 bridge
-            if (containerIBP) {
-                ::new (&elemIBP) Object::InternalPtr<UI::Element>(
-                    reinterpret_cast<UI::Element*>(containerIBP)->FindElement(parts[2]));  // B.3.6 bridge
+            UI::Element* container = controller->GetContainer().Get();
+            if (container) {
+                elem = container->FindElement(parts[2]).Get();
             }
         }
         // ...then the dialog itself.
-        if (elemIBP == 0) {
-            ::new (&elemIBP) Object::InternalPtr<UI::Element>(
-                reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(parts[2]));  // B.3.6 bridge
+        if (elem == nullptr) {
+            elem = dialog->FindElement(parts[2]).Get();
         }
-        if (elemIBP) found = elemIBP;
+        if (elem) found = elem;
     }
 
     *out = found;
-    return outElementIBP;
+    return out;
 }
