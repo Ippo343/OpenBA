@@ -88,6 +88,9 @@
 // `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "video/Buffers.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "Game/WorldGeometry.h"
+#include "Game/WorldGeometryElements.h"
+#include "Game/TerrainHeightfield.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -124,44 +127,45 @@ constexpr float kMinArcGate = 0.001f;    // DAT_1401720b8 (avg-edge degenerate g
 // ============================================================
 
 // ============================================================
-// Growable-vector idiom (the engine's {data,count,cap} 16-byte header, with the
-// "+1 append over-allocs 3x" growth, matching the b260/fb00 inlined resizes).
+// Growable-vector idiom (Collection::Array's {data, count, cap} 16-byte header,
+// with the "+1 append over-allocs 3x" growth, matching the b260/fb00 inlined
+// resizes). The headers are RawArray<T>: WorldGeometry's own arrays and the
+// per-body scratch.
 // ============================================================
-struct Vec { void* data; int32_t count; int32_t cap; };
-
 void* MemAllocA(uint64_t bytes, int align) {
     return (System::MemoryAllocator::_singleton) ? System::MemoryAllocator::MemAlloc(bytes, align) : nullptr;
 }
 
-// Append one element of `stride` bytes; mirrors the inlined resize (count+1).
-void VecPush(Vec* v, const void* elem, int stride, int align) {
-    int n = v->count + 1;
-    if (v->cap < n) {
-        int newCap = (v->count != 0) ? n * 3 : n;   // 3x over-alloc on non-empty append
-        void* nb = MemAllocA((uint64_t)newCap * stride, align);
+// Append one element; mirrors the inlined resize (count+1).
+template <class T>
+void VecPush(RawArray<T>* v, const T& elem, int align) {
+    int n = v->size + 1;
+    if (v->capacity < n) {
+        int newCap = (v->size != 0) ? n * 3 : n;   // 3x over-alloc on non-empty append
+        T* nb = static_cast<T*>(MemAllocA((uint64_t)newCap * sizeof(T), align));
         if (!nb) return;
-        if (v->data && v->count > 0)
-            std::memcpy(nb, v->data, (size_t)v->count * stride);
+        if (v->data && v->size > 0)
+            std::memcpy(nb, v->data, (size_t)v->size * sizeof(T));
         if (v->data) System::MemoryAllocator::MemFree(v->data);
         v->data = nb;
-        v->cap = newCap;
+        v->capacity = newCap;
     }
-    std::memcpy((uint8_t*)v->data + (size_t)v->count * stride, elem, stride);
-    v->count = n;
+    v->data[v->size] = elem;
+    v->size = n;
 }
 
 // Resize a range-array (stride 0x10, align 4) to N entries, copy-only (sub_efd0).
-void RangeResize(Vec* v, int n) {
-    if (n == v->count) return;
-    void* oldData = v->data;
-    int oldCount = v->count;
-    v->count = n;
-    if (v->cap < n) {
-        v->cap = n;
-        void* nb = MemAllocA((uint64_t)n * 0x10, 4);
+void RangeResize(RawArray<GeometryDrawRange>* v, int n) {
+    if (n == v->size) return;
+    GeometryDrawRange* oldData = v->data;
+    int oldCount = v->size;
+    v->size = n;
+    if (v->capacity < n) {
+        v->capacity = n;
+        GeometryDrawRange* nb = static_cast<GeometryDrawRange*>(MemAllocA((uint64_t)n * sizeof(GeometryDrawRange), 4));
         if (nb && oldData && oldCount > 0) {
             int keep = (oldCount < n) ? oldCount : n;
-            std::memcpy(nb, oldData, (size_t)keep * 0x10);
+            std::memcpy(nb, oldData, (size_t)keep * sizeof(GeometryDrawRange));
         }
         if (oldData && oldData != nb) System::MemoryAllocator::MemFree(oldData);
         v->data = nb;
@@ -173,8 +177,9 @@ void RangeResize(Vec* v, int n) {
 // The retail f3e0 uses an RB-tree keyed on the packed vertex; a hash with exact
 // key compare is behaviourally identical (same dedup set, same index order).
 // ============================================================
+template <class T>
 struct WeldSet {
-    Vec     verts;       // OutVtx/16-byte GPU verts
+    RawArray<T> verts;   // OutVtx/16-byte GPU verts
     int32_t* buckets;    // hash head index (-1 empty)
     int32_t* chain;      // per-vertex next-in-bucket
     int32_t  mask;
@@ -183,25 +188,27 @@ struct WeldSet {
 };
 
 uint32_t WeldHash(const void* key, int stride) {
-    const uint8_t* k = (const uint8_t*)key;
+    const uint8_t* k = (const uint8_t*)key;   // CAST-OK: byte_io
     uint32_t h = 2166136261u;            // FNV-1a
     for (int i = 0; i < stride; ++i) { h ^= k[i]; h *= 16777619u; }
     return h;
 }
 
-void WeldInit(WeldSet* s, int stride, int estimate) {
-    s->verts.data = nullptr; s->verts.count = 0; s->verts.cap = 0;
-    s->stride = stride;
+template <class T>
+void WeldInit(WeldSet<T>* s, int estimate) {
+    s->verts.data = nullptr; s->verts.size = 0; s->verts.capacity = 0;
+    s->stride = (int)sizeof(T);
     int cap = 16;
     while (cap < estimate * 2) cap <<= 1;
     s->mask = cap - 1;
-    s->buckets = (int32_t*)std::malloc((size_t)cap * sizeof(int32_t));
+    s->buckets = (int32_t*)std::malloc((size_t)cap * sizeof(int32_t));   // LEFT: GAME-c weld scratch (std::malloc, as before B.4)
     for (int i = 0; i < cap; ++i) s->buckets[i] = -1;
     s->chainCap = estimate > 0 ? estimate : 16;
-    s->chain = (int32_t*)std::malloc((size_t)s->chainCap * sizeof(int32_t));
+    s->chain = (int32_t*)std::malloc((size_t)s->chainCap * sizeof(int32_t));   // LEFT: GAME-c weld scratch
 }
 
-void WeldFree(WeldSet* s) {
+template <class T>
+void WeldFree(WeldSet<T>* s) {
     if (s->buckets) std::free(s->buckets);
     if (s->chain) std::free(s->chain);
     if (s->verts.data) System::MemoryAllocator::MemFree(s->verts.data);
@@ -210,17 +217,18 @@ void WeldFree(WeldSet* s) {
 
 // Returns the index of `key` in the weld set (existing on a hit, freshly
 // appended on a miss). Mirrors f3e0's "return existing index or insert".
-uint16_t WeldAdd(WeldSet* s, const void* key) {
+template <class T>
+uint16_t WeldAdd(WeldSet<T>* s, const T* key) {
     uint32_t b = WeldHash(key, s->stride) & s->mask;
     for (int32_t i = s->buckets[b]; i >= 0; i = s->chain[i]) {
-        const uint8_t* v = (const uint8_t*)s->verts.data + (size_t)i * s->stride;
+        const T* v = &s->verts.data[i];
         if (std::memcmp(v, key, s->stride) == 0) return (uint16_t)i;
     }
-    int32_t idx = s->verts.count;
-    VecPush(&s->verts, key, s->stride, 2);
+    int32_t idx = s->verts.size;
+    VecPush(&s->verts, *key, 2);
     if (idx >= s->chainCap) {
         int32_t nc = s->chainCap * 2;
-        s->chain = (int32_t*)std::realloc(s->chain, (size_t)nc * sizeof(int32_t));
+        s->chain = (int32_t*)std::realloc(s->chain, (size_t)nc * sizeof(int32_t));   // LEFT: GAME-c weld scratch
         s->chainCap = nc;
     }
     s->chain[idx] = s->buckets[b];
@@ -238,34 +246,32 @@ inline V2 Lerp(V2 a, V2 b, float t) { return { a.x + (b.x - a.x) * t, a.y + (b.y
 // ============================================================
 // fb00 — per-body contour vertex/UV generator (Stage A approximated, B/C faithful)
 //
-//   param_1 = hf (TradeData), param_2 = bodyIdx, out = vtxOut(OutVtx)+idxOut(u16).
+//   hf = the heightfield, bodyIdx = its feature polyline, out = vtxOut(OutVtx)+idxOut(u16).
 // ============================================================
-void fb00_BuildBody(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
-    uint8_t* h = (uint8_t*)hf;
-    // record = (hf+0x18) array, stride 0x10: {centerlinePtr@+0, ptCount@+8}
-    uint8_t* recBase = *(uint8_t**)(h + 0x18);
+void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>* vtxOut, RawArray<uint16_t>* idxOut) {
+    // record = hf->paths, stride 0x10: {centerline, ptCount}
+    const RawArray<TerrainPathPoint>* recBase = hf->paths._data;
     if (!recBase) return;
-    uint8_t* rec = recBase + (size_t)bodyIdx * 0x10;
-    const uint8_t* cl = *(const uint8_t**)(rec + 0x00);   // centerline array
-    int ptCount = *(const int32_t*)(rec + 0x08);
+    const RawArray<TerrainPathPoint>& rec = recBase[bodyIdx];
+    const TerrainPathPoint* cl = rec.data;   // centerline array
+    int ptCount = rec.size;
     if (!cl || ptCount < 2) return;
 
     // Centerline point accessor (stride 0x1c): x@+0, y@+4, halfWidth@+0x14.
     auto CP = [&](int i) -> V2 {
-        const float* f = (const float*)(cl + (size_t)i * 0x1c);
-        return { f[0], f[1] };
+        return { cl[i].x, cl[i].y };
     };
     // radius = centerline[0].halfWidth + 2.0   (fb00: *(*plVar38+0x14) + DAT_140172174)
-    float radius = (((const float*)cl)[5] + kRadMargin);   // +0x14 == float index 5
+    float radius = (cl[0].outerRadius + kRadMargin);
     float channelWidth = 2.0f * radius;
     if (channelWidth < 1.0f) channelWidth = 1.0f;
 
     // --- Stage A (approx): banks = centerline +/- radius along per-node normal.
     // --- Stage B (faithful): arc-length V along the centerline (shared across
     //     the width band so the texture flows straight along the spine).
-    V2*    bankL = (V2*)std::malloc((size_t)ptCount * sizeof(V2));
-    V2*    bankR = (V2*)std::malloc((size_t)ptCount * sizeof(V2));
-    float* vCoord = (float*)std::malloc((size_t)ptCount * sizeof(float));
+    V2*    bankL = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+    V2*    bankR = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: GAME-c body scratch
+    float* vCoord = (float*)std::malloc((size_t)ptCount * sizeof(float)); // LEFT: GAME-c body scratch
     if (!bankL || !bankR || !vCoord) {
         if (bankL) std::free(bankL);
         if (bankR) std::free(bankR);
@@ -303,9 +309,9 @@ void fb00_BuildBody(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
     //     U marches 0 -> 1 in 0.25 steps; position bilinear across the banks;
     //     V is the (shared) centerline arc-length coordinate.
     int estimate = ptCount * 4 * 2;
-    WeldSet weld; WeldInit(&weld, (int)sizeof(OutVtx), estimate);
+    WeldSet<OutVtx> weld; WeldInit(&weld, estimate);
 
-    auto emitIdx = [&](uint16_t v) { VecPush(idxOut, &v, 2, 2); };
+    auto emitIdx = [&](uint16_t v) { VecPush(idxOut, v, 2); };
 
     for (int i = 0; i + 1 < ptCount; ++i) {
         V2 p0 = bankL[i], p1 = bankL[i + 1];
@@ -333,9 +339,7 @@ void fb00_BuildBody(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
     }
 
     // Move the welded vertex set into vtxOut (transfer ownership of the buffer).
-    vtxOut->data  = weld.verts.data;
-    vtxOut->count = weld.verts.count;
-    vtxOut->cap   = weld.verts.cap;
+    *vtxOut = weld.verts;
     weld.verts.data = nullptr;   // don't free below
     WeldFree(&weld);
 
@@ -358,7 +362,7 @@ inline V2    V2Norm(V2 a) { float l = V2Len(a); return (l < 1e-8f) ? V2{ 0.0f, 0
 void V2Push(V2List* L, V2 v) {
     if (L->n >= L->cap) {
         int nc = L->cap ? L->cap * 2 : 128;
-        L->d = (V2*)std::realloc(L->d, (size_t)nc * sizeof(V2));
+        L->d = (V2*)std::realloc(L->d, (size_t)nc * sizeof(V2));   // LEFT: GAME-c bank scratch (std::realloc, as before B.4)
         L->cap = nc;
     }
     L->d[L->n++] = v;
@@ -404,23 +408,22 @@ void ResampleRange(const V2* bank, int s, int e, int count, V2* out) {
     }
 }
 
-void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
-    uint8_t* h = (uint8_t*)hf;
-    uint8_t* recBase = *(uint8_t**)(h + 0x18);
+void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>* vtxOut, RawArray<uint16_t>* idxOut) {
+    const RawArray<TerrainPathPoint>* recBase = hf->paths._data;
     if (!recBase) return;
-    uint8_t* rec = recBase + (size_t)bodyIdx * 0x10;
-    const uint8_t* cl = *(const uint8_t**)(rec + 0x00);
-    int ptCount = *(const int32_t*)(rec + 0x08);
+    const RawArray<TerrainPathPoint>& rec = recBase[bodyIdx];
+    const TerrainPathPoint* cl = rec.data;
+    int ptCount = rec.size;
     if (!cl || ptCount < 3) return;   // need >=3 pts for an edge pair (fan); <3 -> caller falls back
 
-    auto CLx = [&](int i) { return ((const float*)(cl + (size_t)i * 0x1c))[0]; };
-    auto CLy = [&](int i) { return ((const float*)(cl + (size_t)i * 0x1c))[1]; };
+    auto CLx = [&](int i) { return cl[i].x; };
+    auto CLy = [&](int i) { return cl[i].y; };
     // radius = centerline[0].halfWidth(+0x14) + 2.0   (fb00: cl[0].halfWidth + DAT_140172174)
-    float radius = (((const float*)cl)[5] + kRadMargin);
+    float radius = (cl[0].outerRadius + kRadMargin);
 
     // --- Build edge records (shifted endpoints +0.5x / -0.5y, DAT_140172114=0.5). ---
     int ne = ptCount - 1;
-    Edge* edges = (Edge*)std::malloc((size_t)ne * sizeof(Edge));
+    Edge* edges = (Edge*)std::malloc((size_t)ne * sizeof(Edge));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
     if (!edges) return;
     for (int i = 0; i < ne; ++i) {
         V2 p0 = { CLx(i) + 0.5f,     CLy(i) - 0.5f };
@@ -480,8 +483,8 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
     }
 
     // --- Matching (sub_bdf0): nearest bank point to each RAW centerline node. ---
-    int* lm = (int*)std::malloc((size_t)ptCount * sizeof(int));
-    int* rm = (int*)std::malloc((size_t)ptCount * sizeof(int));
+    int* lm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+    int* rm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: GAME-c body scratch
     if (!lm || !rm) {
         std::free(edges); std::free(leftBank.d); std::free(rightBank.d);
         std::free(lm); std::free(rm);
@@ -529,8 +532,8 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
         if (cnt < 1) cnt = 1;
         if (sumL / (float)cnt < kMinArcGate || sumR / (float)cnt < kMinArcGate) continue;  // degenerate gate
 
-        V2* Lr = (V2*)std::malloc((size_t)cnt * sizeof(V2));
-        V2* Rr = (V2*)std::malloc((size_t)cnt * sizeof(V2));
+        V2* Lr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+        V2* Rr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: GAME-c body scratch
         if (!Lr || !Rr) { std::free(Lr); std::free(Rr); break; }
         ResampleRange(leftBank.d, prevL, cL, cnt, Lr);
         ResampleRange(rightBank.d, prevR, cR, cnt, Rr);
@@ -540,7 +543,7 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
             prevMid = mid; haveMid = true;
             float v = gMidArc / kVDenom + kVOffset;   // V = cumulative flow arc / 32 - 16
             V2Push(&gL, Lr[j]); V2Push(&gR, Rr[j]);
-            if (gN >= gCap) { gCap = gCap ? gCap * 2 : 256; gV = (float*)std::realloc(gV, (size_t)gCap * sizeof(float)); }
+            if (gN >= gCap) { gCap = gCap ? gCap * 2 : 256; gV = (float*)std::realloc(gV, (size_t)gCap * sizeof(float)); }   // LEFT: GAME-c body scratch
             gV[gN++] = v;
         }
         std::free(Lr); std::free(Rr);
@@ -549,8 +552,8 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
 
     // --- Stage C (faithful): 4-column strip between gL/gR, shared streamwise V. ---
     int estimate = gN * 4 * 2; if (estimate < 16) estimate = 16;
-    WeldSet weld; WeldInit(&weld, (int)sizeof(OutVtx), estimate);
-    auto emitIdx = [&](uint16_t v) { VecPush(idxOut, &v, 2, 2); };
+    WeldSet<OutVtx> weld; WeldInit(&weld, estimate);
+    auto emitIdx = [&](uint16_t v) { VecPush(idxOut, v, 2); };
     for (int i = 0; i + 1 < gN; ++i) {
         V2 p0 = gL.d[i], p1 = gL.d[i + 1];
         float v0 = gV[i], v1 = gV[i + 1];
@@ -573,9 +576,7 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
         }
     }
 
-    vtxOut->data  = weld.verts.data;
-    vtxOut->count = weld.verts.count;
-    vtxOut->cap   = weld.verts.cap;
+    *vtxOut = weld.verts;
     weld.verts.data = nullptr;
     WeldFree(&weld);
 
@@ -585,60 +586,61 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
     std::free(gL.d); std::free(gR.d); std::free(gV);
 }
 
+} // anonymous namespace
+
 // ============================================================
 // b260 PHASE 1 — contour water bodies.
 // ============================================================
-void b260_Phase1(uint8_t* geom, uint8_t* hf) {
-    Vec* rangeA = (Vec*)(geom + 0x1c0);
-    Vec* vtxAcc = (Vec*)(geom + 0x1a0);   // 16-byte GPU verts
-    Vec* idxAcc = (Vec*)(geom + 0x1b0);   // uint16 indices
+void WorldGeometry::BuildWaterBodies(const TerrainHeightfield* hf) {
+    RawArray<GeometryDrawRange>* rangeA = &ContourRangesA();
+    RawArray<TerrainVertex>*    vtxAcc = &ContourVertices();   // 16-byte GPU verts
+    RawArray<uint16_t>*       idxAcc = &ContourIndices();    // uint16 indices
 
-    int bodyCount = *(int32_t*)(hf + 0x20);
+    int bodyCount = hf->paths._size;
     RangeResize(rangeA, bodyCount);       // sub_efd0; sets rangeA.count (geom+0x1c8)
 
     // Stage A: faithful dense rounded-bank builder. It falls back to the older
     // approximation for degenerate (<3-point) bodies that produce no geometry.
 
     for (int body = 0; body < bodyCount; ++body) {
-        Vec vtxOut{ nullptr, 0, 0 };
-        Vec idxOut{ nullptr, 0, 0 };
+        RawArray<OutVtx>   vtxOut{ nullptr, 0, 0 };
+        RawArray<uint16_t> idxOut{ nullptr, 0, 0 };
         {
             fb00_BuildBody_Faithful(hf, body, &vtxOut, &idxOut);
-            if (vtxOut.count == 0) {   // degenerate body -> approximation fallback
+            if (vtxOut.size == 0) {   // degenerate body -> approximation fallback
                 if (vtxOut.data) System::MemoryAllocator::MemFree(vtxOut.data);
                 if (idxOut.data) System::MemoryAllocator::MemFree(idxOut.data);
-                vtxOut = Vec{ nullptr, 0, 0 };
-                idxOut = Vec{ nullptr, 0, 0 };
+                vtxOut = RawArray<OutVtx>{ nullptr, 0, 0 };
+                idxOut = RawArray<uint16_t>{ nullptr, 0, 0 };
                 fb00_BuildBody(hf, body, &vtxOut, &idxOut);
             }
         }
 
         // Range entry: {idxStart, vtxStart, vtxCount, idxCount}.
-        int32_t* re = (int32_t*)((uint8_t*)rangeA->data + (size_t)body * 0x10);
-        re[0] = idxAcc->count;     // idxStart (geom+0x1b8)
-        re[1] = vtxAcc->count;     // vtxStart (geom+0x1a8)
-        re[2] = vtxOut.count;      // vtxCount
-        re[3] = idxOut.count;      // idxCount
+        GeometryDrawRange& re = rangeA->data[body];
+        re.values[0]  = idxAcc->size;      // idxStart (geom+0x1b8)
+        re.values[1] = vtxAcc->size;      // vtxStart (geom+0x1a8)
+        re.values[2] = vtxOut.size;       // vtxCount
+        re.values[3]  = idxOut.size;       // idxCount
 
         // Pack + append each fb00 vertex into the GPU staging buffer.
         int zBody = (int)(kZBaseP1 - (float)body);   // z = -192 - bodyIdx
-        const OutVtx* ov = (const OutVtx*)vtxOut.data;
-        for (int i = 0; i < vtxOut.count; ++i) {
-            int16_t gv[8];
-            gv[0] = (int16_t)(int)(ov[i].posX * kPosScale);
-            gv[1] = (int16_t)(int)(ov[i].posY * kPosScale);
-            gv[2] = (int16_t)zBody;
-            gv[3] = 0;
-            gv[4] = (int16_t)(int)(ov[i].uvU * kUVScale);
-            gv[5] = (int16_t)(int)(ov[i].uvV * kUVScale);
-            uint8_t* c = (uint8_t*)&gv[6];
-            c[0] = 0x7f; c[1] = 0x7f; c[2] = 0xff; c[3] = 0x00;
-            VecPush(vtxAcc, gv, 0x10, 2);
+        const OutVtx* ov = vtxOut.data;
+        for (int i = 0; i < vtxOut.size; ++i) {
+            TerrainVertex gv;
+            gv.position[0] = (int16_t)(int)(ov[i].posX * kPosScale);
+            gv.position[1] = (int16_t)(int)(ov[i].posY * kPosScale);
+            gv.position[2] = (int16_t)zBody;
+            gv.position[3] = 0;
+            gv.uv[0] = (int16_t)(int)(ov[i].uvU * kUVScale);
+            gv.uv[1] = (int16_t)(int)(ov[i].uvV * kUVScale);
+            gv.normal[0] = 0x7f; gv.normal[1] = 0x7f; gv.normal[2] = 0xff; gv.normal[3] = 0x00;
+            VecPush(vtxAcc, gv, 2);
         }
         // Append the body-local indices verbatim (GPU adds baseVertex=vtxStart).
-        const uint16_t* oi = (const uint16_t*)idxOut.data;
-        for (int i = 0; i < idxOut.count; ++i)
-            VecPush(idxAcc, &oi[i], 2, 2);
+        const uint16_t* oi = idxOut.data;
+        for (int i = 0; i < idxOut.size; ++i)
+            VecPush(idxAcc, oi[i], 2);
 
         if (vtxOut.data) System::MemoryAllocator::MemFree(vtxOut.data);
         if (idxOut.data) System::MemoryAllocator::MemFree(idxOut.data);
@@ -646,24 +648,24 @@ void b260_Phase1(uint8_t* geom, uint8_t* hf) {
 }
 
 // ============================================================
-// b260 PHASE 2 — heightmap shore ring around the features at hf+0x48.
+// b260 PHASE 2 — heightmap shore ring around the heightfield's water features.
 // Faithful port: for each feature, walk the bounding box [center +/- (radius+2)],
 // emit a heightmap-conformal quad per cell that straddles the water boundary
 // (some corner inside radius AND some corner underwater <= -0.75). Per-vertex
 // planar UV (= pos.xy * 48) and an AO byte (= weight * 255). Welded via f3e0.
 // ============================================================
-void b260_Phase2(uint8_t* geom, uint8_t* hf) {
-    Vec* rangeB = (Vec*)(geom + 0x1d0);
-    Vec* vtxAcc = (Vec*)(geom + 0x1a0);
-    Vec* idxAcc = (Vec*)(geom + 0x1b0);
+void WorldGeometry::BuildWaterShores(const TerrainHeightfield* hf) {
+    RawArray<GeometryDrawRange>* rangeB = &ContourRangesB();
+    RawArray<TerrainVertex>*    vtxAcc = &ContourVertices();
+    RawArray<uint16_t>*       idxAcc = &ContourIndices();
 
-    int featureCount = *(int32_t*)(hf + 0x50);
+    int featureCount = hf->waterFeatures._size;
     RangeResize(rangeB, featureCount);
 
-    int   N        = *(int32_t*)(geom + 0xd0);   // heightmap edge
-    int16_t* hmap  = *(int16_t**)(geom + 0xd8);  // int16 heightmap
-    int   halfGrid = *(int32_t*)(geom + 0xc0) >> 1;
-    uint8_t* featBase = *(uint8_t**)(hf + 0x48);
+    int   N        = _fieldD0;           // heightmap edge
+    const int16_t* hmap = _arrayD8;      // int16 heightmap
+    int   halfGrid = _gridSize >> 1;
+    const TerrainStamp* featBase = hf->waterFeatures._data;
 
 
     if (!hmap || N <= 0) return;
@@ -676,25 +678,25 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
     };
 
     for (int f = 0; f < featureCount; ++f) {
-        const float* feat = (const float*)(featBase + (size_t)f * 0xc);
-        float cx = feat[0], cy = feat[1], radius = feat[2];
+        const TerrainStamp& feat = featBase[f];
+        float cx = feat.x, cy = feat.y, radius = feat.radius;
         float r2 = radius + kRadMargin;
 
         int xmin = (int)(cx - r2), xmax = (int)(cx + r2);
         int ymin = (int)(cy - r2), ymax = (int)(cy + r2);
 
-        int32_t* re = (int32_t*)((uint8_t*)rangeB->data + (size_t)f * 0x10);
-        re[0] = idxAcc->count;     // idxStart
-        re[1] = vtxAcc->count;     // vtxStart
-        re[2] = 0;                 // vtxCount  (filled after)
-        re[3] = 0;                 // idxCount  (filled after)
+        GeometryDrawRange& re = rangeB->data[f];
+        re.values[0]  = idxAcc->size;     // idxStart
+        re.values[1] = vtxAcc->size;     // vtxStart
+        re.values[2] = 0;                // vtxCount  (filled after)
+        re.values[3]  = 0;                // idxCount  (filled after)
 
         int zFeat = (int)((float)f - kZBaseP2);   // z = featureIdx - 191
 
         // Per-feature local weld set (matches the b260 per-feature local_1c8).
         int est = (xmax - xmin + 1) * (ymax - ymin + 1) * 4;
         if (est < 16) est = 16;
-        WeldSet weld; WeldInit(&weld, 0x10, est);
+        WeldSet<TerrainVertex> weld; WeldInit(&weld, est);
         int idxAdded = 0;
 
         for (int row = ymin; row < ymax; ++row) {
@@ -741,71 +743,61 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
                 // Weld the 4 corners, then emit two triangles (i0,i1,i2),(i0,i2,i3).
                 uint16_t ci[4];
                 for (int k = 0; k < 4; ++k) {
-                    int16_t gv[8];
-                    gv[0] = (int16_t)(int)(corner[k][0] * kPosScale);
-                    gv[1] = (int16_t)(int)(corner[k][1] * kPosScale);
-                    gv[2] = (int16_t)zFeat;
-                    gv[3] = 0;
-                    gv[4] = (int16_t)(int)(corner[k][0] * kPosScale);  // planar UV = pos.xy
-                    gv[5] = (int16_t)(int)(corner[k][1] * kPosScale);
-                    uint8_t* c = (uint8_t*)&gv[6];
-                    c[0] = 0x7f; c[1] = 0x7f;
-                    c[2] = (uint8_t)(int64_t)(weight[k] * kAOScale);
-                    c[3] = 0x00;
-                    ci[k] = WeldAdd(&weld, gv);
+                    TerrainVertex gv;
+                    gv.position[0] = (int16_t)(int)(corner[k][0] * kPosScale);
+                    gv.position[1] = (int16_t)(int)(corner[k][1] * kPosScale);
+                    gv.position[2] = (int16_t)zFeat;
+                    gv.position[3] = 0;
+                    gv.uv[0] = (int16_t)(int)(corner[k][0] * kPosScale);  // planar UV = pos.xy
+                    gv.uv[1] = (int16_t)(int)(corner[k][1] * kPosScale);
+                    gv.normal[0] = 0x7f; gv.normal[1] = 0x7f;
+                    gv.normal[2] = (uint8_t)(int64_t)(weight[k] * kAOScale);
+                    gv.normal[3] = 0x00;
+                    ci[k] = WeldAdd(&weld, &gv);
                 }
                 uint16_t quad[6] = { ci[0], ci[1], ci[2], ci[0], ci[2], ci[3] };
-                for (int k = 0; k < 6; ++k) VecPush(idxAcc, &quad[k], 2, 2);
+                for (int k = 0; k < 6; ++k) VecPush(idxAcc, quad[k], 2);
                 idxAdded += 6;
             }
         }
 
         // Bulk-append the welded verts to the GPU staging buffer.
-        const uint8_t* wv = (const uint8_t*)weld.verts.data;
-        for (int i = 0; i < weld.verts.count; ++i)
-            VecPush(vtxAcc, wv + (size_t)i * 0x10, 0x10, 2);
+        const TerrainVertex* wv = weld.verts.data;
+        for (int i = 0; i < weld.verts.size; ++i)
+            VecPush(vtxAcc, wv[i], 2);
 
-        re[2] = weld.verts.count;
-        re[3] = idxAdded;
+        re.values[2] = weld.verts.size;
+        re.values[3]  = idxAdded;
 
         WeldFree(&weld);
     }
 }
 
-} // anonymous namespace
-
 // ============================================================
-// Public entry — build the contour water mesh into the WorldGeometry object.
-//   self = WorldGeometry (geom, the b260 param_1; VB+0x160 / IB+0x180)
-//   hf   = heightfield TradeData (the b260 param_2; centerlines at +0x18)
-// Mirrors TradeWork_impl_b260(param_1=self, param_2=hf).
+// b260 (0x1400ab260): build the contour water mesh into this WorldGeometry from
+// the heightfield (the feature polylines and the water features), then create
+// the water VB (+0x160) / IB (+0x180).
 // ============================================================
-extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf) {
-    if (!self || !hf) return;
+void WorldGeometry::BuildWaterMesh(TerrainHeightfield* hf) {
+    if (!hf) return;
     if (!System::MemoryAllocator::_singleton) {
         fprintf(stderr, "[water_contour] MemAlloc/Free unavailable — skipping\n");
         fflush(stderr);
         return;
     }
-    uint8_t* geom = (uint8_t*)self;
-    uint8_t* h    = (uint8_t*)hf;
 
-    b260_Phase1(geom, h);
-    b260_Phase2(geom, h);   // shore rings around the hf+0x48 features
+    BuildWaterBodies(hf);
+    BuildWaterShores(hf);   // shore rings around the hf->waterFeatures
 
     // Finalize the GPU buffers (b260 tail). IndexBuffer first, then VertexBuffer.
-    Vec* vtxAcc = (Vec*)(geom + 0x1a0);
-    Vec* idxAcc = (Vec*)(geom + 0x1b0);
-    // B.3.5 bridges — the two `if (door)` readiness guards are gone with the doors.
-    reinterpret_cast<Video::IndexBuffer*>(geom + 0x180)
-        ->Create(idxAcc->count * 2, false, idxAcc->data);   // B.3.5 bridge
-    reinterpret_cast<Video::VertexBuffer*>(geom + 0x160)
-        ->Create(vtxAcc->count << 4, false, vtxAcc->data);  // B.3.5 bridge
+    _waterIndexBuffer.Create(ContourIndices().size * 2, false, ContourIndices().data);
+    _waterVertexBuffer.Create(ContourVertices().size << 4, false, ContourVertices().data);
 
     fprintf(stderr, "[water_contour] built: bodies(+0x1c8)=%d featRanges(+0x1d8)=%d "
             "verts(+0x1a8)=%d idx(+0x1b8)=%d VB=%p IB=%p\n",
-            *(int32_t*)(geom + 0x1c8), *(int32_t*)(geom + 0x1d8),
-            vtxAcc->count, idxAcc->count,
-            *(void**)(geom + 0x160 + 8), *(void**)(geom + 0x180 + 8));
+            ContourRangesA().size, ContourRangesB().size,
+            ContourVertices().size, ContourIndices().size,
+            static_cast<void*>(_waterVertexBuffer.platformData),
+            static_cast<void*>(_waterIndexBuffer.platformData));
     fflush(stderr);
 }

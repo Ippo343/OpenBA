@@ -52,6 +52,7 @@
 //
 // All offsets verified against live Ghidra disassembly of Application-x64.exe.
 
+#include "Game/TerrainHeightfield.h"   // TerrainHeightfield, the stage declarations
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "collection/Collection.h"
@@ -570,7 +571,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
 //   stamp stages (e910/ec50) read to CARVE round lake pits (maskC MAX, exp 2.25,
 //   strength 2.0, SUBTRACTED). Carve radius = the "radius" fields above.
 // ============================================================
-extern "C" void wg_f390_ranges(void* hf) {
+void wg_f390_ranges(TerrainHeightfield* hf) {
     void* rng = (uint8_t*)hf + HF_RANDOM;
 
     int32_t* sizeRow = *(int32_t**)((uint8_t*)hf + HF_SIZEROW);
@@ -651,7 +652,7 @@ extern "C" void wg_f390_ranges(void* hf) {
 //   later carved DOWN toward sea level by the river/stamp stages (maskA, MIN
 //   mask) — secondary channels/valleys branching off the main paths.
 // ============================================================
-extern "C" void wg_f390_paths(void* hf) {
+void wg_f390_paths(TerrainHeightfield* hf) {
     int32_t* p = (int32_t*)hf;
 
     int32_t* sizeRow = *(int32_t**)((uint8_t*)hf + HF_SIZEROW);

@@ -36,6 +36,13 @@
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/WeatherSimulation.h"
+#include "Game/WeatherParticleGeometry.h"
+#include "Game/Weather.h"
+#include "Game/Calendar.h"
+#include "Game/GameSettings.h"
+#include "Component/EnvironmentDescription.h"
+#include "graphics/SunLight.h"
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -48,16 +55,11 @@
 // ============================================================
 namespace {
 
-struct EnvKeyframe {
-    uint32_t ambientColor;   // 0xAARRGGBB (dim)   -> SunLight ambient (col2)
-    uint32_t lightColor;     // 0xAARRGGBB (bright) -> SunLight diffuse (col1)
-    uint32_t fogColor;       // 0xAARRGGBB
-    float    fogNear;
-    float    fogFar;
-    float    fogMax;         // unused by SetFog here, kept for fidelity
-    float    sunHeading;     // degrees (constant 120)
-    float    sunPitch;       // degrees (elevation, 48..65)
-};
+// One keyframe is EnvironmentDescription's month record (0x20): skyColor = the
+// ambient colour (SunLight col2), groundColor = the light colour (col1), fogColor,
+// fogStart / fogEnd, sunIntensity (fogMax; unused by SetFog here), sunAngle = the
+// sun heading (degrees, constant 120), sunSpread = the sun pitch (48..65).
+using EnvKeyframe = EnvironmentDescription::WeatherEntry;
 
 // 12 keyframes spanning one in-game day (300 s each, 3600 s total).
 constexpr EnvKeyframe kKeyframes[12] = {
@@ -113,16 +115,16 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // Caller batch CB6: `self` is the GameUpdateLoop (its one caller is Draw's
     // `this`); its fields are read by name.
     GameUpdateLoop* const gul = static_cast<GameUpdateLoop*>(self);   // B.3.8 bridge
-    void* sun = gul->m_sunLight;   // +0x100
+    Graphics::SunLight* sun = gul->m_sunLight;   // +0x100
     // B.3.5: the `!fn_Graphics_SunLight_Set` term is gone with the door call;
     // the `!sun` object test is retail's and stays.
     if (!sun) return;
 
     // Game time in seconds (the sim clock). +0x128 -> Time struct, time @ +8.
     float seconds = 0.0f;
-    void* timeObj = gul->m_dayCounter;   // +0x128
+    Calendar* timeObj = gul->m_dayCounter;   // +0x128
     if (timeObj)
-        seconds = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
+        seconds = timeObj->yearTime.AsSeconds();
 
     // Phase within the day -> keyframe index + interpolation fraction.
     float dayT = seconds - kDayLength * floorf(seconds / kDayLength);  // wrap into [0,dayLen)
@@ -142,27 +144,26 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // retail; fall back to the baked-in kKeyframes only if Environment.rsc failed
     // to load (envRes null). EnvKeyframe is byte-compatible with the envRes entry
     // layout (ambient@0, light@4, fog@8, fogNear@c, fogFar@10, fogMax@14,
-    // heading@18, pitch@1c), so the table is a direct reinterpret.
+    // heading@18, pitch@1c): it IS EnvironmentDescription::WeatherEntry.
     const EnvKeyframe* table = kKeyframes;
-    void* wsim = gul->m_weather;   // weather sim (gameWorld+0x130)
+    WeatherSimulation* wsim = gul->m_weather;   // weather sim (gameWorld+0x130)
     if (wsim) {
-        void* envRes = *reinterpret_cast<void**>(wsim);  // *(weatherSim+0) == envRes
+        EnvironmentDescription* envRes = wsim->environment;  // *(weatherSim+0) == envRes
         if (envRes)
-            table = reinterpret_cast<const EnvKeyframe*>(
-                reinterpret_cast<uint8_t*>(envRes) + 0x38);
+            table = envRes->_months;   // +0x38
     }
     const EnvKeyframe& a = table[kf];
     const EnvKeyframe& b = table[kfNext];
 
     // Base day-cycle look (interpolated keyframe): sun angle + light/ambient/fog.
-    float heading = Lerp(a.sunHeading, b.sunHeading, frac);
-    float pitch   = Lerp(a.sunPitch,   b.sunPitch,   frac);
+    float heading = Lerp(a.sunAngle,  b.sunAngle,  frac);
+    float pitch   = Lerp(a.sunSpread, b.sunSpread, frac);
     float lightCol[4], ambientCol[4], fogCol[4];
-    LerpColor(a.lightColor,   b.lightColor,   frac, lightCol);    // diffuse (col1)
-    LerpColor(a.ambientColor, b.ambientColor, frac, ambientCol);  // ambient (col2)
-    LerpColor(a.fogColor,     b.fogColor,     frac, fogCol);
-    float fogNear = Lerp(a.fogNear, b.fogNear, frac);
-    float fogFar  = Lerp(a.fogFar,  b.fogFar,  frac);
+    LerpColor(a.groundColor, b.groundColor, frac, lightCol);    // diffuse (col1)
+    LerpColor(a.skyColor,    b.skyColor,    frac, ambientCol);  // ambient (col2)
+    LerpColor(a.fogColor,    b.fogColor,    frac, fogCol);
+    float fogNear = Lerp(a.fogStart, b.fogStart, frac);
+    float fogFar  = Lerp(a.fogEnd,   b.fogEnd,   frac);
 
     // Active weather-effect color blend — faithful port of Weather::DrawUpdate's
     // helper_3ac0 second loop (exe 0x140093ac0). Each live rain/snow effect lerps
@@ -175,30 +176,29 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // when no effects are active, so the base look is intact.
     {
         uint8_t weatherSetting = (g_gameSettings != nullptr)
-            ? reinterpret_cast<const uint8_t*>(g_gameSettings)[0x16] : 0;
+            ? g_gameSettings->showWeather : 0;   // +0x16
         if (weatherSetting != 0 && wsim) {
-            uint8_t* ws = reinterpret_cast<uint8_t*>(wsim);
-            int cnt = *reinterpret_cast<int*>(ws + 0x58);
-            void** arr = *reinterpret_cast<void***>(ws + 0x50);
+            int cnt = wsim->effectCount;                 // +0x58
+            Graphics::Geometry** arr = wsim->effects;    // +0x50
             if (cnt > 0 && arr) {
                 for (int i = 0; i < cnt; ++i) {
-                    void* geo = arr[i];
-                    if (!geo) continue;
-                    float t = *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(geo) + 0xc0);
-                    void* desc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(geo) + 0xc8);
+                    if (!arr[i]) continue;
+                    // The effects are WeatherParticleGeometry (WeatherSimulation::SetEffectEnabled).
+                    const WeatherParticleGeometry* geo = static_cast<const WeatherParticleGeometry*>(arr[i]);
+                    float t = geo->_intensity;                 // +0xC0
+                    const Weather* desc = geo->_descriptor;    // +0xC8
                     if (!desc) continue;
-                    uint8_t* dd = reinterpret_cast<uint8_t*>(desc);
                     float dAmb[4], dLight[4], dFog[4];
-                    UnpackColor(*reinterpret_cast<uint32_t*>(dd + 0x60), dAmb);
-                    UnpackColor(*reinterpret_cast<uint32_t*>(dd + 0x64), dLight);
-                    UnpackColor(*reinterpret_cast<uint32_t*>(dd + 0x68), dFog);
+                    UnpackColor(desc->ambientColor._value, dAmb);   // +0x60
+                    UnpackColor(desc->lightColor._value, dLight);   // +0x64
+                    UnpackColor(desc->fogColor._value, dFog);       // +0x68
                     for (int k = 0; k < 4; ++k) {
                         ambientCol[k] = Lerp(ambientCol[k], dAmb[k],   t);
                         lightCol[k]   = Lerp(lightCol[k],   dLight[k], t);
                         fogCol[k]     = Lerp(fogCol[k],     dFog[k],   t);
                     }
-                    fogNear = Lerp(fogNear, *reinterpret_cast<float*>(dd + 0x6c), t);
-                    fogFar  = Lerp(fogFar,  *reinterpret_cast<float*>(dd + 0x70), t);
+                    fogNear = Lerp(fogNear, desc->fogNear, t);   // +0x6C
+                    fogFar  = Lerp(fogFar,  desc->fogFar,  t);   // +0x70
                     // heading/pitch intentionally NOT blended (retail sub_49f0
                     // param_5=0 keeps the base day-cycle sun angle during precip).
                 }
@@ -214,21 +214,19 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // Without this, GetSunCamera builds the sun shadow camera from the wrong side ->
     // shadowProjection[0].z sign inverts -> the shadow depth comparison always passes
     // -> NO cast shadows (ground gets ambient-only). Negate Z to match retail.
-    float dir[3] = {0.0f, 0.0f, 1.0f};
-    *reinterpret_cast<Math::Vector3*>(dir) = Math::Vector3::FromYawPitch(heading, pitch);
-    dir[2] = -dir[2];
+    Math::Vector3 dir = Math::Vector3::FromYawPitch(heading, pitch);
+    dir.z = -dir.z;
 
-
-    // B.3.5 bridge — ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
-    reinterpret_cast<Graphics::SunLight*>(sun)->Set(
-        *reinterpret_cast<const Math::Vector3*>(dir),
-        *reinterpret_cast<const Math::Vector4*>(lightCol),
-        *reinterpret_cast<const Math::Vector4*>(ambientCol));   // B.3.5 bridge
+    // ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
+    sun->Set(dir,
+             Math::Vector4(lightCol[0], lightCol[1], lightCol[2], lightCol[3]),
+             Math::Vector4(ambientCol[0], ambientCol[1], ambientCol[2], ambientCol[3]));
 
     // Fog (day-cycle distances + color, effect-blended above).
     if (ctx) {
-        // B.3.5 bridge — ?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z.
+        // ?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z.
+        // LEFT: ctx is the caller's void* (gameupdateloop.cpp declares this entry untyped).
         reinterpret_cast<Video::Context*>(ctx)->SetFog(
-            fogNear, fogFar, *reinterpret_cast<const Math::Vector4*>(fogCol));   // B.3.5 bridge
+            fogNear, fogFar, Math::Vector4(fogCol[0], fogCol[1], fogCol[2], fogCol[3]));
     }
 }

@@ -38,6 +38,7 @@
 // ADD-ONLY: this file does not modify worldgen.cpp. The orchestrator wires these
 // three extern "C" entry points into the kFullPipeline branch separately.
 
+#include "Game/TerrainHeightfield.h"   // TerrainHeightfield, the stage declarations
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
@@ -54,20 +55,10 @@
 // ----------------------------------------------------------------------------
 extern "C" void Reimpl_Array_Resize_Stride04(void* hdr, int n);   // sub_3a00 (float arrays)
 
-// ----------------------------------------------------------------------------
-// Heightfield field offsets (int* index -> byte offset). Verified §1.1.
-// ----------------------------------------------------------------------------
-static constexpr int HF_GRIDSIZE   = 0x00;   // param_1[0]
-static constexpr int HF_HEIGHTMAP  = 0x08;   // param_1[2]  float* data
-static constexpr int HF_HM_COUNT   = 0x10;   // param_1[4]  cell count (dim+1)^2
-static constexpr int HF_PATCH_DATA = 0x18;   // param_1[6]
-static constexpr int HF_PATCH_CNT  = 0x20;   // param_1[8]
-static constexpr int HF_LISTC_DATA = 0x38;   // param_1[0xe]
-static constexpr int HF_LISTC_CNT  = 0x40;   // param_1[0x10]
-static constexpr int HF_RANDOM     = 0x58;   // System::Random (param_1+0x16)
-static constexpr int HF_SIZEROW    = 0xa28;  // param_1[0x28a]  int*
-
-static constexpr int SIZEROW_ERODE_ITERS = 0x24;   // sizeRow[+0x24]
+// The heightfield's fields are TerrainHeightfield's (TerrainHeightfield.h):
+//   param_1[0] gridSize, [2] heightmap.data, [4] heightmap.size, [6] / [8]
+//   paths._data / _size, [0xe] / [0x10] basinStamps._data / _size, +0x58 random,
+//   [0x28a] sizeRow (sizeRow->erosionIterations is its +0x24).
 
 // ----------------------------------------------------------------------------
 // .rdata float constants (verified via read_memory; address = raw LE dword = value)
@@ -130,10 +121,10 @@ static inline float wg_negate_bits(float v) {
 //   mode        = param_6 (0 = MIN blend, 1 = MAX blend)
 //   maskHdr     = param_7 ({float* data, ...} target mask header; *maskHdr == data ptr)
 // ============================================================================
-static void wg_eee0_radial_brush(int32_t* hf, const float* center, float cutoff,
+static void wg_eee0_radial_brush(const TerrainHeightfield* hf, const float* center, float cutoff,
                                  float falloffBase, float strength, char mode,
-                                 int64_t* maskHdr) {
-    int dim  = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);
+                                 RawArray<float>* maskHdr) {
+    int dim  = hf->gridSize;
     int edge = dim + 1;   // row stride (iVar1 = iVar9 + 1)
 
     // Step 1: grow radius until on-axis falloff >= 0.99.
@@ -151,7 +142,7 @@ static void wg_eee0_radial_brush(int32_t* hf, const float* center, float cutoff,
     int cyBase = (int)center[1] + half;    // (int)param_2[1] + half  (row)
     int span   = (int)r + 1;               // iVar10 = (int)fVar17 + 1
 
-    float* mask = (float*)(*maskHdr);
+    float* mask = maskHdr->data;
 
     // Disasm: outer var iVar15 = dy in [-span, span] (row), inner uVar13/iVar12 =
     // dx in [-span, span] (col). Distance uses (dx^2 + dy^2). The exe maps
@@ -209,29 +200,27 @@ static void wg_eee0_radial_brush(int32_t* hf, const float* center, float cutoff,
 // (max-min over a slope) shrinks; valley-floor mean is essentially unchanged.
 // => NOT the source of the ~8-unit normalization.
 // ============================================================================
-extern "C" void wg_f390_erosion(void* hfv) {
-    uint8_t* p = (uint8_t*)hfv;
-
-    int dim  = *(int32_t*)(p + HF_GRIDSIZE);    // *param_1
+void wg_f390_erosion(TerrainHeightfield* hfv) {
+    int dim  = hfv->gridSize;                   // *param_1
     int edge = dim + 1;                         // iVar19 = iVar2 + 1 (row stride)
 
-    int32_t* sizeRow = *(int32_t**)(p + HF_SIZEROW);
+    const TerrainSizeRow* sizeRow = hfv->sizeRow;
     if (!sizeRow) return;
-    int iters = *(int32_t*)((uint8_t*)sizeRow + SIZEROW_ERODE_ITERS);
+    int iters = sizeRow->erosionIterations;     // sizeRow +0x24
 
     if (iters <= 0) {
         return;
     }
 
-    void* rng = p + HF_RANDOM;
+    System::Random* rng = &hfv->random;
 
     for (int it = 0; it < iters; ++it) {
         // Start cell in [1, dim-1] (Rand(dim-1) -> [0, dim-2], +1).
-        int col = (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(dim - 1)) + 1;   // B.3.4b bridge
-        int row = (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(dim - 1)) + 1;   // B.3.4b bridge
+        int col = (int)rng->Rand((uint32_t)(dim - 1)) + 1;
+        int row = (int)rng->Rand((uint32_t)(dim - 1)) + 1;
 
         while (true) {
-            float* hm = *(float**)(p + HF_HEIGHTMAP);   // re-read base each step (matches disasm)
+            float* hm = hfv->heightmap.data;   // re-read base each step (matches disasm)
             int curIdx = row * edge + col;
             float hCur = hm[curIdx];
             if (hCur <= 0.0f) break;            // dead/sea cell — stop droplet
@@ -274,7 +263,7 @@ extern "C" void wg_f390_erosion(void* hfv) {
             float t = (hCur - bestH) * kErodeFactor;     // slope * 1/16
             if (t > kErodeMaxXfer) t = kErodeMaxXfer;    // clamp to 0.8
             hm[curIdx] = (kOne - t) * hCur + t * bestH;
-            (*(float**)(p + HF_HEIGHTMAP))[bestIdx] = (kOne - t) * bestH + t * hCur;
+            hfv->heightmap.data[bestIdx] = (kOne - t) * bestH + t * hCur;
 
             // Step to the lowest cell; stop if we didn't move (best == self),
             // or stepped onto the [0]/[dim] border ring.
@@ -322,20 +311,17 @@ extern "C" void wg_f390_erosion(void* hfv) {
 //   the mean only by the total stamped mass, NOT by a uniform field-wide offset.
 //   => ec50 is NOT the global ~8-unit lowerer; it carves localized water/feature beds.
 // ============================================================================
-extern "C" void wg_f390_carve(void* hfv) {
-    int32_t* param_1 = (int32_t*)hfv;
-    uint8_t* p = (uint8_t*)hfv;
+void wg_f390_carve(TerrainHeightfield* hfv) {
+    int cellCount = hfv->heightmap.size;    // param_1[4]
 
-    int cellCount = *(int32_t*)(p + HF_HM_COUNT);    // param_1[4]
-
-    // Two temp masks (sub_3a00 resize: {data,count,cap,pad} headers on the stack).
-    struct { void* data; int count; int cap; int pad; } mulHdr = {nullptr, 0, 0, 0};
-    struct { void* data; int count; int cap; int pad; } subHdr = {nullptr, 0, 0, 0};
+    // Two temp masks (sub_3a00 resize: {data,count,cap} headers on the stack).
+    RawArray<float> mulHdr = {nullptr, 0, 0};
+    RawArray<float> subHdr = {nullptr, 0, 0};
     Reimpl_Array_Resize_Stride04(&mulHdr, cellCount);   // local_a0 (MIN mask)
     Reimpl_Array_Resize_Stride04(&subHdr, cellCount);   // local_90 (MAX mask)
 
-    float* mulMask = (float*)mulHdr.data;
-    float* subMask = (float*)subHdr.data;
+    float* mulMask = mulHdr.data;
+    float* subMask = subHdr.data;
     if (mulMask && subMask) {
         for (int i = 0; i < cellCount; ++i) {
             mulMask[i] = kOne;   // init 1.0 (0x3f800000 in disasm)
@@ -343,53 +329,53 @@ extern "C" void wg_f390_carve(void* hfv) {
         }
     }
 
-    int64_t* mulMaskHdr = (int64_t*)&mulHdr;   // *hdr == data ptr (eee0 reads *param_7)
-    int64_t* subMaskHdr = (int64_t*)&subHdr;
+    RawArray<float>* mulMaskHdr = &mulHdr;   // eee0 reads the data pointer (*param_7)
+    RawArray<float>* subMaskHdr = &subHdr;
 
     // Pass A — patch groups (0x1C-stride records).
-    int groupCount = *(int32_t*)(p + HF_PATCH_CNT);    // param_1[8]
+    int groupCount = hfv->paths._size;    // param_1[8]
     if (groupCount > 0) {
-        uint8_t* groupBase = *(uint8_t**)(p + HF_PATCH_DATA);   // param_1[6]
+        RawArray<TerrainPathPoint>* groupBase = hfv->paths._data;   // param_1[6]
         for (int g = 0; g < groupCount; ++g) {
-            // Each group elem (16B) = {void* recs, int count, ...} at groupBase + g*0x10.
-            uint8_t* grp  = groupBase + (int64_t)g * 0x10;
-            int      recN = *(int32_t*)(grp + 8);
-            uint8_t* recs = *(uint8_t**)(grp + 0);
+            // Each group elem (16B) = {recs, count, ...}.
+            RawArray<TerrainPathPoint>* grp = &groupBase[g];
+            int recN = grp->size;
+            TerrainPathPoint* recs = grp->data;
             for (int r = 0; r < recN; ++r) {
-                uint8_t* rec = recs + (int64_t)r * 0x1c;
+                TerrainPathPoint* rec = &recs[r];   // stride 0x1c
                 float center[2];
-                center[0] = *(float*)(rec + 0);
-                center[1] = *(float*)(rec + 4);
-                float a = *(float*)(rec + 0x08);   // pass-2 strength
-                float b = *(float*)(rec + 0x0c);   // pass-1 cutoff (inner radius)
-                float c = *(float*)(rec + 0x10);   // pass-1 falloff base
-                float d = *(float*)(rec + 0x14);   // pass-2 cutoff (outer radius)
-                float e = *(float*)(rec + 0x18);   // pass-2 falloff base
+                center[0] = rec->x;
+                center[1] = rec->y;
+                float a = rec->strength;       // +0x08 pass-2 strength
+                float b = rec->innerRadius;    // +0x0c pass-1 cutoff (inner radius)
+                float c = rec->innerFalloff;   // +0x10 pass-1 falloff base
+                float d = rec->outerRadius;    // +0x14 pass-2 cutoff (outer radius)
+                float e = rec->outerFalloff;   // +0x18 pass-2 falloff base
                 // MIN into mulMask: eee0(center, cutoff=b, base=c, strength=1.0, mode 0)
-                wg_eee0_radial_brush(param_1, center, b, c, kOne, 0, mulMaskHdr);
+                wg_eee0_radial_brush(hfv, center, b, c, kOne, 0, mulMaskHdr);
                 // MAX into subMask: eee0(center, cutoff=d, base=e, strength=a, mode 1)
-                wg_eee0_radial_brush(param_1, center, d, e, a, 1, subMaskHdr);
+                wg_eee0_radial_brush(hfv, center, d, e, a, 1, subMaskHdr);
             }
         }
     }
 
     // Pass B — listC points (0xC-stride {pt[2], radius}). MAX into subMask.
-    int listcCount = *(int32_t*)(p + HF_LISTC_CNT);    // param_1[0x10]
+    int listcCount = hfv->basinStamps._size;    // param_1[0x10]
     if (listcCount > 0) {
-        uint8_t* base = *(uint8_t**)(p + HF_LISTC_DATA);   // param_1[0xe]
+        TerrainStamp* base = hfv->basinStamps._data;   // param_1[0xe]
         for (int i = 0; i < listcCount; ++i) {
-            uint8_t* rec = base + (int64_t)i * 0xc;
+            TerrainStamp* rec = &base[i];   // stride 0xc
             float center[2];
-            center[0] = *(float*)(rec + 0);
-            center[1] = *(float*)(rec + 4);
-            float radius = *(float*)(rec + 8);
+            center[0] = rec->x;
+            center[1] = rec->y;
+            float radius = rec->radius;
             // eee0(center, cutoff=radius, base=2.0, strength=2.25, mode 1 -> subMask)
-            wg_eee0_radial_brush(param_1, center, radius, kListCExp, kListCStrength, 1, subMaskHdr);
+            wg_eee0_radial_brush(hfv, center, radius, kListCExp, kListCStrength, 1, subMaskHdr);
         }
     }
 
     // Finalize carve: h[i] = mulMask[i] * h[i] - subMask[i].
-    float* hm = *(float**)(p + HF_HEIGHTMAP);          // param_1[2]
+    float* hm = hfv->heightmap.data;          // param_1[2]
     if (hm && mulMask && subMask) {
         for (int i = 0; i < cellCount; ++i) {
             hm[i] = mulMask[i] * hm[i] - subMask[i];
@@ -437,19 +423,17 @@ extern "C" void wg_f390_carve(void* hfv) {
 // Running twice doubles the diffusion but not any bias.
 // => smoothing is NOT the source of the ~8-unit global lowering.
 // ============================================================================
-extern "C" void wg_f390_smooth(void* hfv) {
-    uint8_t* p = (uint8_t*)hfv;
-
-    int cellCount = *(int32_t*)(p + HF_HM_COUNT);    // param_1[4]
+void wg_f390_smooth(TerrainHeightfield* hfv) {
+    int cellCount = hfv->heightmap.size;    // param_1[4]
 
     // Temp output buffer (sub_3a00).
-    struct { void* data; int count; int cap; int pad; } tmpHdr = {nullptr, 0, 0, 0};
+    RawArray<float> tmpHdr = {nullptr, 0, 0};
     Reimpl_Array_Resize_Stride04(&tmpHdr, cellCount);
-    float* tmp = (float*)tmpHdr.data;
+    float* tmp = tmpHdr.data;
 
-    int dim  = *(int32_t*)(p + HF_GRIDSIZE);   // *param_1
+    int dim  = hfv->gridSize;                  // *param_1
     int edge = dim + 1;                        // iVar3 = iVar6 + 1 (row stride)
-    float* hm = *(float**)(p + HF_HEIGHTMAP);  // *(longlong*)(param_1+2)
+    float* hm = hfv->heightmap.data;           // *(longlong*)(param_1+2)
 
     auto clamp = [&](int v) { return v < 0 ? 0 : (v > dim ? dim : v); };
 
