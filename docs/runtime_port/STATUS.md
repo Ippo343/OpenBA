@@ -20,15 +20,20 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **B.4 (THE CAST METRIC) IN PROGRESS — paused 2026-09-29.** Scope set by the user: the dangerous
-  casts go completely (any spelling of a read by offset or of a `void*` / integer receiver
-  reinterpreted as a class), only safe casts stay; the differences from retail found on the way are a
-  separate task (`docs/known_port_issues.md` 13, 14). Metric (`endgame_b/b4_session/castmetric.py`, every
-  spelling summed): **46,226 to remove at block 0 -> 17,621** at `af21c719`; 31 gated merges, 0 problems;
-  invariants unchanged. First pass merged: W0, T, runtime UI / IO / Graphics / Video, Component a-f,
-  Dialog a-e, Work a-c, Game a, Action a, runtime Engine. Nothing is running or half merged. Not
-  started: ACT-b, GAME-b, GAME-c, PLAYER, TUT, R-CORE, STANDALONE, tests; then the second pass, the
-  closing wave (forwarders), the audit and the close. **How to resume: `endgame_b/NEXT_SESSION.md`.**
+- **B.4 (THE CAST METRIC) IN PROGRESS — FIRST PASS DONE 2026-10-02, stopped there by the user.** Scope
+  set by the user: the dangerous casts go completely (any spelling of a read by offset or of a `void*` /
+  integer receiver reinterpreted as a class), only safe casts stay; the differences from retail found on
+  the way are a separate task (`docs/known_port_issues.md` 13, 14, rows to 124). Metric
+  (`endgame_b/b4_session/castmetric.py`, every spelling summed): **46,226 to remove at block 0 -> 8,950**
+  at `6a3ccdca` (81% removed); tests row 813 -> 796; 44 gated merges, 0 problems; invariants unchanged
+  (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, resave golden, unit 918 / 0). Every block
+  of the file map is merged (W0, T, the six runtime blocks, Component a-f, Dialog a-e, Work a-c, Game a-c,
+  Action a-b, Player, Tutorial / Goal, Standalone, Tests); nothing is running or half merged. What is left
+  is cross-module: casts waiting on a header, signature or raw-storage member another file owns, plus 478
+  `B4 FORWARD` forwarder lines. **Next: the second pass, cut by blocker from a fresh inventory, then the
+  closing wave, the audit and the close — `endgame_b/NEXT_SESSION.md`.** Quiet-machine `sa-stress` at the
+  tip: update 1.68 ms/frame, p95 2.15 (base 1.92 / 2.40). Owed at the close: `devlost.sh`, a generated-world
+  comparison, one manual run of the removal tool's CalcPath.
   Rule sheet `endgame_b/B4_RULES.md`, kit and gate table `endgame_b/b4_session/`.
 - **REGISTRY TEARDOWN CLOSED (2026-09-28) — ENDGAME B.2 is finished:** nothing registers a body under a
   retail name or address and nothing resolves one. **Deleted:** `standalone/address_registry.{cpp,h}`, all

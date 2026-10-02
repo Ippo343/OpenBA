@@ -29,7 +29,7 @@ category needs the coordinator (M2).
 |---|---:|---:|---:|---|
 | `alloc_header` | 65 | 62 | 0 | reads / writes an allocator block's boundary tag, free-list link, footer, canary or range page arithmetic: memory the allocator owns as raw bytes |
 | `ptr_int` | 62 | 10 | 52 | a pointer used as an integer: unsigned pointer compares, byte distance between two addresses, pointer bits grafted |
-| `crash_walk` | 79 | 69 | 3 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps |
+| `crash_walk` | 86 | 69 | 3 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps |
 | `win32` | 56 | 17 | 17 | a Win32 / CRT API's own untyped parameter or result: `LPVOID` thread parameters, `LPARAM` message structs, `BYTE*` registry buffers, `intptr_t` OS handles, a CRITICAL_SECTION kept as opaque bytes because the type header cannot include `<windows.h>` |
 | `float_bits` | 25 | 0 | 25 | a float read or written as its bit pattern |
 | `string_header` | 24 | 4 | 20 | the `System::String` `{length, refCount}` header at `data - 8` |
@@ -39,10 +39,10 @@ category needs the coordinator (M2).
 | `gpu_map` | 2 | 0 | 2 | memory returned by a GPU buffer map |
 | `com_iid` | 2 | 0 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID |
 | `crt` | 9 | 5 | 0 | the ported CRT's own `void*` / `char*` parameters (qsort, `_stricmp`) |
-| `hash` | 3 | 2 | 1 | a pointer hashed as an integer |
+| `hash` | 5 | 2 | 1 | a pointer hashed as an integer |
 | `vslot` | 1 | 1 | 0 | `Object::SlotAddressOf`, the one sanctioned look into a compiler vtable (diagnostics) |
 | `dx11_seam` | 39 | 0 | 27 | (raised 27 -> 39 by R-VIDEO: the 12 `DeletingDtor` vector arms in `runtime/types/video/CompanionData.h`) deferred: the VideoDX11 seam, removed by plan §4.1 (`dx11/funcs/dx11_seam.*`, `Video::*Data` self-casts, video_interface's Dx9Placeholder) |
-| **total** | **414** | **182** | **162** | |
+| **total** | **423** | **182** | **162** | |
 
 Ceilings raised 2026-10-02 after the coordinator read the marked lines (the metric tool does not
 enforce ceilings: the coordinator compares `--floor`'s marked lines per category at each merge):
@@ -52,6 +52,9 @@ still to mark); `byte_io` 8 -> 17 (compression 4, crc 1, the compressed streams 
 worker 3, userinterface 1, the water weld's key hash 1; audio 4, renderer 1, context 2 still to mark);
 `alloc_header` 62 -> 65 (the list test allocator's header word, `linkedlist.cpp`); `crash_walk`
 72 -> 79 (`entity_comp_validator.cpp`'s seven vtable / object probes, to be marked by STANDALONE).
+Raised again at `6a3ccdca`: `crash_walk` 79 -> 86 (`scene_watch.cpp`'s vtable-word probes and raw
+dumps of a freed block, `entity_comp_validator.cpp` 9), `hash` 3 -> 5 (`perf_experimental.cpp`'s three
+pointer-keyed tables).
 
 E's own names map as: `crash_diag` → `crash_walk`, `pe_image` → `pe_walk`, `value_pun` →
 `float_bits`, `container_storage` → `elem_stride`, `gpu_mapped` → `gpu_map`, `vtable_diag` →

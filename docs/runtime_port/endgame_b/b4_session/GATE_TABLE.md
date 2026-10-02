@@ -216,3 +216,10 @@ Metric at `558bbe9a`: **10415** to remove.
 Metric at `d27d421e`: **9,619** to remove.
 
 | 43 | W2-TESTS | `31b50bd5` | tests: InterpolatedState components by name, a real `IO::Stream` subclass for FakeStream, `Time` built by field, a literal copied instead of `const_cast`: tests row 813 -> 796 (the rest is the tests' subject, or waits on the runtime POD mirrors and the minted IO tables) | exit 0 · 918 / 0 · 0 | ok | 5/5 | — (tests only) | 0 |
+
+| 44 | W2-STANDALONE (second part) | `6a3ccdca` | standalone: eighteen harnesses and diagnostics by name (food panel, scene watch, death, food production, orchard, market overstock, disaster, pasture, pause menu ...): 1286 -> 617 in 78 files (`tool_harness.cpp` 455 left for the second pass); floor ceilings `crash_walk` 86, `hash` 5 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0 on a QUIET machine (no agent building): update 1.68 ms/frame, p95 2.15 | 0 |
+
+Metric at `6a3ccdca`: **8,950** to remove (tests row 796). **B.4 FIRST PASS DONE; the session stops
+here by the user's decision (2026-10-02): no agent is running, no merge is in progress, every block
+is merged and gated.** `sa-stress` during the pass, recorded only (base 1.92 / 2.40): mean 1.64 - 2.15,
+p95 2.03 - 3.31 with agents building; the quiet run above is the comparable one.
