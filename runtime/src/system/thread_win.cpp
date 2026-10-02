@@ -95,15 +95,15 @@ using RtSystem::Thread;
 // 0x18000c5c0  ??0CriticalSection@System@@QEAA@XZ
 // NOT a real constructor — see the banner above.
 CriticalSection* RtSystem_CriticalSection_Ctor(CriticalSection* self) {
-    InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
-    SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(self), 5000);
+    InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self->_storage));  // CAST-OK: win32
+    SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(self->_storage), 5000);  // CAST-OK: win32
     return self;
 }
 
 // 0x18000c5b0  ??1CriticalSection@System@@QEAA@XZ
 // NOT a real destructor — see the banner above.
 void RtSystem_CriticalSection_Dtor(CriticalSection* self) {
-    DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
+    DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self->_storage));  // CAST-OK: win32
 }
 
 // ---- System::Thread ---------------------------------------------------------
@@ -194,12 +194,12 @@ namespace System {
 
 // 0x18000c700  ?Lock@CriticalSection@System@@QEAAXXZ
 void CriticalSection::Lock() {
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(this));
+    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(_storage));  // CAST-OK: win32
 }
 
 // 0x18000c6f0  ?Unlock@CriticalSection@System@@QEAAXXZ
 void CriticalSection::Unlock() {
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(this));
+    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(_storage));  // CAST-OK: win32
 }
 
 // 0x1800ca4e0  ??0Thread@System@@QEAA@I@Z -- the body MINUS the vptr store
@@ -219,34 +219,34 @@ void Thread::InitFields(unsigned int stackSize) {
     uintptr_t h = _beginthreadex(nullptr, stackSize, &Thread::ThreadFunc, this,
                                  CREATE_SUSPENDED, &threadId);
     _hThread = reinterpret_cast<void*>(h);  // CAST-OK: win32
-    SetThreadPriority(reinterpret_cast<HANDLE>(_hThread), THREAD_PRIORITY_NORMAL);
+    SetThreadPriority(_hThread, THREAD_PRIORITY_NORMAL);
 
     _hStart    = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     _hStop     = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     _hFinished = CreateEventW(nullptr, TRUE,  TRUE,  nullptr);
 
-    ResumeThread(reinterpret_cast<HANDLE>(_hThread));
+    ResumeThread(_hThread);
 }
 
 // 0x1800ca590  ??1Thread@System@@QEAA@XZ -- the body MINUS the vptr store.
 void Thread::ReleaseFields() {
-    SetEvent(reinterpret_cast<HANDLE>(_hStop));
-    WaitForSingleObject(reinterpret_cast<HANDLE>(_hThread), INFINITE);
-    CloseHandle(reinterpret_cast<HANDLE>(_hThread));
-    CloseHandle(reinterpret_cast<HANDLE>(_hStart));
-    CloseHandle(reinterpret_cast<HANDLE>(_hStop));
-    CloseHandle(reinterpret_cast<HANDLE>(_hFinished));
+    SetEvent(_hStop);
+    WaitForSingleObject(_hThread, INFINITE);
+    CloseHandle(_hThread);
+    CloseHandle(_hStart);
+    CloseHandle(_hStop);
+    CloseHandle(_hFinished);
 }
 
 // 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
 void Thread::Start() {
-    ResetEvent(reinterpret_cast<HANDLE>(_hFinished));
-    SetEvent(reinterpret_cast<HANDLE>(_hStart));
+    ResetEvent(_hFinished);
+    SetEvent(_hStart);
 }
 
 // 0x1800ca5f0  ?WaitForFinish@Thread@System@@QEAAXXZ
 void Thread::WaitForFinish() {
-    WaitForSingleObject(reinterpret_cast<HANDLE>(_hFinished), INFINITE);
+    WaitForSingleObject(_hFinished, INFINITE);
 }
 
 // 0x18000c590  ?OnCompleted@Thread@System@@UEAAXXZ  — slot 1
@@ -275,21 +275,21 @@ unsigned int __stdcall Thread::ThreadFunc(void* param) {
     // are what say so.
     RtSystem::Thread* self = static_cast<RtSystem::Thread*>(param);  // CAST-OK: win32
 
-    HANDLE handles[2] = { reinterpret_cast<HANDLE>(self->hStart),
-                          reinterpret_cast<HANDLE>(self->hStop) };
+    HANDLE handles[2] = { self->hStart,
+                          self->hStop };
 
     unsigned int r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
     while (r == 0) {
         using WorkFn = void (*)(RtSystem::Thread*);
 
-        void** vt = static_cast<void**>(self->vtable);
+        void** vt = static_cast<void**>(self->vtable);  // LEFT: the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
         self->runFlags |= 1u;
-        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work
+        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work  // LEFT: as above
 
-        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does
-        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted
+        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does  // LEFT: as above
+        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted  // LEFT: as above
 
-        HANDLE finished = reinterpret_cast<HANDLE>(self->hFinished);
+        HANDLE finished = self->hFinished;
         self->runFlags &= ~1u;
         SetEvent(finished);
 

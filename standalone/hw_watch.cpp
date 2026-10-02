@@ -53,7 +53,7 @@ DWORD WINAPI ArmThread(LPVOID p) {
 }
 }  // namespace
 
-void* HwWatch_MainThreadHandle() { return (void*)g_mainThread; }
+void* HwWatch_MainThreadHandle() { return g_mainThread; }
 
 extern "C" void HwWatch_Init() {
     if (g_mainTid) return;

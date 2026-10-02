@@ -74,6 +74,7 @@
 #include "../../types/collection/Collection.h"
 #include "avl_trees.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+#include "../../types/audio/Audio.h"   // B.4: Audio::Scene::EmitterInstance / AttenutedEffect
 
 namespace rtsort {
 
@@ -100,7 +101,7 @@ SortCounters g_sc = {};
 // SIGNED dword the PackageFile constructor seeds with 0x2710 and only
 // ReadPackfile changes (filesystem_packages.cpp §"the comparator").
 static inline int32_t Key(void* elem) {
-    return *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);
+    return *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);  // LEFT: SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +284,10 @@ void SortByKey70(void** first, int32_t count) {
         // which is a no-op on well-formed pointers and is kept because it is
         // what fixes the sign of the comparison retail then makes with `JL`
         // (SIGNED) rather than `JB`.
-        const int64_t rightBytes = (reinterpret_cast<int64_t>(hi) -
-                                    reinterpret_cast<int64_t>(i)) & ~static_cast<int64_t>(7);
-        const int64_t leftBytes  = (reinterpret_cast<int64_t>(j) -
-                                    reinterpret_cast<int64_t>(lo)) & ~static_cast<int64_t>(7);
+        const int64_t rightBytes = (reinterpret_cast<int64_t>(hi) -  // CAST-OK: ptr_int
+                                    reinterpret_cast<int64_t>(i)) & ~static_cast<int64_t>(7);  // CAST-OK: ptr_int
+        const int64_t leftBytes  = (reinterpret_cast<int64_t>(j) -  // CAST-OK: ptr_int
+                                    reinterpret_cast<int64_t>(lo)) & ~static_cast<int64_t>(7);  // CAST-OK: ptr_int
 
         if (leftBytes >= rightBytes) {
             // 0x180026658
@@ -323,12 +324,9 @@ void SortByKey70(void** first, int32_t count) {
 
 // `Collection::Array<T>` header, 16 bytes. Redeclared rather than pulled from
 // lane Q's array_internal.h; only the three fields are needed.
-struct ArrayHdr16 {
-    uint8_t* _data;      // +0x00
-    int32_t  _size;      // +0x08
-    int32_t  _capacity;  // +0x0c
-};
-static_assert(sizeof(ArrayHdr16) == 0x10, "Collection::Array is 16 bytes");
+// B.4 (R-CORE): the T16 is Audio::Scene::EmitterInstance -- the element of
+// AttenutedEffect::positions, whose operator= this is (Audio.h).
+using EmitterArray = Collection::Array<Audio::Scene::EmitterInstance>;
 
 // ---------------------------------------------------------------------------
 // 0x180050d30 — `Collection::Array<T16>::operator=`, stride 0x10, ALIGN 4.
@@ -352,8 +350,8 @@ static_assert(sizeof(ArrayHdr16) == 0x10, "Collection::Array is 16 bytes");
 // other two (the destructor has already zeroed `_size`), and is kept.
 // ---------------------------------------------------------------------------
 void* Array16Assign(void* dstRaw, const void* srcRaw) {
-    ArrayHdr16*       dst = static_cast<ArrayHdr16*>(dstRaw);
-    const ArrayHdr16* src = static_cast<const ArrayHdr16*>(srcRaw);
+    EmitterArray*       dst = static_cast<EmitterArray*>(dstRaw);  // LEFT: void* door (audio.cpp / audio_scene_update.cpp hold void*)
+    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: as above
     if (dst == src) return dst;
 
     rtcoll::RtColl_ArrayDtor_180051d80(dst);
@@ -369,17 +367,17 @@ void* Array16Assign(void* dstRaw, const void* srcRaw) {
         // (runtime/src/collection/alloc_door.cpp) rather than a private
         // resolution of 0x1800c7a50 — same allocator, but the channel
         // `BANISHED_REDZONE` can see. `4` is this instantiation's own align.
-        dst->_data = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(
+        dst->_data = static_cast<Audio::Scene::EmitterInstance*>(System::MemoryAllocator::MemAlloc(
             static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 0x10, 4));
     }
     for (int32_t k = 0; k < dst->_size; ++k) {
-        uint8_t* p = dst->_data + static_cast<int64_t>(k) * 0x10;
+        Audio::Scene::EmitterInstance* p = dst->_data + k;
         if (p == nullptr) continue;
-        const uint8_t* s = src->_data + static_cast<int64_t>(k) * 0x10;
-        *reinterpret_cast<uint32_t*>(p + 0x0) = *reinterpret_cast<const uint32_t*>(s + 0x0);
-        *reinterpret_cast<uint32_t*>(p + 0x4) = *reinterpret_cast<const uint32_t*>(s + 0x4);
-        *reinterpret_cast<uint32_t*>(p + 0x8) = *reinterpret_cast<const uint32_t*>(s + 0x8);
-        *reinterpret_cast<uint32_t*>(p + 0xc) = *reinterpret_cast<const uint32_t*>(s + 0xc);
+        const Audio::Scene::EmitterInstance* s = src->_data + k;
+        p->position.x = s->position.x;     // four DWORD moves
+        p->position.y = s->position.y;
+        p->position.z = s->position.z;
+        p->volume     = s->volume;
     }
     return dst;
 }
@@ -409,28 +407,27 @@ void* Array16Assign(void* dstRaw, const void* srcRaw) {
 // load-bearing: on the realloc arm the destination is raw MemAlloc memory and
 // `operator=` starts by destroying it.
 // ---------------------------------------------------------------------------
-void* EffectSlotAssign(void* dstRaw, const void* srcRaw) {
-    uint8_t*       d = static_cast<uint8_t*>(dstRaw);
-    const uint8_t* s = static_cast<const uint8_t*>(srcRaw);
-
-    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
-    *reinterpret_cast<uint32_t*>(d + 0x04) = *reinterpret_cast<const uint32_t*>(s + 0x04);
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x0c) = *reinterpret_cast<const uint32_t*>(s + 0x0c);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
-    *reinterpret_cast<uint64_t*>(d + 0x18) = *reinterpret_cast<const uint64_t*>(s + 0x18);
-    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
-    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
-    *reinterpret_cast<uint32_t*>(d + 0x28) = *reinterpret_cast<const uint32_t*>(s + 0x28);
+static void EffectSlotCopy(Audio::Scene::AttenutedEffect* d, const Audio::Scene::AttenutedEffect* s) {
+    d->pos.x          = s->pos.x;          // four DWORD moves
+    d->pos.y          = s->pos.y;
+    d->pos.z          = s->pos.z;
+    d->soundType      = s->soundType;
+    d->soundEffectRef = s->soundEffectRef; // QWORD
+    d->startTime      = s->startTime;      // QWORD
+    d->channelHandle  = s->channelHandle;  // three DWORD moves
+    d->idTag          = s->idTag;
+    d->baseVolume     = s->baseVolume;
     /* +0x2c .. +0x2f deliberately untouched — retail does not write them */
-    *reinterpret_cast<uint64_t*>(d + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x38) = 0;
+    d->positions._data     = nullptr;
+    d->positions._size     = 0;            // one qword (H7)
+    d->positions._capacity = 0;
 
     // Through the port-aware address door, so the 0x180050d30 registration
     // below is what runs and the census can see the edge.
-    rtsort::Array16Assign(d + 0x30, s + 0x30);
-
-    return d;
+    rtsort::Array16Assign(&d->positions, &s->positions);
+}
+void EffectSlotAssign(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<Audio::Scene::AttenutedEffect, &EffectSlotCopy>(d, s);
 }
 
 }  // namespace rtsort

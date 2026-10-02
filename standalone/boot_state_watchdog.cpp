@@ -118,7 +118,7 @@ struct DialogScan {
 };
 
 BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
-    auto* scan = reinterpret_cast<DialogScan*>(lp);
+    auto* scan = reinterpret_cast<DialogScan*>(lp);  // CAST-OK: win32
 
     if (!IsWindowVisible(hwnd)) return TRUE;
 
@@ -139,7 +139,7 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lp) {
 bool ModalDialogOpen(char* utf8Title, int cap) {
     DialogScan scan{};
     scan.pid = GetCurrentProcessId();
-    EnumWindows(&EnumProc, reinterpret_cast<LPARAM>(&scan));
+    EnumWindows(&EnumProc, reinterpret_cast<LPARAM>(&scan));  // CAST-OK: win32
     if (!scan.found) return false;
 
     if (cap > 0) {

@@ -241,9 +241,9 @@ typedef int (*DecompressFn)(const void*, uint32_t, void*, uint32_t);
 // two `RT_EXPORT_ONCE` sites with no receiver at all.
 int System::Compression::Decompress(const void* src, uint32_t srcLen,
                                     void* dst, uint32_t dstCap) {
-    const uint8_t* sp          = static_cast<const uint8_t*>(src);
+    const uint8_t* sp          = static_cast<const uint8_t*>(src);  // CAST-OK: byte_io
     const uint8_t* const srcEnd = sp + srcLen;          // 1800c4672, zero-extended
-    uint8_t* const dstBase      = static_cast<uint8_t*>(dst);
+    uint8_t* const dstBase      = static_cast<uint8_t*>(dst);  // CAST-OK: byte_io
     uint8_t* const dstEnd       = dstBase + dstCap;     // 1800c467b, zero-extended
     uint8_t* op                 = dstBase;
 
@@ -279,7 +279,7 @@ int System::Compression::Decompress(const void* src, uint32_t srcLen,
                 return 0;
             }
             // UNSIGNED compare (JC at 1800c46f8): mp can wrap below the buffer.
-            if (reinterpret_cast<uintptr_t>(mp) < reinterpret_cast<uintptr_t>(dstBase)) {
+            if (reinterpret_cast<uintptr_t>(mp) < reinterpret_cast<uintptr_t>(dstBase)) {  // CAST-OK: ptr_int
                 if (RtSystem::g_branch) ++RtSystem::g_branch->failMatchSrc;
                 return 0;
             }
@@ -466,7 +466,7 @@ static inline uint32_t CompressHash(uint32_t dv) {
 // An allocation failure here is an upstream fault to find.
 System::Compression::Compression() {
     void* p = RtSystem::RtMemAlloc(0x40000u, 4);
-    _table = static_cast<uint32_t*>(p);
+    _table = static_cast<uint32_t*>(p);  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
     std::memset(p, 0, 0x40000u);
 }
 
@@ -480,10 +480,10 @@ int System::Compression::Compress(const void* src, uint32_t srcLen,
         return 0;                                        // 1800c4645
 
     uint32_t* const table = _table;                           // 1800c42c6: MOV RCX,[R11]
-    const uint8_t* const in     = static_cast<const uint8_t*>(src);
+    const uint8_t* const in     = static_cast<const uint8_t*>(src);  // CAST-OK: byte_io
     const uint8_t* const inEnd  = in + srcLen;                // 1800c4289
     const uint8_t* const inMax  = inEnd - 2;                  // 1800c4292: R15
-    uint8_t* const outBase      = static_cast<uint8_t*>(dst);
+    uint8_t* const outBase      = static_cast<uint8_t*>(dst);  // CAST-OK: byte_io
     uint8_t* const outEnd       = outBase + dstCap;           // 1800c428e: R12
 
     const uint8_t* ip = in;                                   // 1800c4296: RAX

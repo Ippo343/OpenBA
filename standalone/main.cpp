@@ -124,7 +124,7 @@ static void DumpVideoRegistry(const char* tag) {
         wchar_t buf[64] = {0};
         DWORD cb = sizeof(buf), type = 0;
         if (RegQueryValueExW(hKey, k, nullptr, &type,
-                             reinterpret_cast<BYTE*>(buf), &cb) == ERROR_SUCCESS) {
+                             reinterpret_cast<BYTE*>(buf), &cb) == ERROR_SUCCESS) {  // CAST-OK: win32
             printf("[VideoReg %s]   %-18ls = \"%ls\" (type %lu)\n", tag, k, buf, type);
         } else {
             printf("[VideoReg %s]   %-18ls = <absent>\n", tag, k);
@@ -186,13 +186,13 @@ static void HarnessGuardUnattendedBoot() {
     auto setStr = [&](const wchar_t* name, const wchar_t* val) {
         DWORD bytes = (DWORD)((wcslen(val) + 1) * sizeof(wchar_t));
         RegSetValueExW(hKey, name, 0, REG_SZ,
-                       reinterpret_cast<const BYTE*>(val), bytes);
+                       reinterpret_cast<const BYTE*>(val), bytes);  // CAST-OK: win32
     };
     auto getInt = [&](const wchar_t* name, int* out) {
         wchar_t buf[64] = {0};
         DWORD cb = sizeof(buf), type = 0;
         if (RegQueryValueExW(hKey, name, nullptr, &type,
-                             reinterpret_cast<BYTE*>(buf), &cb) != ERROR_SUCCESS)
+                             reinterpret_cast<BYTE*>(buf), &cb) != ERROR_SUCCESS)  // CAST-OK: win32
             return false;
         *out = _wtoi(buf);
         return true;
@@ -202,7 +202,7 @@ static void HarnessGuardUnattendedBoot() {
         wchar_t settings[16] = {0};
         DWORD cb = sizeof(settings), type = 0;
         if (RegQueryValueExW(hKey, L"VideoSettings", nullptr, &type,
-                             reinterpret_cast<BYTE*>(settings), &cb) == ERROR_SUCCESS &&
+                             reinterpret_cast<BYTE*>(settings), &cb) == ERROR_SUCCESS &&  // CAST-OK: win32
             wcscmp(settings, L"true") == 0) {
             setStr(L"VideoSettings", L"false");
             printf("[Standalone] HarnessGuard: VideoSettings true -> false "
@@ -717,14 +717,14 @@ static bool RunFactorySelfTest(const char* typeName,
 // "DX9 or DX11" question that drives the +0x267E crash.
 // ============================================================
 static void DumpVideoState() {
-    void* device = ::Video::Device::_singleton;
-    void* config = ::Video::Configuration::_singleton;
-    printf("\n[VideoProbe] Configuration::_singleton = %p\n", config);
+    ::Video::Device* device = ::Video::Device::_singleton;
+    ::Video::Configuration* config = ::Video::Configuration::_singleton;
+    printf("\n[VideoProbe] Configuration::_singleton = %p\n", (void*)config);
     if (config) {
-        int interfaceIdx = *reinterpret_cast<int*>((uintptr_t)config + 4);
-        int adapterIdx   = *reinterpret_cast<int*>((uintptr_t)config + 8);
-        int width        = *reinterpret_cast<int*>((uintptr_t)config + 0x0c);
-        int height       = *reinterpret_cast<int*>((uintptr_t)config + 0x10);
+        int interfaceIdx = config->interfaceIndex;   // +0x04
+        int adapterIdx   = config->adapterIndex;     // +0x08
+        int width        = config->width;            // +0x0c
+        int height       = config->height;           // +0x10
         const char* iname =
             interfaceIdx == 0 ? "VideoDX9" :
             interfaceIdx == 1 ? "VideoDX11" :
@@ -740,12 +740,12 @@ static void DumpVideoState() {
         // sits here now is what Video::Configuration::Save writes to the
         // registry at shutdown, so a 0 in either field means the next boot is
         // poisoned.
-        const int cfgWinX = *reinterpret_cast<int*>((uintptr_t)config + 0x14);
-        const int cfgWinY = *reinterpret_cast<int*>((uintptr_t)config + 0x18);
-        const int cfgWinW = *reinterpret_cast<int*>((uintptr_t)config + 0x1c);
-        const int cfgWinH = *reinterpret_cast<int*>((uintptr_t)config + 0x20);
+        const int cfgWinX = config->windowX;        // +0x14
+        const int cfgWinY = config->windowY;        // +0x18
+        const int cfgWinW = config->windowWidth;    // +0x1c
+        const int cfgWinH = config->windowHeight;   // +0x20
         printf("[VideoProbe]   +0x00 settings  = %d  (true => launcher dialog next boot)\n",
-               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x00));
+               config->settingsValid);
         printf("[VideoProbe]   +0x14 windowX   = %d\n", cfgWinX);
         printf("[VideoProbe]   +0x18 windowY   = %d\n", cfgWinY);
         printf("[VideoProbe]   +0x1c windowW   = %d%s\n", cfgWinW,
@@ -753,36 +753,32 @@ static void DumpVideoState() {
         printf("[VideoProbe]   +0x20 windowH   = %d%s\n", cfgWinH,
                cfgWinH <= 0 ? "   <-- POISONED (AdjustDisplay latched an externally-forced size)" : "");
         printf("[VideoProbe]   +0x40 fullscreen= %d  +0x41 vsync=%d  +0x42 skipShow=%d\n",
-               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x40),
-               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x41),
-               *reinterpret_cast<uint8_t*>((uintptr_t)config + 0x42));
+               config->fullscreen, config->vsync, config->field42);
     }
 
-    printf("[VideoProbe] Device::_singleton        = %p\n", device);
+    printf("[VideoProbe] Device::_singleton        = %p\n", (void*)device);
     if (device) {
-        int activeIdx = *reinterpret_cast<int*>((uintptr_t)device + 0xf8);
-        void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
-        int interfaceCount = *reinterpret_cast<int*>((uintptr_t)device + 0x48);
-        HMODULE dx9   = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xb0);
-        void* dx9_GetName  = *reinterpret_cast<void**>((uintptr_t)device + 0xb8);
-        void* dx9_Create   = *reinterpret_cast<void**>((uintptr_t)device + 0xc0);
-        HMODULE dx11  = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xc8);
-        void* dx11_GetName = *reinterpret_cast<void**>((uintptr_t)device + 0xd0);
-        void* dx11_Create  = *reinterpret_cast<void**>((uintptr_t)device + 0xd8);
-        HMODULE gl    = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xe0);
+        int activeIdx = device->activeInterface;                   // +0xf8
+        ::Video::DeviceData* activeDD = device->deviceData;       // +0x100
+        int interfaceCount = device->interfaceCount;               // +0x48
+        const ::Video::Device::InterfaceSlot& dx9  = device->dllSlots[0];   // +0xb0
+        const ::Video::Device::InterfaceSlot& dx11 = device->dllSlots[1];   // +0xc8
+        const ::Video::Device::InterfaceSlot& gl   = device->dllSlots[2];   // +0xe0
         printf("[VideoProbe]   +0x48  interface count = %d\n", interfaceCount);
         printf("[VideoProbe]   +0xf8  active idx  = %d\n", activeIdx);
-        printf("[VideoProbe]   +0x100 active DeviceData = %p\n", activeDD);
-        printf("[VideoProbe]   slot0 DX9:  HMOD=%p GetName=%p Create=%p\n", dx9, dx9_GetName, dx9_Create);
-        printf("[VideoProbe]   slot1 DX11: HMOD=%p GetName=%p Create=%p\n", dx11, dx11_GetName, dx11_Create);
-        printf("[VideoProbe]   slot2 GL:   HMOD=%p\n", gl);
+        printf("[VideoProbe]   +0x100 active DeviceData = %p\n", (void*)activeDD);
+        printf("[VideoProbe]   slot0 DX9:  HMOD=%p GetName=%p Create=%p\n", dx9.module,
+               (void*)dx9.getDeviceName, (void*)dx9.createDeviceData);
+        printf("[VideoProbe]   slot1 DX11: HMOD=%p GetName=%p Create=%p\n", dx11.module,
+               (void*)dx11.getDeviceName, (void*)dx11.createDeviceData);
+        printf("[VideoProbe]   slot2 GL:   HMOD=%p\n", gl.module);
         if (activeDD) {
             void* vtbl = *reinterpret_cast<void**>(activeDD);
             printf("[VideoProbe]   active DeviceData vtable = %p\n", vtbl);
             HMODULE owner = nullptr;
             if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCSTR)vtbl, &owner) && owner) {
+                                   (LPCSTR)vtbl, &owner) && owner) {  // CAST-OK: crash_walk
                 char path[MAX_PATH] = {0};
                 GetModuleFileNameA(owner, path, MAX_PATH);
                 const char* nm = strrchr(path, '\\');
@@ -903,12 +899,14 @@ static void DumpSwapChainState(const char* tag) {
         printf("[SwapProbe %s] device singleton not populated\n", tag);
         return;
     }
-    void* device = ::Video::Device::_singleton;
-    void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
+    ::Video::Device* device = ::Video::Device::_singleton;
+    ::Video::DeviceData* activeDD = device->deviceData;   // +0x100
     if (!activeDD) {
         printf("[SwapProbe %s] activeDeviceData NULL (Device+0x100)\n", tag);
         return;
     }
+    // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
+    // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
     void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
     if (!swapChain) {
         printf("[SwapProbe %s] swapChain NULL (activeDD+0x18)\n", tag);
@@ -979,9 +977,11 @@ static bool g_bootedExclusiveFullscreen = false;
 
 static void CaptureBootFullscreenMode() {
     if (!::Video::Device::_singleton) return;
-    void* device = ::Video::Device::_singleton;
-    void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
+    ::Video::Device* device = ::Video::Device::_singleton;
+    ::Video::DeviceData* activeDD = device->deviceData;   // +0x100
     if (!activeDD) return;
+    // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
+    // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
     void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
     if (!swapChain) return;
     void** vt = *reinterpret_cast<void***>(swapChain);
@@ -1009,11 +1009,11 @@ static void CaptureBootFullscreenMode() {
 static void ForceVideoContextReset(const char* tag) {
     if (!g_bootedExclusiveFullscreen) return;
     if (!::Engine::MainLoop::_singleton) return;
-    uint8_t* ml = reinterpret_cast<uint8_t*>(::Engine::MainLoop::_singleton);
-    void* ctx = *reinterpret_cast<void**>(ml + 0x10);
+    ::Engine::MainLoop* ml = ::Engine::MainLoop::_singleton;
+    ::Video::Context* ctx = ml->_context;   // +0x10
     if (!ctx) return;
-    *(ml + 0x18) = 0;  // engine clears m_videoContextDirty before Reset
-    reinterpret_cast<::Video::Context*>(ctx)->Reset();  // B.3.5 bridge
+    ml->_contextDirty = 0;  // +0x18: engine clears m_videoContextDirty before Reset
+    ctx->Reset();
     printf("[CtxReset %s] Video::Context::Reset(ctx=%p) — FSE refocus recovery\n",
            tag, ctx);
     fflush(stdout);
@@ -1039,9 +1039,9 @@ static bool IsEngineWindow(HWND hwnd) {
     if (GetClassNameW(hwnd, cls, 64) > 0 && wcscmp(cls, L"Banished") == 0)
         return true;
 
-    void* device = ::Video::Device::_singleton;
+    ::Video::Device* device = ::Video::Device::_singleton;
     if (!device) return false;
-    HWND devHwnd = *reinterpret_cast<HWND*>((uintptr_t)device + 0x90);
+    HWND devHwnd = reinterpret_cast<HWND>(device->windowHandle);  // CAST-OK: win32
     return devHwnd && devHwnd == hwnd;
 }
 
@@ -1049,9 +1049,9 @@ static void EnsureBlackWindowBrush(HWND hwnd) {
     static bool done = false;
     if (done || !hwnd) return;
     if (!IsEngineWindow(hwnd)) return;   // not ours — keep looking
-    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);  // CAST-OK: win32
     if (!black) return;
-    HBRUSH old = (HBRUSH)SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)black);
+    HBRUSH old = (HBRUSH)SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)black);  // CAST-OK: win32
     InvalidateRect(hwnd, nullptr, TRUE);  // force a repaint with the new brush
     UpdateWindow(hwnd);
     done = true;
@@ -1061,7 +1061,7 @@ static void EnsureBlackWindowBrush(HWND hwnd) {
 
 static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code >= 0) {
-        auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);
+        auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);  // CAST-OK: win32
         // Swap the class brush the first time we see a message for the ENGINE
         // window specifically. Other top-level windows on this thread are
         // ignored — see EnsureBlackWindowBrush for why matching on "first
@@ -1078,7 +1078,7 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
                    (unsigned)((msg->lParam >> 16) & 0xFFFF));
             fflush(stdout);
         } else if (msg->message == 0x0046 /*WM_WINDOWPOSCHANGING*/) {
-            auto* wp = reinterpret_cast<WINDOWPOS*>(msg->lParam);
+            auto* wp = reinterpret_cast<WINDOWPOS*>(msg->lParam);  // CAST-OK: win32
             if (wp) {
                 printf("[WndMsg] WM_WINDOWPOSCHANGING hwnd=%p %d,%d %dx%d flags=0x%X\n",
                        (void*)msg->hwnd, wp->x, wp->y, wp->cx, wp->cy, wp->flags);

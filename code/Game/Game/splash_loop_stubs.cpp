@@ -1,4 +1,4 @@
-// standalone/splash_loop_stubs.cpp
+// code/Game/Game/splash_loop_stubs.cpp
 // Standalone-only stub vtable for the exe's splash DialogLoaderLoopT subclass
 // (vtable @ 0x140158800, used for both Dialog\Loading.rsc and Dialog\ShiningRock.rsc
 // in the original GameMain).
@@ -82,17 +82,15 @@ void SetRandomLoadingTip(GameLoadDialogLoopT* self) {
     // Find "descText" in the dialog instance (member value-return ABI:
     // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
     const System::String nameStr("descText");
-    uint64_t elemBuf = 0;
-    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(self->_dialogInstance)->FindElement(nameStr));  // B.3.6 bridge
+    const Object::InternalPtr<UI::Element> found = self->_dialogInstance->FindElement(nameStr);
 
     // Normalise the missing-element sentinel (0xffffffff........) to null.
-    uintptr_t raw = static_cast<uintptr_t>(elemBuf);
+    UI::Element* elem = found.Get();
+    uintptr_t raw = reinterpret_cast<uintptr_t>(elem);  // CAST-OK: ptr_int
     if (raw < 0x10000 || raw > 0x00007FFFFFFFFFFFULL) {
-        TipBail("descText not found (FindElement sentinel)", (void*)raw);
+        TipBail("descText not found (FindElement sentinel)", elem);
         return;
     }
-    void* elem = reinterpret_cast<void*>(raw);
 
     // Retail gates on the TEXTELEMENT type id, read from exref 0x140151508
     // (Ghidra labels that global `fn_LabelElement_SetSprite` -- a misnamed
@@ -105,25 +103,22 @@ void SetRandomLoadingTip(GameLoadDialogLoopT* self) {
     }
 
     // StringTable at element+0xD8; pick a random 1-based index in [1, count].
-    void* table = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(elem) + 0xD8);
+    UI::TextElement* textElem = static_cast<UI::TextElement*>(elem);
+    UI::StringTable* table = textElem->_text.GetStringTable().Get();
     if (!table) { TipBail("elem+0xD8 StringTable==null", elem); return; }
-    int count = reinterpret_cast<const UI::StringTable*>(table)->GetCount();  // B.3.6 bridge
+    int count = table->GetCount();
     if (count <= 0) { TipBail("StringTable count<=0", table); return; }
     uint32_t idx = self->_random.Rand(static_cast<uint32_t>(count - 1));   // the loop's own Random (+0x194)
 
-    uint8_t uiStr[16];
-    ::new (uiStr) UI::String(
-        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(table)),  // B.3.6 bridge
-        static_cast<int>(idx + 1));
-    uint8_t textVal[16];
-    *reinterpret_cast<uint64_t*>(textVal)     = *reinterpret_cast<uint64_t*>(uiStr);
-    *reinterpret_cast<uint64_t*>(textVal + 8) = *reinterpret_cast<uint64_t*>(uiStr + 8);
-    reinterpret_cast<UI::TextElement*>(elem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
+    const UI::String uiStr(Object::ExternalPtr<UI::StringTable>(table),
+                           static_cast<int>(idx + 1));
+    const UI::String textVal = uiStr;
+    textElem->SetText(&textVal);
 
     static int s_tipLog = 0;
     if (s_tipLog++ < 8) {
         printf("[SplashDLT] loading tip set: descText=%p table=%p count=%d idx=%u\n",
-               elem, table, count, idx + 1);
+               (void*)elem, (void*)table, count, idx + 1);
     }
 }
 
@@ -265,7 +260,9 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     StallDebug::Tick("SplashDLT::Update");
     // The first-tick clamp below writes the caller's Time and restores it
     // before returning (MainLoop owns it); retail's slot takes it by const&.
-    Time* dt = reinterpret_cast<Time*>(const_cast<System::Time*>(&time));   // B.3.8 bridge
+    // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
+    // const& of retail's slot signature (our divergence, not retail's).
+    System::Time* dt = const_cast<System::Time*>(&time);   // B.3.8 bridge
 
     // Pump the embedded UI — flushes the pending-open list (where Startup
     // pushed our LoaderDialog), runs each open dialog's OnUpdate, processes
@@ -287,13 +284,13 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     bool clamped = false;
     if (_elapsedTicks == 0 && dt &&
         ::System::Timer::_ticksPerSecond > 0) {
-        origTicks = dt->ticks;
+        origTicks = dt->_ticks;
         double dtMs = (double)origTicks * 1000.0 / (double)::System::Timer::_ticksPerSecond;
         printf("[SplashDLT::Update] self=%p first-tick dt=%lld (%.2fms)\n",
                (void*)this, (long long)origTicks, dtMs);
         int64_t maxTicks = ::System::Timer::_ticksPerSecond / 60;
         if (origTicks > maxTicks) {
-            dt->ticks = maxTicks;
+            dt->_ticks = maxTicks;
             clamped = true;
             printf("[SplashDLT::Update] self=%p first-tick dt clamped from %lld "
                    "to %lld (~16ms) — Startup stall accumulator\n",
@@ -308,7 +305,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     BootWindow::PumpWatchdog();
 
     if (clamped) {
-        dt->ticks = origTicks;
+        dt->_ticks = origTicks;
     }
 
     // Run the deferred MenuScene load, once, on the first frame where this
@@ -366,7 +363,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
     Sleep(14);
 
-    _elapsedTicks += dt->ticks;
+    _elapsedTicks += dt->_ticks;
 
     // (The "Fix 1 deferred load kick" that used to sit here is gone — it was the
     // second dispatcher of next->vtable->Load. See the Step 3 note in
@@ -397,7 +394,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // be here was an artefact of our deferred load kick, which is gone.
     if (::System::Timer::_ticksPerSecond > 0 &&
         _nextLoop && _nextLoop->GetLoadProgress() != 0) {
-        _tipTimer += dt->ticks;
+        _tipTimer += dt->_ticks;
         if (_tipTimer >= ::System::Timer::_ticksPerSecond * 2) {   // 2.0s
             _tipTimer = 0;
             // [diag] measure the ACTUAL interval and the retail gate value.
@@ -425,6 +422,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // Caller batch CB6: "is the next loop a GameUpdateLoop" compares the vptr
     // with the class's compiler table (B8-5 identity; it was the by-address
     // g_GameUpdateLoop_Vtable, which 0x14015e2f0's row served with that table).
+    // LEFT: a vptr identity compare (GameUpdateLoop is unreflected: no type id).
     bool worldReady = true;
     if (_nextLoop &&
         *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {
@@ -480,13 +478,13 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
         }
 
         Engine::UpdateLoop* next = _nextLoop;
-        void* mainLoop = ::Engine::MainLoop::_singleton;
+        Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
         printf("[SplashDLT::Update] self=%p elapsed=%lld delay=%lld "
                "fade-alpha=%.3f -> transition next=%p\n",
                (void*)this, (long long)_elapsedTicks,
                (long long)_delayTicks, alpha, (void*)next);
         if (next && mainLoop) {
-            reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(next);   // B.3.7 bridge
+            mainLoop->SetNextLoop(next);
         }
         return false;
     }
@@ -548,8 +546,9 @@ Object::InternalPtr<UI::DialogInstance>* GameLoadDialogLoopT::CreateLoopDialog(
     // Mirrors exe LoaderDialog_Ctor3 @ 0x140099070: builds a real DialogInstance
     // subclass wrapping the loaded .rsc (Dialog/ShiningRock.rsc or
     // Dialog/Loading.rsc), patches our standalone vtable, returns IBP.
-    return static_cast<Object::InternalPtr<UI::DialogInstance>*>(
-        LoaderDialog_FromSplashDLT(this, retPtr));
+    // The body (loaderdialog.cpp) returns its second argument on every path.
+    LoaderDialog_FromSplashDLT(this, retPtr);
+    return retPtr;
 }
 
 // B38_RULES D5: `Vtable()` is the COMPILER's table. ENDGAME B.3.9 EXA: the

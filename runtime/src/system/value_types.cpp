@@ -224,8 +224,8 @@ void System::Random::NextGroup() {
 // Two calls: slot +0x98 serializes the plain `index`, slot +0x40 the
 // 624-entry uint32 array.
 void System::Random::Serialize(::IO::Serializer& s) {
-    s.Serialize(*reinterpret_cast<unsigned int*>(&_index), nullptr);   // B.3.4 bridge  (0x98 = uint door)
-    s.Serialize(0x270, reinterpret_cast<unsigned int*>(_mt), nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
+    s.Serialize(*reinterpret_cast<unsigned int*>(&_index), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: an int32 field through the uint overload (serialize_signedness, H8: needs retail's field type)
+    s.Serialize(0x270, _mt, nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
 }
 
 // ============================================================
@@ -282,7 +282,7 @@ void System::Time::Serialize(::IO::Serializer& s) {
 // ?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c4150
 // Slot +0x98 serializes the packed 4-byte `value`.
 void System::Color::Serialize(::IO::Serializer& s) {
-    s.Serialize(*reinterpret_cast<unsigned int*>(&_value), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    s.Serialize(_value, nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 // ============================================================
@@ -413,7 +413,7 @@ static System::String* RtSystem_DateTime_FormatPart(const System::DateTime* self
     static_assert(sizeof(System::DateTime) == sizeof(FILETIME),
                   "System::DateTime IS a FILETIME -- Value.h's layout pin, "
                   "restated where the real type is actually visible");
-    FileTimeToLocalFileTime(reinterpret_cast<const FILETIME*>(self), &local);
+    FileTimeToLocalFileTime(reinterpret_cast<const FILETIME*>(&self->_lowDateTime), &local);  // CAST-OK: win32
     FileTimeToSystemTime(&local, &st);
 
     wchar_t buf[256];   // 0x100 WCHARs, retail's [RSP+0x50] scratch -- also uninitialised
@@ -429,7 +429,7 @@ static System::String* RtSystem_DateTime_FormatPart(const System::DateTime* self
     // TRANSITIONAL CAST, the class->POD direction: `WideString::AsUTF8` is a
     // registered C entry point whose hidden return slot is the POD. Same eight
     // bytes, and it placement-constructs into this raw slot.
-    RtSystem::RtSystem_WideString_AsUTF8(&ws, reinterpret_cast<RtSystem::String*>(ret));
+    RtSystem::RtSystem_WideString_AsUTF8(&ws, reinterpret_cast<RtSystem::String*>(ret));  // LEFT: POD String / Filename bridge (H10)
     RtSystem::RtSystem_WideString_Dtor(&ws);
     return ret;   // MOV RAX,RBX
 }

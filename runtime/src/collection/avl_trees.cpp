@@ -124,6 +124,7 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "../../types/system/String.h"   // B.4: RtSystem::StringRefCount
 #include "../../types/collection/Collection.h"
 #include "../../types/object/TypeInfo.h"
 #include "avl_trees.h"
@@ -194,14 +195,14 @@ static void StringAddRefInto(char** slot, char* src) {
     *slot = nullptr;                       // retail stores the zero FIRST
     if (src) {
         *slot = src;
-        ++reinterpret_cast<int32_t*>(src)[-1];
+        ++RtSystem::StringRefCount(src);
     }
 }
 
 static void StringReleaseInline(char** slot) {
     char* p = *slot;
     if (!p) return;
-    if (--reinterpret_cast<int32_t*>(p)[-1] == 0) {
+    if (--RtSystem::StringRefCount(p) == 0) {
         *slot = p - 8;
         MemFree(p - 8);
     } else {
@@ -274,7 +275,7 @@ static_assert(sizeof(PtrArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 // drives BOTH.
 // ---------------------------------------------------------------------------
 void* PtrArrayDtor(void* self) {
-    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);
+    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: void* door (the Array<T*> operator= / dtor pair; outside callers hold void*)
     MemFree(a->_data);        // retail's `if (p)` lives inside 0x1800c7ad0
     a->_data     = nullptr;
     a->_size     = 0;
@@ -319,8 +320,8 @@ void* PtrArrayDtor(void* self) {
 // failed. Retail checks it every iteration and so does this.
 // ---------------------------------------------------------------------------
 void* PtrArrayAssign(void* dstRaw, const void* srcRaw) {
-    PtrArrayHdr*       dst = static_cast<PtrArrayHdr*>(dstRaw);
-    const PtrArrayHdr* src = static_cast<const PtrArrayHdr*>(srcRaw);
+    PtrArrayHdr*       dst = static_cast<PtrArrayHdr*>(dstRaw);  // LEFT: void* door (the Array<T*> operator= / dtor pair; outside callers hold void*)
+    const PtrArrayHdr* src = static_cast<const PtrArrayHdr*>(srcRaw);  // LEFT: void* door (the Array<T*> operator= / dtor pair; outside callers hold void*)
     if (dst == src) { ++g_pc.ptrAssignSelf; return dst; }
 
     // Through the port-aware address door, so the 0x1800093e0 site's own
@@ -344,8 +345,8 @@ void* PtrArrayAssign(void* dstRaw, const void* srcRaw) {
     for (int32_t i = 0; i < dst->_size; ++i) {
         uint8_t* p = dst->_data + static_cast<int64_t>(i) * 8;
         if (p == nullptr) continue;
-        *reinterpret_cast<void**>(p) =
-            *reinterpret_cast<void* const*>(src->_data + static_cast<int64_t>(i) * 8);
+        *reinterpret_cast<void**>(p) =  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+            *reinterpret_cast<void* const*>(src->_data + static_cast<int64_t>(i) * 8);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     }
     return dst;
 }
@@ -370,10 +371,10 @@ void* PtrArrayAssign(void* dstRaw, const void* srcRaw) {
 // two int16 and corrects TypeInfo.h in the same commit; the accessors below
 // are how this file reads them without depending on which spelling wins.
 static inline int16_t& Balance50(TypeNode* n) {
-    return *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x48);
+    return *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x48);  // LEFT: TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in R-IO's TypeInfo.h (H8 width: coordinator)
 }
 static inline int16_t& Height50(TypeNode* n) {
-    return *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x4a);
+    return *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x4a);  // LEFT: TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in R-IO's TypeInfo.h (H8 width: coordinator)
 }
 
 static inline void Recompute(TypeNode* n) {
@@ -563,30 +564,30 @@ void Retrace50(RtObject::Factory* set, TypeNode** slot) {
 // would free a garbage pointer.
 // ---------------------------------------------------------------------------
 TypeNode* TypePairCtor(void* nodeRaw, const void* srcRaw, TypeNode* parent) {
-    uint8_t*       node = static_cast<uint8_t*>(nodeRaw);
-    const uint8_t* src  = static_cast<const uint8_t*>(srcRaw);
+    uint8_t*       node = static_cast<uint8_t*>(nodeRaw);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    const uint8_t* src  = static_cast<const uint8_t*>(srcRaw);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
-    *reinterpret_cast<uint32_t*>(node + 0x00) =
-        *reinterpret_cast<const uint32_t*>(src + 0x00);
+    *reinterpret_cast<uint32_t*>(node + 0x00) =  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        *reinterpret_cast<const uint32_t*>(src + 0x00);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     /* +0x04 .. +0x07 deliberately untouched — retail does not write them */
-    *reinterpret_cast<uint32_t*>(node + 0x08) =
-        *reinterpret_cast<const uint32_t*>(src + 0x08);
-    *reinterpret_cast<uint64_t*>(node + 0x10) =
-        *reinterpret_cast<const uint64_t*>(src + 0x10);
-    *reinterpret_cast<uint64_t*>(node + 0x18) =
-        *reinterpret_cast<const uint64_t*>(src + 0x18);
-    *reinterpret_cast<uint64_t*>(node + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(node + 0x28) = 0;
+    *reinterpret_cast<uint32_t*>(node + 0x08) =  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        *reinterpret_cast<const uint32_t*>(src + 0x08);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x10) =  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        *reinterpret_cast<const uint64_t*>(src + 0x10);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x18) =  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        *reinterpret_cast<const uint64_t*>(src + 0x18);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x20) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x28) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
     // Through the port-aware address door, so this edge is countable and so a
     // later re-registration of 0x180009350 is picked up with no edit here.
     rtavl::PtrArrayAssign(node + 0x20, src + 0x20);
 
-    *reinterpret_cast<TypeNode**>(node + 0x30) = parent;
-    *reinterpret_cast<uint64_t*>(node + 0x38)  = 0;
-    *reinterpret_cast<uint64_t*>(node + 0x40)  = 0;
-    *reinterpret_cast<uint32_t*>(node + 0x48)  = 0;   // ONE dword: balance+height
-    return reinterpret_cast<TypeNode*>(node);
+    *reinterpret_cast<TypeNode**>(node + 0x30) = parent;  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+    *reinterpret_cast<uint64_t*>(node + 0x38)  = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x40)  = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint32_t*>(node + 0x48)  = 0;   // ONE dword: balance+height  // LEFT: TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in R-IO's TypeInfo.h (H8 width: coordinator)
+    return reinterpret_cast<TypeNode*>(node);  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
 }
 
 // ---------------------------------------------------------------------------
@@ -651,11 +652,11 @@ struct TypePolicy : Collection::detail::NoCounters {
     // so the count is reached by offset here rather than by field.
     static Node*&   Root(SetT* s)  { return s->root; }
     static int32_t& Count(SetT* s) {
-        return *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(s) + 8);
+        return *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(s) + 8);  // LEFT: Object::Factory is declared 8 bytes in R-IO's TypeInfo.h; its count at +8 has no field
     }
     static uint32_t NodeKey(const Node* n)      { return n->key; }
     static uint32_t SearchKey(const Element* p) {
-        return *reinterpret_cast<const uint32_t*>(p);
+        return *reinterpret_cast<const uint32_t*>(p);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     }
     // A u32 key has no null state, so both null arms fold away at compile time.
     static bool IsNull(uint32_t) { return false; }
@@ -682,7 +683,7 @@ struct TypePolicy : Collection::detail::NoCounters {
 TypeNode** TypeInsertCore(RtObject::Factory* set, TypeNode** outSlot,
                           const void* pair) {
     return Collection::detail::InsertCorePattern<TypePolicy>(
-        set, outSlot, static_cast<const uint8_t*>(pair));
+        set, outSlot, static_cast<const uint8_t*>(pair));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 }
 
 // ---------------------------------------------------------------------------
@@ -799,17 +800,17 @@ static int StrCmpSigned(const char* a, const char* b) {
 // than raw allocator bytes.
 // ---------------------------------------------------------------------------
 Node* StringPairCtor(void* nodeRaw, const void* srcRaw, Node* parent) {
-    uint8_t*          node = static_cast<uint8_t*>(nodeRaw);
-    const StringPair* src  = static_cast<const StringPair*>(srcRaw);
+    uint8_t*          node = static_cast<uint8_t*>(nodeRaw);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    const StringPair* src  = static_cast<const StringPair*>(srcRaw);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
-    StringAddRefInto(reinterpret_cast<char**>(node + 0x00), src->key);
-    StringAddRefInto(reinterpret_cast<char**>(node + 0x08), src->value);
+    StringAddRefInto(reinterpret_cast<char**>(node + 0x00), src->key);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    StringAddRefInto(reinterpret_cast<char**>(node + 0x08), src->value);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
-    *reinterpret_cast<Node**>(node + 0x10)    = parent;
-    *reinterpret_cast<uint64_t*>(node + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(node + 0x20) = 0;
-    *reinterpret_cast<uint32_t*>(node + 0x28) = 0;   // balance + height
-    return reinterpret_cast<Node*>(node);
+    *reinterpret_cast<Node**>(node + 0x10)    = parent;  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+    *reinterpret_cast<uint64_t*>(node + 0x18) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x20) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint32_t*>(node + 0x28) = 0;   // balance + height  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    return reinterpret_cast<Node*>(node);  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
 }
 
 // ---------------------------------------------------------------------------
@@ -842,7 +843,7 @@ struct StringPolicy : Collection::detail::NoCounters {
     // search key (0x18002a1bc, and AGAIN at 0x18002a212) every iteration; the
     // shared pattern calls these at exactly those points.
     static char* NodeKey(const Node* n) {
-        return *reinterpret_cast<char* const*>(n);
+        return *reinterpret_cast<char* const*>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     }
     static char* SearchKey(const Element* p) { return p->key; }
     static bool  IsNull(char* k) { return k == nullptr; }
@@ -870,7 +871,7 @@ struct StringPolicy : Collection::detail::NoCounters {
 
 Node** StringInsertCore(Set* set, Node** outSlot, const void* pairRaw) {
     return Collection::detail::InsertCorePattern<StringPolicy>(
-        set, outSlot, static_cast<const StringPair*>(pairRaw));
+        set, outSlot, static_cast<const StringPair*>(pairRaw));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 }
 
 // ---------------------------------------------------------------------------
@@ -943,20 +944,20 @@ static int PathStrICmp(const char* a, const char* b) {
 // registration of 0x1800067d0 is what runs and the site's `calls=` counts it.
 // ---------------------------------------------------------------------------
 Node* FilenamePairCtor(void* nodeRaw, const void* srcRaw, Node* parent) {
-    uint8_t*       node = static_cast<uint8_t*>(nodeRaw);
-    const uint8_t* src  = static_cast<const uint8_t*>(srcRaw);
+    uint8_t*       node = static_cast<uint8_t*>(nodeRaw);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    const uint8_t* src  = static_cast<const uint8_t*>(srcRaw);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
     RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
-        reinterpret_cast<RtSystem::Filename*>(node + 0x00),
-        reinterpret_cast<const RtSystem::Filename*>(src + 0x00));
+        reinterpret_cast<RtSystem::Filename*>(node + 0x00),  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        reinterpret_cast<const RtSystem::Filename*>(src + 0x00));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
-    *reinterpret_cast<uint64_t*>(node + 0x08) =
-        *reinterpret_cast<const uint64_t*>(src + 0x08);
-    *reinterpret_cast<Node**>(node + 0x10)    = parent;
-    *reinterpret_cast<uint64_t*>(node + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(node + 0x20) = 0;
-    *reinterpret_cast<uint32_t*>(node + 0x28) = 0;
-    return reinterpret_cast<Node*>(node);
+    *reinterpret_cast<uint64_t*>(node + 0x08) =  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        *reinterpret_cast<const uint64_t*>(src + 0x08);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<Node**>(node + 0x10)    = parent;  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+    *reinterpret_cast<uint64_t*>(node + 0x18) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint64_t*>(node + 0x20) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    *reinterpret_cast<uint32_t*>(node + 0x28) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    return reinterpret_cast<Node*>(node);  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
 }
 
 // 0x180008520 — allocate 0x30 (align 8) and construct. FIRST PARAM IGNORED.
@@ -982,10 +983,10 @@ struct FilenamePolicy : Collection::detail::NoCounters {
     static Node*&   Root(SetT* s)  { return s->root; }
     static int32_t& Count(SetT* s) { return s->count; }
     static const char* NodeKey(const Node* n) {
-        return *reinterpret_cast<const char* const*>(n);
+        return *reinterpret_cast<const char* const*>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     }
     static const char* SearchKey(const Element* p) {
-        return *reinterpret_cast<const char* const*>(p);   // 0x180025ce1 re-read
+        return *reinterpret_cast<const char* const*>(p);   // 0x180025ce1 re-read  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     }
     static bool IsNull(const char* k) { return k == nullptr; }
     static bool Less(const char* a, const char* b) { return PathStrICmp(a, b) < 0; }
@@ -1011,7 +1012,7 @@ struct FilenamePolicy : Collection::detail::NoCounters {
 
 Node** FilenameInsertCore(Set* set, Node** outSlot, const void* pairRaw) {
     return Collection::detail::InsertCorePattern<FilenamePolicy>(
-        set, outSlot, static_cast<const uint8_t*>(pairRaw));
+        set, outSlot, static_cast<const uint8_t*>(pairRaw));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,14 +1031,14 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
     uint8_t temp[0x10];
 
     RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
-        reinterpret_cast<RtSystem::Filename*>(temp + 0x00),
-        reinterpret_cast<const RtSystem::Filename*>(key));
+        reinterpret_cast<RtSystem::Filename*>(temp + 0x00),  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+        reinterpret_cast<const RtSystem::Filename*>(key));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
-    *reinterpret_cast<uint64_t*>(temp + 0x08) = *value;
+    *reinterpret_cast<uint64_t*>(temp + 0x08) = *value;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
     FilenameInsertCore(set, outSlot, temp);
 
-    StringReleaseInline(reinterpret_cast<char**>(temp + 0x00));
+    StringReleaseInline(reinterpret_cast<char**>(temp + 0x00));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     return outSlot;
 }
 
@@ -1084,8 +1085,8 @@ void SubtreeFree(void* ignoredThis, Node* node) {
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    if (*reinterpret_cast<char* const*>(node) != nullptr) ++g_pc.freeStringsReleased;
-    StringReleaseInline(reinterpret_cast<char**>(node));
+    if (*reinterpret_cast<char* const*>(node) != nullptr) ++g_pc.freeStringsReleased;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    StringReleaseInline(reinterpret_cast<char**>(node));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }

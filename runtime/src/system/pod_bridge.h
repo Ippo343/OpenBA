@@ -41,26 +41,26 @@
 namespace RtSystem {
 
 // ---- String ---------------------------------------------------------------
-inline System::String&       Sys(String& s)        { return reinterpret_cast<System::String&>(s); }
-inline const System::String& Sys(const String& s)  { return reinterpret_cast<const System::String&>(s); }
-inline System::String*       Sys(String* s)        { return reinterpret_cast<System::String*>(s); }
-inline const System::String* Sys(const String* s)  { return reinterpret_cast<const System::String*>(s); }
+inline System::String&       Sys(String& s)        { return reinterpret_cast<System::String&>(s); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::String& Sys(const String& s)  { return reinterpret_cast<const System::String&>(s); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline System::String*       Sys(String* s)        { return reinterpret_cast<System::String*>(s); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::String* Sys(const String* s)  { return reinterpret_cast<const System::String*>(s); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
 
 // ---- WideString (ENDGAME B.3.4b SYSTEM (4a)) -------------------------------
 // The same transitional cast one type over. `RtSystem::WideString` is the POD
 // three `runtime/src/` files still hold by value and seed through the ctor
 // door; `System::WideString` is the class the doors now delegate to. Both are
 // one `wchar_t*`, pinned field for field in WideString.h.
-inline System::WideString&       Sys(WideString& w)       { return reinterpret_cast<System::WideString&>(w); }
-inline const System::WideString& Sys(const WideString& w) { return reinterpret_cast<const System::WideString&>(w); }
-inline System::WideString*       Sys(WideString* w)       { return reinterpret_cast<System::WideString*>(w); }
-inline const System::WideString* Sys(const WideString* w) { return reinterpret_cast<const System::WideString*>(w); }
+inline System::WideString&       Sys(WideString& w)       { return reinterpret_cast<System::WideString&>(w); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::WideString& Sys(const WideString& w) { return reinterpret_cast<const System::WideString&>(w); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline System::WideString*       Sys(WideString* w)       { return reinterpret_cast<System::WideString*>(w); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::WideString* Sys(const WideString* w) { return reinterpret_cast<const System::WideString*>(w); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
 
 // ---- Filename -------------------------------------------------------------
-inline System::Filename&       Sys(Filename& f)       { return reinterpret_cast<System::Filename&>(f); }
-inline const System::Filename& Sys(const Filename& f) { return reinterpret_cast<const System::Filename&>(f); }
-inline System::Filename*       Sys(Filename* f)       { return reinterpret_cast<System::Filename*>(f); }
-inline const System::Filename* Sys(const Filename* f) { return reinterpret_cast<const System::Filename*>(f); }
+inline System::Filename&       Sys(Filename& f)       { return reinterpret_cast<System::Filename&>(f); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::Filename& Sys(const Filename& f) { return reinterpret_cast<const System::Filename&>(f); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline System::Filename*       Sys(Filename* f)       { return reinterpret_cast<System::Filename*>(f); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::Filename* Sys(const Filename* f) { return reinterpret_cast<const System::Filename*>(f); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
 
 // ---- a String field read AS a Filename ------------------------------------
 // Retail does this at real call sites, not as a convenience: `IO::FileSystem`
@@ -68,7 +68,7 @@ inline const System::Filename* Sys(const Filename* f) { return reinterpret_cast<
 // (0x180007b90) / `GetDataDirectory` (0x180007bd0) pass their addresses straight
 // into `??0Filename@System@@QEAA@AEBV01@@Z`. Same eight bytes, same single
 // field; the conversion retail performs by pointer cast, spelled once.
-inline System::Filename&       SysFile(String& s)       { return reinterpret_cast<System::Filename&>(s); }
-inline const System::Filename& SysFile(const String& s) { return reinterpret_cast<const System::Filename&>(s); }
+inline System::Filename&       SysFile(String& s)       { return reinterpret_cast<System::Filename&>(s); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+inline const System::Filename& SysFile(const String& s) { return reinterpret_cast<const System::Filename&>(s); }  // LEFT: POD String / Filename slot read as the class (H10 bridge)
 
 }  // namespace RtSystem

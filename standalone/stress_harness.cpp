@@ -38,7 +38,16 @@
 #include "Component/CitizenAIComponent.h"
 #include "Component/CitizenComponent.h"
 #include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent (0x140002e10)
-#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050 (0x140003050)
+#include "Work/exe_bodies.h"
+#include "Entity/ComponentEntity.h"         // B4: FindComponent<T>
+#include "Entity/EntityList.h"              // B4: GameUpdateLoop::m_entityList
+#include "Entity/CitizenBehavior.h"         // B4: GameUpdateLoop::m_citizenList
+#include "Component/CharacterComponent.h"   // B4: CitizenComponent::character
+#include "Component/CitizenDescription.h"   // B4: CitizenComponent::description
+#include "Component/WorkPlaceComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkDescription.h"
+#include "Game/PlayerToolManager.h"         // B4: GameUpdateLoop::m_toolManager
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <intrin.h>
@@ -130,7 +139,7 @@ FILE* s_csv = nullptr;
 FILE* s_compOut = nullptr;
 
 bool Readable(const void* p) {
-    const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+    const uintptr_t a = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
     return a >= 0x10000 && a < 0x00007FFFFFFFFFFFULL;
 }
 
@@ -147,31 +156,30 @@ struct Census {
     double ageMean = 0, hungerMean = 0;
 };
 
-Census TakeCensus(void* gw) {
+Census TakeCensus(GameUpdateLoop* gw) {
     Census c;
     if (!Readable(gw)) return c;
-    const uintptr_t g = reinterpret_cast<uintptr_t>(gw);
-    const uintptr_t el = *reinterpret_cast<uintptr_t*>(g + 0xE8);
-    if (Readable(reinterpret_cast<void*>(el))) {
-        int n = *reinterpret_cast<int*>(el + 0x10);
+    EntityList* el = gw->m_entityList;                 // +0xE8
+    if (Readable(el)) {
+        int n = el->masterArray.count;                 // +0x10
         if (n >= 0 && n < 10000000) c.entities = n;
     }
-    const uintptr_t town = *reinterpret_cast<uintptr_t*>(g + 0xF0);
-    if (!Readable(reinterpret_cast<void*>(town))) return c;
-    uint8_t* arr = *reinterpret_cast<uint8_t**>(town + 0xA0);
-    const int n = *reinterpret_cast<int*>(town + 0xA8);
+    CitizenBehavior* town = gw->m_citizenList;         // +0xF0
+    if (!Readable(town)) return c;
+    CitizenComponent** arr = town->citizens;           // +0xA0
+    const int n = town->citizenCount;                  // +0xA8
     if (!arr || n <= 0 || n > 100000) return c;
     double age = 0, hunger = 0;
     for (int i = 0; i < n; ++i) {
-        uintptr_t cz = *reinterpret_cast<uintptr_t*>(arr + (size_t)i * 8);
-        if (!Readable(reinterpret_cast<void*>(cz))) continue;
+        CitizenComponent* cz = arr[i];
+        if (!Readable(cz)) continue;
         ++c.citizens;
-        age    += *reinterpret_cast<float*>(cz + 0x3C);
-        hunger += *reinterpret_cast<float*>(cz + 0x44);
-        if (*reinterpret_cast<uintptr_t*>(cz + 0x238)) ++c.home238;
-        if (*reinterpret_cast<uintptr_t*>(cz + 0x248)) ++c.work248;
-        const uintptr_t ch = *reinterpret_cast<uintptr_t*>(cz + 0x278);
-        if (Readable(reinterpret_cast<void*>(ch)) && *reinterpret_cast<int32_t*>(ch + 0x60) >= 0)
+        age    += cz->age;                             // +0x3C
+        hunger += cz->hunger;                          // +0x44
+        if (cz->home) ++c.home238;                     // +0x238
+        if (cz->workplace) ++c.work248;                // +0x248
+        CharacterComponent* ch = cz->character;        // +0x278
+        if (Readable(ch) && ch->currentAction >= 0)    // +0x60
             ++c.busy;
     }
     if (c.citizens) { c.ageMean = age / c.citizens; c.hungerMean = hunger / c.citizens; }
@@ -201,8 +209,8 @@ uint32_t s_tidCitizen = 0, s_tidCitizenAI = 0;
 bool     s_tidResolved = false;
 void*    s_curComp = nullptr;        // component whose Update is running (hot loop)
 uint32_t s_curTid  = 0;
-uintptr_t s_curCitizen = 0;          // citizen watched during that Update
-uintptr_t s_curHome = 0;
+CitizenComponent* s_curCitizen = nullptr;   // citizen watched during that Update
+ComponentEntity*  s_curHome = nullptr;
 // [HomeLoss] watch is opt-in since 2026-09-04 (BANISHED_STRESS_HOMEWATCH=1): the population
 // collapse it was built for is closed, and its per-Update bookkeeping sat on every bucket tick.
 bool s_homeWatch = false;
@@ -212,45 +220,49 @@ void HomeWatchInit() {
     TscMs(0);   // stamp the TSC/QPC calibration origin
 }
 int      s_homeLossLogged = 0;
-std::vector<std::pair<uintptr_t, uintptr_t>> s_homeShadow;   // (citizen, home) last frame
+std::vector<std::pair<CitizenComponent*, ComponentEntity*>> s_homeShadow;   // (citizen, home) last frame
 
-void LogHomeLoss(uintptr_t cz, const char* where) {
+void LogHomeLoss(CitizenComponent* cz, const char* where) {
     if (++s_homeLossLogged > 400) return;
-    const uintptr_t ch = *reinterpret_cast<uintptr_t*>(cz + 0x278);
-    const int depth = Readable(reinterpret_cast<void*>(ch)) ? *reinterpret_cast<int32_t*>(ch + 0x60) : -99;
-    const uintptr_t desc = *reinterpret_cast<uintptr_t*>(cz + 0x288);
-    const float adultAge = Readable(reinterpret_cast<void*>(desc)) ? *reinterpret_cast<float*>(desc + 0x44) : 0.f;
-    const char* name = *reinterpret_cast<const char**>(cz + 0x28);
+    CharacterComponent* ch = cz->character;                                // +0x278
+    const int depth = Readable(ch) ? ch->currentAction : -99;              // +0x60
+    CitizenDescription* desc = cz->description;                            // +0x288
+    const float adultAge = Readable(desc) ? desc->adultAge : 0.f;          // +0x44
+    // LEFT: CitizenComponent::name (+0x28) is H5 raw storage (a System::String; CIT / W0-H1):
+    // its first qword is the character data.
+    const char* name = *reinterpret_cast<const char* const*>(&cz->name);
+    const unsigned long long prof =
+        reinterpret_cast<uintptr_t>(cz->profession);  // CAST-OK: ptr_int
     std::fprintf(stderr, "[HomeLoss] frame=%d %s citizen=%p name=%s age=%.2f(adult>=%.1f) hunger=%.1f "
                          "state+0xb0=%d flags+0x54=0x%x +0x88=0x%x prof=0x%llx work248=%p parent250=%p "
                          "partner258=%p ring260=%p elder208=%p target228=%p depth=%d\n",
                  s_worldFrame, where, (void*)cz, Readable(name) ? name : "?",
-                 *reinterpret_cast<float*>(cz + 0x3C), adultAge, *reinterpret_cast<float*>(cz + 0x44),
-                 *reinterpret_cast<int32_t*>(cz + 0xb0), *reinterpret_cast<uint32_t*>(cz + 0x54),
-                 *reinterpret_cast<uint32_t*>(cz + 0x88),
-                 (unsigned long long)*reinterpret_cast<uint64_t*>(cz + 0x1f0),
-                 *reinterpret_cast<void**>(cz + 0x248), *reinterpret_cast<void**>(cz + 0x250),
-                 *reinterpret_cast<void**>(cz + 0x258), *reinterpret_cast<void**>(cz + 0x260),
-                 *reinterpret_cast<void**>(cz + 0x208), *reinterpret_cast<void**>(cz + 0x228), depth);
+                 cz->age, adultAge, cz->hunger,
+                 (int32_t)cz->field_0xB0, cz->statusFlags,
+                 cz->happinessFlags,
+                 prof,
+                 (void*)cz->workplace, (void*)cz->spouse,
+                 (void*)cz->_parent, (void*)cz->_firstChild,
+                 (void*)cz->school, (void*)cz->careBuilding, depth);
     std::fflush(stderr);
 }
 
 // Per-frame shadow compare of every registered citizen's home slot. Catches a clear
 // that happened OUTSIDE a Citizen/CitizenAI Update (message handler, residence tick,
 // entity removal) — the component hook cannot see those.
-void HomeShadowScan(void* gw) {
+void HomeShadowScan(GameUpdateLoop* gw) {
     if (!Readable(gw)) return;
-    const uintptr_t town = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xF0);
-    if (!Readable(reinterpret_cast<void*>(town))) return;
-    uint8_t* arr = *reinterpret_cast<uint8_t**>(town + 0xA0);
-    const int n = *reinterpret_cast<int*>(town + 0xA8);
+    CitizenBehavior* town = gw->m_citizenList;            // +0xF0
+    if (!Readable(town)) return;
+    CitizenComponent** arr = town->citizens;              // +0xA0
+    const int n = town->citizenCount;                     // +0xA8
     if (!arr || n <= 0 || n > 100000) return;
-    std::vector<std::pair<uintptr_t, uintptr_t>> now;
+    std::vector<std::pair<CitizenComponent*, ComponentEntity*>> now;
     now.reserve(n);
     for (int i = 0; i < n; ++i) {
-        uintptr_t cz = *reinterpret_cast<uintptr_t*>(arr + (size_t)i * 8);
-        if (!Readable(reinterpret_cast<void*>(cz))) continue;
-        const uintptr_t home = *reinterpret_cast<uintptr_t*>(cz + 0x238);
+        CitizenComponent* cz = arr[i];
+        if (!Readable(cz)) continue;
+        ComponentEntity* const home = cz->home;           // +0x238
         now.emplace_back(cz, home);
         if (home) continue;
         for (const auto& pr : s_homeShadow)
@@ -306,48 +318,47 @@ constexpr int kStaffRetry  = 300;
 constexpr int kStaffDense  = 6000;   // retry every kStaffRetry until here, then every 1800
 int s_staffPasses = 0;
 
-void StaffPass(void* gw, int worldFrame) {
-    const uintptr_t g = reinterpret_cast<uintptr_t>(gw);
-    const uintptr_t townMgr    = *reinterpret_cast<uintptr_t*>(g + 0xF0);
-    const uintptr_t entityList = *reinterpret_cast<uintptr_t*>(g + 0xE8);
+void StaffPass(GameUpdateLoop* gw, int worldFrame) {
+    CitizenBehavior* townMgr = gw->m_citizenList;     // +0xF0
+    EntityList* entityList   = gw->m_entityList;      // +0xE8
     if (!townMgr || !entityList) return;
-    const uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
-    const int n = *reinterpret_cast<int32_t*>(entityList + 0x10);
+    ComponentEntity** arr = entityList->masterArray.data;   // +0x08
+    const int n = entityList->masterArray.count;            // +0x10
     if (!arr || n <= 0) return;
 
     // 0x140002e10 = FindComponent_WorkPlace, 0x140003050 = FindComponent_Work (both
-    // Ghidra-misnamed; see reference_misnamed_component_finders). Bodies:
-    // AttendanceComponent_GetJobHostComponent, WorkBase_FindComponent_3050.
+    // Ghidra-misnamed; see reference_misnamed_component_finders): the two
+    // ComponentEntity::FindComponent<T> instances, called by name.
 
     struct Need { uint64_t prof; int want; int have; int buildings; };
     std::vector<Need> needs;
     int workplaces = 0, notAccepting = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        if (*reinterpret_cast<uint32_t*>((uint8_t*)ent + 0x40) & 0x400) continue;   // removed
-        uint64_t wpc = 0;
-        AttendanceComponent_GetJobHostComponent(ent, &wpc);                    // 0x140002e10
+        if (ent->_entityFlags & 0x400) continue;   // removed (+0x40)
+        WorkPlaceComponent* wpc = ent->FindComponent<WorkPlaceComponent>();   // 0x140002e10
         if (!wpc) continue;
-        const uint64_t prof = *reinterpret_cast<uint64_t*>(wpc + 0x48);
+        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the profession as a uint64 key.
+        const uint64_t prof = reinterpret_cast<uintptr_t>(wpc->profession);   // +0x48
         if (!prof) continue;
         ++workplaces;
-        if (*reinterpret_cast<uint8_t*>(wpc + 0x50) == 0) { ++notAccepting; continue; }
-        const int have = (int)*reinterpret_cast<uint32_t*>(wpc + 0x60);   // live roster
+        if (wpc->isAccepting == 0) { ++notAccepting; continue; }            // +0x50
+        const int have = wpc->workerCount;   // live roster (+0x60)
         int want = 1;
-        uint64_t wc = 0;
-        WorkBase_FindComponent_3050(reinterpret_cast<uintptr_t>(ent), &wc);  // 0x140003050
+        WorkComponent* wc = ent->FindComponent<WorkComponent>();             // 0x140003050
         if (wc) {
-            const uintptr_t wd = *reinterpret_cast<uintptr_t*>(wc + 0x18);   // WorkDescription
+            // Component::_description (+0x18) downcast inside the Description hierarchy.
+            const Description* baseDesc = wc->_description;
+            const WorkDescription* wd = static_cast<const WorkDescription*>(baseDesc);
             if (wd) {
-                const int dflt = *reinterpret_cast<int32_t*>(wd + 0x24);
-                const int mx   = *reinterpret_cast<int32_t*>(wd + 0x2c);
+                const int dflt = wd->_i24;   // +0x24
+                const int mx   = wd->_i2c;   // +0x2c
                 want = dflt > 0 ? dflt : 1;
                 if (mx > 0 && want > mx) want = mx;
             }
             // Effective capacity as the panel enforces it (workComp+0x30), when computed.
-            const int cap = *reinterpret_cast<int32_t*>(wc + 0x30);
+            const int cap = wc->workState;
             if (cap > 0 && want > cap) want = cap;
         }
         Need* nd = nullptr;
@@ -361,6 +372,8 @@ void StaffPass(void* gw, int worldFrame) {
         const int missing = x.want - x.have;
         if (missing <= 0) continue;
         wanted += missing;
+        // LEFT: CitizenEmploy_SeatWorkers (CIT, Component/exe_bodies.h) takes the town
+        // manager as int64 and the profession as a uint64 key.
         const int got = CitizenEmploy_SeatWorkers((int64_t)townMgr, x.prof, missing);
         seatedTotal += got;
         if (got || s_staffPasses == 0)
@@ -400,9 +413,9 @@ void OpenCsv() {
     std::fflush(s_csv);
 }
 
-void EmitRow(void* gul, int frame) {
+void EmitRow(GameUpdateLoop* gul, int frame) {
     OpenCsv();
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     const long long now = QpcNow();
     const double wall = QpcMs(now - s_runT0) / 1000.0;
     const double windowS = QpcMs(now - (s_lastRow ? s_lastRow : s_runT0)) / 1000.0;
@@ -410,8 +423,8 @@ void EmitRow(void* gul, int frame) {
 
     int speed = 0;
     {
-        void* eui = *reinterpret_cast<void**>((uint8_t*)gul + 0x120);
-        if (eui && *(char*)((uint8_t*)eui + 0x30) == 0) speed = *(int32_t*)((uint8_t*)eui + 0x34);
+        PlayerToolManager* eui = gul->m_toolManager;                    // +0x120
+        if (eui && eui->paused == 0) speed = eui->field_0x34;            // +0x30 / +0x34
     }
     const double fps = windowS > 0 ? s_drawN / windowS : 0.0;
     const double updMean = s_updN ? s_updMsSum / s_updN : 0.0;
@@ -487,27 +500,27 @@ extern "C" void StressHarness_UpdateBegin(int frameNum) {
     if (!s_runT0) s_runT0 = s_updT0;
 }
 
-extern "C" void StressHarness_UpdateEnd(void* gul, int frameNum) {
+extern "C" void StressHarness_UpdateEnd(GameUpdateLoop* gul, int frameNum) {
     if (!StressHarness_Enabled() || !s_updT0) return;
     const long long now = QpcNow();
     const double ms = QpcMs(now - s_updT0);
     s_updMsSum += ms; ++s_updN;
     if (s_updSamples.size() < 8192) s_updSamples.push_back((float)ms);
 
-    void* eui = *reinterpret_cast<void**>((uint8_t*)gul + 0x120);
-    if (eui && *(char*)((uint8_t*)eui + 0x30) == 0) {
-        int spd = *(int32_t*)((uint8_t*)eui + 0x34);
+    PlayerToolManager* eui = gul->m_toolManager;                        // +0x120
+    if (eui && eui->paused == 0) {                                       // +0x30
+        int spd = eui->field_0x34;                                       // +0x34
         if (spd > 0) s_simIters += spd;
     }
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (gw != s_world) {
         s_world = gw; s_worldSeenAt = frameNum; ++s_worldNo;
         s_runT0 = now; s_lastRow = 0; s_staffPasses = 0;
         s_updMsSum = s_drawMsSum = 0; s_updN = s_drawN = 0; s_simIters = 0;
         s_updSamples.clear(); s_frameSamples.clear();
         std::fprintf(stderr, "[Stress] world#%d %p first ticked at process frame %d\n",
-                     s_worldNo, gw, frameNum);
+                     s_worldNo, (void*)gw, frameNum);
     }
     s_worldFrame = frameNum - s_worldSeenAt + 1;
 
@@ -543,19 +556,21 @@ static void CompProf_WatchBegin(void* comp, uint32_t tid) {
         s_tidCitizen   = CitizenComponent::TypeId();
         s_tidCitizenAI = CitizenAIComponent::TypeId();
     }
-    s_curComp = comp; s_curTid = tid; s_curCitizen = 0; s_curHome = 0;
-    uintptr_t cz = 0;
-    if (tid == s_tidCitizen) cz = reinterpret_cast<uintptr_t>(comp);
-    else if (tid == s_tidCitizenAI) cz = *reinterpret_cast<uintptr_t*>((uint8_t*)comp + 0x38);
-    if (cz && Readable(reinterpret_cast<void*>(cz))) {
+    s_curComp = comp; s_curTid = tid; s_curCitizen = nullptr; s_curHome = nullptr;
+    // LEFT: `comp` is void* (entitylist.cpp declares CompProf_Begin* itself, ENTITY);
+    // the type id just matched names the class.
+    CitizenComponent* cz = nullptr;
+    if (tid == s_tidCitizen) cz = reinterpret_cast<CitizenComponent*>(comp);
+    else if (tid == s_tidCitizenAI) cz = reinterpret_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38
+    if (cz && Readable(cz)) {
         s_curCitizen = cz;
-        s_curHome = *reinterpret_cast<uintptr_t*>(cz + 0x238);
+        s_curHome = cz->home;                                            // +0x238
     }
 }
 
 extern "C" int CompProf_BeginKind(void* comp, int kind) {
     void* vtbl = *reinterpret_cast<void**>(comp);
-    uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);
+    uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);  // CAST-OK: hash
     for (int probe = 0; probe < kCompSlots; ++probe) {
         const int idx = (int)((h + probe) & (kCompSlots - 1));
         CompSlot& s = s_comp[idx];
@@ -574,16 +589,16 @@ extern "C" int CompProf_BeginKind(void* comp, int kind) {
 extern "C" int CompProf_Begin(void* comp) { return CompProf_BeginKind(comp, 0); }
 
 extern "C" void CompProf_End(int slot, long long qpcTicks) {
-    if (s_homeWatch && s_curCitizen && s_curHome && Readable(reinterpret_cast<void*>(s_curCitizen)) &&
-        *reinterpret_cast<uintptr_t*>(s_curCitizen + 0x238) == 0) {
+    if (s_homeWatch && s_curCitizen && s_curHome && Readable(s_curCitizen) &&
+        s_curCitizen->home == nullptr) {                                  // +0x238
         const char* tn = ::Object::GetTypeNameById(s_curTid);
         char where[96];
         std::snprintf(where, sizeof(where), "IN-UPDATE(%s comp=%p)", tn ? tn : "?", s_curComp);
         LogHomeLoss(s_curCitizen, where);
         // Mark the shadow so the per-frame scan does not report it a second time.
-        for (auto& pr : s_homeShadow) if (pr.first == s_curCitizen) { pr.second = 0; break; }
+        for (auto& pr : s_homeShadow) if (pr.first == s_curCitizen) { pr.second = nullptr; break; }
     }
-    s_curComp = nullptr; s_curCitizen = 0; s_curHome = 0;
+    s_curComp = nullptr; s_curCitizen = nullptr; s_curHome = nullptr;
     if (slot < 0) return;
     s_comp[slot].ticks += qpcTicks;
     ++s_comp[slot].calls;

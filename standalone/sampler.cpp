@@ -130,7 +130,7 @@ bool TakeSample(Sample& s) {
         // Re-read the tag now that the thread is stopped (it may have moved since).
         s.tag = (uint8_t)g_samplerTag;
         for (int f = 0; f < kMaxFrames && ctx.Rip; ++f) {
-            s.rip[s.n++] = (uintptr_t)ctx.Rip;
+            s.rip[s.n++] = ctx.Rip;
             DWORD64 imageBase = 0;
             PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
             if (!fn) {
@@ -194,7 +194,7 @@ void Sampler_Flush() {
 void Sampler_Init() {
     const int hz = Opt().sample;
     if (hz == 0) return;
-    g_mainThread = (HANDLE)HwWatch_MainThreadHandle();
+    g_mainThread = HwWatch_MainThreadHandle();
     if (!g_mainThread) { std::fprintf(stderr, "[Sampler] no main-thread handle (HwWatch_Init first)\n"); return; }
     if (hz > 1) g_hz = hz;
     InitializeCriticalSection(&g_lock);

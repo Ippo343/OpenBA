@@ -325,8 +325,8 @@ Node* AllocNode(void* /*unused, never read*/, const void* src, Node* parent) {
     Node* n = static_cast<Node*>(MemAlloc(0x38, 8));
     if (!n) return nullptr;
 
-    const uint64_t* s = static_cast<const uint64_t*>(src);
-    uint64_t* d = reinterpret_cast<uint64_t*>(n);
+    const uint64_t* s = static_cast<const uint64_t*>(src);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    uint64_t* d = reinterpret_cast<uint64_t*>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     d[0] = s[0];            // 0x1800230cb — element +0x00..+0x07
     d[1] = s[1];            // 0x1800230d1 — element +0x08..+0x0f
     d[2] = s[2];            // 0x1800230d9 — element +0x10..+0x17

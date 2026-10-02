@@ -20,6 +20,7 @@
 // Value: 1/on = dump every 600 frames, or a frame count. Test-only, opt-in.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/CitizenBehavior.h"   // B4: m_citizenList / professionResources
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -54,17 +55,17 @@ extern "C" void FoodStockCensus_Tick(int frame) {
     if (!s_period || (frame % s_period) != 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    const uintptr_t tracker = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    CitizenBehavior* tracker = gw->m_citizenList;                     // +0xf0
     if (!tracker) return;
-    const uintptr_t table = *reinterpret_cast<uintptr_t*>(tracker + 0x170);
+    const ProfessionResourceEntry* table = tracker->professionResources;   // +0x170
     if (!table) return;
 
     int changed = 0;
     for (int i = 0; i < kMaxMaterials; ++i) {
-        const uintptr_t e = table + static_cast<uintptr_t>(i) * 0x20;
-        const int cur = *reinterpret_cast<int32_t*>(e);
-        const int lim = *reinterpret_cast<int32_t*>(e + 8);
+        const ProfessionResourceEntry& e = table[i];                  // stride 0x20
+        const int cur = e.currentCount;                               // +0x00
+        const int lim = e.maxCount;                                   // +0x08
         // Reject entries that are not real materials. Scanning a fixed 64 walks off the
         // end of the table and the tail decodes as nonsense (measured: limits like
         // -2100900192 "rising" in lockstep), which would read as a dozen materials

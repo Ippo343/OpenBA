@@ -64,6 +64,8 @@ public:
     void StopBurning();                                           // 0x14011ea10
     void ScatterContents(int baseX, int baseY, int width, int depth);  // 0x14011c530
     void RubbleStep();                                            // 0x14011d5d0
+    void RunStateMachine();                                       // 0x14011dfa0 (B4 PLAYER; body in Player/keystone_a_removalcalcpath.cpp)
+    void PostDestroyEvent();                                      // 0x14011e4d0 event 1 on the current node (B4 PLAYER; same file)
     // The state handlers of the controller's table (RCX = [node+0x18] = this,
     // RDX = the state machine, R8 = the elapsed Time for the per-frame column).
     char State3Enter(void* sm);                                   // 0x14011d7b0

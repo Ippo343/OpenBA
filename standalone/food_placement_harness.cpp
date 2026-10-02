@@ -33,6 +33,8 @@
 // (BANISHED_FOOD_PLACE_FRAME, default 900).
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "options.h"
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"   // Object::Base::TypeName (B3X W0)
@@ -153,15 +155,14 @@ void Init() {
 
 uint32_t Tid(const char* n) { return n ? ::Object::GetTypeIdByName(n) : 0; }
 
-void* FindComp(void* ent, uint32_t tid) {
+Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
@@ -172,20 +173,19 @@ void ProbeClass(const FoodClass& fc) {
         std::fprintf(stderr, "[FoodPlace] %-19s TYPE ID UNRESOLVED\n", fc.component);
         return;
     }
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* el = gw->m_entityList;   // +0xe8
     if (!el) return;
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
-    const int n = *reinterpret_cast<int32_t*>(el + 0x10);
+    ComponentEntity** arr = el->masterArray.data;   // +0x08
+    const int n = el->masterArray.count;   // +0x10
 
     int instances = 0;
-    void* ent = nullptr; void* comp = nullptr;
+    ComponentEntity* ent = nullptr; Component* comp = nullptr;
     for (int i = 0; i < n && arr; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* e = *slot;
+        ComponentEntity* e = arr[i];
         if (!e) continue;
-        if (void* c = FindComp(e, tid)) {
+        if (Component* c = FindComp(e, tid)) {
             ++instances;
             if (!ent) { ent = e; comp = c; }
         }
@@ -198,36 +198,36 @@ void ProbeClass(const FoodClass& fc) {
 
     // ── placement facts ───────────────────────────────────────────────────────────
     int tx = -1, ty = -1, fw = -1, fh = -1;
-    if (void* mc = FindComp(ent, MapComponent::TypeId())) {
-        uintptr_t m = reinterpret_cast<uintptr_t>(mc);
-        tx = *reinterpret_cast<int16_t*>(m + 0x28);
-        ty = *reinterpret_cast<int16_t*>(m + 0x2a);
-        fw = *reinterpret_cast<int16_t*>(m + 0x2c);
-        fh = *reinterpret_cast<int16_t*>(m + 0x2e);
+    if (Component* mcc = FindComp(ent, MapComponent::TypeId())) {
+        MapComponent* m = static_cast<MapComponent*>(mcc);   // exact type id
+        tx = m->tileX0;   // +0x28
+        ty = m->tileY0;   // +0x2a
+        fw = m->tileX1;   // +0x2c
+        fh = m->tileY1;   // +0x2e
     }
     int state = -1;
     const bool hasSM = (FindComp(ent, StateMachineComponent::TypeId()) != nullptr);
-    if (void* smc = FindComp(ent, StateMachineComponent::TypeId()))
-        state = *reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(smc) + 0x51);
+    if (Component* smc = FindComp(ent, StateMachineComponent::TypeId()))
+        state = static_cast<StateMachineComponent*>(smc)->stateMachine.activeState;   // +0x51
     int staffed = -1, accepting = -1;
     unsigned long long profKey = 0;
     bool haveWpc = false;
-    if (void* wpc = FindComp(ent, WorkPlaceComponent::TypeId())) {
-        uintptr_t w = reinterpret_cast<uintptr_t>(wpc);
+    if (Component* wpcc = FindComp(ent, WorkPlaceComponent::TypeId())) {
+        WorkPlaceComponent* w = static_cast<WorkPlaceComponent*>(wpcc);   // exact type id
         haveWpc   = true;
-        staffed   = *reinterpret_cast<int32_t*>(w + 0x60);
-        accepting = *reinterpret_cast<uint8_t*>(w + 0x50);
+        staffed   = w->workerCount;     // +0x60
+        accepting = w->isAccepting;     // +0x50
         // +0x48 = profession key. WorkplaceUI_Startup hides the ENTIRE workPlace
         // ribbon (worker up/down spinner + stop-sign icon) when this is 0 -
         // faithful to retail 0x140087080. profKey=0 therefore means no worker
         // arrows regardless of what the .rsc declares; read this field first for
         // any "that panel has no worker arrows" report.
-        profKey = *reinterpret_cast<unsigned long long*>(w + 0x48);
+        profKey = reinterpret_cast<uintptr_t>(w->profession);  // CAST-OK: ptr_int
     }
 
     std::fprintf(stderr, "[FoodPlace] %-19s PLACED x%d  ent=%p comp=%p tile=(%d,%d) fp=%dx%d "
                  "SM=%s stateIdx=%d staffed=%d accepting=%d profKey(+0x48)=0x%llx%s\n",
-                 fc.component, instances, ent, comp, tx, ty, fw, fh,
+                 fc.component, instances, (void*)ent, (void*)comp, tx, ty, fw, fh,
                  hasSM ? "yes" : "NO", state, staffed, accepting, profKey,
                  !haveWpc ? " [NO WorkPlaceComponent]"
                           : (profKey == 0 ? "  <-- RIBBON HIDDEN (no worker spinner)" : ""));

@@ -46,9 +46,8 @@ extern "C" void AllocStats_RecordFree(void* p);
 
 namespace {
 
-inline LPCRITICAL_SECTION AllocCs(void* self) {
-    return reinterpret_cast<LPCRITICAL_SECTION>(
-        reinterpret_cast<uint8_t*>(self) + 0x640);   // MemoryAllocator::lock
+inline LPCRITICAL_SECTION AllocCs(MemoryAllocator* self) {
+    return reinterpret_cast<LPCRITICAL_SECTION>(self->lock);  // CAST-OK: win32
 }
 
 // The composed body: lock, the teardown check, the RAW member Allocate (which

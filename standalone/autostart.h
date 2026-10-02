@@ -20,6 +20,8 @@
 #pragma once
 
 
+class MenuDialogLoopT;
+
 namespace AutoStart {
 
 // Read BANISHED_AUTOSTART once and latch the enabled flag + settle count.
@@ -32,7 +34,7 @@ bool Enabled();
 // Per-frame driver. Call from MenuDLT::Update with the MenuDialogLoopT loop
 // pointer (the menu loop whose +0x38 holds the live MainMenuDialog). No-op
 // once the sequence has fired or if disabled.
-void TickMenu(void* menuDLT);
+void TickMenu(MenuDialogLoopT* menuDLT);
 
 }  // namespace AutoStart
 

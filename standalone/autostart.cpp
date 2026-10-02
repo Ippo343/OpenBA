@@ -25,6 +25,9 @@ void* g_StandaloneScenarioDialog = nullptr;
 #include "ui/UserInterface.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/Internal.h"
+#include "Game/MenuDialogLoopT.h"     // B4: TickMenu's typed menu loop
+#include "Dialog/ModDialog.h"         // B4: ModDialog::entries
+#include "Dialog/SaveLoadDialog.h"    // B4: SaveLoadDialog list fields
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
 extern "C" void* ModDialog_LastOpened();
@@ -35,7 +38,6 @@ namespace AutoStart {
 namespace {
 
 // --- Layout constants (verified elsewhere in the standalone code) ---
-constexpr uintptr_t kMenuDLT_DialogInstance = 0x38;   // MenuDLT m_dialogInstance
 constexpr uintptr_t kNewGame_ButtonOk       = 0xF0;   // NewGameDialog::buttonOk
 
 // Dialog command/event protocol (matches the UI dispatcher).
@@ -223,7 +225,7 @@ void Init() {
 
 bool Enabled() { return s_enabled; }
 
-void TickMenu(void* menuDLT) {
+void TickMenu(MenuDialogLoopT* menuDLT) {
     if (!s_enabled || s_phase == Phase::Disabled || s_phase == Phase::Done)
         return;
     if (!menuDLT) return;
@@ -233,8 +235,7 @@ void TickMenu(void* menuDLT) {
         // The MainMenuDialog is created + set up (Slot4) by the menu loop's
         // Startup path; it lands at MenuDLT+0x38. Wait for it, then let the
         // menu render for s_settleFrames before injecting the New Game click.
-        void* mainMenu = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        UI::DialogInstance* mainMenu = menuDLT->_dialogInstance;
         if (!mainMenu) {
             s_phaseFrame = 0;   // not ready yet — keep waiting
             return;
@@ -250,7 +251,7 @@ void TickMenu(void* menuDLT) {
         if (++s_phaseFrame < s_settleFrames) return;
 
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting New Game "
-               "click\n", mainMenu);
+               "click\n", (void*)mainMenu);
         s_lastMenu = mainMenu;
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_New);
         s_phase        = Phase::WaitNewGame;
@@ -264,6 +265,8 @@ void TickMenu(void* menuDLT) {
         // NewGameDialog::Slot4 (Startup) finds buttonOk and populates the
         // combos. buttonOk != null is our proxy that setup finished, so
         // StartGame can safely read the combo selections.
+        // LEFT: g_StandaloneNewGameDialog is void* (NewGameDialog.h / mainmenudialog.cpp,
+        // DLG); a typed read here would raise this file's static_void column.
         bool setupDone = newGame &&
             *reinterpret_cast<void**>(
                 reinterpret_cast<uintptr_t>(newGame) + kNewGame_ButtonOk) != nullptr;
@@ -301,8 +304,7 @@ void TickMenu(void* menuDLT) {
     }
 
     case Phase::WaitMenuButton: {
-        void* mainMenu = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        UI::DialogInstance* mainMenu = menuDLT->_dialogInstance;
         if (!mainMenu) {
             s_phaseFrame = 0;
             return;
@@ -310,7 +312,7 @@ void TickMenu(void* menuDLT) {
         if (++s_phaseFrame < s_settleFrames) return;
 
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) - injecting click id=%d\n",
-                mainMenu, s_menuButtonId);
+                (void*)mainMenu, s_menuButtonId);
         InjectClick(mainMenu, kMsg_ButtonClick, s_menuButtonId);
         s_phase      = s_menuClickCursor ? Phase::MenuClicks : Phase::Done;
         s_phaseFrame = 0;
@@ -327,10 +329,9 @@ void TickMenu(void* menuDLT) {
         else       { s_menuClickCursor = nullptr; }
 
         if (tok[0] == 'm') {
-            void* mainMenu = *reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+            UI::DialogInstance* mainMenu = menuDLT->_dialogInstance;
             int id = std::atoi(tok + 1);
-            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=%p id=%d\n", mainMenu, id);
+            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=%p id=%d\n", (void*)mainMenu, id);
             if (mainMenu) InjectClick(mainMenu, kMsg_ButtonClick, id);
         } else if (tok[0] == 'd') {
             void* dlg = ModDetailsDialog_LastOpened();
@@ -347,8 +348,10 @@ void TickMenu(void* menuDLT) {
             // and with no .pkm installed (WinData/_mods_off holds them) the
             // entry array count at +0xC0 is 0 and the row handler faults reading
             // its entry. Mirror WaitLoadDialog's saveCount gate: skip loudly.
+            // LEFT: ModDialog_LastOpened (mod_dialog_vtables.cpp, DLG) returns void*.
+            ModDialog* modDlg = static_cast<ModDialog*>(dlg);
             if (dlg && id >= 1000 && id < 6000) {
-                const int rows = *reinterpret_cast<int*>(static_cast<uint8_t*>(dlg) + 0xC0);
+                const int rows = modDlg->entries.GetSize();   // +0xC0, entries' count
                 const int row  = id % 1000;
                 if (row >= rows) {
                     fprintf(stderr, "[AutoStart] WARN: AUTOMENU_CLICKS token %d names row %d "
@@ -363,10 +366,8 @@ void TickMenu(void* menuDLT) {
                 // arguments (0 / 0 / 0 / nullptr; the old raw 4-argument call
                 // left them unset) are the harness's choice: retail has no such
                 // caller.
-                void* nullElem = nullptr;
-                static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
-                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),
-                    kMsg_ButtonClick, id, 0, 0, 0, nullptr);
+                Object::InternalPtr<UI::Element> nullElem;
+                modDlg->OnElementEvent(&nullElem, kMsg_ButtonClick, id, 0, 0, 0, nullptr);
             }
         }
         if (!s_menuClickCursor) s_phase = Phase::Done;
@@ -374,8 +375,7 @@ void TickMenu(void* menuDLT) {
     }
 
     case Phase::WaitLoadMenu: {
-        void* mainMenu = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        UI::DialogInstance* mainMenu = menuDLT->_dialogInstance;
         if (!mainMenu) {
             s_phaseFrame = 0;
             return;
@@ -383,7 +383,7 @@ void TickMenu(void* menuDLT) {
         if (++s_phaseFrame < s_settleFrames) return;
 
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting Load click\n",
-                mainMenu);
+                (void*)mainMenu);
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_Load);
         s_phase        = Phase::WaitLoadDialog;
         s_newGameFrame = 0;
@@ -401,15 +401,16 @@ void TickMenu(void* menuDLT) {
             }
             return;
         }
-        uintptr_t d = reinterpret_cast<uintptr_t>(dlg);
+        // LEFT: g_StandaloneSaveLoadDialog is void* (set in mainmenudialog.cpp, DLG).
+        SaveLoadDialog* d = static_cast<SaveLoadDialog*>(dlg);
         // Wait for the list scan: refreshFlag (+0xBB) cleared AND saveCount
         // (+0xC4) populated by SaveLoadDialog_Load's refresh pass.
-        int saveCount = *reinterpret_cast<int*>(d + 0xC4);
-        if (*reinterpret_cast<uint8_t*>(d + 0xBB) != 0 || saveCount <= 0) {
+        int saveCount = d->saveCount;
+        if (d->refreshFlag != 0 || saveCount <= 0) {
             if (s_newGameFrame > kNewGameTimeoutFrames) {
                 fprintf(stderr, "[AutoStart] WARN: save list never populated "
                        "(refreshFlag=%d count=%d) — aborting AUTOLOAD\n",
-                       *reinterpret_cast<uint8_t*>(d + 0xBB), saveCount);
+                       d->refreshFlag, saveCount);
                 s_phase = Phase::Done;
             }
             return;
@@ -420,13 +421,12 @@ void TickMenu(void* menuDLT) {
         int pick = 0;
         if (::Save::SaveLoad::_singleton) {
             for (int i = 0; i < saveCount; i++) {
-                const void* info = &::Save::SaveLoad::_singleton->GetSaveInfo(i);  // B.3.7 bridge
-                const char* nm = info ? *reinterpret_cast<const char* const*>(
-                    reinterpret_cast<uintptr_t>(info) + 0x38) : nullptr;
+                const ::Save::SaveLoad::SaveInfo* info = &::Save::SaveLoad::_singleton->GetSaveInfo(i);
+                const char* nm = info ? info->name._data : nullptr;   // +0x38
                 if (nm && std::strcmp(nm, s_loadName) == 0) { pick = i; break; }
             }
         }
-        *reinterpret_cast<int*>(d + 0xC0) = pick;   // selectedIndex (SelectEntry sans sound)
+        d->selectedIndex = pick;   // +0xC0 (SelectEntry sans sound)
         fprintf(stderr, "[AutoStart] save list ready (%d entries) — selecting #%d "
                "(\"%s\") and injecting Load click\n", saveCount, pick, s_loadName);
         InjectClick(dlg, kMsg_ButtonClick, kSLD_LoadClick);
@@ -437,8 +437,7 @@ void TickMenu(void* menuDLT) {
     }
 
     case Phase::WaitTutorialMenu: {
-        void* mainMenu = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        UI::DialogInstance* mainMenu = menuDLT->_dialogInstance;
         if (!mainMenu) {
             s_phaseFrame = 0;
             return;
@@ -446,7 +445,7 @@ void TickMenu(void* menuDLT) {
         if (++s_phaseFrame < s_settleFrames) return;
 
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting Tutorial "
-                "click\n", mainMenu);
+                "click\n", (void*)mainMenu);
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_Tutorial);
         s_phase        = Phase::WaitTutorialDialog;
         s_newGameFrame = 0;
@@ -464,6 +463,8 @@ void TickMenu(void* menuDLT) {
             }
             return;
         }
+        // LEFT: g_StandaloneScenarioDialog is void* (mainmenudialog.cpp, DLG); a typed
+        // read here would raise this file's static_void column.
         uintptr_t d = reinterpret_cast<uintptr_t>(dlg);
         // Slot4 fills the entry array (+0xD8) and its count (+0xE0) from the
         // scenario resource list. Count > 0 is our proxy that setup finished.
@@ -511,8 +512,7 @@ void TickMenu(void* menuDLT) {
     }
 
     case Phase::WaitQuit: {
-        void* mainMenu = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(menuDLT) + kMenuDLT_DialogInstance);
+        UI::DialogInstance* mainMenu = menuDLT->_dialogInstance;
         if (!mainMenu) {
             s_phaseFrame = 0;
             return;
@@ -520,7 +520,7 @@ void TickMenu(void* menuDLT) {
         if (++s_phaseFrame < s_settleFrames) return;
 
         fprintf(stderr, "[AutoStart] menu settled (mainMenu=%p) — injecting Quit click\n",
-               mainMenu);
+               (void*)mainMenu);
         InjectClick(mainMenu, kMsg_ButtonClick, kButtonId_Quit);
         s_phase = Phase::Done;
         break;

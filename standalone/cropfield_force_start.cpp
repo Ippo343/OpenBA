@@ -19,6 +19,10 @@
 // Test-only, opt-in, default off.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
+#include "Entity/CitizenBehavior.h"     // B4: m_citizenList->field_0x120
+#include "Component/ComponentDescription.h"
 #include "Object/factory_registration.h"
 #include "Component/CropFieldComponent.h"
 #include "Component/NaturalResourceDescription.h"
@@ -62,15 +66,14 @@ bool AlreadyDone(void* c) {
     return false;
 }
 
-void* FindComp(void* ent, uint32_t tid) {
+Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
@@ -78,43 +81,43 @@ void* FindComp(void* ent, uint32_t tid) {
 // Post a node event through the entity's StateMachineComponent, exactly as
 // OrchardComponent_Command does: smc+0x48 is the SM, sm+0x00 the node, node vtable
 // slot 2 is PostEvent(node, sm, curIdx, eventId), and smc+0x51 carries the index.
-void PostNodeEvent(void* smc, int eventId) {
+void PostNodeEvent(StateMachineComponent* smc, int eventId) {
     if (!smc) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(smc);
-    uintptr_t sm = s + 0x48;
-    void* node = *reinterpret_cast<void**>(sm);
+    StateMachine* sm = &smc->stateMachine;          // +0x48
+    void* node = sm->current;                       // sm+0x00
     if (!node) return;
+    // LEFT: the harness's own "slot 2 is filled" guard reads the node's vtable, so
+    // the call stays a slot call (Controller::PostEvent would drop the guard).
     void** vt = *reinterpret_cast<void***>(node);
     if (!vt || !vt[2]) return;
-    const int curIdx = *reinterpret_cast<int8_t*>(s + 0x51);
+    const int curIdx = sm->activeState;             // +0x51
     reinterpret_cast<char (*)(void*, void*, int, int)>(vt[2])(
-        node, reinterpret_cast<void*>(sm), curIdx, eventId);
+        node, sm, curIdx, eventId);
     std::fprintf(stderr, "[CropStart]   posted node event %d (node=%p curIdx=%d)\n",
                  eventId, node, curIdx);
 }
 
 void Fire(int frame) {
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    uintptr_t el = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* el = gw->m_entityList;                 // +0xe8
     if (!el) return;
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
-    const int n = *reinterpret_cast<int32_t*>(el + 0x10);
+    ComponentEntity** arr = el->masterArray.data;      // +0x08
+    const int n = el->masterArray.count;               // +0x10
     const uint32_t tidCrop = CropFieldComponent::TypeId();
     const uint32_t tidSM   = StateMachineComponent::TypeId();
     if (!arr || n <= 0 || !tidCrop) return;
 
     int found = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        void* comp = FindComp(ent, tidCrop);
+        Component* comp = FindComp(ent, tidCrop);
         if (!comp) continue;
         ++found;
         if (AlreadyDone(comp)) continue;
 
-        uintptr_t c = reinterpret_cast<uintptr_t>(comp);
+        CropFieldComponent* c = static_cast<CropFieldComponent*>(comp);   // exact type id
 
         // ── pick a CROP TYPE (the analogue of the orchard's tree-type combo) ──────
         // State-9 enter reads comp+0x50 as a description LIST and looks inside it for a
@@ -128,13 +131,12 @@ void Fire(int frame) {
         // sub-description list at +0x28 / +0x30. So pick the first entry that actually
         // contains a NaturalResourceDescription and write it in — the same value a
         // player's combo pick would produce.
-        if (*reinterpret_cast<uintptr_t*>(c + 0x50) == 0) {
+        if (c->cropDescription == nullptr) {                              // +0x50
             const uint32_t tidNatRes = NaturalResourceDescription::TypeId();
-            void* gw2 = GameUpdateLoop::_singleton;
-            uintptr_t town = gw2 ? *reinterpret_cast<uintptr_t*>(
-                reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;
-            void** types = town ? *reinterpret_cast<void***>(town + 0x120) : nullptr;
-            const int typeN = town ? *reinterpret_cast<int32_t*>(town + 0x128) : 0;
+            GameUpdateLoop* gw2 = GameUpdateLoop::_singleton;
+            CitizenBehavior* town = gw2 ? gw2->m_citizenList : nullptr;    // +0xf0
+            ComponentDescription** types = town ? town->field_0x120 : nullptr;   // +0x120
+            const int typeN = town ? town->field_0x128 : 0;                // +0x128
             // VARIETY, not just "a crop": collect every planable type and hand each
             // field the NEXT one, rather than the first match for all of them.
             //
@@ -145,16 +147,15 @@ void Fire(int frame) {
             // crop, eight times over. The turn is static and advances per ASSIGNED
             // field, so the spread stays even.
             static int s_cropTurn = 0;
-            void* chosen = nullptr;
+            ComponentDescription* chosen = nullptr;
             {
-                void* planable[64];
+                ComponentDescription* planable[64];
                 int planableN = 0;
                 for (int t = 0; t < typeN && types && planableN < 64; ++t) {
-                    void* entry = types[t];
+                    ComponentDescription* entry = types[t];
                     if (!entry) continue;
-                    uintptr_t e = reinterpret_cast<uintptr_t>(entry);
-                    void** subs = *reinterpret_cast<void***>(e + 0x28);
-                    const int subN = *reinterpret_cast<int32_t*>(e + 0x30);
+                    auto subs = entry->_subDescs;                          // +0x28
+                    const int subN = entry->_subDescCount;                // +0x30
                     for (int k = 0; k < subN && subs; ++k)
                         if (subs[k] && tidNatRes &&
                             Object::IsDerivedFromNullSafe(subs[k], tidNatRes)) {
@@ -167,9 +168,9 @@ void Fire(int frame) {
                 }
             }
             if (chosen) {
-                *reinterpret_cast<void**>(c + 0x50) = chosen;
+                c->cropDescription = chosen;                              // +0x50
                 std::fprintf(stderr, "[CropStart]   crop type set: %p (from %d world "
-                             "resource types)\n", chosen, typeN);
+                             "resource types)\n", (void*)chosen, typeN);
             } else {
                 std::fprintf(stderr, "[CropStart]   NO crop type available — scanned %d "
                              "world resource types, none carries a "
@@ -178,16 +179,16 @@ void Fire(int frame) {
             }
         }
 
-        const uint8_t before = *reinterpret_cast<uint8_t*>(c + 0x48);
-        *reinterpret_cast<uint8_t*>(c + 0x48) = 1;
+        const uint8_t before = c->workEnabled;                            // +0x48
+        c->workEnabled = 1;
         if (s_doneN < kMaxTracked) s_done[s_doneN++] = comp;
 
         std::fprintf(stderr, "[CropStart] frame=%d comp=%p master(+0x48) %u -> 1, "
                      "hasCrop(+0x49)=%u slots(+0x60)=%d\n",
-                     frame, comp, (unsigned)before,
-                     (unsigned)*reinterpret_cast<uint8_t*>(c + 0x49),
-                     *reinterpret_cast<int32_t*>(c + 0x60));
-        if (s_mode >= 2) PostNodeEvent(FindComp(ent, tidSM), 3);
+                     frame, (void*)comp, (unsigned)before,
+                     (unsigned)c->hasCrop,                                // +0x49
+                     c->slots.count);                                     // +0x60
+        if (s_mode >= 2) PostNodeEvent(static_cast<StateMachineComponent*>(FindComp(ent, tidSM)), 3);
         std::fflush(stderr);
     }
     if (found == 0) {

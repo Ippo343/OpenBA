@@ -37,7 +37,7 @@
 // it, so the seam is the two lines around the `fn_UI_Update` call in
 // `GameUpdateLoop::Update` (code/Game/Game/gameupdateloop.cpp) and around the
 // `fn_DialogLoopT_Update` tail call in `MenuDLT::Stub_Update`
-// (standalone/menudialogloopt_stubs.cpp). PostUpdate reads the element flags
+// (code/Game/Game/menudialogloopt_stubs.cpp). PostUpdate reads the element flags
 // back once retail has had its say.
 //
 // THE SCALE ROUND TRIP — the one piece of arithmetic that can be wrong
@@ -480,8 +480,8 @@ void Walk(UI::Element* e, RtUI::DialogInstance* dlg, Scan& sc, int depth) {
 }
 
 bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
-    ListNode* head = *reinterpret_cast<ListNode**>(
-        reinterpret_cast<uint8_t*>(ui) + 0x00);
+    using ListNode = Collection::LinkedList<UI::DialogInstancePtr>::Node;
+    ListNode* head = ui->_dialogs._head;   // +0x00
 
     if (dump) {
         // THE FRAME THE HOVER TEST ACTUALLY RUNS IN. Element::Update compares
@@ -504,7 +504,7 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
     }
 
     for (ListNode* n = head; n; n = n->next) {
-        RtUI::DialogInstance* dlg = static_cast<RtUI::DialogInstance*>(n->value);
+        RtUI::DialogInstance* dlg = static_cast<RtUI::DialogInstance*>(n->element);
         if (!dlg) continue;
         UI::Element* root = static_cast<UI::Element*>(dlg->_root);
         if (!root) continue;
@@ -671,11 +671,10 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     // them is a defect that every other screen this lane has is blind to --
     // the downstream rows only ever read +0x60.
     {
-        const uint8_t* S    = reinterpret_cast<const uint8_t*>(ui);
-        const uint32_t fId  = *reinterpret_cast<const uint32_t*>(S + 0x70);
-        const void*    fDat = *reinterpret_cast<void* const*>(S + 0x78);
-        const int32_t  fGx  = *reinterpret_cast<const int32_t*>(S + 0x80);
-        const int32_t  fGy  = *reinterpret_cast<const int32_t*>(S + 0x84);
+        const uint32_t fId  = ui->_dragDropId;      // +0x70
+        const void*    fDat = ui->_dragDropData;    // +0x78
+        const int32_t  fGx  = ui->_dragDropGrabX;   // +0x80
+        const int32_t  fGy  = ui->_dragDropGrabY;   // +0x84
         // In the RELEASE build standalone/log_strip.h #defines printf away, so
         // these four become unused. Silenced rather than left to warn.
         (void)fId; (void)fDat; (void)fGx; (void)fGy;
@@ -731,11 +730,10 @@ bool Enabled() {
     return g_cfg.armed;
 }
 
-void PreUpdate(void* uiRaw) {
+void PreUpdate(UI::UserInterface* ui) {
     ReadConfig();
-    if (!g_cfg.armed || g_done || !uiRaw) return;
+    if (!g_cfg.armed || g_done || !ui) return;
 
-    UI::UserInterface* ui = static_cast<UI::UserInterface*>(uiRaw);
     ++g_frame;
     g_lastTarget = nullptr;
     g_lastDlg    = nullptr;
@@ -839,9 +837,9 @@ void PreUpdate(void* uiRaw) {
                (void*)g_lastTarget);
 }
 
-void PostUpdate(void* uiRaw) {
+void PostUpdate(UI::UserInterface* ui) {
     ReadConfig();
-    if (!g_cfg.armed || !uiRaw) return;
+    if (!g_cfg.armed || !ui) return;
     if (!g_lastTarget) return;
 
     // Retail has now run. These three reads are the whole difference between
@@ -863,24 +861,22 @@ void PostUpdate(void* uiRaw) {
     // The accumulator at +0xa0 is the one EndHover resets. Printing all three
     // says WHICH guard is refusing rather than leaving S4=0 to be guessed at.
     if (g_cfg.trace && g_lastDlg) {
-        const uint8_t* d = reinterpret_cast<const uint8_t*>(g_lastDlg);
+        const RtUI::DialogInstance* d = g_lastDlg;
         printf("[MouseInject/dwell] f=%d dlg=%p hovering=%d lastPos=(%d,%d) "
                "accum=%lld uiMouseCaptured=%d elemFlags=%08x dragDlg=%p dragElem=%p\n",
                g_frame, (void*)g_lastDlg, (int)g_lastDlg->_hovering,
-               (int)*reinterpret_cast<const int32_t*>(d + 0x90),
-               (int)*reinterpret_cast<const int32_t*>(d + 0x94),
-               (long long)*reinterpret_cast<const int64_t*>(d + 0xa0),
-               (int)*(reinterpret_cast<const uint8_t*>(uiRaw) + 0xd9),
+               (int)d->_hoverMouseX,
+               (int)d->_hoverMouseY,
+               (long long)d->_hoverTime,
+               (int)ui->_mouseCaptured,
                (unsigned)f,
                // +0x60 is what UserInterface::Update turns into
                // UpdateState::dragActive, and +0x68 is the element EndDragDrop
                // would destroy. A drop that never fires is almost always +0x60
                // already cleared by Update's OWN end-drag block, which does the
                // teardown INLINE and never calls EndDragDrop.
-               *reinterpret_cast<void* const*>(
-                   reinterpret_cast<const uint8_t*>(uiRaw) + 0x60),
-               *reinterpret_cast<void* const*>(
-                   reinterpret_cast<const uint8_t*>(uiRaw) + 0x68));
+               ui->_dragDropDialog,
+               (void*)ui->_dragDropElement);
     }
 }
 

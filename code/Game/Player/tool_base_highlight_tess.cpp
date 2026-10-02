@@ -43,10 +43,9 @@ constexpr uint32_t kDAT_1401722c0 = 0x80000000;  // XORPS sign-flip mask (the ne
 constexpr uint8_t  kDAT_1401c23cf = 0x2e;        // base index byte (iVar13 seed = 46)
 }  // namespace
 
-// ---- ported-alongside AVL helpers (tool_base_highlight.cpp) ----------------------
-extern "C" int64_t* TradeWork_impl_1f6b0(int64_t* root, int64_t* outNode, uint32_t* key);
-extern "C" int64_t  TradeWork_impl_1fc00(int64_t* root, int64_t key);
-extern "C" void     TradeWork_helper_14b00(int64_t ctx, void* node);
+// ---- the vertex-dedup set (tool_base_highlight.cpp, Player/exe_bodies.h) -----------
+//   0x14001f6b0 DecalVertexSetInsert, 0x14001fc00 DecalVertexSetFind,
+//   0x140014b00 Avl38FreeSubtree<DecalVertexNode>.
 
 namespace {
 
@@ -114,11 +113,14 @@ inline void AppendIndex(int64_t lVar16, uint16_t idx) {
 
 // EmitVertex — resolve ONE corner descriptor to a vertex index (find/insert/append),
 // then append that index to the index buffer.
-inline void EmitVertex(int64_t lVar16, int64_t* poolRoot, int64_t* pool,
-                       uint32_t* desc, int64_t* outNode) {
-    int64_t node = TradeWork_impl_1fc00(poolRoot, (int64_t)desc);   // 0x14001fc00
+inline void EmitVertex(int64_t lVar16, AvlTreeHead<DecalVertexNode>* set, int64_t* pool,
+                       uint32_t* desc, DecalVertexNode** outNode) {
+    // LEFT: the corner records are raw dwords of this body's stack block (the
+    // 0x14-byte vertex record is not modelled, TessVertex14 below); the set reads
+    // their first 0x14 bytes as the key.
+    DecalVertexNode* node = DecalVertexSetFind(set, reinterpret_cast<const DecalVertexKey*>(desc));   // 0x14001fc00
     uint16_t idx;
-    if (node == 0) {
+    if (node == nullptr) {
         int curCount = *reinterpret_cast<int*>((char*)pool + 8);    // pool.count
         uint32_t rec[6];
         rec[0] = desc[0]; rec[1] = desc[1]; rec[2] = desc[2];
@@ -131,10 +133,10 @@ inline void EmitVertex(int64_t lVar16, int64_t* poolRoot, int64_t* pool,
         // raw `desc` (position + UVs). Passing these swapped makes node+0x14 hold garbage
         // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
         // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
-        TradeWork_impl_1f6b0(poolRoot, outNode, rec);                  // 0x14001f6b0 (key = rec)
+        DecalVertexSetInsert(set, outNode, reinterpret_cast<const DecalVertexKey*>(rec));   // 0x14001f6b0 (key = rec) LEFT: as above
         Pf_VectorResize14Fill_f8d0(pool, curCount + 1, reinterpret_cast<uint64_t*>(desc));   // 0x14001f8d0 (vertex = desc)
     } else {
-        idx = *reinterpret_cast<uint16_t*>(node + 0x14);
+        idx = (uint16_t)node->key.index;   // the low word (retail reads a word at node+0x14)
     }
     AppendIndex(lVar16, idx);
 }
@@ -276,8 +278,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
 
     // dedup pool + BST.
     struct VPool { int64_t base; int32_t count; int32_t cap; } pool = {0, 0, 0};
-    struct BstRoot { int64_t root; int32_t count; } bst = {0, 0};
-    int64_t* poolRootHolder = reinterpret_cast<int64_t*>(&bst);
+    AvlTreeHead<DecalVertexNode> bst = {nullptr, 0, {}};
 
     int iVar13 = (int)kDAT_1401c23cf;
     fVar33 = (float)((*reinterpret_cast<int*>(lVar16 + 0x34) + *reinterpret_cast<int*>(lVar16 + 0x2c)) >> 1);
@@ -299,7 +300,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     reinterpret_cast<TessVertexArray*>(lVar16 + 0x08)->~Array();
     reinterpret_cast<TessIndexArray*>(lVar16 + 0x18)->~Array();
 
-    int64_t outNode;
+    DecalVertexNode* outNode;
 
     // main tile loop (y = minY..maxY, x = minX..maxX).
     int iVar18 = *reinterpret_cast<int*>(lVar16 + 0x30);
@@ -369,7 +370,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                         uint32_t* c3 = reinterpret_cast<uint32_t*>(descBlock + 0x3c);
 
                         auto emit = [&](uint32_t* desc) {
-                            EmitVertex(lVar16, poolRootHolder, reinterpret_cast<int64_t*>(&pool),
+                            EmitVertex(lVar16, &bst, reinterpret_cast<int64_t*>(&pool),
                                        desc, &outNode);
                         };
 
@@ -406,12 +407,12 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     }
 
     // free the BST + vertex pool.
-    if (bst.root != 0) {
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(&bst.root), *reinterpret_cast<void**>(bst.root + 0x20));
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(&bst.root), *reinterpret_cast<void**>(bst.root + 0x28));
-        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(bst.root));   // bst.root != 0 here
+    if (bst.root != nullptr) {
+        Avl38FreeSubtree(&bst.root, bst.root->left);    // 0x140014b00
+        Avl38FreeSubtree(&bst.root, bst.root->right);   // 0x140014b00
+        System::MemoryAllocator::MemFree(bst.root);   // bst.root != 0 here
     }
-    bst.root  = 0;
+    bst.root  = nullptr;
     bst.count = 0;
     if (pool.base) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(pool.base));
 
