@@ -13,9 +13,7 @@
 // then calls Graphics::MaterialInstance::Setup on the result, validating
 // against the same slot).
 //
-// TODO: factor with code/Game/Game/serialize_externals.cpp once that
-// file's `ExternalPtrSerializeGeneric` is exposed (it's currently in an
-// anonymous namespace, so we duplicate the body here under a new name).
+// The body is shared with code/Game/Game/serialize_externals.cpp (B.4 GAME-b).
 
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
@@ -28,190 +26,32 @@
 #include <cstdint>
 #include <cstdio>
 #include "Game/exe_bodies.h"
+#include "Game/serialize_externals.h"
 
 namespace {
-
-// Shared body — duplicate of ExternalPtrSerializeGeneric in
-// serialize_externals.cpp. See that file for the per-line provenance
-// against FUN_14001b8e0. Renamed here to avoid an ODR clash.
-void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
-                                      const uint32_t* typeIdPtr,
-                                      const char* typeName) {
+// B.4 GAME-b: the body is the shared typed SerializeExternalRef (serialize_externals.cpp);
+// this copy differed only in its log tag. The C entry points' two LEFT casts:
+// the slot and the serializer arrive as void* from callers holding their own types.
+void ForwardRef7140(void* refField, void* serializer, uint32_t typeId, const char* typeName) {
     if (!refField || !serializer) return;
-
-    if (!::Object::ExternalFactory::_singleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[ExternalPtr::Serialize_7140<%s>] runtime primitives unwired — "
-                   "skipping serialize (cascade-safe no-op)\n",
-                   typeName ? typeName : "?");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    void* factory = ::Object::ExternalFactory::_singleton;
-    // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
-    // The singleton is still read through the EXISTING door, so the guards
-    // above still gate the same cell and the same registered body still runs.
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-
-    uint32_t typeId = 0;
-    bool typeIdResolved = false;
-    if (typeIdPtr) {
-        typeId = *typeIdPtr;
-        typeIdResolved = (typeId != 0);
-    }
-    // Lazy resolution path — see serialize_externals.cpp for rationale.
-    if (!typeIdResolved && typeName) {
-        const char* simple = typeName;
-        for (const char* p = typeName; *p; ++p) {
-            if (p[0] == ':' && p[1] == ':') simple = p + 2;
-        }
-        typeId = ::Object::ResolveTypeIdByNameLazy(simple);
-        typeIdResolved = (typeId != 0);
-    }
-    if (!typeIdResolved) {
-        static bool s_typeWarned = false;
-        if (!s_typeWarned) {
-            printf("[ExternalPtr::Serialize_7140<%s>] typeId not yet registered — "
-                   "loading without type validation\n",
-                   typeName ? typeName : "?");
-            fflush(stdout);
-            s_typeWarned = true;
-        }
-    }
-
-    IO::Encoding* encoding = const_cast<IO::Encoding*>(
-        &reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
-    if (!encoding) return;
-    // Encoding vtable +0x10 is slot 2 == IO::Encoding::GetKind() (B34_RULES §1.1).
-    int encState = encoding->GetKind();   // B.3.4 bridge  (+0x10 = Encoding::GetKind)
-
-    if (encState == 3) {
-        // Path-export (read-only) mode.
-        if (!*refField) return;
-        // `GetPath` returns by value through a hidden return slot and the callee
-        // CONSTRUCTS into it; copy-initialising the local is the same store.
-        System::Filename pathBuf =
-            reinterpret_cast<const ::Object::External*>(*refField)->GetPath();  // B.3.3 bridge
-        const void* found = efactory->FindOrLoad(pathBuf);
-        if (found && typeIdResolved) {
-            ::Object::IsDerivedFromOrTrust(const_cast<void*>(found), typeId);
-        }
-        return;
-    }
-
-    System::Filename fnameBuf;
-
-    bool refMode = efactory->IsReferenceModeEnabled();
-
-    if (refMode) {
-        uint32_t refId = 0xFFFFFFFFu;
-        if (*refField) {
-            refId = efactory->GetReferenceId(
-                reinterpret_cast<const ::Object::External*>(*refField));   // B.3.3 bridge
-        }
-
-        int serializerInner = *reinterpret_cast<int*>(
-            reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
-
-        bool needsLoad = false;
-        if (!*refField || serializerInner != 0 || refId != 0xFFFFFFFFu) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
-            if (refId != 0xFFFFFFFFu) {
-                if (serializerInner == 0) {
-                    System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
-                    fnameBuf = tmpFn;
-                }
-                needsLoad = true;
-            }
-        } else {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
-        }
-
-        if (needsLoad) {
-            int innerCheck = *reinterpret_cast<int*>(
-                reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
-            if (innerCheck == 0) {
-                void* loaded = const_cast<::Object::External*>(
-                    efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
-                void* result = nullptr;
-                if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
-                    result = loaded;
-                }
-                *refField = result;
-            }
-        }
-    } else {
-        bool hasRef = (*refField != nullptr);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
-        if (hasRef) {
-            if (*refField) {
-                System::Filename pathBuf =
-                    reinterpret_cast<const ::Object::External*>(*refField)->GetPath();  // B.3.3 bridge
-                fnameBuf = pathBuf;
-            }
-            fnameBuf.AsString().Serialize(serializer);
-
-            int innerCheck = *reinterpret_cast<int*>(
-                reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
-            if (innerCheck == 0) {
-                void* loaded = const_cast<::Object::External*>(
-                    efactory->FindOrLoad(fnameBuf));                        // B.3.3 bridge
-                void* result = nullptr;
-                if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
-                    result = loaded;
-                }
-                *refField = result;
-            }
-        }
-    }
-
+    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),
+                                *reinterpret_cast<IO::Serializer*>(serializer),
+                                typeId, typeName, "ExternalPtr::Serialize_7140");
 }
-
 } // namespace
 
-// ============================================================
-// FUN_140007140 — typed ExternalPtr serialize for Graphics::MaterialInstance
-// (typeInfo slot 0x140151350)
-// ============================================================
 extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
     void* refField, void* serializer) {
-
-    // 0x140007140 resolves back to ourselves via the address registry, so we
-    // always run the cleaned body here.
-
-    // Retail reads the BaseTypeInfo* in import slot 0x140151350; ENDGAME B.3.9
-    // TI-REST: the class's own record.
-    const uint32_t* typeIdPtr = &Graphics::MaterialInstance::GetTypeInfo().typeId;
-    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
-                                     serializer, typeIdPtr,
-                                     "Graphics::MaterialInstance");
+    ForwardRef7140(refField, serializer, Graphics::MaterialInstance::GetTypeInfo().typeId,
+                   "Graphics::MaterialInstance");
 }
 
-// ============================================================
-// Scenario's typed ExternalPtr serializers (menu-loader factory cascade).
-// ============================================================
-// FUN_140019ec0 (MapGenerator), FUN_14001a0c0 (TerrainGenerator),
-// FUN_1400194a0 (ClimateGenerator) — same body as 7140, differing only by the
-// hardcoded TypeInfo_<Gen> the original uses for IsDerivedFrom. Registered at
-// their exe addresses (address_registry.cpp) so Scenario_Serialize resolves
-// them; without these the three ExtPtr fields (Scenario +0x70/+0x78/+0x80)
-// aren't read and the loader stream misaligns -> downstream garbage typeId ->
-// crash. The typeId is resolved lazily by name (the generators are registered
-// elsewhere), so no .rdata typeInfo slot is needed here.
 extern "C" void Reimpl_ExternalPtr_Serialize_MapGenerator(void* refField, void* serializer) {
-    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
-                                     serializer, nullptr, "MapGenerator");
+    ForwardRef7140(refField, serializer, 0u, "MapGenerator");
 }
 extern "C" void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, void* serializer) {
-    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
-                                     serializer, nullptr, "TerrainGenerator");
+    ForwardRef7140(refField, serializer, 0u, "TerrainGenerator");
 }
 extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer) {
-    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
-                                     serializer, nullptr, "ClimateGenerator");
+    ForwardRef7140(refField, serializer, 0u, "ClimateGenerator");
 }

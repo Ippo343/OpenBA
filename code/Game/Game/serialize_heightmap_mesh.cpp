@@ -2,6 +2,13 @@
 //
 // M3.5 Path B session 6 — heightmap mesh-build path.
 //
+// B.4 GAME-b: the receiver is WorldGeometry (settled from retail's callers, see
+// WorldGeometryElements.h): BuildTerrainMesh (0x1400ac1e0), FillTerrainVertices
+// (0x1400ac880) and TerrainNormal (0x1400ae270) are members reading its fields;
+// the vertex is TerrainVertex. The standalone flat water sheet
+// (WorldGen_BuildWaterMesh) had no caller left since the b260 contour mesh and
+// went with this change.
+//
 // Three exe-internal helpers + the Runtime DX wiring that constructs the
 // renderable terrain mesh from the deserialized heightmap raw bytes:
 //
@@ -51,6 +58,9 @@
 #include <cstdlib>
 #include <cmath>
 #include "Game/exe_bodies.h"
+#include "Game/WorldGeometryElements.h"
+#include "Action/PathAvl.h"
+#include "math/Math.h"
 
 namespace {
 
@@ -96,56 +106,36 @@ constexpr float kNormalDefaultZ  = 2.0f;        // 0x140172174
 // `srcRowPitch = sizeBytes`. THIS FILE WAS RIGHT; Buffers.h's names were wrong and
 // are now fixed. No argument order changed anywhere.
 
+} // namespace
+
 // ============================================================
-// Helper C — TradeWork_helper_e270 (vertex normal compute)
+// 0x1400ae270 — WorldGeometry::TerrainNormal (vertex normal from the heightmap)
 // ============================================================
 //
-// Reads heightmap samples around (col, row) in the heightmap buffer at
-// self+0xd8 (gridLevels^2 grid at self+0xd0), computes a Vector3 normal from
-// the discrete x/y deltas of the heightmap, and Normalize()s in place.
-//
-// param_1 (self) : Geometry container (RCX)
-// param_2 (out)  : pointer to a 12-byte Vector3 in stack memory (RDX, hidden retval)
-// param_3 (col)  : int (R8)
-// param_4 (row)  : int (R9)
+// Reads the int16 heightmap (_arrayD8, row stride _fieldD0 = gridLevels) around
+// (col, row), computes a normal from the discrete x/y deltas and normalizes it.
 //
 // Decompile:
 //   nx = (h(col+1,row) - h(col-1,row)) * (-1/256)
 //   ny = (h(col,row+1) - h(col,row-1)) * (-1/256)
 //   nz = 2.0
-//   *(Vector3*)param_2 = { nx, ny, nz }
-//   Math::Vector3::Normalize(param_2);   // hidden-retval discarded — modifies via this
+//   Math::Vector3::Normalize(...)
 //
 // Coordinate clamping: each index is clamped to [0, gridLevels-1] independently.
-extern "C" void* TradeWork_helper_e270_Body(void* self, void* retbuf, int col, int row) {
-    if (!self || !retbuf) return retbuf;
-
-    int gridLevels = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0xd0);
-    if (gridLevels <= 0) {
-        // Degenerate — store 0,0,2 unnormalized to avoid div-by-zero in Normalize.
-        float* v = reinterpret_cast<float*>(retbuf);
-        v[0] = 0.0f; v[1] = 0.0f; v[2] = kNormalDefaultZ;
-        return retbuf;
-    }
-
-    int16_t* heightmap = *reinterpret_cast<int16_t**>(reinterpret_cast<uint8_t*>(self) + 0xd8);
-    if (!heightmap) {
-        float* v = reinterpret_cast<float*>(retbuf);
-        v[0] = 0.0f; v[1] = 0.0f; v[2] = kNormalDefaultZ;
-        return retbuf;
-    }
+Math::Vector3 WorldGeometry::TerrainNormal(int col, int row) const {
+    int gridLevels = _fieldD0;
+    // Degenerate — 0,0,2 unnormalized to avoid div-by-zero in Normalize.
+    if (gridLevels <= 0) return Math::Vector3(0.0f, 0.0f, kNormalDefaultZ);
+    const int16_t* heightmap = _arrayD8;
+    if (!heightmap) return Math::Vector3(0.0f, 0.0f, kNormalDefaultZ);
 
     auto clamp = [&](int v) -> int {
         if (v < 0) return 0;
         if (v >= gridLevels) return gridLevels - 1;
         return v;
     };
-
     auto sample = [&](int c, int r) -> int {
-        int cc = clamp(c);
-        int rr = clamp(r);
-        // heightmap[r * gridLevels + c]
-        return static_cast<int>(heightmap[static_cast<size_t>(rr) * gridLevels + cc]);
+        return static_cast<int>(heightmap[static_cast<size_t>(clamp(r)) * gridLevels + clamp(c)]);
     };
 
     // Mirrors disasm:
@@ -158,104 +148,63 @@ extern "C" void* TradeWork_helper_e270_Body(void* self, void* retbuf, int col, i
     float ny = static_cast<float>(dy) * kNormalDeltaStep;
     float nz = kNormalDefaultZ;
 
-    float* out = reinterpret_cast<float*>(retbuf);
-
     // Normalize IN PLACE (the original e270 ends with Math::Vector3::Normalize on
-    // the local vector, mutating it). We must do the same: the vertex writer ac880
-    // byte-encodes each component as (n + 1.0) * 127.5 into a UNORM8. With nz left
-    // at the raw 2.0, that yields (2.0+1.0)*127.5 = 382.5 -> (char)382 = 126, which
-    // the terrain VS decodes as nz = 126/255*2-1 ≈ 0 — i.e. EVERY terrain normal
-    // ends up flat/sideways with random XY, wrecking diffuse lighting + the PS
-    // triplanar rock blend (faceted/blocky terrain). RenderDoc A/B vs retail:
-    // retail nz byte ~200-249 (unit normals tilting on slopes), ours was 126 flat.
-    //
-    // Do it in plain C++ rather than via Math::Vector3::Normalize: that method is
-    // the *by-value*
-    // (const) overload — it returns a normalized COPY and leaves `this` unchanged,
-    // so it never mutated our vector (that's why nz stayed 2.0).
+    // the local vector, mutating it). The vertex writer ac880 byte-encodes each
+    // component as (n + 1.0) * 127.5 into a UNORM8; with nz left at the raw 2.0
+    // every terrain normal decodes flat/sideways (RenderDoc A/B vs retail: retail
+    // nz byte ~200-249, ours was 126). Plain C++, not Math::Vector3::Normalize: that
+    // is the by-value (const) overload — it returns a normalized COPY.
     float len = std::sqrt(nx * nx + ny * ny + nz * nz);
     if (len > 1e-8f) {
         float inv = 1.0f / len;
-        out[0] = nx * inv;
-        out[1] = ny * inv;
-        out[2] = nz * inv;
-    } else {
-        // Degenerate (perfectly flat): straight up.
-        out[0] = 0.0f;
-        out[1] = 0.0f;
-        out[2] = 1.0f;
+        return Math::Vector3(nx * inv, ny * inv, nz * inv);
     }
-
-    return retbuf;
+    // Degenerate (perfectly flat): straight up.
+    return Math::Vector3(0.0f, 0.0f, 1.0f);
 }
 
 // ============================================================
-// Helper B — FUN_1400ac880 (per-cell vertex block compute)
+// 0x1400ac880 — WorldGeometry::FillTerrainVertices (one chunk's vertex block)
 // ============================================================
 //
-// Fills a buffer of `cellSize * cellSize` 16-byte vertices for the rectangular
-// block (colStart..colStart+cellSize, rowStart..rowStart+cellSize). Called
-// once per master grid cell from sub_c1e0; the resulting block is uploaded
-// into the appropriate slice of the master VertexBuffer.
+// Fills `width * height` TerrainVertex records for the block (colStart..,
+// rowStart..); called once per chunk from BuildTerrainMesh / RebuildDirtyChunks,
+// the block then uploaded into its slice of the master VertexBuffer.
 //
-// Original signature (param ordering, R8 = third int arg etc.):
-//   void FUN_1400ac880(self, colStart, rowStart, cellSize_x, cellSize_y, vertOut)
-//
-// param_1 (RCX, self)        : Geometry container
-// param_2 (RDX, colStart)    : starting column in master grid
-// param_3 (R8 , rowStart)    : starting row in master grid
-// param_4 (R9 , cellSize_x)  : block width in cells
-// param_5 (stack, cellSize_y): block height in cells (equal to _x in practice)
-// param_6 (stack, vertOut)   : 16-byte-stride output buffer
-//
-// Per-vertex (`*psVar10` is the running pointer, advances 8 shorts = 16 bytes):
-//   psVar10[0] = (short)col - (gridSize >> 1)
-//   psVar10[1] = (short)row - (gridSize >> 1)
-//   psVar10[2] = heightmap[row * gridLevels + col]   (via clamped col/row)
-//   psVar10[3] = 0xff                                (Pre-byte: alpha or pad)
-//   psVar10[4] = (short)((col / gridSize) * UVToShortScale)
-//   psVar10[5] = (short)((row / gridSize) * UVToShortScale)
-//   psVar10[6] (low byte ) = (char)((nx + UVScale) * ByteScale)  (offset 0xc)
-//   psVar10[6] (high byte) = (char)((ny + UVScale) * ByteScale)  (offset 0xd)
-//   psVar10[7] (low byte ) = (char)((nz + UVScale) * ByteScale)  (offset 0xe)
-//   *(byte*)(psVar10 + 0xf) = 0
-extern "C" void FUN_1400ac880_Body(void* self,
-                                   int colStart,
-                                   int rowStart,
-                                   int cellSize_x,
-                                   int cellSize_y,
-                                   int16_t* vertOut) {
-    if (!self || !vertOut) return;
+// Per vertex:
+//   position = { col - grid/2, row - grid/2, heightmap[row][col] (clamped), 0x00FF }
+//   uv       = { col / grid * 16384, row / grid * 16384 }
+//   normal   = { (nx + 1) * 127.5, (ny + 1) * 127.5, (nz + 1) * 127.5, 0 }
+void WorldGeometry::FillTerrainVertices(int colStart, int rowStart, int width, int height,
+                                        TerrainVertex* out) const {
+    if (!out) return;
 
-    int rowEnd = rowStart + cellSize_y;
-    int colEnd = colStart + cellSize_x;
+    int rowEnd = rowStart + height;
+    int colEnd = colStart + width;
 
-    int gridSize   = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0xc0);
-    int gridLevels = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0xd0);
-    int16_t* heightmap = *reinterpret_cast<int16_t**>(reinterpret_cast<uint8_t*>(self) + 0xd8);
+    int gridSize   = _gridSize;
+    int gridLevels = _fieldD0;
+    const int16_t* heightmap = _arrayD8;
 
     if (!heightmap) {
         // Without a heightmap, the loop would deref garbage. Zero the block
-        // and bail — caller (sub_c1e0) will still produce a flat plane.
-        size_t totalVerts = static_cast<size_t>(cellSize_x) * cellSize_y;
-        for (size_t i = 0; i < totalVerts * 8; ++i) {
-            vertOut[i] = 0;
-        }
+        // and bail — the caller will still produce a flat plane.
+        size_t totalVerts = static_cast<size_t>(width) * height;
+        for (size_t i = 0; i < totalVerts; ++i) out[i] = TerrainVertex{};
         return;
     }
 
     int16_t halfGrid = static_cast<int16_t>(gridSize >> 1);
-    int16_t* psVar10 = vertOut;
+    TerrainVertex* v = out;
 
     for (int row = rowStart; row < rowEnd; ++row) {
         for (int col = colStart; col < colEnd; ++col) {
-            // (1) Compute normal via helper_e270 — output to local Vector3.
-            float normalBuf[3] = {0.0f, 0.0f, 0.0f};
-            TradeWork_helper_e270_Body(self, normalBuf, col, row);
+            // (1) The normal (0x1400ae270).
+            const Math::Vector3 normal = TerrainNormal(col, row);
 
             // (2) Position xy (relative to grid centre).
-            psVar10[0] = static_cast<int16_t>(col) - halfGrid;
-            psVar10[1] = static_cast<int16_t>(row) - halfGrid;
+            v->position[0] = static_cast<int16_t>(static_cast<int16_t>(col) - halfGrid);
+            v->position[1] = static_cast<int16_t>(static_cast<int16_t>(row) - halfGrid);
 
             // (3) Heightmap sample (clamped col/row).
             int cc = col;
@@ -264,16 +213,10 @@ extern "C" void FUN_1400ac880_Body(void* self,
             int rr = row;
             if (rr < 0) rr = 0;
             if (rr >= gridLevels) rr = gridLevels - 1;
+            v->position[2] = heightmap[static_cast<size_t>(rr) * gridLevels + cc];
 
-            int16_t height = heightmap[static_cast<size_t>(rr) * gridLevels + cc];
-            psVar10[2] = height;
-
-            // (4) Disasm shows: word[3] = 0xff (=255), then byte[0xf]=0
-            // (these overlap in the 16-byte vertex layout). The disasm sets
-            // word[3] = R15W (=0xff), then byte[0xd] = (ny+UVScale)*kByteScale,
-            // byte[0xe] = (nz+UVScale)*kByteScale, byte[0xf] = 0.
-            // We replicate by writing word[3] first then overwriting byte[0xd-0xf].
-            psVar10[3] = static_cast<int16_t>(0x00ff);
+            // (4) word[3] = 0xff.
+            v->position[3] = static_cast<int16_t>(0x00ff);
 
             // (5) UV (col/gridSize * UVToShortScale, row/gridSize * UVToShortScale).
             float gridSizeF = static_cast<float>(gridSize);
@@ -283,85 +226,54 @@ extern "C" void FUN_1400ac880_Body(void* self,
             float uvRow = (gridSizeF != 0.0f)
                             ? (static_cast<float>(row) / gridSizeF) * kUVToShortScale
                             : 0.0f;
-            psVar10[4] = static_cast<int16_t>(static_cast<int>(uvCol));
-            psVar10[5] = static_cast<int16_t>(static_cast<int>(uvRow));
+            v->uv[0] = static_cast<int16_t>(static_cast<int>(uvCol));
+            v->uv[1] = static_cast<int16_t>(static_cast<int>(uvRow));
 
-            // (6) Normal bytes — disasm writes byte[0xc] first then byte[0xd]
-            // and byte[0xe], with byte[0xf] = 0.
-            uint8_t* p8 = reinterpret_cast<uint8_t*>(psVar10);
-            p8[0xc] = static_cast<uint8_t>(static_cast<int>((normalBuf[0] + kUVScale) * kByteScale));
-            p8[0xd] = static_cast<uint8_t>(static_cast<int>((normalBuf[1] + kUVScale) * kByteScale));
-            p8[0xe] = static_cast<uint8_t>(static_cast<int>((normalBuf[2] + kUVScale) * kByteScale));
-            p8[0xf] = 0;
+            // (6) Normal bytes — byte[0xc], [0xd], [0xe], then [0xf] = 0.
+            v->normal[0] = static_cast<uint8_t>(static_cast<int>((normal.x + kUVScale) * kByteScale));
+            v->normal[1] = static_cast<uint8_t>(static_cast<int>((normal.y + kUVScale) * kByteScale));
+            v->normal[2] = static_cast<uint8_t>(static_cast<int>((normal.z + kUVScale) * kByteScale));
+            v->normal[3] = 0;
 
-            psVar10 += 8;  // advance one 16-byte vertex (8 shorts)
+            ++v;
         }
     }
 }
 
 // ============================================================
-// Helper A — TradeWork_impl_sub_c1e0 (heightmap mesh builder)
+// 0x1400ac1e0 — WorldGeometry::BuildTerrainMesh
 // ============================================================
 //
-// Top-level helper: builds the vertex buffer + index buffer for the entire
-// terrain mesh. Walks the chunk grid (chunksPerSide × chunksPerSide), fills
-// each chunk's vertex block via FUN_1400ac880, uploads to VertexBuffer, then
-// constructs a single per-chunk triangle-list index buffer with checkerboard
-// winding (every chunk shares the same IB).
+// Builds the vertex buffer + index buffer for the entire terrain mesh. Walks the
+// chunk grid (chunksPerSide x chunksPerSide), fills each chunk's vertex block
+// (0x1400ac880), uploads it to the VertexBuffer, then builds a single per-chunk
+// triangle-list index buffer with checkerboard winding (every chunk shares it).
 //
-// param_1 (self) : Geometry container — fields used:
-//   self+0xC0 : int gridSize       (full heightmap edge in cells, e.g. 768)
-//   self+0xC8 : int chunkSize      (per-chunk cell edge, e.g. 32). The original
-//                                    disasm reads this as `*(param_1+200)` and
-//                                    uses it BOTH as the divisor for
-//                                    chunksPerSide AND as the chunk-stride and
-//                                    the IB inner-loop bound.
-//   self+0xCC : int vertsPerSide   (per-chunk vertex edge = chunkSize+1, e.g. 33)
-//   self+0xD0 : int gridLevels     (heightmap-storage dimension, e.g. gridSize+1)
-//   self+0xD4 : int vertsPerChunk  (vertsPerSide², e.g. 1089)
-//   self+0xD8 : int16* heightmap   (deserialized heightmap buffer)
-//   self+0x100: VertexBuffer       (master mesh vertex buffer)
-//   self+0x120: IndexBuffer        (per-chunk index buffer, shared across chunks)
+// Fields:
+//   _gridSize (+0xC0)          full heightmap edge in cells (e.g. 768)
+//   _chunkSize (+0xC8)         per-chunk cell edge (e.g. 32): the divisor for
+//                              chunksPerSide, the chunk stride and the IB loop bound
+//   _fieldCC (+0xCC)           vertsPerSide = chunkSize + 1 (e.g. 33): the vertex
+//                              block edge and the row stride of the index ids
+//   _chunkIndexStride (+0xD4)  vertsPerChunk = vertsPerSide^2 (e.g. 1089)
+//   _vertexBuffer (+0x100), _indexBuffer (+0x120)
 //
-// chunksPerSide = gridSize / chunkSize is computed locally — NOT a stored
-// field. (Earlier this reimpl conflated +0xC8 with chunksPerSide; that was
-// wrong and over-allocated the VB by a factor of (chunkSize/chunksPerSide)².)
-extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
-    if (!self) return;
-
+// chunksPerSide = gridSize / chunkSize is computed locally — NOT a stored field.
+void WorldGeometry::BuildTerrainMesh() {
     if (!System::MemoryAllocator::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
-            printf("[sub_c1e0] MemAlloc/Free unavailable — skipping mesh build (self=%p)\n", self);
+            printf("[sub_c1e0] MemAlloc/Free unavailable — skipping mesh build (self=%p)\n", (void*)this);
             fflush(stdout);
             s_warned = true;
         }
         return;
     }
 
-    // B.3.5: the four-door readiness guard is gone with the doors.
-
-    uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
-
-    // Field map (verified vs original sub_c1e0 disasm + Geometry CollectDraw/ItemDraw):
-    //   self+0xC0 : int gridSize       — full heightmap edge in cells (e.g. 768)
-    //   self+0xC8 : int chunkSize      — per-chunk cell edge (e.g. 32). Original
-    //                                     disasm reads this as `*(param_1+200)` and
-    //                                     uses it BOTH as the divisor for
-    //                                     chunksPerSide AND as the chunk-stride.
-    //   self+0xCC : int vertsPerSide   — per-chunk vertex edge (chunkSize+1, e.g. 33).
-    //                                     Used as the vertex-grid edge passed to
-    //                                     FUN_1400ac880, AND as the row-stride for
-    //                                     index-buffer vertex IDs.
-    //   self+0xD4 : int vertsPerChunk  — vertsPerSide² (e.g. 1089).
-    //
-    // chunksPerSide = gridSize / chunkSize is computed locally — NOT a stored
-    // field. Earlier the variable was named `cellGridSize` and read directly
-    // from +0xC8 (which is wrong — that's chunkSize).
-    int gridSize       = *reinterpret_cast<int*>(selfBytes + 0xC0);
-    int chunkSize      = *reinterpret_cast<int*>(selfBytes + 0xC8);
-    int vertsPerSide   = *reinterpret_cast<int*>(selfBytes + 0xCC);
-    int vertsPerChunk  = *reinterpret_cast<int*>(selfBytes + 0xD4);
+    int gridSize       = _gridSize;
+    int chunkSize      = _chunkSize;
+    int vertsPerSide   = _fieldCC;
+    int vertsPerChunk  = _chunkIndexStride;
     int chunksPerSide  = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
 
     if (chunksPerSide <= 0 || chunkSize <= 0 || vertsPerSide <= 0 || vertsPerChunk <= 0) {
@@ -376,69 +288,45 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
         return;
     }
 
-    // (1) Allocate the per-chunk scratch vert buffer using the existing
-    //     stride-0x10 resize helper. arrayHeader is a 16-byte stack-local.
-    struct ArrayHeader16 { void* data; int32_t count; int32_t cap; };
-    ArrayHeader16 scratch{nullptr, 0, 0};
-
+    // (1) The per-chunk scratch vertex array (the stride-0x10 resize, 0x14001ef10).
+    RawArray<TerrainVertex> scratch{nullptr, 0, 0};
     Reimpl_Array_Resize_Stride16B(&scratch, vertsPerChunk);
+    TerrainVertex* vertScratch = scratch.data;
 
-    int16_t* vertScratch = reinterpret_cast<int16_t*>(scratch.data);
-
-    // (2) Allocate the master VertexBuffer at self+0x100.
-    //     Total size = vertsPerChunk * chunksPerSide² * 16 bytes.
+    // (2) The master VertexBuffer: vertsPerChunk * chunksPerSide^2 * 16 bytes.
     int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
     int totalVbSize = totalVerts * 0x10;
-    bool createOk = reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x100)
-                        ->Create(totalVbSize, /*dynamic=*/false,
-                                 /*initialData=*/nullptr);   // B.3.5 bridge
+    [[maybe_unused]] bool createOk = _vertexBuffer.Create(totalVbSize, /*dynamic=*/false, /*initialData=*/nullptr);
 
     printf("[sub_c1e0] entry self=%p gridSize=%d chunkSize=%d chunksPerSide=%d "
            "vertsPerSide=%d vertsPerChunk=%d totalVbSize=%d (0x%x) createOk=%d\n",
-           self, gridSize, chunkSize, chunksPerSide, vertsPerSide, vertsPerChunk,
+           (void*)this, gridSize, chunkSize, chunksPerSide, vertsPerSide, vertsPerChunk,
            totalVbSize, totalVbSize, createOk);
-    {
-        // Dump the freshly-Created VB struct so we can see the post-Create state
-        // of the VertexBufferData wrapper and its vtable.
-        const uint64_t* vbq = reinterpret_cast<const uint64_t*>(selfBytes + 0x100);
-        printf("[sub_c1e0] VB after Create: q0=%016llx q1=%016llx q2=%016llx q3=%016llx\n",
-               (unsigned long long)vbq[0], (unsigned long long)vbq[1],
-               (unsigned long long)vbq[2], (unsigned long long)vbq[3]);
-        if (vbq[1]) {
-            const uint64_t* vbd = reinterpret_cast<const uint64_t*>(vbq[1]);
-            printf("[sub_c1e0] VertexBufferData @%p: vtable=%016llx q1=%016llx q2=%016llx\n",
-                   (void*)vbq[1], (unsigned long long)vbd[0],
-                   (unsigned long long)vbd[1], (unsigned long long)vbd[2]);
-        }
-        fflush(stdout);
-    }
+    fflush(stdout);
 
-    // (3) Walk the chunk grid, filling each chunk and uploading to VertexBuffer.
-    int firstSetReturned = -1;
+    // (3) Walk the chunk grid, filling each chunk and uploading it.
+    [[maybe_unused]] int firstSetReturned = -1;
     if (vertScratch) {
         for (int chunkRow = 0; chunkRow < chunksPerSide; ++chunkRow) {
             for (int chunkCol = 0; chunkCol < chunksPerSide; ++chunkCol) {
                 int colStart = chunkSize * chunkCol;
                 int rowStart = chunkSize * chunkRow;
 
-                FUN_1400ac880_Body(self, colStart, rowStart,
-                                   vertsPerSide, vertsPerSide, vertScratch);
+                FillTerrainVertices(colStart, rowStart, vertsPerSide, vertsPerSide, vertScratch);
 
                 int byteOffset = (chunkRow * chunksPerSide + chunkCol) * vertsPerChunk * 0x10;
                 int byteSize   = vertsPerChunk * 0x10;
-                bool ok = reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x100)
-                              ->Set(byteSize, byteOffset, vertScratch);   // B.3.5 bridge
+                bool ok = _vertexBuffer.Set(byteSize, byteOffset, vertScratch);
 
                 if (chunkRow == 0 && chunkCol == 0) {
                     firstSetReturned = ok ? 1 : 0;
-                    // Dump first vertex from scratch (should be (-gridSize/2, -gridSize/2, h, 0xFF))
-                    // to confirm FUN_1400ac880 wrote real data.
-                    int16_t* v0 = vertScratch;
+                    // The first vertex (should be (-gridSize/2, -gridSize/2, h, 0xFF)).
+                    [[maybe_unused]] const TerrainVertex& v0 = vertScratch[0];
                     printf("[sub_c1e0] chunk(0,0) scratch v0: x=%d y=%d h=%d w3=%d uvU=%d uvV=%d "
                            "n_xyzpad=%02x %02x %02x %02x  Set->%d  byteOff=%d byteSz=%d\n",
-                           v0[0], v0[1], v0[2], v0[3], v0[4], v0[5],
-                           ((uint8_t*)v0)[0xC], ((uint8_t*)v0)[0xD],
-                           ((uint8_t*)v0)[0xE], ((uint8_t*)v0)[0xF],
+                           v0.position[0], v0.position[1], v0.position[2], v0.position[3],
+                           v0.uv[0], v0.uv[1],
+                           v0.normal[0], v0.normal[1], v0.normal[2], v0.normal[3],
                            ok ? 1 : 0, byteOffset, byteSize);
                     fflush(stdout);
                 }
@@ -448,36 +336,27 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     printf("[sub_c1e0] cell loop complete; first Set returned %d\n", firstSetReturned);
     fflush(stdout);
 
-    // (4) Build the index buffer. The IB describes the topology of ONE chunk
-    //     (chunkSize × chunkSize quads); every chunk shares this IB. Vertex IDs
-    //     use `row * vertsPerSide + col` because each chunk has vertsPerSide²
-    //     vertices in row-major order.
+    // (4) The index buffer: ONE chunk's topology (chunkSize x chunkSize quads),
+    //     shared by every chunk; vertex ids `row * vertsPerSide + col`.
     int quadsPerChunk = chunkSize * chunkSize;
     int idxCount      = quadsPerChunk * 6;
     int idxBytes      = quadsPerChunk * 12;
 
     int16_t* idxBuf = nullptr;
     if (idxCount > 0) {
-        idxBuf = reinterpret_cast<int16_t*>(
+        idxBuf = static_cast<int16_t*>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(idxCount) * 2, 2));
     }
 
-    // The original disasm has a strange "self-copy initialise" loop that runs
-    // before the real indices are written:
-    //   for (i = 0; i < idxCount; ++i)
-    //     if (signed(prev_iter) < 0 && idxBuf != null)
-    //       idxBuf[i] = idxBuf[i - prev_iter];
-    // It compares against negative loop iterator, so it never executes. We
-    // skip emulating this dead branch.
+    // The original disasm has a "self-copy initialise" loop that runs before the
+    // real indices are written; it compares against a negative loop iterator, so
+    // it never executes. We skip emulating this dead branch.
 
-    // (5) Allocate the master IndexBuffer at self+0x120 (idxBytes total).
-    reinterpret_cast<Video::IndexBuffer*>(selfBytes + 0x120)
-        ->Create(idxBytes, /*dynamic=*/false, /*initialData=*/nullptr);   // B.3.5 bridge
+    // (5) The master IndexBuffer (idxBytes total).
+    _indexBuffer.Create(idxBytes, /*dynamic=*/false, /*initialData=*/nullptr);
 
-    // (6) Fill the index buffer — checkerboard quad winding.
-    //     Two triangles per quad, alternating diagonal direction by parity.
-    //     Loop iterates over the chunkSize × chunkSize quads of one chunk;
-    //     vertex IDs are `row * vertsPerSide + col`.
+    // (6) Fill the index buffer — checkerboard quad winding, two triangles per
+    //     quad, alternating diagonal direction by parity.
     if (idxBuf && idxCount > 0) {
         int idx = 0;
         for (int row = 0; row < chunkSize; ++row) {
@@ -511,14 +390,13 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
         }
 
         // (7) Upload the indices.
-        bool ibSetOk = reinterpret_cast<Video::IndexBuffer*>(selfBytes + 0x120)
-                           ->Set(idxBytes, 0, idxBuf);   // B.3.5 bridge
+        [[maybe_unused]] bool ibSetOk = _indexBuffer.Set(idxBytes, 0, idxBuf);
         printf("[sub_c1e0] IB Set returned %d (idxBytes=%d quadsPerChunk=%d)\n",
                ibSetOk ? 1 : 0, idxBytes, quadsPerChunk);
         fflush(stdout);
     }
 
-    // (8) Free the scratch buffers (matches the original's MemFree(idxBuf);
+    // (8) Free the scratch buffers (the original's MemFree(idxBuf);
     //     MemFree(scratch.data) at the end of sub_c1e0).
     if (idxBuf) {
         System::MemoryAllocator::MemFree(idxBuf);
@@ -529,203 +407,21 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 }
 
 // ============================================================
-// Water surface overlay mesh — standalone addition (not in the original c4b0,
-// which builds it inside the 686-line b260). RenderDoc on the real game proved
-// water = a flat overlay mesh in WorldGeometry VB+0x160 / IB+0x180 at a constant
-// sea-level z, drawn with the water material (+0x150/+0x158) that samples the
-// animated `_water_` normal map + `_reflection_`/`_frame_` buffers.
-//
-// We build the SAME 16-byte vertex format + per-chunk index buffer as the
-// terrain mesh (sub_c1e0 above), but with z forced to the water level and a flat
-// up-normal. A full-map flat plane is visually equivalent to the real contour-
-// fitted mesh: terrain above water depth-occludes it, so water shows only in the
-// carved channels/lakes. geometry_draw.cpp emits + draws it (mode 0xA000).
-//
-// Water level: the real game's water verts use int16 z = -192 = -0.75 * 256
-// (the b260 -0.75 "below-water" constant; VS scales z by 1/256). Overridable via
-// BANISHED_WATER_LEVEL=<float world height>.
-extern "C" void WorldGen_BuildWaterMesh(void* self) {
-    if (!self) return;
-    if (!System::MemoryAllocator::_singleton) return;
-    // B.3.5: the four-door readiness guard is gone with the doors.
-
-    uint8_t* sb = reinterpret_cast<uint8_t*>(self);
-    int gridSize      = *reinterpret_cast<int*>(sb + 0xC0);
-    int chunkSize     = *reinterpret_cast<int*>(sb + 0xC8);
-    int vertsPerSide  = *reinterpret_cast<int*>(sb + 0xCC);
-    int vertsPerChunk = *reinterpret_cast<int*>(sb + 0xD4);
-    int chunksPerSide = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
-    if (chunksPerSide <= 0 || chunkSize <= 0 || vertsPerSide <= 0 || vertsPerChunk <= 0) {
-        fprintf(stderr, "[water] bad grid params (gridSize=%d chunkSize=%d vps=%d vpc=%d)\n",
-                gridSize, chunkSize, vertsPerSide, vertsPerChunk);
-        fflush(stderr);
-        return;
-    }
-
-    // Water level (int16, x256 fixed-point). Default -192 = -0.75 world.
-    const int16_t kWaterLevelQ = -192;
-    const int16_t halfGrid = static_cast<int16_t>(gridSize >> 1);
-
-    // Normal-map tiling (wave size). The water VS (hash a73d5785) scales the
-    // vertex uv by 1/1024, so the wave wavelength in WORLD space is
-    // (uvStep/1024) tiles per world-unit (our grid has 1 cell = 1 world unit).
-    //
-    // RenderDoc A/B vs retail (captures/banished_water_frame19675.rdc, water VB
-    // 3205): retail's contour mesh uses 256 uv per COLUMN but its columns span
-    // ~3.6 world units, giving ~0.068-0.086 tiles/world-unit (~0.075 avg, i.e.
-    // ONE wave tile every ~13 world units). Our old uvStep=256 over a uniform
-    // 1-unit grid gave 0.25 tiles/world (a tile every 4 units) — ~3.3x too
-    // small/dense, so the waves read as fine ripples that don't convey motion.
-    // (The shipped scroll speed is in tile-space: time*(0.01,0.02) uv/sec, so
-    // bigger tiles also travel farther per second -> waves look bigger AND
-    // faster, matching retail.)
-    //
-    // Default 80 -> 80/1024 = 0.078 tiles/world (~1 tile per 12.8 world units),
-    // squarely in the measured retail range. int16 wraps every 64 tiles
-    // (65536/1024) so tiling stays seamless; the lower step also pushes the
-    // int16-overflow seam from col 128 out to col ~410 (fewer/no seams on a
-    // 512 grid).
-    const int uvStep = 80;
-
-    // Flat up-normal (0,0,1) packed to bytes like the terrain builder.
-    const uint8_t nB0 = static_cast<uint8_t>(static_cast<int>((0.0f + kUVScale) * kByteScale)); // 127
-    const uint8_t nB2 = static_cast<uint8_t>(static_cast<int>((1.0f + kUVScale) * kByteScale)); // 255
-
-    int16_t* vertScratch = reinterpret_cast<int16_t*>(
-        System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(vertsPerChunk) * 0x10, 2));
-    if (!vertScratch) return;
-
-    // (1) VertexBuffer at +0x160 (same total size as terrain VB).
-    int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
-    int totalVbSize = totalVerts * 0x10;
-    bool vbOk = reinterpret_cast<Video::VertexBuffer*>(sb + 0x160)
-                    ->Create(totalVbSize, false, nullptr);   // B.3.5 bridge
-
-    for (int chunkRow = 0; chunkRow < chunksPerSide; ++chunkRow) {
-        for (int chunkCol = 0; chunkCol < chunksPerSide; ++chunkCol) {
-            int colStart = chunkSize * chunkCol;
-            int rowStart = chunkSize * chunkRow;
-            int16_t* p = vertScratch;
-            for (int row = rowStart; row < rowStart + vertsPerSide; ++row) {
-                for (int col = colStart; col < colStart + vertsPerSide; ++col) {
-                    // The WATER vertex shader (hash a73d5785) scales X,Y by 1/48
-                    // (0.020833) — UNLIKE the terrain VS which scales X,Y by 1.0.
-                    // So water vertex X,Y must be 48x the world grid coord to land in
-                    // the same world space as the terrain. We previously wrote raw grid
-                    // coords (±halfGrid) like the terrain builder, which after the VS's
-                    // /48 collapsed the whole water sheet to a ~±5-unit patch at the map
-                    // center → it never covered the lakes, so only the terrain's
-                    // underwater tint showed (no reflective surface). RenderDoc-confirmed
-                    // vs retail (water VB y≈-12495 → /48 ≈ -260 world). Z still /256.
-                    p[0] = static_cast<int16_t>((col - static_cast<int>(halfGrid)) * 48);
-                    p[1] = static_cast<int16_t>((row - static_cast<int>(halfGrid)) * 48);
-                    p[2] = kWaterLevelQ;                       // flat sea level (z /256 in VS)
-                    p[3] = 0;                                  // pos.w = 0 (retail; was 0xff)
-                    p[4] = static_cast<int16_t>(col * uvStep);
-                    p[5] = static_cast<int16_t>(row * uvStep);
-                    uint8_t* b = reinterpret_cast<uint8_t*>(p);
-                    b[0xc] = nB0;  // nx
-                    b[0xd] = nB0;  // ny
-                    b[0xe] = nB2;  // nz
-                    // Vertex-color alpha = 0x80 (0.5). This is the water shader's
-                    // reflection/effect strength — retail water VBs encode 0x80 here.
-                    // We had 0, which zeroed the reflection contribution → the water
-                    // showed only dark refraction (no sky/scene mirror). RenderDoc A/B
-                    // vs retail (TEXCOORD2 = 7f 7f ff 80) confirmed this is the lever.
-                    b[0xf] = 0x80;
-                    p += 8;
-                }
-            }
-            int byteOffset = (chunkRow * chunksPerSide + chunkCol) * vertsPerChunk * 0x10;
-            reinterpret_cast<Video::VertexBuffer*>(sb + 0x160)
-                ->Set(vertsPerChunk * 0x10, byteOffset, vertScratch);   // B.3.5 bridge
-        }
-    }
-
-    // (2) IndexBuffer at +0x180 — identical per-chunk triangle list as terrain.
-    int quadsPerChunk = chunkSize * chunkSize;
-    int idxCount      = quadsPerChunk * 6;
-    int idxBytes      = quadsPerChunk * 12;
-    int16_t* idxBuf = reinterpret_cast<int16_t*>(
-        System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(idxCount) * 2, 2));
-    reinterpret_cast<Video::IndexBuffer*>(sb + 0x180)
-        ->Create(idxBytes, false, nullptr);   // B.3.5 bridge
-    if (idxBuf) {
-        int idx = 0;
-        for (int row = 0; row < chunkSize; ++row) {
-            for (int col = 0; col < chunkSize; ++col) {
-                int16_t v_tl = static_cast<int16_t>(
-                    static_cast<int16_t>(row) * static_cast<int16_t>(vertsPerSide) +
-                    static_cast<int16_t>(col));
-                int16_t v_tr = static_cast<int16_t>(v_tl + 1);
-                int16_t v_bl = static_cast<int16_t>(
-                    (static_cast<int16_t>(row) + 1) * static_cast<int16_t>(vertsPerSide) +
-                    static_cast<int16_t>(col));
-                int16_t v_br = static_cast<int16_t>(v_bl + 1);
-                idxBuf[idx + 0] = v_tl;
-                if (((col + row) & 1) == 0) {
-                    idxBuf[idx + 1] = v_bl; idxBuf[idx + 2] = v_tr; idxBuf[idx + 3] = v_tr;
-                } else {
-                    idxBuf[idx + 1] = v_br; idxBuf[idx + 2] = v_tr; idxBuf[idx + 3] = v_tl;
-                }
-                idxBuf[idx + 4] = v_bl; idxBuf[idx + 5] = v_br;
-                idx += 6;
-            }
-        }
-        reinterpret_cast<Video::IndexBuffer*>(sb + 0x180)
-            ->Set(idxBytes, 0, idxBuf);   // B.3.5 bridge
-        System::MemoryAllocator::MemFree(idxBuf);
-    }
-    System::MemoryAllocator::MemFree(vertScratch);
-
-    fprintf(stderr, "[water] mesh built: VB+0x160 q1=%p IB+0x180 q1=%p totalVerts=%d "
-            "chunksPerSide=%d levelQ=%d vbOk=%d\n",
-            *reinterpret_cast<void**>(sb + 0x160 + 8), *reinterpret_cast<void**>(sb + 0x180 + 8),
-            totalVerts, chunksPerSide, (int)kWaterLevelQ, vbOk);
-    fflush(stderr);
-}
-
-} // anonymous namespace
-
-// ============================================================
 // Chunk-streaming — FUN_1400AAD50 (per-frame dirty-chunk upload)
 // ============================================================
 //
-// Vtable +0x08 of the derived Geometry class. Decompiled from exe 0x1400AAD50
-// (the function that JMP-thunk 0x1400AED40 dispatches to). The original walks
-// a binary tree of "dirty" chunk indices at self+0xE8, regenerates each
-// chunk's vertices via FUN_1400ac880, and uploads them into the master
-// VertexBuffer at self+0x100 via Video::VertexBuffer::Set.
+// Vtable +0x08 of WorldGeometry (slot 1 0x1400aed40 is a JMP to it). Walks the
+// AVL tree of dirty chunk indices at _dirtyTreeRoot (+0xE8; nodes AvlNode28:
+// key = the linear chunk index row*chunksPerSide + col, parent +0x08, left
+// +0x10, right +0x18), regenerates each chunk's vertices (0x1400ac880) and
+// uploads them into the master VertexBuffer.
 //
-// Tree layout — each node is a 0x28-byte allocation (System::MemoryAllocator::MemAlloc
-// with align=8). Field offsets (verified from disasm):
-//   +0x00  int   chunkIdx (the linear chunk index = row*chunksPerSide + col)
-//   +0x08  void* parent
-//   +0x10  void* left  child
-//   +0x18  void* right child
-//   +0x20  uint  AVL balance / height (set by inserter, ignored here)
-//
-// In addition to chunk-streaming, the original also handles re-marking entity
-// elements at self+0x1F0 whose bbox overlaps any rebuilt chunk. We omit that
-// path for now — the menu scene has zero entities (self+0x1F8 == 0) so it's
-// dead code there; document the omission and the disasm for the in-game
-// follow-up. See `notes/M35_geom_serialize_findings.md` for the spec.
-
-// Cascade safety: if MemAlloc/Free are unresolved we soft-fail with a one-shot
-// warning and return early — better than corrupting the dirty tree.
-//
-// Caller batch CB6: the body of the old anonymous GeometryChunkUpdate_Body, moved
-// into the member (0x1400aad50 is its own function in retail; slot 1 0x1400aed40
-// is a JMP to it). `selfBytes + off` reads became the class's named fields. The
-// one-shot warning flag is a namespace-scope atomic (B6-5), not a function-local.
-extern "C" void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
-                                      int cellSize_x, int cellSize_y,
-                                      int16_t* vertOut);
+// The original also re-meshes the decals at +0x1F0 whose box overlaps a rebuilt
+// chunk (0x1400ace40); omitted, see the TODO at the end.
 namespace { std::atomic<bool> s_chunkUpdateWarned{false}; }
 
 void WorldGeometry::RebuildDirtyChunks() {
-    // +0xF0 is the "dirty tree non-empty" count (4 bytes). The original
-    // tests this as the first thing — when no chunks are dirty, return.
+    // +0xF0 is the "dirty tree non-empty" count. The original tests this first.
     if (_dirtyTreeCount == 0) return;
 
     if (!System::MemoryAllocator::_singleton) {
@@ -736,8 +432,6 @@ void WorldGeometry::RebuildDirtyChunks() {
         return;
     }
 
-    // B.3.5: the `VertexBuffer::Set` door-readiness guard is gone with the door.
-
     int gridSize       = _gridSize;           // +0xC0
     int chunkSize      = _chunkSize;          // +0xC8
     int vertsPerSide   = _fieldCC;            // +0xCC
@@ -746,68 +440,45 @@ void WorldGeometry::RebuildDirtyChunks() {
 
     if (chunksPerSide <= 0 || vertsPerChunk <= 0) return;
 
-    // Allocate the per-chunk scratch vertex buffer (16-byte stride).
-    struct ArrayHeader16 { void* data; int32_t count; int32_t cap; };
-    ArrayHeader16 scratch{nullptr, 0, 0};
+    // The per-chunk scratch vertex array (16-byte stride).
+    RawArray<TerrainVertex> scratch{nullptr, 0, 0};
     Reimpl_Array_Resize_Stride16B(&scratch, vertsPerChunk);
-    int16_t* vertScratch = reinterpret_cast<int16_t*>(scratch.data);
+    TerrainVertex* vertScratch = scratch.data;
     if (!vertScratch) return;
 
-    // Recursive in-order walk of the dirty-chunk tree. Mirrors the original's
-    // threaded-BST traversal but using the call stack — depth is O(log N) for
-    // a balanced AVL, max ~10 even for 18x18 chunks.
-    void* treeRoot = _dirtyTreeRoot;          // +0xE8
+    AvlNode28* treeRoot = _dirtyTreeRoot;     // +0xE8
 
-    auto upload = [&](void* node) {
-        uint8_t* n = reinterpret_cast<uint8_t*>(node);
-        int chunkIdx = *reinterpret_cast<int*>(n);
+    auto upload = [&](const AvlNode28* node) {
+        int chunkIdx = node->key;
         int row = chunkIdx / chunksPerSide;
         int col = chunkIdx % chunksPerSide;
 
         // Generate this chunk's vertices into the scratch buffer, then upload.
-        Reimpl_FUN_1400ac880(this,
-                             col * chunkSize, row * chunkSize,
-                             vertsPerSide, vertsPerSide,
-                             vertScratch);
+        FillTerrainVertices(col * chunkSize, row * chunkSize, vertsPerSide, vertsPerSide, vertScratch);
 
         int byteSize   = vertsPerChunk * 0x10;
         int byteOffset = (row * chunksPerSide + col) * vertsPerChunk * 0x10;
         _vertexBuffer.Set(byteSize, byteOffset, vertScratch);   // +0x100
     };
 
-    // Iterative in-order walk to avoid std::function or recursive lambdas.
-    // We use the parent links on each node (offset 0x08) to ascend.
+    // Iterative in-order walk using the parent links to ascend.
     if (treeRoot) {
-        // Descend to leftmost.
-        void* node = treeRoot;
-        while (true) {
-            void* leftChild = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x10);
-            if (!leftChild) break;
-            node = leftChild;
-        }
+        AvlNode28* node = treeRoot;
+        while (node->left) node = node->left;   // leftmost
 
         while (node) {
             upload(node);
 
-            // Move to in-order successor:
-            void* rightChild = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18);
-            if (rightChild) {
-                node = rightChild;
-                while (true) {
-                    void* leftChild = *reinterpret_cast<void**>(
-                        reinterpret_cast<uint8_t*>(node) + 0x10);
-                    if (!leftChild) break;
-                    node = leftChild;
-                }
+            // The in-order successor.
+            if (node->right) {
+                node = node->right;
+                while (node->left) node = node->left;
             } else {
                 // Walk up while we're the right child of our parent.
                 while (true) {
-                    void* parent = *reinterpret_cast<void**>(
-                        reinterpret_cast<uint8_t*>(node) + 0x08);
+                    AvlNode28* parent = node->parent;
                     if (!parent) { node = nullptr; break; }
-                    void* parentRight = *reinterpret_cast<void**>(
-                        reinterpret_cast<uint8_t*>(parent) + 0x18);
-                    if (parentRight != node) {
+                    if (parent->right != node) {
                         node = parent;
                         break;
                     }
@@ -817,13 +488,12 @@ void WorldGeometry::RebuildDirtyChunks() {
         }
     }
 
-    // Free the dirty tree (recursive post-order via FUN_140014c30 in the
-    // original — equivalent to "free children, then self").
-    auto freeNode = [&](auto&& self_, void* node) -> void {
+    // Free the dirty tree (post-order via FUN_140014c30 in the original —
+    // "free children, then self").
+    auto freeNode = [&](auto&& self_, AvlNode28* node) -> void {
         if (!node) return;
-        uint8_t* n = reinterpret_cast<uint8_t*>(node);
-        self_(self_, *reinterpret_cast<void**>(n + 0x10));
-        self_(self_, *reinterpret_cast<void**>(n + 0x18));
+        self_(self_, node->left);
+        self_(self_, node->right);
         System::MemoryAllocator::MemFree(node);
     };
     freeNode(freeNode, treeRoot);
@@ -831,40 +501,32 @@ void WorldGeometry::RebuildDirtyChunks() {
     _dirtyTreeRoot = nullptr;    // +0xE8
     _dirtyTreeCount = 0;         // +0xF0
 
-    // Free scratch buffer.
     if (scratch.data) {
         System::MemoryAllocator::MemFree(scratch.data);
     }
 
-    // TODO (in-game): the original also walks the entity SoA at self+0x1F0
-    // (count +0x1F8) for each rebuilt chunk, and re-meshes any entity whose
-    // bbox overlaps the chunk's region (via FUN_1400ace40). Skipped here
-    // because the menu scene has no entities. Re-add when in-game terrain
-    // editing wants entity re-meshing on terraform.
+    // TODO (in-game): the original also walks the decals at +0x1F0 for each
+    // rebuilt chunk and re-meshes any whose box overlaps the chunk's region
+    // (FUN_1400ace40). Skipped here (the menu scene has none).
 }
 
 
 // ============================================================
-// Public reimpl entry points
+// The C entry points
 // ============================================================
-//
-// Each entry tries the original exe address first (usable when the exe code
-// page is mapped). If that pointer is null (no exe code), we fall through to
-// our cleaned C body.
-
+// B4 FORWARD: 1 outside caller (worldgen.cpp, GAME-c, holds the geometry as
+// void*). LEFT: that void*.
 extern "C" void Reimpl_TradeWork_sub_c1e0(void* self) {
-    TradeWork_impl_sub_c1e0_Body(self);
+    if (!self) return;
+    reinterpret_cast<WorldGeometry*>(self)->BuildTerrainMesh();
 }
 
-extern "C" void Reimpl_FUN_1400ac880(void* self,
-                                     int colStart,
-                                     int rowStart,
-                                     int cellSize_x,
-                                     int cellSize_y,
-                                     int16_t* vertOut) {
-    FUN_1400ac880_Body(self, colStart, rowStart, cellSize_x, cellSize_y, vertOut);
-}
-
-extern "C" void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row) {
-    return TradeWork_helper_e270_Body(self, retbuf, col, row);
+// B4 FORWARD: 1 outside caller (Action/action_pf_road.cpp, ACT-a: a float[3]).
+extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row) {
+    if (!self || !out) return out;
+    const Math::Vector3 n = self->TerrainNormal(col, row);
+    out[0] = n.x;
+    out[1] = n.y;
+    out[2] = n.z;
+    return out;
 }
