@@ -91,7 +91,6 @@
 #include "Game/WorldGeometry.h"
 #include "Game/WorldGeometryElements.h"
 #include "Game/TerrainHeightfield.h"
-#include <vector>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -174,53 +173,65 @@ void RangeResize(RawArray<GeometryDrawRange>* v, int n) {
 }
 
 // ============================================================
-// Vertex weld (f3e0 equivalent): exact key dedup -> monotonic index.
+// Vertex weld (f3e0 equivalent): full 16-byte key dedup -> monotonic index.
 // The retail f3e0 uses an RB-tree keyed on the packed vertex; a hash with exact
-// (bitwise) key compare is behaviourally identical (same dedup set, same index
-// order: an index is the key's first-insertion position, whatever the hash).
+// key compare is behaviourally identical (same dedup set, same index order).
 // ============================================================
 template <class T>
 struct WeldSet {
-    RawArray<T>          verts;      // the welded keys, in first-insertion order
-    std::vector<int32_t> buckets;    // hash head index (-1 empty)
-    std::vector<int32_t> chain;      // per-vertex next-in-bucket
-    int32_t              mask;
+    RawArray<T> verts;   // OutVtx/16-byte GPU verts
+    int32_t* buckets;    // hash head index (-1 empty)
+    int32_t* chain;      // per-vertex next-in-bucket
+    int32_t  mask;
+    int32_t  chainCap;
+    int32_t  stride;     // key/element size in bytes
 };
 
-// FNV-1a over the key's fields (any hash gives the same welded result).
-inline uint32_t WeldHashStep(uint32_t h, int32_t v) {
-    for (int i = 0; i < 4; ++i) { h ^= (uint32_t)(v >> (i * 8)) & 0xffu; h *= 16777619u; }
+uint32_t WeldHash(const void* key, int stride) {
+    const uint8_t* k = (const uint8_t*)key;   // CAST-OK: byte_io
+    uint32_t h = 2166136261u;            // FNV-1a
+    for (int i = 0; i < stride; ++i) { h ^= k[i]; h *= 16777619u; }
     return h;
 }
 
 template <class T>
 void WeldInit(WeldSet<T>* s, int estimate) {
     s->verts.data = nullptr; s->verts.size = 0; s->verts.capacity = 0;
+    s->stride = (int)sizeof(T);
     int cap = 16;
     while (cap < estimate * 2) cap <<= 1;
     s->mask = cap - 1;
-    s->buckets.assign((size_t)cap, -1);
-    s->chain.assign((size_t)(estimate > 0 ? estimate : 16), 0);
+    s->buckets = (int32_t*)std::malloc((size_t)cap * sizeof(int32_t));   // LEFT: GAME-c weld scratch (std::malloc, as before B.4)
+    for (int i = 0; i < cap; ++i) s->buckets[i] = -1;
+    s->chainCap = estimate > 0 ? estimate : 16;
+    s->chain = (int32_t*)std::malloc((size_t)s->chainCap * sizeof(int32_t));   // LEFT: GAME-c weld scratch
 }
 
 template <class T>
 void WeldFree(WeldSet<T>* s) {
+    if (s->buckets) std::free(s->buckets);
+    if (s->chain) std::free(s->chain);
     if (s->verts.data) System::MemoryAllocator::MemFree(s->verts.data);
-    s->verts.data = nullptr;
+    s->buckets = nullptr; s->chain = nullptr; s->verts.data = nullptr;
 }
 
 // Returns the index of `key` in the weld set (existing on a hit, freshly
 // appended on a miss). Mirrors f3e0's "return existing index or insert".
 template <class T>
-uint16_t WeldAdd(WeldSet<T>* s, const T& key, uint32_t hash) {
-    uint32_t b = hash & (uint32_t)s->mask;
-    for (int32_t i = s->buckets[b]; i >= 0; i = s->chain[(size_t)i]) {
-        if (std::memcmp(&s->verts.data[i], &key, sizeof(T)) == 0) return (uint16_t)i;
+uint16_t WeldAdd(WeldSet<T>* s, const T* key) {
+    uint32_t b = WeldHash(key, s->stride) & s->mask;
+    for (int32_t i = s->buckets[b]; i >= 0; i = s->chain[i]) {
+        const T* v = &s->verts.data[i];
+        if (std::memcmp(v, key, s->stride) == 0) return (uint16_t)i;
     }
     int32_t idx = s->verts.size;
-    VecPush(&s->verts, key, 2);
-    if ((size_t)idx >= s->chain.size()) s->chain.resize(s->chain.size() * 2);
-    s->chain[(size_t)idx] = s->buckets[b];
+    VecPush(&s->verts, *key, 2);
+    if (idx >= s->chainCap) {
+        int32_t nc = s->chainCap * 2;
+        s->chain = (int32_t*)std::realloc(s->chain, (size_t)nc * sizeof(int32_t));   // LEFT: GAME-c weld scratch
+        s->chainCap = nc;
+    }
+    s->chain[idx] = s->buckets[b];
     s->buckets[b] = idx;
     return (uint16_t)idx;
 }
@@ -231,24 +242,6 @@ uint16_t WeldAdd(WeldSet<T>* s, const T& key, uint32_t hash) {
 struct OutVtx { float posX, posY, uvU, uvV; };
 struct V2 { float x, y; };
 inline V2 Lerp(V2 a, V2 b, float t) { return { a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t }; }
-
-// The float fields hash through their integer value at 1/1024 precision: equal
-// keys hash equally, which is all the weld needs.
-inline uint32_t WeldHash(const OutVtx& v) {
-    uint32_t h = 2166136261u;
-    h = WeldHashStep(h, (int32_t)(v.posX * 1024.0f));
-    h = WeldHashStep(h, (int32_t)(v.posY * 1024.0f));
-    h = WeldHashStep(h, (int32_t)(v.uvU * 1024.0f));
-    h = WeldHashStep(h, (int32_t)(v.uvV * 1024.0f));
-    return h;
-}
-inline uint32_t WeldHash(const TerrainVertex& v) {
-    uint32_t h = 2166136261u;
-    for (int16_t p : v.position) h = WeldHashStep(h, p);
-    for (int16_t t : v.uv)       h = WeldHashStep(h, t);
-    for (uint8_t c : v.normal)    h = WeldHashStep(h, c);
-    return h;
-}
 
 // ============================================================
 // fb00 — per-body contour vertex/UV generator (Stage A approximated, B/C faithful)
@@ -276,9 +269,15 @@ void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>*
     // --- Stage A (approx): banks = centerline +/- radius along per-node normal.
     // --- Stage B (faithful): arc-length V along the centerline (shared across
     //     the width band so the texture flows straight along the spine).
-    std::vector<V2>    bankL((size_t)ptCount);
-    std::vector<V2>    bankR((size_t)ptCount);
-    std::vector<float> vCoord((size_t)ptCount);
+    V2*    bankL = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+    V2*    bankR = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: GAME-c body scratch
+    float* vCoord = (float*)std::malloc((size_t)ptCount * sizeof(float)); // LEFT: GAME-c body scratch
+    if (!bankL || !bankR || !vCoord) {
+        if (bankL) std::free(bankL);
+        if (bankR) std::free(bankR);
+        if (vCoord) std::free(vCoord);
+        return;
+    }
 
     float arc = 0.0f;
     V2 prev = CP(0);
@@ -313,7 +312,6 @@ void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>*
     WeldSet<OutVtx> weld; WeldInit(&weld, estimate);
 
     auto emitIdx = [&](uint16_t v) { VecPush(idxOut, v, 2); };
-    auto weldAdd = [&](const OutVtx& v) { return WeldAdd(&weld, v, WeldHash(v)); };
 
     for (int i = 0; i + 1 < ptCount; ++i) {
         V2 p0 = bankL[i], p1 = bankL[i + 1];
@@ -329,10 +327,10 @@ void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>*
             OutVtx V1 = { pLo.x, pLo.y, uHi, vLo };
             OutVtx V2v= { pHi.x, pHi.y, uHi, vHi };
             OutVtx V3 = { p1.x,  p1.y,  uLo, v1 };
-            uint16_t i0 = weldAdd(V0);
-            uint16_t i1 = weldAdd(V1);
-            uint16_t i2 = weldAdd(V2v);
-            uint16_t i3 = weldAdd(V3);
+            uint16_t i0 = WeldAdd(&weld, &V0);
+            uint16_t i1 = WeldAdd(&weld, &V1);
+            uint16_t i2 = WeldAdd(&weld, &V2v);
+            uint16_t i3 = WeldAdd(&weld, &V3);
             // winding matches fb00 Stage C: (V0,V2,V1),(V0,V3,V2)
             emitIdx(i0); emitIdx(i2); emitIdx(i1);
             emitIdx(i0); emitIdx(i3); emitIdx(i2);
@@ -344,6 +342,8 @@ void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>*
     *vtxOut = weld.verts;
     weld.verts.data = nullptr;   // don't free below
     WeldFree(&weld);
+
+    std::free(bankL); std::free(bankR); std::free(vCoord);
 }
 
 // ============================================================
@@ -353,10 +353,20 @@ void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>*
 //   dense banks via retail's nearest-point matching + matched-range resample.
 // ============================================================
 struct Edge { V2 p0, p1, dir, perp; float len; };
+struct V2List { V2* d; int n; int cap; };
 
 inline float V2Len(V2 a) { return std::sqrt(a.x * a.x + a.y * a.y); }
 inline V2    V2Sub(V2 a, V2 b) { return { a.x - b.x, a.y - b.y }; }
 inline V2    V2Norm(V2 a) { float l = V2Len(a); return (l < 1e-8f) ? V2{ 0.0f, 0.0f } : V2{ a.x / l, a.y / l }; }
+
+void V2Push(V2List* L, V2 v) {
+    if (L->n >= L->cap) {
+        int nc = L->cap ? L->cap * 2 : 128;
+        L->d = (V2*)std::realloc(L->d, (size_t)nc * sizeof(V2));   // LEFT: GAME-c bank scratch (std::realloc, as before B.4)
+        L->cap = nc;
+    }
+    L->d[L->n++] = v;
+}
 
 // Distance from point p to segment [a,b]  (sub_ba30 endpoint + perpendicular test).
 float DistToSeg(V2 p, V2 a, V2 b) {
@@ -372,15 +382,15 @@ float DistToSeg(V2 p, V2 a, V2 b) {
 
 // sub_ba30: keep a bank sample only if it is >= radius from EVERY centerline edge.
 // (Brute-force over all edges == the spatial-hash result; far edges can't be closer.)
-bool BankValid(const std::vector<Edge>& edges, V2 p, float radius) {
-    for (const Edge& e : edges)
-        if (DistToSeg(p, e.p0, e.p1) < radius) return false;
+bool BankValid(const Edge* edges, int ne, V2 p, float radius) {
+    for (int i = 0; i < ne; ++i)
+        if (DistToSeg(p, edges[i].p0, edges[i].p1) < radius) return false;
     return true;
 }
 
 // sub_b360/b750 position resample: bank polyline range [s,e] -> `count` points,
 // equally spaced by arc length (stepLen = totalArc / count).
-void ResampleRange(const std::vector<V2>& bank, int s, int e, int count, std::vector<V2>& out) {
+void ResampleRange(const V2* bank, int s, int e, int count, V2* out) {
     if (count <= 0) return;
     float total = 0.0f;
     for (int k = s; k < e; ++k) total += V2Len(V2Sub(bank[k + 1], bank[k]));
@@ -413,7 +423,8 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
 
     // --- Build edge records (shifted endpoints +0.5x / -0.5y, DAT_140172114=0.5). ---
     int ne = ptCount - 1;
-    std::vector<Edge> edges((size_t)ne);
+    Edge* edges = (Edge*)std::malloc((size_t)ne * sizeof(Edge));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+    if (!edges) return;
     for (int i = 0; i < ne; ++i) {
         V2 p0 = { CLx(i) + 0.5f,     CLy(i) - 0.5f };
         V2 p1 = { CLx(i + 1) + 0.5f, CLy(i + 1) - 0.5f };
@@ -425,7 +436,7 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
 
     // --- Stage A: dense left/right banks (straight runs + convex corner fans). ---
     // fb00 main loop runs over edges [0, ptCount-3]; the fan reads edge[idx+1].
-    std::vector<V2> leftBank, rightBank;
+    V2List leftBank = { nullptr, 0, 0 }, rightBank = { nullptr, 0, 0 };
     const float kStraight = 4.0f;   // DAT_140172194
     const float kFanPer90 = 20.0f;  // DAT_1401721c4
     const float kRadDeg   = 57.29578f; // DAT_1401721ec (180/PI)
@@ -440,8 +451,8 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
             V2 spine = { e.p0.x + (e.p1.x - e.p0.x) * f, e.p0.y + (e.p1.y - e.p0.y) * f };
             V2 Lp = { spine.x - e.perp.x * radius, spine.y - e.perp.y * radius };  // LEFT  = spine - perp*r
             V2 Rp = { spine.x + e.perp.x * radius, spine.y + e.perp.y * radius };  // RIGHT = spine + perp*r
-            if (BankValid(edges, Lp, radius)) leftBank.push_back(Lp);
-            if (BankValid(edges, Rp, radius)) rightBank.push_back(Rp);
+            if (BankValid(edges, ne, Lp, radius)) V2Push(&leftBank, Lp);
+            if (BankValid(edges, ne, Rp, radius)) V2Push(&rightBank, Rp);
         }
         // Convex corner fan at node e.p1, rotating this-perp -> next-perp.
         const Edge& nx = edges[idx + 1];
@@ -459,30 +470,39 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
             V2 ip = V2Norm(V2{ (1.0f - t) * e.perp.x + t * nx.perp.x,
                                (1.0f - t) * e.perp.y + t * nx.perp.y });
             V2 pt = { e.p1.x + sign * radius * ip.x, e.p1.y + sign * radius * ip.y };
-            if (BankValid(edges, pt, radius)) {
-                if (side) leftBank.push_back(pt); else rightBank.push_back(pt);
+            if (BankValid(edges, ne, pt, radius)) {
+                if (side) V2Push(&leftBank, pt); else V2Push(&rightBank, pt);
             }
         }
     }
 
-    int nL = (int)leftBank.size(), nR = (int)rightBank.size();
-    if (nL < 2 || nR < 2) return;
+    int nL = leftBank.n, nR = rightBank.n;
+    if (nL < 2 || nR < 2) {
+        std::free(edges); std::free(leftBank.d); std::free(rightBank.d);
+        return;
+    }
 
     // --- Matching (sub_bdf0): nearest bank point to each RAW centerline node. ---
-    std::vector<int> lm((size_t)ptCount), rm((size_t)ptCount);
+    int* lm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+    int* rm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: GAME-c body scratch
+    if (!lm || !rm) {
+        std::free(edges); std::free(leftBank.d); std::free(rightBank.d);
+        std::free(lm); std::free(rm);
+        return;
+    }
     for (int i = 0; i < ptCount; ++i) {
         V2 c = { CLx(i), CLy(i) };
         int bi = 0; float bd = 1e30f;
-        for (int k = 0; k < nL; ++k) { float dd = V2Len(V2Sub(leftBank[k], c)); if (dd < bd) { bd = dd; bi = k; } }
+        for (int k = 0; k < nL; ++k) { float dd = V2Len(V2Sub(leftBank.d[k], c)); if (dd < bd) { bd = dd; bi = k; } }
         lm[i] = bi;
         bi = 0; bd = 1e30f;
-        for (int k = 0; k < nR; ++k) { float dd = V2Len(V2Sub(rightBank[k], c)); if (dd < bd) { bd = dd; bi = k; } }
+        for (int k = 0; k < nR; ++k) { float dd = V2Len(V2Sub(rightBank.d[k], c)); if (dd < bd) { bd = dd; bi = k; } }
         rm[i] = bi;
     }
 
     // --- Matched-range resample -> global cross-section lists (gL, gR, gV). ---
-    std::vector<V2> gL, gR;
-    std::vector<float> gV;
+    V2List gL = { nullptr, 0, 0 }, gR = { nullptr, 0, 0 };
+    float* gV = nullptr; int gN = 0, gCap = 0;
     float gMidArc = 0.0f; V2 prevMid = { 0.0f, 0.0f }; bool haveMid = false;
     int prevL = 0, prevR = 0;
     for (int i = 0; i < ptCount; ++i) {
@@ -497,7 +517,7 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
         // Skips skewed cross-sections without advancing prevL/prevR (faithful to the
         // retail goto-skip). Over-emit avoidance only.
         {
-            V2 cross = V2Norm(V2Sub(leftBank[cL], rightBank[cR]));
+            V2 cross = V2Norm(V2Sub(leftBank.d[cL], rightBank.d[cR]));
             V2 ta = { CLx(i > 0 ? i - 1 : i),            CLy(i > 0 ? i - 1 : i) };
             V2 tb = { CLx(i < ptCount - 1 ? i + 1 : i),  CLy(i < ptCount - 1 ? i + 1 : i) };
             V2 tang = V2Norm(V2Sub(tb, ta));
@@ -505,49 +525,51 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
             if (std::fabs(d) >= 0.02f) continue;   // not perpendicular -> skip this cross-section
         }
 
-        float sumL = 0.0f; for (int k = prevL; k < cL; ++k) sumL += V2Len(V2Sub(leftBank[k + 1], leftBank[k]));
-        float sumR = 0.0f; for (int k = prevR; k < cR; ++k) sumR += V2Len(V2Sub(rightBank[k + 1], rightBank[k]));
+        float sumL = 0.0f; for (int k = prevL; k < cL; ++k) sumL += V2Len(V2Sub(leftBank.d[k + 1], leftBank.d[k]));
+        float sumR = 0.0f; for (int k = prevR; k < cR; ++k) sumR += V2Len(V2Sub(rightBank.d[k + 1], rightBank.d[k]));
         if (sumL < 2.0f && sumR < 2.0f) continue;    // both-banks-short gate (DAT_140172174=2.0)
         int cnt = (int)(sumL > sumR ? sumL : sumR);
         if (cnt < 1) cnt = 1;
         if (sumL / (float)cnt < kMinArcGate || sumR / (float)cnt < kMinArcGate) continue;  // degenerate gate
 
-        std::vector<V2> Lr((size_t)cnt), Rr((size_t)cnt);
-        ResampleRange(leftBank, prevL, cL, cnt, Lr);
-        ResampleRange(rightBank, prevR, cR, cnt, Rr);
+        V2* Lr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+        V2* Rr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: GAME-c body scratch
+        if (!Lr || !Rr) { std::free(Lr); std::free(Rr); break; }
+        ResampleRange(leftBank.d, prevL, cL, cnt, Lr);
+        ResampleRange(rightBank.d, prevR, cR, cnt, Rr);
         for (int j = 0; j < cnt; ++j) {
             V2 mid = { (Lr[j].x + Rr[j].x) * 0.5f, (Lr[j].y + Rr[j].y) * 0.5f };
             if (haveMid) gMidArc += V2Len(V2Sub(mid, prevMid));
             prevMid = mid; haveMid = true;
             float v = gMidArc / kVDenom + kVOffset;   // V = cumulative flow arc / 32 - 16
-            gL.push_back(Lr[j]); gR.push_back(Rr[j]);
-            gV.push_back(v);
+            V2Push(&gL, Lr[j]); V2Push(&gR, Rr[j]);
+            if (gN >= gCap) { gCap = gCap ? gCap * 2 : 256; gV = (float*)std::realloc(gV, (size_t)gCap * sizeof(float)); }   // LEFT: GAME-c body scratch
+            gV[gN++] = v;
         }
+        std::free(Lr); std::free(Rr);
         prevL = cL; prevR = cR;
     }
 
     // --- Stage C (faithful): 4-column strip between gL/gR, shared streamwise V. ---
-    int gN = (int)gV.size();
     int estimate = gN * 4 * 2; if (estimate < 16) estimate = 16;
     WeldSet<OutVtx> weld; WeldInit(&weld, estimate);
     auto emitIdx = [&](uint16_t v) { VecPush(idxOut, v, 2); };
-    auto weldAdd = [&](const OutVtx& v) { return WeldAdd(&weld, v, WeldHash(v)); };
     for (int i = 0; i + 1 < gN; ++i) {
-        V2 p0 = gL[i], p1 = gL[i + 1];
+        V2 p0 = gL.d[i], p1 = gL.d[i + 1];
         float v0 = gV[i], v1 = gV[i + 1];
         float uLo = 0.0f, uHi = kUStep;
         for (int col = 0; col < 4; ++col) {
             float t = uHi;
-            V2 pLo = Lerp(gL[i],     gR[i],     t);
-            V2 pHi = Lerp(gL[i + 1], gR[i + 1], t);
+            V2 pLo = Lerp(gL.d[i],     gR.d[i],     t);
+            V2 pHi = Lerp(gL.d[i + 1], gR.d[i + 1], t);
             OutVtx V0 = { p0.x,  p0.y,  uLo, v0 };
             OutVtx V1 = { pLo.x, pLo.y, uHi, v0 };
             OutVtx V2v= { pHi.x, pHi.y, uHi, v1 };
             OutVtx V3 = { p1.x,  p1.y,  uLo, v1 };
-            uint16_t i0 = weldAdd(V0);
-            uint16_t i1 = weldAdd(V1);
-            uint16_t i2 = weldAdd(V2v);
-            uint16_t i3 = weldAdd(V3);
+            uint16_t i0 = WeldAdd(&weld, &V0);
+            uint16_t i1 = WeldAdd(&weld, &V1);
+            uint16_t i2 = WeldAdd(&weld, &V2v);
+            uint16_t i3 = WeldAdd(&weld, &V3);
             emitIdx(i0); emitIdx(i2); emitIdx(i1);   // (V0,V2,V1),(V0,V3,V2)
             emitIdx(i0); emitIdx(i3); emitIdx(i2);
             uLo = uHi; uHi += kUStep; p0 = pLo; p1 = pHi;
@@ -557,6 +579,11 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
     *vtxOut = weld.verts;
     weld.verts.data = nullptr;
     WeldFree(&weld);
+
+    std::free(edges);
+    std::free(leftBank.d); std::free(rightBank.d);
+    std::free(lm); std::free(rm);
+    std::free(gL.d); std::free(gR.d); std::free(gV);
 }
 
 } // anonymous namespace
@@ -726,7 +753,7 @@ void WorldGeometry::BuildWaterShores(const TerrainHeightfield* hf) {
                     gv.normal[0] = 0x7f; gv.normal[1] = 0x7f;
                     gv.normal[2] = (uint8_t)(int64_t)(weight[k] * kAOScale);
                     gv.normal[3] = 0x00;
-                    ci[k] = WeldAdd(&weld, gv, WeldHash(gv));
+                    ci[k] = WeldAdd(&weld, &gv);
                 }
                 uint16_t quad[6] = { ci[0], ci[1], ci[2], ci[0], ci[2], ci[3] };
                 for (int k = 0; k < 6; ++k) VecPush(idxAcc, quad[k], 2);
