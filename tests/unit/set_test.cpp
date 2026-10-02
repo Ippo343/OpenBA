@@ -479,7 +479,7 @@ UNIT_TEST(set_pointer_key_null_orders_first) {
 
         CHECK(s.Find(beta) != nullptr);
         CHECK(s.Find(nullptr) != nullptr);
-        char* absent = const_cast<char*>("delta");
+        char absent[] = "delta";
         CHECK(s.Find(absent) == nullptr);
 
         // A duplicate null key is still a lookup, not an insert.
