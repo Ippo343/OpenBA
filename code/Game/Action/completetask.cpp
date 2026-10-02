@@ -39,45 +39,34 @@
 // Serializes status, entity refs with type checks, task fields.
 // ============================================================
 void CompleteTask::Persist(void* stream) {
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status (version 0)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&this->_status), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs + task fields (version 1)
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Work entity ref (+0x20) with type validation. The .rdata type-id may be unavailable
-    // in the standalone exe (a Serialize-only dep, not part of the exec gate) — validation
-    // is simply skipped when the type-id can't be resolved.
-    reinterpret_cast<Object::InternalBasePtr*>(&this->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->workEntity != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(this->workEntity, CitizenComponent::TypeId())) {
-            this->workEntity = nullptr;
+    // Work citizen ref (+0x20) with type validation.
+    workEntity.InternalBasePtr::Serialize(ser);
+    if (workEntity.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(workEntity.Get(), CitizenComponent::TypeId())) {
+            workEntity = nullptr;
         }
     }
 
     // Target entity ref (+0x28) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&this->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->targetEntity != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(this->targetEntity, ComponentEntity::TypeId())) {
-            this->targetEntity = nullptr;
+    targetEntity.InternalBasePtr::Serialize(ser);
+    if (targetEntity.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(targetEntity.Get(), ComponentEntity::TypeId())) {
+            targetEntity = nullptr;
         }
     }
 
-    // Task param (+0x34)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->taskParam), nullptr);   // B.3.4 bridge
+    ser.Serialize(taskParam, nullptr);   // +0x34
 
     // Task index (+0x30) — versioned, only in version >= 1
-    int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version > 0) {
-        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->taskIndex), nullptr);   // B.3.4 bridge
+        ser.Serialize(taskIndex, nullptr);
     }
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -91,12 +80,11 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
     // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
     // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
     if (GameUpdateLoop::_singleton == nullptr ||
-        !*(void**)((uint8_t*)GameUpdateLoop::_singleton + 0x118)) return 0;
+        GameUpdateLoop::_singleton->m_tutorial == nullptr) return 0;
 
-    // Lazy-resolve task index from work entity
+    // Lazy-resolve task index from the work citizen
     if (this->taskIndex == 0x7FFFFFFF) {
-        uint8_t* workEnt = static_cast<uint8_t*>(workEntity);
-        this->taskIndex = *(int32_t*)(workEnt + 0x30);
+        this->taskIndex = workEntity->field_0x30;
     }
 
     // taskIdx < 0 is EXPECTED, not a gap. The build-material haul tree
@@ -110,14 +98,13 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
     // 2026-07-22 against the live BUILD_TRACE (taskIdx=-1, taskMgr live) — do not "fix".
     int32_t taskIdx = this->taskIndex;
     if (taskIdx >= 0) {
-        void* entityRef28 = this->targetEntity;
-        void* entityRef20 = this->workEntity;
-        void* gameState = GameUpdateLoop::_singleton;
-        void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
+        void* entityRef28 = this->targetEntity.Get();
+        void* entityRef20 = this->workEntity.Get();
+        WorkScheduler* taskMgr = GameUpdateLoop::_singleton->m_tutorial;
 
-        bool completed = ActCt_TryCompleteTask_8760(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
+        bool completed = TryCompleteTask(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
         if (completed) {
-            ActCt_TaskCleanup_8e30(taskMgr, taskIdx);   // 0x1400f8e30
+            TaskCleanup(taskMgr, taskIdx);   // 0x1400f8e30
         }
     }
     return 0;
@@ -129,19 +116,17 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
 // ============================================================
 void CompleteTask::CheckEntity() {
     if (GameUpdateLoop::_singleton == nullptr ||
-        !*(void**)((uint8_t*)GameUpdateLoop::_singleton + 0x118)) return;   // inert task mgr -> no-op
+        GameUpdateLoop::_singleton->m_tutorial == nullptr) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (this->taskIndex == 0x7FFFFFFF) {
-        uint8_t* workEnt = static_cast<uint8_t*>(workEntity);
-        this->taskIndex = *(int32_t*)(workEnt + 0x30);
+        this->taskIndex = workEntity->field_0x30;
     }
 
-    void* entityRef28 = this->targetEntity;
-    void* entityRef20 = this->workEntity;
-    void* gameState = GameUpdateLoop::_singleton;
-    void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
+    void* entityRef28 = this->targetEntity.Get();
+    void* entityRef20 = this->workEntity.Get();
+    WorkScheduler* taskMgr = GameUpdateLoop::_singleton->m_tutorial;
 
-    ActCt_TaskReassign_8800(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800
+    TaskReassign(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800
 }
 
 // ============================================================
@@ -149,16 +134,15 @@ void CompleteTask::CheckEntity() {
 // Returns true if param matches entity at +0x28 or parent entity at +0x20.
 // ============================================================
 bool CompleteTask::GetTarget(void* param) {
-    void* paramVal = *(void**)param;
+    void* paramVal = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 
     // Check direct match with target entity
-    if (this->targetEntity == paramVal) {
+    if (this->targetEntity.Get() == paramVal) {
         return true;
     }
 
-    // Check parent entity of work entity
-    void* parentEntity = *(void**)(static_cast<uint8_t*>(workEntity) + 0x10);
-    return parentEntity == *(void**)param;
+    // Check the work citizen's owning entity (Component +0x10)
+    return workEntity->_entity == paramVal;
 }
 
 // ============================================================
@@ -200,15 +184,19 @@ void* CompleteTask::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3,
                                    uint64_t* param_4, uint32_t param_5) {
-    // ENDGAME B.3.8 ACT: the real ctor (CompleteTask.h). A by-address door.
-    return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2, param_3, param_4, param_5));
+    // B4 FORWARD: 11 outside caller files (action_pf_roots_drop, citizenai_actionctors, the
+    // Work/ action builders) hold the two refs as uint64_t*.
+    return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2,
+        reinterpret_cast<const Object::InternalPtr<CitizenComponent>*>(param_3),
+        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(param_4), param_5));
 }
 
 // 0x1400c5da0: +0x20 = *param_3 ; +0x28 = *param_4 ; +0x30 = param_2 ; +0x34 = param_5.
-CompleteTask::CompleteTask(uint32_t taskIndexArg, uint64_t* workEntityArg, uint64_t* targetEntityArg,
+CompleteTask::CompleteTask(uint32_t taskIndexArg, const Object::InternalPtr<CitizenComponent>* workEntityArg,
+                           const Object::InternalPtr<ComponentEntity>* targetEntityArg,
                            uint32_t taskParamArg)
-    : workEntity(reinterpret_cast<void*>(*workEntityArg)),
-      targetEntity(reinterpret_cast<void*>(*targetEntityArg)),
+    : workEntity(*workEntityArg),
+      targetEntity(*targetEntityArg),
       taskIndex(static_cast<int32_t>(taskIndexArg)),
       taskParam(static_cast<int32_t>(taskParamArg)) {}
 
