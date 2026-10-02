@@ -37,8 +37,8 @@ disjoint file sets; regenerate with `scripts/filemap.py`), `GATE_TABLE.md`, the 
 | state | blocks |
 |---|---|
 | MERGED and gated | W0: R0-EXE, R0-RT, E0, W0-H1, W0-H2 · T · R-UI-a, R-UI-b, R-IO, R-GFX, R-VIDEO, R-ENG · COMP-a, b, c, d, e, f · DLG-a, b, c, d, e · WORK-a, b, c · GAME-a · ACT-a |
-| RUNNING when paused | none: every started block handed in and is merged. The five last worktrees (`.claude/worktrees/agent-*`) are merged and can be removed |
-| NOT STARTED | ACT-b, GAME-b, GAME-c, PLAYER, TUT (Tutorial / Goal / Object), R-CORE, STANDALONE, the tests |
+| RUNNING (resumed 2026-10-02; branch `b4-W1-<block>`, worktree `.claude/worktrees/agent-*`) | ACT-b, GAME-b, PLAYER, TUT. `known_port_issues` 14 row numbers reserved per block: ACT-b 51-59, GAME-b 60-69, PLAYER 70-79, TUT 80-89 |
+| NOT STARTED | GAME-c, R-CORE, STANDALONE, the tests (`DX11`, 15 files / 240, belongs to the dx11 seam step) |
 
 `PathfinderThread.h` was moved from GAME-b to ACT-a (ACT-a splits its raw storage).
 

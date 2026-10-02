@@ -90,7 +90,7 @@ public:
     // 0x1401024d0's port and MemFrees the block.
     PlayerToolManager();
 
-    void*    field_0x00;         // +0x00 InternalBasePtr (ctor null)
+    UI::DialogInstance* field_0x00;   // +0x00 InternalPtr<UI::DialogInstance>: the open tool dialog (0x1400ff9e0 stores it; ctor null)
     uint64_t field_0x08;         // +0x08 not written by the ctor
     struct ToolRegistryNode* field_0x10; // +0x10 ctor 0; the tool registry root SelectTool 0x140102b60 walks (B4 H4: typed, DLG-d; node in Dialog/toolbardialog.cpp)
     int32_t  field_0x18;         // +0x18 ctor 0
