@@ -132,7 +132,7 @@ public:
         uint16_t _cellW;                                 // +0x10
         uint16_t _cellH;                                 // +0x12
         uint8_t  _pad14[4];                              // +0x14
-        void*    _mesh;                                  // +0x18  ExternalPtr<PickingMesh>
+        PickingMesh* _mesh;                              // +0x18  ExternalPtr<PickingMesh>'s pointer
         Collection::Array<::Transform> _transforms;      // +0x20
         void*       _userData;                           // +0x30
         int32_t     _userValue;                          // +0x38
@@ -180,7 +180,7 @@ public:
     // (Tree name; a stack record, retail names none.)
     // ========================================================================
     struct AddDesc {
-        void*                          _mesh;        // +0x00
+        PickingMesh*                   _mesh;        // +0x00  ExternalPtr<PickingMesh>'s pointer
         Collection::Array<::Transform> _transforms;  // +0x08
         void*                          _userData;    // +0x18
         int32_t                        _userValue;   // +0x20
@@ -314,7 +314,9 @@ public:
     int32_t                    _pad44;         // +0x44  never written by InitGrid
     Collection::Array<Entry>   _entries;       // +0x48
     int32_t                    _freeEntry;     // +0x58
-    int32_t                    _queryStamp;    // +0x5c
+    // `mutable`: the const Intersect (0x1801246c0) bumps it — retail's const
+    // is a lie there, and this names that instead of casting it away.
+    mutable int32_t            _queryStamp;    // +0x5c
 };
 
 static_assert(sizeof(Scene::Entry) == 0x48, "Picking::Scene::Entry must be 0x48 bytes");
