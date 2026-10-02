@@ -23,6 +23,7 @@
 #include "Dialog/ToolUI.h"
 #include "math/Math.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"   // Tool::dialogPtr (+0x80 / +0x90)
 #include "volume/Volume.h"
 #include "Player/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
@@ -196,14 +197,16 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
     // caller had already done this check, so it was omitted here -- but slot 5 (tool
     // teardown) has NOT, and without it a right-click would close pinned panels too.
+    // LEFT: EditTool::entityRef (+0x28) holds the dialog's InternalPtr as an integer
+    // (Dialog/edittool_select.cpp, Dialog/toolui.cpp and standalone/orchard_force_start.cpp
+    // read it so).
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(dialogPtr);
     {
         const uint32_t tidToolUI = ToolUI::TypeId();
-        uintptr_t ctrl = 0;
-        ::new (&ctrl) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(tidToolUI));  // B.3.6 bridge
-        if (ctrl != 0) {
-            if (Object::IsDerivedFromNullSafe((void*)ctrl, tidToolUI)) {
-                if (*(char*)(ctrl + 0x40) != 0) return;   // pinned -> leave it open
+        Object::InternalPtr<UI::DialogController> ctrl = dialog->GetController(tidToolUI);
+        if (ctrl.Get() != nullptr) {
+            if (ctrl->IsDerivedFrom(tidToolUI)) {
+                if (static_cast<ToolUI*>(ctrl.Get())->pinned != 0) return;   // pinned -> leave it open
             }
         }
     }
@@ -214,11 +217,11 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // stack copy, matching the toolui.cpp close-button path.
     if (!dialogPtr) return;
     if (dialogPtr < 0x10000 || dialogPtr > 0x00007FFFFFFFFFFFULL) return;
-    void* userInterface = *(void**)(dialogPtr + 0x10);
+    void* userInterface = dialog->_ui;
     if (!userInterface) return;
-    uint64_t dialogRef = dialogPtr;
-    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(  // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));
+    Object::InternalPtr<UI::DialogInstance> dialogRef(dialog);
+    // LEFT: DialogInstance::_ui is `void*` (runtime/types/ui/DialogInstance.h, R-UI).
+    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(&dialogRef);
     // Fires on entity-death AND on right-click deselect (vtable slot 5), so this
     // must not claim a cause it cannot know.
     printf("[EditTool] deselect -> closed info dialog %p\n", (void*)dialogPtr);
@@ -246,8 +249,6 @@ void EditTool::Update(void*, char) {
     if (entityRef == 0)
         return;
 
-    void* entityIBP = (void*)&entityRef;  // &self+0x28
-
     // Resolve lazy/weak pointer
 
     // If the referenced info dialog was destroyed while this EditTool kept its
@@ -260,7 +261,7 @@ void EditTool::Update(void*, char) {
     // (Retail destroys the tool on close, so the dialog is always live there and
     // this guard never triggers.)
     {
-        uintptr_t resolved = *(uintptr_t*)entityIBP;
+        uintptr_t resolved = entityRef;
         if (resolved < 0x10000 || resolved > 0x00007FFFFFFFFFFFULL) {
             entityRef = 0;
             // Drop the selected-entity ref too: leaving +0x30 set blocks re-selecting
@@ -271,66 +272,51 @@ void EditTool::Update(void*, char) {
         }
     }
 
-    // Get ToolUI controller from dialog
-    uintptr_t dialogPtr = *(uintptr_t*)entityIBP;  // deref IBP to get dialog
-    uintptr_t controllerResult = 0;
-    uintptr_t toolUIObj = 0;
+    // Get ToolUI controller from dialog.
+    // LEFT: EditTool::entityRef (+0x28) holds the dialog as an integer (see
+    // EditTool_CloseInfoDialog).
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(entityRef);
+    ToolUI* toolUI = nullptr;
 
     {
         const uint32_t tidToolUI = ToolUI::TypeId();
-        ::new (&controllerResult) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(tidToolUI));  // B.3.6 bridge
-        if (controllerResult != 0) {
-            void* ctrObj = (void*)controllerResult;
-            if (Object::IsDerivedFromNullSafe(ctrObj, tidToolUI)) {
-                toolUIObj = controllerResult;
+        Object::InternalPtr<UI::DialogController> controller = dialog->GetController(tidToolUI);
+        if (controller.Get() != nullptr) {
+            if (controller->IsDerivedFrom(tidToolUI)) {
+                toolUI = static_cast<ToolUI*>(controller.Get());
             }
         }
     }
 
-    // Wrap in IBP (local_48 in decompilation)
-    uintptr_t toolUIIBP = 0;
-    new (&toolUIIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(toolUIObj));   // B.3.3 bridge
-
-    // Get PageToggleUI controller from the same dialog
-    dialogPtr = *(uintptr_t*)entityIBP;
-    controllerResult = 0;
-    uintptr_t pageToggleObj = 0;
+    // Get the EntityUI (PageToggleUI) controller from the same dialog
+    EntityUI* pageToggle = nullptr;
 
     {
         const uint32_t tidEntityUI = EntityUI::TypeId();
-        ::new (&controllerResult) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(tidEntityUI));  // B.3.6 bridge
-        if (controllerResult != 0) {
-            void* ctrObj = (void*)controllerResult;
-            if (Object::IsDerivedFromNullSafe(ctrObj, tidEntityUI)) {
-                pageToggleObj = controllerResult;
+        Object::InternalPtr<UI::DialogController> controller = dialog->GetController(tidEntityUI);
+        if (controller.Get() != nullptr) {
+            if (controller->IsDerivedFrom(tidEntityUI)) {
+                pageToggle = static_cast<EntityUI*>(controller.Get());
             }
         }
     }
 
-    // Wrap in IBP (local_50 in decompilation)
-    uintptr_t pageToggleIBP = 0;
-    new (&pageToggleIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(pageToggleObj));   // B.3.3 bridge
-
     REPO_DIAG("[Repos] entityRef(dialog)=%p toolUIIBP=%p pageToggleIBP=%p\n",
-              (void*)entityRef, (void*)toolUIIBP, (void*)pageToggleIBP);
+              static_cast<void*>(dialog), static_cast<void*>(toolUI), static_cast<void*>(pageToggle));
 
     // Standalone safety: this reposition only runs once an entity's info dialog is open, a
     // path never exercised until GUI select landed. If either controller came back null (a
     // missing standalone controller, or an entity whose dialog lacks a ToolUI/EntityUI), we
     // cannot position — skip rather than deref a null IBP. The dialog still shows at its .rsc
     // default position. Retail always has both controllers.
-    if (toolUIIBP == 0 || pageToggleIBP == 0) {
+    if (toolUI == nullptr || pageToggle == nullptr) {
         REPO_DIAG("[Repos] BAIL: null controller (toolUI=%p pageToggle=%p)\n",
-                  (void*)toolUIIBP, (void*)pageToggleIBP);
+                  static_cast<void*>(toolUI), static_cast<void*>(pageToggle));
         return;
     }
 
-    // Check ToolUI controller flag at +0x40
-    if (*(char*)(toolUIIBP + 0x40) != 0) {
+    // Check the ToolUI's pinned flag (+0x40)
+    if (toolUI->pinned != 0) {
         // Flag is set — skip positioning
         REPO_DIAG("[Repos] BAIL: toolUI+0x40 pinned flag set\n");
         return;
@@ -346,28 +332,25 @@ void EditTool::Update(void*, char) {
     // kept dead-entity panels open forever (the upgrade-path crash class the
     // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
     // backstop for PINNED panels, which retail also leaves open).
-    if (!SA_DialogEntityAlive((void*)pageToggleIBP)) {
-        EditTool_CloseInfoDialog(this, dialogPtr);
+    if (!SA_DialogEntityAlive(pageToggle)) {
+        EditTool_CloseInfoDialog(this, entityRef);
         return;
     }
 
     // Construct a Volume::Rectangle for entity bounding rect
-    uint8_t rectangle[32];
-    memset(rectangle, 0, sizeof(rectangle));
-    RtVolume_Rectangle_Ctor(reinterpret_cast<struct Rectangle*>(rectangle));
+    struct Rectangle rectangle;
+    RtVolume_Rectangle_Ctor(&rectangle);
 
-    // Get entity reference from PageToggleUI controller at +0x30
-    uintptr_t entityObj = *(uintptr_t*)(pageToggleIBP + 0x30);
+    // Get entity reference from the EntityUI controller (+0x30)
+    ComponentEntity* entityObj = pageToggle->entity;
 
     // Get entity's screen bounding rectangle
-    uintptr_t entityParam = entityObj;
-    bool gotRect = PlayerScreenRect_Entity_0380(entityObj, &entityParam,
-                                                reinterpret_cast<uint64_t*>(rectangle)) != 0;
+    ComponentEntity* entityParam = entityObj;
+    bool gotRect = PlayerScreenRect_EntityRect_0380(entityObj, &entityParam, &rectangle) != 0;
 
     REPO_DIAG("[Repos] entityObj=%p gotRect=%d rect(L,T,R,B)=[%.1f %.1f %.1f %.1f]\n",
-              (void*)entityObj, (int)gotRect,
-              *(float*)&rectangle[0], *(float*)&rectangle[4],
-              *(float*)&rectangle[8], *(float*)&rectangle[12]);
+              static_cast<void*>(entityObj), (int)gotRect,
+              rectangle.min.x, rectangle.min.y, rectangle.max.x, rectangle.max.y);
 
     // Citizen / dynamic-entity fallback: 0380 only yields a rect for entities with a
     // static footprint or model bounding-box (buildings). Citizens have neither, so it
@@ -378,10 +361,10 @@ void EditTool::Update(void*, char) {
     // QoL addition, guarded so it never runs when 0380 already produced a rect.)
     if (!gotRect) {
         float sx = 0.0f, sy = 0.0f;
-        if (TryProjectEntityModelPos(reinterpret_cast<const ComponentEntity*>(entityObj), &sx, &sy)) {   // LEFT: entityObj is read raw from the PageToggleUI controller (+0x30) above
-            *(float*)&rectangle[0] = sx;   // left
-            *(float*)&rectangle[4] = sy;   // top
-            *(float*)&rectangle[8] = sx;   // right (== left -> midX = sx, centred)
+        if (TryProjectEntityModelPos(entityObj, &sx, &sy)) {
+            rectangle.min.x = sx;   // left
+            rectangle.min.y = sy;   // top
+            rectangle.max.x = sx;   // right (== left -> midX = sx, centred)
             gotRect = true;
             REPO_DIAG("[Repos] citizen fallback: projected worldpos -> screen(%.1f,%.1f)\n", sx, sy);
         }
@@ -396,18 +379,12 @@ void EditTool::Update(void*, char) {
     }
 
     // Get dialog root element and its padded size
-    dialogPtr = *(uintptr_t*)entityIBP;
-    void* rootIBPPtr = nullptr;
-    uintptr_t rootRetbuf = 0;  // InternalPtr<Element> return-by-value buffer
-    ::new (&rootRetbuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetRoot());  // B.3.6 bridge
-    rootIBPPtr = &rootRetbuf;
-
+    Object::InternalPtr<UI::Element> root = dialog->GetRoot();
 
     int dialogWidth = 0, dialogHeight = 0;
-    uintptr_t rootElement = rootIBPPtr ? *(uintptr_t*)rootIBPPtr : 0;
+    UI::Element* rootElement = root.Get();
     if (rootElement) {
-        reinterpret_cast<UI::Element*>(rootElement)->GetPaddedSize(dialogWidth, dialogHeight);  // B.3.6 bridge
+        rootElement->GetPaddedSize(dialogWidth, dialogHeight);
     }
 
     // Calculate dialog position from entity rect.
@@ -421,9 +398,9 @@ void EditTool::Update(void*, char) {
     //   midX = (left + right) * 0.5
     // A prior port misread local_28 as rect+0x10 (past the 16-byte rect), which reads 0
     // and pulls every dialog toward the left edge. maxX lives at +0x08.
-    float rectLeft  = *(float*)&rectangle[0];
-    float rectTop   = *(float*)&rectangle[4];
-    float rectRight = *(float*)&rectangle[8];
+    float rectLeft  = rectangle.min.x;
+    float rectTop   = rectangle.min.y;
+    float rectRight = rectangle.max.x;
 
     float midX = (rectLeft + rectRight) * 0.5f;
 
@@ -436,10 +413,9 @@ void EditTool::Update(void*, char) {
     int posX = (int)vec2.x - (dialogWidth >> 1);
     int posY = (int)vec2.y - dialogHeight;
 
-    // Get UI scale factor from dialog's UI instance
-    dialogPtr = *(uintptr_t*)entityIBP;
-    // dialog+0x10 = UI instance, UI+0xdc = scale factor
-    float uiScale = *(float*)(*(uintptr_t*)(dialogPtr + 0x10) + 0xdc);
+    // Get UI scale factor from dialog's UI instance (dialog+0x10 = UI, UI+0xdc = scale).
+    // LEFT: DialogInstance::_ui is `void*` (runtime/types/ui/DialogInstance.h, R-UI).
+    float uiScale = reinterpret_cast<const UI::UserInterface*>(dialog->_ui)->_uiScale;
 
     // Apply scale and set position
     int scaledX = (int)((float)posX / uiScale);
@@ -451,9 +427,9 @@ void EditTool::Update(void*, char) {
     // [0, screen-dialog] in UI space so the whole panel stays visible. Positions already
     // inside the screen are unaffected, so building placement is unchanged.
     if (uiScale > 0.0f && ::Video::Device::_singleton) {
-        uintptr_t disp = (uintptr_t)::Video::Device::_singleton;
-        int screenW = *(int*)(disp + 4);
-        int screenH = *(int*)(disp + 8);
+        const ::Video::Device* disp = ::Video::Device::_singleton;
+        int screenW = disp->backBufferWidth;
+        int screenH = disp->backBufferHeight;
         if (screenW > 0 && screenH > 0) {
             int maxX = (int)((float)screenW / uiScale) - dialogWidth;
             int maxY = (int)((float)screenH / uiScale) - dialogHeight;
@@ -464,17 +440,15 @@ void EditTool::Update(void*, char) {
         }
     }
 
-    dialogPtr = *(uintptr_t*)entityIBP;
     REPO_DIAG("[Repos] SETPOS midX=%.1f rectTop=%.1f dlgW=%d dlgH=%d uiScale=%.3f "
               "-> scaled=(%d,%d)\n", midX, rectTop, dialogWidth,
               dialogHeight, uiScale, scaledX, scaledY);
-    reinterpret_cast<UI::DialogInstance*>(dialogPtr)->SetUpperLeft(scaledX, scaledY, true);  // B.3.6 bridge
+    dialog->SetUpperLeft(scaledX, scaledY, true);
 
     // If game world flag bit 10 is set and pageToggle controller exists, call helper
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uint32_t worldFlags = *(uint32_t*)(gameWorld + 0xd0);
-    if (((worldFlags >> 10) & 1) != 0 && pageToggleIBP != 0) {
-        PlayerTrade_EditTool_66800(static_cast<int64_t>(pageToggleIBP));
+    uint32_t worldFlags = GameUpdateLoop::_singleton->m_gameFlags;
+    if (((worldFlags >> 10) & 1) != 0 && pageToggle != nullptr) {
+        pageToggle->SetPinned();   // 0x140066800
     }
 }
 
@@ -501,26 +475,25 @@ char EditTool::OnKey(char param2) {
 
     if (param2 == 0) return 1;
 
-    // Check tool state: self+0x10 -> state struct
-    uintptr_t statePtr = (uintptr_t)dialogPtr;
-    bool flag80 = *(char*)(statePtr + 0x80) != 0;
-    if (flag80 && *(uintptr_t*)(statePtr + 0x90) == 0) {
+    // Check the tool manager's state (Tool +0x10)
+    PlayerToolManager* manager = dialogPtr;
+    bool flag80 = manager->field_0x80 != 0;
+    if (flag80 && manager->field_0x90 == nullptr) {
         return 1;
     }
 
     // The KeyMap: Input::Configuration::_singleton->_keyMap (retail's triple
     // deref of the import slot 0x140151738).
     if (!Input::Configuration::_singleton) return 1;
-    uintptr_t keyMap = reinterpret_cast<uintptr_t>(Input::Configuration::_singleton->_keyMap);
+    const Input::KeyMap* keyMap = Input::Configuration::_singleton->_keyMap;
 
     // Check KeyMap::Pressed(keyMap, 0, 5)
-    bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
+    bool pressed = keyMap->Pressed(0, 5);
     if (SelDiagOn() && pressed)
-        printf("[SelDiag] action-5 PRESSED (keyMap=%p) — running pick\n", (void*)keyMap);
+        printf("[SelDiag] action-5 PRESSED (keyMap=%p) — running pick\n", static_cast<const void*>(keyMap));
     if (!pressed) return 1;
 
     // Get world data pointers
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8 (the tree called it the entity list)
 
     // Compute camera ray from mouse position
@@ -539,7 +512,7 @@ char EditTool::OnKey(char param2) {
     // reset to 400.0f just before the picking call, which threw the terrain distance away.
     float maxDist = 400.0f;   // 0x43c80000
 
-    PlayerRay_GetMouseRay_1005a0(reinterpret_cast<void*>(keyMap), rayOrigin, rayDir);
+    PlayerRay_GetMouseRay_1005a0(keyMap, rayOrigin, rayDir);
 
     // Map hit test to find world position under cursor
     // MUST be 4 floats, matching retail EditTool::Draw's `float local_58[4]` (0x1400fd030).
@@ -556,10 +529,9 @@ char EditTool::OnKey(char param2) {
     // Reaches SelectEntity only when the terrain ray MISSES (so the EntityAtCell branch that
     // would overwrite the slot is skipped) and the picking pass also misses.
     float hitPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    uintptr_t foundEntity = 0;
+    ComponentEntity* foundEntity = nullptr;
 
     WorldGeometry* mapComponent = GameUpdateLoop::_singleton->m_worldGeometry;
-    int* mapSize = *(int**)(gameWorld + 0xf8);
 
     if (mapComponent) {
         float maxDistArr[2];
@@ -570,7 +542,7 @@ char EditTool::OnKey(char param2) {
                                                    maxDistArr, hitPos, &maxDist) != 0;
 
         if (mapHit) {
-            int gridSize = *mapSize;
+            int gridSize = entityList->size;
             int halfGrid = gridSize >> 1;
 
             // Convert world position to grid cell
@@ -588,11 +560,11 @@ char EditTool::OnKey(char param2) {
             if (cellIndex > 0) {
                 ComponentEntity* retIBP = nullptr;
                 ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
-                if (result) foundEntity = (uintptr_t)*result;   // LEFT: foundEntity is the tree's integer IBP (EditTool::OnKey not yet converted)
+                if (result) foundEntity = *result;
             }
             if (SelDiagOn())
                 printf("[SelDiag] mapHit=1 hitPos=(%.2f,%.2f) cell=(%d,%d) cellEntity=%p\n",
-                       hitPos[0], hitPos[1], cellX, cellY, (void*)foundEntity);
+                       hitPos[0], hitPos[1], cellX, cellY, static_cast<void*>(foundEntity));
         } else if (SelDiagOn()) {
             printf("[SelDiag] mapHit=0 (ray missed terrain) ray o=(%.2f,%.2f,%.2f) d=(%.2f,%.2f,%.2f)\n",
                    rayOrigin[0], rayOrigin[1], rayOrigin[2], rayDir[0], rayDir[1], rayDir[2]);
@@ -603,34 +575,33 @@ char EditTool::OnKey(char param2) {
     }
 
     // Picking scene intersection (3D ray picking for precise entity selection)
-    void* pickingScene = *(void**)(gameWorld + 0x70);
-    float hitNormal[3] = {0.0f, 0.0f, 0.0f};
-    float hitPoint[3] = {0.0f, 0.0f, 0.0f};
+    Picking::Scene* pickingScene = GameUpdateLoop::_singleton->m_pickingScene;
+    Math::Vector3 hitNormal(0.0f, 0.0f, 0.0f);
+    Math::Vector3 hitPoint(0.0f, 0.0f, 0.0f);
 
     if (pickingScene) {
         // NO reset here — retail deliberately carries the map hit test's shortened
         // distance into the pick (see the maxDist declaration). Re-stamping 400.0f is
         // what let the pick reach through terrain.
-        int hitId = reinterpret_cast<const Picking::Scene*>(pickingScene)->Intersect(   // B.3.7 bridge
-            *reinterpret_cast<const Vector3*>(rayOrigin), *reinterpret_cast<const Vector3*>(rayDir),
-            *reinterpret_cast<const Math::Scalar*>(&maxDist),
-            *reinterpret_cast<Vector3*>(hitPoint), *reinterpret_cast<Vector3*>(hitNormal));
+        int hitId = pickingScene->Intersect(
+            Math::Vector3(rayOrigin[0], rayOrigin[1], rayOrigin[2]),
+            Math::Vector3(rayDir[0], rayDir[1], rayDir[2]),
+            Math::Scalar(maxDist), hitPoint, hitNormal);
         if (hitId >= 0) {
-            // Get the entity associated with this picking hit
-            void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(static_cast<uint32_t>(hitId));   // B.3.7 bridge
-            uintptr_t pickIBP = 0;
-            new (&pickIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(userData));   // B.3.3 bridge
-            foundEntity = pickIBP;
+            // Get the entity associated with this picking hit.
+            // LEFT: Picking::Scene's user data is `void*` (block R-GFX); the picking
+            // component stores the owning ComponentEntity there.
+            foundEntity = reinterpret_cast<ComponentEntity*>(
+                pickingScene->GetUserData(static_cast<uint32_t>(hitId)));
         }
         if (SelDiagOn())
-            printf("[SelDiag] Picking hitId=%d -> foundEntity=%p\n", hitId, (void*)foundEntity);
+            printf("[SelDiag] Picking hitId=%d -> foundEntity=%p\n", hitId, static_cast<void*>(foundEntity));
     } else if (SelDiagOn()) {
-        printf("[SelDiag] Picking skipped (scene=%p)\n", pickingScene);
+        printf("[SelDiag] Picking skipped (scene=%p)\n", static_cast<void*>(pickingScene));
     }
 
     // Select the found entity if valid and different from current
-    if (foundEntity != 0) {
+    if (foundEntity != nullptr) {
         // If flag80 is set, verify entity matches expected type
         if (flag80) {
             // CORRECTED 2026-08-01. This used to blame "a mesh registered without
@@ -643,32 +614,35 @@ char EditTool::OnKey(char param2) {
             // Kept as defence in depth only. NOTE it did not fire on the 2026-08-01 repeat:
             // flag80 was 0, so this whole branch was skipped and the corrupt value went
             // straight through to SelectEntity.
-            if (foundEntity < 0x10000 || (foundEntity & 0x7) != 0) {
+            // LEFT: the tree's address probe (a guard retail lacks, 14d row 74).
+            uintptr_t foundBits = reinterpret_cast<uintptr_t>(foundEntity);
+            if (foundBits < 0x10000 || (foundBits & 0x7) != 0) {
                 static int s_warned = 0;
                 if (s_warned < 4) {
                     s_warned++;
                     fprintf(stderr, "[EditTool] WARN: picking user data %p is not a valid entity "
                             "pointer — skipping select. A mesh was registered without "
-                            "Picking::Scene::SetMeshUserData.\n", (void*)foundEntity);
+                            "Picking::Scene::SetMeshUserData.\n", static_cast<void*>(foundEntity));
                     fflush(stderr);
                 }
                 return 1;
             }
-            uintptr_t entityTypeRef = *(uintptr_t*)(foundEntity + 0x28);
-            uintptr_t expectedType = *(uintptr_t*)((uintptr_t)dialogPtr + 0x90);
-            if (entityTypeRef != expectedType) {
+            // The entity's description (+0x28) against the manager's pending group (+0x90).
+            if (foundEntity->_description != manager->field_0x90) {
                 return 1;  // type mismatch, skip
             }
         }
 
         // Check if entity is different from last selected
-        if (lastEntityRef != foundEntity) {
-            // Call EditTool_SelectEntity (0x1400fd3b0)
-            uintptr_t entityParam = foundEntity;
-            EditTool_SelectEntity_Impl(this, &entityParam);
+        // LEFT: EditTool::lastEntityRef (+0x30) holds the entity as an integer (see
+        // EditTool_CloseInfoDialog).
+        if (lastEntityRef != reinterpret_cast<uint64_t>(foundEntity)) {
+            // EditTool::SelectEntity (0x1400fd3b0)
+            Object::InternalPtr<ComponentEntity> entityParam(foundEntity);
+            SelectEntity(&entityParam);
             if (SelDiagOn())
                 printf("[SelDiag] SELECT entity=%p -> dialog(self+0x28)=%p\n",
-                       (void*)foundEntity, (void*)entityRef);
+                       static_cast<void*>(foundEntity), (void*)entityRef);
         }
     } else if (SelDiagOn()) {
         printf("[SelDiag] no entity under cursor — nothing selected\n");
@@ -732,7 +706,9 @@ extern "C" bool EditTool_IsEditTool(void* tool) {
 // rather than reinterpreting it. Returns null if no EditTool could be activated.
 extern "C" void* EditTool_HarnessAcquire(void* entityUI) {
     if (!entityUI) return nullptr;
-    void* tool = *(void**)((uintptr_t)entityUI + 0x28);
+    // LEFT: the harnesses (standalone/*, STANDALONE) hand the tool manager over as void*.
+    PlayerToolManager* manager = (PlayerToolManager*)entityUI;
+    void* tool = manager->currentTool;
     if (EditTool_IsEditTool(tool)) return tool;
     if (tool) {
         static int warned = 0;
@@ -744,7 +720,7 @@ extern "C" void* EditTool_HarnessAcquire(void* entityUI) {
         }
     }
     EntityUI_SetEditMode_Impl(entityUI, 0);
-    tool = *(void**)((uintptr_t)entityUI + 0x28);
+    tool = manager->currentTool;
     return EditTool_IsEditTool(tool) ? tool : nullptr;
 }
 
@@ -762,42 +738,14 @@ extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
         }
         return 0;
     }
-    // Clear any prior selection ref so d3b0 doesn't early-out on a repeat.
-    uintptr_t entityParam = (uintptr_t)entity;
-    EditTool_SelectEntity_Impl(editTool, &entityParam);
-    void* dlg = *(void**)((uintptr_t)editTool + 0x28);
+    // LEFT: the harnesses (standalone/*, STANDALONE) hand the tool and the entity over as void*.
+    EditTool* tool = (EditTool*)editTool;
+    Object::InternalPtr<ComponentEntity> entityParam((ComponentEntity*)entity);
+    tool->SelectEntity(&entityParam);   // 0x1400fd3b0
+    void* dlg = (void*)tool->entityRef;
     printf("[EditSel] direct select entity=%p -> dialog=%p (%s)\n",
            entity, dlg, dlg ? "OPENED" : "no dialog");
     return dlg != 0 ? 1 : 0;
-}
-
-// Dump a dialog's element tree with geometry + flags so we can see WHY injected
-// content isn't drawing (zero size? off-screen? visibility flag?). Element layout:
-//   +0x10 name (System::String) · +0x34 flags · +0x38..0x58 rect fields
-//   +0xa0 children array · +0xa8 child count · vtable[2]=GetTypeId
-static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
-    if (!elem || depth > 10 || *counter > 200) return;
-    (*counter)++;
-    uintptr_t e = (uintptr_t)elem;
-    char* nameData = *(char**)(e + 0x10);
-    int len = nameData ? *(int*)(nameData - 8) : 0;
-    uint32_t tid = 0;
-    tid = reinterpret_cast<Object::Base*>(elem)->Type();   // B.3.x bridge (slot 2)
-    uint32_t flags = *(uint32_t*)(e + 0x34);
-    // Element bounds: +0x68 x, +0x6c y, +0x70 w, +0x74 h (ints) — from
-    // TabElement::UpdateContainers geometry math.
-    int bx = *(int*)(e + 0x68), by = *(int*)(e + 0x6c);
-    int bw = *(int*)(e + 0x70), bh = *(int*)(e + 0x74);
-    printf("[CitTree] %*selem=%p tid=%u flags=0x%x name='%.*s' | rect=(%d,%d %dx%d)\n",
-           depth * 2, "", elem, tid, flags, len > 0 ? len : 0, nameData ? nameData : "",
-           bx, by, bw, bh);
-    // These locals exist only for the trace line above; BANISHED_STRIP_LOGS
-    // turns printf into ((void)0) in release, which otherwise makes every one
-    // of them -Wunused (standalone/log_strip.h's own documented caveat).
-    (void)tid; (void)flags; (void)len; (void)bx; (void)by; (void)bw; (void)bh;
-    void** kids = *(void***)(e + 0xa0);
-    int kc = *(int*)(e + 0xa8);
-    for (int i = 0; kids && i < kc; i++) DumpCitizenElemTree(kids[i], depth + 1, counter);
 }
 
 // Drive the select path on a CITIZEN. Citizens aren't in the region-map cell array
@@ -808,18 +756,20 @@ static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
 // real click uses: pick userData -> EditTool_SelectEntity -> CitizenUI dialog.
 extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
-    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x70);
+    Picking::Scene* scene = GameUpdateLoop::_singleton->m_pickingScene;
     if (!scene) { printf("[EditSel] picking scene null\n"); return 0; }
+    EditTool* tool = (EditTool*)editTool;   // LEFT: the harness API's void* (STANDALONE)
 
     // Citizens register with low pick-ids (0..N). Probe the first several; the first
     // that yields a live userData entity gets selected.
     for (int id = 0; id < 16; id++) {
-        void* userData = reinterpret_cast<const Picking::Scene*>(scene)->GetUserData(static_cast<uint32_t>(id));   // B.3.7 bridge
+        void* userData = scene->GetUserData(static_cast<uint32_t>(id));
         if (!userData) continue;
         printf("[EditSel] citizen pick-id %d -> entity=%p; selecting...\n", id, userData);
-        uintptr_t entityParam = (uintptr_t)userData;
-        EditTool_SelectEntity_Impl(editTool, &entityParam);
-        void* dlg = *(void**)((uintptr_t)editTool + 0x28);
+        // LEFT: Picking::Scene's user data is `void*` (block R-GFX).
+        Object::InternalPtr<ComponentEntity> entityParam(reinterpret_cast<ComponentEntity*>(userData));
+        tool->SelectEntity(&entityParam);   // 0x1400fd3b0
+        void* dlg = (void*)tool->entityRef;
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",
                userData, dlg, dlg ? "OPENED" : "no dialog");
         if (dlg) {
@@ -833,10 +783,9 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
 extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
 
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
     Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8
-    int* mapSize = *(int**)(gameWorld + 0xf8);
-    int gridSize = (mapSize && *mapSize > 0) ? *mapSize : 256;
+    int gridSize = (entityList && entityList->size > 0) ? entityList->size : 256;
+    EditTool* tool = (EditTool*)editTool;   // LEFT: the harness API's void* (STANDALONE)
     int tried = 0, found = 0;
 
     // Expanding Chebyshev rings around centre (124,124), same valley the placement/
@@ -853,17 +802,17 @@ extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
 
                 ComponentEntity* retIBP = nullptr;
                 ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
-                uintptr_t entity = result ? (uintptr_t)*result : 0;   // LEFT: as above
+                ComponentEntity* entity = result ? *result : nullptr;
                 if (!entity) continue;
                 found++;
 
-                uintptr_t entityParam = entity;
-                EditTool_SelectEntity_Impl(editTool, &entityParam);
+                Object::InternalPtr<ComponentEntity> entityParam(entity);
+                tool->SelectEntity(&entityParam);   // 0x1400fd3b0
                 tried++;
-                void* dlg = *(void**)((uintptr_t)editTool + 0x28);
+                void* dlg = (void*)tool->entityRef;
                 if (dlg != 0) {
                     printf("[EditSel] cell(%d,%d) entity=%p OPENED info dialog=%p "
-                           "(tried=%d occupants=%d)\n", cx, cy, (void*)entity, dlg, tried, found);
+                           "(tried=%d occupants=%d)\n", cx, cy, static_cast<void*>(entity), dlg, tried, found);
                     return 1;
                 }
             }
