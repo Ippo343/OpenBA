@@ -19,6 +19,8 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/OrchardComponent.h"
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -52,32 +54,30 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
     if (!s_enabled || s_fired || frameNum < s_frame) return;
     s_fired = true;
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-    uintptr_t entityList = gw ? *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : 0;
-    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
-    const int n   = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    EntityList* entityList = gw ? gw->m_entityList : nullptr;                     // +0xe8
+    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;   // +0x08
+    const int n   = entityList ? entityList->masterArray.count : 0;               // +0x10
     const uint32_t tid = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tid) {
         std::fprintf(stderr, "[OrchardCut] frame=%d: cannot scan (arr=%p n=%d tid=%u)\n",
-                     frameNum, reinterpret_cast<void*>(arr), n, tid);
+                     frameNum, static_cast<void*>(arr), n, tid);
         std::fflush(stderr);
         return;
     }
 
     int found = 0, clicked = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        const int cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        const int cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
         OrchardComponent* comp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* cc = *cs;
+            Component* cc = cA[c].Get();
             if (!cc) continue;
-            if (reinterpret_cast<Object::Base*>(cc)->Type() == tid) {   // B.3.8 bridge
-                comp = reinterpret_cast<OrchardComponent*>(cc);         // B.3.8 bridge
+            if (cc->Type() == tid) {
+                comp = static_cast<OrchardComponent*>(cc);   // exact type id
                 break;
             }
         }
