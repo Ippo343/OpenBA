@@ -205,3 +205,7 @@ R-CORE (row 38) routes at `06c62180`: ui ok · tools ok · `sa-stress` exit 0, u
 | 39 | W2-STANDALONE (first part) | `7229ae9e` | standalone: the four game-logic files moved to `code/Game/Game`; autostart, modal_driver, mouse_inject, stress_harness, main and ten harnesses by name: 1746 -> 1286 in 78 files (tool_harness and 17 harnesses still to do) | exit 0 · 918 / 0 · 0 (the gate counted 10: the moved files' standing warnings under their new paths; baseline paths updated) | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.80 ms/frame, p95 2.41 (agents building) | 0 |
 
 Metric at `7229ae9e`: **11,063** to remove.
+
+| 40 | W1-PLAYER (second and third parts) | `558bbe9a` | Player: PathTool arrays are `Collection::Array` members (retail dtor 0x1400de950, ctor 0x1400de9e0, grows 0x140026ba0 / 0x1400de2f0 / 0x1400de400), `PathTool::SetSelected` 0x1400dd710, the 0x38-node AVL templates, edittool, tool_base_trade, fencedtool_calcpath, the removal CalcPath helpers are `WorkScheduler` / `DestroyComponent` members, `AddDecal`: 2230 -> 287 in 49 files (highlight tess and render left for the second pass) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 2.15 ms/frame, p95 3.24 (agents building) | 0 |
+
+Metric at `558bbe9a`: **10415** to remove.
