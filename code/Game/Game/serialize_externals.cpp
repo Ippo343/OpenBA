@@ -49,7 +49,7 @@
 // callers hold the fields with their own types): their two LEFT casts live in
 // ForwardRef alone.
 void SerializeExternalRefChecked(::Object::External*& ref, IO::Serializer& serializer,
-                                 uint32_t typeId, const char* typeName, const char* tag) {
+                                 uint32_t typeId, const char* typeName, [[maybe_unused]] const char* tag) {
     if (!::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {

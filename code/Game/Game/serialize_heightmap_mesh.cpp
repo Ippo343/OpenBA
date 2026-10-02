@@ -296,7 +296,7 @@ void WorldGeometry::BuildTerrainMesh() {
     // (2) The master VertexBuffer: vertsPerChunk * chunksPerSide^2 * 16 bytes.
     int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
     int totalVbSize = totalVerts * 0x10;
-    bool createOk = _vertexBuffer.Create(totalVbSize, /*dynamic=*/false, /*initialData=*/nullptr);
+    [[maybe_unused]] bool createOk = _vertexBuffer.Create(totalVbSize, /*dynamic=*/false, /*initialData=*/nullptr);
 
     printf("[sub_c1e0] entry self=%p gridSize=%d chunkSize=%d chunksPerSide=%d "
            "vertsPerSide=%d vertsPerChunk=%d totalVbSize=%d (0x%x) createOk=%d\n",
@@ -305,7 +305,7 @@ void WorldGeometry::BuildTerrainMesh() {
     fflush(stdout);
 
     // (3) Walk the chunk grid, filling each chunk and uploading it.
-    int firstSetReturned = -1;
+    [[maybe_unused]] int firstSetReturned = -1;
     if (vertScratch) {
         for (int chunkRow = 0; chunkRow < chunksPerSide; ++chunkRow) {
             for (int chunkCol = 0; chunkCol < chunksPerSide; ++chunkCol) {
@@ -390,7 +390,7 @@ void WorldGeometry::BuildTerrainMesh() {
         }
 
         // (7) Upload the indices.
-        bool ibSetOk = _indexBuffer.Set(idxBytes, 0, idxBuf);
+        [[maybe_unused]] bool ibSetOk = _indexBuffer.Set(idxBytes, 0, idxBuf);
         printf("[sub_c1e0] IB Set returned %d (idxBytes=%d quadsPerChunk=%d)\n",
                ibSetOk ? 1 : 0, idxBytes, quadsPerChunk);
         fflush(stdout);
