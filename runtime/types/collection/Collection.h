@@ -256,6 +256,34 @@ struct ArraySpec {
 };
 
 // ---------------------------------------------------------------------------
+// B.4 (R-CORE) — the element view of a hand-derived row
+// ---------------------------------------------------------------------------
+// SetSizeCore steps the buffer as BYTES, `stride` at a time: the row is a
+// runtime parameter, so the core is not a template over the element. These
+// three adapters are the one place a stepped byte address becomes the element
+// it holds. Every hand-derived row's element operation is written against the
+// element's own type (fields by name) and reaches the core through one of them.
+template <class E, void (*F)(E*, const E*)>
+void AssignAs(uint8_t* dst, const uint8_t* src) {
+    F(reinterpret_cast<E*>(dst), reinterpret_cast<const E*>(src));  // CAST-OK: elem_stride
+}
+template <class E, void (*F)(E*)>
+void InitAs(uint8_t* dst) {
+    F(reinterpret_cast<E*>(dst));  // CAST-OK: elem_stride
+}
+template <class E, void (*F)(E*, int)>
+void DestroyAs(void* /*ignoredThis*/, uint8_t* base, int count) {
+    F(reinterpret_cast<E*>(base), count);  // CAST-OK: elem_stride
+}
+
+// The word-wise element copy several rows share (B13: one body serving several
+// element types): N moves of W, in address order, at retail's store width.
+template <class W, int N>
+void CopyWords(W* dst, const W* src) {
+    for (int k = 0; k < N; ++k) dst[k] = src[k];
+}
+
+// ---------------------------------------------------------------------------
 // SpecFor<T> — the trait-derived row
 // ---------------------------------------------------------------------------
 // One `static const ArraySpec` per element type, built at first use. The three
@@ -265,7 +293,7 @@ template <class T>
 void TAssign(uint8_t* dst, const uint8_t* src) {
     // Retail's realloc arm COPY-CONSTRUCTS into the new buffer and destroys the
     // old elements afterwards; placement copy-construct is that, exactly.
-    new (static_cast<void*>(dst)) T(*reinterpret_cast<const T*>(src));
+    new (static_cast<void*>(dst)) T(*reinterpret_cast<const T*>(src));  // CAST-OK: elem_stride
 }
 template <class T>
 void TInit(uint8_t* dst) {
@@ -273,8 +301,9 @@ void TInit(uint8_t* dst) {
 }
 template <class T>
 void TDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
+    T* elems = reinterpret_cast<T*>(base);  // CAST-OK: elem_stride
     for (int i = 0; i < count; ++i)
-        reinterpret_cast<T*>(base + static_cast<int64_t>(i) * sizeof(T))->~T();
+        elems[i].~T();
 }
 
 template <class T>
