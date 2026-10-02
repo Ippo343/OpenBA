@@ -23,6 +23,14 @@
 #include "graphics/Geometry.h"
 #include "video/Buffers.h"
 
+// B.4 GAME-b: forward declarations for the appended members.
+template <class T> struct RawArray;
+struct TerrainVertex; struct GeometryBatch; struct GeometryDrawRange; struct AvlNode28;
+namespace Video { class ImageBuffer; }
+namespace Graphics { class MaterialInstance; }
+namespace IO { class Stream; }
+namespace Object { class External; }
+
 class WorldGeometry final : public Graphics::Geometry {
 public:
     WorldGeometry();                                                  // 0x1400b00e0
@@ -43,6 +51,26 @@ public:
     // B.4 ACT-a (bodies in Action/action_pf_road.cpp)
     void MarkChunksDirty(int x, int y);                              // 0x1400ab150
     void RebuildRoadMesh(class Map* map);                            // 0x1400af370
+    // B.4 GAME-b (WorldGeometryElements.h; Serialize bodies in geometry_serialize.cpp,
+    // the mesh / image helpers in serialize_heightmap_mesh.cpp / serialize_image_upload.cpp)
+    void Serialize(IO::Stream& stream);                               // 0x1400b04d0
+    void SerializeLegacyBatches(IO::Stream& stream);                  // 0x1400af1a0
+    void BuildTerrainMesh();                                          // 0x1400ac1e0
+    void UploadHeightImage();                                         // 0x1400ac780
+    void FillTerrainVertices(int colStart, int rowStart, int width, int height,
+                             TerrainVertex* out) const;               // 0x1400ac880
+    Math::Vector3 TerrainNormal(int col, int row) const;              // 0x1400ae270
+    // The nine _arrays headers by element type (bodies in geometry_draw.cpp; LEFT
+    // until _arrays is typed).
+    RawArray<TerrainVertex>&           ContourVertices();             // +0x1A0
+    RawArray<uint16_t>&                ContourIndices();              // +0x1B0
+    RawArray<GeometryDrawRange>&       ContourRangesA();              // +0x1C0 mode 0x6000
+    RawArray<GeometryDrawRange>&       ContourRangesB();              // +0x1D0 mode 0x8000
+    RawArray<RawArray<Math::Vector2>>& ContourOutlines();             // +0x1E0
+    RawArray<GeometryBatch>&           Decals();                      // +0x1F0 mode 0x2000
+    RawArray<GeometryBatch>&           RoadBatches();                 // +0x200 mode 0x4000
+    RawArray<Object::External*>&       BatchMaterials();              // +0x210
+    RawArray<int32_t>&                 BatchCounters();               // +0x220
 
 
 public:
@@ -54,16 +82,16 @@ public:
     int32_t  _chunkIndexStride;   // +0xD4  index count per chunk (the ctor leaves it)
     int16_t* _arrayD8;            // +0xD8  {data, (height words: 0x14009e0e0 stores one; B.4 ACT-a H4)
     uint64_t _arrayD8Size;        // +0xE0   count|cap}
-    void*    _dirtyTreeRoot;      // +0xE8  tree of dirty chunks (nodes: children +0x10/+0x18)
+    AvlNode28* _dirtyTreeRoot;    // +0xE8  tree of dirty chunks (nodes: children +0x10/+0x18)
     int32_t  _dirtyTreeCount;     // +0xF0
     uint8_t  _padF4[4];           // +0xF4
-    void*    _terrainMaterial;    // +0xF8  MaterialInstance* for the chunks
+    Graphics::MaterialInstance* _terrainMaterial; // +0xF8  MaterialInstance* for the chunks
     Video::VertexBuffer _vertexBuffer;       // +0x100 terrain chunk vertices
     Video::IndexBuffer  _indexBuffer;        // +0x120
-    void*    _heightBytes;        // +0x140 raw heightmap (4 bytes/cell)
-    void*    _heightImage;        // +0x148 Video::ImageBuffer* uploaded from +0x140
-    void*    _waterMaterialA;     // +0x150
-    void*    _waterMaterialB;     // +0x158
+    uint8_t* _heightBytes;        // +0x140 raw heightmap (4 bytes/cell)
+    Video::ImageBuffer* _heightImage; // +0x148 Video::ImageBuffer* uploaded from +0x140
+    Graphics::MaterialInstance* _waterMaterialA;  // +0x150
+    Graphics::MaterialInstance* _waterMaterialB;  // +0x158
     Video::VertexBuffer _waterVertexBuffer;  // +0x160 water contour mesh
     Video::IndexBuffer  _waterIndexBuffer;   // +0x180
     // Nine {data, count|cap} headers, +0x1A0..+0x22F:

@@ -21,3 +21,12 @@
 
 void ExternalPtrSerializeGeneric(void** refField, void* serializer,
                                  const uint32_t* typeIdPtr, const char* typeName);
+
+namespace Object { class External; }
+namespace IO { class Serializer; }
+// B.4 GAME-b: the typed per-reference body (serialize_externals.cpp). The Checked
+// form adds the factory / type-id preamble and its one-shot warnings (tagged).
+void SerializeExternalRef(Object::External*& ref, IO::Serializer& serializer,
+                          uint32_t typeId, bool typeIdResolved);
+void SerializeExternalRefChecked(Object::External*& ref, IO::Serializer& serializer,
+                                 uint32_t typeId, const char* typeName, const char* tag);
