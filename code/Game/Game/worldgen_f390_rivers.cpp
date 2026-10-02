@@ -49,6 +49,7 @@
 // DO NOT build standalone yet — Vector2/Random-Float engine pointers below are
 // declared extern and must be wired in engine_funcs before this links.
 
+#include "Game/TerrainHeightfield.h"   // TerrainHeightfield, the stage declarations
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // fn_Random_RandFloatTol
 #include "math/Math.h"
@@ -278,7 +279,7 @@ static void wg_StampBrush_eee0(int* hf, const float* center, float radiusParam,
 // only populates listB (hf+0x28) with {x,y,radius} river points. The actual height
 // change happens in e910 (below), which reads listB and carves those cells down.
 // ============================================================
-extern "C" void wg_f390_rivers(void* hfp) {
+void wg_f390_rivers(TerrainHeightfield* hfp) {
     uint8_t* p = (uint8_t*)hfp;
     void* rng = p + HF_RANDOM;
     int*  sizeRow = *(int**)(p + HF_SIZEROW);
@@ -434,7 +435,7 @@ extern "C" void wg_f390_rivers(void* hfp) {
 //   slightly negative — feeding the classifier's buildable band [-0.25, 0.75]
 //   around the carved water margins.
 // ============================================================
-extern "C" void wg_f390_stamp(void* hfp) {
+void wg_f390_stamp(TerrainHeightfield* hfp) {
     int* hf = (int*)hfp;
     uint8_t* p = (uint8_t*)hfp;
     int n = hf[4];                 // (dim+1)^2 cell count

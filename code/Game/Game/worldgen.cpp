@@ -46,6 +46,10 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "utility/PerlinNoise.h"   // RtUtility_PerlinNoise_Ctor / _Generate
 #include "Game/exe_bodies.h"
+#include "Game/WorldGeometry.h"
+#include "Game/TerrainGenerator.h"
+#include "Game/TerrainHeightfield.h"
+#include "graphics/Material.h"   // Graphics::MaterialInstance (an Object::External)
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -60,68 +64,18 @@
 // Game/exe_bodies.h: Reimpl_Array_Resize_Stride02 (sub_c890, int16 heightmap @wg+0xd8),
 // Reimpl_Array_Resize_Stride04 (sub_3a00, float heightmap @hf+0x08),
 // Reimpl_Array_Resize_ArrayOfArrays (sub_f0a0, detail-group-C @wg+0x1e0),
-// Reimpl_TradeWork_sub_c780 (height-texture upload +0x148), Reimpl_TradeWork_sub_c1e0
+// WorldGeometry::UploadHeightImage (0x1400ac780, height-texture upload +0x148), WorldGeometry::BuildTerrainMesh (0x1400ac1e0)
 // (base grid mesh VB+0x100/IB+0x120).
-extern "C" void WorldGen_BuildWaterMesh(void* self);                   // flat water overlay mesh (VB+0x160/IB+0x180)
-extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf);  // b260 contour water mesh (water_contour_mesh.cpp)
+// WorldGeometry::BuildWaterMesh (b260, water_contour_mesh.cpp) is a member.
 
-// ============================================================
-// Heightfield scratch-struct field offsets (verified, blueprint §1.1)
-// Base struct ~0xA30 bytes. b0230 stack-allocates it; we heap-allocate
-// (large; avoids a giant stack frame) and free at the end.
-// ============================================================
-static constexpr int HF_GRIDSIZE   = 0x00;   // int  = sizeRow[0]*2  (set by f390)
-static constexpr int HF_HEIGHTMAP  = 0x08;   // {float* data, int count, int cap} — (dim+1)^2 floats
-static constexpr int HF_PATCHLIST  = 0x18;   // {void* data, int count, int _} — feature patches
-static constexpr int HF_DETAILCNTA = 0x20;   // int  count passed to sub_f0a0
-static constexpr int HF_LISTB      = 0x28;   // {void*,int,int,int} river points
-// +0x38: cd150's radial-stamp list, 0xC elems {x, y, radius}. Named "mountain
-// satellites" historically, but that name is BACKWARDS about what they do: the
-// e910/ec50 stamp feeds them to eee0 with MAX into maskC (strength 2.0, exp 2.25,
-// retail 0x1400ceac2/aca), and the final height is `h = maskB*h*maskA - maskC` —
-// maskC is SUBTRACTED. So these carve circular DEPRESSIONS, not peaks. They are
-// what produces the round basins dotted across the valley floor.
-static constexpr int HF_BASINSTAMPS = 0x38;  // {void*,int,int,int} radial carve stamps
-// +0x48: one 0xC record per mountain range {x, y, bandX}. Despite the old name
-// "cliff polys", this is the array b260 PHASE 2 reads as the water features
-// {x, y, radius} — the tarn disks. Count at +0x50. See water_contour_mesh.cpp.
-static constexpr int HF_WATERFEATS  = 0x48;  // {void*,int,int,int} b260 phase-2 tarn features
-static constexpr int HF_RANDOM     = 0x58;   // System::Random (~0x9C8 bytes), seeded
-static constexpr int HF_TERRAINGEN = 0xa20;  // TerrainGenerator* back-ptr
-static constexpr int HF_SIZEROW    = 0xa28;  // int* = gen->sizeTable + sizeIdx*0x44
-static constexpr int HF_TOTAL      = 0xa40;  // allocation size (margin past +0xa30)
-
-// ============================================================
-// WorldGeometry field offsets (verified, blueprint §1.3)
-// ============================================================
-static constexpr int WG_DIMX2      = 0xc0;   // int dim*2  (== heightfield gridSize)
-static constexpr int WG_DIM        = 0xc4;   // int dim
-static constexpr int WG_BASESUBDIV = 0xc8;   // int 32  (per-chunk cell edge)
-static constexpr int WG_BASEEDGE   = 0xcc;   // int 33
-static constexpr int WG_HEIGHTEDGE = 0xd0;   // int dim*2+1  (= N, int16 heightmap edge)
-static constexpr int WG_BASEVERTS  = 0xd4;   // int 33*33
-static constexpr int WG_HM16       = 0xd8;   // {short* data,int,int} int16 heightmap (NxN)
-static constexpr int WG_MATERIAL1  = 0xf8;   // External* (ground material)
-static constexpr int WG_BLENDTEX   = 0x140;  // void* RGBA splat buffer (cf440 result)
-static constexpr int WG_MATERIAL2  = 0x150;  // External*
-static constexpr int WG_MATERIAL3  = 0x158;  // External*
-static constexpr int WG_DETAILGRPC = 0x1e0;  // {void*,int,int} detail-group-C
-
-// Source PathPoint stride for the step-8 feature-record copy. Matches
-// PATHPT_STRIDE in worldgen_f390_coastline.cpp (which is static there), and the
-// `count * 0x1c` walk in retail TradeWork_impl_c4b0's append loop.
-static constexpr int PATHPT_STRIDE_SRC = 0x1c;
-
-// PathPoint field offsets within the 0x1C source stride (water_contour_mesh.cpp:295,
-// notes/water_mesh/lake_coverage.md §"+0x14 is a per-path constant"):
-//   +0x00 float x, +0x04 float y, ..., +0x14 float halfWidth
-// halfWidth is the CHANNEL half-width in tiles. It is written by the path builder
+// TerrainPathPoint::outerRadius (+0x14, TerrainHeightfield.h) is what this file
+// calls the channel half-width (notes/water_mesh/lake_coverage.md §"+0x14 is a
+// per-path constant"). halfWidth is the CHANNEL half-width in tiles. It is written by the path builder
 // (FUN_1400cc850 arg a7) identically into every point of a path, so it is a per-path
 // constant, not per-point: coastline ring = 4.0 (DAT_140172194), secondary paths =
 // 1.5 (DAT_140172160). The RENDERED water band is wider still — fb00 uses
 // halfWidth + 2.0 (DAT_140172174) — so "distance from centerline to dry land" is
 // halfWidth + 2, not halfWidth.
-static constexpr int PATHPT_OFF_HALFWIDTH = 0x14;
 static constexpr float PATHPT_BAND_MARGIN = 2.0f;   // DAT_140172174
 
 // ── halfWidth side table ────────────────────────────────────────────────────────
@@ -154,15 +108,6 @@ extern "C" float WorldGen_GetPathBankDistance(int pathIndex) {
 }
 
 // ============================================================
-// TerrainGenerator material-triple offsets (input to fd10).
-// Each triple = {System::String name @+0; int cookie @+0x08; External* cache @+0x10}.
-// ============================================================
-static constexpr int GEN_SIZETABLE = 0x80;   // int* (rows of 0x44 bytes, indexed by sizeIdx)
-static constexpr int GEN_MAT1       = 0x38;
-static constexpr int GEN_MAT2       = 0x50;
-static constexpr int GEN_MAT3       = 0x68;
-
-// ============================================================
 // .rdata float constants (verified via read_memory; blueprint §2)
 // ============================================================
 static constexpr float kHalf       = 0.5f;   // 0x140172114  pn1 persistence
@@ -193,15 +138,8 @@ static constexpr float kQuantize   = 256.0f; // 0x140172230  float->int16 fixed-
 // clobbering the real Random index. Fixed in worldgen_f390_coastline.cpp.
 static constexpr bool kFullPipeline = true;
 
-// f390 feature/normalization stages (each operates on the heightfield `hf`).
-extern "C" void wg_f390_coastline(void* hf);   // cd090 — coastline ring -> patchList
-extern "C" void wg_f390_ranges(void* hf);      // cd150 — mountain ranges -> listC
-extern "C" void wg_f390_paths(void* hf);       // ccf60 — secondary paths -> patchList
-extern "C" void wg_f390_rivers(void* hf);      // cd460 — river network -> listB
-extern "C" void wg_f390_stamp(void* hf);       // e910  — feature stamp BUILD (carves height)
-extern "C" void wg_f390_erosion(void* hf);     // cc080 — droplet erosion
-extern "C" void wg_f390_carve(void* hf);       // ec50  — feature stamp finalize/carve
-extern "C" void wg_f390_smooth(void* hf);      // c350  — 3-tap box-blur (called twice)
+// The f390 feature / normalization stages (each on the heightfield) are declared
+// in TerrainHeightfield.h.
 
 // ============================================================
 // e5d0 — base perlin heightmap (the single load-bearing gen function).
@@ -217,25 +155,24 @@ extern "C" void wg_f390_smooth(void* hf);      // c350  — 3-tap box-blur (call
 //   pn2: persistence 0.25, octaves 5.0, sampled at (col*0.1,  row*0.1)
 //   -> valley: center (small dist) uses base (low), edge (large dist) uses h (high).
 // ============================================================
-static void wg_BaseHeightmap_e5d0(int32_t* hf) {
-    uint8_t* p = (uint8_t*)hf;
-    int dim  = *(int32_t*)(p + HF_GRIDSIZE);   // = mapDim*2
+static void wg_BaseHeightmap_e5d0(TerrainHeightfield* hf) {
+    int dim  = hf->gridSize;                     // = mapDim*2
     int edge = dim + 1;                          // (dim+1) vertices per side
 
     // Resize the float heightmap to (dim+1)^2 (sub_3a00 == Stride04).
-    Reimpl_Array_Resize_Stride04(p + HF_HEIGHTMAP, edge * edge);
-    float* heightmap = *(float**)(p + HF_HEIGHTMAP);
+    Reimpl_Array_Resize_Stride04(&hf->heightmap, edge * edge);
+    float* heightmap = hf->heightmap.data;
     if (!heightmap) return;
 
-    void* rng = p + HF_RANDOM;
-    int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
-    int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
-    uint8_t pn1[0x100] = {};
-    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn1), kHalf, kOctaves, s2, s1);          // persist 0.5
-    int s3 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
-    int s4 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
-    uint8_t pn2[0x100] = {};
-    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn2), kQuarter, kOctaves, s4, s3);       // persist 0.25
+    System::Random* rng = &hf->random;
+    int s1 = rng->RandTol(0xffffff);
+    int s2 = rng->RandTol(0xffffff);
+    RtUtility::PerlinNoise pn1 = {};
+    RtUtility_PerlinNoise_Ctor(&pn1, kHalf, kOctaves, s2, s1);          // persist 0.5
+    int s3 = rng->RandTol(0xffffff);
+    int s4 = rng->RandTol(0xffffff);
+    RtUtility::PerlinNoise pn2 = {};
+    RtUtility_PerlinNoise_Ctor(&pn2, kQuarter, kOctaves, s4, s3);       // persist 0.25
 
     int half = dim >> 1;
     float distBias = (float)dim * kQuarter + kFalloffBias;      // dim*0.25 + 16
@@ -248,9 +185,9 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
             float curve = powf(kFalloffBase, distBias - dist);  // 1.1 ^ ((dim*0.25+16) - dist)
             float w     = kOne / (curve + kOne);
 
-            float pn1s = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(pn1), (float)col * kQuarter, (float)row * kQuarter);
+            float pn1s = RtUtility_PerlinNoise_Generate(&pn1, (float)col * kQuarter, (float)row * kQuarter);
             float base = (pn1s + kOne) * kBaseScale;             // (pn1+1)*8
-            float pn2s = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(pn2), (float)col * kPn2Coord, (float)row * kPn2Coord);
+            float pn2s = RtUtility_PerlinNoise_Generate(&pn2, (float)col * kPn2Coord, (float)row * kPn2Coord);
             float h    = (pn2s + kQuarter) * kHScale + pn1s;     // (pn2+0.25)*48 + pn1
             if (h < kClampFloor) h = kClampFloor;
 
@@ -277,10 +214,9 @@ static void wg_PublishLoadProgress(int stage) {
         GameUpdateLoop::_singleton->_loadProgress = stage;   // +0x24
 }
 
-static void wg_HeightmapPipeline_f390(int32_t* hf) {
-    uint8_t* p = (uint8_t*)hf;
-    int32_t* sizeRow = *(int32_t**)(p + HF_SIZEROW);
-    *(int32_t*)(p + HF_GRIDSIZE) = (sizeRow ? sizeRow[0] : 0) * 2;   // gridSize = mapDim*2
+static void wg_HeightmapPipeline_f390(TerrainHeightfield* hf) {
+    const TerrainSizeRow* sizeRow = hf->sizeRow;
+    hf->gridSize = (sizeRow ? sizeRow->mapSize : 0) * 2;   // gridSize = mapDim*2
 
     wg_PublishLoadProgress(1);
     wg_BaseHeightmap_e5d0(hf);
@@ -309,16 +245,17 @@ static void wg_HeightmapPipeline_f390(int32_t* hf) {
 // the base-mesh draw binds). Real cf440 (rock/grass/AO splat) is the next layer;
 // it changes only surface texturing, not geometry.
 // ============================================================
-static void* wg_BlendTexture_cf440_stub(int32_t* hf) {
-    int dim = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);   // = mapDim*2 (== WorldGeom+0xc0)
+// The splat buffer is WorldGeometry::_heightBytes: 4 bytes per cell, R rock /
+// G grass / B AO / A.
+static uint8_t* wg_BlendTexture_cf440_stub(const TerrainHeightfield* hf) {
+    int dim = hf->gridSize;   // = mapDim*2 (== WorldGeom+0xc0)
     if (dim <= 0 || !System::MemoryAllocator::_singleton) return nullptr;
     uint64_t n = (uint64_t)dim * (uint64_t)dim;
-    void* buf = System::MemoryAllocator::MemAlloc(n * 4, 4);
+    uint8_t* buf = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(n * 4, 4));
     if (buf) {
         // Neutral mid splat weights (R rock / G grass / B AO, A=0xff). With null
         // materials the shader falls back to a flat surface — visible terrain.
-        uint32_t* px = (uint32_t*)buf;
-        for (uint64_t i = 0; i < n; ++i) px[i] = 0x80808080u;
+        for (uint64_t i = 0; i < n * 4; ++i) buf[i] = 0x80;
     }
     return buf;
 }
@@ -370,10 +307,10 @@ static inline void wg_CellNormal_cf150(const float* hm, int dim, int col, int ro
 // Heights are sampled from the (dim+1)² float heightmap; normals via cf150.
 // All thresholds are the verified .rdata constants (read_memory 0x1401720f0..).
 // ============================================================
-static void* wg_BlendTexture_cf440(int32_t* hf) {
-    int dim = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);
-    const float* hm = *(const float**)((uint8_t*)hf + HF_HEIGHTMAP);
-    void* rng = (uint8_t*)hf + HF_RANDOM;
+static uint8_t* wg_BlendTexture_cf440(TerrainHeightfield* hf) {
+    int dim = hf->gridSize;
+    const float* hm = hf->heightmap.data;
+    System::Random* rng = &hf->random;
     if (dim <= 0 || !hm || !System::MemoryAllocator::_singleton) {
         fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p) "
                 "— falling back to flat splat\n", (void*)hm);
@@ -396,10 +333,10 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
 
     // Perlin for the rock scatter: persist 0.25, octaves 4.0, two RandTol seeds.
     // (ctor arg order mirrors e5d0: seeds passed (second, first).)
-    int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
-    int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
-    uint8_t pn[0x100] = {};
-    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(pn), kCoord, kCfOctaves, s2, s1);
+    int s1 = rng->RandTol(0xffffff);
+    int s2 = rng->RandTol(0xffffff);
+    RtUtility::PerlinNoise pn = {};
+    RtUtility_PerlinNoise_Ctor(&pn, kCoord, kCfOctaves, s2, s1);
 
     // Per-cell scratch: dim*dim * {x,y,h,nx,ny,nz} (6 floats / 0x18 bytes).
     float* scratch = (float*)System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 0x18, 4);
@@ -415,7 +352,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
         }
     }
 
-    uint32_t* out = (uint32_t*)System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 4, 4);
+    uint8_t* out = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc((uint64_t)dim * dim * 4, 4));
     if (!out) { System::MemoryAllocator::MemFree(scratch); return wg_BlendTexture_cf440_stub(hf); }
 
     // --- R (rock) + G (grass) channels ---
@@ -428,7 +365,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
             // R: rock scatter.
             uint32_t rock;
             if (height >= kRockHMin) {
-                float pnv = RtUtility_PerlinNoise_Generate(reinterpret_cast<const RtUtility::PerlinNoise*>(pn), (float)col * kCoord,
+                float pnv = RtUtility_PerlinNoise_Generate(&pn, (float)col * kCoord,
                                                     (float)row * kCoord);
                 pnv = pnv * kRRemap + kRRemap;                  // (pn+1)*0.5 -> [0,1]
                 rock = (uint32_t)(long long)(pnv * pnv * k255);
@@ -461,7 +398,11 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
                 if (gb < v) grass = v;
             }
 
-            out[dim * row + col] = ((grass & 0xff) << 8) | (rock & 0xff);
+            uint8_t* px = &out[(size_t)(dim * row + col) * 4];   // the cell's 4 bytes
+            px[0] = (uint8_t)(rock & 0xff);    // R
+            px[1] = (uint8_t)(grass & 0xff);   // G
+            px[2] = 0;                         // B (the AO pass below)
+            px[3] = 0;                         // A (never written by retail)
         }
     }
 
@@ -502,7 +443,7 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
             float avg = (count > 0.0f) ? accumDot / count : 0.0f;
             float ao  = (1.0f - avg) * snz * k255;
             uint32_t aoByte = (uint32_t)(long long)ao & 0xff;
-            out[dim * row + col] |= aoByte << 16;
+            out[(size_t)(dim * row + col) * 4 + 2] |= (uint8_t)aoByte;   // B
         }
     }
 
@@ -517,16 +458,18 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
 //   triple = {System::String name @+0; int cookie @+0x08; External* cache @+0x10}
 // Returns the resolved External* (or null -> untextured-but-visible terrain).
 // ============================================================
-static void* wg_ResolveMaterial_fd10(void* triple) {
+static Graphics::MaterialInstance* wg_ResolveMaterial_fd10(void* triple) {
     if (!triple) return nullptr;
-    void* factory = ::Object::ExternalFactory::_singleton;
+    const ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;
     if (!factory) return nullptr;
 
-    // String is at +0 of the triple.
+    // String is at +0 of the triple. LEFT: TerrainGenerator's three triples are raw
+    // String storage (H5: a System::String member would run its ctor / dtor).
     System::Filename fnbuf(*reinterpret_cast<const System::String*>(triple));
-    return const_cast<::Object::External*>(
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory)         // B.3.3 bridge
-            ->Find(fnbuf));
+    // The tree trusts Find's result (retail checks IsDerivedFrom MaterialInstance in
+    // 0x14001fd10; known_port_issues 14).
+    return static_cast<Graphics::MaterialInstance*>(
+        const_cast<::Object::External*>(factory->Find(fnbuf)));
 }
 
 // ============================================================
@@ -545,41 +488,43 @@ static void* wg_ResolveMaterial_fd10(void* triple) {
 // it leaves +0x0c (capacity) untouched where ~Array zeroes it, and its retail
 // body is not pinned.
 // ============================================================
-extern const rtcoll::ArraySpec kSpec_WgPathVec;   // worldgen_f390_coastline.cpp
-using WgPathVecArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                         Collection::ExplicitSpec<&kSpec_WgPathVec>>;
-
-static void wg_FreePatchList(void* hdr) {
-    // B.3.2 bridge: hf+0x18 is still a raw {data,count,cap} triple.
-    reinterpret_cast<WgPathVecArray*>(hdr)->~Array();
+// hf->paths is a TerrainPathList (the kSpec_WgPathVec row): its ~Array is that body.
+static void wg_FreePatchList(TerrainPathList* paths) {
+    paths->~Array();
 }
 
-static void wg_FreeScalarList(void* hdr) {
-    uint8_t* h = (uint8_t*)hdr;
-    void* data = *(void**)(h + 0x00);
+template <class List>
+static void wg_FreeScalarList(List* list) {
+    void* data = list->data;
     if (data) System::MemoryAllocator::MemFree(data);
-    *(void**)(h + 0x00) = nullptr;
-    *(int32_t*)(h + 0x08) = 0;
+    list->data = nullptr;
+    list->size = 0;
+}
+template <class T>
+static void wg_FreeScalarList(Collection::Array<T>* list) {
+    void* data = list->_data;
+    if (data) System::MemoryAllocator::MemFree(data);
+    list->_data = nullptr;
+    list->_size = 0;
 }
 
 // ============================================================
 // c4b0 — TradeWork core orchestrator. Verified from TradeWork_impl_c4b0
 // @0x1400ac4b0 (blueprint §0). First-light skips b260 (detail mesh).
 // ============================================================
-static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
-    uint8_t* w = (uint8_t*)wg;
-    int N = *(int32_t*)(w + WG_HEIGHTEDGE);     // dim*2+1
+void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
+    int N = _fieldD0;     // dim*2+1
 
     // 1. Resize the int16 heightmap to N*N (sub_c890 == Stride02).
-    Reimpl_Array_Resize_Stride02(w + WG_HM16, N * N);
+    Reimpl_Array_Resize_Stride02(&_arrayD8, N * N);
 
     // 2. Generate the float heightmap.
     wg_HeightmapPipeline_f390(hf);
 
     // 3. Quantize float -> int16 (x256 fixed-point) into WorldGeom+0xd8.
     {
-        float* fmap = *(float**)((uint8_t*)hf + HF_HEIGHTMAP);
-        short* hm16 = *(short**)(w + WG_HM16);
+        float* fmap = hf->heightmap.data;
+        int16_t* hm16 = _arrayD8;
         if (fmap && hm16) {
             for (int row = 0; row < N; ++row) {
                 for (int col = 0; col < N; ++col) {
@@ -592,18 +537,18 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
 
     // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
     //    rock/grass/AO splat (green grass, rock on slopes/peaks).
-    *(void**)(w + WG_BLENDTEX) = wg_BlendTexture_cf440(hf);
+    _heightBytes = wg_BlendTexture_cf440(hf);
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).
-    Reimpl_TradeWork_sub_c780(wg);
-    Reimpl_TradeWork_sub_c1e0(wg);
+    UploadHeightImage();    // 0x1400ac780
+    BuildTerrainMesh();     // 0x1400ac1e0
 
     // 7. b260 water mesh: the faithful b260 CONTOUR mesh (rivers
     //      flow / lake shore rings; UV follows each water body's centerline).
     //      Builds into VB+0x160/IB+0x180 with per-body ranges at +0x1c0/+0x1d0,
     //      drawn by geometry_draw.cpp modes 0x6000/0x8000. param_2 = hf
     //      (centerlines at hf+0x18, features at hf+0x48).
-    WorldGen_BuildContourWaterMesh(wg, hf);
+    BuildWaterMesh(hf);
 
     // 8. Detail-group-C resize + the FEATURE-RECORD APPEND LOOP.
     //
@@ -652,11 +597,11 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     //     {ptr, count}, never capacity, so the observable result is identical and
     //     this avoids reimplementing the grow-and-copy dance for a known length.
     {
-        const int destCount = *(int32_t*)((uint8_t*)hf + HF_DETAILCNTA);
-        Reimpl_Array_Resize_ArrayOfArrays(w + WG_DETAILGRPC, destCount);
+        const int destCount = hf->paths._size;
+        Reimpl_Array_Resize_ArrayOfArrays(&contourOutlines, destCount);
 
-        uint8_t* srcBase  = *(uint8_t**)((uint8_t*)hf + HF_PATCHLIST);
-        uint8_t* destBase = *(uint8_t**)(w + WG_DETAILGRPC);
+        const RawArray<TerrainPathPoint>* srcBase = hf->paths._data;
+        RawArray<Math::Vector2>* destBase = contourOutlines.data;
         int pathsCopied = 0, pointsCopied = 0;
 
         s_pathHalfWidthCount = 0;
@@ -664,10 +609,10 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
             s_pathHalfWidth[i] = s_pathHalfWidthMax[i] = -1.0f;
 
         for (int i = 0; i < destCount && srcBase && destBase; ++i) {
-            uint8_t* srcRec  = srcBase  + (size_t)i * 0x10;
-            uint8_t* destRec = destBase + (size_t)i * 0x10;
-            uint8_t* srcPts  = *(uint8_t**)(srcRec + 0x00);
-            const int srcN   = *(int32_t*)(srcRec + 0x08);
+            const RawArray<TerrainPathPoint>& srcRec = srcBase[i];
+            RawArray<Math::Vector2>& destRec = destBase[i];
+            const TerrainPathPoint* srcPts = srcRec.data;
+            const int srcN   = srcRec.size;
             if (!srcPts || srcN <= 0) continue;
 
             // Capture halfWidth from the SOURCE before the narrowing copy drops it.
@@ -676,11 +621,10 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
             // wrong field this min/max would diverge and say so. Cheap insurance
             // against reading a plausible-looking number out of the wrong offset.
             if (i < kMaxTrackedPaths) {
-                float hwMin = *(const float*)(srcPts + PATHPT_OFF_HALFWIDTH);
+                float hwMin = srcPts[0].outerRadius;
                 float hwMax = hwMin;
                 for (int j = 1; j < srcN; ++j) {
-                    const float hw = *(const float*)(srcPts + (size_t)j * PATHPT_STRIDE_SRC
-                                                     + PATHPT_OFF_HALFWIDTH);
+                    const float hw = srcPts[j].outerRadius;
                     if (hw < hwMin) hwMin = hw;
                     if (hw > hwMax) hwMax = hw;
                 }
@@ -689,15 +633,16 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
                 if (i >= s_pathHalfWidthCount) s_pathHalfWidthCount = i + 1;
             }
 
-            void* buf = System::MemoryAllocator::MemAlloc((uint64_t)srcN * 8, 4);
+            Math::Vector2* buf = static_cast<Math::Vector2*>(System::MemoryAllocator::MemAlloc((uint64_t)srcN * 8, 4));
             if (!buf) continue;
-            // dest[j] = src[srcN-1-j] — the reversal from note (1).
-            for (int j = 0; j < srcN; ++j)
-                *(uint64_t*)((uint8_t*)buf + (size_t)j * 8) =
-                    *(uint64_t*)(srcPts + (size_t)(srcN - 1 - j) * PATHPT_STRIDE_SRC);
-            *(void**)(destRec + 0x00)  = buf;
-            *(int32_t*)(destRec + 0x08) = srcN;
-            *(int32_t*)(destRec + 0x0c) = srcN;
+            // dest[j] = src[srcN-1-j] — the reversal from note (1); only (x, y).
+            for (int j = 0; j < srcN; ++j) {
+                buf[j].x = srcPts[srcN - 1 - j].x;
+                buf[j].y = srcPts[srcN - 1 - j].y;
+            }
+            destRec.data     = buf;
+            destRec.size     = srcN;
+            destRec.capacity = srcN;
             ++pathsCopied; pointsCopied += srcN;
         }
 
@@ -732,6 +677,11 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     }
 }
 
+// The tree MemAllocs the heightfield (retail: b0230's stack) with 0x10 bytes past
+// its 0xA30 and zeroes all of it.
+static constexpr uint64_t kHeightfieldAlloc = 0xa40;
+static_assert(kHeightfieldAlloc >= sizeof(TerrainHeightfield), "the allocation covers the record");
+
 // ============================================================
 // b0230 — TerrainBuild_Dispatcher (top-level worldgen entry).
 // Verified from FUN_1400b0230 @0x1400b0230 (blueprint §0).
@@ -740,79 +690,83 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
 //   sizeIdx   = terrain size-table index
 //   seed      = map seed
 // ============================================================
+void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t seed) {
+    // Size-table row for this map size: gen->sizeTable + sizeIdx*0x44.
+    TerrainSizeRow* sizeTable = gen->_field80;
+    TerrainSizeRow* sizeRow   = sizeTable ? &sizeTable[sizeIdx] : nullptr;
+    int dim = sizeRow ? sizeRow->mapSize : 0;
+
+    fprintf(stderr, "[worldgen] BuildTerrain ENTER wg=%p gen=%p sizeIdx=%d seed=%u sizeTable=%p dim=%d\n",
+            static_cast<void*>(this), static_cast<void*>(gen), sizeIdx, seed,
+            static_cast<void*>(sizeTable), dim);
+    fflush(stderr);
+
+    if (dim <= 0) {
+        fprintf(stderr, "[worldgen] BuildTerrain: bad dim=%d (sizeTable=%p) — aborting\n",
+                dim, static_cast<void*>(sizeTable));
+        fflush(stderr);
+        return;
+    }
+
+    // WorldGeometry grid dims.
+    _gridSize         = dim * 2;
+    _fieldC4          = dim;
+    _chunkSize        = 0x20;          // 32
+    _fieldD0          = dim * 2 + 1;
+    _fieldCC          = 0x20 + 1;      // 33
+    _chunkIndexStride = 33 * 33;       // 1089
+
+    // Resolve the 3 ground materials (NULL-safe; untextured if unresolved).
+    _terrainMaterial = wg_ResolveMaterial_fd10(&gen->_field38);
+    _waterMaterialA  = wg_ResolveMaterial_fd10(&gen->_field50);
+    _waterMaterialB  = wg_ResolveMaterial_fd10(&gen->_field68);
+
+    // Allocate + init the heightfield scratch struct (heap; retail's is b0230's
+    // 0xA30-byte stack record; the tree allocates 0x10 bytes of margin past it).
+    TerrainHeightfield* hf = static_cast<TerrainHeightfield*>(System::MemoryAllocator::MemAlloc(kHeightfieldAlloc, 8));
+    if (!hf) {
+        fprintf(stderr, "[worldgen] BuildTerrain: heightfield alloc failed — aborting\n");
+        fflush(stderr);
+        return;
+    }
+    memset(static_cast<void*>(hf), 0, kHeightfieldAlloc);
+    RtSystem_Random_CtorSeed(&hf->random, seed);
+    hf->generator = gen;
+    hf->sizeRow   = sizeRow;
+
+    // Build.
+    BuildFromHeightfield(hf);
+
+    // Teardown (reverse of construction).
+    wg_FreeScalarList(&hf->waterFeatures);
+    wg_FreeScalarList(&hf->basinStamps);
+    wg_FreeScalarList(&hf->riverPoints);
+    wg_FreePatchList (&hf->paths);
+    wg_FreeScalarList(&hf->heightmap);
+    System::MemoryAllocator::MemFree(hf);
+
+    fprintf(stderr, "[worldgen] BuildTerrain EXIT — wg=%p dimX2=%d edge=%d hm16=%p mat1=%p blendTex=%p\n",
+            static_cast<void*>(this), _gridSize, _fieldD0,
+            static_cast<void*>(_arrayD8), static_cast<void*>(_terrainMaterial), _heightBytes);
+    // Water diagnostics: the two water materials (+0x150/+0x158), the water vertex
+    // buffer's size and the water draw-range counts (+0x1c8/+0x1d8).
+    fprintf(stderr, "[worldgen]   waterMatA(+0x150)=%p waterMatB(+0x158)=%p "
+            "overlayVB(+0x160).size=%d overlayCntA(+0x1c8)=%d overlayCntB(+0x1d8)=%d\n",
+            static_cast<void*>(_waterMaterialA), static_cast<void*>(_waterMaterialB),
+            _waterVertexBuffer.size, contourRangesA.size, contourRangesB.size);
+    fflush(stderr);
+}
+
+// B4 FORWARD: 1 outside caller (gameupdateloop_load.cpp, GAME-a: it holds the two
+// objects as void* locals copied from GameUpdateLoop's typed members). The null
+// test is the old body's; retail's caller tests both before the call.
 extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed) {
     if (!wg || !gen) {
         fprintf(stderr, "[worldgen] BuildTerrain: null wg=%p gen=%p — skipping\n", wg, gen);
         fflush(stderr);
         return;
     }
-
-    uint8_t* w = (uint8_t*)wg;
-    uint8_t* g = (uint8_t*)gen;
-
-    // Size-table row for this map size: gen->sizeTable + sizeIdx*0x44.
-    int32_t* sizeTable = *(int32_t**)(g + GEN_SIZETABLE);
-    int32_t* sizeRow   = sizeTable ? (int32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : nullptr;
-    int dim = sizeRow ? sizeRow[0] : 0;
-
-    fprintf(stderr, "[worldgen] BuildTerrain ENTER wg=%p gen=%p sizeIdx=%d seed=%u sizeTable=%p dim=%d\n",
-            wg, gen, sizeIdx, seed, (void*)sizeTable, dim);
-    fflush(stderr);
-
-    if (dim <= 0) {
-        fprintf(stderr, "[worldgen] BuildTerrain: bad dim=%d (sizeTable=%p) — aborting\n",
-                dim, (void*)sizeTable);
-        fflush(stderr);
-        return;
-    }
-
-    // WorldGeometry grid dims.
-    *(int32_t*)(w + WG_DIMX2)      = dim * 2;
-    *(int32_t*)(w + WG_DIM)        = dim;
-    *(int32_t*)(w + WG_BASESUBDIV) = 0x20;        // 32
-    *(int32_t*)(w + WG_HEIGHTEDGE) = dim * 2 + 1;
-    *(int32_t*)(w + WG_BASEEDGE)   = 0x20 + 1;    // 33
-    *(int32_t*)(w + WG_BASEVERTS)  = 33 * 33;     // 1089
-
-    // Resolve the 3 ground materials (NULL-safe; untextured if unresolved).
-    *(void**)(w + WG_MATERIAL1) = wg_ResolveMaterial_fd10(g + GEN_MAT1);
-    *(void**)(w + WG_MATERIAL2) = wg_ResolveMaterial_fd10(g + GEN_MAT2);
-    *(void**)(w + WG_MATERIAL3) = wg_ResolveMaterial_fd10(g + GEN_MAT3);
-
-    // Allocate + init the heightfield scratch struct (heap; ~0xA30 bytes).
-    void* hfMem = System::MemoryAllocator::MemAlloc(HF_TOTAL, 8);
-    if (!hfMem) {
-        fprintf(stderr, "[worldgen] BuildTerrain: heightfield alloc failed — aborting\n");
-        fflush(stderr);
-        return;
-    }
-    memset(hfMem, 0, HF_TOTAL);
-    uint8_t* hf = (uint8_t*)hfMem;
-    RtSystem_Random_CtorSeed(reinterpret_cast<System::Random*>(hf + HF_RANDOM), seed);
-    *(void**)(hf + HF_TERRAINGEN) = gen;
-    *(int32_t**)(hf + HF_SIZEROW) = sizeRow;
-
-    // Build.
-    wg_TradeCore_c4b0(wg, (int32_t*)hf);
-
-    // Teardown (reverse of construction; first-light lists are empty no-ops).
-    wg_FreeScalarList(hf + HF_WATERFEATS);
-    wg_FreeScalarList(hf + HF_BASINSTAMPS);
-    wg_FreeScalarList(hf + HF_LISTB);
-    wg_FreePatchList (hf + HF_PATCHLIST);
-    wg_FreeScalarList(hf + HF_HEIGHTMAP);
-    System::MemoryAllocator::MemFree(hfMem);
-
-    fprintf(stderr, "[worldgen] BuildTerrain EXIT — wg=%p dimX2=%d edge=%d hm16=%p mat1=%p blendTex=%p\n",
-            wg, *(int32_t*)(w + WG_DIMX2), *(int32_t*)(w + WG_HEIGHTEDGE),
-            *(void**)(w + WG_HM16), *(void**)(w + WG_MATERIAL1), *(void**)(w + WG_BLENDTEX));
-    // Water diagnostics: the two water materials (+0x150/+0x158) and the overlay
-    // mesh draw-item counts (+0x1c8/+0x1d8). If matWater* are null the water
-    // material resource didn't load; if the counts are 0 the b260 overlay mesh
-    // wasn't built (b260 is skipped in our worldgen).
-    fprintf(stderr, "[worldgen]   waterMatA(+0x150)=%p waterMatB(+0x158)=%p "
-            "overlayVB(+0x160)=%p overlayCntA(+0x1c8)=%d overlayCntB(+0x1d8)=%d\n",
-            *(void**)(w + 0x150), *(void**)(w + 0x158), *(void**)(w + 0x160),
-            *(int32_t*)(w + 0x1c8), *(int32_t*)(w + 0x1d8));
-    fflush(stderr);
+    // LEFT: the two untyped parameters (the old body's C-style casts) until the
+    // closing wave rewires the caller to `m_worldGeometry->BuildTerrain(m_terrainConfig, ...)`.
+    ((WorldGeometry*)wg)->BuildTerrain((TerrainGenerator*)gen, sizeIdx, seed);
 }

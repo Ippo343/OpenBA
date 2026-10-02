@@ -38,6 +38,7 @@
 // ADD-ONLY: this file does not modify worldgen.cpp. The orchestrator wires these
 // three extern "C" entry points into the kFullPipeline branch separately.
 
+#include "Game/TerrainHeightfield.h"   // TerrainHeightfield, the stage declarations
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
@@ -209,7 +210,7 @@ static void wg_eee0_radial_brush(int32_t* hf, const float* center, float cutoff,
 // (max-min over a slope) shrinks; valley-floor mean is essentially unchanged.
 // => NOT the source of the ~8-unit normalization.
 // ============================================================================
-extern "C" void wg_f390_erosion(void* hfv) {
+void wg_f390_erosion(TerrainHeightfield* hfv) {
     uint8_t* p = (uint8_t*)hfv;
 
     int dim  = *(int32_t*)(p + HF_GRIDSIZE);    // *param_1
@@ -322,7 +323,7 @@ extern "C" void wg_f390_erosion(void* hfv) {
 //   the mean only by the total stamped mass, NOT by a uniform field-wide offset.
 //   => ec50 is NOT the global ~8-unit lowerer; it carves localized water/feature beds.
 // ============================================================================
-extern "C" void wg_f390_carve(void* hfv) {
+void wg_f390_carve(TerrainHeightfield* hfv) {
     int32_t* param_1 = (int32_t*)hfv;
     uint8_t* p = (uint8_t*)hfv;
 
@@ -437,7 +438,7 @@ extern "C" void wg_f390_carve(void* hfv) {
 // Running twice doubles the diffusion but not any bias.
 // => smoothing is NOT the source of the ~8-unit global lowering.
 // ============================================================================
-extern "C" void wg_f390_smooth(void* hfv) {
+void wg_f390_smooth(TerrainHeightfield* hfv) {
     uint8_t* p = (uint8_t*)hfv;
 
     int cellCount = *(int32_t*)(p + HF_HM_COUNT);    // param_1[4]
