@@ -662,8 +662,11 @@ static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, in
     MapComponent* comp = cloned->FindComponent<MapComponent>();
     comp->tileX0 = (int16_t)col;
     comp->tileY0 = (int16_t)row;
-    comp->tileX1 = 1;   // +0x2c / +0x2e: one qword store of 0x10001 in retail (H7: two stores)
+    // Retail stores ONE qword 0x10001 at +0x2c (0x140103847 / 0x1401039e1): width 1,
+    // height 1 AND +0x30 (the rotation) = 0. Three named stores leave the same bytes.
+    comp->tileX1 = 1;
     comp->tileY1 = 1;
+    comp->extraField = 0;
     ComponentEntity* local_70 = cloned;
     EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &local_70,
                                    static_cast<int>(desc->_ref38->_category));

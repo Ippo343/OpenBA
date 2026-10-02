@@ -128,8 +128,9 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* d
         Reimpl_Array_Resize_Stride08(&refs, needed);
         Reimpl_Array_Resize_Stride04(&ints, needed);
         // Zero the freshly grown tail of the int array. Retail bounds this by the int
-        // array's own capacity field (+0x228), NOT by `needed`.
-        int intCount = static_cast<int>(static_cast<uint32_t>(ints.sizeCap >> 32));   // +0x228
+        // array's own dword at +0x228 (0x1400acdd8 / 0x1400ace01: CMP EBX,[RDI+0x228]) -- the
+        // low dword of its {data, size|capacity} header, i.e. its size -- NOT by `needed`.
+        int intCount = static_cast<int>(static_cast<uint32_t>(ints.sizeCap));   // +0x228 (low dword)
         uint32_t* intBase = (uint32_t*)ints.data;
         if (intBase) {
             for (int i = oldCount; i < intCount; ++i)
