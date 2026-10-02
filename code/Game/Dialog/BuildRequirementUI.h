@@ -33,6 +33,12 @@ public:
     ~BuildRequirementUI() override = default;                     // [0] 0x140010860
     void Persist(void* /*stream*/) override {}   // [3] 0x14005ee80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14005e7c0
+    // The CreateBar setters the tools' UpdateCreateBar (0x1400ffc60) runs (B4 PLAYER;
+    // bodies in Player/tool_base_createbar.cpp).
+    void SetSizeText(const System::String* text);    // 0x14005e600 "textSize"
+    void SetStatusText(const System::String* cost);  // 0x14005e420 "textStatus"
+    void SetSizeMultiplier(uint32_t multiplier);     // 0x14005e700 the labelBuild%i quantities
+    void SetIconColor(uint32_t color);               // 0x14005e360 "imageIcon"
 
     // ---- fields (B4 DLG-a) ----------------------------------------------
     // +0x30 the building's ComponentDescription (resolved from the data source)

@@ -62,6 +62,7 @@ public:
     // Re-point every mesh material to one material set (defined in
     // destroycomponent_state6.cpp, B4 COMP-c).
     void SetMaterialSet(int materialSetIdx);                      // 0x140125020
+    void SetTransformFromYaw(const Math::Vector3* offset, float yaw);   // 0x140003870 (B4 PLAYER; body in Player/tool_base_tile.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     Graphics::MeshInstance meshInstance; // +0x28

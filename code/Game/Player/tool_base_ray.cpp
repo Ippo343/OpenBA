@@ -28,6 +28,12 @@
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Player/exe_bodies.h"
+#include "Player/PlacementTool.h"
+#include "Player/RotationSetting.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Game/Map.h"
+#include "Game/WorldGeometry.h"
+#include "Game/PlayerController.h"
 
 // ============================================================
 // Locally-resolved dispatch-slot helpers (Runtime exports behind exe .rdata slots)
@@ -47,9 +53,6 @@
 // GetScreenDirection is called by name: RtVolume_Frustum_GetScreenDirection
 // (runtime/types/volume/Volume.h), the retslot passed explicitly as the door did.
 
-static inline uintptr_t GameWorld() {
-    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-}
 
 // CharacterComponent_impl_f3e0 (0x14009f3e0) = grid->world conversion:
 // Reimpl_MapGetTerrainPos (Game/exe_bodies.h), called by name.
@@ -80,13 +83,12 @@ static inline uintptr_t GameWorld() {
 // Caller signature: bool fn(longlong gameWorldMap, float* origin, Vector3* dir,
 //                           float* maxDist, float* outA, float* outB)
 //   (param_1 = *(g_pGameWorldSingleton+0x110) in the 101270 caller; +0xc0 = grid width.)
-extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_2,
+extern "C" uint8_t PlayerRay_TerrainMarch_aa530(WorldGeometry* param_1, float* param_2,
                                                 float* param_3, float* param_4,
                                                 float* param_5, float* param_6) {
-    const uint32_t signMask = 0x80000000u;  // DAT_1401722c0
     const float uvScale = kRdata_14017214c;  // DAT_14017214c (=1.0)
 
-    int width = *reinterpret_cast<int*>(param_1 + 0xc0);
+    int width = param_1->_gridSize;
 
     // normDir = normalize(param_3.x, param_3.y) — the 2D ray direction (DDA divisor).
     // 🔑 Math::Vector2 is 8 bytes (2 floats); MSVC x64 returns it in RAX, NOT via a
@@ -104,12 +106,8 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 
     float center = static_cast<float>(width >> 1);
     float centerPos[2] = { center, center };      // local_res8[0],[1]
-    float centerNeg[2];                           // local_res8[2],[3] = center ^ 0x80000000 (-center)
-    {
-        uint32_t bits = reinterpret_cast<uint32_t&>(center) ^ signMask;
-        centerNeg[0] = reinterpret_cast<float&>(bits);
-        centerNeg[1] = centerNeg[0];
-    }
+    // local_res8[2],[3] = center ^ 0x80000000 (DAT_1401722c0): the sign flip, -center.
+    float centerNeg[2] = { -center, -center };
 
     // First slab pass: parametric distances to the +/- grid boundaries per axis.
     float tNear[2] = {0.0f, 0.0f};   // local_68[j]
@@ -156,8 +154,7 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
             tMax[j] = static_cast<float>(width - cell[j]) * dlt + tFar;
         } else {
             // 0x49742400 = large "infinity" sentinel so this axis never crosses.
-            uint32_t inf = 0x49742400u;
-            tMax[j] = reinterpret_cast<float&>(inf);
+            tMax[j] = 1000000.0f;   // the bits 0x49742400
             step[j] = 0;
         }
     }
@@ -168,8 +165,10 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
         if (cell[0] >= 0 && cell[0] < width && cell[1] >= 0 && cell[1] < width) {
             // 0x1400aaa20 QuarryComponent_helper_aa20 = Pf_CellQuadRay_aa20 (Action/exe_bodies.h);
             // it returns int, the door read AL as the bool.
+            // LEFT: 0x1400aaa20's typed body is file-local to Action/action_pf_road.cpp
+            // (block ACT-a); its B4 FORWARD takes the WorldGeometry as an int64.
             bool hit = static_cast<uint8_t>(Pf_CellQuadRay_aa20(
-                static_cast<int64_t>(param_1), cell[0], cell[1], param_3, param_2, param_4,
+                reinterpret_cast<int64_t>(param_1), cell[0], cell[1], param_3, param_2, param_4,
                 param_5, param_6, nullptr)) != 0;
             if (hit) return 1;
         }
@@ -197,22 +196,22 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 //   camera   = *(g_pGameWorldSingleton + 0xe0) ; +0x34 = Graphics::Camera,
 //              +0x98..+0xc4 = 48-byte Transform3 (camera world matrix)
 // Caller signature: bool fn(void* /*param_1, ignored*/, float* outOrigin, float* outDir)
-extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOrigin, float* outDir) {
+extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(const void* /*param_1*/, float* outOrigin, float* outDir) {
     if (!Input::Configuration::_singleton) return 0;
 
     // KeyMap = Input::Configuration::_singleton->_keyMap (retail's triple deref of
     // the import slot 0x140151738: slot -> &_singleton -> _singleton -> _keyMap).
-    void* keyMap = Input::Configuration::_singleton->_keyMap;
-    void* display = ::Video::Device::_singleton;        // Video::Device instance
-    uintptr_t camHolder = reinterpret_cast<uintptr_t>(
-        GameUpdateLoop::_singleton ? *reinterpret_cast<void**>(GameWorld() + 0xe0) : nullptr);
-    if (!keyMap || !display || !camHolder) return 0;
+    const Input::KeyMap* keyMap = Input::Configuration::_singleton->_keyMap;
+    const ::Video::Device* display = ::Video::Device::_singleton;
+    PlayerController* controller =
+        GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_playerController : nullptr;
+    if (!keyMap || !display || !controller) return 0;
 
-    short mouseX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
-    short mouseY = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
+    short mouseX = keyMap->GetValue(0, 0);
+    short mouseY = keyMap->GetValue(0, 1);
 
-    int screenW = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 4);
-    int screenH = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 8);
+    int screenW = display->backBufferWidth;
+    int screenH = display->backBufferHeight;
 
     // Safety: garbage/zero screen dims would let the bounds check pass with junk and then
     // crash in the camera-ray math (writing a by-value result through a bad retbuf). Reject
@@ -223,42 +222,37 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     if (mouseX < 0 || mouseX >= screenW || mouseY < 0 || mouseY >= screenH)
         return 0;
 
-    // Copy the 48-byte camera Transform3 (camHolder+0x98 .. +0xc4) onto the stack.
-    float xform[12];
-    for (int i = 0; i < 12; i++)
-        xform[i] = *reinterpret_cast<float*>(camHolder + 0x98 + i * 4);
+    // LEFT: PlayerController::camera (+0x34) is raw storage (H5) in block GAME-b's
+    // header; the Graphics::Camera is read through it.
+    const Graphics::Camera* camera =
+        reinterpret_cast<const Graphics::Camera*>(controller->camera);
 
-    // Camera = camHolder + 0x34. GetFrustum returns a Frustum (112 bytes) by value.
-    void* camera = reinterpret_cast<void*>(camHolder + 0x34);
-    // Camera::GetFrustum is a hidden-retslot door in retail; the door body moves
-    // to the call site as exactly ONE construction into the same caller storage.
-    alignas(16) uint8_t frustum[112];
-    ::new (static_cast<void*>(frustum)) ::Frustum(
-        reinterpret_cast<const Graphics::Camera*>(camera)->GetFrustum());   // B.3.5 bridge
+    // Copy the 48-byte camera Transform3 (controller +0x98 = camera +0x64) onto the stack.
+    Math::Transform3 xform = camera->_cameraToWorld;
+
+    // Camera::GetFrustum returns a Frustum (0x64 bytes) by value.
+    ::Frustum frustum(camera->GetFrustum());
 
     // origin = xform * Vector3(0,0,0).  (Vector3(Scalar=0) broadcasts 0 to all lanes.)
     Math::Vector3 zeroVec((Math::Scalar(0.0f)));
     {
-        Math::Vector3 r =
-            reinterpret_cast<const Math::Transform3*>(xform)->operator*(zeroVec);
+        Math::Vector3 r = xform.operator*(zeroVec);
         outOrigin[0] = r.x; outOrigin[1] = r.y; outOrigin[2] = r.z;
     }
 
     // screenDir = Frustum.GetScreenDirection(mouseX/width, mouseY/height).
     float u = static_cast<float>(mouseX) / static_cast<float>(screenW);
     float v = static_cast<float>(mouseY) / static_cast<float>(screenH);
-    float screenDir[3] = {0.0f, 0.0f, 0.0f};
+    Math::Vector3 screenDir;
     {
-        float* r = reinterpret_cast<float*>(RtVolume_Frustum_GetScreenDirection(
-            reinterpret_cast<const struct Frustum*>(frustum),
-            reinterpret_cast<Math::Vector3*>(screenDir), u, v));
-        screenDir[0] = r[0]; screenDir[1] = r[1]; screenDir[2] = r[2];
+        Math::Vector3 dirOut;
+        const Math::Vector3* r = RtVolume_Frustum_GetScreenDirection(&frustum, &dirOut, u, v);
+        screenDir = *r;
     }
 
     // direction = xform.Rotate(screenDir).
     {
-        Math::Vector3 r = reinterpret_cast<const Math::Transform3*>(xform)->Rotate(
-            *reinterpret_cast<const Math::Vector3*>(screenDir));
+        Math::Vector3 r = xform.Rotate(screenDir);
         outDir[0] = r.x; outDir[1] = r.y; outDir[2] = r.z;
     }
     return 1;
@@ -271,22 +265,21 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
 // converts the hit world position to a clamped cell index. Returns -1 when the mouse
 // is off-screen or the ray hits nothing.
 //   maxDist constant = DAT_14017223c = 400.0f.
-//   grid = *(g_pGameWorldSingleton + 0xf8); grid[0] = width.
-//   map  = *(g_pGameWorldSingleton + 0x110) (passed as aa530's param_1).
-// Caller signature: int fn(void* self)  (param_1 forwarded to GetMouseRay; ignored there.)
-extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
+//   map = GameUpdateLoop::m_game (+0xF8); map->size = width.
+//   geometry = GameUpdateLoop::m_worldGeometry (+0x110) (aa530's param_1).
+// param_1 is forwarded to GetMouseRay, which never reads it.
+extern "C" int PlayerRay_ScreenToCell_101270(const void* param_1) {
     float origin[3] = {0.0f, 0.0f, 0.0f};
     float dir[3]    = {0.0f, 0.0f, 0.0f};
 
-    uint8_t ok = PlayerRay_GetMouseRay_1005a0(reinterpret_cast<void*>(param_1), origin, dir);
+    uint8_t ok = PlayerRay_GetMouseRay_1005a0(param_1, origin, dir);
     if (ok == 0)
         return -1;
 
-    uint32_t maxBits = 0x43c80000u;     // DAT_14017223c = 400.0f
-    float maxDist = reinterpret_cast<float&>(maxBits);
+    float maxDist = 400.0f;             // DAT_14017223c = 0x43c80000
 
-    int* grid = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(GameWorld() + 0xf8));
-    uintptr_t map = *reinterpret_cast<uintptr_t*>(GameWorld() + 0x110);
+    Map* map = GameUpdateLoop::_singleton->m_game;
+    WorldGeometry* geometry = GameUpdateLoop::_singleton->m_worldGeometry;
 
     // local_18[4] in the original — aa530's helper aa20 writes 3 floats (world pos)
     // through this buffer (param_5 -> aa20 param_7), so it must hold at least 3.
@@ -294,13 +287,13 @@ extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
     float scratch[6] = {0,0,0,0,0,0};             // local_res10 (out, unused by caller)
 
     uint8_t hit = PlayerRay_TerrainMarch_aa530(
-        map, origin, dir, &maxDist, hitPos, scratch);
+        geometry, origin, dir, &maxDist, hitPos, scratch);
 
 
     if (hit == 0)
         return -1;
 
-    int width = grid[0];
+    int width = map->size;
     int col = static_cast<int>(hitPos[0] + static_cast<float>(width >> 1));
     int row = static_cast<int>(hitPos[1] + static_cast<float>(width >> 1));
     if (col < 0) col = 0;
@@ -311,47 +304,39 @@ extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
 }
 
 // ============================================================
-// FUN_1400fda00 — PlacementTool_sub_da00 (placement footprint position calc)
+// FUN_1400fda00 — PlacementTool::GetPlacement (placement footprint position calc)
 // ============================================================
 // Picks the terrain cell under the mouse (ScreenToCell), centres the building
 // footprint (width/height from the tool's description) over it, validates the
 // footprint is fully on the map, computes the world centre position (averaging the
-// two diagonal corners via CharacterComponent_impl_f3e0 grid->world), and a yaw
-// factor. Returns true when the placement is valid.
-//   self+0x28 -> description IBP; desc+0x44 = footprint width, desc+0x48 = height.
-//   self+0x48 -> rotation IBP; *(rot+0x10) = orientation (1 or 3 swaps W/H).
-//   grid = *(g_pGameWorldSingleton + 0xf8); grid[0] = width.
+// two diagonal corners via 0x14009f3e0 grid->world), and a yaw factor. Returns true
+// when the placement is valid.
+//   this+0x28 -> CreatePlacedDescription; +0x44 = footprint width, +0x48 = height.
+//   this+0x48 -> RotationSetting; rotation 1 or 3 swaps W/H.
 //   DAT_140172204 = 90.0f (yaw scalar), DAT_140172114 = 0.5f (cell centre offset).
-// Caller signature: bool fn(longlong self, int* outStartCol, int* outStartRow,
-//                           int* outEndCol, int* outEndRow, float* outPos, float* outYaw)
-extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* param_2,
-                                                    int* param_3, int* param_4,
-                                                    int* param_5, float* param_6,
-                                                    float* param_7) {
+// A member: every field it reads is the PlacementTool's (B4 PLAYER).
+uint8_t PlacementTool::GetPlacement(int* param_2, int* param_3, int* param_4,
+                                    int* param_5, Math::Vector3* param_6, float* param_7) {
     const float yawScalar  = 90.0f;  // DAT_140172204 = 0x42b40000
     const float halfCell   = 0.5f;   // DAT_140172114 = 0x3f000000
 
-    uintptr_t descIbpSlot = param_1 + 0x48;   // rotation/footprint IBP (self+0x48)
-    uintptr_t descPtr     = *reinterpret_cast<uintptr_t*>(param_1 + 0x28);
+    uint32_t footW = static_cast<uint32_t>(descComponent->_i44);
+    uint32_t footH = static_cast<uint32_t>(descComponent->_i48);
 
-    uint32_t footW = *reinterpret_cast<uint32_t*>(descPtr + 0x44);
-    uint32_t footH = *reinterpret_cast<uint32_t*>(descPtr + 0x48);
-
-    // Orientation: rot+0x10 == 1 or 3 swaps width/height.
+    // Orientation: rotation == 1 or 3 swaps width/height.
     uint32_t dimX = footW, dimY = footH;
-    uintptr_t rot = *reinterpret_cast<uintptr_t*>(descIbpSlot);
-    int orient = *reinterpret_cast<int*>(rot + 0x10);
+    int orient = rotationIBP->rotation;
     if (orient == 1 || orient == 3) {
         dimX = footH;
         dimY = footW;
     }
 
-    int* grid = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(GameWorld() + 0xf8));
-    int cellIdx = PlayerRay_ScreenToCell_101270(descIbpSlot);
+    Map* grid = GameUpdateLoop::_singleton->m_game;
+    int cellIdx = PlayerRay_ScreenToCell_101270(&rotationIBP);   // RCX = &this->+0x48 (never read)
     if (cellIdx < 0)
         return 0;
 
-    int width = grid[0];
+    int width = grid->size;
     int row = cellIdx / width;
     int col = cellIdx % width;
 
@@ -376,7 +361,7 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
 
     // Validate the footprint is fully on the map (and start col > 0).
     int startCol = *param_2;
-    int w = grid[0];
+    int w = grid->size;
     uint8_t valid;
     if (startCol < 0 || w <= startCol || *param_3 < 0 || w <= *param_3 ||
         startCol < 1 || w <= *param_4 || *param_5 < 0 || w <= *param_5) {
@@ -386,12 +371,11 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
     }
 
     // outYaw = orientation * 90.0f.
-    uintptr_t rot2 = *reinterpret_cast<uintptr_t*>(descIbpSlot);
-    *param_7 = static_cast<float>(*reinterpret_cast<int*>(rot2 + 0x10)) * yawScalar;
+    *param_7 = static_cast<float>(rotationIBP->rotation) * yawScalar;
 
     if (valid != 0) {
         // Average the two diagonal corner world positions for the footprint centre.
-        int gw = grid[0];
+        int gw = grid->size;
         int idxA = *param_3 * gw + *param_2;
         float centerOff = static_cast<float>(gw >> 1) - halfCell;
         float inGridA[3];
@@ -401,7 +385,7 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
         float worldA[3] = {0.0f, 0.0f, 0.0f};
         Reimpl_MapGetTerrainPos(grid, worldA, inGridA, '\0', nullptr);
 
-        gw = grid[0];
+        gw = grid->size;
         int idxB = *param_5 * gw + *param_4;
         centerOff = static_cast<float>(gw >> 1) - halfCell;
         float inGridB[3];
@@ -411,9 +395,9 @@ extern "C" uint8_t PlayerRay_PlacementPosCalc_fda00(uintptr_t param_1, int* para
         float worldB[3] = {0.0f, 0.0f, 0.0f};
         Reimpl_MapGetTerrainPos(grid, worldB, inGridB, '\0', nullptr);
 
-        param_6[0] = (worldB[0] + worldA[0]) * halfCell;
-        param_6[1] = (worldB[1] + worldA[1]) * halfCell;
-        param_6[2] = 0.0f;
+        param_6->x = (worldB[0] + worldA[0]) * halfCell;
+        param_6->y = (worldB[1] + worldA[1]) * halfCell;
+        param_6->z = 0.0f;
     }
     return valid;
 }

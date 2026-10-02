@@ -30,6 +30,9 @@
 #include <cstdint>
 #include <cstring>
 #include "Player/exe_bodies.h"
+#include "Component/RadiusDescription.h"
+#include "Game/Map.h"
+#include "Game/WorldGeometry.h"
 
 // Shared AVL rotations from tool_base_trade.cpp (0x140015000 / 0x140014ed0, registered).
 extern "C" int64_t PlayerTrade_Rot_15000(int64_t* root, int64_t node);
@@ -352,35 +355,38 @@ haveSlot:
 
 // ============================================================
 // 0x140055430 — HighlightAdd. Builds the radius-highlight rectangle around centerCell
-// and submits it to the tile renderer (gameWorld+0x110). param_1 = radiusComponent
-// (needs +0x20 highlight target != null, +0x28 radius). Returns highlight slot or -1.
+// and submits it to the terrain decal system (GameUpdateLoop +0x110, the
+// WorldGeometry). param_1 = the RadiusDescription (+0x20 material != null, +0x28
+// radius). Returns the highlight slot or -1.
 // 1:1 port of FUN_140055430 (b0d80 args disasm-verified; uvScale = g_fUVScale = 1.0f).
 // ============================================================
-extern "C" int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
-    int64_t target = *reinterpret_cast<int64_t*>(param_1 + 0x20);
-    if (target == 0) return -1;
+int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
+    Graphics::MaterialInstance* target = param_1->_material;
+    if (target == nullptr) return -1;
 
-    int64_t gameWorld = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton);
-    int mapSize = **reinterpret_cast<int**>(gameWorld + 0xf8);
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    int mapSize = gameWorld->m_game->size;
 
     // gw+0x110 holds a POINTER to the tile-highlight renderer, not the renderer
     // itself. Retail (0x140055430): TradeWork_impl_0d80(*(longlong*)(gw + 0x110), ...).
-    // We passed `gw + 0x110` — so 0d80 read its slot array from gw+0x300/0x308 and
-    // the tessellator (0xace40) walked a garbage heightmap, faulting on the first
-    // sample. Only the fishing dock hits this: it is the one placeable whose
-    // description carries a RadiusDescription, which is what arms this path.
-    int64_t highlightMgr = *reinterpret_cast<int64_t*>(gameWorld + 0x110);
-    if (highlightMgr == 0) return -1;
+    WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
+    if (highlightMgr == nullptr) return -1;
     int row = param_2 / mapSize;
     int col = param_2 % mapSize;
-    int r   = *reinterpret_cast<int*>(param_1 + 0x28);
+    int r   = param_1->_radius;
 
-    float uvScale = kRdata_14017214c;
-    uint32_t uv = *reinterpret_cast<uint32_t*>(&uvScale);
+    const uint32_t uv = 0x3f800000u;   // the bits of 1.0f (kRdata_14017214c), passed in an int register
 
-    return TradeWork_impl_0d80(highlightMgr,
+    // LEFT: 0x1400b0d80 (below) still takes the decal system and the material as
+    // integers; Component/decalcomponent.cpp binds it by a local extern "C" of that shape.
+    return TradeWork_impl_0d80(reinterpret_cast<int64_t>(highlightMgr),
                                col - r, row - r, r + col, r + row,
-                               0xff, 0, target, 0,
+                               0xff, 0, reinterpret_cast<int64_t>(target), 0,
                                uv, 0, 0, uv, uv,
                                1, r - 2, r + 2, 0, 1);
+}
+
+// B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp) passes the description as an integer.
+int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
+    return Player_HighlightAdd_55430(reinterpret_cast<const RadiusDescription*>(param_1), param_2);   // B4 FORWARD
 }

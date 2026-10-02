@@ -44,6 +44,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "Player/exe_bodies.h"
+#include "Component/ComponentDescription.h"
+#include "Component/CreateFencedDescription.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
@@ -344,10 +346,11 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     // 3. Shelter placement + yaw.
     uint32_t shMinX = 0, shMinY = 0, shMaxX = 0, shMaxY = 0;
     float shelterPos[3] = { 0.f, 0.f, 0.f };
+    uint32_t yawBits = 0;   // 0x1400dbf90 stores the yaw float's bits
     float yawF = 0.f;
-    // The door typed the last argument float*; the body takes uint32_t* (same pointer).
-    PlayerEdit_FencedAnchorCalc_dbf90(reinterpret_cast<uintptr_t>(this), &shMinX, &shMinY, &shMaxX,
-                                      &shMaxY, shelterPos, reinterpret_cast<uint32_t*>(&yawF));
+    PlayerEdit_FencedAnchorCalc_dbf90(this, &shMinX, &shMinY, &shMaxX,
+                                      &shMaxY, shelterPos, &yawBits);
+    std::memcpy(&yawF, &yawBits, sizeof yawF);
     const int yawI = static_cast<int>(yawF);
 
     // 4. Master entity from the tool's description template (tool+0x20).
@@ -365,8 +368,7 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(masterIBP), &multiIBP);
 
     {
-        int64_t clearTmpl = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(fencedDesc) + 0x70);
+        const ComponentDescription* clearTmpl = fencedDesc->_ref70;
         DragPlacementTool_ClearPathEntities_1018d0(reinterpret_cast<void*>(masterIBP), minCol, minRow,
                                                    maxCol, maxRow, clearTmpl);
     }
