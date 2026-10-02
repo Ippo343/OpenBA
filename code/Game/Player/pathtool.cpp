@@ -175,8 +175,10 @@ char PathTool::OnKey(char key) {
 // in real Collection::Arrays (stride 0x14 / 0x20, align 4, byteCopy). B4 PLAYER:
 // the two hand-written {data, count, capacity} arrays and their toEngineFormat
 // packs are gone. Their grow went to n*3 even from empty (capacity 3 for the first
-// record); SetSizeCore's reference rule gives capacity 1 there. Allocation size
-// only; no record differs.
+// record). Retail's inlined grow is SetSizeCore's rule: capacity n, trebled only
+// when one record is appended to a non-empty array (0x1400dd47c-0x1400dd487 for the
+// tiles, the same shape from 0x1400dd5d0 for the segments), so the first grow is
+// capacity 1, as here (known_port_issues 14 row 75).
 // ============================================================
 
 // ============================================================

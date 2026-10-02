@@ -410,8 +410,11 @@ int FencedTool::CalcCost(int startCell, int endCell,
 // Player/Tool.h: col, row, variant, color, angle) in a real Collection::Array
 // (stride 0x14, align 4, byteCopy). B4 PLAYER: the hand-written {data, count,
 // capacity} array and its toEngineFormat pack are gone. Its grow went to n*3 even
-// from empty (capacity 3 for the first record); SetSizeCore's reference rule gives
-// capacity 1 there. Allocation size only; no record differs.
+// from empty (capacity 3 for the first record). Retail's inlined grow is
+// SetSizeCore's rule: capacity n, trebled only when one record is appended to a
+// non-empty array (`LEA EAX,[RCX+1]; CMP; JNZ; TEST ECX,ECX; JZ; LEA ESI,[RBX+RBX*2]`
+// at 0x1400dc542-0x1400dc54d and 0x1400dc942-0x1400dc94e), so the first grow is
+// capacity 1, as here (known_port_issues 14 row 75).
 // ============================================================
 using TileArray = Collection::Array<ToolTileRecord>;
 
