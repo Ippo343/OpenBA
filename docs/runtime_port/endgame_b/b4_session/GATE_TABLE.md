@@ -191,3 +191,7 @@ Metric at `0dd2b4c0`: **13,080** to remove.
 | 36 | W1-GAME-b (second part) | `266bd17f` | Game b: the geometry and serialize bodies by name; the `TradeWork_impl_*` bodies are WorldGeometry members (`Serialize` 0x1400b04d0, `BuildTerrainMesh` 0x1400ac1e0, `UploadHeightImage` 0x1400ac780 ...); `WorldGeometryElements.h`; one shared typed external-ref serializer: 1526 -> 134 in 44 files (block finished) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 2.01 ms/frame, p95 3.31 (agents building); `devlost.sh` not run (owed at the close: geometry draw changed) | 0 |
 
 Metric at `266bd17f`: **12575** to remove.
+
+| 37 | W1-GAME-c (first part) | `bd70c96f` | Game c: weather, worldgen.cpp, the water mesh, the erosion and river stages by name; `WorldGeometry::BuildTerrain` 0x1400b0230, `BuildFromHeightfield` 0x1400ac4b0, `BuildWaterMesh` 0x1400ab260, `WeatherSimulation::Update`, `WeatherParticleGeometry::Configure` members; `TerrainHeightfield.h`; the first agent's rewritten water weld restored to the original: 1497 -> 1057 in 29 files (starttown and 13 files still to do) | exit 0 · 918 / 0 · 0 | ok | 5/5 | `sa-stress` exit 0, update 2.07 ms/frame, p95 2.97 (agents building) | 0 |
+
+Metric at `bd70c96f`: **12135** to remove.
