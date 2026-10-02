@@ -56,11 +56,22 @@
 // not pinned, so no `ArraySpec` row can honestly be written for it yet. Slab
 // chains, free lists, node chains, the cell BST and the `MemFree` with no
 // header stores (a6720's [thread+0x158]) are not arrays and are untouched.
+// B.4 GAME-b: every body is a member of the class whose fields it reads —
+// PathCellQueue<T>::Release (0x14001a5f0, both queues), PathOpenSet::Clear
+// (0x14001ced0), RegionGraph::ReleaseStorage (0x1400a8570),
+// PathfinderThread::~PathfinderThread (0x1400a6720) / DrainQueue (0x1400a6690),
+// Map::~Map (0x14009ed60); 0x14001a450 / 0x14001dac0 / 0x14001e3a0 are inlined
+// into their one caller each, on the named arrays. LEFT: Map::pickingScene and
+// the PathfinderThread lock are raw storage reached through their doors /
+// ~Scene (H5), Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to
+// a body taking int64_t*).
 #include "Game/PathfinderThread.h"
+#include "Game/Map.h"
+#include "Action/PathSearch.h"
 #include <windows.h>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "picking/Scene.h"
-#include "Action/exe_bodies.h"   // Pf_BstFreeRecursive_d400, Pf_FreeArray30_e490
+#include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"     // WorkBase_TreeNodeFree_e320 / _14c30
 #include "collection/Collection.h"
 #include <cstdint>
@@ -70,345 +81,243 @@
 
 namespace {
 
-// B3R: the exe sub-callees are called by name -- WorkBase_TreeNodeFree_e320 /
-// _14c30 (Work/exe_bodies.h), Pf_BstFreeRecursive_d400 / Pf_FreeArray30_e490
-// (Action/exe_bodies.h) -- and so are the two Runtime dtors above.
-
 inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
-// B.3.2 bridge: the owning structs are still untyped bytes.
-inline rtcoll::ArrayHdr& Arr(int64_t base, int64_t off) {
-    return *reinterpret_cast<rtcoll::ArrayHdr*>(base + off);
+// The free-and-zero of a RawArray header: retail's inlined trivial-element
+// ~Array (MemFree(data); data = 0; one qword over size + capacity = 0, H7: two
+// named stores).
+template <class T>
+void FreeRawArray(RawArray<T>& a) {
+    MemFree(a.data);
+    a.data = nullptr;
+    a.size = 0;
+    a.capacity = 0;
 }
 
 } // namespace
 
 // ============================================================================
-// 0x14001a5f0 — free-list + slab-chain destructor.
-//   param_1 is a pool header. Walks the in-use node chain at [param_1] (next @+0x10),
-//   recycling each node onto the free list (head @param_1+0x20), decrementing the
-//   in-use count (@param_1+0x34) and incrementing the free count (@param_1+0x38).
-//   Then zeroes head/tail/count, and frees the slab chain (head @param_1+0x18,
-//   next = first qword of each slab).
-//   Field map (BYTE offsets): +0x00 inuse-head, +0x08 inuse-tail, +0x10 (int) count,
-//     +0x18 slab-chain head, +0x20 free-list head, +0x34 (int) inuse-count,
-//     +0x38 (int) free-count.
-// 1:1 port of FUN_14001a5f0.
+// 0x14001a5f0 — PathCellQueue<T>::Release (the pool's free list + chunk chain).
+//   Walks the queued nodes from the tail (link `prev`, node +0x10), pushing each
+//   onto the pool's free list (inUse - 1, available + 1). Then zeroes head / tail /
+//   count, and frees the chunk chain (next = first qword of each chunk).
+// 1:1 port of FUN_14001a5f0; one retail body for both queues (B13).
 // ============================================================================
-extern "C" void GameDtor_FreeListDtor_1a5f0(uint64_t* param_1) {
-    uint64_t* node = reinterpret_cast<uint64_t*>(param_1[0]);   // [param_1]
+template <class T>
+void PathCellQueue<T>::Release() {
+    Node* node = tail;
     while (node != nullptr) {
-        uint64_t* next = reinterpret_cast<uint64_t*>(node[2]);  // node[+0x10]
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x34) -= 1; // DEC [+0x34]
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x38) += 1; // INC [+0x38]
-        node[0] = param_1[4];                                   // *node = [+0x20] (free head)
-        param_1[4] = reinterpret_cast<uint64_t>(node);          // [+0x20] = node
+        Node* next = node->prev;
+        pool.Push(node);
         node = next;
     }
-    param_1[1] = 0;                                             // [+0x08] = 0
-    param_1[0] = 0;                                             // [+0x00] = 0
-    *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x10) = 0; // [+0x10] = 0
-    // Free the slab chain: head @[+0x18], next = *slab.
-    while (param_1[3] != 0) {                                   // [+0x18] != 0
-        uint64_t nextSlab = *reinterpret_cast<uint64_t*>(param_1[3]); // *(slab)
-        MemFree(reinterpret_cast<void*>(param_1[3]));
-        param_1[3] = nextSlab;
+    head = nullptr;                                             // [+0x08] = 0
+    tail = nullptr;                                             // [+0x00] = 0
+    count = 0;                                                  // [+0x10] = 0
+    // Free the chunk chain: head pool.chunks, next = *chunk.
+    while (pool.chunks != nullptr) {
+        PathPoolLink* nextChunk = pool.chunks->next;
+        MemFree(pool.chunks);
+        pool.chunks = nextChunk;
     }
 }
+template void PathCellQueue<PathCellIndex>::Release();   // Map +0xA8
+template void PathCellQueue<PathCellXY>::Release();      // RegionGraph +0xC8
 
 // ============================================================================
-// 0x14001a450 — tree + array destructor.
-//   param_1 layout (BYTE offsets):
-//     +0x18 array data block, +0x20 (count?), +0x28 tree root, +0x30 (int) tree count.
-//   Frees the tree at +0x28 (children @node+0x18 / node+0x20, via the registered
-//   recursive 0x14000e320), then the array block at +0x18.
-// 1:1 port of FUN_14001a450.
-// ============================================================================
-extern "C" void GameDtor_TreeArrayDtor_1a450(int64_t param_1) {
-    void** treeSlot = reinterpret_cast<void**>(param_1 + 0x28);
-    void* root = *treeSlot;
-    if (root != nullptr) {
-        // FUN_14000e320(treeSlot, root->+0x18); FUN_14000e320(treeSlot, root->+0x20)
-        void* childA = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(root) + 0x18);
-        void* childB = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(root) + 0x20);
-        WorkBase_TreeNodeFree_e320(treeSlot, childA);   // 0x14000e320
-        WorkBase_TreeNodeFree_e320(treeSlot, childB);
-        MemFree(root);
-    }
-    *treeSlot = nullptr;                                        // [+0x28] = 0
-    *reinterpret_cast<int*>(param_1 + 0x30) = 0;                // [+0x30] = 0
-    Arr(param_1, 0x18).~Array();   // free array @[+0x18]; [+0x18] = 0; [+0x20] = 0
-}
-
-// ============================================================================
-// 0x14001ced0 — cell-BST clear.
-//   param_1 layout (BYTE offsets):
-//     +0x00 BST root, +0x08 (int) node count, +0x10 slab-chain head,
-//     +0x18 free-list head, +0x2c (int) in-use count, +0x30 (int) free count.
-//   If root != 0: recursively recycles both subtrees onto the free list (via the
-//   registered 0x14001d400, children @node+0x18 / node+0x20), pushes root onto the
-//   free list (@+0x18) adjusting the +0x2c/+0x30 counts. Then zeroes root/count and
-//   frees the slab chain (head @+0x10, next = *slab).
+// 0x14001ced0 — PathOpenSet::Clear.
+//   If root != 0: recycles both subtrees onto the free list (0x14001d400,
+//   FreeSubtree), pushes the root itself (inUse - 1, available + 1). Then zeroes
+//   root / count and frees the chunk chain.
 // 1:1 port of BuildStructure_impl_ced0 (FUN_14001ced0).
 // ============================================================================
-extern "C" void GameDtor_CellBstClear_1ced0(int64_t* param_1) {
-    int64_t* root = reinterpret_cast<int64_t*>(param_1[0]);    // *param_1
-    if (root != nullptr) {
-        // FUN_14001d400(param_1, root[3]); FUN_14001d400(param_1, root[4])
-        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(param_1),
-                                 reinterpret_cast<uint64_t*>(root[3]));   // root->+0x18
-        Pf_BstFreeRecursive_d400(reinterpret_cast<uintptr_t>(param_1),
-                                 reinterpret_cast<uint64_t*>(root[4]));   // root->+0x20
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x2c) -= 1; // DEC [+0x2c]
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x30) += 1; // INC [+0x30]
-        root[0] = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_1) + 0x18); // *root = [+0x18]
-        *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_1) + 0x18) =
-            reinterpret_cast<int64_t>(root);                  // [+0x18] = root
+void PathOpenSet::Clear() {
+    PathOpenNode* r = root;
+    if (r != nullptr) {
+        FreeSubtree(r->left);    // 0x14001d400
+        FreeSubtree(r->right);
+        pool.Push(r);
     }
-    param_1[0] = 0;                                            // *param_1 = 0
-    *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x08) = 0; // [+0x08] = 0
-    // Free the slab chain at +0x10 (next = *slab).
-    while (*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_1) + 0x10) != 0) {
-        int64_t slab = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_1) + 0x10);
-        int64_t nextSlab = *reinterpret_cast<int64_t*>(slab);  // *slab
-        MemFree(reinterpret_cast<void*>(slab));
-        *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_1) + 0x10) = nextSlab;
+    root = nullptr;
+    count = 0;
+    while (pool.chunks != nullptr) {
+        PathPoolLink* nextChunk = pool.chunks->next;
+        MemFree(pool.chunks);
+        pool.chunks = nextChunk;
     }
 }
 
 // ============================================================================
-// 0x14001dac0 — array-free, element stride 0x18.
-//   param_1: +0x00 array base, +0x08 (int) count.
-//   For each of `count` elements (base + i*0x18), frees element->+0x08 (read as the
-//   first qword of the +0x08 sub-record), then zeroes that record's two qwords.
-//   Then frees the array base and zeroes base/count.
-//   (Disasm: RBX = base+0x08; frees [RBX], zeroes [RBX]/[RBX+8]; RBX += 0x18 per iter.)
-// 1:1 port of FUN_14001dac0.
-// ============================================================================
-extern "C" void GameDtor_FreeArray18_1dac0(int64_t* param_1) {
-    int64_t base = param_1[0];                                 // *param_1
-    int64_t count = static_cast<int>(param_1[1] & 0xffffffff); // (int)[+0x08], sign-extended
-    if (count > 0) {
-        uint64_t* cur = reinterpret_cast<uint64_t*>(base + 0x08); // RBX = base + 8
-        do {
-            Arr(reinterpret_cast<int64_t>(cur), 0).~Array();   // free [RBX]; [RBX] = [RBX+8] = 0
-            cur = reinterpret_cast<uint64_t*>(reinterpret_cast<int64_t>(cur) + 0x18); // RBX += 0x18
-            --count;
-        } while (count != 0);
-    }
-    Arr(reinterpret_cast<int64_t>(param_1), 0).~Array();        // free base; zero header
-}
-
-// ============================================================================
-// 0x14001e3a0 — array-free, element stride 0x20.
-//   Same shape as 0x14001dac0 but the freed sub-record sits at element + 0x10 and the
-//   stride is 0x20. (Disasm: RBX = base+0x10; frees [RBX], zeroes [RBX]/[RBX+8];
-//   RBX += 0x20 per iter.) Then frees base and zeroes base/count.
-// 1:1 port of FUN_14001e3a0.
-// ============================================================================
-extern "C" void GameDtor_FreeArray20_1e3a0(int64_t* param_1) {
-    int64_t base = param_1[0];                                 // *param_1
-    int64_t count = static_cast<int>(param_1[1] & 0xffffffff); // (int)[+0x08]
-    if (count > 0) {
-        uint64_t* cur = reinterpret_cast<uint64_t*>(base + 0x10); // RBX = base + 0x10
-        do {
-            Arr(reinterpret_cast<int64_t>(cur), 0).~Array();   // free [RBX]; [RBX] = [RBX+8] = 0
-            cur = reinterpret_cast<uint64_t*>(reinterpret_cast<int64_t>(cur) + 0x20); // RBX += 0x20
-            --count;
-        } while (count != 0);
-    }
-    Arr(reinterpret_cast<int64_t>(param_1), 0).~Array();        // free base; zero header
-}
-
-// ============================================================================
-// 0x1400a8570 — Game sub-object (+0x70) destructor.
-//   Tears down the path/command pools held at +0x08 .. +0xc8 of the sub-object.
-//   Sequence (BYTE offsets into param_1):
-//     1a5f0(param_1 + 0xc8)                         free-list dtor
-//     MemFree [+0xb8]; [+0xb8]=[+0xc0]=0
-//     MemFree [+0xa8]; [+0xa8]=[+0xb0]=0
-//     MemFree [+0x98]; [+0x98]=[+0xa0]=0
-//     MemFree [+0x88]; [+0x88]=[+0x90]=0
-//     1e3a0(param_1 + 0x78)                          array-free stride 0x20
-//     1e490(<unused>, [+0x68], (int)[+0x70])         array-free stride 0x30
-//     MemFree [+0x68]; [+0x68]=[+0x70]=0
-//     ced0(param_1 + 0x18)                           cell-BST clear
-//     MemFree [+0x08]; [+0x08]=[+0x10]=0
+// 0x1400a8570 — RegionGraph's destructor body.
+//   queue.Release()                                   1a5f0(+0xc8)
+//   ~Array labels, freeRegions, dirtyAdjacency, dirtyRebuild (+0xb8 .. +0x88)
+//   blocks: each block's `regions` array, then the block array (1e3a0(+0x78))
+//   regions: RegionNodesFree (0x14001e490) over the elements, then the array
+//   search.open.Clear()                                ced0(+0x18)
+//   search.nodes freed                                 [+0x08]
 // 1:1 port of TradeComponent_impl_8570 (FUN_1400a8570).
 // ============================================================================
-extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
-    GameDtor_FreeListDtor_1a5f0(reinterpret_cast<uint64_t*>(param_1 + 0xc8));
+void RegionGraph::ReleaseStorage() {
+    queue.Release();
 
-    Arr(param_1, 0xb8).~Array();   // MemFree [+0xb8]; [+0xb8]=[+0xc0]=0
-    Arr(param_1, 0xa8).~Array();   // MemFree [+0xa8]; [+0xa8]=[+0xb0]=0
-    Arr(param_1, 0x98).~Array();   // MemFree [+0x98]; [+0x98]=[+0xa0]=0
-    Arr(param_1, 0x88).~Array();   // MemFree [+0x88]; [+0x88]=[+0x90]=0
+    labels.~Array();           // MemFree [+0xb8]; [+0xb8]=[+0xc0]=0
+    freeRegions.~Array();      // MemFree [+0xa8]
+    dirtyAdjacency.~Array();   // MemFree [+0x98]
+    dirtyRebuild.~Array();     // MemFree [+0x88]
 
-    GameDtor_FreeArray20_1e3a0(reinterpret_cast<int64_t*>(param_1 + 0x78));
+    // 0x14001e3a0 (stride 0x20): each block's region-id array (+0x10), then the block array.
+    for (int32_t i = 0; i < blocks.size; ++i) {
+        blocks.data[i].regions.~Array();
+    }
+    FreeRawArray(blocks);
 
-    Pf_FreeArray30_e490(0, static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(param_1 + 0x68)),
-                        *reinterpret_cast<int*>(param_1 + 0x70));   // 0x14001e490
+    RegionNodesFree(regions.data, regions.size);   // 0x14001e490: the elements' two arrays
+    FreeRawArray(regions);                         // the outer header
 
-    // The element step (1e490, stride 0x30) ran above; this is the outer header.
-    Arr(param_1, 0x68).~Array();   // MemFree [+0x68]; [+0x68]=[+0x70]=0
-
-    GameDtor_CellBstClear_1ced0(reinterpret_cast<int64_t*>(param_1 + 0x18));
-
-    Arr(param_1, 0x08).~Array();   // MemFree [+0x08]; [+0x08]=[+0x10]=0
+    search.open.Clear();         // 0x14001ced0
+    FreeRawArray(search.nodes);  // MemFree [+0x08]; [+0x08]=[+0x10]=0
 }
 
 // ============================================================================
-// 0x1400a6720 — worker-queue Thread object destructor.
-//   thread layout (BYTE offsets):
-//     +0x00 vtable, +0x30 CriticalSection, +0x60 cmd-node chain head (next @node+0x18),
-//     +0x68 (?), +0x70 (int) count, +0x78 base of a {+0x08 array, +0x18 cell-BST, ...}
-//       sub-block, +0x80 (under +0x78) ptr freed, +0x90/+0x18 cell-BST cleared,
-//     +0x158 array block (under +0x78+0xe0), +0x160 array-free stride 0x18 target.
-//   Sequence:
-//     [thread] = &PTR_FUN_14015ef18                  set (now-defunct) vtable
-//     1dac0(thread + 0x160)                           array-free stride 0x18
-//     MemFree [thread + 0x158]   (= [(+0x78)+0xe0])
-//     ced0((thread+0x78) + 0x18 = thread + 0x90)      cell-BST clear
-//     MemFree [(+0x78)+0x08 = thread + 0x80]; zero +0x80/+0x88
-//     walk cmd-node chain @+0x60 (next @node+0x18), MemFree each; zero +0x68/+0x60, +0x70
-//     CriticalSection::~CriticalSection(thread + 0x30)
-//     Thread::~Thread(thread)                         (tail-call)
+// 0x1400a6720 — PathfinderThread::~PathfinderThread.
+//   [thread] = 0x14015ef18                            the compiler's
+//   results: each result's path array, then the array (0x14001dac0, stride 0x18)
+//   MemFree grid.cellFlags   ([thread + 0x158], not zeroed)
+//   grid.search.open.Clear() (ced0(thread + 0x90))
+//   grid.search.nodes freed  ([thread + 0x80]; zero +0x80/+0x88)
+//   walk the command chain from queueTail (link `prev`, node +0x18), MemFree each;
+//   zero queueHead, queueTail, queueCount
+//   CriticalSection::~CriticalSection(lock)
+//   Thread::~Thread()                                 the compiler's chain
 // 1:1 port of BuildStructure_impl_6720 (FUN_1400a6720).
-//
-// ENDGAME B.3.8 LOOP: the restamp stores PathfinderThread's table (0x14015ef18 is
-// that class). Nothing reads it before the Thread/CS dtors run (they don't touch
-// +0x00); it was a null store while 0x14015ef18 was unregistered.
-//
-// ENDGAME B.3.9 VS (B9-13 foreign site, SYS W3): 0x1400a6720 IS
-// `PathfinderThread::~PathfinderThread` and is now that member. The table store
-// on entry is the compiler's, and the tail call is the compiler's chain into
-// `System::Thread::~Thread()` -- it was the `??1Thread@System@@QEAA@XZ` door,
-// which re-stamped the minted base table and ran the same body; the door and
-// the minted row are retired.
 // ============================================================================
 PathfinderThread::~PathfinderThread() {
-    const int64_t thread = reinterpret_cast<int64_t>(this);
+    // 0x14001dac0: each result's path (+0x08), then the result array.
+    for (int32_t i = 0; i < results.size; ++i) {
+        results.data[i].path.~Array();
+    }
+    FreeRawArray(results);
 
-    GameDtor_FreeArray18_1dac0(reinterpret_cast<int64_t*>(thread + 0x160));
+    MemFree(grid.cellFlags);              // MemFree [thread + 0x158]
+    grid.search.open.Clear();             // ced0(thread + 0x90)
+    FreeRawArray(grid.search.nodes);      // MemFree [thread + 0x80]; [thread + 0x80] = [thread + 0x88] = 0
 
-    // RBX = thread + 0x78 in the original; the next three derefs are off RBX.
-    int64_t rbx = thread + 0x78;
-    MemFree(*reinterpret_cast<void**>(rbx + 0xe0));            // MemFree [thread + 0x158]
-
-    GameDtor_CellBstClear_1ced0(reinterpret_cast<int64_t*>(rbx + 0x18)); // ced0(thread + 0x90)
-
-    Arr(rbx, 0x08).~Array();   // MemFree [thread + 0x80]; [thread + 0x80] = [thread + 0x88] = 0
-
-    // Walk the cmd-node chain at +0x60 (RSI = thread + 0x60); next link @node+0x18.
-    int64_t rsi = thread + 0x60;
-    void* cur = *reinterpret_cast<void**>(rsi);
+    // Walk the command chain from the tail; next link @node+0x18 (prev).
+    PathCommand* cur = queueTail;
     while (cur != nullptr) {
-        void* next = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(cur) + 0x18);
+        PathCommand* next = cur->prev;
         MemFree(cur);
         cur = next;
     }
-    *reinterpret_cast<int64_t*>(rsi + 0x08) = 0;              // [thread + 0x68] = 0
-    *reinterpret_cast<int64_t*>(rsi) = 0;                    // [thread + 0x60] = 0
-    *reinterpret_cast<int*>(rsi + 0x10) = 0;                 // [thread + 0x70] = 0
+    queueHead = nullptr;                  // [thread + 0x68] = 0
+    queueTail = nullptr;                  // [thread + 0x60] = 0
+    queueCount = 0;                       // [thread + 0x70] = 0
 
-    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(thread + 0x30));
+    // LEFT: the CriticalSection dtor is a door on the POD mirror (System::
+    // CriticalSection is trivially destructible by design, Thread.h).
+    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(&lock));
     // tail-call: System::Thread::~Thread() -- the compiler's base chain.
 }
 
 // ============================================================================
-// 0x1400a6690 — worker-queue drain + worker-thread stop.
-//   thread layout: +0x08 (byte) flags (bit0 = running), +0x30 CriticalSection,
-//     +0x70 (int) queue count.
+// 0x1400a6690 — PathfinderThread::DrainQueue: worker-queue drain + worker stop.
 //   Loop:
-//     Lock(thread + 0x30)
-//     if (count > 0) { if ((flags & 1) == 0) Thread::Start(thread); count = [+0x70]; }
+//     Lock(lock)
+//     if (queueCount > 0) { if ((_runFlags & 1) == 0) Start(); count = queueCount; }
 //     if (count == 0) { Unlock; break; }
-//     YieldToThreads(*g_pAppSingleton); Unlock; loop
-//   After loop: Unlock; WaitForFinish(thread)   (tail-call)
+//     YieldToThreads(Application::_singleton); Unlock; loop
+//   After loop: Unlock; WaitForFinish()   (tail-call)
 // 1:1 port of FUN_1400a6690.
 //
 // SPIN/WAIT: this blocks until the worker thread drains the queue to 0. It explicitly
 // starts the worker (Thread::Start) when work is pending and the thread isn't running.
-// Shutdown-only; not autostart-exercised. If in standalone the worker never drains
-// (e.g. Thread::Start is a no-op), this would spin — see FINAL REPORT.
+// Shutdown-only; not autostart-exercised.
 // ============================================================================
-extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
+void PathfinderThread::DrainQueue() {
     for (;;) {
-        reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Lock();   // B.3.4b bridge
-        int count = *reinterpret_cast<int*>(thread + 0x70);
+        lock.Lock();
+        int count = queueCount;
         if (count > 0) {
-            if ((*reinterpret_cast<uint8_t*>(thread + 0x08) & 1) == 0) {
-                reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->Start();   // B.3.4b bridge
+            if ((_runFlags & 1) == 0) {   // the byte at +0x08, bit 0 (running)
+                Start();
             }
-            count = *reinterpret_cast<int*>(thread + 0x70);
+            count = queueCount;
         }
         if (count == 0) break;
-        // YieldToThreads(Application::_singleton)
         ::Application::Application::_singleton->YieldToThreads();
-        reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
+        lock.Unlock();
     }
-    reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
-    reinterpret_cast<System::Thread*>(reinterpret_cast<void*>(thread))->WaitForFinish(); // tail-call  B.3.4b bridge
+    lock.Unlock();
+    WaitForFinish(); // tail-call
 }
 
 // ============================================================================
-// 0x14009ed60 — Game::Dtor.
-//   param_1 = Game* (this).  Field map (BYTE offsets):
-//     +0x08 Picking::Scene sub-object (dtor at tail), +0x68 worker-queue Thread*,
-//     +0x70 sub-object pointer (a8570), +0x78 tree+array pool (1a450),
-//     +0x80 array block (freed), +0xa8 free-list pool (1a5f0),
-//     +0xe8 tree node (children @+0x10/+0x18 freed via 14c30), +0xf0 (int) tree count.
-//   Sequence:
-//     if ([+0x68]) { a6690([+0x68]); if ([+0x68]) { a6720([+0x68]); MemFree([+0x68]); } }
-//     if ([+0x70]) { a8570([+0x70]); MemFree([+0x70]); }
-//     if ([+0x78]) { 1a450([+0x78]); MemFree([+0x78]); }
-//     node = [+0xe8]; if (node) { 14c30(&[+0xe8], node->+0x10); 14c30(&[+0xe8], node->+0x18); MemFree(node); }
-//     [+0xe8] = 0; [+0xf0] = 0;
-//     1a5f0(param_1 + 0xa8)
-//     MemFree([+0x80]); [+0x80]=[+0x88]=0
-//     Picking::Scene::~Scene(param_1 + 0x08)         (tail-call)
-// 1:1 port of FUN_14009ed60 (Game::Dtor).
+// 0x14009ed60 — Map::~Map.
+//   if (pathfinder) { DrainQueue; if (pathfinder) { ~PathfinderThread; MemFree } }
+//   if (regionGraph) { ReleaseStorage; MemFree }
+//   if (regionPairCache) { 0x14001a450; MemFree }
+//   the +0xE8 tree: children freed through 0x140014c30, the root MemFreed; root / count zeroed
+//   cellQueue.Release()                               1a5f0(+0xa8)
+//   cells freed                                        [+0x80]; [+0x80]=[+0x88]=0
+//   Picking::Scene::~Scene(+0x08)                      (tail-call)
+// 1:1 port of FUN_14009ed60.
 // ============================================================================
-extern "C" void Game_Dtor_9ed60(int64_t param_1) {
-    int64_t queue = *reinterpret_cast<int64_t*>(param_1 + 0x68);
-    if (queue != 0) {
-        GameDtor_DrainQueue_a6690(queue);
-        queue = *reinterpret_cast<int64_t*>(param_1 + 0x68);   // re-read [RBX + 0x68]
-        if (queue != 0) {
-            reinterpret_cast<PathfinderThread*>(queue)->~PathfinderThread();   // 0x1400a6720
-            MemFree(reinterpret_cast<void*>(queue));
+Map::~Map() {
+    if (pathfinder != nullptr) {
+        pathfinder->DrainQueue();
+        if (pathfinder != nullptr) {   // re-read [RBX + 0x68]
+            pathfinder->~PathfinderThread();   // 0x1400a6720
+            MemFree(pathfinder);
         }
     }
 
-    void* subObj = *reinterpret_cast<void**>(param_1 + 0x70);
-    if (subObj != nullptr) {
-        GameDtor_SubObjDtor_a8570(reinterpret_cast<int64_t>(subObj));
-        MemFree(subObj);
+    if (regionGraph != nullptr) {
+        regionGraph->ReleaseStorage();   // 0x1400a8570
+        MemFree(regionGraph);
     }
 
-    void* treeArr = *reinterpret_cast<void**>(param_1 + 0x78);
-    if (treeArr != nullptr) {
-        GameDtor_TreeArrayDtor_1a450(reinterpret_cast<int64_t>(treeArr));
-        MemFree(treeArr);
+    if (regionPairCache != nullptr) {
+        // LEFT: Map::regionPairCache is int64_t* (gameupdateloop.cpp, GAME-a,
+        // hands it to 0x1400a5d10's int64_t* parameter).
+        RegionPairCache* cache = reinterpret_cast<RegionPairCache*>(regionPairCache);
+        // 0x14001a450: the index tree (children +0x18 / +0x20 through 0x14000e320),
+        // its root / count zeroed, then the ring array freed.
+        AvlNode30* root = cache->index.root;
+        if (root != nullptr) {
+            WorkBase_TreeNodeFree_e320(&cache->index.root, root->left);    // 0x14000e320
+            WorkBase_TreeNodeFree_e320(&cache->index.root, root->right);
+            MemFree(root);
+        }
+        cache->index.root = nullptr;                            // [+0x28] = 0
+        cache->index.count = 0;                                 // [+0x30] = 0
+        FreeRawArray(cache->ring);                              // [+0x18]; [+0x18]=[+0x20]=0
+        MemFree(cache);
     }
 
-    // +0xe8 tree node: free children @+0x10/+0x18 via the registered 0x140014c30
-    // (which takes (&slot, child) and recurses children @child+0x10 / child+0x18).
-    void** nodeSlot = reinterpret_cast<void**>(param_1 + 0xe8);
-    void* node = *nodeSlot;
+    // +0xe8 tree: free children @+0x10/+0x18 via 0x140014c30 (which takes
+    // (&slot, child) and recurses children @child+0x10 / child+0x18).
+    AvlNode28* node = field_0xE8;
     if (node != nullptr) {
-        void* childA = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(node) + 0x10);
-        void* childB = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(node) + 0x18);
-        WorkBase_TreeNodeFree_14c30(nodeSlot, childA);   // 0x140014c30
-        WorkBase_TreeNodeFree_14c30(nodeSlot, childB);
+        WorkBase_TreeNodeFree_14c30(&field_0xE8, node->left);    // 0x140014c30
+        WorkBase_TreeNodeFree_14c30(&field_0xE8, node->right);
         MemFree(node);
     }
-    *nodeSlot = nullptr;                                        // [+0xe8] = 0
-    *reinterpret_cast<int*>(param_1 + 0xf0) = 0;                // [+0xf0] = 0
+    field_0xE8 = nullptr;                                       // [+0xe8] = 0
+    field_0xF0 = 0;                                             // [+0xf0] = 0
 
-    GameDtor_FreeListDtor_1a5f0(reinterpret_cast<uint64_t*>(param_1 + 0xa8));
+    cellQueue.Release();                                        // 0x14001a5f0(+0xa8)
 
-    Arr(param_1, 0x80).~Array();   // free [+0x80]; [+0x80]=[+0x88]=0
+    MemFree(cells);                                             // free [+0x80]
+    cells = nullptr;
+    cellCount = 0;                                              // [+0x88] = 0 (one qword, H7)
+    cellCapacity = 0;
 
-    reinterpret_cast<Picking::Scene*>(param_1 + 0x08)->Picking::Scene::~Scene();   // tail-call
+    // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
+    reinterpret_cast<Picking::Scene*>(pickingScene)->Picking::Scene::~Scene();   // tail-call
+}
+
+// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The caller MemFrees
+// the map afterwards.
+extern "C" void Game_Dtor_9ed60(Map* map) {
+    map->~Map();
 }
