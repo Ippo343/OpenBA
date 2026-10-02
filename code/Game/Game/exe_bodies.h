@@ -193,7 +193,8 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor);  // 0x1400d
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount);  // 0x1400198a0
 
 // ---- weather_sim.cpp
-extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time);  // 0x1400944e0
+class WeatherSimulation; namespace System { class Time; }
+extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)
 
 // ---- worldgen_f390_shims.cpp
 // System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an

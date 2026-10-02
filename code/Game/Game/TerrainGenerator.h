@@ -21,6 +21,8 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+struct TerrainSizeRow;   // Game/TerrainHeightfield.h
+
 class TerrainGenerator final : public Object::External {
     DECLARE_EXE_TYPE(TerrainGenerator)
 
@@ -56,7 +58,7 @@ public:
     uint8_t  _pad74[4];          // +0x74: padding
     void*    _field78;           // +0x78: resolved External ptr for noise layer 3
     // Dynamic terrain data array
-    void*    _field80;           // +0x80: terrain data array ptr (0x44 bytes per entry, freed in dtor)
+    TerrainSizeRow* _field80;    // +0x80: the size table (TerrainSizeRow, 0x44 per entry, freed in dtor)
     void*    _field88;           // +0x88: count/capacity info for terrain data array
 };
 

@@ -26,6 +26,8 @@
 // B.4 GAME-b: forward declarations for the appended members.
 template <class T> struct RawArray;
 struct TerrainVertex; struct GeometryBatch; struct GeometryDrawRange; struct AvlNode28;
+class TerrainGenerator;       // Game/TerrainGenerator.h
+struct TerrainHeightfield;    // Game/TerrainHeightfield.h
 namespace Video { class ImageBuffer; }
 namespace Graphics { class MaterialInstance; }
 namespace IO { class Stream; }
@@ -71,6 +73,12 @@ public:
     RawArray<GeometryBatch>&           RoadBatches();                 // +0x200 mode 0x4000
     RawArray<Object::External*>&       BatchMaterials();              // +0x210
     RawArray<int32_t>&                 BatchCounters();               // +0x220
+    // B.4 GAME-c: the new-game terrain build (worldgen.cpp, water_contour_mesh.cpp)
+    void BuildTerrain(TerrainGenerator* generator, int sizeIndex, uint32_t seed);  // 0x1400b0230
+    void BuildFromHeightfield(TerrainHeightfield* heightfield);       // 0x1400ac4b0
+    void BuildWaterMesh(TerrainHeightfield* heightfield);             // 0x1400ab260
+    void BuildWaterBodies(const TerrainHeightfield* heightfield);     // 0x1400ab260 phase 1 (B5: split body)
+    void BuildWaterShores(const TerrainHeightfield* heightfield);     // 0x1400ab260 phase 2
 
 
 public:

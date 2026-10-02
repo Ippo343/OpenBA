@@ -32,13 +32,10 @@
 // ============================================================
 // Mirrors Weather_Ctor at 0x1400d3e50. External() and the 0x140160290 stamp
 // are the compiler's; then the Weather-specific defaults.
-Weather::Weather() {
+Weather::Weather() : velocityDir(0.0f, 0.0f, -1.0f) {
     // Particle system defaults
     material = nullptr;
     particleCount = 100;
-    velocityDirX = 0.0f;
-    velocityDirY = 0.0f;
-    velocityDirZ = -1.0f;
     velocity = 0.0f;
     velocityTolerence = 0.0f;
     velocityStretch = false;
@@ -51,9 +48,9 @@ Weather::Weather() {
     transitionTime = 0.0f;
 
     // Environment/lighting defaults
-    ambientColor = 0xFF595965;
-    lightColor = 0xFFCBCBBC;
-    fogColor = 0xFFBFBFF2;
+    ambientColor._value = 0xFF595965;
+    lightColor._value = 0xFFCBCBBC;
+    fogColor._value = 0xFFBFBFF2;
     fogNear = 90.0f;
     fogFar = 225.0f;
     fogMax = 0.95f;
@@ -90,76 +87,29 @@ Object::External* Weather::Construct() {
 // Original: 0x1400d3c90
 
 bool Weather::Serialize(void* stream) {
-    // Create IO::Serializer on the stack (24 bytes), version 0
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
-    // ExternalPtr material (+0x20)
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&material, serializer);
-
-    // int particleCount (+0x28) — declared int32_t == int door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(particleCount, nullptr);   // B.3.4 bridge
-
-    // Vector3 velocityDir (+0x2C..+0x34)  — member function: this=vec3, arg=serializer
-    // B.3.1 bridge: WeatherParticle keeps the three floats as separate members.
-    reinterpret_cast<Math::Vector3*>(&velocityDirX)->Serialize(serializer);
-
-    // float velocity (+0x38) — declared float == float door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(velocity, nullptr);   // B.3.4 bridge
-
-    // float velocityTolerence (+0x3C) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(velocityTolerence, nullptr);   // B.3.4 bridge
-
-    // bool velocityStretch (+0x40) — declared bool == bool door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(velocityStretch, nullptr);   // B.3.4 bridge
-
-    // float particleSize (+0x44) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(particleSize, nullptr);   // B.3.4 bridge
-
-    // float size (+0x48) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(size, nullptr);   // B.3.4 bridge
-
-    // float nearFade (+0x4C) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(nearFade, nullptr);   // B.3.4 bridge
-
-    // float nearFadeStart (+0x50) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(nearFadeStart, nullptr);   // B.3.4 bridge
-
-    // float farFadeStart (+0x54) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(farFadeStart, nullptr);   // B.3.4 bridge
-
-    // float farFade (+0x58) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(farFade, nullptr);   // B.3.4 bridge
-
-    // float transitionTime (+0x5C) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(transitionTime, nullptr);   // B.3.4 bridge
-
-    // Color ambientColor (+0x60)  — member function: this=color, arg=serializer
-    reinterpret_cast<System::Color*>(&ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-
-    // Color lightColor (+0x64)
-    reinterpret_cast<System::Color*>(&lightColor)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-
-    // Color fogColor (+0x68)
-    reinterpret_cast<System::Color*>(&fogColor)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-
-    // float fogNear (+0x6C) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(fogNear, nullptr);   // B.3.4 bridge
-
-    // float fogFar (+0x70) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(fogFar, nullptr);   // B.3.4 bridge
-
-    // float fogMax (+0x74) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(fogMax, nullptr);   // B.3.4 bridge
-
-    // float sunHeading (+0x78) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(sunHeading, nullptr);   // B.3.4 bridge
-
-    // float sunPitch (+0x7C) — declared float: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(sunPitch, nullptr);   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&material, &ser);   // ExternalPtr material (+0x20)
+    ser.Serialize(particleCount, nullptr);        // +0x28
+    velocityDir.Serialize(&ser);                  // +0x2C Vector3
+    ser.Serialize(velocity, nullptr);             // +0x38
+    ser.Serialize(velocityTolerence, nullptr);    // +0x3C
+    ser.Serialize(velocityStretch, nullptr);      // +0x40
+    ser.Serialize(particleSize, nullptr);         // +0x44
+    ser.Serialize(size, nullptr);                 // +0x48
+    ser.Serialize(nearFade, nullptr);             // +0x4C
+    ser.Serialize(nearFadeStart, nullptr);        // +0x50
+    ser.Serialize(farFadeStart, nullptr);         // +0x54
+    ser.Serialize(farFade, nullptr);              // +0x58
+    ser.Serialize(transitionTime, nullptr);       // +0x5C
+    ambientColor.Serialize(ser);                  // +0x60 Color
+    lightColor.Serialize(ser);                    // +0x64
+    fogColor.Serialize(ser);                      // +0x68
+    ser.Serialize(fogNear, nullptr);              // +0x6C
+    ser.Serialize(fogFar, nullptr);               // +0x70
+    ser.Serialize(fogMax, nullptr);               // +0x74
+    ser.Serialize(sunHeading, nullptr);           // +0x78
+    ser.Serialize(sunPitch, nullptr);             // +0x7C
     return true;
 }
 

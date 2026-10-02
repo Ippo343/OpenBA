@@ -31,6 +31,9 @@
 // hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "Game/WeatherParticleGeometry.h"
 #include "Game/Weather.h"          // caller batch CB6: the descriptor's fields
+#include "Game/WeatherSimulation.h"
+#include "Game/GameSettings.h"
+#include "Component/EnvironmentDescription.h"
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the game world's fields
 #include "graphics/Scene.h"     // also brings Graphics::Geometry
 #include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
@@ -62,9 +65,10 @@ constexpr float kBoundHi  =  1024.0f;  // DAT_140172250 (SetBounds max)
 constexpr float kBoundLo  = -1024.0f;  // DAT_1401722ac (SetBounds min)
 constexpr float kUVScale  = 1.0f;      // g_fUVScale
 
-inline uint8_t SettingsByte(int off) {
+// GameSettings::showWeather (+0x16), 0 without settings.
+inline uint8_t ShowWeatherSetting() {
     if (g_gameSettings == nullptr) return 0;
-    return reinterpret_cast<const uint8_t*>(g_gameSettings)[off];
+    return g_gameSettings->showWeather;
 }
 }  // namespace
 
@@ -86,34 +90,26 @@ inline uint8_t SettingsByte(int off) {
 // deliberate change.
 // ============================================================
 namespace {
-// ENDGAME B.3.2 closing pass: the row said only what a type's traits say — a
-// whole-stride byte copy, a whole-stride zero tail, no destroy, no
-// deliberately-untouched extent — so it is the trait-derived
-// `Collection::Array<T>` over the 0x24-byte zeroing blob. `SpecFor<T>()`
-// re-derives the identical row; exe 0x140025090 stays here as the provenance.
-using WeatherParticleElem = GameColl::Bytes<0x24, 4>;   // exe 0x140025090
-static_assert(sizeof(WeatherParticleElem)  == 0x24, "WeatherParticleElem stride");
-static_assert(alignof(WeatherParticleElem) == 4,    "WeatherParticleElem align");
-using WeatherParticleArray = Collection::Array<WeatherParticleElem>;
+// The element is WeatherParticle (WeatherParticleGeometry.h); the geometry's
+// destructor frees the array by hand (~Array's three stores).
 }  // namespace
 
-static void WeatherParticle_ArrayAlloc(void* header, int newCount) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    int oldCount = *reinterpret_cast<int*>(h + 8);
+static void WeatherParticle_ArrayAlloc(RawArray<WeatherParticle>* h, int newCount) {
+    int oldCount = h->size;
     if (newCount == oldCount) return;
 
-    void* oldPtr = *reinterpret_cast<void**>(h + 0);
-    *reinterpret_cast<int*>(h + 8) = newCount;
-    if (*reinterpret_cast<int*>(h + 0xc) < newCount) {
+    WeatherParticle* oldPtr = h->data;
+    h->size = newCount;
+    if (h->capacity < newCount) {
         int cap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;  // faithful grow rule
-        *reinterpret_cast<int*>(h + 0xc) = cap;
-        void* p = (System::MemoryAllocator::_singleton)
-                      ? System::MemoryAllocator::MemAlloc((size_t)cap * 0x24, 4)
+        h->capacity = cap;
+        WeatherParticle* p = (System::MemoryAllocator::_singleton)
+                      ? static_cast<WeatherParticle*>(System::MemoryAllocator::MemAlloc((size_t)cap * 0x24, 4))
                       : nullptr;
-        *reinterpret_cast<void**>(h + 0) = p;
+        h->data = p;
     }
-    void* data = *reinterpret_cast<void**>(h + 0);
+    WeatherParticle* data = h->data;
     if (data && newCount > 0)
         std::memset(data, 0, (size_t)newCount * 0x24);
     if (oldPtr && oldPtr != data)
@@ -128,10 +124,12 @@ WeatherParticleGeometry::WeatherParticleGeometry() {
     _intensity = 0.0f;
     _fadeDirection = 1.0f;          // fade direction (+1 = fade in)
     _descriptor = nullptr;
-    _indices = nullptr;             // index buffer
-    _indexCount = 0;
-    _particles = nullptr;           // particle array
-    _particleCountCap = 0;
+    _indices.data = nullptr;        // index buffer
+    _indices.size = 0;
+    _indices.capacity = 0;
+    _particles.data = nullptr;      // particle array
+    _particles.size = 0;
+    _particles.capacity = 0;
 }
 
 // Registered at 0x1400d3f10 (DebugUI's draw combo) and used by
@@ -151,12 +149,17 @@ WeatherParticleGeometry::~WeatherParticleGeometry() {
     // destroy). The +0xd0 index buffer is not an Array (its +0xd8 is a bare
     // count) and keeps its hand-written free. B.3.2 bridge: +0xe0 is still a
     // raw header.
-    reinterpret_cast<WeatherParticleArray*>(&_particles)->~Array();
+    // (~Array of a trivial element: MemFree, then zero data and the count / capacity.)
+    System::MemoryAllocator::MemFree(_particles.data);
+    _particles.data = nullptr;
+    _particles.size = 0;
+    _particles.capacity = 0;
     {
-        if (_indices) System::MemoryAllocator::MemFree(_indices);
+        if (_indices.data) System::MemoryAllocator::MemFree(_indices.data);
     }
-    _indices = nullptr;
-    _indexCount = 0;
+    _indices.data = nullptr;
+    _indices.size = 0;
+    _indices.capacity = 0;
     // Graphics::Geometry::~Geometry: the compiler's chain.
 }
 
@@ -169,32 +172,28 @@ WeatherParticleGeometry::~WeatherParticleGeometry() {
 // before; DebugUI's combo through the 0x1400d3f10 ctor door); `descriptor` is a
 // Weather — the entry of EnvironmentDescription's weather array, serialized as
 // ExternalPtr<Weather> (Reimpl_ExternalPtr_Serialize_Weather, type-validated).
-extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
-    if (!geo || !descriptor) return;
-    WeatherParticleGeometry* const self = static_cast<WeatherParticleGeometry*>(geo);   // B.3.8 bridge
-    const Weather* const d = static_cast<const Weather*>(descriptor);                  // B.3.8 bridge
-
-    self->_descriptor = descriptor;   // +0xC8
-    self->_intensity = 0.0f;          // +0xC0
+void WeatherParticleGeometry::Configure(Weather* d) {
+    _descriptor = d;      // +0xC8
+    _intensity = 0.0f;    // +0xC0
 
     int particleCount = d->particleCount;   // Weather +0x28
 
-    WeatherParticle_ArrayAlloc(&self->_particles, particleCount);   // +0xE0
+    WeatherParticle_ArrayAlloc(&_particles, particleCount);   // +0xE0
 
-    // Index buffer: 6 shorts (2 tris) per particle. Header {ptr(+0), count(+8)} at geo+0xd0.
+    // Index buffer: 6 shorts (2 tris) per particle; its {data, count} at +0xD0 / +0xD8.
     {
         int idxCount = particleCount * 6;
-        void* p = (System::MemoryAllocator::_singleton)
-                      ? System::MemoryAllocator::MemAlloc((size_t)idxCount * 2, 2)
+        uint16_t* p = (System::MemoryAllocator::_singleton)
+                      ? static_cast<uint16_t*>(System::MemoryAllocator::MemAlloc((size_t)idxCount * 2, 2))
                       : nullptr;
-        self->_indices = p;                                              // +0xD0
-        *reinterpret_cast<int*>(&self->_indexCount) = idxCount;          // +0xD8 (dword store)
+        _indices.data = p;                // +0xD0
+        _indices.size = idxCount;         // +0xD8 (dword store)
     }
 
     // Normalized velocity direction (Weather.velocityDir @ +0x2c).
-    float dir[3] = { d->velocityDirX, d->velocityDirY, d->velocityDirZ };
+    float dir[3];
     {
-        Math::Vector3 nd = reinterpret_cast<const Math::Vector3*>(dir)->Normalize();
+        Math::Vector3 nd = d->velocityDir.Normalize();
         dir[0] = nd.x; dir[1] = nd.y; dir[2] = nd.z;
     }
 
@@ -202,35 +201,35 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     float speedBase = d->velocity;           // Weather +0x38
     float speedTol  = d->velocityTolerence;  // Weather +0x3c
 
-    float* particles = static_cast<float*>(self->_particles);      // +0xE0
-    uint16_t* indices = static_cast<uint16_t*>(self->_indices);    // +0xD0
-    void* rng = (GameUpdateLoop::_singleton != nullptr)
+    WeatherParticle* particles = _particles.data;   // +0xE0
+    uint16_t* indices = _indices.data;              // +0xD0
+    System::Random* rng = (GameUpdateLoop::_singleton != nullptr)
                     ? GameUpdateLoop::_singleton->m_random
                     : nullptr;
 
     for (int i = 0; i < particleCount; ++i) {
-        float* p = particles + (size_t)i * 9;   // stride 0x24 = 9 floats
+        WeatherParticle& p = particles[i];   // stride 0x24
 
         // Random position within the box: randTol per axis * size * 0.5.
-        float r0 = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        float r1 = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        float r2 = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float r0 = rng ? rng->RandFloatTol() : 0.0f;
+        float r1 = rng ? rng->RandFloatTol() : 0.0f;
+        float r2 = rng ? rng->RandFloatTol() : 0.0f;
         // Original order: Vector3(r2*size, size*r1, size*r0) then *0.5.
-        p[0] = r2 * boxSize * kHalf;
-        p[1] = r1 * boxSize * kHalf;
-        p[2] = r0 * boxSize * kHalf;
+        p.position[0] = r2 * boxSize * kHalf;
+        p.position[1] = r1 * boxSize * kHalf;
+        p.position[2] = r0 * boxSize * kHalf;
 
         // Velocity = dir * (randTol*speedTol + speedBase).
-        float rs = rng ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        float rs = rng ? rng->RandFloatTol() : 0.0f;
         float speed = rs * speedTol + speedBase;
-        p[6] = dir[0] * speed;
-        p[7] = dir[1] * speed;
-        p[8] = dir[2] * speed;
+        p.velocity[0] = dir[0] * speed;
+        p.velocity[1] = dir[1] * speed;
+        p.velocity[2] = dir[2] * speed;
 
         // prevPos = pos - velocity * tickDt.
-        p[3] = p[0] - p[6] * kTickDt;
-        p[4] = p[1] - p[7] * kTickDt;
-        p[5] = p[2] - p[8] * kTickDt;
+        p.previousPosition[0] = p.position[0] - p.velocity[0] * kTickDt;
+        p.previousPosition[1] = p.position[1] - p.velocity[1] * kTickDt;
+        p.previousPosition[2] = p.position[2] - p.velocity[2] * kTickDt;
 
         // Quad indices {base+0,+1,+2, +0,+2,+3}.
         if (indices) {
@@ -244,21 +243,29 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     // Identity transform + world bounds [-1024, 1024]^3.
     {
         Math::Transform tf = Math::Transform::Identity();
-        reinterpret_cast<Graphics::Geometry*>(geo)->SetTransform(tf);   // B.3.5 bridge
+        SetTransform(tf);
     }
     {
-        float box[6] = { kBoundLo, kBoundLo, kBoundLo, kBoundHi, kBoundHi, kBoundHi };
-        // B.3.5 bridge — ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z.
-        reinterpret_cast<Graphics::Geometry*>(geo)->SetBounds(
-            *reinterpret_cast<const ::Box*>(box));   // B.3.5 bridge
+        // ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z.
+        ::Box box;
+        box.min.x = kBoundLo; box.min.y = kBoundLo; box.min.z = kBoundLo;
+        box.max.x = kBoundHi; box.max.y = kBoundHi; box.max.z = kBoundHi;
+        SetBounds(box);
     }
 
     // Material layer bitmask: geo+0x30 = 1 << (material+0x20 & 0x1f).
-    void* material = d->material;   // Weather +0x20
+    Graphics::MaterialInstance* material = d->material;   // Weather +0x20
     if (material) {
-        uint32_t layer = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(material) + 0x20);
-        self->_materialTypeFlags = 1u << (layer & 0x1f);   // Graphics::Geometry +0x30
+        uint32_t layer = material->_shaderClass;   // MaterialInstance +0x20
+        _materialTypeFlags = 1u << (layer & 0x1f);   // Graphics::Geometry +0x30
     }
+}
+
+// B4 FORWARD: 1 outside caller (debugui.cpp: it holds the geometry and the
+// descriptor as untyped pointers). The null test is the old body's.
+extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
+    if (!geo || !descriptor) return;
+    static_cast<WeatherParticleGeometry*>(geo)->Configure(static_cast<Weather*>(descriptor));
 }
 
 // ============================================================
@@ -271,9 +278,9 @@ void WeatherParticleGeometry::Update(const System::Time& timeRef) {
     // Caller batch CB6: the fields are read by name (the descriptor is a Weather,
     // see WeatherParticle_Config).
     if (!_descriptor) return;
-    const Weather* const d = static_cast<const Weather*>(_descriptor);   // +0xC8  B.3.8 bridge
+    const Weather* const d = _descriptor;   // +0xC8
 
-    float sec = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
+    float sec = time->AsSeconds();
 
     // Intensity fade toward the fade-direction target, clamped [0,1].
     float transition = d->transitionTime;   // Weather +0x5c
@@ -288,21 +295,23 @@ void WeatherParticleGeometry::Update(const System::Time& timeRef) {
     float half = box * kHalf;
     float negHalf = -half;
 
-    int count = static_cast<int32_t>(_particleCountCap);   // +0xE8 count
-    float* particles = static_cast<float*>(_particles);    // +0xE0
+    int count = _particles.size;                  // +0xE8 count
+    WeatherParticle* particles = _particles.data; // +0xE0
     if (!particles) return;
 
     for (int i = 0; i < count; ++i) {
-        float* p = particles + (size_t)i * 9;
+        WeatherParticle& p = particles[i];
         // prevPos = pos (before integrating), then pos += vel*dt.
-        p[3] = p[0]; p[4] = p[1]; p[5] = p[2];
-        p[0] += sec * p[6];
-        p[1] += sec * p[7];
-        p[2] += sec * p[8];
+        p.previousPosition[0] = p.position[0];
+        p.previousPosition[1] = p.position[1];
+        p.previousPosition[2] = p.position[2];
+        p.position[0] += sec * p.velocity[0];
+        p.position[1] += sec * p.velocity[1];
+        p.position[2] += sec * p.velocity[2];
         // Wrap each axis into [-half, half], shifting prevPos identically.
         for (int a = 0; a < 3; ++a) {
-            while (p[a] > half)     { p[a] -= box; p[a + 3] -= box; }
-            while (p[a] < negHalf)  { p[a] += box; p[a + 3] += box; }
+            while (p.position[a] > half)     { p.position[a] -= box; p.previousPosition[a] -= box; }
+            while (p.position[a] < negHalf)  { p.position[a] += box; p.previousPosition[a] += box; }
         }
     }
 }
@@ -312,14 +321,13 @@ void WeatherParticleGeometry::Update(const System::Time& timeRef) {
 // ============================================================
 void WeatherParticleGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
                                            Graphics::Renderer& rendererRef) const {
-    if (SettingsByte(0x16) == 0) return;   // weather effects disabled in settings
+    if (ShowWeatherSetting() == 0) return;   // weather effects disabled in settings
     if (!_descriptor) return;                                                  // +0xC8
-    void* material = static_cast<const Weather*>(_descriptor)->material;      // Weather +0x20  B.3.8 bridge
+    const Graphics::MaterialInstance* material = _descriptor->material;       // Weather +0x20
     if (!material) return;
     rendererRef.AddDrawItem(
-        this,
-        reinterpret_cast<const Graphics::MaterialInstance*>(material),
-        0xffff, 0, 0.0f, kUVScale, 1, nullptr, 0);   // B.3.5 bridge
+        this, material,
+        0xffff, 0, 0.0f, kUVScale, 1, nullptr, 0);
 }
 
 // Draw (vtable +0x10) — the big instanced-billboard port is the member's body,
@@ -335,18 +343,17 @@ void WeatherParticleGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 //   slot  = 0 or 1
 //   enable= build effect if 1, fade out if 0
 // ============================================================
-extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
-    if (!sim) return;
-    uint8_t* s = reinterpret_cast<uint8_t*>(sim);
-    void** activeArray = *reinterpret_cast<void***>(s + 0x50);   // effect geometry array
+void WeatherSimulation::SetEffectEnabled(int slot, bool enable) {
+    Graphics::Geometry** activeArray = effects;   // +0x50 effect geometry array
     if (!activeArray) return;
 
-    if (enable == 0) {
+    if (!enable) {
         // DISABLE: mark the effect to fade out (Update ramps intensity toward 0).
-        void* g = activeArray[slot];
+        Graphics::Geometry* g = activeArray[slot];
         if (g) {
-            static_cast<WeatherParticleGeometry*>(g)->_fadeDirection = -1.0f;   // +0xC4  B.3.8 bridge
-            *reinterpret_cast<int*>(s + 0x10) = 3;   // sim state = fading
+            // The effects are WeatherParticleGeometry (built below and by 0x1400942c0).
+            static_cast<WeatherParticleGeometry*>(g)->_fadeDirection = -1.0f;   // +0xC4
+            field_0x10 = 3;   // sim state = fading
         }
         return;
     }
@@ -354,34 +361,39 @@ extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
     // ENABLE: only build if this slot has no live effect yet.
     if (activeArray[slot] != nullptr) return;
 
-    void* envRes = *reinterpret_cast<void**>(s + 0x00);
+    EnvironmentDescription* envRes = environment;   // +0x00
     if (!envRes) return;
-    void* arrayBase = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(envRes) + 0x28);
+    EnvironmentDescription::WeatherChoice* arrayBase = envRes->_weatherArray;   // +0x28
     if (!arrayBase) return;
-    void* entry = reinterpret_cast<uint8_t*>(arrayBase) + (size_t)slot * 0x10;
-    void* descriptor = *reinterpret_cast<void**>(entry);
+    Weather* descriptor = arrayBase[slot].weather;
     if (!descriptor) return;
 
     if (!System::MemoryAllocator::_singleton) return;
     void* mem = System::MemoryAllocator::MemAlloc(0xf0, 8);
     if (!mem) return;
-    void* geo = static_cast<Graphics::Geometry*>(::new (mem) WeatherParticleGeometry());
+    WeatherParticleGeometry* geo = ::new (mem) WeatherParticleGeometry();
     activeArray[slot] = geo;
 
-    WeatherParticle_Config(geo, descriptor);
+    geo->Configure(descriptor);
 
     // Add to the Graphics scene global object list (gameWorld+0x60).
     // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term is gone; the
     // two singleton tests are object tests and stay.
     if (GameUpdateLoop::_singleton != nullptr) {
-        void* scene = GameUpdateLoop::_singleton->m_graphicsScene;
+        Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
         if (scene)
-            reinterpret_cast<Graphics::Scene*>(scene)->AddGlobalObject(
-                reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge
+            scene->AddGlobalObject(geo);
     }
-    *reinterpret_cast<int*>(s + 0x10) = 0;   // sim state = active
+    field_0x10 = 0;   // sim state = active
     // NOTE: the audio ambient entity (entry+8 template) is intentionally not
     // spawned here — audio is out of scope for this task.
+}
+
+// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a: its own
+// extern declares the receiver void*). The null test is the old body's.
+extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
+    if (!sim) return;
+    static_cast<WeatherSimulation*>(sim)->SetEffectEnabled(slot, enable != 0);
 }
 
 // ============================================================
