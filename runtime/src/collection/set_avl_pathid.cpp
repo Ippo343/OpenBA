@@ -97,6 +97,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "../../types/system/String.h"   // B.4: RtSystem::StringRefCount
 #include "../../types/collection/Collection.h"
 #include "set_avl.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
@@ -140,7 +141,7 @@ void MemFree(void* p) {                     // the null test is INSIDE ?MemFree@
 void StringReleaseInline(char** slot) {
     char* p = *slot;
     if (!p) return;
-    if (--reinterpret_cast<int32_t*>(p)[-1] == 0) {
+    if (--RtSystem::StringRefCount(p) == 0) {
         *slot = p - 8;
         MemFree(p - 8);
     } else {
@@ -182,17 +183,17 @@ Node* AllocNode(void* /*ignoredSet*/, const PathId* pair, Node* parent) {
     Node* n = static_cast<Node*>(MemAlloc(0x30u, 8));
     if (n == nullptr) return nullptr;
 
-    char** keySlot = reinterpret_cast<char**>(n);
+    char** keySlot = reinterpret_cast<char**>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     *keySlot = nullptr;                       // retail stores the zero FIRST
     if (pair->key) {
         *keySlot = pair->key;
-        ++reinterpret_cast<int32_t*>(pair->key)[-1];
+        ++RtSystem::StringRefCount(pair->key);
     }
-    reinterpret_cast<PathId*>(n)->value = pair->value;   // a DWORD store
+    reinterpret_cast<PathId*>(n)->value = pair->value;   // a DWORD store  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(n) + 0x28) = 0;
+    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(n) + 0x28) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     return n;
 }
 
@@ -218,7 +219,7 @@ struct PathIdPolicy : Collection::detail::NoCounters {
     static Node*&   Root(SetT* s)  { return s->root; }
     static int32_t& Count(SetT* s) { return s->count; }
     static const char* NodeKey(const Node* n) {
-        return *reinterpret_cast<const char* const*>(n);
+        return *reinterpret_cast<const char* const*>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     }
     static const char* SearchKey(const Element* p) { return p->key; }  // retail re-reads
     static bool IsNull(const char* k) { return k == nullptr; }
@@ -260,7 +261,7 @@ Node** Insert(Set* set, Node** outSlot, char* const* key, const uint32_t* value)
     temp.key = nullptr;                       // retail stores the zero FIRST
     if (*key) {
         temp.key = *key;
-        ++reinterpret_cast<int32_t*>(*key)[-1];
+        ++RtSystem::StringRefCount(*key);
     }
     temp.value = *value;
     // temp._pad0c deliberately left uninitialised: retail's store is a DWORD.
@@ -296,7 +297,7 @@ void SubtreeFree(void* ignoredThis, Node* node) {
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    StringReleaseInline(reinterpret_cast<char**>(node));
+    StringReleaseInline(reinterpret_cast<char**>(node));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }

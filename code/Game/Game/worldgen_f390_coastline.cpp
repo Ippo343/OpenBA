@@ -31,6 +31,7 @@
 //
 // Field offsets verified against Ghidra disassembly of Application-x64.exe.
 
+#include "Game/TerrainHeightfield.h"   // TerrainHeightfield, the stage declarations
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "collection/Collection.h"
@@ -617,7 +618,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
 // (hf+0x18); the heightmap at hf+0x08 is untouched. Later stamp stages (e910/ec50)
 // consume the ring to carve the heightmap; the height change happens THERE.
 // ============================================================
-extern "C" void wg_f390_coastline(void* hf) {
+void wg_f390_coastline(TerrainHeightfield* hf) {
     if (!hf) return;
 
     uint8_t* h = (uint8_t*)hf;

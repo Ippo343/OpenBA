@@ -85,19 +85,19 @@ Surface::~Surface() {}
 
 // ?Serialize@Surface@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x18010ca40)
 bool Surface::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 
     Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
+    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
                                               : rt::io::encoding_vtbl::kCreateWriter;
     using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
+    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     ser.readerWriter = rw;
 
     // The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
     // interchangeable (Serializer.h); SerializeUInt is +0x98.
-    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     rwc->SerializeUInt(_f20, nullptr);
     rwc->SerializeUInt(_f28, nullptr);
     rwc->SerializeUInt(_f24, nullptr);

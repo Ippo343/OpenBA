@@ -475,7 +475,7 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 // with different buffers and different bounds. `limitBytes` is retail's, in
 // BYTES of OUTPUT, and is deliberately not the destination's size.
 void Utf8ToUtf16Clamped(uint8_t* dst, int limitBytes, const char* src) {
-    const uint8_t* p   = reinterpret_cast<const uint8_t*>(src);
+    const uint8_t* p   = reinterpret_cast<const uint8_t*>(src);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
     const uint8_t* end = p + RetailStrLen(src);
     int total = 0;
     while (p < end) {
@@ -516,23 +516,23 @@ void System::Error::Display() {
     AppendClamped(text, 0x800, kFatalPrefix);
     AppendClamped(text, 0x800, _errorString);
 
-    Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wtext), 0x800, text);
+    Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wtext), 0x800, text);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
 
     // 0x1800c6299: nine bytes, copied as a qword plus a byte — not a strcpy.
     char     cap[9];
     uint16_t wcap[0x40];
     std::memcpy(cap, kCaption, sizeof(cap));
     std::memset(wcap, 0, sizeof(wcap));
-    Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wcap), 0x40, cap);
+    Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wcap), 0x40, cap);  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
 
     // 0x1800c63c3. Resolved at call time rather than linked, so the call is an
     // indirection an exe-side hook could take — see the ⚠ note in the banner.
     typedef int (__stdcall *MessageBoxWFn)(void*, const wchar_t*, const wchar_t*,
                                            unsigned);
-    if (MessageBoxWFn box = reinterpret_cast<MessageBoxWFn>(
+    if (MessageBoxWFn box = reinterpret_cast<MessageBoxWFn>(  // CAST-OK: win32
             RtSystem_ResolveUser32MessageBoxW())) {
-        box(nullptr, reinterpret_cast<const wchar_t*>(wtext),
-            reinterpret_cast<const wchar_t*>(wcap), 0x10);
+        box(nullptr, reinterpret_cast<const wchar_t*>(wtext),  // CAST-OK: win32
+            reinterpret_cast<const wchar_t*>(wcap), 0x10);  // CAST-OK: win32
     }
 
     DisplayStopIfRequested();

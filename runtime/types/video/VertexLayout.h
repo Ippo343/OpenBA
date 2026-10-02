@@ -144,7 +144,7 @@ public:
     // double-free shape B31_RULES records. The eight bytes are the same.
     // ============================================================
     struct Element {
-        void*    name;        // +0x00  System::String — the semantic name
+        char*    name;        // +0x00  System::String — the semantic name (B4 R-CORE: char*, H4)
         int32_t  stream;      // +0x08  vertex stream / D3D11 InputSlot
         int32_t  offset;      // +0x0c  byte offset within the stream
         Usage    usage;       // +0x10  never read by the DX11 backend

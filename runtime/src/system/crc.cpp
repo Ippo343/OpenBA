@@ -63,7 +63,7 @@ const uint32_t* CrcTable() {
 uint32_t System::CRC::Compute(const void* data, int count, uint32_t crc) {
     if (count > 0) {
         const uint32_t* const table = CrcTable();
-        const uint8_t* p = static_cast<const uint8_t*>(data);
+        const uint8_t* p = static_cast<const uint8_t*>(data);  // CAST-OK: byte_io
         uint64_t n = static_cast<uint32_t>(count);
         do {
             const uint8_t b = *p++;

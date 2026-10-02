@@ -19,6 +19,19 @@
 #include <cstdint>
 #include <cstddef>
 #include "graphics/Geometry.h"
+#include "Action/PathSearch.h"   // RawArray<T>
+
+class Weather;   // Game/Weather.h
+
+// One rain / snow particle (0x24, stride of the +0xE0 array; grown by 0x140025090).
+struct WeatherParticle {
+    float position[3];           // +0x00
+    float previousPosition[3];   // +0x0C (the streak's tail)
+    float velocity[3];           // +0x18
+};
+static_assert(sizeof(WeatherParticle) == 0x24, "WeatherParticle stride 0x24");
+static_assert(offsetof(WeatherParticle, previousPosition) == 0x0C, "WeatherParticle +0x0C");
+static_assert(offsetof(WeatherParticle, velocity) == 0x18, "WeatherParticle +0x18");
 
 class WeatherParticleGeometry final : public Graphics::Geometry {
 public:
@@ -33,15 +46,17 @@ public:
     void AddDrawItems(const Graphics::Scene& scene,
                       Graphics::Renderer& renderer) const override;   // [3] 0x1400d30b0
 
+    // 0x1400d3f80: binds the Weather descriptor, seeds the particles and indices.
+    void Configure(Weather* descriptor);
+
 
 public:
     float    _intensity;          // +0xC0  0..1
     float    _fadeDirection;      // +0xC4  +1 fade in, -1 fade out
-    void*    _descriptor;         // +0xC8  Weather*
-    void*    _indices;            // +0xD0  uint16 index block (6 per particle)
-    uint64_t _indexCount;         // +0xD8
-    void*    _particles;          // +0xE0  {data,
-    uint64_t _particleCountCap;   // +0xE8   count|cap}, stride 0x24
+    Weather* _descriptor;         // +0xC8  ExternalPtr<Weather> (0x1400d3f80 stores it)
+    RawArray<uint16_t> _indices;  // +0xD0  Array<uint16> (0x1400d3f80 sizes it by 0x14001c890), 6 per particle
+    RawArray<WeatherParticle> _particles;   // +0xE0  Array<WeatherParticle> (0x140025090)
+    // Raw fields (RawArray): ~WeatherParticleGeometry (0x1400d3c10) frees both by hand.
 };
 
 static_assert(sizeof(WeatherParticleGeometry) == 0xF0, "WeatherParticleGeometry is MemAlloc(0xf0)");

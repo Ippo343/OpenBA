@@ -96,7 +96,7 @@ using Face    = CollisionMesh::Face;
 // The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
 // POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
 IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 }
 
 // ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
@@ -256,14 +256,14 @@ CollisionMesh::~CollisionMesh() {
 // ?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x180108cd0)
 bool CollisionMesh::Serialize(void* streamv) {
     CollisionMesh* self = this;
-    Stream* stream = static_cast<Stream*>(streamv);
+    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 
     Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
+    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
                                               : rt::io::encoding_vtbl::kCreateWriter;
     using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
+    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     ser.readerWriter = rw;
 
     // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
@@ -281,14 +281,14 @@ bool CollisionMesh::Serialize(void* streamv) {
     rwc->SerializeInt(nA, nullptr);
     if (reading) PtsASetSize(&self->_ptsA, nA);
     for (int32_t i = 0; i < nA; ++i)
-        rwc->SerializeFloatArray(2, reinterpret_cast<float*>(&self->_ptsA._data[i]), nullptr);
+        rwc->SerializeFloatArray(2, &self->_ptsA._data[i].x, nullptr);
 
     // _ptsB
     int32_t nB = self->_ptsB._size;
     rwc->SerializeInt(nB, nullptr);
     if (reading) PtsBSetSize(&self->_ptsB, nB);
     for (int32_t i = 0; i < nB; ++i)
-        rwc->SerializeFloatArray(2, reinterpret_cast<float*>(&self->_ptsB._data[i]), nullptr);
+        rwc->SerializeFloatArray(2, &self->_ptsB._data[i].x, nullptr);
 
     // _faces
     int32_t nF = self->_faces._size;
@@ -306,7 +306,7 @@ bool CollisionMesh::Serialize(void* streamv) {
     const void* surfaceTypeInfo = &Collision2D::Surface::GetTypeInfo();   // retail: [0x1801fa820]
     for (int32_t i = 0; i < nS; ++i) {
         RtObject_ExternalPtr_Serialize(
-            reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]), &ser, surfaceTypeInfo);
+            reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]), &ser, surfaceTypeInfo);  // LEFT: ExternalPtr array serialized through the External** door (Object block)
     }
 
     if (rw != nullptr) {

@@ -194,15 +194,6 @@ inline int32_t HashBucket(int32_t hash, int32_t size) {
     return r;
 }
 
-// The `Collection::Array<T>` header, addressed as bytes. Every SetSize body
-// below reads and writes this triple in place.
-struct ArrayHdr {
-    uint8_t* _data;
-    int32_t  _size;
-    int32_t  _capacity;
-};
-static_assert(sizeof(ArrayHdr) == 16, "Collection::Array header must be 16 bytes");
-
 }  // namespace
 
 // ============================================================================
@@ -224,8 +215,7 @@ static_assert(sizeof(ArrayHdr) == 16, "Collection::Array header must be 16 bytes
 // `rtcoll::MemFree` performs the null test itself (0x1800c7ad0's first
 // instruction is `TEST RCX,RCX; JZ ret`), which is why the pointer is handed
 // over unguarded exactly as retail does.
-void ArrayDtorTransform(void* arrayHdr) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arrayHdr);
+void ArrayDtorTransform(TransformArray* a) {
     if (a->_data) rtcoll::MemFree(a->_data);
     a->_data = nullptr;
     a->_size = 0;
@@ -249,9 +239,7 @@ void ArrayDtorTransform(void* arrayHdr) {
 // The element copy is seven dwords (0x1c bytes) done as seven MOVs, not a
 // memcpy: Math::Transform is 0x1c bytes and the tail dword of a 0x20-byte copy
 // would be a write past the element.
-void* TransformArrayAssign(void* dstV, const void* srcV) {
-    ArrayHdr* dst = static_cast<ArrayHdr*>(dstV);
-    const ArrayHdr* src = static_cast<const ArrayHdr*>(const_cast<void*>(srcV));
+TransformArray* TransformArrayAssign(TransformArray* dst, const TransformArray* src) {
     if (dst == src) return dst;
 
     ArrayDtorTransform(dst);                       // CALL 0x18001c100
@@ -262,18 +250,13 @@ void* TransformArrayAssign(void* dstV, const void* srcV) {
     if (n > dst->_capacity) {
         dst->_capacity = n;
         if (n == oldSize + 1 && oldSize != 0) dst->_capacity = n * 3;
-        dst->_data = static_cast<uint8_t*>(
+        dst->_data = static_cast<Math::Transform*>(
             rtcoll::MemAlloc(static_cast<uint64_t>(dst->_capacity) * 0x1cu, 4));
     }
-    for (int32_t i = 0, off = 0; i < dst->_size; ++i, off += 0x1c) {
-        uint8_t* d = dst->_data + off;
+    for (int32_t i = 0; i < dst->_size; ++i) {
+        Math::Transform* d = dst->_data + i;
         if (d == nullptr) continue;                // retail's `ADD R8,RDX; JZ`
-        const uint8_t* s = src->_data + off;
-        for (int k = 0; k < 7; ++k) {
-            uint32_t w;
-            std::memcpy(&w, s + k * 4, 4);
-            std::memcpy(d + k * 4, &w, 4);
-        }
+        *d = src->_data[i];                        // seven dword moves
     }
     return dst;
 }
@@ -289,16 +272,15 @@ void* TransformArrayAssign(void* dstV, const void* srcV) {
 // `param_1` is dead: the body never reads RCX. It is kept in the signature
 // because the two call sites in 0x18007bc30 pass whatever happens to be in RCX
 // and the ABI has to match.
-void DestroyEntryTransforms(void* /*ignored*/, void* baseV, int count) {
+void DestroyEntryTransforms(void* /*ignored*/, Entry* base, int count) {
     if (count <= 0) return;
-    uint8_t* p = static_cast<uint8_t*>(baseV) + 0x20;
-    for (int i = 0; i < count; ++i, p += 0x48) {
-        void* buf;
-        std::memcpy(&buf, p, sizeof(buf));
+    Entry* e = base;
+    for (int i = 0; i < count; ++i, ++e) {
+        Math::Transform* buf = e->_transforms._data;
         if (buf) rtcoll::MemFree(buf);
-        uint64_t zero = 0;
-        std::memcpy(p, &zero, 8);
-        std::memcpy(p + 8, &zero, 8);
+        e->_transforms._data     = nullptr;        // the two qword stores at
+        e->_transforms._size     = 0;              // +0x20 and +0x28, as the
+        e->_transforms._capacity = 0;              // three named fields (H7)
     }
 }
 
@@ -314,30 +296,25 @@ void DestroyEntryTransforms(void* /*ignored*/, void* baseV, int count) {
 // this body, and are not written by operator= either. Any oracle that memcmps
 // a whole Entry has to skip them, or it fails 100% of cases and reads like a
 // catastrophic port defect (reference_oracle_must_not_compare_unwritten_bytes.md).
-void* EntryCopyConstruct(void* dstV, const void* srcV) {
-    uint8_t*       d = static_cast<uint8_t*>(dstV);
-    const uint8_t* s = static_cast<const uint8_t*>(srcV);
+Entry* EntryCopyConstruct(Entry* d, const Entry* s) {
+    d->_queryStamp = s->_queryStamp;               // +0x00..+0x0f, four dwords
+    d->_nextFree   = s->_nextFree;
+    d->_cellX      = s->_cellX;
+    d->_cellY      = s->_cellY;
+    d->_cellW      = s->_cellW;                    // +0x10, +0x12, two words
+    d->_cellH      = s->_cellH;
 
-    for (int k = 0; k < 4; ++k) {                  // +0x00..+0x0f, four dwords
-        uint32_t w; std::memcpy(&w, s + k * 4, 4); std::memcpy(d + k * 4, &w, 4);
-    }
-    uint16_t h;                                     // +0x10, +0x12, two words
-    std::memcpy(&h, s + 0x10, 2); std::memcpy(d + 0x10, &h, 2);
-    std::memcpy(&h, s + 0x12, 2); std::memcpy(d + 0x12, &h, 2);
+    d->_mesh = s->_mesh;                           // +0x18 _mesh
 
-    uint64_t q;                                     // +0x18 _mesh
-    std::memcpy(&q, s + 0x18, 8); std::memcpy(d + 0x18, &q, 8);
+    d->_transforms._data     = nullptr;            // +0x20 Array header, zeroed
+    d->_transforms._size     = 0;
+    d->_transforms._capacity = 0;
+    TransformArrayAssign(&d->_transforms, &s->_transforms);   // CALL 0x18001b360
 
-    q = 0;                                          // +0x20 Array header, zeroed
-    std::memcpy(d + 0x20, &q, 8);
-    std::memcpy(d + 0x28, &q, 8);
-    TransformArrayAssign(d + 0x20, s + 0x20);       // CALL 0x18001b360
-
-    std::memcpy(&q, s + 0x30, 8); std::memcpy(d + 0x30, &q, 8);  // _userData
-    uint32_t w;
-    std::memcpy(&w, s + 0x38, 4); std::memcpy(d + 0x38, &w, 4);  // _userValue
-    std::memcpy(&w, s + 0x3c, 4); std::memcpy(d + 0x3c, &w, 4);  // _userValue2
-    std::memcpy(&q, s + 0x40, 8); std::memcpy(d + 0x40, &q, 8);  // _callback
+    d->_userData   = s->_userData;
+    d->_userValue  = s->_userValue;
+    d->_userValue2 = s->_userValue2;
+    d->_callback   = s->_callback;
     return d;
 }
 
@@ -352,26 +329,21 @@ void* EntryCopyConstruct(void* dstV, const void* srcV) {
 // Note what it copies at +0x08: one QWORD covering _cellX and _cellY, then two
 // separate WORD moves at +0x10 and +0x12. That is why _pad14 stays untouched:
 // the qword store stops at +0x0f and the word stores are 2 bytes each.
-void* EntryAssign(void* dstV, const void* srcV) {
-    uint8_t*       d = static_cast<uint8_t*>(dstV);
-    const uint8_t* s = static_cast<const uint8_t*>(srcV);
+Entry* EntryAssign(Entry* d, const Entry* s) {
+    d->_queryStamp = s->_queryStamp;
+    d->_nextFree   = s->_nextFree;
+    d->_cellX      = s->_cellX;                    // one qword in retail (H7)
+    d->_cellY      = s->_cellY;
+    d->_cellW      = s->_cellW;
+    d->_cellH      = s->_cellH;
+    d->_mesh       = s->_mesh;
 
-    uint32_t w;
-    std::memcpy(&w, s + 0x00, 4); std::memcpy(d + 0x00, &w, 4);  // _queryStamp
-    std::memcpy(&w, s + 0x04, 4); std::memcpy(d + 0x04, &w, 4);  // _nextFree
-    uint64_t q;
-    std::memcpy(&q, s + 0x08, 8); std::memcpy(d + 0x08, &q, 8);  // _cellX,_cellY
-    uint16_t h;
-    std::memcpy(&h, s + 0x10, 2); std::memcpy(d + 0x10, &h, 2);  // _cellW
-    std::memcpy(&h, s + 0x12, 2); std::memcpy(d + 0x12, &h, 2);  // _cellH
-    std::memcpy(&q, s + 0x18, 8); std::memcpy(d + 0x18, &q, 8);  // _mesh
+    TransformArrayAssign(&d->_transforms, &s->_transforms);   // CALL 0x18001b360
 
-    TransformArrayAssign(d + 0x20, s + 0x20);                    // CALL 0x18001b360
-
-    std::memcpy(&q, s + 0x30, 8); std::memcpy(d + 0x30, &q, 8);
-    std::memcpy(&w, s + 0x38, 4); std::memcpy(d + 0x38, &w, 4);
-    std::memcpy(&w, s + 0x3c, 4); std::memcpy(d + 0x3c, &w, 4);
-    std::memcpy(&q, s + 0x40, 8); std::memcpy(d + 0x40, &q, 8);
+    d->_userData   = s->_userData;
+    d->_userValue  = s->_userValue;
+    d->_userValue2 = s->_userValue2;
+    d->_callback   = s->_callback;
     return d;
 }
 
@@ -389,17 +361,15 @@ void* EntryAssign(void* dstV, const void* srcV) {
 // `Math::Transform::AsTransform3`, the member, called by name (B3R).
 // `?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ` (0x18001fcd0).
 
-void* BoxTransform(void* outV, const void* transformV, const void* inBoxV) {
-    float* out = static_cast<float*>(outV);
-    const float* b = static_cast<const float*>(inBoxV);
-
+float* BoxTransform(float* out, const Math::Transform* transform, const float* b) {
     // Math::Transform3 AsTransform3(const Math::Transform&) — hidden return
-    // slot in RDX, `this` in RCX.
-    float m[12];
-    const Math::Transform3 t3 =
-        static_cast<const Math::Transform*>(transformV)->AsTransform3();   // 0x18001fcd0
-    static_assert(sizeof(t3) == sizeof(m), "Transform3 is the 12 floats of m");
-    std::memcpy(m, &t3, sizeof(m));
+    // slot in RDX, `this` in RCX. m[0..11] are the three basis vectors and the
+    // translation, in that order.
+    const Math::Transform3 t3 = transform->AsTransform3();   // 0x18001fcd0
+    const float m[12] = { t3.axisX.x, t3.axisX.y, t3.axisX.z,
+                          t3.axisY.x, t3.axisY.y, t3.axisY.z,
+                          t3.axisZ.x, t3.axisZ.y, t3.axisZ.z,
+                          t3.translation.x, t3.translation.y, t3.translation.z };
 
     const float ez = (b[5] - b[2]) * kHalf;
     const float ey = (b[4] - b[1]) * kHalf;
@@ -452,29 +422,24 @@ void* BoxTransform(void* outV, const void* transformV, const void* inBoxV) {
 // indices, giving a huge negative w/h. That is retail's behaviour and it is not
 // guarded here: retail's unguarded arithmetic is load-bearing and a mesh with
 // no transforms never reaches AddMesh in the first place.
-void* MeshBoundsXY(const void* descTailV, void* outRectV) {
-    const uint8_t* d = static_cast<const uint8_t*>(descTailV);
-    float* outRect = static_cast<float*>(outRectV);
-
+template <class Desc>
+float* MeshBoundsXY(const Desc* desc, float* outRect) {
     float minX = kBigPos, maxX = kBigNeg;
     float minY = kBigPos, maxY = kBigNeg;
     float minZ = kBigPos, maxZ = kBigNeg;
 
-    int32_t count;
-    std::memcpy(&count, d + 0x10, 4);               // _transforms._size
+    int32_t count = desc->_transforms._size;
     for (int32_t i = 0; i < count; ++i) {
-        const uint8_t* mesh;
-        std::memcpy(&mesh, d + 0x00, sizeof(mesh));
-        const uint8_t* nodes;
-        std::memcpy(&nodes, mesh + 0x38, sizeof(nodes));
-        const uint8_t* xforms;
-        std::memcpy(&xforms, d + 0x08, sizeof(xforms));
+        const PickingMesh* mesh = desc->_mesh;
+        const PickingMesh::SubMesh* nodes = mesh->_nodes._data;
+        const Math::Transform* xforms = desc->_transforms._data;
 
-        float box[6];
-        std::memcpy(box, nodes + static_cast<size_t>(i) * 0x80 + 0x28, sizeof(box));
+        const ::Box& aabb = nodes[i]._aabb;
+        const float box[6] = { aabb.min.x, aabb.min.y, aabb.min.z,
+                               aabb.max.x, aabb.max.y, aabb.max.z };
 
         float t[6];
-        BoxTransform(t, xforms + static_cast<size_t>(i) * 0x1c, box);
+        BoxTransform(t, xforms + i, box);
 
         if (!(maxZ > t[5])) maxZ = t[5];
         if (!(maxY > t[4])) maxY = t[4];
@@ -484,7 +449,7 @@ void* MeshBoundsXY(const void* descTailV, void* outRectV) {
         if (!(t[0] > minX)) minX = t[0];
 
         // re-read the loop bound exactly as retail does (`CMP EDI,[RSI+0x10]`)
-        std::memcpy(&count, d + 0x10, 4);
+        count = desc->_transforms._size;
     }
     (void)minZ; (void)maxZ;   // computed by retail, never stored
 
@@ -514,55 +479,47 @@ void* MeshBoundsXY(const void* descTailV, void* outRectV) {
 //
 // The `oldSize != 0` guard on the trebling is the one lane Q's negative control
 // removes; an append to an EMPTY array allocates exactly 1 in retail.
-void CellArraySetSize(void* arrayHdrV, int newSize, const void* fillV) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arrayHdrV);
+void CellArraySetSize(Collection::Array<Cell>* a, int newSize, const Cell* fill) {
     const int32_t oldSize = a->_size;
     if (newSize == oldSize) return;
 
-    uint8_t* old = a->_data;
+    Cell* old = a->_data;
     a->_size = newSize;
     if (newSize > a->_capacity) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-        a->_data = static_cast<uint8_t*>(
+        a->_data = static_cast<Cell*>(
             rtcoll::MemAlloc(static_cast<uint64_t>(a->_capacity) << 4, 4));
     }
     int32_t i = (old == a->_data) ? oldSize : 0;
     for (; i < newSize; ++i) {
-        uint8_t* dst = a->_data + static_cast<size_t>(i) * 16;
+        Cell* dst = a->_data + i;
         if (dst == nullptr) continue;
-        const uint8_t* src =
-            (i < oldSize) ? old + static_cast<size_t>(i) * 16
-                          : static_cast<const uint8_t*>(fillV);
-        for (int k = 0; k < 4; ++k) {
-            uint32_t w; std::memcpy(&w, src + k * 4, 4); std::memcpy(dst + k * 4, &w, 4);
-        }
+        const Cell* src = (i < oldSize) ? old + i : fill;
+        *dst = *src;                                // four dword moves
     }
     // Cell is trivially destructible, so there is no destroy tail — only the
     // free of the old buffer, and only when the buffer actually moved.
     if (old != a->_data && old != nullptr) rtcoll::MemFree(old);
 }
 
-void EntryArraySetSize(void* arrayHdrV, int newSize, const void* fillV) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arrayHdrV);
+void EntryArraySetSize(Collection::Array<Entry>* a, int newSize, const Entry* fill) {
     const int32_t oldSize = a->_size;
     if (newSize == oldSize) return;
 
-    uint8_t* old = a->_data;
+    Entry* old = a->_data;
     a->_size = newSize;
     if (newSize > a->_capacity) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-        a->_data = static_cast<uint8_t*>(
+        a->_data = static_cast<Entry*>(
             rtcoll::MemAlloc(static_cast<uint64_t>(a->_capacity) * 0x48u, 8));
     }
     int32_t i = (old == a->_data) ? oldSize : 0;
     for (; i < newSize; ++i) {
-        uint8_t* dst = a->_data + static_cast<size_t>(i) * 0x48;
+        Entry* dst = a->_data + i;
         if (dst == nullptr) continue;
-        const uint8_t* src =
-            (i < oldSize) ? old + static_cast<size_t>(i) * 0x48
-                          : static_cast<const uint8_t*>(fillV);
+        const Entry* src = (i < oldSize) ? old + i : fill;
         EntryCopyConstruct(dst, src);               // CALL 0x1800735c0
     }
     // Entry OWNS an Array<Transform>, so the tail has two arms. The buffer
@@ -573,9 +530,7 @@ void EntryArraySetSize(void* arrayHdrV, int newSize, const void* fillV) {
         DestroyEntryTransforms(a->_data, old, oldSize);
         if (old != nullptr) rtcoll::MemFree(old);
     } else if (oldSize > newSize) {
-        DestroyEntryTransforms(nullptr,
-                               old + static_cast<size_t>(newSize) * 0x48,
-                               oldSize - newSize);
+        DestroyEntryTransforms(nullptr, old + newSize, oldSize - newSize);
     }
 }
 
@@ -759,27 +714,25 @@ void AddToCells(Scene* scene, const int32_t* xy, uint16_t w, uint16_t h,
                 fill._entry = entryId;
                 fill._next  = oldHead;
 
-                ArrayHdr* a = reinterpret_cast<ArrayHdr*>(&scene->_links);
+                Collection::Array<Link>* a = &scene->_links;
                 const int32_t oldSize = a->_size;
                 const int32_t newSize = oldSize + 1;
                 if (newSize == oldSize) continue;   // retail's guard; never taken
 
-                uint8_t* old = a->_data;
+                Link* old = a->_data;
                 a->_size = newSize;
                 if (newSize > a->_capacity) {
                     a->_capacity = newSize;
                     if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = newSize * 3;
-                    a->_data = static_cast<uint8_t*>(
+                    a->_data = static_cast<Link*>(
                         rtcoll::MemAlloc(static_cast<uint64_t>(a->_capacity) << 3, 4));
                 }
                 int32_t i = (old == a->_data) ? oldSize : 0;
                 for (; i < newSize; ++i) {
-                    uint8_t* dst = a->_data + static_cast<size_t>(i) * 8;
+                    Link* dst = a->_data + i;
                     if (dst == nullptr) continue;
-                    const uint8_t* src =
-                        (i < oldSize) ? old + static_cast<size_t>(i) * 8
-                                      : reinterpret_cast<const uint8_t*>(&fill);
-                    uint64_t q; std::memcpy(&q, src, 8); std::memcpy(dst, &q, 8);
+                    const Link* src = (i < oldSize) ? old + i : &fill;
+                    *dst = *src;                    // one qword move
                 }
                 if (old != a->_data && old != nullptr) rtcoll::MemFree(old);
             } else {
@@ -814,45 +767,35 @@ int32_t EntryAlloc(Scene* scene, const AddDesc* desc, const int32_t* xy,
                    uint16_t w, uint16_t h) {
     const int32_t freeIdx = scene->_freeEntry;
 
-    uint8_t tmp[0x48];
-    // NOT memset: retail leaves +0x14..+0x17 holding whatever the frame held,
-    // and an oracle that compares those bytes fails 100% of calls. The probe
-    // excludes them; zeroing here would make the port differ from retail in a
-    // way nothing would ever report.
-    const int32_t inUse = -2;
-    std::memcpy(tmp + 0x04, &inUse, 4);
-
-    const uint8_t* d = reinterpret_cast<const uint8_t*>(desc);
-    uint8_t* entries = nullptr;
+    // NOT value-initialised: retail leaves +0x14..+0x17 holding whatever the
+    // frame held, and an oracle that compares those bytes fails 100% of calls.
+    // The probe excludes them; zeroing here would make the port differ from
+    // retail in a way nothing would ever report. `_transforms` is the one
+    // member with a constructor: its zeroed header is retail's "Array header
+    // zeroed first", and its destructor at the end of the scope is retail's
+    // closing CALL 0x18001c100 on the temporary.
+    Entry tmp;
+    tmp._nextFree = -2;
 
     if (freeIdx >= 0) {
-        entries = reinterpret_cast<uint8_t*>(scene->_entries._data);
-        int32_t next;
-        std::memcpy(&next, entries + static_cast<size_t>(freeIdx) * 0x48 + 4, 4);
-        scene->_freeEntry = next;
+        scene->_freeEntry = scene->_entries._data[freeIdx]._nextFree;
     }
 
-    const int32_t zero = 0;
-    std::memcpy(tmp + 0x00, &zero, 4);              // _queryStamp
-    std::memcpy(tmp + 0x08, &xy[0], 4);             // _cellX
-    std::memcpy(tmp + 0x0c, &xy[1], 4);             // _cellY
-    std::memcpy(tmp + 0x10, &w, 2);                 // _cellW
-    std::memcpy(tmp + 0x12, &h, 2);                 // _cellH
-    uint64_t q;
-    std::memcpy(&q, d + 0x00, 8); std::memcpy(tmp + 0x18, &q, 8);   // _mesh
-    q = 0;
-    std::memcpy(tmp + 0x20, &q, 8);                 // Array header zeroed first
-    std::memcpy(tmp + 0x28, &q, 8);
-    TransformArrayAssign(tmp + 0x20, d + 0x08);     // CALL 0x18001b360
-    std::memcpy(&q, d + 0x18, 8); std::memcpy(tmp + 0x30, &q, 8);   // _userData
-    uint32_t v;
-    std::memcpy(&v, d + 0x20, 4); std::memcpy(tmp + 0x38, &v, 4);   // _userValue
-    std::memcpy(&v, d + 0x24, 4); std::memcpy(tmp + 0x3c, &v, 4);   // _userValue2
-    std::memcpy(&q, d + 0x28, 8); std::memcpy(tmp + 0x40, &q, 8);   // _callback
+    tmp._queryStamp = 0;
+    tmp._cellX      = xy[0];
+    tmp._cellY      = xy[1];
+    tmp._cellW      = w;
+    tmp._cellH      = h;
+    tmp._mesh       = desc->_mesh;
+    TransformArrayAssign(&tmp._transforms, &desc->_transforms);   // CALL 0x18001b360
+    tmp._userData   = desc->_userData;
+    tmp._userValue  = desc->_userValue;
+    tmp._userValue2 = desc->_userValue2;
+    tmp._callback   = desc->_callback;
 
     int32_t result;
     if (freeIdx < 0) {
-        EntryArraySetSize(&scene->_entries, scene->_entries._size + 1, tmp);
+        EntryArraySetSize(&scene->_entries, scene->_entries._size + 1, &tmp);
         result = scene->_entries._size - 1;
     } else {
         // Retail RE-READS `_entries._data` here (`MOV RCX,[RSI+0x48]` at
@@ -861,12 +804,10 @@ int32_t EntryAlloc(Scene* scene, const AddDesc* desc, const int32_t* xy,
         // is TransformArrayAssign, which touches the temporary's own buffer —
         // but the re-read is reproduced rather than optimised away, because
         // "nothing can move it" is a claim about code this lane did not port.
-        entries = reinterpret_cast<uint8_t*>(scene->_entries._data);
-        EntryAssign(entries + static_cast<size_t>(freeIdx) * 0x48, tmp);
+        EntryAssign(&scene->_entries._data[freeIdx], &tmp);
         result = freeIdx;
     }
-    ArrayDtorTransform(tmp + 0x20);                 // CALL 0x18001c100
-    return result;
+    return result;                                  // ~tmp: CALL 0x18001c100
 }
 
 // ============================================================================
@@ -920,11 +861,10 @@ uint32_t GridAdd(Scene* scene, const AddDesc* desc) {
 // then write the new rectangle into the entry. Writing it first would unthread
 // from cells the entry was never in.
 void GridReindex(Scene* scene, uint32_t id) {
-    uint8_t* entries = reinterpret_cast<uint8_t*>(scene->_entries._data);
-    uint8_t* entry   = entries + static_cast<size_t>(id) * 0x48;
+    Entry* entry = &scene->_entries._data[id];
 
     float rect[4];
-    MeshBoundsXY(entry + 0x18, rect);
+    MeshBoundsXY(entry, rect);
 
     const float inv = scene->_invCellSize;
     const int32_t cellX = static_cast<int32_t>(rect[0] * inv);
@@ -937,23 +877,20 @@ void GridReindex(Scene* scene, uint32_t id) {
     const uint16_t h = static_cast<uint16_t>(
         static_cast<uint16_t>(maxY) - static_cast<uint16_t>(cellY) + 1);
 
-    int32_t oldX, oldY;
-    uint16_t oldW, oldH;
-    std::memcpy(&oldX, entry + 0x08, 4);
-    std::memcpy(&oldY, entry + 0x0c, 4);
-    std::memcpy(&oldW, entry + 0x10, 2);
-    std::memcpy(&oldH, entry + 0x12, 2);
+    const int32_t  oldX = entry->_cellX;
+    const int32_t  oldY = entry->_cellY;
+    const uint16_t oldW = entry->_cellW;
+    const uint16_t oldH = entry->_cellH;
 
     if (oldX == cellX && oldY == cellY && oldW == w && oldH == h) return;
 
     int32_t newXY[2] = { cellX, cellY };
-    GridUnthread(scene, reinterpret_cast<int32_t*>(entry + 0x08), oldW, oldH,
-                 static_cast<int32_t>(id));
+    GridUnthread(scene, &entry->_cellX, oldW, oldH, static_cast<int32_t>(id));
     AddToCells(scene, newXY, w, h, static_cast<int32_t>(id));
-    std::memcpy(entry + 0x08, &cellX, 4);
-    std::memcpy(entry + 0x0c, &cellY, 4);
-    std::memcpy(entry + 0x10, &w, 2);
-    std::memcpy(entry + 0x12, &h, 2);
+    entry->_cellX = cellX;
+    entry->_cellY = cellY;
+    entry->_cellW = w;
+    entry->_cellH = h;
 }
 
 // ============================================================================
@@ -1033,30 +970,26 @@ void GridUnthread(Scene* scene, int32_t* cellXY, uint16_t w, uint16_t h,
 // `_nextFree` is -1 in the temporary and is immediately overwritten by the
 // free-list push, so the -1 is never observable. It is written anyway.
 void GridFreeEntry(Scene* scene, uint32_t id) {
-    uint8_t tmp[0x48];
-    const int32_t zero = 0;
-    const int32_t minusOne = -1;
-    std::memcpy(tmp + 0x00, &zero, 4);              // _queryStamp
-    std::memcpy(tmp + 0x04, &minusOne, 4);          // _nextFree
-    uint64_t q = 0;
-    std::memcpy(tmp + 0x08, &q, 8);                 // _cellX, _cellY
-    std::memcpy(tmp + 0x10, &zero, 4);              // _cellW, _cellH
-    // +0x14..+0x17 deliberately NOT written — see the banner above.
-    std::memcpy(tmp + 0x18, &q, 8);                 // _mesh
-    std::memcpy(tmp + 0x20, &q, 8);                 // Array<Transform> header
-    std::memcpy(tmp + 0x28, &q, 8);
-    std::memcpy(tmp + 0x30, &q, 8);                 // _userData
-    std::memcpy(tmp + 0x38, &zero, 4);              // _userValue
-    // +0x3c (_userValue2) deliberately NOT written — see the banner above.
-    std::memcpy(tmp + 0x40, &q, 8);                 // _callback
+    {
+        Entry tmp;                                  // `_transforms` zeroed by its ctor
+        tmp._queryStamp = 0;
+        tmp._nextFree   = -1;
+        tmp._cellX      = 0;                        // one qword in retail (H7)
+        tmp._cellY      = 0;
+        tmp._cellW      = 0;                        // one dword in retail (H7)
+        tmp._cellH      = 0;
+        // +0x14..+0x17 deliberately NOT written — see the banner above.
+        tmp._mesh       = nullptr;
+        tmp._userData   = nullptr;
+        tmp._userValue  = 0;
+        // +0x3c (_userValue2) deliberately NOT written — see the banner above.
+        tmp._callback   = nullptr;
 
-    uint8_t* entries = reinterpret_cast<uint8_t*>(scene->_entries._data);
-    EntryAssign(entries + static_cast<size_t>(id) * 0x48, tmp);   // 0x18007b590
-    ArrayDtorTransform(tmp + 0x20);                               // 0x18001c100
+        EntryAssign(&scene->_entries._data[id], &tmp);   // 0x18007b590
+    }                                               // ~tmp: CALL 0x18001c100
 
-    entries = reinterpret_cast<uint8_t*>(scene->_entries._data);  // retail re-reads
-    const int32_t oldFree = scene->_freeEntry;
-    std::memcpy(entries + static_cast<size_t>(id) * 0x48 + 4, &oldFree, 4);
+    // retail re-reads `_entries._data`
+    scene->_entries._data[id]._nextFree = scene->_freeEntry;
     scene->_freeEntry = static_cast<int32_t>(id);
 }
 
@@ -1082,7 +1015,7 @@ void CellIterAdvance(CellIter* it) {
     for (;;) {
         // ---- advance the cursor, row-wrapping, until a non-empty cell -------
         int32_t c;
-        Scene*  s;
+        const Scene* s;
         int32_t x, y;
         for (;;) {
             it->curX = it->curX + 1;
@@ -1116,19 +1049,14 @@ void CellIterAdvance(CellIter* it) {
         const int32_t stamp = it->stamp;
         it->link = link;
         Link* links = s->_links._data;
-        int32_t entryStamp;
-        std::memcpy(&entryStamp,
-                    reinterpret_cast<uint8_t*>(s->_entries._data) +
-                        static_cast<size_t>(links[link]._entry) * 0x48, 4);
+        int32_t entryStamp = s->_entries._data[links[link]._entry]._queryStamp;
         if (entryStamp != stamp) return;            // an unstamped entry: done
 
         it->link = links[link]._next;
         while (it->link >= 0) {
             links = s->_links._data;
             const int32_t li = it->link;
-            std::memcpy(&entryStamp,
-                        reinterpret_cast<uint8_t*>(s->_entries._data) +
-                            static_cast<size_t>(links[li]._entry) * 0x48, 4);
+            entryStamp = s->_entries._data[links[li]._entry]._queryStamp;
             if (entryStamp != stamp) return;
             it->link = links[li]._next;
         }

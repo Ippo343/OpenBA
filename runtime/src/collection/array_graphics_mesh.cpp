@@ -73,16 +73,16 @@ constexpr uint32_t kInnerStride = 0x10;
 // ctor/dtor helpers B.3.2 left alone: the sub-object at +0x18/+0x38/+0x58/+0x78
 // IS a Video buffer, which is why the conversion applies here.
 void VertexBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformConstruct();  // B.3.5 bridge
+    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformConstruct();  // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 }
 void IndexBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
+    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 }
 void VertexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
+    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 }
 void IndexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
+    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 }
 
 // `Collection::Array<T>::operator=` for the 0x98 index array — retail
@@ -114,24 +114,24 @@ void InnerArrayAssign(void* dst, const void* src) {
 //
 // Returns `this` (`MOV RAX,RBX`).
 void* TriangleListCtor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
+    uint8_t* const d = static_cast<uint8_t*>(self);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;          // the String slot
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x461c4000u;   // 10000.0f
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;          // the String slot  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x461c4000u;   // 10000.0f  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 
     const uint32_t kBuffers[4] = { 0x18, 0x38, 0x58, 0x78 };
     for (int i = 0; i < 4; ++i) {
         uint8_t* const b = d + kBuffers[i];
-        *reinterpret_cast<uint32_t*>(b) = 0;
+        *reinterpret_cast<uint32_t*>(b) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
         b[4] = 0;
         if ((i & 1) == 0) VertexBufferPlatformConstruct(b);  // +0x18, +0x58
         else              IndexBufferPlatformConstruct(b);   // +0x38, +0x78
     }
 
-    *reinterpret_cast<uint64_t*>(d + 0x98) = 0;          // the Array header
-    *reinterpret_cast<uint64_t*>(d + 0xa0) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0xa8) = 1;
+    *reinterpret_cast<uint64_t*>(d + 0x98) = 0;          // the Array header  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    *reinterpret_cast<uint64_t*>(d + 0xa0) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    *reinterpret_cast<uint32_t*>(d + 0xa8) = 1;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
     return self;
 }
 
@@ -156,26 +156,26 @@ void* TriangleListCtor(void* self) {
 //
 // +0xa8 is copied last. +0xac..+0xaf are NEVER WRITTEN.
 void* TriangleListCopyCtor(void* dst, const void* src) {
-    uint8_t* const d = static_cast<uint8_t*>(dst);
-    const uint8_t* const s = static_cast<const uint8_t*>(src);
+    uint8_t* const d = static_cast<uint8_t*>(dst);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    const uint8_t* const s = static_cast<const uint8_t*>(src);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 
-    *reinterpret_cast<uint64_t*>(d) = 0;
-    uint8_t* const name = *reinterpret_cast<uint8_t* const*>(s);
+    *reinterpret_cast<uint64_t*>(d) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    uint8_t* const name = *reinterpret_cast<uint8_t* const*>(s);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
     if (name != nullptr) {
-        *reinterpret_cast<uint8_t**>(d) = name;
-        ++*(reinterpret_cast<int32_t*>(name) - 1);
+        *reinterpret_cast<uint8_t**>(d) = name;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+        ++*(reinterpret_cast<int32_t*>(name) - 1);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
     }
 
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
     for (uint32_t o = 0x18; o <= 0x90; o += 8)
-        *reinterpret_cast<uint64_t*>(d + o) = *reinterpret_cast<const uint64_t*>(s + o);
+        *reinterpret_cast<uint64_t*>(d + o) = *reinterpret_cast<const uint64_t*>(s + o);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 
-    *reinterpret_cast<uint64_t*>(d + 0x98) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0xa0) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x98) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    *reinterpret_cast<uint64_t*>(d + 0xa0) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
     InnerIndexArrayAssign(d + 0x98, s + 0x98);
 
-    *reinterpret_cast<uint32_t*>(d + 0xa8) = *reinterpret_cast<const uint32_t*>(s + 0xa8);
+    *reinterpret_cast<uint32_t*>(d + 0xa8) = *reinterpret_cast<const uint32_t*>(s + 0xa8);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
     return dst;
 }
 
@@ -210,20 +210,20 @@ void DestroyTriangleListRange(void*, uint8_t* base, int count) {
     for (int64_t i = 0; i < n; ++i) {
         uint8_t* const e = base + i * kTriStride;
 
-        uint8_t** const buf = reinterpret_cast<uint8_t**>(e + 0x98);
+        uint8_t** const buf = reinterpret_cast<uint8_t**>(e + 0x98);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
         if (*buf != nullptr) MemFree(*buf);
-        *reinterpret_cast<uint64_t*>(e + 0x98) = 0;          // unconditional
-        *reinterpret_cast<uint64_t*>(e + 0xa0) = 0;
+        *reinterpret_cast<uint64_t*>(e + 0x98) = 0;          // unconditional  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+        *reinterpret_cast<uint64_t*>(e + 0xa0) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
 
         IndexBufferPlatformDestruct(e + 0x78);
         VertexBufferPlatformDestruct(e + 0x58);
         IndexBufferPlatformDestruct(e + 0x38);
         VertexBufferPlatformDestruct(e + 0x18);
 
-        uint8_t** const nameSlot = reinterpret_cast<uint8_t**>(e);
+        uint8_t** const nameSlot = reinterpret_cast<uint8_t**>(e);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
         uint8_t* const name = *nameSlot;
         if (name == nullptr) continue;
-        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;
+        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
         --*refs;
         if (*refs != 0) {
             *nameSlot = nullptr;                             // MOV [RSI],R15 (== 0)
@@ -256,18 +256,22 @@ void InitTriangleList(uint8_t* p) { TriangleListCtor(p); }   // CALL 0x1800fefc0
 // calls 0x180014c70 over the top. So the init is the two zero stores alone and
 // the assign is zero-then-assign — which is why `AssignInnerArray` below repeats
 // them instead of delegating.
-void InitInnerArray(uint8_t* p) {
-    *reinterpret_cast<uint64_t*>(p + 0) = 0;
-    *reinterpret_cast<uint64_t*>(p + 8) = 0;
+static void InnerArrayInit(ArrayHdr* a) {
+    a->_data     = nullptr;
+    a->_size     = 0;                    // one qword (H7)
+    a->_capacity = 0;
 }
+void InitInnerArray(uint8_t* p) { InitAs<ArrayHdr, &InnerArrayInit>(p); }
 
 void AssignTriangleList(uint8_t* d, const uint8_t* s) { TriangleListCopyCtor(d, s); }
 
-void AssignInnerArray(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0) = 0;
-    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+static void InnerArrayCopy(ArrayHdr* d, const ArrayHdr* s) {
+    d->_data     = nullptr;
+    d->_size     = 0;                    // one qword (H7)
+    d->_capacity = 0;
     InnerArrayAssign(d, s);
 }
+void AssignInnerArray(uint8_t* d, const uint8_t* s) { AssignAs<ArrayHdr, &InnerArrayCopy>(d, s); }
 
 // ---------------------------------------------------------------------------
 // The specs. Field order is array_internal.h's:

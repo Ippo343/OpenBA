@@ -128,9 +128,13 @@ inline void v3_normalize(float out[3], const float a[3]) {
     }
 }
 
-inline float rd_f(const void* base, int off) {
-    return *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(base) + off);
-}
+// One billboard corner in the dynamic vertex stream (0x14): position, w = 0,
+// then the packed corner uv dword.
+struct ParticleVertex {
+    float    position[4];
+    uint32_t corner;
+};
+static_assert(sizeof(ParticleVertex) == 0x14, "the particle vertex stride is 0x14");
 
 } // namespace
 
@@ -157,28 +161,23 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
         return;
     }
 
-    void*    ctx = &videoCtx;
-    void*    camera = const_cast<Graphics::Camera*>(&cam);
     if (!_descriptor) return;                             // +0xC8 Weather descriptor
-    // The descriptor is a Weather (see WeatherParticle_Config, weather_particles.cpp).
-    const Weather* const desc = static_cast<const Weather*>(_descriptor);   // B.3.8 bridge
+    const Weather* const desc = _descriptor;
 
     const float boxSize      = desc->size;            // Weather +0x48
     const float particleSize = desc->particleSize;    // Weather +0x44
-    const bool  velStretch   = (*reinterpret_cast<const uint8_t*>(&desc->velocityStretch) != 0);   // +0x40
-    const int   particleCount = static_cast<int32_t>(_particleCountCap);   // +0xE8 count
-    const int   indexCount    = static_cast<int32_t>(_indexCount);         // +0xD8
-    const float intensity     = _intensity;                                // +0xC0
+    const bool  velStretch   = desc->velocityStretch; // +0x40
+    const int   particleCount = _particles.size;      // +0xE8 count
+    const int   indexCount    = _indices.size;        // +0xD8
+    const float intensity     = _intensity;           // +0xC0
 
     // (1) Copy the camera Transform3 (camera+0x64) and pull its basis columns.
-    uint8_t camXform[0x70];
-    ::new (static_cast<void*>(camXform)) Math::Transform3(
-        *reinterpret_cast<const Math::Transform3*>(reinterpret_cast<uint8_t*>(camera) + 0x64));
+    const Math::Transform3 camXform(cam._cameraToWorld);
 
-    const float col0[3] = { rd_f(camXform, 0x00), rd_f(camXform, 0x04), rd_f(camXform, 0x08) };
-    const float col1[3] = { rd_f(camXform, 0x0c), rd_f(camXform, 0x10), rd_f(camXform, 0x14) };
-    const float col2[3] = { rd_f(camXform, 0x18), rd_f(camXform, 0x1c), rd_f(camXform, 0x20) };
-    const float camPos[3] = { rd_f(camXform, 0x24), rd_f(camXform, 0x28), rd_f(camXform, 0x2c) };
+    const float col0[3] = { camXform.axisX.x, camXform.axisX.y, camXform.axisX.z };
+    const float col1[3] = { camXform.axisY.x, camXform.axisY.y, camXform.axisY.z };
+    const float col2[3] = { camXform.axisZ.x, camXform.axisZ.y, camXform.axisZ.z };
+    const float camPos[3] = { camXform.translation.x, camXform.translation.y, camXform.translation.z };
 
     const float boxHalf = boxSize * 0.5f;   // DAT_140172114 = 0.5f
 
@@ -197,21 +196,11 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     std::memset(tiles, 0, sizeof(tiles));
     int visibleTiles = 0;
 
-    // worldFrustum = GetFrustum(camera) * camXform
-    // B.3.5: `alignas` added because the retslot door's caller storage is now
-    // placement-new'd into as a real `Volume::Frustum` (0x64 bytes of float).
-    // The retail door wrote the same bytes here through RDX.
-    alignas(16) uint8_t frBuf[0x100];
-    uint8_t worldFrustum[0x100];
-    // B.3.5 bridge — ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ is a
-    // hidden-retslot door (B5-12). `Graphics::Camera::GetFrustum` is NON-VIRTUAL
-    // and returns `::Frustum` by value, so the door body moves to the call site:
-    // ONE construction, into the SAME caller storage the door was handed.
-    void* fr = ::new (static_cast<void*>(frBuf))
-        ::Frustum(reinterpret_cast<const Graphics::Camera*>(camera)->GetFrustum());   // B.3.5 bridge
-    RtVolume_Frustum_MulTransform3(static_cast<const ::Frustum*>(fr),
-                                   reinterpret_cast<::Frustum*>(worldFrustum),
-                                   reinterpret_cast<const Math::Transform3*>(camXform));
+    // worldFrustum = GetFrustum(camera) * camXform. `Graphics::Camera::GetFrustum`
+    // is NON-VIRTUAL and returns `::Frustum` by value (B5-12).
+    const ::Frustum fr = cam.GetFrustum();
+    ::Frustum worldFrustum;
+    RtVolume_Frustum_MulTransform3(&fr, &worldFrustum, &camXform);
 
     for (int i = -2; i < 3; ++i) {            // z (outer)
         for (int j = -2; j < 3; ++j) {        // y (middle)
@@ -221,13 +210,11 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                     boxSize * (float)j + snapped[1],
                     boxSize * (float)i + snapped[2],
                 };
-                // AABB = { center (min), center + box (max) } — 6 floats.
-                float aabb[6] = {
-                    center[0], center[1], center[2],
-                    center[0] + boxSize, center[1] + boxSize, center[2] + boxSize,
-                };
-                uint32_t r = RtVolume_Frustum_Contains(reinterpret_cast<const ::Frustum*>(worldFrustum),
-                                                       reinterpret_cast<const ::Box*>(aabb), 0x3f);
+                // AABB = { center (min), center + box (max) }.
+                ::Box aabb;
+                aabb.min.x = center[0];           aabb.min.y = center[1];           aabb.min.z = center[2];
+                aabb.max.x = center[0] + boxSize; aabb.max.y = center[1] + boxSize; aabb.max.z = center[2] + boxSize;
+                uint32_t r = RtVolume_Frustum_Contains(&worldFrustum, &aabb, 0x3f);
                 if (r != 0x40) {
                     if (visibleTiles < kTileCap) {
                         tiles[visibleTiles * 3 + 0] = center[0] + boxHalf;
@@ -241,12 +228,11 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     }
 
     // (4) Per-draw context state.
-    float color[4] = { 1.0f, 1.0f, 1.0f, intensity };
-    reinterpret_cast<Video::Context*>(ctx)->SetColor(
-        *reinterpret_cast<const Math::Vector4*>(color));   // B.3.5 bridge
+    const Math::Vector4 color(1.0f, 1.0f, 1.0f, intensity);
+    videoCtx.SetColor(color);
 
     const float g_fUVScale = 1.0f;            // 0x14017214c
-    reinterpret_cast<Video::Context*>(ctx)->SetInverseScale(   // B.3.5 bridge
+    videoCtx.SetInverseScale(
         -desc->nearFadeStart,                                     // -near_hi (+0x50, XOR sign flip)
         g_fUVScale / (desc->nearFade - desc->nearFadeStart),      // 1 / (near_lo - near_hi)
         -desc->farFade,                                           // -far_hi (+0x58)
@@ -255,10 +241,9 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     // (5) Build the per-particle billboard quads (4 verts * 0x14 bytes each).
     const int   kVtxStride = 0x14;
     const int   vtxCount   = particleCount * 4;
-    uint8_t*    staging    = nullptr;
+    ParticleVertex* staging = nullptr;
     if (vtxCount > 0) {
-        staging = reinterpret_cast<uint8_t*>(
-            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(vtxCount) * kVtxStride, 4));
+        staging = static_cast<ParticleVertex*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(vtxCount) * kVtxStride, 4));
     }
 
     // Camera-facing billboard axes (default; overwritten per-particle if stretch).
@@ -273,17 +258,17 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     static const uint32_t kCornerUV[4] = { 0x00000000u, 0x000000ffu, 0x0000ffffu, 0x0000ff00u };
 
     if (staging && particleCount > 0) {
-        uint8_t* particles = static_cast<uint8_t*>(_particles);   // +0xE0
-        uint8_t* out = staging;
+        const WeatherParticle* particles = _particles.data;   // +0xE0
+        ParticleVertex* out = staging;
         for (int p = 0; p < particleCount; ++p) {
-            const float* pbase = reinterpret_cast<const float*>(particles + (size_t)p * 0x24);
-            const float* pos   = pbase;                    // +0x00 pos
-            const float* alt   = velStretch ? (pbase + 3)  // +0x0c prevPos
-                                            : pbase;        // else pos
+            const WeatherParticle& particle = particles[p];
+            const float* pos   = particle.position;                 // +0x00 pos
+            const float* alt   = velStretch ? particle.previousPosition   // +0x0c prevPos
+                                            : particle.position;        // else pos
 
             if (velStretch) {
                 // Velocity-oriented axes: velocity x col1, then that x col1.
-                const float* vel = pbase + 6;              // +0x18 velocity
+                const float* vel = particle.velocity;               // +0x18 velocity
                 float perpA[3], perpAn[3], perpB[3], perpBn[3];
                 v3_cross(perpA, vel, col1);
                 v3_normalize(perpAn, perpA);
@@ -305,63 +290,55 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
 
             const float* verts[4] = { v0, v1, v2, v3 };
             for (int q = 0; q < 4; ++q) {
-                float*    fout = reinterpret_cast<float*>(out);
-                uint32_t* uout = reinterpret_cast<uint32_t*>(out);
-                fout[0] = verts[q][0];
-                fout[1] = verts[q][1];
-                fout[2] = verts[q][2];
-                fout[3] = 0.0f;
-                uout[4] = kCornerUV[q];
-                out += kVtxStride;
+                out->position[0] = verts[q][0];
+                out->position[1] = verts[q][1];
+                out->position[2] = verts[q][2];
+                out->position[3] = 0.0f;
+                out->corner = kCornerUV[q];
+                ++out;
             }
         }
     }
 
     // (6) Instanced submit, batched by the max dynamic-instance count.
-    int batch = reinterpret_cast<const Video::Context*>(ctx)
-                    ->GetMaxDynamicInstances(vtxCount, kVtxStride, indexCount);   // B.3.5 bridge
+    int batch = videoCtx.GetMaxDynamicInstances(vtxCount, kVtxStride, indexCount);
     if (visibleTiles < batch) batch = visibleTiles;
 
     if (visibleTiles > 0) {
-        const float mcol0[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
-        const float mcol1[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
-        const float mcol2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+        const Math::Vector4 mcol0(1.0f, 0.0f, 0.0f, 0.0f);
+        const Math::Vector4 mcol1(0.0f, 1.0f, 0.0f, 0.0f);
+        const Math::Vector4 mcol2(0.0f, 0.0f, 1.0f, 0.0f);
 
         int tileBase = 0;
         do {
             if (batch > 0) {
                 for (int t = 0; t < batch; ++t) {
-                    float matrix[16];
-                    // Translation matrix: identity basis + tile cell-center.
-                    // Matrix::Matrix reads a 4th float from `pos`; the tiles[]
-                    // buffer is padded/zeroed so that read is well-defined.
-                    *reinterpret_cast<Math::Matrix*>(matrix) = Math::Matrix(
-                        *reinterpret_cast<const Math::Vector4*>(mcol0),
-                        *reinterpret_cast<const Math::Vector4*>(mcol1),
-                        *reinterpret_cast<const Math::Vector4*>(mcol2),
-                        *reinterpret_cast<const Math::Vector4*>(&tiles[(tileBase + t) * 3]));
-                    reinterpret_cast<Video::Context*>(ctx)->SetTransform(
-                        t, *reinterpret_cast<const Math::Matrix*>(matrix));   // B.3.5 bridge
+                    // Translation matrix: identity basis + tile cell-center. The
+                    // fourth column's w is the next float of tiles[] (retail reads a
+                    // Vector4 at the Vector3); the buffer is padded and zeroed.
+                    const float* tile = &tiles[(tileBase + t) * 3];
+                    const Math::Matrix matrix(mcol0, mcol1, mcol2,
+                                              Math::Vector4(tile[0], tile[1], tile[2], tile[3]));
+                    videoCtx.SetTransform(t, matrix);
                 }
             }
-            if (reinterpret_cast<Video::Context*>(ctx)->BeginInstancedIndexedVertices(
-                    vtxCount, kVtxStride, indexCount, batch)) {   // B.3.5 bridge
-                int    stride = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(ctx) + 0x20e8);
-                void*& vtxCur = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ctx) + 0x20e0);
-                void*& idxCur = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ctx) + 0x20f0);
+            if (videoCtx.BeginInstancedIndexedVertices(vtxCount, kVtxStride, indexCount, batch)) {
+                int stride = videoCtx._dynamicVertexStride;   // +0x20e8
 
                 // Copy the whole particle vertex block into the dynamic vertex cursor.
                 size_t vtxBytes = static_cast<size_t>(vtxCount) * stride;
-                std::memcpy(vtxCur, staging, vtxBytes);
-                vtxCur = reinterpret_cast<uint8_t*>(vtxCur) + vtxBytes;
+                std::memcpy(videoCtx._dynamicVertexCursor, staging, vtxBytes);   // +0x20e0
+                videoCtx._dynamicVertexCursor += vtxBytes;
 
                 // Copy the shared particle index buffer into the dynamic index cursor.
+                // LEFT: Context +0x20f0 (the index cursor) is `uint64_t _unknown20f0`
+                // in R-VIDEO's header.
+                void*& idxCur = *reinterpret_cast<void**>(&videoCtx._unknown20f0);
                 size_t idxBytes = static_cast<size_t>(indexCount) * 2;
-                std::memcpy(idxCur, _indices, idxBytes);   // +0xD0
+                std::memcpy(idxCur, _indices.data, idxBytes);   // +0xD0
                 idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;
 
-                reinterpret_cast<Video::Context*>(ctx)
-                    ->EndInstancedIndexedVertices(0);   // B.3.5 bridge
+                videoCtx.EndInstancedIndexedVertices(0);
             }
             tileBase += batch;
         } while (tileBase < visibleTiles);
