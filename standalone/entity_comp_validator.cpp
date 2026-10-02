@@ -57,14 +57,14 @@ bool Readable(const void* p, size_t n) {
     if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
     if (mbi.State != MEM_COMMIT) return false;
     if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const uint8_t* end = static_cast<const uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;
-    return static_cast<const uint8_t*>(p) + n <= end;
+    const uint8_t* end = static_cast<const uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;  // CAST-OK: win32
+    return static_cast<const uint8_t*>(p) + n <= end;  // CAST-OK: crash_walk
 }
 
 // A live object: readable, and its vtable pointer points into a mapped image.
 bool LooksLikeObject(const void* p) {
     if (!Readable(p, 0x18)) return false;
-    const void* vt = *reinterpret_cast<void* const*>(p);
+    const void* vt = *reinterpret_cast<void* const*>(p);  // CAST-OK: crash_walk
     if (!Readable(vt, 8)) return false;
     MEMORY_BASIC_INFORMATION mbi;
     if (!VirtualQuery(vt, &mbi, sizeof(mbi))) return false;
@@ -78,8 +78,8 @@ bool LooksLikeObject(const void* p) {
 constexpr int32_t kMaxSaneObjId = 1 << 24;
 bool IdLooksSane(const void* obj) {
     if (!Readable(obj, 0x10)) return false;
-    const int32_t id = *reinterpret_cast<const int32_t*>(
-        reinterpret_cast<const uint8_t*>(obj) + 8);
+    // Dword 2 of a probed block (Object::Internal's id when it is one).
+    const int32_t id = reinterpret_cast<const int32_t*>(obj)[2];  // CAST-OK: crash_walk
     return id >= -1 && id < kMaxSaneObjId;
 }
 
@@ -88,14 +88,14 @@ const char* TypeNameOf(const void* obj) {
     // Probe that the table word holding Object::Base::Type() (retail slot 2,
     // +0x10) is readable -- the slot is taken from the member (object/VSlot.h)
     // -- then call Type() by name.
-    const uintptr_t vt = *reinterpret_cast<const uintptr_t*>(obj);
+    const uintptr_t vt = *reinterpret_cast<const uintptr_t*>(obj);  // CAST-OK: crash_walk
     const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
-    if (!Readable(reinterpret_cast<void*>(vt + typeSlot * sizeof(void*)), 8)) return nullptr;
+    if (!Readable(reinterpret_cast<void*>(vt + typeSlot * sizeof(void*)), 8)) return nullptr;  // CAST-OK: crash_walk
     // The validator probes UNTRUSTED memory (a slot that may hold garbage), so
     // an empty table word is still refused before the call.
     if (!::Object::SlotAddressOf(obj, &::Object::Base::Type)) return nullptr;
-    return ::Object::GetTypeNameById(
-        static_cast<const ::Object::Base*>(obj)->Type());   // B.3.x bridge
+    // The probed block passed both tests: ask it its type.
+    return ::Object::GetTypeNameById(static_cast<const ::Object::Base*>(obj)->Type());  // CAST-OK: crash_walk
 }
 
 } // namespace
@@ -111,7 +111,7 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
     static bool s_selftest = false;
     if (!s_selftest) {
         s_selftest = true;
-        const bool bogus = LooksLikeObject(reinterpret_cast<void*>(0xAAAAAAAAull));
+        const bool bogus = LooksLikeObject(reinterpret_cast<void*>(0xAAAAAAAAull));  // CAST-OK: ptr_int
         const bool real  = LooksLikeObject(entity);
         fprintf(stderr, "[CompValidate] self-test: bogus(0xAAAAAAAA)=%d (want 0)  "
                         "realEntity=%d (want 1) -> detector %s\n",
@@ -120,6 +120,8 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
         fflush(stderr);
     }
 
+    // LEFT (both walks below): the IBP array arrives as void* through
+    // componententity.cpp's local declaration of this entry (ENTITY block).
     int bad = 0;
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(
@@ -150,21 +152,21 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(
             reinterpret_cast<uint8_t*>(ibpArr) + static_cast<size_t>(i) * 8);
-        void* obj = Readable(slot, 8) ? *slot : reinterpret_cast<void*>(~0ull);
+        void* obj = Readable(slot, 8) ? *slot : reinterpret_cast<void*>(~0ull);  // CAST-OK: ptr_int
         const char* n = obj ? TypeNameOf(obj) : "(null)";
         // Dump the two words IBP::Serialize would read off a bad pointer — those
         // are the exact numbers that end up in the stream as objId/typeId.
         if (obj && !n && Readable(obj, 0x10)) {
             fprintf(stderr, "[CompValidate]   slot %2d = %p  *** NOT AN OBJECT *** "
                     "wouldWrite objId=%08x typeId=%08x\n", i, obj,
-                    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(obj) + 8),
-                    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(obj) + 0xC));
+                    reinterpret_cast<const uint32_t*>(obj)[2],  // CAST-OK: crash_walk
+                    reinterpret_cast<const uint32_t*>(obj)[3]);  // CAST-OK: crash_walk
         } else if (obj && !n) {
             fprintf(stderr, "[CompValidate]   slot %2d = %p  *** NOT AN OBJECT (unreadable) ***\n",
                     i, obj);
         } else {
             const int32_t oid = (obj && Readable(obj, 0x10))
-                ? *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(obj) + 8) : 0;
+                ? reinterpret_cast<const int32_t*>(obj)[2] : 0;  // CAST-OK: crash_walk
             fprintf(stderr, "[CompValidate]   slot %2d = %p  %-28s objId=%d%s\n",
                     i, obj, n ? n : "(null)", oid,
                     (obj && !IdLooksSane(obj))
