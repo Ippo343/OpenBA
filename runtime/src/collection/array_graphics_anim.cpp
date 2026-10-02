@@ -64,6 +64,8 @@
 #include "array_internal.h"
 #include "array_destroy_internal.h"
 #include "../../types/graphics/AnimationState.h"   // B3R RT-VG: the Rt_* declarations
+#include "../../types/graphics/AnimationManager.h" // B.4: AnimationManager::Instance
+#include "../../types/graphics/GraphicsMesh.h"     // B.4: GraphicsMesh::Node
 
 // The three element copy constructors live with the class they belong to, in
 // runtime/src/graphics/animationstate.cpp. They are reached by name and not by
@@ -83,22 +85,14 @@ namespace gfxanim {
 // the stride and a memcpy would erase it from the source.
 
 // 0x18001b700's inner loop and 0x18005c8a0's grow arm: seven qwords.
-void Assign38Q(uint8_t* d, const uint8_t* s) {
-    uint64_t* dq = reinterpret_cast<uint64_t*>(d);
-    const uint64_t* sq = reinterpret_cast<const uint64_t*>(s);
-    for (int i = 0; i < 7; ++i) dq[i] = sq[i];
-}
+void Assign38Q(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 7>>(d, s); }
 
 // 0x18001b810's inner loop and 0x18005ac50's grow arm: fourteen dwords. The
 // SAME 0x38 stride as Assign38Q above and a DIFFERENT instantiation — the
 // element is two 0x1c Math::Transforms, whose alignment is 4, and retail
 // asks the allocator for 4 here and for 8 there. Merging the two by stride
 // would change the alignment argument of every allocation this array makes.
-void Assign38D(uint8_t* d, const uint8_t* s) {
-    uint32_t* dd = reinterpret_cast<uint32_t*>(d);
-    const uint32_t* sd = reinterpret_cast<const uint32_t*>(s);
-    for (int i = 0; i < 14; ++i) dd[i] = sd[i];
-}
+void Assign38D(uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 14>>(d, s); }
 
 void AssignMeshNode(uint8_t* d, const uint8_t* s)     { RtGraphics_MeshNode_CopyCtor(d, s); }
 void AssignAnimState(uint8_t* d, const uint8_t* s)    { RtGraphics_AnimState_CopyCtor(d, s); }
@@ -110,66 +104,82 @@ void AssignAnimInstance(uint8_t* d, const uint8_t* s) { RtGraphics_AnimInstance_
 // ---------------------------------------------------------------------------
 
 // 0x18005aa30. Two identity Math::Transforms; +0x08 and +0x44 NOT written.
-void InitMeshNode(uint8_t* p) {
-    *reinterpret_cast<uint64_t*>(p + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x0c) = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x14) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0x3f800000ull;   // +0x18 = 1.0f, +0x1c = 0
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x34) = 0x3f800000ull;   // +0x34 = 1.0f, +0x38 = 0
-    *reinterpret_cast<uint64_t*>(p + 0x3c) = 0;
+// The identity Math::Transform as retail stores it: a qword, a dword, then the
+// qword 0x3f800000 that is rotation.w = 1.0f AND translation.x = 0 (H7), then
+// a qword over translation.y / .z.
+static void IdentityTransform(Math::Transform& t) {
+    t.rotation.x    = 0.0f;
+    t.rotation.y    = 0.0f;
+    t.rotation.z    = 0.0f;
+    t.rotation.w    = 1.0f;
+    t.translation.x = 0.0f;
+    t.translation.y = 0.0f;
+    t.translation.z = 0.0f;
 }
+static void MeshNodeInit(Graphics::GraphicsMesh::Node* n) {
+    n->_name.data = nullptr;          // +0x00
+    // +0x08 (the parent index) NOT written
+    IdentityTransform(n->_local);     // +0x0c .. +0x27
+    IdentityTransform(n->_bind);      // +0x28 .. +0x43
+    // +0x44 NOT written
+}
+void InitMeshNode(uint8_t* p) { InitAs<Graphics::GraphicsMesh::Node, &MeshNodeInit>(p); }
 
 // 0x18005b1e0. A zeroed AnimationState: the bool, then the three Array headers
 // and the Vector3 between them, all zero. +0x01..+0x07 not written.
-void InitAnimState(uint8_t* p) {
-    p[0] = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x38) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 0;
+static void AnimStateInit(Graphics::AnimationState* a) {
+    a->_needsUniqueCopy     = false;  // the bool; +0x01..+0x07 not written
+    a->_layers._data        = nullptr;
+    a->_layers._size        = 0;      // one qword (H7)
+    a->_layers._capacity    = 0;
+    a->_rootOffset.x        = 0.0f;   // one qword (H7)
+    a->_rootOffset.y        = 0.0f;
+    a->_rootOffset.z        = 0.0f;   // dword
+    a->_pose._data          = nullptr;
+    a->_pose._size          = 0;
+    a->_pose._capacity      = 0;
+    a->_nodes._data         = nullptr;
+    a->_nodes._size         = 0;
+    a->_nodes._capacity     = 0;
 }
+void InitAnimState(uint8_t* p) { InitAs<Graphics::AnimationState, &AnimStateInit>(p); }
 
 // 0x18005c8a0. The -1 is ONE qword covering BOTH ints at +0x08 and +0x0c, i.e.
 // clipIndex = -1 and handle = -1. +0x10 (speed) and +0x31..+0x37 not written.
-void InitAnimLayer(uint8_t* p) {
-    *reinterpret_cast<uint64_t*>(p + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0xffffffffffffffffull;
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
-    p[0x30] = 0;
+static void AnimLayerInit(Graphics::AnimationState::Layer* l) {
+    l->_group                 = nullptr;
+    l->_clipIndex             = -1;   // ONE qword of -1 over both ints (H7)
+    l->_handle                = -1;
+    // +0x10 (speed) not written
+    l->_time._ticks           = 0;
+    l->_fadeLength._ticks     = 0;
+    l->_fadeRemaining._ticks  = 0;
+    l->_restarted             = false;
 }
+void InitAnimLayer(uint8_t* p) { InitAs<Graphics::AnimationState::Layer, &AnimLayerInit>(p); }
 
 // 0x18005c3d0 / 0x18005be30's no-fill arm. Covers the whole 0x30.
-void InitAnimInstance(uint8_t* p) {
-    *reinterpret_cast<uint64_t*>(p + 0x00) = 0;
-    *reinterpret_cast<int32_t*>(p + 0x08)  = -1;
-    *reinterpret_cast<int32_t*>(p + 0x0c)  = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
+static void AnimInstanceInit(Graphics::AnimationManager::Instance* i) {
+    i->_group            = nullptr;
+    i->_animIndex        = -1;
+    i->_refCount         = 0;
+    i->_nodes._data      = nullptr;
+    i->_nodes._size      = 0;         // one qword (H7)
+    i->_nodes._capacity  = 0;
+    i->_states._data     = nullptr;
+    i->_states._size     = 0;         // one qword (H7)
+    i->_states._capacity = 0;
 }
+void InitAnimInstance(uint8_t* p) { InitAs<Graphics::AnimationManager::Instance, &AnimInstanceInit>(p); }
 
 // 0x18005ac50. Two identity Math::Transforms back to back; covers the whole
 // 0x38.
-void InitInterpTransform(uint8_t* p) {
-    *reinterpret_cast<uint64_t*>(p + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x0c) = 0x3f800000ull;   // +0x0c = 1.0f, +0x10 = 0
-    *reinterpret_cast<uint64_t*>(p + 0x14) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x1c) = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x24) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0x3f800000ull;   // +0x28 = 1.0f, +0x2c = 0
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;
+using InterpTransform = Graphics::InterpolatedState<Math::Transform>;
+static void InterpTransformInit(InterpTransform* s) {
+    IdentityTransform(s->_current);   // +0x00 .. +0x1b
+    IdentityTransform(s->_previous);  // +0x1c .. +0x37
 }
+void InitInterpTransform(uint8_t* p) { InitAs<InterpTransform, &InterpTransformInit>(p); }
 
 // ---------------------------------------------------------------------------
 // Element destruction
@@ -198,22 +208,25 @@ void DestroyAnimStateRange(void*, uint8_t* base, int count) {
 //
 // The zeroing is FOUR dword stores over the header, unconditional, including
 // when the buffer was already null — exactly Body A's shape one level up.
-void DestroyInstanceRange(void*, uint8_t* base, int count) {
+static void InstanceDestroy(Graphics::AnimationManager::Instance* base, int count) {
     if (count <= 0) return;
     const int64_t n = static_cast<int64_t>(count);
     for (int64_t i = 0; i < n; ++i) {
-        uint8_t* e = base + i * 0x30;
+        Graphics::AnimationManager::Instance* e = base + i;
 
-        ArrayHdr* states = reinterpret_cast<ArrayHdr*>(e + 0x20);
-        FreeInnerArraysCore(states->_data, states->_size, &kD_InnerArr3_48);
-        if (states->_data) MemFree(states->_data);
-        states->_data = nullptr; states->_size = 0; states->_capacity = 0;
+        Collection::Array<Graphics::AnimationState>& states = e->_states;
+        FreeInnerArraysCore(reinterpret_cast<uint8_t*>(states._data), states._size, &kD_InnerArr3_48);  // CAST-OK: elem_stride
+        if (states._data) MemFree(states._data);
+        states._data = nullptr; states._size = 0; states._capacity = 0;
 
-        ArrayHdr* nodes = reinterpret_cast<ArrayHdr*>(e + 0x10);
-        ReleaseStringsCore(nodes->_data, nodes->_size, &kD_Str_48);
-        if (nodes->_data) MemFree(nodes->_data);
-        nodes->_data = nullptr; nodes->_size = 0; nodes->_capacity = 0;
+        Collection::Array<Graphics::GraphicsMesh::Node>& nodes = e->_nodes;
+        ReleaseStringsCore(reinterpret_cast<uint8_t*>(nodes._data), nodes._size, &kD_Str_48);  // CAST-OK: elem_stride
+        if (nodes._data) MemFree(nodes._data);
+        nodes._data = nullptr; nodes._size = 0; nodes._capacity = 0;
     }
+}
+void DestroyInstanceRange(void* ignoredThis, uint8_t* base, int count) {
+    DestroyAs<Graphics::AnimationManager::Instance, &InstanceDestroy>(ignoredThis, base, count);
 }
 
 // ---------------------------------------------------------------------------
@@ -367,8 +380,8 @@ using namespace rtcoll::gfxanim;
 // ---- J1 / J2: ~Array ------------------------------------------------------
 void* Rt_ArrayDtor_18001c480(void* a) { rtcoll::AsArray<&kSpec_AnimLayer>(a)->~Array(); return nullptr; }
 void* Rt_ArrayDtor_18001c550(void* a) { rtcoll::AsArray<&kSpec_InterpTransform>(a)->~Array(); return nullptr; }
-void* Rt_ArrayDtor_180014090(void* a) { Clear_180014090(static_cast<ArrayHdr*>(a)); return nullptr; }
-void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a)); return nullptr; }
+void* Rt_ArrayDtor_180014090(void* a) { Clear_180014090(static_cast<ArrayHdr*>(a)); return nullptr; }  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a)); return nullptr; }  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
 
 // ---- the three per-element destroy helpers --------------------------------
 // Retail's arity, including the `this` every one of them spills to the shadow
@@ -399,19 +412,19 @@ void Rt_SetSize_18005be30(void* a, int n, const void* fill) {
 
 // ---- J4: operator= --------------------------------------------------------
 void* Rt_ArrayAssign_180013960(void* d, const void* s) {   // Array<GraphicsMesh::Node>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
                            0x48, 8, &Clear_180014090, &AssignMeshNode);
 }
 void* Rt_ArrayAssign_18005b130(void* d, const void* s) {   // Array<AnimationState>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
                            0x48, 8, &Clear_18005bbb0, &AssignAnimState);
 }
 void* Rt_ArrayAssign_18001b700(void* d, const void* s) {   // Array<AnimationState::Layer>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
                            0x38, 8, &Clear_18001c480, &Assign38Q);
 }
 void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<InterpolatedState<Transform>>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
                            0x38, 4, &Clear_18001c550, &Assign38D);
 }
 

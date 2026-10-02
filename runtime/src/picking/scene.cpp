@@ -193,9 +193,9 @@ void TransformInverse(const ::Transform* self, ::Transform* ret) {
 inline float RtSqrtf(float v) { return __builtin_sqrtf(v); }
 
 // Scene+0x48 accessors, spelled once so a wrong stride cannot be written twice.
-inline Entry* EntryAt(Picking::Scene* s, int32_t idx) { return &s->_entries[idx]; }
-inline int32_t LinkEntry(Picking::Scene* s, int32_t link) { return s->_links[link]._entry; }
-inline int32_t LinkNext(Picking::Scene* s, int32_t link)  { return s->_links[link]._next; }
+inline Entry* EntryAt(const Picking::Scene* s, int32_t idx) { return &s->_entries._data[idx]; }
+inline int32_t LinkEntry(const Picking::Scene* s, int32_t link) { return s->_links[link]._entry; }
+inline int32_t LinkNext(const Picking::Scene* s, int32_t link)  { return s->_links[link]._next; }
 
 }  // namespace
 
@@ -232,10 +232,7 @@ void Scene::SetMeshUserData(uint32_t id, void* userData, int32_t userValue,
 // them — that is retail's behaviour and is reproduced here.
 // ============================================================================
 void Scene::SetTransform(uint32_t id, const Math::Transform& transform) {
-    uint32_t* dst = reinterpret_cast<uint32_t*>(_entries[id]._transforms.GetData());
-    const uint32_t* src = reinterpret_cast<const uint32_t*>(&transform);
-    dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = src[3];
-    dst[4] = src[4]; dst[5] = src[5]; dst[6] = src[6];
+    _entries[id]._transforms.GetData()[0] = transform;   // seven dword moves
     rtpickgrid::GridReindex(this, id);                  // CALL 0x1800724d0
 }
 
@@ -275,12 +272,7 @@ uint32_t Scene::AddMesh(Object::ExternalPtr<PickingMesh> mesh, const Math::Trans
     ::Transform* dst = desc._transforms.GetData();
 
     // Node 0 is the root: the caller's transform, copied dword for dword.
-    {
-        uint32_t* d = reinterpret_cast<uint32_t*>(dst);
-        const uint32_t* s = reinterpret_cast<const uint32_t*>(&root);
-        d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
-        d[4] = s[4]; d[5] = s[5]; d[6] = s[6];
-    }
+    dst[0] = root;                                      // seven dword moves
 
     // worldOf(i) = worldOf(parent(i)) * localOf(i), transliterated from retail.
     // The rotation goes through the quaternion product; the translation is an
@@ -365,7 +357,7 @@ void Scene::RemoveMesh(uint32_t id) {
 int32_t Scene::Intersect(const Vector3& startRef, const Vector3& dirRef,
                          const Math::Scalar& maxDistRef,
                          Vector3& outPosRef, Vector3& outNormalRef) const {
-    Scene* self = const_cast<Scene*>(this);
+    const Scene* self = this;
     const Vector3* start = &startRef;
     const Vector3* dir = &dirRef;
     const Math::Scalar* maxDist = &maxDistRef;
@@ -423,7 +415,7 @@ int32_t Scene::Intersect(const Vector3& startRef, const Vector3& dirRef,
                 // does (it reloads links[curLink]._entry at the top of every
                 // sub-mesh pass rather than hoisting it).
                 Entry* e = EntryAt(self, LinkEntry(self, curLink));
-                const PickingMesh* pm = static_cast<const PickingMesh*>(e->_mesh);
+                const PickingMesh* pm = e->_mesh;
                 const ::Transform* world = &e->_transforms[sub];
 
                 ::Transform invX;
@@ -592,15 +584,5 @@ int32_t Scene::Intersect(const Vector3& startRef, const Vector3& dirRef,
 // allocation it runs (10,000 bucket heads) happens on the LOADER thread when
 // GameUpdateLoop::Load builds the scene.
 extern "C" Picking::Scene* RtPicking_Scene_Ctor(void* selfv) {
-    return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);   // B.3.7 bridge
-}
-
-// ?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z
-// 0x180071e10 — returns a REFERENCE, so there is NO hidden return slot: the
-// caller's second register is the sub-mesh index
-// (reference_hidden_retslot_wild_write.md; tools/abi_retslot_audit.py).
-extern "C" const Collection::Array<Vector3>*
-RtPicking_PickingMesh_Vertices(const void* selfv, int subMesh) {
-    return &reinterpret_cast<const Picking::PickingMesh*>(selfv)                 // B.3.7 bridge
-                ->Picking::PickingMesh::Vertices(subMesh);
+    return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);   // B.3.7 bridge  // LEFT: void* door, GAME-b's gameupdateloop_load.cpp passes raw MemAlloc storage
 }

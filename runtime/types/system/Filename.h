@@ -100,8 +100,8 @@ public:
     int GetLength() const { return AsString().GetLength(); }
 
     // The conversion retail performs by pointer cast. See the header note.
-    String&       AsString()       { return reinterpret_cast<String&>(*this); }
-    const String& AsString() const { return reinterpret_cast<const String&>(*this); }
+    String&       AsString()       { return reinterpret_cast<String&>(*this); }  // LEFT: retail's Filename IS a String (one field); a base-class relation would run String's ctor/dtor (H5, behaviour)
+    const String& AsString() const { return reinterpret_cast<const String&>(*this); }  // LEFT: as above
 
 private:
     // PRIVATE in retail too (AEAA, not QEAA — the QEAA spelling in circulation

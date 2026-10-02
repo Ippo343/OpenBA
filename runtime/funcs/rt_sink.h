@@ -38,32 +38,26 @@ public:
     RtSink() {}
 
     // ---- Stores ------------------------------------------------------------
-    void U8 (void* addr, uint8_t  v, const char* label) {
-        (void)label; *static_cast<uint8_t*>(addr) = v;
-    }
-    void U16(void* addr, uint16_t v, const char* label) {
-        (void)label; *static_cast<uint16_t*>(addr) = v;
-    }
-    void U32(void* addr, uint32_t v, const char* label) {
-        (void)label; *static_cast<uint32_t*>(addr) = v;
-    }
-    void U64(void* addr, uint64_t v, const char* label) {
-        (void)label; *static_cast<uint64_t*>(addr) = v;
-    }
-    void Ptr(void* addr, const void* v, const char* label) {
-        (void)label; *static_cast<const void**>(addr) = v;
-    }
+    // B.4 (R-CORE): each store takes the field it writes, typed; the store is
+    // the plain assignment it always was.
+    void U8 (uint8_t*  addr, uint8_t  v, const char* label) { (void)label; *addr = v; }
+    void U16(uint16_t* addr, uint16_t v, const char* label) { (void)label; *addr = v; }
+    void U32(uint32_t* addr, uint32_t v, const char* label) { (void)label; *addr = v; }
+    void U64(uint64_t* addr, uint64_t v, const char* label) { (void)label; *addr = v; }
+    template <class T>
+    void Ptr(T** addr, T* v, const char* label) { (void)label; *addr = v; }
 
     // ---- Read-back ---------------------------------------------------------
     //
     // A body that stores to X and later re-reads X sees its own store. These
     // exist so such a re-read is spelled out at the call site; they are plain
     // loads.
-    uint8_t  ReadU8 (const void* addr) const { return *static_cast<const uint8_t*>(addr); }
-    uint16_t ReadU16(const void* addr) const { return *static_cast<const uint16_t*>(addr); }
-    uint32_t ReadU32(const void* addr) const { return *static_cast<const uint32_t*>(addr); }
-    uint64_t ReadU64(const void* addr) const { return *static_cast<const uint64_t*>(addr); }
-    void*    ReadPtr(const void* addr) const { return *static_cast<void* const*>(addr); }
+    uint8_t  ReadU8 (const uint8_t*  addr) const { return *addr; }
+    uint16_t ReadU16(const uint16_t* addr) const { return *addr; }
+    uint32_t ReadU32(const uint32_t* addr) const { return *addr; }
+    uint64_t ReadU64(const uint64_t* addr) const { return *addr; }
+    template <class T>
+    T*       ReadPtr(T* const* addr) const { return *addr; }
 
     // ---- Indirect call -----------------------------------------------------
     //

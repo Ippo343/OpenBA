@@ -83,7 +83,7 @@ public:
     // pointlist.cpp (`ReleasePointsRange`, retail 0x180071890).
     // ------------------------------------------------------------------------
     struct Point {
-        void*   name;      // +0x00  System::String (refcounted)
+        char*   name;      // +0x00  System::String (refcounted; B4 R-CORE: char*, H4)
         float   pos[3];    // +0x08
         float   radius;    // +0x14
     };

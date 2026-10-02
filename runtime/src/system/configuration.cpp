@@ -233,7 +233,7 @@ int TreeStrCmp(const char* a, const char* b) {
 // The two null-key arms are retail's and they are ASYMMETRIC on purpose: a null
 // SEARCH key returns the current node, a null NODE key descends. Both are kept.
 extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
-    MapNode* node = *static_cast<MapNode**>(map);
+    MapNode* node = *static_cast<MapNode**>(map);  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
     while (node != nullptr) {
         bool goRight = false;
         if (node->key != nullptr) {
@@ -264,7 +264,7 @@ extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
 void System::Configuration::SetCommandLine(const System::String& cmd) {
 
     void* map = &_mapRoot;
-    MapNode* rootBefore = *static_cast<MapNode**>(map);
+    MapNode* rootBefore = *static_cast<MapNode**>(map);  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
 
     // ENDGAME B.3.4b: the B.3.1 step-2 bridge is gone from this body — `cmd` IS
     // the class now, because the parameter is. The POD-to-class conversion
@@ -309,9 +309,9 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     // body, called by name (B3R), not a member.
                     rtsetavl::Node* node = nullptr;
                     rtavl::StringMapInsert(
-                        static_cast<rtsetavl::Set*>(map), &node,
-                        reinterpret_cast<char* const*>(&key),
-                        reinterpret_cast<char* const*>(&val));
+                        static_cast<rtsetavl::Set*>(map), &node,  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+                        reinterpret_cast<char* const*>(&key),  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+                        reinterpret_cast<char* const*>(&val));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
                 }
 
                 if (pos >= len) break;
@@ -501,10 +501,10 @@ System::String System::Configuration::GetCommandLineString(
 
     // The find takes the MAP, not `this` — `configuration + 0x10`, whose first
     // qword is the root — which is why it is not a member of this class.
-    void* map = const_cast<void*>(static_cast<const void*>(&_mapRoot));
-    MapNode* node = static_cast<MapNode*>(
+    void* map = const_cast<void*>(static_cast<const void*>(&_mapRoot));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+    MapNode* node = static_cast<MapNode*>(  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
         RtSystem_ConfigMap_Find(map,
-            reinterpret_cast<const RtSystem::String*>(&key)));
+            reinterpret_cast<const RtSystem::String*>(&key)));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
 
     // 0x1800c533b: the found node's VALUE, and the temporary's reference.
     char* temp = (node != nullptr) ? node->value : nullptr;
@@ -580,7 +580,7 @@ System::Configuration::~Configuration() {
     //
     // 0x1800c518f -- the string->string map at +0x10: rtsetclear::Clear
     // (0x18000f7d0).
-    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));
+    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
 
     // 0x1800c519d -- the tail call, on `this` itself:
     // rtcoll::RtColl_ArrayDtorElem_180010ab0.
