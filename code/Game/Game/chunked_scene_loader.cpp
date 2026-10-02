@@ -1,4 +1,4 @@
-// standalone/chunked_scene_loader.cpp — see chunked_scene_loader.h for design.
+// code/Game/Game/chunked_scene_loader.cpp — see chunked_scene_loader.h for design.
 
 
 #include "chunked_scene_loader.h"

@@ -1,4 +1,4 @@
-// standalone/menudialogloopt_stubs.cpp
+// code/Game/Game/menudialogloopt_stubs.cpp
 // Standalone-only stub vtable for MenuDialogLoopT (exe vtable @ 0x14015ed00).
 //
 // MenuDialogLoopT is the exe-internal subclass of Engine::DialogLoopT that drives

@@ -37,7 +37,7 @@
 // it, so the seam is the two lines around the `fn_UI_Update` call in
 // `GameUpdateLoop::Update` (code/Game/Game/gameupdateloop.cpp) and around the
 // `fn_DialogLoopT_Update` tail call in `MenuDLT::Stub_Update`
-// (standalone/menudialogloopt_stubs.cpp). PostUpdate reads the element flags
+// (code/Game/Game/menudialogloopt_stubs.cpp). PostUpdate reads the element flags
 // back once retail has had its say.
 //
 // THE SCALE ROUND TRIP — the one piece of arithmetic that can be wrong

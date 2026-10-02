@@ -1,4 +1,4 @@
-// standalone/chunked_scene_loader.h
+// code/Game/Game/chunked_scene_loader.h
 // Standalone-only chunked driver for MenuDLT::Load's heavy PhaseB work.
 //
 // MenuDialogLoopT_LoadStaticMeshes_PhaseB iterates 12K-15K elements per scene

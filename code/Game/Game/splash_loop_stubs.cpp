@@ -1,4 +1,4 @@
-// standalone/splash_loop_stubs.cpp
+// code/Game/Game/splash_loop_stubs.cpp
 // Standalone-only stub vtable for the exe's splash DialogLoaderLoopT subclass
 // (vtable @ 0x140158800, used for both Dialog\Loading.rsc and Dialog\ShiningRock.rsc
 // in the original GameMain).

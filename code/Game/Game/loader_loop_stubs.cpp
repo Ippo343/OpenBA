@@ -1,4 +1,4 @@
-// standalone/loader_loop_stubs.cpp
+// code/Game/Game/loader_loop_stubs.cpp
 // Standalone-only stub vtables for the exe's two LoaderLoop subclasses
 // (vtables @ 0x140158870 inner and @ 0x1401588d0 outer, used in this nesting
 // in the original GameMain).
