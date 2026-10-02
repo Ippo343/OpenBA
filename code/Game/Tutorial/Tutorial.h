@@ -24,6 +24,9 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+class TutorialStep;
+
 class Tutorial final : public Object::External {
     DECLARE_EXE_TYPE(Tutorial)
 
@@ -38,9 +41,11 @@ public:
     virtual Object::External* Construct();                         // [8] 0x140026eb0
 
 public:
-    void*    setup;              // +0x20: ExternalPtr (0x140002340 serializes it; StepExecute keys the dialog lookup on it)
-    void*    steps;              // +0x28: Array<ExternalPtr<TutorialStep>> data
-    int64_t  stepCount;          // +0x30: count (low 32) + capacity (high 32)
+    ComponentDescription* setup; // +0x20: ExternalPtr<ComponentDescription> (0x140002340 serializes it;
+                                 //        StepExecute keys the utility-dialog lookup 0x140100270 on it)
+    TutorialStep** steps;        // +0x28: Array<ExternalPtr<TutorialStep>> data (H5 raw triple)
+    int32_t  stepCount;          // +0x30: count
+    int32_t  stepCapacity;       // +0x34: capacity
     int32_t  currentStep;        // +0x38: -1 by default (tutorial_next_scenario.cpp reads it as the next scenario index)
     uint8_t  _pad3C[4];          // +0x3C: padding
 };
@@ -48,6 +53,7 @@ public:
 static_assert(offsetof(Tutorial, setup) == 0x20, "+0x20");
 static_assert(offsetof(Tutorial, steps) == 0x28, "+0x28");
 static_assert(offsetof(Tutorial, stepCount) == 0x30, "+0x30");
+static_assert(offsetof(Tutorial, stepCapacity) == 0x34, "+0x34");
 static_assert(offsetof(Tutorial, currentStep) == 0x38, "+0x38");
 static_assert(sizeof(Tutorial) == 0x40, "Tutorial is 0x40 (create 0x140026e50 MemAlloc(0x40))");
 static_assert(alignof(Tutorial) == 8, "qword-aligned");

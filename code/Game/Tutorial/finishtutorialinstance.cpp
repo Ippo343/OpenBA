@@ -30,6 +30,9 @@
 #include <new>
 #include <atomic>
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Tutorial/Tutorial.h"
+#include "Game/PlayerToolManager.h"
+#include "Component/ComponentDescription.h"
 
 // Startup/Update call TutWave_TutorialTreeInsert / TutWave_StepExecute by name.
 // ENDGAME B.3.8 (B6-5): the one-shot diagnostic counters are namespace-scope
@@ -59,35 +62,21 @@ std::atomic<int> s_logCreate{0};
 //   }
 //   IO::Serializer::~Serializer(local_20);
 void FinishTutorialInstance::Persist(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     // Achievement::GoalInstance::Persist (slot 3, 0x18009ef70) — QUALIFIED (B7-13):
     // an unqualified call would dispatch back into this slot.
     Achievement::GoalInstance::Persist(stream);
 
-    // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: Internal::Persist hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize InternalBasePtr at +0x20
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Type-check: if deserialized object is not a TutorialInstance, null it out
-    void* obj = *(void**)(s + 0x20);
-    if (obj != nullptr) {
-        // Object::Base::IsDerivedFrom (import slot 0x140152a98) against the id in
-        // TypeInfo_TutorialInstance (dword 0x1401c6668, TutorialInstance's cell —
-        // Table 1), exactly retail's 0x1400d7c3a `MOV EDX,[0x1401c6668]` /
-        // 0x1400d7c40 `CALL [0x140152a98]`.
-        const uint32_t tidTutorialInstance = TutorialInstance::TypeId();
-        bool isDerived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tidTutorialInstance);   // B.3.7 bridge
-        if (!isDerived) {
-            *(uint64_t*)(s + 0x20) = 0;
-        }
-    }
-
-    // Destroy Serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    // Serialize the InternalPtr at +0x20, then, if the deserialized object is
+    // not a TutorialInstance, null it out: Object::Base::IsDerivedFrom (import
+    // slot 0x140152a98) against the id in TypeInfo_TutorialInstance (dword
+    // 0x1401c6668, TutorialInstance's cell — Table 1), exactly retail's
+    // 0x1400d7c3a `MOV EDX,[0x1401c6668]` / 0x1400d7c40 `CALL [0x140152a98]`.
+    // InternalPtr<T>::Serialize(ser, typeId) is that sequence.
+    _field20.Serialize(serializer, TutorialInstance::TypeId());
 }
 
 // ============================================================
@@ -98,7 +87,6 @@ void FinishTutorialInstance::Persist(void* stream) {
 // definition reference from the parent FinishTutorialGoal, then calls
 // the tutorial tree insert helper to register the tutorial dialog,
 // and sets game world flags to enable tutorial UI.
-//
 // Decompiled from disassembly:
 //   1. Allocate 0x38 bytes, call Object::Internal::Internal()
 //   2. Set vtable to TutorialInstance vtable (0x140160bf8)
@@ -107,19 +95,17 @@ void FinishTutorialInstance::Persist(void* stream) {
 //   5. IsDerivedFrom(self+0x18, FinishTutorialGoal) -> get goal pointer
 //   6. CheckPtr(self+0x20), copy goal->+0x30 to tutInst->+0x30, set tutInst->+0x10 = 0
 //   7. Call FinishTutorialGoal_helper_01f0 (tree insert) with:
-//      - gameWorld+0x120 (tutorial tree root)
-//      - tutDef->+0x20 (tutorial external ID)
+//      - gameWorld+0x120 (the PlayerToolManager)
+//      - tutDef->+0x20 (the tutorial's setup description)
 //      - param3 (forwarded)
-//      - *(int*)(*(void**)singleton_exref + 4) - 0x1d0
+//      - Video::Device::_singleton->backBufferWidth (+0x04) - 0x1d0
 //   8. OR gameWorld+0xd0 flags with 0x5f0
-//
 // Retail passes R8 through to 0x1401001f0 untouched (Startup takes no
 // argument; `?Startup@GoalInstance@Achievement@@UEAAXXZ`); the tree's
 // TutWave_TutorialTreeInsert ignores that parameter, so null is passed.
 void FinishTutorialInstance::Startup() {
     FinishTutorialInstance* self = this;
     void* p3 = nullptr;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Step 1-3: MemAlloc(0x38, 8) and the TutorialInstance ctor retail inlined
     // here (Internal(), stamp 0x140160bf8, +0x10 = -1, two null
@@ -127,74 +113,71 @@ void FinishTutorialInstance::Startup() {
     // the tree stamped `g_TutorialInstanceVtable` only when the opt-in
     // BANISHED_LIVE_TUTORIALINSTANCE_VT registration made 0x140160bf8 resolve,
     // and otherwise left Object::Internal's minted table on the object.
-    void* newObj = Object::detail::InternalMemAlloc(sizeof(TutorialInstance), 8);
-    if (newObj != nullptr) {
-        newObj = static_cast<Object::Base*>(::new (newObj) TutorialInstance());
+    void* newMem = Object::detail::InternalMemAlloc(sizeof(TutorialInstance), 8);
+    TutorialInstance* newObj = nullptr;
+    if (newMem != nullptr) {
+        newObj = ::new (newMem) TutorialInstance();
     }
 
-    // Step 4: Create IBP from newObj, store in self+0x20
-    // Use a local IBP buffer (8 bytes), then copy to self+0x20
-    uint64_t localIBP = 0;
-    new (&localIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newObj));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x20) = localIBP;
+    // Step 4: store the new instance in self+0x20
+    _field20 = newObj;
 
     // Step 5: IsDerivedFrom check on self+0x18 (goal pointer) against FinishTutorialGoal
-    void* goalObj = *(void**)(s + 0x18);
-    void* ftGoal = nullptr;
+    const Achievement::Goal* goalObj = _goal.Get();
+    const FinishTutorialGoal* ftGoal = nullptr;
     if (goalObj) {
         bool isDerived = Object::IsDerivedFromNullSafe(goalObj, FinishTutorialGoal::TypeId());
         if (isDerived) {
-            ftGoal = goalObj;
+            ftGoal = static_cast<const FinishTutorialGoal*>(goalObj);
         }
     }
 
     // Step 6: CheckPtr on self+0x20, then copy goal fields to tutInst
 
-    uintptr_t tutInst = *(uintptr_t*)(s + 0x20);
+    TutorialInstance* tutInst = _field20.Get();
     if (tutInst && ftGoal) {
-        // Copy tutorial definition reference: tutInst->+0x30 = goal->+0x30
-        *(uint64_t*)(tutInst + 0x30) = *(uint64_t*)((uintptr_t)ftGoal + 0x30);
+        // Copy the tutorial definition reference
+        tutInst->tutorialDef = ftGoal->_field30;
         // Reset current step to 0
-        *(int32_t*)(tutInst + 0x10) = 0;
+        tutInst->currentStep = 0;
     }
 
     { if (s_logStartup.fetch_add(1) == 0) {
         std::fprintf(stderr, "[FinTutInst] Slot4 INIT self=%p tutInst=%p goalObj=%p ftGoal=%p "
                              "tutDef=%p (goalTid=%u) treeInsert=%p\n",
-                (void*)self, (void*)tutInst, goalObj, ftGoal,
-                tutInst ? *(void**)(tutInst + 0x30) : nullptr,
+                static_cast<void*>(self), static_cast<void*>(tutInst),
+                static_cast<const void*>(goalObj), static_cast<const void*>(ftGoal),
+                tutInst ? static_cast<void*>(tutInst->tutorialDef) : nullptr,
                 FinishTutorialGoal::TypeId(),
                 (void*)&TutWave_TutorialTreeInsert);
         std::fflush(stderr); } }
 
-    // Step 7: Call FinishTutorialGoal_helper_01f0 (tutorial tree insert)
+    // Step 7: Call FinishTutorialGoal_helper_01f0 (the PlayerToolManager tree insert)
     if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-        void* treeRoot = *(void**)(gameWorld + 0x120);
+        PlayerToolManager* treeRoot = GameUpdateLoop::_singleton->m_toolManager;
 
-        // Read tutorial external ID from tutDef->+0x20
-        uintptr_t tutDef = *(uintptr_t*)(tutInst + 0x30);
-        uint64_t tutorialId = 0;
+        // The tutorial's setup description (tutDef +0x20)
+        Tutorial* tutDef = tutInst->tutorialDef;
+        const ComponentDescription* tutorialId = nullptr;
         if (tutDef) {
-            tutorialId = *(uint64_t*)(tutDef + 0x20);
+            tutorialId = tutDef->setup;
         }
 
-        // Read screen height param from singleton exref
-        int heightParam = 0;
+        // The device's back-buffer width (+0x04) - 0x1d0
+        int widthParam = 0;
         {
-            uintptr_t singletonObj = reinterpret_cast<uintptr_t>(::Video::Device::_singleton);
+            Video::Device* singletonObj = ::Video::Device::_singleton;
             if (singletonObj) {
-                heightParam = *(int32_t*)(singletonObj + 4) - 0x1d0;
+                widthParam = singletonObj->backBufferWidth - 0x1d0;
             }
         }
 
-        TutWave_TutorialTreeInsert(treeRoot, tutorialId, p3, static_cast<uint32_t>(heightParam));   // 0x1401001f0
+        TutWave_TutorialTreeInsert(treeRoot, tutorialId, p3, static_cast<uint32_t>(widthParam));   // 0x1401001f0
     }
 
     // Step 8: OR game world flags at +0xd0 with 0x5f0
     if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-        *(uint32_t*)(gameWorld + 0xd0) |= 0x5f0;
+        GameUpdateLoop::_singleton->m_gameFlags |= 0x5f0;
     }
 }
 
@@ -203,33 +186,27 @@ void FinishTutorialInstance::Startup() {
 // ============================================================
 // Execute/Update: checks the InternalBasePtr at +0x20 (TutorialInstance),
 // then delegates to the tutorial step execution helper.
-//
 // Decompiled from disassembly:
 //   1. CheckPtr(&self->+0x20)
 //   2. Tail-call FinishTutorialInstance_helper_1db0(*(self+0x20), p2, p3, p4)
-//
 // Note: R8 (p3) and R9 (p4) are implicitly forwarded through the tail JMP.
-//
 // Update(const Time&, const GoalList&): RDX / R8 reach the helper unchanged;
-// R9 is whatever the caller left (TutWave_StepExecute ignores it and R8).
+// R9 is whatever the caller left (StepExecute ignores it and R8).
 void FinishTutorialInstance::Update(const System::Time& time, const Achievement::GoalList& list) {
     FinishTutorialInstance* self = this;
+    // LEFT: the setup / goal slots StepExecute forwards these to take void*.
     void* p2 = const_cast<void*>(static_cast<const void*>(&time));
     void* p3 = const_cast<void*>(static_cast<const void*>(&list));
-    void* p4 = nullptr;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    // CheckPtr on IBP at +0x20
 
     // Read the TutorialInstance pointer
-    void* tutInst = *(void**)(s + 0x20);
+    TutorialInstance* tutInst = _field20.Get();
     { if (s_logUpdate.fetch_add(1) < 3) {
-        std::fprintf(stderr, "[FinTutInst] Slot5 TICK self=%p tutInst=%p exec=%p\n",
-                (void*)self, tutInst, (void*)&TutWave_StepExecute); std::fflush(stderr); } }
+        std::fprintf(stderr, "[FinTutInst] Slot5 TICK self=%p tutInst=%p\n",
+                static_cast<void*>(self), static_cast<void*>(tutInst)); std::fflush(stderr); } }
 
     // Delegate to the tutorial step execution helper
     if (tutInst) {
-        TutWave_StepExecute(tutInst, p2, p3, (uint64_t)(uintptr_t)p4);   // 0x1400e1db0
+        tutInst->StepExecute(p2, p3, 0);   // 0x1400e1db0
     }
 }
 
@@ -241,29 +218,19 @@ void FinishTutorialInstance::Update(const System::Time& time, const Achievement:
 //   tutorial->+0x30 (External* to Tutorial definition)
 //   tutorialDef->+0x30 (total step count)
 //   vs tutorialInst->+0x10 (current step)
-//
 // Returns: currentStep >= totalSteps
-//
-// Decompiled:
-//   fn_InternalBasePtr_CheckPtr(&this->+0x20);
-//   lVar1 = *(this+0x20);  // TutorialInstance*
-//   return *(int*)(*(int64_t*)(lVar1+0x30) + 0x30) <= *(int*)(lVar1+0x10);
 Achievement::Goal::GoalState FinishTutorialInstance::CheckGoalState() const {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    // CheckPtr on IBP at +0x20
-
     // Read the TutorialInstance pointer
-    uintptr_t tutInst = *(const uintptr_t*)(s + 0x20);
-    if (tutInst == 0) return static_cast<Achievement::Goal::GoalState>(0);
+    const TutorialInstance* tutInst = _field20.Get();
+    if (tutInst == nullptr) return static_cast<Achievement::Goal::GoalState>(0);
 
-    // Read tutorial definition pointer at tutInst+0x30
-    uintptr_t tutDef = *(uintptr_t*)(tutInst + 0x30);
-    if (tutDef == 0) return static_cast<Achievement::Goal::GoalState>(0);
+    // Read the tutorial definition
+    const Tutorial* tutDef = tutInst->tutorialDef;
+    if (tutDef == nullptr) return static_cast<Achievement::Goal::GoalState>(0);
 
-    // Compare: totalSteps (tutDef+0x30) <= currentStep (tutInst+0x10)
-    int totalSteps = *(int*)(tutDef + 0x30);
-    int currentStep = *(int*)(tutInst + 0x10);
+    // Compare: totalSteps <= currentStep
+    int totalSteps = tutDef->stepCount;
+    int currentStep = tutInst->currentStep;
 
     return static_cast<Achievement::Goal::GoalState>((totalSteps <= currentStep) ? 1 : 0);
 }
@@ -279,7 +246,7 @@ FinishTutorialInstance::FinishTutorialInstance() : _field20(nullptr) {}
 // TutorialInstance handle at +0x20; the compiler then runs ~GoalInstance
 // (re-stamp + ~Internal, the InternalFactory swap-remove).
 FinishTutorialInstance::~FinishTutorialInstance() {
-    reinterpret_cast< ::Object::InternalBasePtr*>(&_field20)->DeletePtr();   // B.3.3 bridge
+    _field20.DeletePtr();
 }
 
 void* FinishTutorialInstance::CreateNewObject() {

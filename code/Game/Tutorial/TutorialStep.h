@@ -25,6 +25,12 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+namespace System { class String; }
+namespace UI { class StringTable; }
+class TutorialImage;
+class TutorialSetup;
+class TutorialGoal;
+
 class TutorialStep final : public Object::External {
     DECLARE_EXE_TYPE(TutorialStep)
 
@@ -40,20 +46,24 @@ public:
     virtual Object::External* Construct();                         // [8] 0x140028c90
 
 public:
-    uint8_t  completed;         // +0x20: bool, step completed flag (serialized)
+    bool     completed;         // +0x20: step completed flag (Serialize(bool&))
     uint8_t  _pad21[7];         // +0x21: padding
-    void*    stringTable;       // +0x28: ExternalPtr<StringTable>
+    UI::StringTable* stringTable; // +0x28: ExternalPtr<StringTable>
     void*    titleStr;          // +0x30: System::String (title text)
     void*    descStr;           // +0x38: System::String (description text)
-    void*    images;            // +0x40: Array<ExternalPtr<TutorialImage>> data
+    TutorialImage** images;     // +0x40: Array<ExternalPtr<TutorialImage>> data (H5 raw triple)
     int32_t  imageCount;        // +0x48: count
-    uint8_t  _pad4C[4];         // +0x4C: capacity
-    void*    setups;            // +0x50: Array<ExternalPtr<TutorialSetup>> data
+    int32_t  imageCapacity;     // +0x4C: capacity
+    TutorialSetup** setups;     // +0x50: Array<ExternalPtr<TutorialSetup>> data (H5 raw triple)
     int32_t  setupCount;        // +0x58: count
-    uint8_t  _pad5C[4];         // +0x5C: capacity
-    void*    goals;             // +0x60: Array<ExternalPtr<TutorialGoal>> data
+    int32_t  setupCapacity;     // +0x5C: capacity
+    TutorialGoal** goals;       // +0x60: Array<ExternalPtr<TutorialGoal>> data (H5 raw triple)
     int32_t  goalCount;         // +0x68: count
-    uint8_t  _pad6C[4];         // +0x6C: capacity
+    int32_t  goalCapacity;      // +0x6C: capacity
+
+    // The +0x30 / +0x38 Strings (H5 raw storage). Defined in tutorialstep.cpp.
+    System::String& TitleText();
+    System::String& DescText();
 };
 
 static_assert(offsetof(TutorialStep, completed) == 0x20, "+0x20");

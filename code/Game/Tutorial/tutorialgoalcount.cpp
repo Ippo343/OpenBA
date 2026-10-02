@@ -30,53 +30,44 @@
 #include "Game/Profession.h"
 #include <new>
 #include "ui/SpinnerElement.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/TradeComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Game/Map.h"
 
 // ============================================================
 // Exe-internal helpers, called by name:
-//   0x1400265b0 StatGoal_ResolveExternalPtr (Goal/goal_exe_helpers.h) -- resolve the
+//   0x1400265b0 NamedExternalRef::Resolve (Goal/goal_exe_helpers.h) -- resolve the
 //               External reference named by a String (lazy load)
-//   0x140092010 TutBase_CountBuildingsByType   -- world BST at +0x160, returns node[2]
-//   0x1400910a0 TutBase_CountProfessionsByType -- world BST at +0x100
-//   0x14012fbb0 WorkPlaceComponent_GetMaxWorkers -- available job slots of a
+//   0x140092010 CitizenBehavior::CountByTemplate   -- the +0x160 tree's bucket count
+//   0x1400910a0 CitizenBehavior::CountByProfession -- the +0x100 tree's
+//   0x14012fbb0 WorkPlaceComponent::GetMaxWorkers -- available job slots of a
 //               WorkPlaceComponent (WorkComponent+0x30, lazily via 0x14012e5c0)
-//   0x140013920 TutBase_CastToSliderElement -- IsDerivedFrom SpinnerElement, else null
+//   0x140013920 the SpinnerElement narrowing (IsDerivedFrom, else null), inlined
 //   0x1400e1870 FindUIElementByPath_Impl (find_ui_element_by_path.cpp)
-//   (Tutorial/exe_bodies.h)
 // ============================================================
 
-// 0x1401c7318 is ComponentDescription's cell, 0x1401c5a98 is Profession's (Table 1).
-// Neither result is cached (matching the file's existing no-cache pattern for
-// every other lazily-resolved pointer here); a plain read is cheap and this
-// runs only on the single game-update thread.
-static uint32_t s_tidBuildingDesc;
-static uint32_t* TypeIdBuildingDesc() {       // cases 0, 7, 10
-    s_tidBuildingDesc = ComponentDescription::TypeId();
-    return &s_tidBuildingDesc;
-}
-static uint32_t s_tidProfessionDesc;
-static uint32_t* TypeIdProfessionDesc() {     // cases 1, 3, 6
-    s_tidProfessionDesc = Profession::TypeId();
-    return &s_tidProfessionDesc;
-}
+// 0x1401c7318 is ComponentDescription's cell (cases 0, 7, 10), 0x1401c5a98 is
+// Profession's (cases 1, 3, 6) (Table 1): T::TypeId() below.
 
 // ============================================================
-// BST lookup helper — searches a binary search tree keyed by pointer
+// BST lookup helpers — search a binary search tree keyed by pointer
 // ============================================================
-// BST node layout (8 bytes each slot):
-//   [0] = key (pointer value used as comparison key)
-//   [1] = value (context-dependent: array ptr, count, etc.)
-//   [2] = count (for some BSTs)
-//   [3] = (unused/parent?)
-//   [4] = left child
-//   [5] = right child
-static uintptr_t* BSTFind(uintptr_t root, uintptr_t key) {
-    uintptr_t* node = (uintptr_t*)root;
+// The CitizenBehavior entity-bucket trees (Goal/goal_exe_helpers.h): key +0x00,
+// left +0x20, right +0x28.
+template <class Node, class Key>
+static Node* BSTFind(Node* node, const Key* key) {
     while (node != nullptr) {
-        uintptr_t nodeKey = node[0];
-        if (key < nodeKey) {
-            node = (uintptr_t*)node[4];  // left
-        } else if (key > nodeKey) {
-            node = (uintptr_t*)node[5];  // right
+        if (key < node->key) {
+            node = node->left;
+        } else if (key > node->key) {
+            node = node->right;
         } else {
             return node;  // found
         }
@@ -84,9 +75,9 @@ static uintptr_t* BSTFind(uintptr_t root, uintptr_t key) {
     return nullptr;
 }
 
-// The per-building trade-order tree (BuildingComponent+0x60) is a DIFFERENT node
-// layout from the world-manager trees above. tradeui.cpp:2907 documents it as
-//   { key +0x00, value +0x08, colour +0x10, left +0x18, right +0x20 }
+// The per-building trade-order tree (TradeComponent +0x60) is a DIFFERENT node
+// layout from the world-manager trees above (TradeResourceNode:
+// { key +0x00, value +0x08, parent +0x10, left +0x18, right +0x20 }),
 // and retail's own case-7 descent (0x1400df290) confirms it:
 //   if (key < *node) node = node[3];        // left  = +0x18
 //   else { if (key <= *node) { v = node[1]; break; } node = node[4]; }   // right = +0x20
@@ -95,14 +86,13 @@ static uintptr_t* BSTFind(uintptr_t root, uintptr_t key) {
 // runs off the end of the node as RIGHT. That still "works" for a key sitting at
 // the ROOT, which is why the tutorial's leather-coat goal passed while the iron-tool
 // goal — a non-root node — read 0 forever and stalled the trade tutorial.
-static uintptr_t* TradeOrderBSTFind(uintptr_t root, uintptr_t key) {
-    uintptr_t* node = (uintptr_t*)root;
+static const TradeResourceNode* TradeOrderBSTFind(const TradeResourceNode* node,
+                                                  const ComponentDescription* key) {
     while (node != nullptr) {
-        uintptr_t nodeKey = node[0];
-        if (key < nodeKey) {
-            node = (uintptr_t*)node[3];  // left  (+0x18)
-        } else if (key > nodeKey) {
-            node = (uintptr_t*)node[4];  // right (+0x20)
+        if (key < node->resource) {
+            node = node->left;   // left  (+0x18)
+        } else if (key > node->resource) {
+            node = node->right;  // right (+0x20)
         } else {
             return node;  // found
         }
@@ -111,20 +101,21 @@ static uintptr_t* TradeOrderBSTFind(uintptr_t root, uintptr_t key) {
 }
 
 // ============================================================
-// Resolve external type pointer from self->typeName
+// Resolve the external type pointer from typeRef
 // ============================================================
-// Calls FUN_1400265b0 to ensure external ref is loaded, then reads
-// self->_field40 and checks IsDerivedFrom against the given type ID.
-// Returns the type pointer if it matches, or 0 if not.
-static uintptr_t ResolveTypePtr(uintptr_t self, uint32_t* typeId) {
-    StatGoal_ResolveExternalPtr((void*)(self + 0x30));
-    uintptr_t typePtr = *(uintptr_t*)(self + 0x40);
-    if (typePtr && typeId) {
-        if (Object::IsDerivedFromNullSafe((void*)typePtr, *typeId)) {
-            return typePtr;
+// Calls FUN_1400265b0 to ensure the external ref is loaded, then reads the
+// resolved External and checks IsDerivedFrom T. Returns it if it matches, or
+// null if not.
+template <class T>
+static const T* ResolveTypePtr(NamedExternalRef& ref) {
+    ref.Resolve();
+    const Object::External* typePtr = ref.resolved;
+    if (typePtr) {
+        if (Object::IsDerivedFromNullSafe(typePtr, T::TypeId())) {
+            return static_cast<const T*>(typePtr);
         }
     }
-    return 0;
+    return nullptr;
 }
 
 // ============================================================
@@ -135,17 +126,20 @@ static uintptr_t ResolveTypePtr(uintptr_t self, uint32_t* typeId) {
 // TutorialGoalCount stamps (the compiler's), then the fields.
 TutorialGoalCount::TutorialGoalCount()
     : countMode(0), targetCount(0),          // one qword store at +0x20
-      greaterOrEqual(0), _pad29{},
-      typeName(0),                           // null string
-      _field38(-1),                          // generation sentinel
-      _pad3C{}, _field40(nullptr),
+      greaterOrEqual(false), _pad29{},
+      typeRef{{}, -1, {}, nullptr},          // null name, generation sentinel
       elementName(0) {}                      // null string
+
+// LEFT H5: the +0x48 String is raw storage (see the header).
+System::String& TutorialGoalCount::ElementName() {
+    return *reinterpret_cast<System::String*>(&elementName);
+}
 
 // The dtor inside [0] 0x140027820: ~String +0x48, ~String +0x30; the
 // compiler re-stamps TutorialGoal and runs ~External.
 TutorialGoalCount::~TutorialGoalCount() {
-    reinterpret_cast<System::String*>(&elementName)->~String();   // B.3.1 bridge
-    reinterpret_cast<System::String*>(&typeName)->~String();      // B.3.1 bridge
+    ElementName().~String();
+    typeRef.Name().~String();
 }
 
 // ============================================================
@@ -154,36 +148,32 @@ TutorialGoalCount::~TutorialGoalCount() {
 // Serializes all fields. After loading (version == 0) resolves the external
 // ref at +0x30.
 bool TutorialGoalCount::Serialize(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body (an empty Serializer scope)
 
-    // Create serializer for our fields
-    alignas(8) uint8_t ser[32];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer for our fields. LEFT: External::Serialize hands the
+    // stream in as void* (the runtime base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // +0x20 through the UINT door (rw_vtbl::kScalarUInt, readerWriter +0x98).
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    ser.Serialize(countMode, nullptr);
 
-    // Serialize targetCount (+0x24) as int
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
+    // targetCount (+0x24) as int
+    ser.Serialize(targetCount, nullptr);
 
-    // Serialize typeName (+0x30) as String
-    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser);   // B.3.1 bridge
+    // the type's name (+0x30) as String
+    typeRef.Name().Serialize(&ser);
 
     // If loading (serializer version == 0), resolve the external ref
-    int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version == 0) {
-        StatGoal_ResolveExternalPtr((void*)(s + 0x30));
+        typeRef.Resolve();
     }
 
-    // Serialize greaterOrEqual (+0x28) as bool
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
+    // greaterOrEqual (+0x28) as bool
+    ser.Serialize(greaterOrEqual, nullptr);
 
-    // Serialize elementName (+0x48) as String
-    reinterpret_cast<System::String*>(s + 0x48)->Serialize(ser);   // B.3.1 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    // elementName (+0x48) as String
+    ElementName().Serialize(&ser);
     return true;
 }
 
@@ -197,6 +187,14 @@ Object::External* TutorialGoalCount::Reconstruct() {
 }
 void TutorialGoalCount::Destruct() { this->~TutorialGoalCount(); }
 
+// The tree's finders (Entity/exe_bodies.h's fn_FindComponent_*) answered null
+// for a null entity; retail's FindComponent<T> instances have no such test
+// (known_port_issues 14d row 82). Kept.
+template <class T>
+static T* FindOnEntity(ComponentEntity* entity) {
+    return entity ? entity->FindComponent<T>() : nullptr;
+}
+
 // ============================================================
 // TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
 // ============================================================
@@ -205,17 +203,17 @@ void TutorialGoalCount::Destruct() { this->~TutorialGoalCount(); }
 // returns count >= target; otherwise returns count == target.
 //
 // Count modes:
-//   0: Building count by type (BST at worldData+0x160)
+//   0: Building count by type (the +0x160 tree)
 //   1: Citizens assigned to a profession type
-//   2: Adult population (worldData+0x28)
-//   3: Profession slot count by type (BST at worldData+0x100)
-//   4: Total population including children (worldData+0x08)
-//   5: Has trade posts (merchantList at worldData2+0xF0 > 0)
-//   6: Stored resource count across buildings of a profession type
-//   7: Building storage total by building type (BST at worldData+0x160, iterate)
+//   2: the +0x20 list's count (CitizenBehavior +0x28)
+//   3: Profession slot count by type (the +0x100 tree)
+//   4: StorageLocation count (CitizenBehavior +0x08)
+//   5: Map +0xF0 > 0
+//   6: Available job slots across buildings of a profession type
+//   7: Trading-post stock total by resource type
 //   8: Total stored items across all buildings
 //   9: UI spinner/slider element value (by elementName path)
-//  10: Occupied building count by type
+//  10: Built (state != 0) building count by type
 //
 // param2: unused (game world passed implicitly via g_pGameWorldSingleton)
 // param3: InternalBasePtr* — retail's case 9 CheckPtr'd it and read nothing else
@@ -226,10 +224,10 @@ void TutorialGoalCount::Destruct() { this->~TutorialGoalCount(); }
 // member delegate did before this fold.
 // [8] 0x1400df290 — the 11-mode count switch; StepExecute reads the result.
 bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
+    (void)param2;
     (void)param3;
 
-    uintptr_t s = (uintptr_t)this;
-    uint32_t mode = *(uint32_t*)(s + 0x20);
+    uint32_t mode = countMode;
     int count = 0;
 
     if (GameUpdateLoop::_singleton == nullptr) {
@@ -241,10 +239,10 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // Case 0: Count buildings of a type
     // --------------------------------------------------------
     case 0: {
-        uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        const ComponentDescription* typePtr = ResolveTypePtr<ComponentDescription>(typeRef);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (worldData) {
-            count = (int)TutBase_CountBuildingsByType(worldData, typePtr);
+            count = (int)worldData->CountByTemplate(typePtr);
         }
         break;
     }
@@ -252,39 +250,29 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // --------------------------------------------------------
     // Case 1: Count citizens assigned to a specific profession
     // --------------------------------------------------------
-    // Iterates citizen list (worldData+0xA0, count at +0xA8).
-    // For each alive citizen (health >= deathThreshold && no death flag),
-    // checks if their assigned profession matches the target type.
+    // Iterates the citizen list (CitizenBehavior +0xA0, count +0xA8). For each
+    // adult (age >= the description's adult age) not at school, checks if their
+    // assigned profession matches the target type. The null-citizen and
+    // null-description skips are the tree's.
     case 1: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
-        int citizenCount = *(int*)(worldData + 0xa8);
-        uintptr_t citizenArray = *(uintptr_t*)(worldData + 0xa0);
+        int citizenCount = worldData->citizenCount;
         int matched = 0;
         for (int i = 0; i < citizenCount; i++) {
-            // Each citizen is an IBP at citizenArray + i*8
-            uintptr_t citizenIBP = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
-            // Store in local for CheckPtr
-            uintptr_t localCitizen = citizenIBP;
-            uintptr_t citizen = localCitizen;
+            const CitizenComponent* citizen = worldData->citizens[i];
             if (!citizen) continue;
 
-            // Check alive: health (float at +0x3c) >= deathThreshold (float at citizen->desc(+0x288)+0x44)
-            float health = *(float*)(citizen + 0x3c);
-            uintptr_t desc = *(uintptr_t*)(citizen + 0x288);
+            float age = citizen->age;
+            const CitizenDescription* desc = citizen->description;
             if (!desc) continue;
-            float deathThreshold = *(float*)(desc + 0x44);
-            if (health < deathThreshold) continue;
+            if (age < desc->adultAge) continue;
 
-            // Check no death flag: citizen+0x208 == 0
-            if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
-
-            // Get assigned profession type: citizen+0x1F0
-            uintptr_t profType = *(uintptr_t*)(localCitizen + 0x1f0);
+            if (citizen->school != nullptr) continue;
 
             // Resolve target profession type and compare
-            uintptr_t targetProf = ResolveTypePtr(s, TypeIdProfessionDesc());
-            if (profType == targetProf) {
+            const Profession* targetProf = ResolveTypePtr<Profession>(typeRef);
+            if (citizen->profession == targetProf) {
                 matched++;
             }
         }
@@ -293,12 +281,12 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     }
 
     // --------------------------------------------------------
-    // Case 2: Adult population count (worldData+0x28)
+    // Case 2: the +0x20 list's count (CitizenBehavior +0x28)
     // --------------------------------------------------------
     case 2: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (worldData) {
-            count = *(int*)(worldData + 0x28);
+            count = worldData->field_0x28;
         }
         break;
     }
@@ -307,10 +295,10 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // Case 3: Profession slot count by type
     // --------------------------------------------------------
     case 3: {
-        uintptr_t typePtr = ResolveTypePtr(s, TypeIdProfessionDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        const Profession* typePtr = ResolveTypePtr<Profession>(typeRef);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (worldData) {
-            count = (int)TutBase_CountProfessionsByType(worldData, typePtr);
+            count = (int)worldData->CountByProfession(typePtr);
         }
         break;
     }
@@ -330,26 +318,21 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // `goalstoragebarnfinished { _count = 3 }` passes ONLY at exactly 3, and an
     // off-by-one here is a permanent stall, not a delay. Observed 2026-09-04 at
     // stepCutter7 (step 60): count=4 target=3 ge=0, forever.
-    //
-    // BANISHED_TUTORIAL_TRACE also dumps the array so the extra entry can be
-    // identified by its description pointer (correlate with the [TutRestrict]/[GoalRef]
-    // lines, which print the resolved description for each Template/*.rsc).
     case 4: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (worldData) {
-            count = *(int*)(worldData + 0x08);
-
+            count = worldData->field_0x08;
         }
         break;
     }
 
     // --------------------------------------------------------
-    // Case 5: Has trade posts (merchant list count > 0)
+    // Case 5: Map +0xF0 (a BST count) > 0
     // --------------------------------------------------------
     case 5: {
-        uintptr_t worldData2 = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
+        Map* worldData2 = GameUpdateLoop::_singleton->m_game;
         if (worldData2) {
-            count = (*(int*)(worldData2 + 0xf0) > 0) ? 1 : 0;
+            count = (worldData2->field_0xF0 > 0) ? 1 : 0;
         }
         break;
     }
@@ -357,44 +340,36 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // --------------------------------------------------------
     // Case 6: Available job slots (work capacity) across buildings of a profession type
     // --------------------------------------------------------
-    // Gets profession count from BST at worldData+0x100, then for each entity
-    // of that profession type, finds their WorkPlaceComponent (type 0x1401c80e0),
-    // checks if active (+0x50 != 0), and sums work capacity via helper_fbb0.
-    // helper_fbb0 internally finds WorkComponent on the parent entity and returns
-    // its cached capacity field (+0x30), lazily computing it if needed.
+    // Gets the profession's bucket count from the +0x100 tree, then for each
+    // entity of that profession finds its WorkPlaceComponent, checks it is
+    // accepting (+0x50), and sums its capacity (0x14012fbb0).
     case 6: {
         // Resolve profession type (re-resolved inside loop to match original)
-        uintptr_t profType = ResolveTypePtr(s, TypeIdProfessionDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        const Profession* profType = ResolveTypePtr<Profession>(typeRef);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
 
-        int profCount = (int)TutBase_CountProfessionsByType(worldData, profType);
+        int profCount = (int)worldData->CountByProfession(profType);
         int total = 0;
 
         for (int i = 0; i < profCount; i++) {
             // Re-resolve profession type each iteration (matches original)
-            uintptr_t curProfType = ResolveTypePtr(s, TypeIdProfessionDesc());
+            const Profession* curProfType = ResolveTypePtr<Profession>(typeRef);
 
-            // BST lookup at worldData+0x100 for this profession type
             // Re-read worldData each iteration (matches original)
-            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
-            uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x100);
-            uintptr_t* node = BSTFind(bstRoot, curProfType);
+            worldData = GameUpdateLoop::_singleton->m_citizenList;
+            ProfessionBucketNode* node = BSTFind(ProfessionTreeRoot(worldData), curProfType);
             if (!node) continue;
 
-            // node[1] = array of entity IBPs, indexed by i
-            uintptr_t entityIBP = *(uintptr_t*)(node[1] + (uintptr_t)i * 8);
-            uintptr_t localEntity = entityIBP;
+            ComponentEntity* entity = node->entities[i];
 
             // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
-            uintptr_t workplaceIBP = 0;
-            fn_FindComponent_WorkPlace((void*)localEntity, &workplaceIBP);
+            WorkPlaceComponent* workplace = FindOnEntity<WorkPlaceComponent>(entity);
 
-            // Check if workplace is active (byte at +0x50 != 0)
-            uintptr_t workplace = workplaceIBP;
-            if (workplace && *(uint8_t*)(workplace + 0x50) != 0) {
+            // Check the workplace is accepting (+0x50)
+            if (workplace && workplace->isAccepting) {
                 // Get work capacity (available job slots)
-                total += WorkPlaceComponent_GetMaxWorkers(workplaceIBP);
+                total += workplace->GetMaxWorkers();   // 0x14012fbb0
             }
         }
         count = total;
@@ -402,46 +377,39 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     }
 
     // --------------------------------------------------------
-    // Case 7: Building storage total by building type
+    // Case 7: Trading-post stock total by resource type
     // --------------------------------------------------------
-    // Iterates all entities (worldData+0x30 array, count at +0x38),
-    // finds their BuildingComponent, checks if type matches,
-    // then sums from the BuildingComponent's storage map at +0x60.
+    // Iterates the +0x30 entity list (count +0x38), finds each one's
+    // TradeComponent, and sums the stock tree's (+0x60) quantity for the type.
     case 7: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
-        int entityCount = *(int*)(worldData + 0x38);
-        uintptr_t entityArray = *(uintptr_t*)(worldData + 0x30);
+        int entityCount = worldData->field_0x38;
+        ComponentEntity** entityArray = worldData->field_0x30;
         int total = 0;
 
         for (int i = 0; i < entityCount; i++) {
-            // Get entity IBP
-            uintptr_t entityIBP = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
-            uintptr_t localEntity = entityIBP;
+            ComponentEntity* entity = entityArray[i];
 
-            // Find BuildingComponent
-            uintptr_t buildingIBP = 0;
-            fn_FindComponent_Building((void*)localEntity, &buildingIBP);
+            // Find TradeComponent (FUN_140015140, the tree's fn_FindComponent_Building)
+            TradeComponent* building = FindOnEntity<TradeComponent>(entity);
 
-            // Resolve building description type
-            uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
+            // Resolve the resource description type
+            const ComponentDescription* typePtr = ResolveTypePtr<ComponentDescription>(typeRef);
 
-            // CheckPtr and get building component
-            uintptr_t building = buildingIBP;
             if (!building) continue;
 
-            // Search the building's storage BST at +0x60 for matching type
-            uintptr_t storageBST = *(uintptr_t*)(building + 0x60);
-            uintptr_t* storageNode = TradeOrderBSTFind(storageBST, typePtr);
+            // Search the trading post's stock tree at +0x60 for the type
+            const TradeResourceNode* storageNode = TradeOrderBSTFind(building->stockRoot, typePtr);
 
             int storageCount = 0;
             if (storageNode != nullptr) {
-                storageCount = (int)storageNode[1];
+                storageCount = storageNode->quantity;
             }
             total += storageCount;
 
             // Re-read worldData for next iteration (may change)
-            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+            worldData = GameUpdateLoop::_singleton->m_citizenList;
         }
         count = total;
         break;
@@ -450,39 +418,29 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // --------------------------------------------------------
     // Case 8: Total stored items across all buildings
     // --------------------------------------------------------
-    // Iterates all entities, finds StorageComponent, sums all
-    // item counts from the storage's item array.
+    // Iterates the +0x30 entity list, finds each StorageComponent, sums the
+    // item counts of its slots.
     case 8: {
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
-        int entityCount = *(int*)(worldData + 0x38);
-        uintptr_t entityArray = *(uintptr_t*)(worldData + 0x30);
+        int entityCount = worldData->field_0x38;
+        ComponentEntity** entityArray = worldData->field_0x30;
         int total = 0;
 
         for (int i = 0; i < entityCount; i++) {
-            // Get entity IBP
-            uintptr_t entityIBP = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
-            uintptr_t localEntity = entityIBP;
+            ComponentEntity* entity = entityArray[i];
 
             // Find StorageComponent
-            uintptr_t storageIBP = 0;
-            fn_FindComponent_Storage((void*)localEntity, &storageIBP);
-            uintptr_t storage = storageIBP;
+            StorageComponent* storage = FindOnEntity<StorageComponent>(entity);
             if (!storage) continue;
 
-            // Iterate storage items: count at +0x30, array ptr at +0x28
-            // Each item is 16 bytes (stride 2 qwords), count value at offset -8 from item+16
-            int itemCount = *(int*)(storage + 0x30);
+            int itemCount = storage->slotCount;
             for (int j = 0; j < itemCount; j++) {
-                storage = storageIBP;
-                uintptr_t itemArray = *(uintptr_t*)(storage + 0x28);
-                // Items at stride 16 bytes (2 qwords): count at itemArray + j*16 + 8
-                int itemStored = *(int*)(itemArray + (uintptr_t)j * 16 + 8);
-                total += itemStored;
+                total += storage->storageSlots[j]._count;
             }
 
             // Re-read worldData for next iteration
-            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+            worldData = GameUpdateLoop::_singleton->m_citizenList;
         }
         count = total;
         break;
@@ -491,75 +449,61 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     // --------------------------------------------------------
     // Case 9: UI spinner/slider element value
     // --------------------------------------------------------
-    // Finds a UI element by the elementName path (+0x48),
-    // casts it to SpinnerElement, reads its value if not active.
+    // Finds a UI element by the elementName path (+0x48), narrows it to
+    // SpinnerElement (0x140013920), reads its value if not active.
     case 9: {
-        // Find UI element by path
-        uintptr_t foundIBP[2] = {0, 0};  // InternalBasePtr buffer
-        FindUIElementByPath_Impl(foundIBP, (void*)(s + 0x48), nullptr);   // 0x1400e1870
+        Object::InternalPtr<UI::Element> found;
+        FindUIElementByPath_Impl(&found, &ElementName(), nullptr);   // 0x1400e1870
 
-        uintptr_t element = foundIBP[0];
+        UI::Element* element = found.Get();
         if (!element) { break; }
 
-        // Cast to SliderElement (checks IsDerivedFrom SliderElement type)
-        void* slider = TutBase_CastToSliderElement((void*)element);
-        uintptr_t sliderIBP = (uintptr_t)slider;
-        if (!sliderIBP) { break; }
+        const UI::SpinnerElement* slider =
+            Object::IsDerivedFromNullSafe(element, UI::SpinnerElement::TypeId())
+                ? static_cast<const UI::SpinnerElement*>(element) : nullptr;
+        if (!slider) { break; }
 
-        // Create IBP and check if active
-        if (reinterpret_cast<const UI::SpinnerElement*>(sliderIBP)->IsActive()) {  // B.3.6 bridge
+        if (slider->IsActive()) {
             // Retail refuses to read a spinner mid-edit. If this never clears, the
             // goal stalls forever with the right number visible on screen.
             break;
         }
 
-        // Read current value
-        count = reinterpret_cast<const UI::SpinnerElement*>(sliderIBP)->GetValue();  // B.3.6 bridge
+        count = slider->GetValue();
         break;
     }
 
     // --------------------------------------------------------
-    // Case 10: Occupied building count by type
+    // Case 10: Built building count by type
     // --------------------------------------------------------
-    // Gets building count by type, then for each building in the BST,
-    // finds the BuildStateComponent and checks occupancy flags.
+    // Gets the template's bucket count, then for each of its entities finds the
+    // StateMachineComponent and counts a reported state != 0.
     case 10: {
-        // Get building description type
-        uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
-        uintptr_t worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        const ComponentDescription* typePtr = ResolveTypePtr<ComponentDescription>(typeRef);
+        CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
 
-        int buildingCount = (int)TutBase_CountBuildingsByType(worldData, typePtr);
+        int buildingCount = (int)worldData->CountByTemplate(typePtr);
         int occupied = 0;
 
         for (int i = 0; i < buildingCount; i++) {
-            // Look up building type in BST at worldData+0x160
-            // Need to re-resolve type each iteration (original code does this)
-            uintptr_t curTypePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
-            worldData = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
-            uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x160);
-            uintptr_t* node = BSTFind(bstRoot, curTypePtr);
+            // Re-resolve the type each iteration (original code does this)
+            const ComponentDescription* curTypePtr = ResolveTypePtr<ComponentDescription>(typeRef);
+            worldData = GameUpdateLoop::_singleton->m_citizenList;
+            TemplateBucketNode* node = BSTFind(TemplateTreeRoot(worldData), curTypePtr);
 
-            uintptr_t entityIBP = 0;
+            ComponentEntity* entity = nullptr;
             if (node) {
-                // node[1] = array of entity IBPs
-                entityIBP = *(uintptr_t*)(node[1] + (uintptr_t)i * 8);
-            } else {
-                // Not found — initialize empty IBP
-                new (&entityIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                entity = node->entities[i];
             }
 
-            // CheckPtr and find BuildStateComponent
-            uintptr_t buildStateIBP = 0;
-            fn_FindComponent_BuildState((void*)entityIBP, &buildStateIBP);
-            uintptr_t buildState = buildStateIBP;
+            StateMachineComponent* buildState = FindOnEntity<StateMachineComponent>(entity);
             if (!buildState) continue;
 
-            // Check occupancy: byte at +0x52 (if negative/high bit set, use +0x50 instead)
-            uint8_t flag52 = *(uint8_t*)(buildState + 0x52);
-            uint8_t checkFlag = flag52;
-            if ((int8_t)flag52 < 0) {
-                checkFlag = *(uint8_t*)(buildState + 0x50);
+            // The reported state: +0x52 pending, or +0x50 when nothing is pending.
+            int8_t checkFlag = buildState->stateMachine.pendingState;
+            if (checkFlag < 0) {
+                checkFlag = buildState->stateMachine.currentInput;
             }
             if (checkFlag != 0) {
                 occupied++;
@@ -577,10 +521,10 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
 compare:
 
     // Final comparison: greaterOrEqual ? (count >= target) : (count == target)
-    if (*(uint8_t*)(s + 0x28) != 0) {
-        return (count >= *(int32_t*)(s + 0x24)) ? 1 : 0;
+    if (greaterOrEqual) {
+        return (count >= targetCount) ? 1 : 0;
     }
-    return (count == *(int32_t*)(s + 0x24)) ? 1 : 0;
+    return (count == targetCount) ? 1 : 0;
 }
 
 

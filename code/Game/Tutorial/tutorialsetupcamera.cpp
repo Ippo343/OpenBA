@@ -21,6 +21,8 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"
+#include "Game/Map.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -41,15 +43,14 @@ TutorialSetupCamera::TutorialSetupCamera()
 // ============================================================
 // Serializes 4 int32 fields: cameraX, cameraChunkRow, cameraY, cameraChunkCol.
 bool TutorialSetupCamera::Serialize(void* stream) {
-    alignas(8) uint8_t serializer[32];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraX, nullptr);          // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraChunkRow, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraY, nullptr);          // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraChunkCol, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    serializer.Serialize(cameraX, nullptr);
+    serializer.Serialize(cameraChunkRow, nullptr);
+    serializer.Serialize(cameraY, nullptr);
+    serializer.Serialize(cameraChunkCol, nullptr);
     return true;
 }
 
@@ -70,15 +71,15 @@ void TutorialSetupCamera::Destruct() { this->~TutorialSetupCamera(); }
 void TutorialSetupCamera::Begin() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // Get map cell size from WorldGrid (+0xF8 is pointer to grid, first int is cell size)
-    void** gridPtr = *reinterpret_cast<void***>(gameWorld + 0xF8);
+    // The map edge in cells (Map +0x00, the loop's +0xF8)
+    Map* gridPtr = gameWorld->m_game;
     if (!gridPtr) return;
-    int32_t cellSize = *reinterpret_cast<int32_t*>(gridPtr);
+    int32_t cellSize = gridPtr->size;
 
-    // Get camera object from GameWorld+0x120
-    uintptr_t camera = *reinterpret_cast<uintptr_t*>(gameWorld + 0x120);
+    // The PlayerToolManager (GameWorld+0x120), which holds the camera target
+    PlayerToolManager* camera = gameWorld->m_toolManager;
     if (!camera) return;
 
     // Compute absolute camera position
@@ -86,9 +87,9 @@ void TutorialSetupCamera::Begin() {
     int32_t absY = cameraChunkCol * cellSize + cameraY;
 
     // Write to camera object
-    *(int32_t*)(camera + 0xA8) = absX;
-    *(uint8_t*)(camera + 0xA4) = 1;   // Flag: camera position is set / needs update
-    *(int32_t*)(camera + 0xAC) = absY;
+    camera->field_0xA8 = absX;
+    camera->field_0xA4 = true;   // Flag: camera position is set / needs update
+    camera->field_0xAC = absY;
 }
 
 // ============================================================

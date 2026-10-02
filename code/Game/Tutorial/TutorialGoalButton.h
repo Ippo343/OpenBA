@@ -23,6 +23,8 @@
 #include "Tutorial/TutorialGoal.h"
 #include "Object/exe_type.h"
 
+namespace System { class String; }
+
 class TutorialGoalButton final : public TutorialGoal {
     DECLARE_EXE_TYPE(TutorialGoalButton)
 
@@ -37,9 +39,12 @@ public:
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400dece0
     virtual Object::External* Construct();                         // [9] 0x140027300
 
+    // The +0x20 String (H5 raw storage). Defined in tutorialgoalbutton.cpp.
+    System::String& ElementPath();
+
 public:
     uint64_t elementPath;        // +0x20: System::String — UI element path to find
-    uint8_t  invertCheck;        // +0x28: bool — true: bit 23 clear; false: bit 22 set
+    bool     invertCheck;        // +0x28: true: bit 23 clear; false: bit 22 set (Serialize(bool&))
     uint8_t  _pad29[7];          // +0x29: padding
 };
 

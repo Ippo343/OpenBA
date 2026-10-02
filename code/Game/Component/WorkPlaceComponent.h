@@ -75,6 +75,8 @@ public:
     char EnterDemolish();                                               // 0x14012ed60 state 3
     // The tree's own (no retail body): StartTown's occupied-house visual.
     void ApplyOccupiedVisual();
+    // B4 TUT; body in Tutorial/tutorial_base.cpp.
+    int GetMaxWorkers() const;                                          // 0x14012fbb0
 
 private:
     void EvictRoster();                                                 // 0x14012fc00's pause tail (B5)

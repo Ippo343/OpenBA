@@ -26,6 +26,8 @@
 #include "achievement/Goal.h"
 #include "Object/exe_type.h"
 
+class Tutorial;
+
 class FinishTutorialGoal final : public Achievement::Goal {
     DECLARE_EXE_TYPE(FinishTutorialGoal)
 
@@ -42,7 +44,7 @@ public:
     virtual Object::External* Construct();                         // [10] 0x140026150
 
 public:
-    void*    _field30;           // +0x30: ExternalPtr<Tutorial> — the tutorial definition
+    Tutorial* _field30;          // +0x30: ExternalPtr<Tutorial> — the tutorial definition
 };
 
 static_assert(offsetof(FinishTutorialGoal, _field30) == 0x30, "FinishTutorialGoal +0x30 tutorial");

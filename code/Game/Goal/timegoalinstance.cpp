@@ -22,7 +22,7 @@
 
 // ctor 0x1400dad90 (inlined in create 0x140026670): GoalInstance(), the vptr,
 // elapsedTime = 0.
-TimeGoalInstance::TimeGoalInstance() : elapsedTime(0) {}
+TimeGoalInstance::TimeGoalInstance() : elapsedTime{} {}
 
 // ============================================================
 // TimeGoalInstance::Persist (vtable +0x18, 0x1400dad30)
@@ -35,15 +35,12 @@ void TimeGoalInstance::Persist(void* stream) {
     // after this object.
     Achievement::GoalInstance::Persist(stream);
 
-    // Create serializer
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: Internal::Persist hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
-    reinterpret_cast<System::Time*>(&elapsedTime)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    elapsedTime.Serialize(serializer);
 }
 
 // ============================================================
@@ -55,20 +52,18 @@ void TimeGoalInstance::Persist(void* stream) {
 //   GoalInstance::Update(time, list);
 void TimeGoalInstance::Update(const System::Time& time, const Achievement::GoalList& list) {
     // Accumulate time
-    elapsedTime += *reinterpret_cast<const int64_t*>(&time);   // B.3.4 bridge (System::Time is one int64)
+    elapsedTime._ticks += time._ticks;
 
     // Check if other goals are met (except this instance). The InternalPtr is
     // built through the IBP ctor (import slot 0x140152a90) exactly as retail.
-    uint8_t ibpBuf[8];
-    ::new (static_cast<void*>(ibpBuf)) Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    const Object::InternalPtr<Achievement::GoalInstance> self(this);
 
     // Achievement::GoalList::AreGoalsMetExcept (retail 0x18009f070, NON-virtual)
     // — the InternalPtr argument by HIDDEN POINTER (B37_RULES B7-5).
-    bool othersMet = list.AreGoalsMetExcept(
-        reinterpret_cast<const Object::InternalPtr<Achievement::GoalInstance>*>(ibpBuf));   // B.3.7 bridge
+    bool othersMet = list.AreGoalsMetExcept(&self);
     if (!othersMet) {
         // Reset elapsed time to zero — other goals not met
-        elapsedTime = 0;
+        elapsedTime._ticks = 0;
     }
 
     // Achievement::GoalInstance::Update (slot 5, retail 0x18009f010) — QUALIFIED (B7-13).
@@ -85,7 +80,7 @@ void TimeGoalInstance::Update(const System::Time& time, const Achievement::GoalL
 // 0xe10 = 3600 = seconds per year in game time.
 Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
     // Get parent goal pointer
-    const Object::Base* goal = reinterpret_cast<const Object::Base*>(_goal._ptr);
+    const Object::Base* goal = _goal.Get();
 
     // Cast to TimeGoal via IsDerivedFrom (import slot 0x140152a98) against the
     // id in TypeInfo_TimeGoal (dword 0x1401c62e8 = TimeGoal's own record, i.e.
@@ -97,7 +92,7 @@ Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
     }
 
     // Convert elapsed time to seconds
-    float elapsedSeconds = reinterpret_cast<const System::Time*>(&elapsedTime)->AsSeconds();   // B.3.4 bridge
+    float elapsedSeconds = elapsedTime.AsSeconds();
 
     // Compare against required time
     if (timeGoal) {

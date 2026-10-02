@@ -30,6 +30,9 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+namespace UI { class Element; class ImageElement; }
+class ComponentEntity;
+
 class TutorialHighlightDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(TutorialHighlightDialog)
 
@@ -40,7 +43,7 @@ public:
     // gets (ui, dialog, parent, dataSource 0, userData 0, userFlags 0).
     TutorialHighlightDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                             Object::InternalPtr<UI::DialogInstance> parent,
-                            void* targetElement, int32_t rotation, void* targetEntity);
+                            UI::Element* targetElement, int32_t rotation, ComponentEntity* targetEntity);
 
     // 0x1400e01a0: restamp only
     ~TutorialHighlightDialog() override = default;                 // [0] 0x140027910
@@ -57,13 +60,13 @@ private:
 
 public:
     int64_t  elapsedTicks;       // +0xB8: System::Time — accumulated by OnUpdate
-    void*    glowGroup;          // +0xC0: InternalPtr<UI::Element> "glowGroup"
-    void*    glow;               // +0xC8: InternalPtr<UI::ImageElement> "glow"
-    void*    arrow;              // +0xD0: InternalPtr<UI::ImageElement> "arrow"
+    UI::Element*      glowGroup; // +0xC0: InternalPtr<UI::Element> "glowGroup"
+    UI::ImageElement* glow;      // +0xC8: InternalPtr<UI::ImageElement> "glow"
+    UI::ImageElement* arrow;     // +0xD0: InternalPtr<UI::ImageElement> "arrow"
     int32_t  rotation;           // +0xD8: arrow rotation, degrees (0/90/180/270)
     uint8_t  _padDC[4];          // +0xDC: padding
-    void*    targetElement;      // +0xE0: InternalPtr<UI::Element> (element-path branch)
-    void*    targetEntity;       // +0xE8: entity handle (toolbar-cell branch)
+    UI::Element*     targetElement; // +0xE0: InternalPtr<UI::Element> (element-path branch)
+    ComponentEntity* targetEntity;  // +0xE8: InternalPtr<ComponentEntity> (toolbar-cell branch)
 };
 
 static_assert(offsetof(TutorialHighlightDialog, elapsedTicks) == 0xB8, "+0xB8");

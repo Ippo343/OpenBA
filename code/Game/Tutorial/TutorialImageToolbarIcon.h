@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "Tutorial/TutorialImage.h"
+#include "Goal/goal_exe_helpers.h"   // NamedExternalRef
 
 class TutorialImageToolbarIcon final : public TutorialImage {
     DECLARE_EXE_TYPE(TutorialImageToolbarIcon)
@@ -34,17 +35,16 @@ public:
     Object::External* Reconstruct() override;                      // [6] 0x140028070
     // [7] Destruct: TutorialImage's (the shared 0x140001640 body)
     Object::External* Construct() override;                        // [8] 0x140028060
-    void*             CreateElement(void* ret, void* dialog) override;  // [9] 0x1400e0940
+    Object::InternalPtr<UI::Element>* CreateElement(Object::InternalPtr<UI::Element>* ret,
+                                                    const UI::Dialog* dialog) override;  // [9] 0x1400e0940
 
 public:
-    void*    _toolbarString;     // +0x30: ExternalPtr triple: System::String (toolbar name)
-    int32_t  _toolbarStringTag;  // +0x38: ExternalFactory generation (-1)
-    uint8_t  _pad3C[4];          // +0x3C: padding
-    void*    _toolbarRef;        // +0x40: resolved Toolbar*
+    // +0x30: the Toolbar entry, by name (resolved by 0x140027de0)
+    NamedExternalRef _toolbarRef;
 };
 
-static_assert(offsetof(TutorialImageToolbarIcon, _toolbarString) == 0x30, "+0x30");
-static_assert(offsetof(TutorialImageToolbarIcon, _toolbarStringTag) == 0x38, "+0x38");
-static_assert(offsetof(TutorialImageToolbarIcon, _toolbarRef) == 0x40, "+0x40");
+static_assert(offsetof(TutorialImageToolbarIcon, _toolbarRef) == 0x30, "+0x30");
+static_assert(offsetof(TutorialImageToolbarIcon, _toolbarRef) + offsetof(NamedExternalRef, generation) == 0x38, "+0x38");
+static_assert(offsetof(TutorialImageToolbarIcon, _toolbarRef) + offsetof(NamedExternalRef, resolved) == 0x40, "+0x40");
 static_assert(sizeof(TutorialImageToolbarIcon) == 0x48, "TutorialImageToolbarIcon is 0x48 (create 0x140028020)");
 static_assert(alignof(TutorialImageToolbarIcon) == 8, "qword-aligned");

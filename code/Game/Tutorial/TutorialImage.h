@@ -28,6 +28,10 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+#include "object/Internal.h"   // Object::InternalPtr
+
+namespace UI { class ElementDescription; class Element; class Dialog; }
+
 class TutorialImage : public Object::External {
     DECLARE_EXE_TYPE(TutorialImage)
 
@@ -40,10 +44,12 @@ public:
     Object::External* Reconstruct() override;                      // [6] 0x140027a30
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x1400279e0
-    virtual void*     CreateElement(void* ret, void* dialog);      // [9] 0x1400e0300 (retslot)
+    // [9] 0x1400e0300: by value in retail (retslot, B6): builds the image's element.
+    virtual Object::InternalPtr<UI::Element>* CreateElement(Object::InternalPtr<UI::Element>* ret,
+                                                            const UI::Dialog* dialog);
 
 public:
-    void*    imageRef;           // +0x20: ExternalPtr<UI::ElementDescription> (the image)
+    UI::ElementDescription* imageRef; // +0x20: ExternalPtr<UI::ElementDescription> (the image)
     int32_t  imageWidth;         // +0x28: serialized int
     int32_t  imageHeight;        // +0x2C: serialized int
 };

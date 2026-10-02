@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "achievement/Goal.h"
+#include "system/Value.h"   // System::Time (one int64)
 #include "Object/exe_type.h"
 
 class TimeGoalInstance final : public Achievement::GoalInstance {
@@ -39,7 +40,7 @@ public:
     Achievement::Goal::GoalState CheckGoalState() const override;  // [6] 0x1400dacb0
 
 public:
-    int64_t  elapsedTime;        // +0x20: accumulated System::Time ticks
+    System::Time elapsedTime;    // +0x20: accumulated time (Time::Serialize, 0x1400dac30 adds the frame's)
 };
 
 static_assert(offsetof(TimeGoalInstance, elapsedTime) == 0x20, "TimeGoalInstance::elapsedTime offset");

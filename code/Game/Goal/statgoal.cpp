@@ -9,12 +9,8 @@
 //   +0x38: int32  comparisonType      — comparison enum (0-11: EQ/NE/LT/LE/GT/GE, even=A, odd=B)
 //   +0x3c: int32  fixedValue          — fixed comparison value when not using statB (default 1)
 //   +0x40: bool   requireOtherGoalsMet — adds 1 to result if true
-//   +0x48: String statAString         — resource name for stat A
-//   +0x50: int32  statAGeneration     — ExternalFactory gen counter
-//   +0x58: void*  statAExternal       — resolved External* for stat A
-//   +0x60: String statBString         — resource name for stat B
-//   +0x68: int32  statBGeneration     — ExternalFactory gen counter
-//   +0x70: void*  statBExternal       — resolved External* for stat B
+//   +0x48: NamedExternalRef statA     — {String name, generation, External*} for stat A
+//   +0x60: NamedExternalRef statB     — the same for stat B
 //   +0x78: int32  statFlags           — flags/category (default 0x20)
 //   +0x7c: int32  statSubType         — sub-type index (default 1)
 //
@@ -22,7 +18,6 @@
 
 #include "Goal/StatGoal.h"
 #include "Goal/goal_exe_helpers.h"
-#include "Goal/statvaluedispatch.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
@@ -47,15 +42,14 @@
 // ctor 0x1400daa80: Goal(), the vptr, then the stat defaults.
 StatGoal::StatGoal()
     : statTypeA(5), statTypeB(5), comparisonType(10), fixedValue(1),
-      requireOtherGoalsMet(0), _pad41{}, statAString{}, statAGeneration(-1), _pad54{},
-      statAExternal(nullptr), statBString{}, statBGeneration(-1), _pad6c{},
-      statBExternal(nullptr), statFlags(0x20), statSubType(1) {}
+      requireOtherGoalsMet(false), _pad41{}, statA{{}, -1, {}, nullptr},
+      statB{{}, -1, {}, nullptr}, statFlags(0x20), statSubType(1) {}
 
 // The dtor inside [0] 0x140026540: the two name Strings (B then A); the
-// compiler then runs ~Goal. B.3.1 bridge: the ExternalPtr triples are bytes.
+// compiler then runs ~Goal. The names are raw storage (NamedExternalRef, H5).
 StatGoal::~StatGoal() {
-    reinterpret_cast<System::String*>(statBString)->~String();   // B.3.1 bridge
-    reinterpret_cast<System::String*>(statAString)->~String();   // B.3.1 bridge
+    statB.Name().~String();
+    statA.Name().~String();
 }
 
 // ============================================================
@@ -64,62 +58,55 @@ StatGoal::~StatGoal() {
 // Calls base Goal::Serialize first, then serializes the stat-specific fields.
 // Retail ends in `MOV AL,1` (0x1400da9ee).
 bool StatGoal::Serialize(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // Create serializer (stack-local, 24 bytes)
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer (stack-local). LEFT: External::Serialize hands the stream
+    // in as void* (the runtime base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // statTypeA / statTypeB / comparisonType, each through the UINT door
-    // (rw_vtbl::kScalarUInt, readerWriter vtable +0x98). Retail 0x1400da8e2.
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x30), nullptr);   // B.3.4 bridge  (0x98 = uint door)  statTypeA
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x34), nullptr);   // B.3.4 bridge  (0x98 = uint door)  statTypeB
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x38), nullptr);   // B.3.4 bridge  (0x98 = uint door)  comparisonType
+    // (readerWriter vtable +0x98). Retail 0x1400da8e2.
+    ser.Serialize(statTypeA, nullptr);
+    ser.Serialize(statTypeB, nullptr);
+    ser.Serialize(comparisonType, nullptr);
 
-    // Serialize fixedValue (+0x3c) via Serialize_Int
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(fixedValue, nullptr);   // B.3.4 bridge
+    // fixedValue (+0x3c), Serialize(int&)
+    ser.Serialize(fixedValue, nullptr);
 
-    // Serialize requireOtherGoalsMet (+0x40) via Serialize_Bool
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge
+    // requireOtherGoalsMet (+0x40), Serialize(bool&)
+    ser.Serialize(requireOtherGoalsMet, nullptr);
 
-    // Serialize statA string (+0x48) via String::Serialize. Each leg is wrapped
-    // in the Filename stack temporary retail's compiler emitted.
+    // statA's name (+0x48) via String::Serialize. Each leg is wrapped in the
+    // Filename stack temporary retail's compiler emitted.
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializerBuf);   // B.3.1 bridge
+        statA.Name().Serialize(&ser);
 
-        // If loading (mode == 0), resolve the ExternalPtr. Original (0x1400da960):
-        // RAX = *(serializer+0) [the reader/writer], then *(int*)(RAX+8) == 0.
-        void* reader = *(void**)(serializerBuf + 0);
-        if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            StatGoal_ResolveExternalPtr((void*)(s + 0x48));
+        // If loading (mode == 0), resolve the reference. Original (0x1400da960):
+        // RAX = *(serializer+0) [the stream], then *(int*)(RAX+8) == 0.
+        if (ser._stream && static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            statA.Resolve();
         }
     }
 
-    // Serialize statB string (+0x60)
+    // statB's name (+0x60)
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        reinterpret_cast<System::String*>(s + 0x60)->Serialize(serializerBuf);   // B.3.1 bridge
+        statB.Name().Serialize(&ser);
 
-        void* reader = *(void**)(serializerBuf + 0);
-        if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            StatGoal_ResolveExternalPtr((void*)(s + 0x60));
+        if (ser._stream && static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            statB.Resolve();
         }
     }
 
     // statFlags (+0x78), the same UINT door. Retail 0x1400da9bb.
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x78), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    ser.Serialize(statFlags, nullptr);
 
-    // Serialize statSubType (+0x7c) via Serialize_Int
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(statSubType, nullptr);   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    // statSubType (+0x7c) via Serialize(int&)
+    ser.Serialize(statSubType, nullptr);
     return true;
 }
 
@@ -145,55 +132,30 @@ void StatGoal::Destruct() { this->~StatGoal(); }
 // Operand computation, split out unchanged so a diagnostic can read the two
 // numbers the comparison is about to use. Retail has no such split; the
 // instruction order inside is untouched.
+// Retail copies the WHOLE 0x18 by-name reference to the stack, resolves the
+// COPY and reads the External back out of it: the member is left untouched.
+static const Object::External* ResolveCopy(const NamedExternalRef& ref) {
+    NamedExternalRef local;
+    new (local.name) System::String(ref.Name());
+    local.generation = ref.generation;
+    local.resolved   = ref.resolved;
+    local.Resolve();
+    const Object::External* ext = local.resolved;
+    local.Name().~String();
+    return ext;
+}
+
 void StatGoal::ComputeOperands(int& statValueA, int& comparisonValue) const {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    void* self = const_cast<StatGoal*>(this);
-
-    // Local ExternalPtr struct layout matching original:
-    //   [0x00..0x07]: String (8 bytes, copy)
-    //   [0x08..0x0B]: int32 generation
-    //   [0x10..0x17]: void* external ptr
-    //   [0x28..0x2F]: parent ptr (points back to start)
-
-    // --- Resolve statA ---
-    uint8_t localA[0x30];
-    memset(localA, 0, sizeof(localA));
-    *(uintptr_t*)(localA + 0x28) = (uintptr_t)localA;  // parent ptr
-
-    // B.3.1 bridge: the local ExternalPtr is still untyped bytes.
-    new (localA) System::String(*reinterpret_cast<const System::String*>(s + 0x48));
-    *(int32_t*)(localA + 0x08) = statAGeneration;          // generation
-    *(void**)(localA + 0x10)   = statAExternal;            // external ptr
-    *(uintptr_t*)(localA + 0x28) = (uintptr_t)localA;      // parent ptr
-
-    StatGoal_ResolveExternalPtr(localA);
-    void* extA = *(void**)(localA + 0x10);
-
-    // Destroy string copy
-    reinterpret_cast<System::String*>(localA)->~String();
-
-    // Look up stat value A
-    statValueA = static_cast<int>(StatGoal_StatValueDispatch(self, static_cast<uint32_t>(statTypeA), extA));
+    // --- Resolve statA, look up stat value A ---
+    const Object::External* extA = ResolveCopy(statA);
+    statValueA = static_cast<int>(StatValue(statTypeA, extA));
 
     // --- Determine comparison value ---
     comparisonValue = 0;
     if ((comparisonType & 1) != 0) {
         // Odd comparisonType: use statB
-        uint8_t localB[0x30];
-        memset(localB, 0, sizeof(localB));
-        *(uintptr_t*)(localB + 0x28) = (uintptr_t)localB;
-
-        new (localB) System::String(*reinterpret_cast<const System::String*>(s + 0x60));
-        *(int32_t*)(localB + 0x08) = statBGeneration;
-        *(void**)(localB + 0x10)   = statBExternal;
-        *(uintptr_t*)(localB + 0x28) = (uintptr_t)localB;
-
-        StatGoal_ResolveExternalPtr(localB);
-        void* extB = *(void**)(localB + 0x10);
-
-        reinterpret_cast<System::String*>(localB)->~String();
-
-        comparisonValue = static_cast<int>(StatGoal_StatValueDispatch(self, static_cast<uint32_t>(statTypeB), extB));
+        const Object::External* extB = ResolveCopy(statB);
+        comparisonValue = static_cast<int>(StatValue(statTypeB, extB));
     } else {
         // Even comparisonType: use fixedValue
         comparisonValue = fixedValue;
@@ -207,7 +169,7 @@ Achievement::Goal::GoalState StatGoal::CheckGoalState() const {
 
     // --- Evaluate comparison ---
     bool comparisonMet = false;
-    int cmpType = comparisonType;
+    int cmpType = static_cast<int>(comparisonType);
     if (cmpType >= 0 && cmpType <= 11) {
         switch (cmpType) {
             case 0: case 1:   comparisonMet = (statValueA == comparisonValue); break;
@@ -220,7 +182,7 @@ Achievement::Goal::GoalState StatGoal::CheckGoalState() const {
     }
 
     // Apply requireOtherGoalsMet modifier
-    if (requireOtherGoalsMet != 0) {
+    if (requireOtherGoalsMet) {
         return static_cast<GoalState>(comparisonMet ? 2 : 1);
     }
     return static_cast<GoalState>(comparisonMet ? 1 : 0);
@@ -231,9 +193,9 @@ Achievement::Goal::GoalState StatGoal::CheckGoalState() const {
 // ============================================================
 // Returns the two numbers CheckGoalState compares. Uses the same member, so it
 // can never disagree with the verdict.
-extern "C" void StatGoal_ProbeOperands(void* goal, int* outA, int* outB) {
+extern "C" void StatGoal_ProbeOperands(const StatGoal* goal, int* outA, int* outB) {
     int a = 0, b = 0;
-    if (goal) reinterpret_cast<const StatGoal*>(goal)->ComputeOperands(a, b);   // B.3.8 bridge
+    if (goal) goal->ComputeOperands(a, b);
     if (outA) *outA = a;
     if (outB) *outB = b;
 }
