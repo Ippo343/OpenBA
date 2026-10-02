@@ -59,7 +59,8 @@ public:
     void*    _field78;           // +0x78: resolved External ptr for noise layer 3
     // Dynamic terrain data array
     TerrainSizeRow* _field80;    // +0x80: the size table (TerrainSizeRow, 0x44 per entry, freed in dtor)
-    void*    _field88;           // +0x88: count/capacity info for terrain data array
+    int32_t  _sizeRowCount;      // +0x88: the size table's count (Serialize: the int overload; Array::_size)
+    int32_t  _sizeRowCapacity;   // +0x8C: the size table's capacity (Array::_capacity)
 };
 
 static_assert(sizeof(TerrainGenerator) == 0x90, "TerrainGenerator is 0x90");
@@ -70,4 +71,5 @@ static_assert(offsetof(TerrainGenerator, _field38) == 0x38, "+0x38");
 static_assert(offsetof(TerrainGenerator, _field50) == 0x50, "+0x50");
 static_assert(offsetof(TerrainGenerator, _field68) == 0x68, "+0x68");
 static_assert(offsetof(TerrainGenerator, _field80) == 0x80, "+0x80");
-static_assert(offsetof(TerrainGenerator, _field88) == 0x88, "+0x88");
+static_assert(offsetof(TerrainGenerator, _sizeRowCount) == 0x88, "+0x88");
+static_assert(offsetof(TerrainGenerator, _sizeRowCapacity) == 0x8C, "+0x8C");

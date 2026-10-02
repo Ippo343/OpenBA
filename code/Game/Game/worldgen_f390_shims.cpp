@@ -13,31 +13,33 @@
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "Game/exe_bodies.h"
+#include "Action/PathSearch.h"   // RawArray<T>
 
 extern "C" {
 
 // System::Random::RandFloatTol() — Runtime export; advances RNG state, returns ~[-1,1].
+// The receiver stays void*: its callers outside GAME-c (Component, starttown,
+// founding_spawn) still hold the Random as void*.
 float fn_Random_RandFloatTol(void* self) {
-    return reinterpret_cast<System::Random*>(self)->RandFloatTol();   // B.3.4b bridge
+    return reinterpret_cast<System::Random*>(self)->RandFloatTol();   // LEFT: void* receiver of outside callers (Component blocks, starttown, founding_spawn)
 }
 
 // vector<int> bucket deep-copy ({data@+0, count@+8, cap@+0xC}, stride-4 elements).
-// Mirrors Reimpl_TradeComponent_helper_f9e0 in gameupdateloop_load.cpp.
-void TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
-    if (dstElem == srcElem) return;
-    uint8_t* d = static_cast<uint8_t*>(dstElem);
-    uint8_t* s = static_cast<uint8_t*>(srcElem);
-    void* old = *reinterpret_cast<void**>(d + 0x00);
+// Mirrors Reimpl_TradeComponent_helper_f9e0 in gameupdateloop_load.cpp. Its one
+// caller is worldgen_f390_rivers.cpp's cluster-bucket resize.
+void TradeComponent_helper_f9e0(RawArray<int32_t>* d, const RawArray<int32_t>* s) {
+    if (d == s) return;
+    int32_t* old = d->data;
     if (old) System::MemoryAllocator::MemFree(old);
-    *reinterpret_cast<int32_t*>(d + 0x08) = 0;
-    *reinterpret_cast<void**>(d + 0x00) = nullptr;
-    int32_t cnt = *reinterpret_cast<int32_t*>(s + 0x08);
-    *reinterpret_cast<int32_t*>(d + 0x08) = cnt;
+    d->size = 0;
+    d->data = nullptr;
+    int32_t cnt = s->size;
+    d->size = cnt;
     if (cnt > 0) {
-        *reinterpret_cast<int32_t*>(d + 0x0C) = cnt;
-        *reinterpret_cast<void**>(d + 0x00) = System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4);
-        int32_t* dp = *reinterpret_cast<int32_t**>(d + 0x00);
-        int32_t* sp = *reinterpret_cast<int32_t**>(s + 0x00);
+        d->capacity = cnt;
+        d->data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4));
+        int32_t* dp = d->data;
+        const int32_t* sp = s->data;
         for (int32_t i = 0; i < cnt; ++i) dp[i] = sp[i];
     }
 }

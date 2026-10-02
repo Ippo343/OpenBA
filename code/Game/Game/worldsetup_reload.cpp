@@ -55,7 +55,7 @@
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr) {
     if (!worldSetup) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);
+    uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);   // LEFT: the receiver's class is not settled here (MainMenuDialog by 0x1400b4790's twin; Dialog callers pass void*)
 
     // Caller batch CB6: the three loops are built by their real ctors (below),
     // which stamp the compiler tables and chain the Runtime base ctors
@@ -70,10 +70,13 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // The IBP the caller handed us is copied to a local BEFORE the ctor runs, and
     // the ctor stores that copy at gameLoop+0x150 (retail: local_40 = *param_4).
-    uint64_t ibpCopy = retvalIbpPtr ? *reinterpret_cast<uint64_t*>(retvalIbpPtr) : 0;
+    uint64_t ibpCopy = retvalIbpPtr ? *reinterpret_cast<uint64_t*>(retvalIbpPtr) : 0;   // LEFT: void* parameter of outside callers (Dialog)
+
+    // The scenario index arrives in a pointer-typed parameter; retail keeps its low dword.
+    const int32_t scenario = static_cast<int32_t>(reinterpret_cast<uintptr_t>(scenarioIdx) & 0xFFFFFFFFu);   // CAST-OK: ptr_int
 
     // --- Step 1: inner GameUpdateLoop (0x160) --------------------------------
-    void* pGameLoop = nullptr;
+    GameUpdateLoop* pGameLoop = nullptr;
     void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (gameLoop) {
         // ENDGAME B.3.8 LOOP: the real class; its ctor is 0x140098060's body.
@@ -82,17 +85,17 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
         // '\0' at this call site, so retail writes 0xF0 at +0xD0 (NOT 0).
         const System::String emptyName;
         pGameLoop = ::new (gameLoop) GameUpdateLoop(
-            static_cast<Save::SavedState*>(savedState), ibpCopy,
-            static_cast<int32_t>(reinterpret_cast<uintptr_t>(scenarioIdx) & 0xFFFFFFFFu),
+            static_cast<Save::SavedState*>(savedState), ibpCopy,   // LEFT: void* parameter of outside callers (Dialog)
+            scenario,
             emptyName, 0, 0, /*disasters (p8)=*/false, nullptr, nullptr, nullptr);
     }
 
     // --- Step 2: GameLoadDialogLoopT (0xb60) ---------------------------------
-    void* pDlLoop = nullptr;
+    GameLoadDialogLoopT* pDlLoop = nullptr;
     void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
     if (dlLoop) {
-        uint64_t delayTime[1];
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(delayTime), 1.0f);
+        System::Time delayTime;
+        RtSystem_Time_Ctor(&delayTime, 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // FUN_140099130, inline in engine_funcs.h
@@ -100,35 +103,35 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
         // ENDGAME B.3.8 LOOP: the real class; its ctor is the subclass field
         // init retail inlines here (colours, +0x190, Random, +0xB58, +0x40).
         pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
-            loadingName, static_cast<Engine::UpdateLoop*>(pGameLoop),       // B.3.8 bridge
-            *reinterpret_cast<const System::Time*>(delayTime));
+            loadingName, pGameLoop,
+            delayTime);
     }
 
     // --- Step 3: outer LoaderLoop (0x48) -------------------------------------
-    void* pOuterLoop = nullptr;
+    GameLoaderLoop* pOuterLoop = nullptr;
     void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
     if (outerLoop) {
-        uint64_t zeroTime[1];
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
+        System::Time zeroTime;
+        RtSystem_Time_Ctor(&zeroTime, 0.0f);
         // ENDGAME B.3.8 LOOP: the real class (its ctor = the LoaderLoop door's
         // body + the compiler's 0x1401588d0 stamp).
         pOuterLoop = ::new (outerLoop) GameLoaderLoop(
-            static_cast<Engine::UpdateLoop*>(pDlLoop),                          // B.3.8 bridge
-            *reinterpret_cast<const System::Time*>(zeroTime));
+            pDlLoop,
+            zeroTime);
     }
 
     // --- Step 4: publish the next loop ---------------------------------------
     // Retail tests +0xC0 first (inverse of 0x1400b4790 - see the header comment).
-    uintptr_t dialogLoader = *reinterpret_cast<uintptr_t*>(s + 0xC0);
+    uintptr_t dialogLoader = *reinterpret_cast<uintptr_t*>(s + 0xC0);   // LEFT: +0xC0 of the unsettled receiver
     if (dialogLoader == 0) {
-        uintptr_t gameWorld = *reinterpret_cast<uintptr_t*>(s + 0xB8);
+        uintptr_t gameWorld = *reinterpret_cast<uintptr_t*>(s + 0xB8);   // LEFT: +0xB8 of the unsettled receiver
         SetEngineNextLoop(gameWorld, pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
         SetDialogLoaderNextLoop(dialogLoader, pOuterLoop);
     }
     printf("[WorldSetup::LoadFromSave] chain built: game=%p dlt=%p loader=%p "
                 "scenarioIdx=%d via %s\n",
-                pGameLoop, pDlLoop, pOuterLoop,
-                (int)(int32_t)(uintptr_t)scenarioIdx,
+                static_cast<void*>(pGameLoop), static_cast<void*>(pDlLoop), static_cast<void*>(pOuterLoop),
+                (int)scenario,
                 dialogLoader ? "dialogLoader" : "gameWorld");
 }

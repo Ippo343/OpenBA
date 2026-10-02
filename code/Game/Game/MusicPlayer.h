@@ -19,14 +19,17 @@
 #include <cstdint>
 #include <cstddef>
 
-class MusicTrackList;   // "Game/MusicTracks.rsc" (type cell 0x1401c5a28); no class in the tree yet
+class MusicList;        // Game/MusicList.h: "Game/MusicTracks.rsc" (type cell 0x1401c5a28)
+namespace Object { class External; }
 
 class MusicPlayer {
 public:
-    uint32_t        effect;       // +0x00 the playing track's audio effect handle (ctor -1)
+    uint32_t        effect;      // +0x00 the playing track's audio effect handle (ctor -1)
     uint8_t         _pad04[4];    // +0x04 not written
-    MusicTrackList* trackList;    // +0x08 ExternalPtr (Load's Find)
-    int64_t         field_0x10;   // +0x10 ctor 0 (qword)
+    MusicList*      trackList;    // +0x08 ExternalPtr (Load's Find)
+    Object::External* field_0x10; // +0x10 the last played track's sound (ctor 0, qword); 0x1400a40e0 compares and stores it
+
+    void Update();                // 0x1400a40e0 (body: unreg_lane5_musicplayer.cpp, B4 GAME-c)
 };
 
 static_assert(sizeof(MusicPlayer) == 0x18, "MusicPlayer is 0x18 (Load MemAlloc(0x18, 4))");

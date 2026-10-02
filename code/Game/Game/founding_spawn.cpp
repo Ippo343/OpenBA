@@ -248,13 +248,11 @@ static void* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, void* fall
 // Returns the new entity (raw pointer); *outCitizenComp receives the CheckPtr'd
 // CitizenComponent the family links are written through.
 // ---------------------------------------------------------------------------
-extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfigBytes, void* citizenTemplate,
+extern "C" void* StartTown_SpawnColonistRetail(MapGenerator* startConfig, void* citizenTemplate,
                                                void* entityList, const float base[3],
                                                float age, char genderSel, char educated,
                                                uint8_t** outCitizenComp) {
     if (outCitizenComp) *outCitizenComp = nullptr;
-    // LEFT: starttown.cpp (its block) hands the start config (the MapGenerator) as bytes.
-    MapGenerator* startConfig = reinterpret_cast<MapGenerator*>(startConfigBytes);
     System::Random* rng = FoundingSpawn_Rng();
 
     // 1. allocate + copy-construct the entity from the (re-resolved) citizen template

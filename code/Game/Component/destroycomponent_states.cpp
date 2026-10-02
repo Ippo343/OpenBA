@@ -137,7 +137,7 @@
 
 // starttown.cpp — world-registration (region-map cells + pick mesh) for a building
 // entity created at runtime; retail gets both from RegisterEntity's add-broadcast.
-extern "C" void StartTown_RegisterRuntimeBuilding(void* entity);
+extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity);
 
 // buildcomponent_state1.cpp — the construction-demo site/owner (standalone test scaffold).
 extern "C" void* g_pConstructionDemoSite;

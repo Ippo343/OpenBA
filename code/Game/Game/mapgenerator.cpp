@@ -62,13 +62,13 @@ MapGenerator::MapGenerator() {
     boolIntCount = 0;
 
     // Dynamic arrays at +0x70 through +0xD8 (all zeroed)
-    memset(&refArray1, 0, sizeof(DynArrayHeader));  // +0x70
-    memset(&refArray2, 0, sizeof(DynArrayHeader));  // +0x80
-    memset(&refArray3, 0, sizeof(DynArrayHeader));  // +0x90
-    memset(&refArray4, 0, sizeof(DynArrayHeader));  // +0xA0
-    memset(&refArray5, 0, sizeof(DynArrayHeader));  // +0xB0
-    memset(&refArray6, 0, sizeof(DynArrayHeader));  // +0xC0
-    memset(&refArray7, 0, sizeof(DynArrayHeader));  // +0xD0
+    memset(&refArray1, 0, sizeof(refArray1));  // +0x70
+    memset(&refArray2, 0, sizeof(refArray2));  // +0x80
+    memset(&refArray3, 0, sizeof(refArray3));  // +0x90
+    memset(&refArray4, 0, sizeof(refArray4));  // +0xA0
+    memset(&refArray5, 0, sizeof(refArray5));  // +0xB0
+    memset(&refArray6, 0, sizeof(refArray6));  // +0xC0
+    memset(&refArray7, 0, sizeof(refArray7));  // +0xD0
 
     // Scalar generation parameters (+0xE0 through +0x114)
     paramE0 = 0;
@@ -338,9 +338,9 @@ int MG_SerializeCount(IO::Serializer& serializer, void* header, int32_t count, i
 }
 
 // A pool of ExternalRef entries (stride 0x18).
-void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader& pool) {
+void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>& pool) {
     const int n = MG_SerializeCount(serializer, &pool, pool.count, 0x18);
-    MapGenerator::ExternalRef* e = static_cast<MapGenerator::ExternalRef*>(pool.data);
+    MapGenerator::ExternalRef* e = pool.data;
     if (!e) return;
     for (int i = 0; i < n; ++i) {
         // LEFT: ExternalRef::strPtr is the String's raw storage (H5).
@@ -380,7 +380,7 @@ bool MapGenerator::Serialize(void* stream) {
     //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
     {
         const int n = MG_SerializeCount(serializer, &refArray2, refArray2.count, 0x30);
-        InitialStructure* e = static_cast<InitialStructure*>(refArray2.data);
+        InitialStructure* e = refArray2.data;
         for (int i = 0; e && i < n; ++i) {   // FUN_14001b6c0, in place
             // LEFT: ExternalRef::strPtr is the String's raw storage (H5).
             reinterpret_cast<System::String*>(&e[i].structure.strPtr)->Serialize(&serializer);   // _structure ref name

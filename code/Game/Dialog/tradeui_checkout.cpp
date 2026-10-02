@@ -95,7 +95,7 @@
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 RawMaterialComponent_RegisterRawMaterial: Component/exe_bodies.h.
 // 0x140091a20 — appends into townMgr+0x120 (code/Game/Game/starttown.cpp)
-extern void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc);
+extern void TownMgr_AddAvailableAgri(CitizenBehavior* townMgr, ComponentDescription* desc);
 
 namespace {
 
@@ -300,11 +300,11 @@ void TradeUI::OnTradeButton() {
             }
             // Natural resource (crop / orchard seed): availability only.
             else if (FindComponentByTypeId(bought, NaturalResourceDescription::TypeId())) {
-                TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(town), bought);   // LEFT: takes uint8_t* (its declaring header)
+                TownMgr_AddAvailableAgri(town, bought);
             }
             // Livestock: availability, plus spawn the animals into the world.
             else if (FindComponentByTypeId(bought, LivestockDescription::TypeId())) {
-                TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(town), bought);   // LEFT: takes uint8_t* (its declaring header)
+                TownMgr_AddAvailableAgri(town, bought);
                 // The door was named fn_Building_AddBuyToStorage; it is bound to
                 // 0x14005ace0 TradeComponent_SpawnPurchasedLivestock (B3R: the binding
                 // decides). The never-taken "did not resolve" arm went with the door.
