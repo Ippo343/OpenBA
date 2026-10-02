@@ -42,7 +42,7 @@ class PathTool final : public Tool {
 public:
     PathTool()                                                             // 0x1400de9e0
         : selectedEntity(0), _field30(nullptr), _field38(nullptr), _field40(nullptr),
-          _field48(0), _pad4C{}, _field50(nullptr), _field58(0), _pad5C{} {}
+          _field48(0), _field4C(0), _field50(nullptr), _field58(0), _field5C(0) {}
 
     // 0x1400de950: releases the three Collection::Array buffers (+0x50, +0x40,
     // +0x30, in that order) — the inlined ~Array bodies. The hand-rolled tree
@@ -66,10 +66,10 @@ public:
     void*    _field38;         // +0x38 its size/capacity pair
     int32_t* _field40;         // +0x40 int[] path-point cells (B4 PLAYER)
     int32_t  _field48;         // +0x48 path-point count
-    uint8_t  _pad4C[4];        // +0x4c
+    int32_t  _field4C;         // +0x4c capacity of the +0x40 array (B4 PLAYER)
     int32_t* _field50;         // +0x50 int-pair[] line segments (B4 PLAYER)
     int32_t  _field58;         // +0x58 segment count
-    uint8_t  _pad5C[4];        // +0x5c
+    int32_t  _field5C;         // +0x5c capacity of the +0x50 array (B4 PLAYER)
 };
 
 

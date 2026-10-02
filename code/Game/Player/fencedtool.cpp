@@ -37,6 +37,9 @@
 #include "Component/ModelDescription.h"
 #include "Component/CreatePlacedDescription.h"
 #include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -53,81 +56,66 @@
 void FencedTool::Shutdown() {
     // Remove scene object if added
     if ((int)sceneObjectId >= 0) {
-        void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
+        Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
         if (scene) {
-            reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject(sceneObjectId);   // B.3.5 bridge
+            scene->RemoveObject(sceneObjectId);
         }
     }
 
-    // Destroy mesh instance via vtable dtor if allocated
-    void* mesh = meshInstance;
-    if (mesh) {
-        delete reinterpret_cast<Graphics::MeshInstance*>(mesh);   // B.3.x bridge (slot 0, free)
+    // Destroy mesh instance via vtable dtor if allocated (slot 0, free)
+    if (meshInstance) {
+        delete meshInstance;
     }
 }
 
 // ============================================================
-// Helper: get KeyMap from external reference
+// Helper: the KeyMap of the input configuration
 // ============================================================
-static inline void* GetKeyMap() {
+static inline const Input::KeyMap* GetKeyMap() {
     return Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================
 // FencedTool::OnKey (vtable +0x30, Slot6)
 // ============================================================
-// Wraps DragTool::OnKey with rotation handling for fence orientation.
-//
-// After the base OnKey call:
 //   - KeyMap::Pressed(0, 0x13) = rotate counter-clockwise: decrement rotation,
-//     wrap from 0 to 3
+//     wrap from -1 to 3
 //   - KeyMap::Pressed(0, 0x14) = rotate clockwise: increment rotation,
 //     wrap from 4 to 0
 //
-// Rotation value stored at rotationSetting(+0x50)->+0x10.
+// Rotation value stored at rotationSetting(+0x50)->rotation (+0x10).
 // Always returns 1 (event consumed).
 // Original: 0x1400dcbe0
-// DragTool::OnKey is our own port (dragtool.cpp) — call it by symbol, exactly
-// like BridgeTool/RoadTool wire it into their vtables. The old call went
-// through fn_DragTool_OnKey = ResolveAddr(0x1400fc6b0), which was never
-// registered, so the base drag NEVER ran: mouse-down couldn't set dragState
-// and the preview stayed a single cursor-cell box (found 2026-07-30 manual test).
+// DragTool::OnKey is our own port (dragtool.cpp) — called by symbol (a direct call
+// to the base, as retail's CALL 0x1400fc6b0).
 #include "Player/dragtool.h"
 
 char FencedTool::OnKey(char key) {
     // Call base DragTool::OnKey
     DragTool::OnKey(key);
 
-    void* keyMap = GetKeyMap();
+    const Input::KeyMap* keyMap = GetKeyMap();
 
     // Check rotate counter-clockwise (key 0x13)
-    bool rotLeft = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x13);  // B.3.7 bridge
+    bool rotLeft = keyMap->Pressed(0, 0x13);
     if (rotLeft) {
-        // Access rotationSetting IBP at self+0x50
-        void* rotSettingIBP = (void*)&rotationSetting;
-        uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
+        RotationSetting* rotSetting = rotationSetting;
         if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
-        *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) - 1;
+        rotSetting->rotation = rotSetting->rotation - 1;
 
-        rotSetting = *(uintptr_t*)rotSettingIBP;
-        if (*(int*)(rotSetting + 0x10) < 0) {
-            rotSetting = *(uintptr_t*)rotSettingIBP;
-            *(int*)(rotSetting + 0x10) = 3;
+        if (rotationSetting->rotation < 0) {
+            rotationSetting->rotation = 3;
         }
     } else {
         // Check rotate clockwise (key 0x14)
-        bool rotRight = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x14);  // B.3.7 bridge
+        bool rotRight = keyMap->Pressed(0, 0x14);
         if (rotRight) {
-            void* rotSettingIBP = (void*)&rotationSetting;
-            uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
+            RotationSetting* rotSetting = rotationSetting;
             if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
-            *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) + 1;
+            rotSetting->rotation = rotSetting->rotation + 1;
 
-            rotSetting = *(uintptr_t*)rotSettingIBP;
-            if (*(int*)(rotSetting + 0x10) > 3) {
-                rotSetting = *(uintptr_t*)rotSettingIBP;
-                *(int*)(rotSetting + 0x10) = 0;
+            if (rotationSetting->rotation > 3) {
+                rotationSetting->rotation = 0;
             }
         }
     }
@@ -136,43 +124,32 @@ char FencedTool::OnKey(char key) {
 }
 
 // ============================================================
-// FencedTool::Shutdown (vtable +0x48, Slot9)
+// FencedTool::OnCancel (vtable +0x48, Slot9)
 // ============================================================
 // Removes scene object if added, resets ID to -1, then TAIL-JUMPS to the shared
 // DragTool cancel-drag (0x1400fc640) — so its return value IS that function's:
 // non-zero = "I cancelled my drag, keep me alive", zero = "OK to tear me down".
-// EntityUI_ToolTick_SA reads that byte to decide whether a right-click destroys the
-// tool. This was declared `void` and only forwarded through the fn_DragTool_Shutdown
-// pointer, which resolves NULL in standalone (0x1400fc640 was never registered) — so
-// mid-drag the fence drag was never cancelled, the CreateBar dialog was never closed,
-// and the caller read a garbage EAX for the keep-alive decision.
 // Original: 0x1400dcd10
 char FencedTool::OnCancel() {
     // Remove scene object if added
     if ((int)sceneObjectId >= 0) {
-        void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
+        Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
         if (scene) {
-            reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject(sceneObjectId);   // B.3.5 bridge
+            scene->RemoveObject(sceneObjectId);
         }
         sceneObjectId = (uint32_t)-1;
     }
 
     // Tail-call the shared DragTool cancel-drag (retail `JMP 0x1400fc640`) and return
-    // its result: the qualified (direct) call to DragTool::OnCancel, the body at
-    // 0x1400fc640.
+    // its result.
     return DragTool::OnCancel();
 }
 
 // ============================================================
-// FencedTool::Serialize (vtable +0x38, Slot7) — Fence preview mesh management
+// FencedTool::Update (vtable +0x38, Slot7) — Fence preview mesh management
 // ============================================================
-// Despite being named "Serialize", this manages the fence preview mesh during
-// drag placement. Calculates fence placement params, adds/removes mesh from
-// the scene, and updates its transform.
-//
 // When active (param3 != 0 and dragging):
-//   1. Calculate fence placement via fn_FencedPlacementParams
+//   1. Calculate fence placement via 0x1400dbf90
 //   2. If valid: add mesh to scene (if not already), set transform, update hierarchy
 //   3. If invalid: remove mesh from scene
 // When inactive: remove mesh from scene if present.
@@ -182,47 +159,36 @@ void FencedTool::Update(void* /*param2*/, char param3) {
     float offset[3] = {0.0f, 0.0f, 0.0f};
 
     if (param3 != 0 && dragState != 0) {
-        // Placement parameters — outputs from FencedPlacementParams
-        uint32_t outParam2[2] = {0, 0};
+        // Placement parameters — outputs from the anchor calc
+        uint32_t outParam2 = 0;
         uint32_t outParam3 = 0;
         uint32_t outParam4 = 0;
-        uint32_t outParam5[2] = {0, 0};
-        uint32_t outYaw[8];  // Scalar data for yaw/orientation
-        memset(outYaw, 0, sizeof(outYaw));
+        uint32_t outParam5 = 0;
+        uint32_t outYaw = 0;   // the yaw's bits (degrees) 0x1400dbf90 stores for rotations 0..3
 
         // 0x1400dbf90 returns uint64_t; the door read AL as the bool.
         bool valid = static_cast<uint8_t>(PlayerEdit_FencedAnchorCalc_dbf90(
-            reinterpret_cast<uintptr_t>(this), outParam2, &outParam3, &outParam4, outParam5,
-            offset, outYaw)) != 0;
+            this, &outParam2, &outParam3, &outParam4, &outParam5,
+            offset, &outYaw)) != 0;
 
         if (valid) {
             // Add mesh to scene if not already added
             if ((int)sceneObjectId < 0) {
-                void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
+                Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
                 if (scene && meshInstance) {
-                    sceneObjectId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
-                        ->AddObject(reinterpret_cast<Graphics::Geometry*>(meshInstance));   // B.3.5 bridge
+                    sceneObjectId = (int32_t)scene->AddObject(meshInstance);
                 }
             }
 
-            // Build transform from yaw with zero pitch + zero offset.
-            // Real signature: FromYawPitchOffset(retval, &yaw, &pitch, &offset)
-            uint8_t localTransform[96];
-            memset(localTransform, 0, sizeof(localTransform));
+            // Build transform from yaw with zero pitch, offset = the world position the
+            // anchor calc just wrote (retail 0x1400dcb55 loads R9 from the same buffer
+            // it passed as arg 6 at 0x1400dcb25).
             float zeroPitch = 0.f;
-
-            // R9 = `offset`, the world position FencedPlacementParams just wrote --
-            // NOT a zero vector. Retail 0x1400dcb55 loads R9 from [rsp+0x50], which is
-            // the very same buffer (r11-0x38) it passed as arg 6 to the params call at
-            // 0x1400dcb25. Passing a separate zeroed vector here pinned the fence/gate
-            // ghost mesh at world (0,0,0) instead of under the cursor -- the map origin
-            // is water, so the preview appeared to be standing in a random lake.
-            // PlacementTool's equivalent (0x1400fdff3) already carried a comment saying
-            // exactly this; the fenced path was the one that had it wrong.
-            *reinterpret_cast<Math::Transform*>(localTransform) =
-                Math::Transform::FromYawPitchOffset(
-                    *reinterpret_cast<const Math::Scalar*>(outYaw), zeroPitch,
-                    *reinterpret_cast<const Math::Vector3*>(offset));
+            float yawDeg = 0.f;
+            std::memcpy(&yawDeg, &outYaw, sizeof yawDeg);   // retail reads the dword as the Scalar
+            const Math::Transform localTransform = Math::Transform::FromYawPitchOffset(
+                Math::Scalar(yawDeg), zeroPitch,
+                Math::Vector3(offset[0], offset[1], offset[2]));
 
             {
                 static int n = 0;
@@ -235,14 +201,12 @@ void FencedTool::Update(void* /*param2*/, char param3) {
 
             // Set transform on mesh
             if (meshInstance) {
-                reinterpret_cast<Graphics::Geometry*>(meshInstance)
-                    ->SetTransform(*reinterpret_cast<const Math::Transform*>(localTransform));   // B.3.5 bridge
+                meshInstance->SetTransform(localTransform);
             }
 
             // Update mesh hierarchy
             if (meshInstance) {
-                reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
-                    ->UpdateHierarchy();   // B.3.5 bridge
+                meshInstance->UpdateHierarchy();
             }
 
             return;
@@ -251,10 +215,9 @@ void FencedTool::Update(void* /*param2*/, char param3) {
 
     // Remove mesh from scene if present
     if ((int32_t)sceneObjectId >= 0) {
-        void* scene = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x60);
+        Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
         if (scene) {
-            reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject((uint32_t)sceneObjectId);   // B.3.5 bridge
+            scene->RemoveObject((uint32_t)sceneObjectId);
         }
         sceneObjectId = -1;
     }
@@ -279,10 +242,10 @@ static constexpr float HEIGHT_TOLERANCE = 100.0f;
 int FencedTool::CalcCost(int startCell, int endCell,
                          uint32_t* outWidth, int* outHeight, int* outDepth,
                          int* outFenceSegments) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
-    int mapWidth = *mapGrid;
+    Map* mapGrid = gameWorld->m_game;
+    int mapWidth = mapGrid->size;
 
     // Convert flat cell indices to (col, row) via divmod
     int startCol = startCell % mapWidth;
@@ -308,21 +271,21 @@ int FencedTool::CalcCost(int startCell, int endCell,
     *outFenceSegments = (height + width) * 2 - 4;
 
     // Read size constraints from description
-    uintptr_t desc = (uintptr_t)fencedDesc;
-    int minW = *(int*)(desc + 0x60);
-    int minH = *(int*)(desc + 0x64);
+    const CreateFencedDescription* desc = fencedDesc;
+    int minW = desc->_i60;
+    int minH = desc->_i64;
     if (width < minW || height < minH) return 1;  // Too small
 
-    int maxW = *(int*)(desc + 0x58);
-    int maxH = *(int*)(desc + 0x5c);
+    int maxW = desc->_i58;
+    int maxH = desc->_i5c;
     if (maxW < width || maxH < height) return 2;  // Too large
 
     // Read terrain type mask and allowed entity type
-    uint32_t terrainMask = *(uint32_t*)(desc + 0x20);
-    uintptr_t allowedEntityType = *(uintptr_t*)(desc + 0x70);
+    uint32_t terrainMask = desc->_u20;
+    const ComponentDescription* allowedEntityType = desc->_ref70;
 
     // Cell data base pointer
-    uintptr_t cellDataBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+    const MapCell* cellDataBase = mapGrid->cells;
 
     float baseHeight = 0.0f;
     bool heightInitialized = false;
@@ -338,35 +301,32 @@ int FencedTool::CalcCost(int startCell, int endCell,
             }
 
             int cellIdx = mapWidth * row + col;
-            uintptr_t cellPtr = (uintptr_t)cellIdx * 0x30 + cellDataBase;
+            const MapCell* cellPtr = &cellDataBase[cellIdx];
 
             // Check terrain type mask
-            uint8_t terrainByte = *(uint8_t*)(cellPtr + 0x29);
+            uint8_t terrainByte = cellPtr->terrainType;
             if ((~terrainMask & (1u << (terrainByte & 0x1f))) != 0) {
                 allValid = false; break;
             }
 
             // Check entity occupancy
-            uintptr_t cellEntity = *(uintptr_t*)cellPtr;
-            if (allowedEntityType != 0) {
-                if (cellEntity != 0) {
-                    uintptr_t entityTypeRef = *(uintptr_t*)(*(uintptr_t*)cellPtr + 0x28);
-                    if (entityTypeRef != allowedEntityType) { allValid = false; break; }
+            const ComponentEntity* cellEntity = cellPtr->blocker;
+            if (allowedEntityType != nullptr) {
+                if (cellEntity != nullptr) {
+                    if (cellPtr->blocker->_description != allowedEntityType) { allValid = false; break; }
                 }
             } else {
-                if (cellEntity != 0) { allValid = false; break; }
+                if (cellEntity != nullptr) { allValid = false; break; }
             }
 
             // Check occupied flag
-            if (*(uint8_t*)(cellPtr + 0x28) != 0) { allValid = false; break; }
+            if (cellPtr->footprintCount != 0) { allValid = false; break; }
 
             // Height validation
             {
                 float halfOffset = (float)(mapWidth >> 1) - HALF_CELL;
-                float inPos[4] = {0};
-                *reinterpret_cast<Math::Vector3*>(inPos) = Math::Vector3(
-                    (float)(cellIdx % mapWidth) - halfOffset,
-                    (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
+                float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
+                                  (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                 float outPos[4] = {0};
                 uint32_t extra[2] = {0};
                 Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
@@ -386,16 +346,16 @@ int FencedTool::CalcCost(int startCell, int endCell,
     float anchorPos[3] = {0};
 
     uint64_t anchorResult = PlayerEdit_FencedAnchorCalc_dbf90(
-        reinterpret_cast<uintptr_t>(this), &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
-        anchorPos, &anchorMinCol);
+        this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
+        anchorPos, &anchorMinCol);   // the tree's arg 7; retail passes a separate slot (known_port_issues 14 row 76)
     if ((char)anchorResult == '\0') return 3;
 
-    // Check anchor constraints if in edit mode
-    uintptr_t toolState = (uintptr_t)dialogPtr;
-    if (*(char*)(toolState + 0x80) != '\0') {
-        int mw = *(*(int**)(gameWorld + 0xf8));
-        int storedStart = *(int*)(toolState + 0x98);
-        int storedEnd   = *(int*)(toolState + 0x9c);
+    // Check the owner's constraint rectangle
+    const PlayerToolManager* toolState = dialogPtr;
+    if (toolState->field_0x80) {
+        int mw = gameWorld->m_game->size;
+        int storedStart = toolState->field_0x98;
+        int storedEnd   = toolState->field_0x9C;
         if (minCol != (uint32_t)(storedStart % mw)) return 3;
         if (minRow != (uint32_t)(storedStart / mw)) return 3;
         if (effectiveMaxCol != (uint32_t)(storedEnd % mw)) return 3;
@@ -436,14 +396,14 @@ using TileArray = Collection::Array<ToolTileRecord>;
 // Both phases build arrays of 0x14-byte TileRecords and call fn_TileRender.
 // Original: 0x1400dc440
 void FencedTool::Draw(Video::Context* context, char param3) {
-    uintptr_t dialog = (uintptr_t)dialogPtr;
-    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
-    int mapWidth = *mapGrid;
+    const PlayerToolManager* dialog = dialogPtr;
+    Map* mapGrid = GameUpdateLoop::_singleton->m_game;
+    int mapWidth = mapGrid->size;
 
-    // ---- Phase 1: Edit mode (existing placed area) ----
-    if (*(char*)(dialog + 0x80) != '\0') {
-        int storedStart = *(int*)(dialog + 0x98);
-        int storedEnd   = *(int*)(dialog + 0x9c);
+    // ---- Phase 1: the owner's constraint rectangle ----
+    if (dialog->field_0x80) {
+        int storedStart = dialog->field_0x98;
+        int storedEnd   = dialog->field_0x9C;
 
         int startCol = storedStart / mapWidth;
         int startRow = storedStart % mapWidth;
@@ -502,16 +462,16 @@ void FencedTool::Draw(Video::Context* context, char param3) {
     int height = maxRow - minRow + 1;
 
     // Check size constraints from description
-    uintptr_t desc = (uintptr_t)fencedDesc;
+    const CreateFencedDescription* desc = fencedDesc;
     bool tooLarge = false;
-    if (width > *(int*)(desc + 0x58) || height > *(int*)(desc + 0x5c)) {
+    if (width > desc->_i58 || height > desc->_i5c) {
         tooLarge = true;
     }
 
     // Read terrain info for per-cell validation
-    uintptr_t cellDataBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-    uint32_t terrainMask = *(uint32_t*)(desc + 0x20);
-    uintptr_t allowedEntityType = *(uintptr_t*)(desc + 0x70);
+    const MapCell* cellDataBase = mapGrid->cells;
+    uint32_t terrainMask = desc->_u20;
+    const ComponentDescription* allowedEntityType = desc->_ref70;
 
     // Build a placement validity bitmap (using System::String pattern from decompilation)
     // The original builds a string-like structure for the grid. We simplify to direct checks.
@@ -531,32 +491,31 @@ void FencedTool::Draw(Video::Context* context, char param3) {
             bool valid = false;
             if (c >= 0 && c < mapWidth && r >= 0 && r < mapWidth) {
                 int cellIdx = mapWidth * r + c;
-                uintptr_t cellPtr = (uintptr_t)cellIdx * 0x30 + cellDataBase;
+                const MapCell* cellPtr = &cellDataBase[cellIdx];
 
                 // Terrain type check
-                uint8_t terrainByte = *(uint8_t*)(cellPtr + 0x29);
+                uint8_t terrainByte = cellPtr->terrainType;
                 if ((~terrainMask & (1u << (terrainByte & 0x1f))) != 0) {
                     valid = false;
                 } else {
                     // Entity occupancy check
-                    uintptr_t cellEntity = *(uintptr_t*)cellPtr;
-                    if (allowedEntityType != 0) {
-                        if (cellEntity != 0) {
-                            uintptr_t entityTypeRef = *(uintptr_t*)(*(uintptr_t*)cellPtr + 0x28);
-                            if (entityTypeRef != allowedEntityType) {
+                    const ComponentEntity* cellEntity = cellPtr->blocker;
+                    if (allowedEntityType != nullptr) {
+                        if (cellEntity != nullptr) {
+                            if (cellPtr->blocker->_description != allowedEntityType) {
                                 valid = false;
                                 goto after_check;
                             }
                         }
                     } else {
-                        if (cellEntity != 0) {
+                        if (cellEntity != nullptr) {
                             valid = false;
                             goto after_check;
                         }
                     }
 
                     // Occupied flag check
-                    if (!alreadyPlaced && *(uint8_t*)(cellPtr + 0x28) != 0) {
+                    if (!alreadyPlaced && cellPtr->footprintCount != 0) {
                         valid = false;
                         goto after_check;
                     }
@@ -564,10 +523,8 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                     // Height validation
                     {
                         float halfOffset = (float)(mapWidth >> 1) - HALF_CELL_OFF;
-                        float inPos[4] = {0};
-                        *reinterpret_cast<Math::Vector3*>(inPos) = Math::Vector3(
-                            (float)(cellIdx % mapWidth) - halfOffset,
-                            (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
+                        float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
+                                          (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                         float outPos[4] = {0};
                         uint32_t extra[2] = {0};
                         Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
@@ -672,30 +629,25 @@ void FencedTool::Startup() {
     }
 
     // 2. Find MapDescription on the tool group (+0x20)
-    void* areaDesc = FencedFindComponent<MapDescription>(descriptionPtr);
+    MapDescription* areaDesc = FencedFindComponent<MapDescription>(descriptionPtr);
     this->areaDesc = areaDesc;
 
     // 3. Find ModelDescription on fencedDesc's section 0 (+0x28)
-    void* fenceDesc = FencedFindComponent<ModelDescription>(FencedSection0(this->fencedDesc));
+    ModelDescription* fenceDesc = FencedFindComponent<ModelDescription>(FencedSection0(this->fencedDesc));
     this->fenceDesc = fenceDesc;
 
     // 4. Resolve RotationSetting from toolSetting IBP (+0x18)
     //    CheckPtr on the IBP first, then IsDerivedFrom, then construct new IBP at +0x50
-    void* toolSettingVal = toolSetting;
-    void* rotSetting = nullptr;
+    ToolSetting* toolSettingVal = toolSetting;
+    RotationSetting* rotSetting = nullptr;
     if (toolSettingVal) {
         bool isDerived = Object::IsDerivedFromNullSafe(toolSettingVal, RotationSetting::TypeId());   // cell 0x1401c63c8
         if (isDerived) {
-            rotSetting = toolSettingVal;
+            rotSetting = static_cast<RotationSetting*>(toolSettingVal);
         }
     }
-    // Construct InternalBasePtr at +0x50 with the resolved RotationSetting
-    {
-        void* localIBP = nullptr;
-        new (&localIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(rotSetting));   // B.3.3 bridge
-        rotationSetting = localIBP;
-    }
+    // The InternalBasePtr at +0x50 holds the resolved RotationSetting
+    rotationSetting = rotSetting;
 
     // 5. Find CreatePlacedDescription on fencedDesc's section 0 -> read +0x44 and +0x48
     const CreatePlacedDescription* sizeDesc1 =
@@ -711,31 +663,28 @@ void FencedTool::Startup() {
 
     // 6. Allocate MeshInstance (0x120 bytes, alignment 8)
     void* meshMem = System::MemoryAllocator::MemAlloc(0x120, 8);
-    void* meshInst = nullptr;
+    Graphics::MeshInstance* meshInst = nullptr;
     if (meshMem) {
         // Retail: `??0MeshInstance` then the exe's copy 0x14015e240 of the class's
         // own table (not a subclass) = `new MeshInstance()`.
-        ::new (meshMem) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
-        meshInst = meshMem;
+        meshInst = ::new (meshMem) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
     }
     meshInstance = meshInst;
 
-    // 7. Set mesh from FenceDescription's model list (last entry)
-    //    fenceDesc->+0x20 is a model array: +0x08 = data ptr, +0x10 = count
-    uintptr_t modelArray = *(uintptr_t*)((uintptr_t)this->fenceDesc + 0x20);
-    int modelCount = *(int*)(modelArray + 0x10);
-    void** modelData = *(void***)(modelArray + 0x08);
-    void* lastMesh = modelData[modelCount - 1];  // last entry
+    // 7. Set mesh from the ModelDescription's first mesh group, last mesh
+    //    (+0x20 Array<ModelMeshGroup> data; group +0x08 meshes, +0x10 count)
+    const ModelMeshGroup* modelArray = this->fenceDesc->_meshGroups;
+    int modelCount = modelArray->meshCount;
+    Graphics::GraphicsMesh** modelData = modelArray->meshes;
+    Graphics::GraphicsMesh* lastMesh = modelData[modelCount - 1];  // last entry
 
     if (meshInst) {
-        reinterpret_cast<Graphics::MeshInstance*>(meshInst)
-            ->SetMesh(Graphics::ExternalPtrHandle{lastMesh});   // B.3.5 bridge
+        meshInst->SetMesh(Graphics::ExternalPtrHandle{lastMesh});
     }
 
     // 8. UpdateHierarchy — tail call in original (JMP to dispatch slot)
     if (meshInstance) {
-        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
-            ->UpdateHierarchy();   // B.3.5 bridge
+        meshInstance->UpdateHierarchy();
     }
 }
 

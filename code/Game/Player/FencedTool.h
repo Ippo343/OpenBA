@@ -38,6 +38,10 @@
 #include "Object/exe_type.h"
 
 class CreateFencedDescription;   // Component/CreateFencedDescription.h
+class MapDescription;            // Component/MapDescription.h
+class ModelDescription;          // Component/ModelDescription.h
+class RotationSetting;           // Player/RotationSetting.h
+namespace Graphics { class MeshInstance; }
 
 class FencedTool final : public DragTool {
     DECLARE_EXE_TYPE(FencedTool)
@@ -61,14 +65,14 @@ public:
                   int* outHeight, int* outDepth, int* outFenceSegments) override;  // [14] 0x1400db490
 
     CreateFencedDescription* fencedDesc;   // +0x38 cell 0x1401c4100 (B4 PLAYER)
-    void*    areaDesc;          // +0x40 area description* (DAT_1401c7a18)
-    void*    fenceDesc;         // +0x48 fence description* (DAT_1401c7a88)
-    void*    rotationSetting;   // +0x50 InternalBasePtr<RotationSetting>
+    MapDescription*   areaDesc;          // +0x40 cell 0x1401c7a18 (B4 PLAYER)
+    ModelDescription* fenceDesc;         // +0x48 cell 0x1401c7a88 (B4 PLAYER)
+    RotationSetting*  rotationSetting;   // +0x50 InternalBasePtr<RotationSetting> (B4 PLAYER)
     int32_t  sceneObjectId;     // +0x58 Graphics::Scene object id, -1 = not added
     uint32_t _field5C;          // +0x5c from the size description +0x44
     uint32_t _field60;          // +0x60 from the size description +0x48
     uint8_t  _pad64[4];         // +0x64
-    void*    meshInstance;      // +0x68 Graphics::MeshInstance* (fence preview)
+    Graphics::MeshInstance* meshInstance; // +0x68 the fence preview (B4 PLAYER)
 };
 
 

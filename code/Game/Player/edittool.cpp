@@ -41,6 +41,7 @@
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
+#include "Game/Map.h"
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -520,7 +521,7 @@ char EditTool::OnKey(char param2) {
 
     // Get world data pointers
     uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
+    Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8 (the tree called it the entity list)
 
     // Compute camera ray from mouse position
     // rayOrigin = 12 bytes (Vector3), rayDir = 12 bytes (Vector3)
@@ -585,9 +586,9 @@ char EditTool::OnKey(char param2) {
             int cellIndex = gridSize * cellY + cellX;
 
             if (cellIndex > 0) {
-                uintptr_t retIBP = 0;
-                void* result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
-                if (result) foundEntity = *(uintptr_t*)result;
+                ComponentEntity* retIBP = nullptr;
+                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                if (result) foundEntity = (uintptr_t)*result;   // LEFT: foundEntity is the tree's integer IBP (EditTool::OnKey not yet converted)
             }
             if (SelDiagOn())
                 printf("[SelDiag] mapHit=1 hitPos=(%.2f,%.2f) cell=(%d,%d) cellEntity=%p\n",
@@ -833,7 +834,7 @@ extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
 
     uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
+    Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8
     int* mapSize = *(int**)(gameWorld + 0xf8);
     int gridSize = (mapSize && *mapSize > 0) ? *mapSize : 256;
     int tried = 0, found = 0;
@@ -850,9 +851,9 @@ extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
                 int cellIndex = gridSize * cy + cx;
                 if (cellIndex <= 0) continue;
 
-                uintptr_t retIBP = 0;
-                void* result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
-                uintptr_t entity = result ? *(uintptr_t*)result : 0;
+                ComponentEntity* retIBP = nullptr;
+                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                uintptr_t entity = result ? (uintptr_t)*result : 0;   // LEFT: as above
                 if (!entity) continue;
                 found++;
 

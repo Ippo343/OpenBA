@@ -19,6 +19,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Player/exe_bodies.h"
 #include "Game/Map.h"
+#include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
 #include "system/MemoryAllocator.h"
 #include <cstdint>
@@ -44,8 +45,8 @@
 // ============================================================
 // Helper: get KeyMap from external reference
 // ============================================================
-static inline uint64_t GetKeyMap() {
-    return (uint64_t)Input::Configuration::_singleton->_keyMap;
+static inline const Input::KeyMap* GetKeyMap() {
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three
@@ -59,10 +60,12 @@ static inline uint64_t GetKeyMap() {
 PathTool::~PathTool() {
     Object::detail::InternalMemFree(_field50);
     _field50 = nullptr;
-    *reinterpret_cast<uint64_t*>(&_field58) = 0;   // size + capacity dwords
+    _field58 = 0;   // size + capacity dwords (one qword store in retail)
+    _field5C = 0;
     Object::detail::InternalMemFree(_field40);
     _field40 = nullptr;
-    *reinterpret_cast<uint64_t*>(&_field48) = 0;
+    _field48 = 0;
+    _field4C = 0;
     Object::detail::InternalMemFree(_field30);
     _field30 = nullptr;
     _field38 = nullptr;
@@ -90,25 +93,26 @@ char PathTool::OnKey(char key) {
     }
 
     // Check if primary action button is pressed
-    uint64_t keyMap = GetKeyMap();
+    const Input::KeyMap* keyMap = GetKeyMap();
 
     // KeyMap::Pressed(keyMap, 0, 5) — retail calls it through exe slot 0x140151758.
-    bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
+    bool pressed = keyMap->Pressed(0, 5);
     if (!pressed) return 1;
 
-    // Get map data pointer
-    uint64_t mapData = *(uint64_t*)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf8);
+    // The map
+    Map* mapData = GameUpdateLoop::_singleton->m_game;
 
-    // Compute mouse ray
+    // Compute mouse ray (the first out is what 0x1401005a0 writes as the origin;
+    // the names below are the tree's, the order is retail's)
     float rayOrigin[3] = {0};  // 12 bytes (vec3)
     float rayDir[3] = {0};     // 12 bytes (vec3)
     float distance[2] = {0};   // raycast distance param
-    PlayerRay_GetMouseRay_1005a0(reinterpret_cast<void*>(keyMap), rayDir, rayOrigin);
+    PlayerRay_GetMouseRay_1005a0(keyMap, rayDir, rayOrigin);
 
     // Raycast terrain
     distance[0] = 400.0f;
-    uint64_t entityIBP = 0;
-    int* mapGrid = *(int**)(((uintptr_t)GameUpdateLoop::_singleton) + 0xf8);
+    ComponentEntity* entityIBP = nullptr;
+    Map* mapGrid = GameUpdateLoop::_singleton->m_game;
     float outPos[4] = {0};
 
     // local_res18 is used for terrain height param: 400.0f
@@ -117,10 +121,10 @@ char PathTool::OnKey(char key) {
 
     WorldGeometry* mapSystem = GameUpdateLoop::_singleton->m_worldGeometry;
     if (mapSystem) {
-        bool hit = PlayerRay_TerrainMarch_aa530(mapSystem, (float*)rayDir, rayOrigin,
+        bool hit = PlayerRay_TerrainMarch_aa530(mapSystem, rayDir, rayOrigin,
             terrainParam, outPos, distance) != 0;
         if (hit) {
-            int gridSize = *mapGrid;
+            int gridSize = mapGrid->size;
             int cellX = (int)(outPos[0] + (float)(gridSize >> 1));
             int cellY = (int)(outPos[1] + (float)(gridSize >> 1));
             // Clamp to grid bounds
@@ -130,7 +134,7 @@ char PathTool::OnKey(char key) {
             if (cellY >= gridSize) cellY = gridSize - 1;
             int cellIndex = gridSize * cellY + cellX;
             if (cellIndex > 0) {
-                uint64_t retIBP = 0;
+                ComponentEntity* retIBP = nullptr;
                 PlayerEdit_EntityAtCell_a0280(mapData, &retIBP, cellIndex);
                 entityIBP = retIBP;
             }
@@ -138,31 +142,30 @@ char PathTool::OnKey(char key) {
     }
 
     // Try picking scene intersection as well
-    float hitNormal[3] = {0};
-    float hitPos[3] = {0};
-    void* pickingScene = *(void**)(((uintptr_t)GameUpdateLoop::_singleton) + 0x70);
+    Math::Vector3 hitNormal(0.0f, 0.0f, 0.0f);
+    Math::Vector3 hitPos(0.0f, 0.0f, 0.0f);
+    Picking::Scene* pickingScene = GameUpdateLoop::_singleton->m_pickingScene;
     if (pickingScene) {
         // Picking::Scene::Intersect / GetUserData (import slots 0x140152428 /
         // 0x140152890), arguments in the door's positional order.
-        uint32_t hitIdx = static_cast<uint32_t>(reinterpret_cast<const Picking::Scene*>(pickingScene)->Intersect(   // B.3.7 bridge
-            *reinterpret_cast<const Vector3*>(rayDir), *reinterpret_cast<const Vector3*>(rayOrigin),
-            *reinterpret_cast<const Math::Scalar*>(distance),
-            *reinterpret_cast<Vector3*>(hitNormal), *reinterpret_cast<Vector3*>(hitPos)));
+        uint32_t hitIdx = static_cast<uint32_t>(pickingScene->Intersect(
+            Math::Vector3(rayDir[0], rayDir[1], rayDir[2]),
+            Math::Vector3(rayOrigin[0], rayOrigin[1], rayOrigin[2]),
+            Math::Scalar(distance[0]),
+            hitNormal, hitPos));
         if ((int)hitIdx >= 0) {
-            void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(hitIdx);   // B.3.7 bridge
-            {
-                uint64_t tmpIBP = 0;
-                new (&tmpIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(userData));   // B.3.3 bridge
-                entityIBP = tmpIBP;
-            }
+            // LEFT: Picking::Scene's user data is `void*` (block R-GFX); the bridge and
+            // the picking component store the owning ComponentEntity there.
+            entityIBP = reinterpret_cast<ComponentEntity*>(pickingScene->GetUserData(hitIdx));
         }
     }
 
     // If we found an entity and it differs from current selection, update
-    if (entityIBP != 0) {
-        if ((uint64_t)selectedEntity != entityIBP) {
-            uint64_t tmpIBP = entityIBP;
+    if (entityIBP != nullptr) {
+        // LEFT: PathTool::selectedEntity (+0x28) and 0x1400dd710 still carry the
+        // InternalBasePtr as an integer (pathtool_setselected.cpp, not yet converted).
+        uint64_t tmpIBP = reinterpret_cast<uint64_t>(entityIBP);
+        if (selectedEntity != tmpIBP) {
             PathTool_helper_d710(reinterpret_cast<int64_t>(this), &tmpIBP);
         }
     }

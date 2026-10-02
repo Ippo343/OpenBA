@@ -21,6 +21,7 @@ namespace UI { class DialogInstance; }
 class WorldGeometry;          // Game/WorldGeometry.h
 class Map;                    // Game/Map.h
 class BridgeTool;             // Player/BridgeTool.h
+class FencedTool;             // Player/FencedTool.h
 class CreatePlacedDescription;   // Component/CreatePlacedDescription.h
 class RadiusDescription;         // Component/RadiusDescription.h
 namespace System { class String; }
@@ -58,9 +59,9 @@ void DragTool_PlayErrorSound_100140(const void* /*unused*/);  // 0x140100140
 void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minCol, int minRow, int maxCol, int maxRow, const ComponentDescription* entityTemplate);  // 0x1401018d0
 
 // ---- tool_base_edit.cpp
-void* PlayerEdit_EntityAtCell_a0280(uintptr_t entityList, void* retIBP, int cellIndex);  // 0x1400a0280
+ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity** retIBP, int cellIndex);  // 0x1400a0280
 float PlayerEdit_AvgTerrainHeight_101730(void* , int p2, int p3, int p4, int p5);  // 0x140101730
-uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t self, uint32_t* param_2, uint32_t* param_3, uint32_t* param_4, uint32_t* param_5, float* param_6, uint32_t* param_7);  // 0x1400dbf90
+uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* param_2, uint32_t* param_3, uint32_t* param_4, uint32_t* param_5, float* param_6, uint32_t* param_7);  // 0x1400dbf90
 
 // ---- tool_base_highlight.cpp
 extern "C" void TradeWork_helper_14b00(int64_t param_1, void* node);  // 0x140014b00
