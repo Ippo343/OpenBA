@@ -37,6 +37,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Game/exe_bodies.h"
+#include "Action/PathSearch.h"   // RawArray<T>
+#include "math/Math.h"
 extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cpp
 
 // ============================================================
@@ -44,14 +46,17 @@ extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cp
 // ============================================================
 //
 // Mirrors `GenericArrayResize` in serialize_arrays.cpp but exposes only
-// stride + alignment so we can reuse it for the strides this session adds
-// without duplicating the loop body.
+// stride + alignment so it serves every stride below.
 //
-// NOTE: serialize_arrays.cpp keeps its own anonymous-namespace copy of the
-// same routine — we don't share via header because we MUST NOT edit
-// serialize_arrays.cpp per session 5 hard-rules. The two copies are
-// byte-equivalent.
+// B.4 GAME-b: the header is read as a RawArray (data, size, capacity) instead
+// of by offset. LEFT: the C entry points receive each caller's header as void*
+// (geometry, name database, plant-area, worldgen, ...), so the one cast below
+// is where it is read as a byte-element header.
 namespace {
+
+RawArray<uint8_t>& ByteHeader(void* arrayHeader) {
+    return *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);
+}
 
 void GenericArrayResize(void* arrayHeader, int newCount,
                         size_t stride, int alignment) {
@@ -82,38 +87,35 @@ void GenericArrayResize(void* arrayHeader, int newCount,
         return;
     }
 
-    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
-    void** dataSlot = reinterpret_cast<void**>(hdr + 0x00);
-    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
-    int32_t* capSlot = reinterpret_cast<int32_t*>(hdr + 0x0C);
+    RawArray<uint8_t>& hdr = ByteHeader(arrayHeader);
 
-    int oldCount = *countSlot;
+    int oldCount = hdr.size;
     if (newCount == oldCount) return;
 
-    void* oldData = *dataSlot;
-    *countSlot = newCount;
+    uint8_t* oldData = hdr.data;
+    hdr.size = newCount;
 
-    if (*capSlot < newCount) {
-        *capSlot = newCount;
+    if (hdr.capacity < newCount) {
+        hdr.capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            *capSlot = newCount * 3;
+            hdr.capacity = newCount * 3;
         }
-        size_t bytes = static_cast<size_t>(*capSlot) * stride;
+        size_t bytes = static_cast<size_t>(hdr.capacity) * stride;
         g_allocStatsCtx = arrayHeader;                         // ALLOCSTATS owner tag
-        void* newBuf = System::MemoryAllocator::MemAlloc(bytes, alignment);
+        uint8_t* newBuf = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(bytes, alignment));
         g_allocStatsCtx = nullptr;
-        *dataSlot = newBuf;
+        hdr.data = newBuf;
     }
 
-    int copyStart = (oldData == *dataSlot) ? oldCount : 0;
-    auto* dst = reinterpret_cast<uint8_t*>(*dataSlot);
+    int copyStart = (oldData == hdr.data) ? oldCount : 0;
+    uint8_t* dst = hdr.data;
 
     for (int slot = copyStart; slot < newCount; ++slot) {
         size_t off = static_cast<size_t>(slot) * stride;
         uint8_t* dstElem = dst + off;
         if (!dstElem) continue;
         if (slot < oldCount) {
-            const uint8_t* srcElem = reinterpret_cast<const uint8_t*>(oldData) + off;
+            const uint8_t* srcElem = oldData + off;
             for (size_t i = 0; i < stride; ++i) {
                 dstElem[i] = srcElem[i];
             }
@@ -131,7 +133,7 @@ void GenericArrayResize(void* arrayHeader, int newCount,
         }
     }
 
-    if (oldData != *dataSlot && oldData != nullptr) {
+    if (oldData != hdr.data && oldData != nullptr) {
         System::MemoryAllocator::MemFree(oldData);
     }
 }
@@ -201,11 +203,7 @@ extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount) {
 // Inlined: TradeWork_helper_ff00 — deep-clone inner Vector2 array
 // ============================================================
 //
-// Used only by Helper #3 below. xref_count=2 (sub_f0a0 + one self-recursion
-// inside the resize loop). NOT registered separately — no exe address surface
-// in code/Game/ calls it directly.
-//
-// Decompiled from FUN_14001ff00:
+// Used only by Helper #3 below. Decompiled from FUN_14001ff00:
 //   if (param_1 != param_2) {
 //       MemFree(*param_1);
 //       *param_1 = 0; param_1[1] = 0;  (count = 0)
@@ -219,46 +217,44 @@ extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount) {
 //           ((qword*)*param_1)[i] = ((qword*)*param_2)[i];
 //   }
 //
-// Layout matches: each "outer element" is a 16-byte array-header
-// { void* data; int32 count; int32 cap }. The inner data is 8-byte
-// elements (Vector2 — 2 floats). MemAlloc alignment is 4.
+// Each outer element is a RawArray of Vector2 (8-byte elements); MemAlloc
+// alignment is 4.
 namespace {
 
-void DeepCloneInner_FF00(void* dstHeader, const void* srcHeader) {
-    if (dstHeader == srcHeader) return;
+using Outline = RawArray<Math::Vector2>;
+
+void DeepCloneInner_FF00(Outline& dst, const Outline& src) {
+    if (&dst == &src) return;
     if (!System::MemoryAllocator::_singleton) return;
 
-    auto* dst = reinterpret_cast<uint8_t*>(dstHeader);
-    auto* src = reinterpret_cast<const uint8_t*>(srcHeader);
+    // Free the dst's existing buffer, zero the data and the count.
+    if (dst.data) System::MemoryAllocator::MemFree(dst.data);
+    dst.data = nullptr;
+    dst.size = 0;
+    // capacity is left in the existing state then overwritten below if n>0
 
-    void** dstData = reinterpret_cast<void**>(dst + 0x00);
-    int32_t* dstCount = reinterpret_cast<int32_t*>(dst + 0x08);
-    int32_t* dstCap = reinterpret_cast<int32_t*>(dst + 0x0C);
-
-    void* const* srcData = reinterpret_cast<void* const*>(src + 0x00);
-    const int32_t* srcCount = reinterpret_cast<const int32_t*>(src + 0x08);
-
-    // Free the dst's existing buffer, zero header.
-    if (*dstData) System::MemoryAllocator::MemFree(*dstData);
-    *dstData = nullptr;
-    *dstCount = 0;
-    // capacity slot is left in the existing state then overwritten below if n>0
-
-    int n = *srcCount;
-    *dstCount = n;
+    int n = src.size;
+    dst.size = n;
     if (n > 0) {
-        *dstCap = n;
-        size_t bytes = static_cast<size_t>(n) * 8;
-        *dstData = System::MemoryAllocator::MemAlloc(bytes, 4);
+        dst.capacity = n;
+        dst.data = static_cast<Math::Vector2*>(
+            System::MemoryAllocator::MemAlloc(static_cast<size_t>(n) * 8, 4));
     }
 
-    if (*dstData && *srcData) {
-        auto* dstElems = reinterpret_cast<uint64_t*>(*dstData);
-        const auto* srcElems = reinterpret_cast<const uint64_t*>(*srcData);
-        for (int i = 0; i < *dstCount; ++i) {
-            dstElems[i] = srcElems[i];
+    if (dst.data && src.data) {
+        for (int i = 0; i < dst.size; ++i) {
+            dst.data[i] = src.data[i];
         }
     }
+}
+
+// Retail's free-and-zero of one outer element: MemFree(data); data = 0; one
+// qword over size + capacity = 0 (H7: two named stores).
+void FreeOutline(Outline& o) {
+    if (o.data) System::MemoryAllocator::MemFree(o.data);
+    o.data = nullptr;
+    o.size = 0;
+    o.capacity = 0;
 }
 
 } // anonymous namespace
@@ -283,6 +279,8 @@ void DeepCloneInner_FF00(void* dstHeader, const void* srcHeader) {
 //
 // The decompile structure is unusual because the outer "shrink" path walks
 // the OLD buffer, not the new one — we follow that exact pattern.
+//
+// LEFT: worldgen.cpp (GAME-c) passes the header as void*.
 extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     if (newCount < 0) {
@@ -309,76 +307,57 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
         return;
     }
 
-    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
-    void** dataSlot = reinterpret_cast<void**>(hdr + 0x00);
-    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
-    int32_t* capSlot = reinterpret_cast<int32_t*>(hdr + 0x0C);
+    RawArray<Outline>& hdr = *reinterpret_cast<RawArray<Outline>*>(arrayHeader);
 
-    int oldCount = *countSlot;
+    int oldCount = hdr.size;
     if (newCount == oldCount) return;
 
-    void* oldData = *dataSlot;
-    *countSlot = newCount;
+    Outline* oldData = hdr.data;
+    hdr.size = newCount;
 
-    if (*capSlot < newCount) {
-        *capSlot = newCount;
+    if (hdr.capacity < newCount) {
+        hdr.capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            *capSlot = newCount * 3;
+            hdr.capacity = newCount * 3;
         }
-        size_t bytes = static_cast<size_t>(*capSlot) * 0x10;
-        void* newBuf = System::MemoryAllocator::MemAlloc(bytes, 8);
-        *dataSlot = newBuf;
+        size_t bytes = static_cast<size_t>(hdr.capacity) * 0x10;
+        hdr.data = static_cast<Outline*>(System::MemoryAllocator::MemAlloc(bytes, 8));
     }
 
     // Per-element fill loop. Walks (newCount - copyStart) elements.
-    int copyStart = (oldData == *dataSlot) ? oldCount : 0;
-    auto* dstBase = reinterpret_cast<uint8_t*>(*dataSlot);
-    auto* srcBase = reinterpret_cast<const uint8_t*>(oldData);
+    int copyStart = (oldData == hdr.data) ? oldCount : 0;
+    Outline* dstBase = hdr.data;
 
     if (copyStart < newCount) {
         // The original walks `plVar9 = puVar6 + lVar7 * 2` (i.e. old-buffer
-        // starting at index copyStart). When buffer didn't realloc, copyStart
-        // = oldCount, so plVar9 walks past the end of valid data — safe
-        // because the < oldCount branch is what triggers the deep-clone.
+        // starting at index copyStart). When the buffer didn't realloc,
+        // copyStart = oldCount, so plVar9 walks past the end of valid data —
+        // safe because the < oldCount branch is what triggers the deep-clone.
         for (int i = copyStart; i < newCount; ++i) {
-            uint8_t* dstElem = dstBase + static_cast<size_t>(i) * 0x10;
-            const uint8_t* srcElem = srcBase + static_cast<size_t>(i) * 0x10;
-            // zero the destination header first
+            Outline* dstElem = dstBase + i;
+            const Outline* srcElem = oldData + i;
+            // zero the destination header first (two qwords)
             if (dstElem) {
-                *reinterpret_cast<uint64_t*>(dstElem + 0x00) = 0;
-                *reinterpret_cast<uint64_t*>(dstElem + 0x08) = 0;
+                dstElem->data = nullptr;
+                dstElem->size = 0;
+                dstElem->capacity = 0;
                 if (i < oldCount && srcElem) {
-                    DeepCloneInner_FF00(dstElem, srcElem);
+                    DeepCloneInner_FF00(*dstElem, *srcElem);
                 }
             }
         }
     }
 
-    if (oldData == *dataSlot) {
+    if (oldData == hdr.data) {
         // Same buffer: shrink path — free each freed slot's inner array.
         if (newCount < oldCount) {
-            int freeCount = oldCount - newCount;
-            uint8_t* freeBase = dstBase + static_cast<size_t>(newCount) * 0x10;
-            for (int i = 0; i < freeCount; ++i) {
-                uint8_t* elem = freeBase + static_cast<size_t>(i) * 0x10;
-                void** innerData = reinterpret_cast<void**>(elem + 0x00);
-                if (*innerData) System::MemoryAllocator::MemFree(*innerData);
-                *innerData = nullptr;
-                *reinterpret_cast<uint64_t*>(elem + 0x08) = 0;
-            }
+            for (int i = newCount; i < oldCount; ++i) FreeOutline(dstBase[i]);
         }
     } else {
         // Reallocated: free all OLD outer slots' inner buffers, then free
         // the old outer buffer itself.
         if (oldData && oldCount > 0) {
-            auto* oldBuf = reinterpret_cast<uint8_t*>(oldData);
-            for (int i = 0; i < oldCount; ++i) {
-                uint8_t* elem = oldBuf + static_cast<size_t>(i) * 0x10;
-                void** innerData = reinterpret_cast<void**>(elem + 0x00);
-                if (*innerData) System::MemoryAllocator::MemFree(*innerData);
-                *innerData = nullptr;
-                *reinterpret_cast<uint64_t*>(elem + 0x08) = 0;
-            }
+            for (int i = 0; i < oldCount; ++i) FreeOutline(oldData[i]);
         }
         if (oldData) System::MemoryAllocator::MemFree(oldData);
     }

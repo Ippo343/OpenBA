@@ -141,9 +141,11 @@ extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);  
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10
 extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount);  // 0x14000c520
-extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer, uint32_t count, void* arrayBase);  // 0x14001bbf0
-extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(void* serializer, int count, void* arrayBase);  // 0x14001bcc0
-extern "C" void Reimpl_Array_Serialize_External_Particle(void* serializer, int count, void* arrayBase);  // 0x14001bff0
+struct MenuSceneMesh;
+namespace IO { class Serializer; }
+extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0
+extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bcc0
+extern "C" void Reimpl_Array_Serialize_External_Particle(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bff0
 
 // ---- serialize_externals.cpp
 extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(void* refField, void* serializer);  // 0x14001b8e0
