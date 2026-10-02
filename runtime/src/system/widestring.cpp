@@ -198,7 +198,7 @@ inline void WideReleaseInline(System::WideString* self) {
 }
 
 inline int WideLength(const wchar_t* d) {
-    return d ? reinterpret_cast<const int32_t*>(d)[-2] : 0;
+    return d ? reinterpret_cast<const int32_t*>(d)[-2] : 0;  // CAST-OK: string_header
 }
 
 int WideStrLen(const wchar_t* s) {
@@ -288,10 +288,10 @@ String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
 
 void System::WideString::SetLength(int len) {
     RtSystem::WideReleaseInline(this);
-    int32_t* block = static_cast<int32_t*>(RtSystem::RtMemAlloc(
+    int32_t* block = static_cast<int32_t*>(RtSystem::RtMemAlloc(  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
         static_cast<uint64_t>(8 + (static_cast<int64_t>(len) + 1) * 2),
         RtSystem::kStringAllocAlign));
-    _data = reinterpret_cast<wchar_t*>(block + 2);
+    _data = reinterpret_cast<wchar_t*>(block + 2);  // CAST-OK: string_header
     block[0] = len;
     block[1] = 1;
 }

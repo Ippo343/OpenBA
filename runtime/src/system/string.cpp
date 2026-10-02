@@ -124,9 +124,9 @@ using RtSystem::kStringAllocAlign;
 // block+4, data = block+8. Does NOT write a terminator — every caller does.
 void String::SetLength(int len) {
     Release();
-    int32_t* block = static_cast<int32_t*>(
+    int32_t* block = static_cast<int32_t*>(  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
         RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(len) + 1) + 8, kStringAllocAlign));
-    _data = reinterpret_cast<char*>(block + 2);
+    _data = reinterpret_cast<char*>(block + 2);  // CAST-OK: string_header
     block[0] = len;
     block[1] = 1;
 }
@@ -1069,7 +1069,7 @@ String operator+(const String& lhs, char c) {
     // watchpoint on the refcount word sees it.
     if (tmp._data != nullptr) {
         ret._data = tmp._data;
-        int32_t* rc = reinterpret_cast<int32_t*>(tmp._data - 4);
+        int32_t* rc = &RtSystem::StringRefCount(tmp._data);
         ++*rc;
         --*rc;
         if (*rc == 0) RtMemFree(tmp._data - 8);
