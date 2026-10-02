@@ -12,6 +12,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Component/PastureComponent.h"
+#include "Entity/CitizenBehavior.h"   // B4: the town pasture registry
 #include "Component/exe_bodies.h"   // Pasture_FillAllPastures (0x140060290)
 #include <cstdint>
 #include <cstdio>
@@ -38,20 +39,19 @@ static void PastureTendHarness_Tick(int frameNum) {
     if (s_interval < 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
     if (!gs) return;
-    int n = *reinterpret_cast<int*>(gs + 0x98);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
+    int n = gs->pastureCount;                                         // +0x98
+    PastureComponent** list = gs->pastures;                           // +0x90
     if (n <= 0 || !list) return;
     for (int i = 0; i < n; ++i) {
-        void* pasture = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        PastureComponent* pasture = list[i];
         if (!pasture) continue;
-        if (*reinterpret_cast<void**>((uintptr_t)pasture + 0x28) == nullptr) continue;
+        if (pasture->livestockType == nullptr) continue;              // +0x28
         // gameState+0x90 is the world pasture registry (pasture state 2 adds the
         // component, state 3 / slot 7 erase it): every entry is a PastureComponent.
         // Slot 15 OnMessage; the body reads only the message id.
-        reinterpret_cast<PastureComponent*>(pasture)->OnMessage(0, nullptr, 0, 0);   // B.3.8 bridge
+        pasture->OnMessage(0, nullptr, 0, 0);
     }
 }
 
@@ -88,17 +88,16 @@ static void PastureProduceHarness_Tick(int frameNum) {
     }
     if (s_interval < 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
     if (!gs) return;
-    int n = *reinterpret_cast<int*>(gs + 0x98);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
+    int n = gs->pastureCount;                                         // +0x98
+    PastureComponent** list = gs->pastures;                           // +0x90
     if (n <= 0 || !list) return;
     for (int i = 0; i < n; ++i) {
-        void* pasture = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
+        PastureComponent* pasture = list[i];
         if (!pasture) continue;
-        if (*reinterpret_cast<void**>((uintptr_t)pasture + 0x28) == nullptr) continue;
-        *reinterpret_cast<int*>((uintptr_t)pasture + 0x44) += 8;
+        if (pasture->livestockType == nullptr) continue;              // +0x28
+        pasture->production += 8;                                     // +0x44
     }
 }
 
