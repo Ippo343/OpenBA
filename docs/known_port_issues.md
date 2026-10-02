@@ -406,6 +406,18 @@ stated condition.
   `StorageComponent::QueryCount` instead of `CitizenComp_StorageComponent_QueryCount`, whose null
   test is unreachable there (0x14012c560 has already dereferenced the storage).
 
+TUT (rows 80-84, 88-89):
+
+| # | where | the tree | retail | status |
+|---|---|---|---|---|
+| 80 | `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`, the B4 FORWARD for 21 outside callers) | a second port of 0x14012e5c0 that adds two guards before the member's body: `WorkDescription::_i30 == 0` and a missing MapComponent each return the default worker count `_i24` | 0x14012e5c0 has neither test; `WorkComponent::CalcMaxWorkers` (the member) matches it and the forwarder now calls it after the guards | CONFIRMED (TUT); kept so no caller's result moves |
+| 81 | `WorkPlaceComponent::GetMaxWorkers` (`tutorial_base.cpp`) | returns 0 when the entity has no WorkComponent | 0x14012fbb0 reads the found component without a null test | CONFIRMED (TUT) |
+| 82 | `FindOnEntity<T>` in `tutorialgoalcount.cpp` (TutorialGoalCount::IsComplete 0x1400df290) | returns null for a null entity before `FindComponent` | not read | SUSPECTED (TUT) |
+| 83 | `TutRestrict_ResolveRefOrLoad` (`tutorialsetuprestrictplayer.cpp`) | after the find-only resolve misses, normalises the name and calls `ExternalFactory::FindOrLoad` (the site's STANDALONE DEVIATION note) | resolves both refs with 0x14001b1d0, find-only | SUSPECTED (TUT; the site comment quotes the address, not re-read) |
+| 84 | `NamedExternalRef::Resolve` (`goal_exe_helpers.cpp`, 0x1400265b0) | the same load-on-miss (`FindOrLoad` of the normalised name) and a re-read of the factory generation after it | find-only, one generation read | SUSPECTED (TUT; not re-read) |
+| 88 | `TimeGoalInstance::CheckGoalState` (`timegoalinstance.cpp`) | tests `goal` for null before IsDerivedFrom and the narrowed goal for null before reading `requiredYears` (the miss returns 0) | 0x1400dacb0: `CMOVNZ RBX,RDI` then `MOV ECX,[RBX+0x30]` -- no test; a non-TimeGoal reads through null | CONFIRMED (TUT) |
+| 89 | `TutorialHighlightDialog::PlaceOnElement` / `PlaceOnEntity` (`tutorialhighlightdialog.cpp`) | null tests on `glow`, `glowGroup`, `arrow`, the target element, the Video::Device singleton and the UI | not read | SUSPECTED (TUT) |
+
 ### 14e. Stores that may normalise where retail copies
 
 - `optionsdialog.cpp:745,748`: `inputCfg->_mouseClipping = checkMouseClip->_checked != 0;` and
@@ -472,6 +484,14 @@ stated condition.
   node tree (`InteractNodePosition` / `InteractNodeCount`), and `ActCNR_NR_*` on the ModelComponent
   mesh selection (`ModelMeshGroupCount`, `ModelMeshCount`, `ModelSelectMesh`), not on a
   NaturalResourceComponent. (ACT-a)
+
+TUT (rows 85-87):
+
+| # | where | the tree | retail | status |
+|---|---|---|---|---|
+| 85 | `FinishTutorialInstance::Startup` (`finishtutorialinstance.cpp`) | read `Video::Device` +0x04 as the screen "height" | +0x04 is `backBufferWidth` (the R-VIDEO header); the body now reads it by that name, value unchanged | CONFIRMED by the header (TUT) |
+| 86 | `PlayerToolManager` +0xA4 / +0xA8 / +0xAC (`field_0xA4..AC`, PLAYER's header) | `TutorialSetupCamera::Begin` calls them the camera position flag / x / y; `TutorialSetupRestrictPlayer::Begin` called the same three fields "camera restriction bounds" | both bodies store the same values there (0x1400e20d0, 0x1400e2f20); the fields are unnamed | SUSPECTED (TUT); the name belongs to PLAYER |
+| 87 | `Cemetery_CountBurials_6dd0` (`statvaluedispatch.cpp`) | a file-local copy of the cemetery burial count | `cemeteryui.cpp`'s static `CemeteryGetBurialCount_Impl` (DLG-a) ports the same count; two copies | SUSPECTED (TUT); not merged (no behaviour change) |
 
 ### 14g. Commit messages that state something nobody verified
 

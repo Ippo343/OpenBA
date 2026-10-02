@@ -164,15 +164,15 @@ void FinishTutorialInstance::Startup() {
         }
 
         // The device's back-buffer width (+0x04) - 0x1d0
-        int heightParam = 0;
+        int widthParam = 0;
         {
             Video::Device* singletonObj = ::Video::Device::_singleton;
             if (singletonObj) {
-                heightParam = singletonObj->backBufferWidth - 0x1d0;
+                widthParam = singletonObj->backBufferWidth - 0x1d0;
             }
         }
 
-        TutWave_TutorialTreeInsert(treeRoot, tutorialId, p3, static_cast<uint32_t>(heightParam));   // 0x1401001f0
+        TutWave_TutorialTreeInsert(treeRoot, tutorialId, p3, static_cast<uint32_t>(widthParam));   // 0x1401001f0
     }
 
     // Step 8: OR game world flags at +0xd0 with 0x5f0
