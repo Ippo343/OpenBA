@@ -20,6 +20,7 @@ class ToolbarDescription;     // Component/ToolbarDescription.h
 namespace UI { class DialogInstance; }
 class WorldGeometry;          // Game/WorldGeometry.h
 class Map;                    // Game/Map.h
+class BridgeTool;             // Player/BridgeTool.h
 class CreatePlacedDescription;   // Component/CreatePlacedDescription.h
 class RadiusDescription;         // Component/RadiusDescription.h
 namespace System { class String; }
@@ -30,8 +31,8 @@ class PlayerController;       // Game/PlayerController.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 
 // ---- bridgetool_validate.cpp
-extern "C" int BridgeTool_SnapEndCell_Impl(void* self, int endCell);  // 0x1400fb710
-extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int endCell, int* outLength);  // 0x1400fb2d0
+extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell);  // 0x1400fb710
+extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell, int* outLength);  // 0x1400fb2d0
 
 // ---- keystone_a_removalcalcpath.cpp
 extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);  // 0x1400f8d50

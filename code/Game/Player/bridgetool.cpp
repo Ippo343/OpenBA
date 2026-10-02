@@ -114,16 +114,16 @@ int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
             if (!s_first) s_first = true;
             if (isDrag)   s_drag  = true;
             if (valid)    s_valid = true;
-            uintptr_t d = (uintptr_t)bridgeDesc;
+            [[maybe_unused]] const CreateBridgeDescription* d = bridgeDesc;
             fprintf(stderr, "[Bridge] CalcCost: start=%d end=%d snapped=%d -> valid=%d len=%d"
                     "  (Snap=%p Validate=%p desc=%p body=%08x approach=%08x req=%08x "
                     "neigh=%08x radius=%d)\n",
                     startCell, endCell, snappedEnd, valid, bridgeLength,
                     (void*)&BridgeTool_SnapEndCell_Impl, (void*)&BridgeTool_ValidatePath_Impl,
-                    (void*)d,
-                    d ? *(uint32_t*)(d + 0x20) : 0, d ? *(uint32_t*)(d + 0x24) : 0,
-                    d ? *(uint32_t*)(d + 0x2c) : 0, d ? *(uint32_t*)(d + 0x30) : 0,
-                    d ? *(int*)(d + 0x34) : -1);
+                    static_cast<const void*>(d),
+                    d ? d->_u20 : 0, d ? d->_u24 : 0,
+                    d ? d->_u2c : 0, d ? d->_u30 : 0,
+                    d ? d->_i34 : -1);
             fflush(stderr);
         }
     }
