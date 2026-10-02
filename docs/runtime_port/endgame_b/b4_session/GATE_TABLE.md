@@ -214,3 +214,5 @@ Metric at `558bbe9a`: **10415** to remove.
 | 42 | W1-GAME-c (starttown) | `d27d421e` | Game c: starttown's start config, map, entity list, spawn passes, founding-house list, residence bring-up, storage wiring; MapGenerator pools `DynArrayHeader<T>` (retail dtor 0x14001aea0); eight doors replaced by their members: 545 -> 195 in starttown.cpp (citizen-side functions left for the second pass) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.81 ms/frame, p95 2.34 (agents building) | 0 |
 
 Metric at `d27d421e`: **9,619** to remove.
+
+| 43 | W2-TESTS | `31b50bd5` | tests: InterpolatedState components by name, a real `IO::Stream` subclass for FakeStream, `Time` built by field, a literal copied instead of `const_cast`: tests row 813 -> 796 (the rest is the tests' subject, or waits on the runtime POD mirrors and the minted IO tables) | exit 0 · 918 / 0 · 0 | ok | 5/5 | — (tests only) | 0 |
