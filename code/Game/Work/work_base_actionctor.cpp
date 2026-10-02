@@ -319,8 +319,8 @@ void* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, void* p2, void* p3) {
     // The real ctor (Action(): Internal, +0x10/+0x18 = 0; +0x20/+0x28 zeroed), then
     // the two field copies.
     PickupRawMaterial* a = new (self) PickupRawMaterial();
-    a->_field20 = p2 ? *reinterpret_cast<void**>(p2) : nullptr;
-    a->_field28 = p3 ? *reinterpret_cast<void**>(p3) : nullptr;
+    a->_field20 = p2 ? *reinterpret_cast<CitizenComponent**>(p2) : nullptr;
+    a->_field28 = p3 ? *reinterpret_cast<ComponentEntity**>(p3) : nullptr;
     return static_cast<Object::Base*>(a);
 }
 
