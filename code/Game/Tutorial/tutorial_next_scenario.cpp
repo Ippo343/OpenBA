@@ -46,6 +46,8 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "Tutorial/Tutorial.h"
+#include "Tutorial/TutorialInstance.h"
+#include "ui/UserInterface.h"
 #include "Game/GameUpdateLoop.h"       // ENDGAME B.3.9 EXA: the real loop classes
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
@@ -69,27 +71,25 @@ namespace {
 //   worldsetup_reload.cpp / newgamedialog.cpp / saveloaddialog.cpp.
 // ENDGAME B.3.9 EXA: the real loop classes (retail inlines the splash's
 // subclass ctor here; the class's ctor is that body).
-void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
+GameLoaderLoop* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
     Engine::UpdateLoop* pDlLoop = nullptr;
     void* dlLoop = System::MemoryAllocator::MemAlloc(0xb60, 4);
     if (dlLoop) {
-        uint64_t delayTime = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), 1.0f);
+        System::Time delayTime{};
+        RtSystem_Time_Ctor(&delayTime, 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // 0x140099130
 
-        pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
-            loadingName, pGameLoop, *reinterpret_cast<const System::Time*>(&delayTime));
+        pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(loadingName, pGameLoop, delayTime);
     }
 
-    void* pOuterLoop = nullptr;
+    GameLoaderLoop* pOuterLoop = nullptr;
     void* outerLoop = System::MemoryAllocator::MemAlloc(0x48, 4);
     if (outerLoop) {
-        uint64_t zeroTime = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTime), 0.0f);
-        pOuterLoop = ::new (outerLoop) GameLoaderLoop(
-            pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
+        System::Time zeroTime{};
+        RtSystem_Time_Ctor(&zeroTime, 0.0f);
+        pOuterLoop = ::new (outerLoop) GameLoaderLoop(pDlLoop, zeroTime);
     }
     return pOuterLoop;
 }
@@ -105,19 +105,21 @@ const char* MissingDependency(bool needSaveLoad) {
     return nullptr;
 }
 
+// LEFT: Scenario's two Strings are `void*` in GAME-b's header.
+const System::String& ScenarioString(void* const& field) {
+    return *reinterpret_cast<const System::String*>(&field);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// FinishTutorialInstance_helper_0d70 (exe 0x1400E0D70)
+// TutorialInstance::LoadNextScenario (exe 0x1400E0D70)
 // ---------------------------------------------------------------------------
-// `self` is the FinishTutorialInstance; self+0x30 is the Tutorial definition and
-// tutorialDef+0x38 is the index of the scenario to load next.
-extern "C" void TutWave_LoadNextScenario(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    uintptr_t tutorialDef = *reinterpret_cast<uintptr_t*>(s + 0x30);
-    if (!tutorialDef) {
+// tutorialDef (+0x30) is the Tutorial definition and its currentStep (+0x38)
+// is the index of the scenario to load next.
+void TutorialInstance::LoadNextScenario() {
+    Tutorial* tutorial = tutorialDef;
+    if (!tutorial) {
         fprintf(stderr, "[TutNext] tutInst+0x30 (Tutorial def) is NULL — no next scenario\n");
         fflush(stderr);
         return;
@@ -125,7 +127,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
 
     // Retail's only bounds test. A negative index means "no scenario follows
     // this tutorial", which is how the last tutorial in the chain ends.
-    int scenIdx = *reinterpret_cast<int32_t*>(tutorialDef + 0x38);
+    int scenIdx = tutorial->currentStep;
     if (scenIdx < 0) {
         fprintf(stderr, "[TutNext] scenarioIndex=%d (<0) — this tutorial ends the chain\n", scenIdx);
         fflush(stderr);
@@ -139,15 +141,12 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     }
 
     // The scenario list is the SAME one ScenarioDialog enumerates:
-    // *(*g_pKeyMapSingleton + 8), resources at *(list + 0x20)[i].
-    void* scenarioList = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(g_gameContainer) + 8);
-    uintptr_t resArray = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(scenarioList) + 0x20);
-    void* resource = *reinterpret_cast<void**>(resArray + static_cast<uintptr_t>(scenIdx) * 8);
+    // GameContainer +0x08, its resources at +0x20.
+    Object::ExternalList* scenarioList = g_gameContainer->scenarioList.Get();
+    Object::External* resource = scenarioList->_resources[scenIdx];
 
-    void* scenario = Object::IsDerivedFromNullSafe(resource, Scenario::TypeId()) ? resource : nullptr;
-    uintptr_t sc = reinterpret_cast<uintptr_t>(scenario);
+    Scenario* scenario = Object::IsDerivedFromNullSafe(resource, Scenario::TypeId())
+        ? static_cast<Scenario*>(resource) : nullptr;
 
     // 0x140013AA0 -- Scenario::GetSaveName, String(scenario + 0x88). Retail runs
     // this on a possibly-null `scenario` (the IsDerivedFrom filter can yield 0);
@@ -156,24 +155,23 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     if (!scenario) {
         fprintf(stderr, "[TutNext] scenario[%d]=%p is not a Scenario (typeId filter %u) "
                         "— cannot start the next tutorial\n",
-                scenIdx, resource, Scenario::TypeId());
+                scenIdx, static_cast<void*>(resource), Scenario::TypeId());
         fflush(stderr);
         return;
     }
 
     System::String saveNameStr("");
-    // Scenario::GetSaveName -- B.3.1 bridge, the Scenario is still untyped bytes.
-    saveNameStr = *reinterpret_cast<const System::String*>(sc + 0x88);
+    // Scenario::GetSaveName (+0x88)
+    saveNameStr = ScenarioString(scenario->_field88);
 
     bool hasSaveState = (saveNameStr._data != nullptr && saveNameStr.GetLength() > 0);
 
     fprintf(stderr, "[TutNext] next scenario index=%d resource=%p hasSaveState=%d\n",
-            scenIdx, scenario, (int)hasSaveState);
+            scenIdx, static_cast<void*>(scenario), (int)hasSaveState);
     fflush(stderr);
 
-    uint8_t nullIBP[8];
-    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    uint64_t ibpCopy = *reinterpret_cast<uint64_t*>(nullIBP);
+    // The null InternalBasePtr<AchievementInstance> the ctor's p3 receives.
+    uint64_t ibpCopy = 0;
 
     Engine::UpdateLoop* pGameLoop = nullptr;
 
@@ -181,30 +179,29 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         // ---- NEW-SCENARIO branch -------------------------------------------
         // 0x140013A60 -- Scenario::GetDisplayName, String(scenario + 0x58).
         System::String displayNameStr("");
-        displayNameStr = *reinterpret_cast<const System::String*>(sc + 0x58);
+        displayNameStr = ScenarioString(scenario->scenarioName);
 
         // Worldgen params. The outer two of the generator triple are stored in
         // the order mapGen(+0x70) / terrainGen(+0x78) / climateGen(+0x80) --
         // positionally p9/p10/p11 -> loop +0x40/+0x48/+0x50, which
         // GameUpdateLoop::Load reads back in that order. Same mapping
         // ScenarioDialog::LoadSelected documents.
-        uint32_t seedVal        = *reinterpret_cast<uint32_t*>(sc + 0x60);
-        uint32_t terrainSizeVal = *reinterpret_cast<uint32_t*>(sc + 0x64);
-        char     disasterOff    = *reinterpret_cast<char*>(sc + 0x68);
-        uint64_t mapGen         = *reinterpret_cast<uint64_t*>(sc + 0x70);
-        uint64_t terrainGen     = *reinterpret_cast<uint64_t*>(sc + 0x78);
-        uint64_t climateGen     = *reinterpret_cast<uint64_t*>(sc + 0x80);
+        uint32_t seedVal        = static_cast<uint32_t>(scenario->_field60);
+        uint32_t terrainSizeVal = static_cast<uint32_t>(scenario->_field64);
+        bool     disasterOff    = scenario->_field68;
 
         void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         if (gameLoop) {
             // ENDGAME B.3.9 EXA: the real class; ctor 0x140098060 copy-constructs
             // the name (retail's by-value String arrives by hidden pointer), and
             // our local releases its own reference as retail's ~String does.
+            // LEFT: Scenario's generator ExternalPtrs are `void*` (GAME-b's header).
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 nullptr, ibpCopy, scenIdx, displayNameStr,
                 static_cast<int32_t>(seedVal), static_cast<int32_t>(terrainSizeVal),
-                /*p8=*/disasterOff != 0, reinterpret_cast<MapGenerator*>(mapGen),
-                reinterpret_cast<TerrainGenerator*>(terrainGen), reinterpret_cast<ClimateGenerator*>(climateGen));
+                /*p8=*/disasterOff, reinterpret_cast<MapGenerator*>(scenario->mapGenerator),
+                reinterpret_cast<TerrainGenerator*>(scenario->terrainGenerator),
+                reinterpret_cast<ClimateGenerator*>(scenario->climateGenerator));
         }
     } else {
         // ---- SAVED-SCENARIO branch -----------------------------------------
@@ -214,48 +211,39 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
             return;
         }
 
-        void* saveLoad = ::Save::SaveLoad::_singleton;
-        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);   // B.3.7 bridge
-        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveNameStr, 2);   // B.3.7 bridge
+        Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
+        saveLoad->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);
+        saveLoad->SetSaveName(saveNameStr, 2);
 
         // Tutorial saves live inside WinData/*.pkg, so Persistence+0x90 must
         // point at the DATA directory for the load, then be restored. Identical
         // to ScenarioDialog::LoadSelected -- including that GetSavePath returns a
         // System::String (destroyed with String::~String at the very end) while
         // the GetDataDirectory temp is a Filename.
-        void* persistence = ::IO::Persistence::_singleton;
-        System::String savePathBuf;
-        // B.3.4 bridge, twice. Each member returns BY VALUE through MSVC's
-        // hidden return slot, and the buffer below is the slot the door was
-        // handed, so the prvalue is constructed straight into it (guaranteed
-        // elision): one AddRef each, exactly as the door did, and each local's
-        // own destructor is the one release it always was.
-        ::new (&savePathBuf) System::String(
-            reinterpret_cast<const IO::Persistence*>(persistence)->GetSavePath());
-        void* fileSystem = ::IO::FileSystem::_singleton;
-        System::Filename dataDirBuf;
-        ::new (&dataDirBuf) System::Filename(
-            reinterpret_cast<const IO::FileSystem*>(fileSystem)->GetDataDirectory());
-        *reinterpret_cast<System::String*>(
-            reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90) =
+        IO::Persistence* persistence = ::IO::Persistence::_singleton;
+        System::String savePathBuf(persistence->GetSavePath());
+        IO::FileSystem* fileSystem = ::IO::FileSystem::_singleton;
+        System::Filename dataDirBuf(fileSystem->GetDataDirectory());
+        // LEFT: IO::Persistence::_savePath is the RtSystem::String POD (R-IO's header).
+        *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) =
             dataDirBuf.AsString();
 
-        int operation = static_cast<int>(reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetOperation());   // B.3.7 bridge
+        int operation = static_cast<int>(saveLoad->GetOperation());
         int loopCount = 0;
         while (operation != 0) {
-            uint8_t zeroTime[8];
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
-            reinterpret_cast<Save::SaveLoad*>(saveLoad)->Update(*reinterpret_cast<const System::Time*>(zeroTime));   // B.3.7 bridge
-            operation = static_cast<int>(reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetOperation());   // B.3.7 bridge
+            System::Time zeroTime{};
+            RtSystem_Time_Ctor(&zeroTime, 0.0f);
+            saveLoad->Update(zeroTime);
+            operation = static_cast<int>(saveLoad->GetOperation());
             ++loopCount;
         }
         fprintf(stderr, "[TutNext] SaveLoad pump finished after %d iterations\n", loopCount);
         fflush(stderr);
 
-        *reinterpret_cast<System::String*>(
-            reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90) = savePathBuf;
+        // LEFT: as above.
+        *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) = savePathBuf;
 
-        Save::SavedState* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();   // B.3.7 bridge
+        Save::SavedState* savedState = saveLoad->GetSaveState();
 
         void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         if (gameLoop) {
@@ -269,13 +257,20 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
 
     }
 
-    void* pOuterLoop = BuildLoaderChain(pGameLoop);
+    GameLoaderLoop* pOuterLoop = BuildLoaderChain(pGameLoop);
 
-    // Publish on the GAME WORLD singleton: cursor + fullscreen fade on its UI
-    // (+0x98), next loop at +0xC8. Retail has no controller test here.
-    SetEngineNextLoop(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton), pOuterLoop);
+    // Publish on the GAME WORLD singleton (0x140097fb0, inlined as the tree's
+    // SetEngineNextLoop): cursor + fullscreen fade on its UI (+0x98), next loop
+    // at +0xC8. Retail has no controller test here.
+    {
+        GameUpdateLoop* engine = GameUpdateLoop::_singleton;
+        UI::UserInterface* ui = engine->m_userInterface;
+        ui->SetCursor(g_gameContainer->cursorHourglass);
+        ui->SetFullscreenFade(true, 0xFF000000, false);
+        engine->m_nextLoop = pOuterLoop;
+    }
 
     fprintf(stderr, "[TutNext] next-scenario loop chain queued (gameLoop=%p loader=%p)\n",
-            (void*)pGameLoop, pOuterLoop);
+            static_cast<void*>(pGameLoop), static_cast<void*>(pOuterLoop));
     fflush(stderr);
 }

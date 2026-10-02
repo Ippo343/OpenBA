@@ -23,7 +23,8 @@
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"   // 0x140028860 ToolbarDescription_StringArrayResize
 #include "Dialog/exe_bodies.h"      // 0x140101a80 / 0x140102b60
-#include "Tutorial/exe_bodies.h"    // TutWave_* (0x140028650, 0x1400e2330/24f0/2700/29f0)
+#include "Tutorial/exe_bodies.h"    // TutWave_SerializeDialogRef (0x140028650), FindDialogByName_Impl
+#include "Game/PlayerToolManager.h"
 #include <cstdint>
 #include <new>
 
@@ -34,11 +35,17 @@
 // TutorialSetupDialog stamps (the compiler's), +0x20..+0x58 zeroed, +0x60 = -1,
 // +0x68 = 0, +0x70 = 0.
 TutorialSetupDialog::TutorialSetupDialog()
-    : shownPaths(0), shownPathCount(0), shownPathCapacity(0),
-      dialogNames(0), dialogNameCount(0), dialogNameCapacity(0),
+    : shownPaths(nullptr), shownPathCount(0), shownPathCapacity(0),
+      dialogNames(nullptr), dialogNameCount(0), dialogNameCapacity(0),
       highlightPath(0), arrowRotation(0), _pad4C{}, highlightDialog(nullptr),
-      toolbarName(0), toolbarStamp(-1), _pad64{}, toolbarCached(nullptr),
+      toolbarRef{{}, -1, {}, nullptr},
       toolbarIndex(0), _pad74{} {}
+
+// LEFT H5: the +0x40 String is raw storage (the ctor stores 0 inline, the dtor
+// destroys it by hand).
+System::String& TutorialSetupDialog::HighlightPath() {
+    return *reinterpret_cast<System::String*>(&highlightPath);
+}
 
 // The dtor 0x1400e2bf0: ~String +0x58, ~String +0x40, then the two String
 // arrays (+0x30, then +0x20) — each an inlined Collection::Array<System::String>
@@ -46,10 +53,11 @@ TutorialSetupDialog::TutorialSetupDialog()
 // compiler re-stamps TutorialSetup and runs ~External (the tree ran a guarded
 // ~Internal instead).
 TutorialSetupDialog::~TutorialSetupDialog() {
-    reinterpret_cast<System::String*>(&toolbarName)->~String();       // B.3.1 bridge
-    reinterpret_cast<System::String*>(&highlightPath)->~String();     // B.3.1 bridge
-    reinterpret_cast<Collection::Array<System::String>*>(&dialogNames)->~Array();   // B.3.2 bridge
-    reinterpret_cast<Collection::Array<System::String>*>(&shownPaths)->~Array();    // B.3.2 bridge
+    toolbarRef.Name().~String();
+    HighlightPath().~String();
+    // LEFT H5: the two String arrays are raw {data, count, capacity} triples.
+    reinterpret_cast<Collection::Array<System::String>*>(&dialogNames)->~Array();
+    reinterpret_cast<Collection::Array<System::String>*>(&shownPaths)->~Array();
 }
 
 // ============================================================
@@ -74,65 +82,61 @@ Object::External* TutorialSetupDialog::Construct() {
 // ExternalRef (resolved on load) and the toolbar index. Retail does NOT call
 // the base TutorialSetup::Serialize here. Returns true (MOV AL,1).
 bool TutorialSetupDialog::Serialize(void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
+    // LEFT: External::Serialize hands the stream in as void* (the runtime
+    // base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // 1st String array (+0x20)
-    uint32_t count1 = shownPathCount;
-    ser->Serialize(*reinterpret_cast<int*>(&count1), nullptr);
-    if (static_cast<int>(ser->GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
-        ToolbarDescription_StringArrayResize(&shownPaths, static_cast<unsigned>(static_cast<int>(count1)));   // 0x140028860
+    int count1 = static_cast<int>(shownPathCount);
+    ser.Serialize(count1, nullptr);
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
+        ToolbarDescription_StringArrayResize(&shownPaths, static_cast<unsigned>(count1));   // 0x140028860
     }
-    if (static_cast<int32_t>(count1) > 0) {
-        uint8_t* p = reinterpret_cast<uint8_t*>(shownPaths);
-        for (uint32_t i = 0; i < count1; ++i, p += 8) {
-            reinterpret_cast<System::String*>(p)->Serialize(serializer);   // B.3.1 bridge
+    if (count1 > 0) {
+        System::String* p = shownPaths;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(count1); ++i, ++p) {
+            p->Serialize(&ser);
         }
     }
 
     // 2nd String array (+0x30)
-    uint32_t count2 = dialogNameCount;
-    ser->Serialize(*reinterpret_cast<int*>(&count2), nullptr);
-    if (static_cast<int>(ser->GetDirection()) == 0) {
-        ToolbarDescription_StringArrayResize(&dialogNames, static_cast<unsigned>(static_cast<int>(count2)));   // 0x140028860
+    int count2 = static_cast<int>(dialogNameCount);
+    ser.Serialize(count2, nullptr);
+    if (static_cast<int>(ser.GetDirection()) == 0) {
+        ToolbarDescription_StringArrayResize(&dialogNames, static_cast<unsigned>(count2));   // 0x140028860
     }
-    if (static_cast<int32_t>(count2) > 0) {
-        uint8_t* p = reinterpret_cast<uint8_t*>(dialogNames);
-        for (uint32_t i = 0; i < count2; ++i, p += 8) {
-            reinterpret_cast<System::String*>(p)->Serialize(serializer);   // B.3.1 bridge
+    if (count2 > 0) {
+        System::String* p = dialogNames;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(count2); ++i, ++p) {
+            p->Serialize(&ser);
         }
     }
 
-    reinterpret_cast<System::String*>(&highlightPath)->Serialize(serializer);   // B.3.1 bridge
-    TutWave_SerializeDialogRef(&highlightDialog, serializer);   // ExternalPtr<UI::Dialog> (0x140028650)
-    ser->Serialize(arrowRotation, nullptr);
+    HighlightPath().Serialize(&ser);
+    TutWave_SerializeDialogRef(&highlightDialog, &ser);   // ExternalPtr<UI::Dialog> (0x140028650)
+    ser.Serialize(arrowRotation, nullptr);
 
     // Temporary Filename retail's compiler emitted as this scope's guard.
     System::Filename tempFilename;
     (void)tempFilename;
 
-    reinterpret_cast<System::String*>(&toolbarName)->Serialize(serializer);   // B.3.1 bridge
+    toolbarRef.Name().Serialize(&ser);
 
     // On load: resolve the ExternalRef at +0x58 (FUN_14001b1d0 inlined): when
     // the factory generation moved, Find the name and keep it if it IsDerivedFrom
     // the building description type.
-    if (static_cast<int>(ser->GetDirection()) == 0) {
-        void* factory = ::Object::ExternalFactory::_singleton;
-        if (toolbarStamp != *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 8)) {
-            System::Filename filenameBuf(*reinterpret_cast<const System::String*>(&toolbarName));   // B.3.1 bridge
-            ::Object::ExternalFactory* efactory =
-                reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-            void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filenameBuf)));
+    if (static_cast<int>(ser.GetDirection()) == 0) {
+        ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+        if (toolbarRef.generation != efactory->_generation) {
+            System::Filename filenameBuf(toolbarRef.Name());
+            const ::Object::External* found = efactory->Find(filenameBuf);
             bool valid = found && Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId());
-            toolbarCached = valid ? found : nullptr;
-            toolbarStamp = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 8);
+            toolbarRef.resolved = valid ? found : nullptr;
+            toolbarRef.generation = efactory->_generation;
         }
     }
 
-    ser->Serialize(toolbarIndex, nullptr);
-
-    ser->~Serializer();
+    ser.Serialize(toolbarIndex, nullptr);
     return true;
 }
 
@@ -144,39 +148,34 @@ bool TutorialSetupDialog::Serialize(void* stream) {
 // building (a building description data source) or close it (clearing edit
 // mode first when the data source is a ComponentEntity).
 void TutorialSetupDialog::Begin() {
-    TutWave_ShowListedElements(this);        // 0x1400e29f0
-    TutWave_OpenHighlightDialog(this, '\0'); // 0x1400e2700
+    ShowListedElements();        // 0x1400e29f0
+    OpenHighlightDialog('\0');   // 0x1400e2700
 
     int count2 = static_cast<int32_t>(dialogNameCount);
     for (int i = 0; i < count2; ++i) {
-        uint64_t instance = 0;
-        void* strPtr = reinterpret_cast<void*>(dialogNames + static_cast<uintptr_t>(i) * 8);
-        FindDialogByName_Impl(&instance, strPtr);
-        if (instance == 0) continue;
+        Object::InternalPtr<UI::DialogInstance> instance;
+        FindDialogByName_Impl(&instance, &dialogNames[i]);
+        if (instance.Get() == nullptr) continue;
 
-        void* basePtr = *reinterpret_cast<void**>(instance + 0x30);   // DialogInstance::_dataSource
+        Object::Base* basePtr = instance.Get()->_dataSource;   // DialogInstance::_dataSource
 
         // Original uses IsA first (null/type-safe), then IsDerivedFrom
-        bool isBuild = reinterpret_cast<const Object::Base*>(basePtr)->IsA(ComponentDescription::TypeId());   // B.3.x bridge
+        bool isBuild = basePtr->IsA(ComponentDescription::TypeId());
         if (isBuild) {
             bool derived = Object::IsDerivedFromNullSafe(basePtr, ComponentDescription::TypeId());
-            void* entityForFollow = derived ? basePtr : nullptr;
-            uint64_t retval[2] = {0, 0};
-            uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-            void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);
-            Toolbar_Utility_Reg(playerController, retval, reinterpret_cast<uint64_t>(entityForFollow));   // 0x140101a80
+            ComponentDescription* entityForFollow = derived ? static_cast<ComponentDescription*>(basePtr) : nullptr;
+            PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
+            playerController->ToggleUtilityDialog(entityForFollow);   // 0x140101a80
         } else {
             // Original: SetEditMode only if IsA(ComponentEntity), but CloseDialog always
-            bool isEntity = reinterpret_cast<const Object::Base*>(basePtr)->IsA(ComponentEntity::TypeId());   // B.3.x bridge
-            uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
+            bool isEntity = basePtr->IsA(ComponentEntity::TypeId());
             if (isEntity) {
-                void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);
-                Toolbar_ShowGroup_Impl(playerController, 0);   // 0x140102b60 (the door was named SetEditMode)
+                PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
+                playerController->SelectTool(nullptr);   // 0x140102b60 (the door was named SetEditMode)
             }
-            void* ui = *reinterpret_cast<void**>(gameSingleton + 0x98);
-            uint64_t instCopy = instance;
-            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
-                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&instCopy));
+            UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
+            Object::InternalPtr<UI::DialogInstance> instCopy = instance;
+            ui->CloseDialog(&instCopy);
         }
     }
 }
@@ -187,8 +186,8 @@ void TutorialSetupDialog::Begin() {
 // Every tick: re-show the listed elements, re-open the highlight unless one
 // is already open. `time` is unused.
 void TutorialSetupDialog::Update(void* /*time*/) {
-    TutWave_ShowListedElements(this);           // 0x1400e29f0
-    TutWave_OpenHighlightDialog(this, '\x01');  // 0x1400e2700
+    ShowListedElements();          // 0x1400e29f0
+    OpenHighlightDialog('\x01');   // 0x1400e2700
 }
 
 // ============================================================
@@ -196,16 +195,13 @@ void TutorialSetupDialog::Update(void* /*time*/) {
 // ============================================================
 // The step completes: un-hide every dialog, close the open highlight.
 void TutorialSetupDialog::End() {
-    TutWave_SetAllDialogFlags(this, '\x01');   // 0x1400e2330
+    SetAllDialogFlags('\x01');   // 0x1400e2330
 
-    uint64_t instance = 0;
-    TutWave_FindHighlightDialog(this, &instance);   // 0x1400e24f0
-    if (instance != 0) {
-        uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-        void* ui = *reinterpret_cast<void**>(gameSingleton + 0x98);
-        uint64_t instPtr = instance;
-        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&instPtr));
+    Object::InternalPtr<UI::DialogInstance> instance = FindHighlightDialog();   // 0x1400e24f0
+    if (instance.Get() != nullptr) {
+        UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
+        Object::InternalPtr<UI::DialogInstance> instPtr = instance;
+        ui->CloseDialog(&instPtr);
     }
 }
 

@@ -34,10 +34,11 @@ public:
     Object::External* Reconstruct() override;                      // [6] 0x140027f50
     // [7] Destruct: TutorialImage's (the shared 0x140001640 body)
     Object::External* Construct() override;                        // [8] 0x140027f00
-    void*             CreateElement(void* ret, void* dialog) override;  // [9] 0x1400e06e0
+    Object::InternalPtr<UI::Element>* CreateElement(Object::InternalPtr<UI::Element>* ret,
+                                                    const UI::Dialog* dialog) override;  // [9] 0x1400e06e0
 
 public:
-    int32_t  _inputId;           // +0x30: input key id (serialized through the uint door)
+    uint32_t _inputId;           // +0x30: input key id (H2: Serialize(unsigned int&), 0x1400e07f0)
     uint8_t  _pad34[4];          // +0x34: padding
 };
 

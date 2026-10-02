@@ -34,63 +34,53 @@
 // In standalone the type-id storage slot (0x140152870) is unregistered → null,
 // so the IsDerivedFrom check is skipped and the Find result is trusted — same
 // strategy as ResolveExternalByName_Impl's TypeId_ComponentDescription_FC guard.
-void StatGoal_ResolveExternalPtr(void* externalRef) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(externalRef);
-    if (!::Object::ExternalFactory::_singleton) return;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+// The +0x00 String (H5 raw storage; see the header). LEFT: the one
+// reinterpretation of the name storage.
+System::String& NamedExternalRef::Name() {
+    return *reinterpret_cast<System::String*>(name);
+}
+const System::String& NamedExternalRef::Name() const {
+    return *reinterpret_cast<const System::String*>(name);
+}
 
-    int32_t refGen     = *reinterpret_cast<int32_t*>(s + 0x08);
-    int32_t factoryGen = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
+// LEFT: CitizenBehavior::field_0x100 / field_0x160 are `void*` (WORK-a's header).
+ProfessionBucketNode* ProfessionTreeRoot(const CitizenBehavior* cb) {
+    return reinterpret_cast<ProfessionBucketNode*>(cb->field_0x100);
+}
+TemplateBucketNode* TemplateTreeRoot(const CitizenBehavior* cb) {
+    return reinterpret_cast<TemplateBucketNode*>(cb->field_0x160);
+}
+
+void NamedExternalRef::Resolve() {
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    if (!efactory) return;
+
+    int32_t refGen     = generation;
+    int32_t factoryGen = efactory->_generation;
     if (refGen == factoryGen) return;
 
-    // +0x00 of the ExternalPtr is the name String (B.3.1 bridge: the containing
-    // ExternalPtr struct is still untyped bytes).
-    System::Filename filename(reinterpret_cast<const System::String&>(*reinterpret_cast<char*>(s)));
-    void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filename)));
-
-    // STANDALONE DEVIATION, deliberate — identical to the one documented at
-    // length in TutRestrict_ResolveRefOrLoad (tutorialsetuprestrictplayer.cpp)
-    // and TutBase_ResolveToolbarRef (tutorial_base.cpp).
-    //
-    // Retail's Find() alone is enough because UpdateLoop::LoadResources has
-    // already preloaded the Game/GameResources.rsc dependency tree INTO the
-    // ExternalFactory; ours leaves those entries in the loop's m_resourceList,
-    // so Find() misses for anything nothing else happened to load.
-    //
-    // This resolver feeds TutorialGoalCount::Check, whose "Zone" mode counts
-    // entities in the EntityList's per-description BST keyed by the resolved
-    // description POINTER. A miss writes null, the BST is then searched for key
-    // 0, the count comes back 0, and the goal can never be met — the tutorial
-    // stalls forever with no error anywhere. Measured on stepFirstClear2, whose
-    // goal counts "Template\Clear.rsc": the WoodHouse goal one step earlier only
-    // worked because the step's own restriction had FindOrLoad'ed that exact
-    // name into the factory first. Nothing ever loads Clear.rsc by name.
-    //
-    // Retail would fault on neither leg (it never has the null), so this is not
-    // a guard over a faithful crash — it is the standalone resource-environment
-    // gap. The real fix remains making the preload populate the factory.
+    System::Filename filename(Name());
+    const ::Object::External* found = efactory->Find(filename);
     bool loaded = false;
     if (!found) {
-        const char* name = *reinterpret_cast<const char* const*>(s);
-        if (name && name[0]) {
+        const char* text = Name()._data;
+        if (text && text[0]) {
             // Only the LOADER rejects backslashes; the factory's key comparison
             // normalizes separators (measured — see tutorial_base.cpp).
             char normalized[260];
             size_t k = 0;
-            for (; name[k] && k < sizeof(normalized) - 1; ++k)
-                normalized[k] = (name[k] == '\\') ? '/' : name[k];
+            for (; text[k] && k < sizeof(normalized) - 1; ++k)
+                normalized[k] = (text[k] == '\\') ? '/' : text[k];
             normalized[k] = 0;
 
             System::String   normStr(normalized);
             System::Filename normFile(normStr);
-            found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(normFile)));
+            found = efactory->FindOrLoad(normFile);
             loaded = true;
         }
     }
 
-    void* result = nullptr;
+    const ::Object::External* result = nullptr;
     if (found) {
         // Retail reads the type id through the import slot 0x140152870
         // (?_typeInfo@External@Object@@). ENDGAME B.3.9 TR: the class accessor; the
@@ -100,12 +90,11 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
         }
     }
 
-    *reinterpret_cast<void**>(s + 0x10) = result;
+    resolved = result;
     // Re-read the generation: a FindOrLoad that actually loaded bumps it, and
     // stamping the pre-load value would make the next call redo the whole
     // lookup for nothing.
-    *reinterpret_cast<int32_t*>(s + 0x08) =
-        *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
+    generation = efactory->_generation;
 
 }
 
@@ -146,11 +135,14 @@ namespace {
 //               External* cached @+0x10}, stride 0x18, align 8.
 // +0x0c..+0x0f is written by NEITHER arm, which — together with the -1
 // generation seed — is why this row cannot be derived from a C++ type's traits.
+// LEFT: rtcoll::ArraySpec's element callbacks take raw `uint8_t*` storage
+// (runtime/types/collection/Collection.h); each names its element once.
 void AssignGoalRefEntry(uint8_t* d, const uint8_t* s) {
-    // B.3.2 bridge: the entry is still untyped bytes in the BuildingGoal struct.
-    new (d) System::String(*reinterpret_cast<const System::String*>(s));     // +0x00
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+    NamedExternalRef* dst = reinterpret_cast<NamedExternalRef*>(d);
+    const NamedExternalRef* src = reinterpret_cast<const NamedExternalRef*>(s);
+    new (dst->name) System::String(src->Name());     // +0x00
+    dst->generation = src->generation;               // +0x08
+    dst->resolved = src->resolved;                   // +0x10
 }
 
 // ⚠ The tail SEED VALUES are load-bearing: a newly added entry gets generation
@@ -159,14 +151,16 @@ void AssignGoalRefEntry(uint8_t* d, const uint8_t* s) {
 // pointer is still null — the entry would silently never resolve. Faithful to
 // retail, which stores 0xffffffff explicitly.
 void InitGoalRefEntry(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xFFFFFFFFu;   // generation -1
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    NamedExternalRef* e = reinterpret_cast<NamedExternalRef*>(d);
+    e->Name()._data = nullptr;                       // +0x00
+    e->generation = -1;                              // +0x08 generation -1
+    e->resolved = nullptr;                           // +0x10
 }
 
 void DestroyGoalRefEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
+    NamedExternalRef* elems = reinterpret_cast<NamedExternalRef*>(base);
     for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
+        elems[i].Name().~String();
 }
 
 // stays explicit: a String copy-ctor `assign` (byteCopy=false) with a real
@@ -184,9 +178,9 @@ using GoalRefArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 }  // namespace
 
-void Goal_RefArray_Resize(void* arr, uint32_t newCount) {
+void Goal_RefArray_Resize(NamedExternalRefArray* arr, uint32_t newCount) {
     if (!arr) return;
-    // B.3.2 bridge: BuildingGoal+0x38 is still a raw 0x10-byte array header in
-    // an unconverted exe struct; the cast goes when BuildingGoal becomes a class.
+    // LEFT: the element ops are a uint8_t ArraySpec row (above), so the typed
+    // header is driven as that Array instantiation.
     reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));
 }
