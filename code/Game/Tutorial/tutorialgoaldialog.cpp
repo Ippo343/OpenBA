@@ -30,13 +30,19 @@
 // 0x140027520): External(), the TutorialGoal and TutorialGoalDialog stamps
 // (the compiler's), then +0x20 = +0x28 = 0, +0x30 = -1, +0x38 = 0.
 TutorialGoalDialog::TutorialGoalDialog()
-    : dialogName(0), targetName(0), targetStamp(-1), _pad34{}, targetDescription(nullptr) {}
+    : dialogName(0), target{{}, -1, {}, nullptr} {}
+
+// LEFT H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor
+// destroys it by hand).
+System::String& TutorialGoalDialog::DialogName() {
+    return *reinterpret_cast<System::String*>(&dialogName);
+}
 
 // The dtor inside [0] 0x140027590: ~String on +0x28, then +0x20; the compiler
 // re-stamps TutorialGoal and runs ~External (the tree ran a guarded ~Internal).
 TutorialGoalDialog::~TutorialGoalDialog() {
-    reinterpret_cast<System::String*>(&targetName)->~String();   // B.3.1 bridge
-    reinterpret_cast<System::String*>(&dialogName)->~String();   // B.3.1 bridge
+    target.Name().~String();
+    DialogName().~String();
 }
 
 // ============================================================
@@ -48,24 +54,23 @@ TutorialGoalDialog::~TutorialGoalDialog() {
 bool TutorialGoalDialog::Serialize(void* stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // LEFT: External::Serialize hands the stream in as void* (the runtime
+    // base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    reinterpret_cast<System::String*>(&dialogName)->Serialize(ser);   // B.3.1 bridge
+    DialogName().Serialize(&ser);
 
     // Filename temp retail's compiler emitted for this scope; only ever
     // constructed and destroyed.
     System::Filename tempFilename;
     (void)tempFilename;
 
-    reinterpret_cast<System::String*>(&targetName)->Serialize(ser);   // B.3.1 bridge
+    target.Name().Serialize(&ser);
 
     // On load (direction 0): resolve the ExternalRef at +0x28 by name.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        ResolveExternalByName_Impl(&targetName);
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        ResolveExternalByName_Impl(&target);
     }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
     return true;
 }
 
@@ -89,23 +94,23 @@ Object::External* TutorialGoalDialog::Construct() {
 // target description is named, or the dialog's data source is that
 // description (directly, or through a ComponentEntity's +0x28 Description).
 bool TutorialGoalDialog::IsComplete(void* /*time*/, void* /*instance*/) {
-    uint64_t dialogPtr = 0;
-    FindDialogByName_Impl(&dialogPtr, &dialogName);
-    if (dialogPtr == 0) return false;   // dialog not open
+    Object::InternalPtr<UI::DialogInstance> dialogPtr;
+    FindDialogByName_Impl(&dialogPtr, &DialogName());
+    if (dialogPtr.Get() == nullptr) return false;   // dialog not open
 
     // The dialog instance's data source (DialogInstance +0x30).
-    void* userData = *reinterpret_cast<void**>(dialogPtr + 0x30);
-    void* description = nullptr;
+    Object::Base* userData = dialogPtr.Get()->_dataSource;
+    const Object::External* description = nullptr;
     if (userData != nullptr) {
         if (Object::IsDerivedFromNullSafe(userData, ComponentDescription::TypeId())) {
-            description = userData;
+            description = static_cast<const ComponentDescription*>(userData);
         } else if (Object::IsDerivedFromNullSafe(userData, ComponentEntity::TypeId())) {
-            description = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(userData) + 0x28);
+            description = static_cast<const ComponentEntity*>(userData)->_description;
         }
     }
 
-    ResolveExternalByName_Impl(&targetName);
-    if (targetDescription != nullptr && targetDescription != description) return false;
+    ResolveExternalByName_Impl(&target);
+    if (target.resolved != nullptr && target.resolved != description) return false;
     return true;
 }
 

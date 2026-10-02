@@ -38,6 +38,14 @@
 #include "Game/Toolbar.h"                // B.3.9 EXA: Toolbar::TypeId()
 #include "ui/SpinnerElement.h"           // UI::SpinnerElement::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "Tutorial/exe_bodies.h"
+#include "Goal/goal_exe_helpers.h"           // NamedExternalRef, the entity-bucket trees
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Game/Profession.h"
 
 // ============================================================
 // Family A — ExternalPtr serialize helpers
@@ -84,27 +92,20 @@ extern "C" void TutBase_SerializeImageRef(void* fieldPtr, void* serializer) {
     SerOne(fieldPtr, serializer, "ElementDescription");
 }
 
-// 0x140027de0 — resolve+cache a Toolbar external referenced by name.
-// Mirrors ResolveExternalByName_Impl (engine_funcs.h) exactly, validating against
-// the Toolbar type instead of BuildComponent.
-//   stringField layout: +0x00 String, +0x08 cached generation, +0x10 cached External*.
-extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
-    if (!stringField) return;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    if (!factory) return;
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(stringField);
+/// 0x140027de0 — ExternalPtr<Toolbar>'s resolve by name: resolve + cache a
+// Toolbar external referenced by name. Mirrors ResolveExternalByName_Impl
+// exactly, validating against the Toolbar type instead.
+void NamedExternalRef::ResolveToolbar() {
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    if (!efactory) return;
 
     // Generation check — cached result still valid if generations match.
-    int32_t refGen     = *reinterpret_cast<int32_t*>(s + 0x08);
-    int32_t factoryGen = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
+    int32_t refGen     = generation;
+    int32_t factoryGen = efactory->_generation;
     if (refGen == factoryGen) return;
 
-    // +0x00 of the ref triple is the name String (B.3.1 bridge: still raw bytes).
-    System::Filename filename(*reinterpret_cast<const System::String*>(s));
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-    void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filename)));
+    System::Filename filename(Name());
+    const ::Object::External* found = efactory->Find(filename);
 
     // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
     // on the null below, so this is not papering over a faithful fault: it is the
@@ -130,22 +131,22 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     // does; until then this loads on demand, which is what retail's environment
     // has already done by this point.
     if (!found) {
-        const char* name = *reinterpret_cast<const char* const*>(s);
-        if (name) {
+        const char* text = Name()._data;
+        if (text) {
             char normalized[260];
             size_t k = 0;
-            for (; name[k] && k < sizeof(normalized) - 1; ++k)
-                normalized[k] = (name[k] == '\\') ? '/' : name[k];
+            for (; text[k] && k < sizeof(normalized) - 1; ++k)
+                normalized[k] = (text[k] == '\\') ? '/' : text[k];
             normalized[k] = 0;
 
             System::String   normStr(normalized);
             System::Filename normFile(normStr);
-            found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(normFile)));
+            found = efactory->FindOrLoad(normFile);
         }
     }
 
     // Validate Toolbar type (cell 0x1401c6128; the global "TypeId_ToolbarItem" lies — D5).
-    void* result = nullptr;
+    const ::Object::External* result = nullptr;
     if (found) {
         uint32_t tid = Toolbar::TypeId();
         if (Object::IsDerivedFromNullSafe(found, tid)) {
@@ -153,121 +154,84 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
         }
     }
 
-    *reinterpret_cast<void**>(s + 0x10)  = result;
-    *reinterpret_cast<int32_t*>(s + 0x08) = factoryGen;
-
+    // The factory hands out const Externals; the reference holds them mutable
+    // (retail's ExternalPtr<T> is a plain T*).
+    resolved   = const_cast<::Object::External*>(result);
+    generation = factoryGen;
 }
 
 // ============================================================
 // Family B — TutorialGoalCount::Check data helpers
 // ============================================================
 
-// Shared BST lookup: node[0]=key, node[2]=count, node[4]=left, node[5]=right.
-// Faithful port of the original control flow (FUN_140092010 / FUN_1400910a0).
-static inline uint32_t BstCountByKey(uintptr_t root, uintptr_t key) {
-    uintptr_t* node = reinterpret_cast<uintptr_t*>(root);
+// Shared BST lookup over the CitizenBehavior entity-bucket trees: the bucket's
+// entity count, 0 when absent. Faithful port of the original control flow
+// (FUN_140092010 / FUN_1400910a0).
+template <class Node, class Key>
+static inline uint32_t BstCountByKey(const Node* node, const Key* key) {
     while (true) {
         while (true) {
             if (node == nullptr) return 0;
-            if (node[0] <= key) break;       // not greater → leave inner loop
-            node = reinterpret_cast<uintptr_t*>(node[4]);  // go left
+            if (node->key <= key) break;     // not greater → leave inner loop
+            node = node->left;               // go left
         }
-        if (key <= node[0]) break;           // equal → found
-        node = reinterpret_cast<uintptr_t*>(node[5]);      // go right
+        if (key <= node->key) break;         // equal → found
+        node = node->right;                  // go right
     }
     if (node == nullptr) return 0;
-    return static_cast<uint32_t>(node[2]);
+    return static_cast<uint32_t>(node->count);
 }
 
-// 0x140092010 — count buildings of a type (BST at worldData+0x160).
-extern "C" uint32_t TutBase_CountBuildingsByType(uintptr_t worldData, uintptr_t typePtr) {
-    return BstCountByKey(*reinterpret_cast<uintptr_t*>(worldData + 0x160), typePtr);
+// 0x140092010 — the entities of one template (the +0x160 tree).
+uint32_t CitizenBehavior::CountByTemplate(const ComponentDescription* key) const {
+    return BstCountByKey(TemplateTreeRoot(this), key);
 }
 
-// 0x1400910a0 — count professions of a type (BST at worldData+0x100).
-extern "C" uint32_t TutBase_CountProfessionsByType(uintptr_t worldData, uintptr_t typePtr) {
-    return BstCountByKey(*reinterpret_cast<uintptr_t*>(worldData + 0x100), typePtr);
+// 0x1400910a0 — the entities of one profession (the +0x100 tree).
+uint32_t CitizenBehavior::CountByProfession(const Profession* key) const {
+    return BstCountByKey(ProfessionTreeRoot(this), key);
 }
 
-// 0x140013920 — cast an element to SliderElement (IsDerivedFrom check).
-// Returns null when the type can't be confirmed — safe for the slider-value
-// read path (count stays 0), never feeds a non-slider into Spinner accessors.
-extern "C" void* TutBase_CastToSliderElement(void* element) {
-    if (!element) {
-        return nullptr;
+// The tree's guards around 0x14012e5c0 that retail lacks (known_port_issues
+// 14d row 80): a scaled description with a zero _maxArea, or an entity with no
+// MapComponent, answers _defaultWorkers where retail divides by zero /
+// dereferences null. Everything else is WorkComponent::CalcMaxWorkers, retail's
+// body (Component/workcomponent.cpp).
+static int CalcMaxWorkersGuarded(const WorkComponent* work) {
+    const Description* base = work->_description;
+    const WorkDescription* jobType = Object::IsDerivedFromNullSafe(base, WorkDescription::TypeId())
+        ? static_cast<const WorkDescription*>(base) : nullptr;
+    if (jobType && jobType->_b34) {
+        if (jobType->_i30 == 0) return jobType->_i24;
+        if (work->_entity->FindComponent<MapComponent>() == nullptr) return jobType->_i24;
     }
-    return Object::IsDerivedFromNullSafe(element, UI::SpinnerElement::TypeId()) ? element : nullptr;
+    return work->CalcMaxWorkers();   // 0x14012e5c0
 }
 
-// 0x14012e5c0 — WorkComponent::CalcMaxWorkers. Computes a workplace's worker
-// capacity from its WorkDescription (workComp+0x18) and the building footprint.
-// Lazily computed and cached at workComp+0x30 by the fbb0 helper below.
-//
-// This is the ONLY body registered at 0x14012e5c0 (reg_tutorial_base.cpp). It lives in
-// the Tutorial file because TutorialGoalCount::Check was the first caller found, but the
-// function belongs to WorkComponent and has five other callers: WorkPlaceUI_OnCreate
-// (0x140087080), the builder-profession enter/leave pair (0x14012f520 / 0x14012f670),
-// HuntComponent::Update (0x140122740) and fbb0 below. It is NOT "terrain speed" — a
-// second copy under that name was registered from reg_component_nature.cpp until the
-// duplicate was removed.
+// 0x14012e5c0 — WorkComponent::CalcMaxWorkers. This was a SECOND port of it
+// (B4 TUT compared both with retail 2026-10-02: the same function; this copy
+// only adds the two guards above). The body is the member's; the C name stays
+// for the callers in other blocks' files.
+// B4 FORWARD: 21 outside callers (Component/citizencomponent.cpp,
+// destroycomponent_workerrelease.cpp, huntcomponent.cpp, workplacecomponent.cpp;
+// Game/town_workplace_registry.cpp; Work/buildstructure.cpp, cleararea.cpp,
+// foresterwork.cpp, harvestarea.cpp, harvestorchard.cpp, herbalistwork.cpp,
+// huntwork.cpp, marketwork.cpp, pasturework.cpp, plantarea.cpp,
+// plantorchard.cpp, tendarea.cpp, tradework.cpp).
 extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
-    uintptr_t obj = *reinterpret_cast<uintptr_t*>(workComp + 0x18);   // WorkDescription
-
-    // Validate WorkDescription; trust on unresolved type-id (matches the
-    // original's assumption that +0x18 is always a WorkDescription).
-    uintptr_t desc = obj;
-    if (obj) {
-        static uint32_t s_wdTid = 0;
-        if (s_wdTid == 0) s_wdTid = WorkDescription::TypeId();
-        if (s_wdTid != 0) desc = Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(obj), s_wdTid) ? obj : 0;
-    }
-    if (!desc) return 0;   // original would deref null; we no-op instead.
-
-    int baseCap = *reinterpret_cast<int*>(desc + 0x24);
-
-    // Fixed-capacity workplaces (flag at +0x34 == 0): return base capacity.
-    if (*reinterpret_cast<char*>(desc + 0x34) == 0) {
-        return baseCap;
-    }
-
-    // Footprint-scaled: capacity = (footprintArea / divisor) * baseCap, clamped.
-    int divisor = *reinterpret_cast<int*>(desc + 0x30);
-    if (divisor == 0) return baseCap;   // avoid float div-by-zero UB.
-
-    uint8_t ibp[32] = {};
-    FloorComponent_FindResData(*reinterpret_cast<void**>(workComp + 0x10), ibp);   // 0x140004680
-    uintptr_t footprint = *reinterpret_cast<uintptr_t*>(ibp);
-    if (!footprint) return baseCap;
-
-    int h = *reinterpret_cast<short*>(footprint + 0x2e);
-    int w = *reinterpret_cast<short*>(footprint + 0x2c);
-    float uvScale = kRdata_14017214c;
-    int computed = static_cast<int>(
-        (static_cast<float>(h * w) / static_cast<float>(divisor)) * static_cast<float>(baseCap) + uvScale);
-
-    // result = min(computed, baseCap), and if that min < 1, clamp up to 1.
-    int result = baseCap;
-    if (computed <= result) {
-        result = computed;
-        if (computed < 1) result = 1;
-    }
-    return result;
+    return CalcMaxWorkersGuarded(reinterpret_cast<const WorkComponent*>(workComp));   // B4 FORWARD: the old signature
 }
 
 // 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's
-// WorkComponent via FUN_140003050 and returns its cached capacity (+0x30),
-// computing it lazily through WorkComponent_CalcMaxWorkers if still 0.
-extern "C" int WorkPlaceComponent_GetMaxWorkers(uintptr_t workplaceComp) {
-
-    uint8_t ibp[32] = {};
-    void* self = WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(workplaceComp + 0x10), ibp);   // 0x140003050
-
-    uintptr_t comp = *reinterpret_cast<uintptr_t*>(self);
+// WorkComponent (FindComponent<WorkComponent>, 0x140003050) and returns its
+// cached capacity (+0x30), computing it lazily if still 0. The null-component
+// return is the tree's (retail reads through it; 14d row 81).
+int WorkPlaceComponent::GetMaxWorkers() const {
+    WorkComponent* comp = _entity->FindComponent<WorkComponent>();
     if (!comp) return 0;
 
-    if (*reinterpret_cast<int*>(comp + 0x30) == 0) {
-        // 0x14012e5c0 -- the body registered there (reg_tutorial_base.cpp).
-        *reinterpret_cast<int*>(comp + 0x30) = WorkComponent_CalcMaxWorkers(comp);
+    if (comp->workState == 0) {
+        comp->workState = CalcMaxWorkersGuarded(comp);   // 0x14012e5c0
     }
-    return *reinterpret_cast<int*>(comp + 0x30);
+    return comp->workState;
 }

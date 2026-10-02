@@ -18,6 +18,8 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"
+#include "Game/Map.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -46,20 +48,20 @@ TutorialSetupGameSpeed::TutorialSetupGameSpeed() : speed(1), _field24(0), _pad25
 //   skip: RET
 void TutorialSetupGameSpeed::Begin() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
-    // game+0x120 = time/speed controller pointer
-    uintptr_t timeCtrl = *(uintptr_t*)(game + 0x120);
-    if (timeCtrl == 0) return;
+    // game+0x120 = the PlayerToolManager (the speed / pause controller)
+    PlayerToolManager* timeCtrl = game->m_toolManager;
+    if (timeCtrl == nullptr) return;
 
     // Write speed to controller +0x34
-    *(int32_t*)(timeCtrl + 0x34) = speed;
+    timeCtrl->field_0x34 = speed;
 
-    // If _field24 is set, also set controller +0x30 to 0
-    if (_field24 != 0) {
+    // If _field24 is set, also clear the controller's +0x30 (paused)
+    if (_field24) {
         // Re-read controller (matching original code)
-        timeCtrl = *(uintptr_t*)(game + 0x120);
-        *(uint8_t*)(timeCtrl + 0x30) = 0;
+        timeCtrl = game->m_toolManager;
+        timeCtrl->paused = false;
     }
 }
 
@@ -68,13 +70,12 @@ void TutorialSetupGameSpeed::Begin() {
 // ============================================================
 // speed (int32) and _field24 (bool).
 bool TutorialSetupGameSpeed::Serialize(void* stream) {
-    alignas(8) uint8_t ser[32];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(speed, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&_field24), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(speed, nullptr);
+    ser.Serialize(_field24, nullptr);
     return true;
 }
 

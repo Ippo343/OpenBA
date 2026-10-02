@@ -25,6 +25,9 @@
 #include <cstdint>
 #include "achievement/Goal.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr
+
+class TutorialInstance;
 
 class FinishTutorialInstance final : public Achievement::GoalInstance {
     DECLARE_EXE_TYPE(FinishTutorialInstance)
@@ -40,7 +43,7 @@ public:
     Achievement::Goal::GoalState CheckGoalState() const override;  // [6] 0x1400d7bb0
 
 public:
-    void*    _field20;           // +0x20: InternalPtr<TutorialInstance>
+    Object::InternalPtr<TutorialInstance> _field20;   // +0x20: the tutorial instance (Startup builds it)
 };
 
 static_assert(offsetof(FinishTutorialInstance, _field20) == 0x20, "FinishTutorialInstance +0x20 tutorial instance");

@@ -23,6 +23,9 @@
 #include <cstdint>
 #include "Tutorial/TutorialGoal.h"
 #include "Object/exe_type.h"
+#include "Goal/goal_exe_helpers.h"   // NamedExternalRef
+
+namespace System { class String; }
 
 class TutorialGoalDialog final : public TutorialGoal {
     DECLARE_EXE_TYPE(TutorialGoalDialog)
@@ -40,17 +43,18 @@ public:
 
 public:
     uint64_t dialogName;         // +0x20: System::String — the dialog resource to wait for
-    // +0x28..+0x3f: an ExternalRef {String name, int generation, External* cached}
-    // resolved through ResolveExternalByName_Impl (FUN_14001b1d0).
-    uint64_t targetName;         // +0x28: System::String — the building description's name
-    int32_t  targetStamp;        // +0x30: factory generation (-1 = unresolved)
-    uint8_t  _pad34[4];          // +0x34: padding
-    void*    targetDescription;  // +0x38: cached External* (null = any)
+    // +0x28..+0x3f: the building description, by name: String, factory
+    //   generation (-1 = unresolved), cached External* (null = any); resolved
+    //   by 0x14001b1d0
+    NamedExternalRef target;
+
+    // The +0x20 String (H5 raw storage). Defined in tutorialgoaldialog.cpp.
+    System::String& DialogName();
 };
 
 static_assert(offsetof(TutorialGoalDialog, dialogName) == 0x20, "dialogName offset");
-static_assert(offsetof(TutorialGoalDialog, targetName) == 0x28, "targetName offset");
-static_assert(offsetof(TutorialGoalDialog, targetStamp) == 0x30, "targetStamp offset");
-static_assert(offsetof(TutorialGoalDialog, targetDescription) == 0x38, "targetDescription offset");
+static_assert(offsetof(TutorialGoalDialog, target) == 0x28, "+0x28");
+static_assert(offsetof(TutorialGoalDialog, target) + offsetof(NamedExternalRef, generation) == 0x30, "+0x30");
+static_assert(offsetof(TutorialGoalDialog, target) + offsetof(NamedExternalRef, resolved) == 0x38, "+0x38");
 static_assert(sizeof(TutorialGoalDialog) == 0x40, "TutorialGoalDialog is 0x40 (create 0x140027440)");
 static_assert(alignof(TutorialGoalDialog) == 8, "qword-aligned");

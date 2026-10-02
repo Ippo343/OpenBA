@@ -27,6 +27,7 @@
 #include <cstdint>
 #include "achievement/Goal.h"
 #include "Object/exe_type.h"
+#include "Goal/goal_exe_helpers.h"   // NamedExternalRefArray
 
 class BuildingGoal final : public Achievement::Goal {
     DECLARE_EXE_TYPE(BuildingGoal)
@@ -43,14 +44,15 @@ public:
     virtual Object::External* Construct();                         // [10] 0x140025de0
 
 public:
-    uint8_t  _field30;           // +0x30: requireAll (1 = every listed type, 0 = any)
+    bool     _field30;           // +0x30: requireAll (1 = every listed type, 0 = any); Serialize(bool&)
     uint8_t  _pad31[7];          // +0x31: padding
-    void*    _field38;           // +0x38: entry array data (stride 0x18 ExternalPtr triples)
-    void*    _field40;           // +0x40: entry count (+0x40) / capacity (+0x44)
+    // +0x38: Array<by-name ComponentDescription reference> (stride 0x18;
+    //   resolved by 0x14001b1d0; H5 raw triple, freed by 0x14001b030)
+    NamedExternalRefArray _field38;
 };
 
 static_assert(offsetof(BuildingGoal, _field30) == 0x30, "BuildingGoal +0x30 requireAll");
 static_assert(offsetof(BuildingGoal, _field38) == 0x38, "BuildingGoal +0x38 entry array");
-static_assert(offsetof(BuildingGoal, _field40) == 0x40, "BuildingGoal +0x40 entry count");
+static_assert(offsetof(BuildingGoal, _field38) + offsetof(NamedExternalRefArray, count) == 0x40, "BuildingGoal +0x40 entry count");
 static_assert(sizeof(BuildingGoal) == 0x48, "BuildingGoal is 0x48 (create 0x140025d80 MemAlloc(0x48))");
 static_assert(alignof(BuildingGoal) == 8, "BuildingGoal is qword-aligned");

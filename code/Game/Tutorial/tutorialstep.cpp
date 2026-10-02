@@ -45,10 +45,10 @@
 // ctor 0x1400e3480: External() (the base's real ctor), the stamp (the
 // compiler's), then every field zeroed (+0x20 .. +0x68).
 TutorialStep::TutorialStep()
-    : completed(0), _pad21{}, stringTable(nullptr), titleStr(nullptr), descStr(nullptr),
-      images(nullptr), imageCount(0), _pad4C{},
-      setups(nullptr), setupCount(0), _pad5C{},
-      goals(nullptr), goalCount(0), _pad6C{} {}
+    : completed(false), _pad21{}, stringTable(nullptr), titleStr(nullptr), descStr(nullptr),
+      images(nullptr), imageCount(0), imageCapacity(0),
+      setups(nullptr), setupCount(0), setupCapacity(0),
+      goals(nullptr), goalCount(0), goalCapacity(0) {}
 
 // The dtor body 0x1400e33f0: free the goals (+0x60), setups (+0x50) and images
 // (+0x40) arrays in retail's order — each an inlined Collection::Array<T>::~Array
@@ -59,8 +59,8 @@ TutorialStep::~TutorialStep() {
     reinterpret_cast<Collection::Array<void*>*>(&goals)->~Array();    // B.3.2 bridge
     reinterpret_cast<Collection::Array<void*>*>(&setups)->~Array();   // B.3.2 bridge
     reinterpret_cast<Collection::Array<void*>*>(&images)->~Array();   // B.3.2 bridge
-    reinterpret_cast<System::String*>(&descStr)->~String();           // B.3.1 bridge
-    reinterpret_cast<System::String*>(&titleStr)->~String();          // B.3.1 bridge
+    DescText().~String();
+    TitleText().~String();
 }
 
 // ============================================================
@@ -88,48 +88,47 @@ Object::External* TutorialStep::Construct() {                     // 0x140028c90
 //   5. int count at +0x48, then DynArray resize +0x40, then array serialize (images)
 //   6. int count at +0x58, then DynArray resize +0x50, then array serialize (setups)
 //   7. int count at +0x68, then DynArray resize +0x60, then array serialize (goals)
-bool TutorialStep::Serialize(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+// LEFT H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor
+// destroys them by hand).
+System::String& TutorialStep::TitleText() {
+    return *reinterpret_cast<System::String*>(&titleStr);
+}
+System::String& TutorialStep::DescText() {
+    return *reinterpret_cast<System::String*>(&descStr);
+}
 
-    // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+bool TutorialStep::Serialize(void* stream) {
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // 1. Serialize bool at +0x20 (completed flag)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
+    serializer.Serialize(completed, nullptr);
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
-    Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(s + 0x28), serializer);   // 0x14000bf40
+    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);   // 0x14000bf40
 
     // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
-    reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
-    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);   // B.3.1 bridge
+    TitleText().Serialize(&serializer);
+    DescText().Serialize(&serializer);
 
     // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
-    struct ArrayLeg { uintptr_t dataOff; uintptr_t countOff;
-                      void (*serialize)(void* serializer, int count, void* arrayData, void* p4); };
-    const ArrayLeg legs[3] = {
-        { 0x40, 0x48, &TutBase_SerializeImageArray },   // images  0x140028cf0
-        { 0x50, 0x58, &TutBase_SerializeSetupArray },   // setups  0x140028f40
-        { 0x60, 0x68, &TutBase_SerializeGoalArray },    // goals   0x140029190
-    };
-    for (const ArrayLeg& leg : legs) {
-        int32_t localCount = *reinterpret_cast<int32_t*>(s + leg.countOff);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    auto leg = [&serializer](auto& data, int32_t count,
+                             void (*serializeArray)(void* serializer, int count, void* arrayData, void* p4)) {
+        int32_t localCount = count;
+        serializer.Serialize(localCount, nullptr);
         // On load (encoding mode 0): resize the array
-        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            Reimpl_Array_Resize_Stride08(reinterpret_cast<void*>(s + leg.dataOff), localCount);   // 0x140001bb0
+        if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            Reimpl_Array_Resize_Stride08(&data, localCount);   // 0x140001bb0
         }
-        void* arrayData = *reinterpret_cast<void**>(s + leg.dataOff);
-        leg.serialize(serializer, localCount, arrayData, nullptr);
-    }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+        serializeArray(&serializer, localCount, data, nullptr);
+    };
+    leg(images, imageCount, &TutBase_SerializeImageArray);   // images  0x140028cf0
+    leg(setups, setupCount, &TutBase_SerializeSetupArray);   // setups  0x140028f40
+    leg(goals,  goalCount,  &TutBase_SerializeGoalArray);    // goals   0x140029190
     return true;
 }
 
-// create 0x140028c50: MemAlloc(0x70, 8), then the ctor.
 void* TutorialStep::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialStep), 8);
     if (!p) return nullptr;

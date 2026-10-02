@@ -15,6 +15,8 @@
 #include "Tutorial/TutorialInstance.h"
 #include "object/TypeInfo.h"
 #include "Tutorial/exe_bodies.h"   // 0x1400262b0 TutWave_SerializeTutorialRef
+#include "Tutorial/Tutorial.h"
+#include "Tutorial/TutorialStep.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -29,10 +31,7 @@
 // Startup (0x1400d7a90): Internal() (the base's real ctor), the stamp (the
 // compiler's), then the fields. +0x28 is not written (retail's).
 TutorialInstance::TutorialInstance()
-    : currentStep(-1), ibpField18(nullptr), ibpField20(nullptr), tutorialDef(nullptr) {
-    ::new (static_cast<void*>(&ibpField18)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    ::new (static_cast<void*>(&ibpField20)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-}
+    : currentStep(-1), stepDialog(nullptr), stepUI(nullptr), tutorialDef(nullptr) {}
 
 // ============================================================
 // TutorialInstance::Persist -- Slot3 (vtable +0x18, 0x1400e1520)
@@ -51,45 +50,36 @@ TutorialInstance::TutorialInstance()
 //   ...step adjustment loop...
 //   CALL [0x140152ad0]  ; Serializer::~Serializer
 void TutorialInstance::Persist(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: Internal::Persist hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // 1. Serialize ExternalPtr<Tutorial> at +0x30
-    TutWave_SerializeTutorialRef(reinterpret_cast<void*>(s + 0x30), serializer);   // 0x1400262b0
+    TutWave_SerializeTutorialRef(&tutorialDef, &serializer);   // 0x1400262b0
 
     // 2. Serialize int32_t currentStep at +0x10
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(currentStep, nullptr);   // B.3.4 bridge
+    serializer.Serialize(currentStep, nullptr);
 
     // 3. On load: adjust currentStep backwards if steps are not completed
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        void* tutDef = tutorialDef;
+    if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        Tutorial* tutDef = tutorialDef;
         int32_t step = currentStep;
 
         if (tutDef != nullptr) {
-            uintptr_t td = reinterpret_cast<uintptr_t>(tutDef);
-            int32_t totalSteps = *reinterpret_cast<int32_t*>(td + 0x30);
+            int32_t totalSteps = tutDef->stepCount;
 
             // Only adjust if step is within range and positive
             if (step < totalSteps && step > 0) {
-                // tutDef->+0x28 is the steps array; step[i]->+0x20 the completed bool
+                // the steps array; each step's completed bool
                 while (step > 0) {
-                    void** stepsArray = *reinterpret_cast<void***>(td + 0x28);
-                    void* currentStepObj = stepsArray[step];
-                    uint8_t completed = *reinterpret_cast<uint8_t*>(
-                        reinterpret_cast<uintptr_t>(currentStepObj) + 0x20);
-                    if (completed != 0) break;
+                    TutorialStep* currentStepObj = tutDef->steps[step];
+                    if (currentStepObj->completed) break;
                     step--;
                     currentStep = step;
                 }
             }
         }
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

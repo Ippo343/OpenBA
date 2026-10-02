@@ -33,18 +33,15 @@ bool TimeGoal::Serialize(void* stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // Create serializer
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer. LEFT: External::Serialize hands the stream in as void*
+    // (the runtime base's signature).
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize requiredYears (+0x30)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(requiredYears, nullptr);   // B.3.4 bridge
+    serializer.Serialize(requiredYears, nullptr);
 
     // Serialize requireOtherGoalsMet (+0x34)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&requireOtherGoalsMet), nullptr);   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    serializer.Serialize(requireOtherGoalsMet, nullptr);
     return true;
 }
 
