@@ -29,8 +29,11 @@
 #include "RemoveNaturalResource.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // ActCNR_*, ActHunt_* helpers
-#include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0
+#include "Action/exe_bodies.h"   // RemoveNaturalResourceCore, NotifyEntityChanged
+#include "Component/Description.h"
+#include "Component/CitizenDescription.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Game/ProfessionList.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdlib>
@@ -59,52 +62,41 @@
 // Serializes: status(+0x18), entity(+0x20) with type check, entity(+0x28) with type check, bool(+0x30)
 // ============================================================
 void RemoveNaturalResource::Persist(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser1[24];
-    alignas(8) uint8_t ser2[24];
-
-    // Serialize status byte (+0x18)
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
+    Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs and harvest flag
-    ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Serialize citizen entity ref (+0x20)
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field20 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field20, CitizenComponent::TypeId())) {
+    // The working citizen (+0x20)
+    _field20.InternalBasePtr::Serialize(ser);
+    if (_field20.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field20.Get(), CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
 
-    // Serialize resource entity ref (+0x28)
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (_field28 != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(_field28, ComponentEntity::TypeId())) {
+    // The natural-resource entity (+0x28)
+    _field28.InternalBasePtr::Serialize(ser);
+    if (_field28.Get() != nullptr) {
+        if (!::Object::IsDerivedFromNullSafe(_field28.Get(), ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }
 
     // Serialize harvest flag (+0x30)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_field30, nullptr);
 }
 
 // ============================================================
 // AbstractImpl (0x1400cab10) — slot 4
-// Checks resource ownership, sets harvest flags, calls removal helper.
-// Returns 0 (action complete).
+// Checks the resource's profession, sets its mature / harvestable flags, calls the
+// removal helper (0x1401260f0). Returns 0 (action complete).
 // ============================================================
 int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
     (void)actionStack;
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    void* nrCompIBP = nullptr;
 
-    // Get NaturalResourceComponent from resource entity at +0x28
-    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(_field28), &nrCompIBP);   // 0x1400052c0
+    // The resource entity's NaturalResourceComponent (+0x28)
+    NaturalResourceComponent* nrComp = _field28->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
 
     // Standalone-safety: the NR component find can resolve null when the action's target
     // (+0x28) is not wired to a live tree entity. In retail it is always a valid natural
@@ -114,92 +106,76 @@ int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
     // null+0x18. The diagnostic reports the target so the cut-sequence target wiring (the
     // remaining economy gap, PerformWork_Action_Ctor3) can be closed. Returning 0 completes
     // the action so the citizen isn't wedged. The live-world path (non-null) is unchanged.
-    if (nrCompIBP == nullptr) {
+    if (nrComp == nullptr) {
         return 0;
     }
-    uintptr_t nrComp = (uintptr_t)nrCompIBP;
-    void* descObj = *(void**)(nrComp + 0x18);
+    Description* descObj = nrComp->_description;
 
     // Check if description is NaturalResourceDescription type
     bool isNatResDesc = ::Object::IsDerivedFromNullSafe(descObj, NaturalResourceDescription::TypeId());
-    void* natResDesc = isNatResDesc ? descObj : nullptr;
+    const NaturalResourceDescription* natResDesc =
+        isNatResDesc ? static_cast<const NaturalResourceDescription*>(descObj) : nullptr;
 
-    // Check if the resource has an owner and it's not the town owner
-    uintptr_t ownerRef = *(uintptr_t*)((uintptr_t)natResDesc + 0x78);
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t mapPtr = *(uintptr_t*)(gameWorld + 0xb0);
-    uintptr_t townOwner = *(uintptr_t*)(mapPtr + 0x30);
+    // The resource's profession, against the town's default (ProfessionList +0x30)
+    void* ownerRef = natResDesc->_profession;
+    Profession* townOwner = GameUpdateLoop::_singleton->m_professionList->field_0x30;
 
-    if (ownerRef != 0 && ownerRef != townOwner) {
-        // Check if the citizen's current action matches the owner
-        uintptr_t citizenEntity = *(uintptr_t*)(s + 0x20);
-        uintptr_t citizenAction = *(uintptr_t*)(citizenEntity + 0x1f0);
-
-        if (citizenAction != ownerRef) {
-            // Clear the harvestable flag on NR comp
-            nrComp = (uintptr_t)nrCompIBP;
-            *(uint8_t*)(nrComp + 0x2d) = 0;
+    if (ownerRef != nullptr && ownerRef != townOwner) {
+        // Not harvestable unless the citizen has the resource's profession
+        if (_field20->profession != ownerRef) {
+            nrComp->harvestable = false;
         }
     }
 
-    // Compare citizen's growth value with component threshold
-    uintptr_t citizenEntity = *(uintptr_t*)(s + 0x20);
-    uintptr_t comp288 = *(uintptr_t*)(citizenEntity + 0x288);
-    int threshold = *(int*)(comp288 + 0x118);
-    int growthValue = *(int*)(citizenEntity + 0x210);
+    // Mature when the citizen's education has reached its description's maximum
+    CitizenComponent* citizen = _field20.Get();
+    int threshold = citizen->description->maxEducation;
+    int growthValue = citizen->education;
 
-    nrComp = (uintptr_t)nrCompIBP;
-    *(bool*)(nrComp + 0x2c) = (threshold <= growthValue);
+    nrComp->mature = (threshold <= growthValue);
 
-    // Get citizen's tool/work entity ref at +0x248
-    citizenEntity = *(uintptr_t*)(s + 0x20);
-    void* workEntityIBP = *(void**)(citizenEntity + 0x248);
+    // The citizen's workplace (+0x248)
+    ComponentEntity* workEntityIBP = _field20->workplace;
 
     // Call the removal helper
-    nrComp = (uintptr_t)nrCompIBP;
-    ActCNR_RemoveNatRes_1260f0((int64_t)nrComp, &workEntityIBP, *(char*)(s + 0x30));   // 0x1401260f0
+    RemoveNaturalResourceCore(nrComp, &workEntityIBP, _field30);   // 0x1401260f0
 
     return 0;
 }
 
 // ============================================================
 // CheckEntity (0x1400caaa0) — slot 8
-// Clears "in use" bit (bit 20) on entity's model component at +0x28.
+// Clears the "in use" bit (bit 20) of the resource's NaturalResourceComponent flags.
 // ============================================================
 void RemoveNaturalResource::CheckEntity() {
-    void* localIBP[4];
+    NaturalResourceComponent* nrComp = _field28->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
 
-    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(_field28), localIBP);   // 0x1400052c0
-
-    uint8_t* modelComp = (uint8_t*)(localIBP[0]);
-    if (!modelComp) return;   // [standalone] NR component not found -> nothing to clear
-    uint32_t flagsOld = *(uint32_t*)(modelComp + 0x20);
+    if (!nrComp) return;   // [standalone] NR component not found -> nothing to clear
+    uint32_t flagsOld = nrComp->_flags;
     uint32_t flagsNew = flagsOld & 0xFFEFFFFF;  // clear bit 20
-    *(uint32_t*)(modelComp + 0x20) = flagsNew;
+    nrComp->_flags = flagsNew;
 
     if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
-        void* parent = *(void**)(modelComp + 0x10);
+        ComponentEntity* parent = nrComp->_entity;
         if (parent != nullptr) {
-            ActHunt_NotifyEntityChanged_c3470(*(void**)(modelComp + 0x10));   // 0x1400c3470
+            NotifyEntityChanged(nrComp->_entity);   // 0x1400c3470
         }
     }
 }
 
 // ============================================================
 // GetTarget (0x1400caa20) — slot 9
-// Returns true if param matches entity at +0x28 or entity at +0x20's parent.
+// Returns true if param matches the resource entity at +0x28 or the citizen's (+0x20)
+// owning entity (Component +0x10).
 // ============================================================
 bool RemoveNaturalResource::GetTarget(void* param) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
 
-    void* entity28 = _field28;
-
-    if (*(void**)param == entity28) {
+    if (target == _field28.Get()) {
         return true;
     }
 
-    void* parentEntity = *(void**)(*(uint8_t**)(s + 0x20) + 0x10);
-    return parentEntity == *(void**)param;
+    return _field20->_entity == target;
 }
 
 // ============================================================
@@ -215,7 +191,7 @@ bool RemoveNaturalResource::GetTarget(void* param) {
 RemoveNaturalResource::RemoveNaturalResource()
     : _field20(nullptr),
       _field28(nullptr),
-      _field30(0),
+      _field30(false),
       _pad31{} {}
 
 // [3] 0x1400cac50
@@ -240,14 +216,17 @@ void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
 //   +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
 // ============================================================
 void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4) {
-    // ENDGAME B.3.8 ACT: the real ctor (RemoveNaturalResource.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) RemoveNaturalResource(param_2, param_3, param_4));
+    // B4 FORWARD: 1 outside caller (Work/work_base_actionctor.cpp) holds the refs as uint64_t*.
+    return static_cast<Object::Base*>(new (self) RemoveNaturalResource(
+        reinterpret_cast<ComponentEntity* const*>(param_2), reinterpret_cast<CitizenComponent* const*>(param_3),
+        param_4));
 }
 
 // 0x1400cadf0: +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
-RemoveNaturalResource::RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag)
-    : _field20(reinterpret_cast<void*>(*p3)),
-      _field28(reinterpret_cast<void*>(*p2)),
+RemoveNaturalResource::RemoveNaturalResource(ComponentEntity* const* resource, CitizenComponent* const* citizen,
+                                             bool flag)
+    : _field20(*citizen),
+      _field28(*resource),
       _field30(flag) {}
 
 DEFINE_EXE_TYPE(RemoveNaturalResource, "Action")
