@@ -297,6 +297,7 @@ in the code carries a comment.
 | 48 | `PathfinderThread::ApplyCommand`'s 64 KB path buffer | `static` (one worker thread uses it) | on the stack (0x1400a6436) | CONFIRMED (ACT-a) |
 | 49 | `RegionPairCache::Store` (`action_pf_region.cpp`) | writes 0 to `RegionPairEntry::field_0x0C` | 0x1400a5b30 stores a stale stack dword there (never read) | CONFIRMED (ACT-a) |
 | 60 | the main menu's camera frustum (`MenuScene_Helper_8660`, `menudialogloopt.cpp`) | a second port of 0x140098660 next to `PlayerController::UpdateCamera`: takes the width / height from `Video::Configuration` +0x04 / +0x08, which are `interfaceIndex` / `adapterIndex` (so the aspect is 1 / 0 -> the 16:9 fallback, or interface / adapter), and has no ultrawide clamp | 0x140098660 reads `Video::Device`'s back-buffer width / height (+0x04 / +0x08) and clamps fovX past 16:9 (the member's body, `gameupdateloop_load.cpp`) | CONFIRMED from the two bodies and the header (GAME-b); retail not re-read for the menu's call |
+| 90 | `WeatherParticleGeometry::Configure` (`weather_particles.cpp`) | draws the particles' positions and speeds from `GameUpdateLoop::m_random` (null-tested) | 0x1400d3f80 constructs a LOCAL `System::Random` on its stack (`CALL [0x140152b50]` on `RBP-0x80` at 0x1400d3fde) and draws `RandFloatTol` (`[0x140151400]`) from it: the world Random is not advanced | CONFIRMED (GAME-c) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -329,6 +330,7 @@ in the code carries a comment.
 | 32 | `BeginDrawGroup`, `Render` (runtime graphics) | stack `RendererDrawGroup` / `RendererSceneEntry` objects whose implicit ctors zero memory that is then overwritten | no such stores | CONFIRMED (R-GFX); cost only |
 | 42 | `NoiseUI` dtor (`NoiseUI.h`, DLG-b's) | `= default`: the ImageBuffer, MaterialInstance and SpriteSheet OnCreated (0x1400714c0, wired by DLG-d) makes are never freed | 0x140071bc0 deletes +0x40, +0x38, +0x30 through slot 0 (ModDialog's dtor has the same three `delete`s) | CONFIRMED (DLG-d); a header line of a finished block, left for the coordinator |
 | 50 | `PathfinderThread` (`PathfinderThread.h`, ACT-a) | the +0x160 result array is a trivially-constructible `RawArray<PathResult>` (H5) and the +0x30 lock a trivially-constructible `System::CriticalSection`, so declaring them runs no ctor / dtor; the tree's ctor / dtor bodies run exactly what they ran before | the class's ctor 0x1400a67f0 / dtor construct and destroy both members | SUSPECTED (ACT-a; the H5 rule of the coordinator's condition 1) |
+| 91 | `WeatherParticleGeometry::Configure` (`weather_particles.cpp`) | allocates the +0xD0 index block with a raw MemAlloc and stores data and count; the capacity (+0xDC) is never written | 0x1400d3f80 sizes +0xD0 through 0x14001c890 (`Array<uint16>::SetSize`, data / size / capacity) | CONFIRMED (GAME-c) |
 
 ### 14d. Guards the tree has and retail lacks — and guards B.4 dropped
 

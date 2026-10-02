@@ -21,6 +21,10 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"       // Math::Vector3
+#include "system/Value.h"    // System::Color
+
+namespace Graphics { class MaterialInstance; }
 
 class Weather final : public Object::External {
     DECLARE_EXE_TYPE(Weather)
@@ -39,11 +43,9 @@ public:
 
 public:
     // --- Weather particle fields ---
-    void*    material;           // +0x20: MaterialInstance* _material (External ref)
+    Graphics::MaterialInstance* material; // +0x20: ExternalPtr<MaterialInstance> _material (0x140007140)
     int32_t  particleCount;      // +0x28: _particleCount (default 100)
-    float    velocityDirX;       // +0x2C: _velocityDirection.x (default 0)
-    float    velocityDirY;       // +0x30: _velocityDirection.y (default 0)
-    float    velocityDirZ;       // +0x34: _velocityDirection.z (default -1.0)
+    Math::Vector3 velocityDir;   // +0x2C: _velocityDirection (default 0, 0, -1.0; Vector3::Serialize)
     float    velocity;           // +0x38: _velocity (default 0)
     float    velocityTolerence;  // +0x3C: _velocityTolerence (default 0) [sic: typo in original]
     bool     velocityStretch;    // +0x40: _velocityStretch (default false)
@@ -57,9 +59,9 @@ public:
     float    transitionTime;     // +0x5C: _transitionTime (default 0)
 
     // --- EnvironmentSetting fields (lighting/atmosphere) ---
-    uint32_t ambientColor;       // +0x60: _ambientColor (default 0xFF595965)
-    uint32_t lightColor;         // +0x64: _lightColor (default 0xFFCBCBBC)
-    uint32_t fogColor;           // +0x68: _fogColor (default 0xFFBFBFF2)
+    System::Color ambientColor;  // +0x60: _ambientColor (default 0xFF595965; Color::Serialize)
+    System::Color lightColor;    // +0x64: _lightColor (default 0xFFCBCBBC)
+    System::Color fogColor;      // +0x68: _fogColor (default 0xFFBFBFF2)
     float    fogNear;            // +0x6C: _fogNear (default 90.0)
     float    fogFar;             // +0x70: _fogFar (default 225.0)
     float    fogMax;             // +0x74: _fogMax (default 0.95)
@@ -70,8 +72,7 @@ public:
 static_assert(sizeof(Weather) == 0x80, "Weather is 0x80");
 static_assert(offsetof(Weather, material) == 0x20, "+0x20");
 static_assert(offsetof(Weather, particleCount) == 0x28, "+0x28");
-static_assert(offsetof(Weather, velocityDirX) == 0x2C, "+0x2C");
-static_assert(offsetof(Weather, velocityDirZ) == 0x34, "+0x34");
+static_assert(offsetof(Weather, velocityDir) == 0x2C, "+0x2C");
 static_assert(offsetof(Weather, velocity) == 0x38, "+0x38");
 static_assert(offsetof(Weather, velocityTolerence) == 0x3C, "+0x3C");
 static_assert(offsetof(Weather, velocityStretch) == 0x40, "+0x40");
