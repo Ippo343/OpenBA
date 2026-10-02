@@ -176,7 +176,7 @@ void RegionPairCache::Expire(const int64_t* dt) {
                         if (keyB <= node->key1) {
                             // LEFT: 0x14001ca60 is declared in Work/exe_bodies.h (WORK) taking the
                             // tree head as uintptr_t*.
-                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&index), node);   // 0x14001ca60
+                            WorkCellBST_Remove_ca60((uintptr_t*)&index, node);   // 0x14001ca60
                             break;
                         }
                     }
@@ -207,5 +207,6 @@ void RegionPairCache::Expire(const int64_t* dt) {
 // B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp) holds the cache as int64_t*.
 void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
     if (param_1 == nullptr || param_2 == nullptr) return;
-    reinterpret_cast<RegionPairCache*>(param_1)->Expire(param_2);
+    // LEFT: GAME-a (Game/gameupdateloop.cpp holds the cache as int64_t*).
+    ((RegionPairCache*)param_1)->Expire(param_2);
 }
