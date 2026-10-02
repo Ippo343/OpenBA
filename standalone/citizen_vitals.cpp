@@ -15,6 +15,11 @@
 
 #include "citizen_vitals.h"
 #include "options.h"
+#include "Game/GameUpdateLoop.h"            // B4: m_citizenList / m_entityList
+#include "Entity/CitizenBehavior.h"
+#include "Entity/EntityList.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -27,21 +32,20 @@ bool Enabled() {
 }
 
 bool Readable(const void* p) {
-    const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+    const uintptr_t a = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
     return a >= 0x10000 && a < 0x00007FFFFFFFFFFFULL;
 }
 
 } // namespace
 
-void CitizenVitals_Tick(void* gameWorld) {
+void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
     if (!Enabled() || !Readable(gameWorld)) return;
 
-    const uintptr_t town = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
-    if (!Readable(reinterpret_cast<void*>(town))) return;
+    CitizenBehavior* town = gameWorld->m_citizenList;   // +0xF0
+    if (!Readable(town)) return;
 
-    uint8_t* arr = *reinterpret_cast<uint8_t**>(town + 0xA0);
-    const int  n = *reinterpret_cast<int*>(town + 0xA8);
+    CitizenComponent** arr = town->citizens;            // +0xA0
+    const int  n = town->citizenCount;                  // +0xA8
     if (!arr || n <= 0 || n > 100000) return;
 
     // Count only frames that have a populated town, so frame 1 is the first frame
@@ -62,12 +66,12 @@ void CitizenVitals_Tick(void* gameWorld) {
     float maxAgeOf0 = 0;
 
     for (int i = 0; i < n; ++i) {
-        uintptr_t c = *reinterpret_cast<uintptr_t*>(arr + static_cast<size_t>(i) * 8);
-        if (!Readable(reinterpret_cast<void*>(c))) continue;
-        const float age    = *reinterpret_cast<float*>(c + 0x3C);
-        const float maxAge = *reinterpret_cast<float*>(c + 0x40);
-        const float hunger = *reinterpret_cast<float*>(c + 0x44);
-        const float thirst = *reinterpret_cast<float*>(c + 0x48);
+        CitizenComponent* c = arr[i];
+        if (!Readable(c)) continue;
+        const float age    = c->age;        // +0x3C
+        const float maxAge = c->maxAge;     // +0x40
+        const float hunger = c->hunger;     // +0x44
+        const float thirst = c->coldness;   // +0x48 (the header's name; this file calls it thirst)
         if (live == 0) maxAgeOf0 = maxAge;
         ++live;
         ageSum += age; hungerSum += hunger; thirstSum += thirst;
@@ -80,13 +84,13 @@ void CitizenVitals_Tick(void* gameWorld) {
         //   busy > 0 but nothing changes -> actions are issued and never complete
         // CharacterComponent hangs off CitizenComponent +0x278; its +0x60 is the
         // action-stack top, seeded to -1 by the ctor (empty).
-        const uintptr_t ch = *reinterpret_cast<uintptr_t*>(c + 0x278);
-        if (Readable(reinterpret_cast<void*>(ch))) {
+        CharacterComponent* ch = c->character;           // +0x278
+        if (Readable(ch)) {
             ++hasChar;
-            if (*reinterpret_cast<int32_t*>(ch + 0x60) >= 0) ++busy;
+            if (ch->currentAction >= 0) ++busy;          // +0x60
         }
-        if (*reinterpret_cast<uintptr_t*>(c + 0x238)) ++has238;
-        if (*reinterpret_cast<uintptr_t*>(c + 0x248)) ++has248;
+        if (c->home) ++has238;                           // +0x238
+        if (c->workplace) ++has248;                      // +0x248
     }
     if (live == 0) return;
 
@@ -100,10 +104,9 @@ void CitizenVitals_Tick(void* gameWorld) {
     // pair retail reads at 0x1400f96xx.
     int entities = -1;
     {
-        const uintptr_t el = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(gameWorld) + 0xE8);
-        if (Readable(reinterpret_cast<void*>(el))) {
-            const int n2 = *reinterpret_cast<int*>(el + 0x10);
+        EntityList* el = gameWorld->m_entityList;          // +0xE8
+        if (Readable(el)) {
+            const int n2 = el->masterArray.count;            // +0x10
             if (n2 >= 0 && n2 < 10000000) entities = n2;
         }
     }
