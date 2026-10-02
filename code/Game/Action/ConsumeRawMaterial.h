@@ -33,9 +33,9 @@ public:
     };
 
     ConsumeRawMaterial();                                                   // create 0x1400220c0
-    ConsumeRawMaterial(const Object::InternalPtr<ComponentEntity>* storage, ComponentDescription* material,
+    ConsumeRawMaterial(ComponentEntity* const* storage, ComponentDescription* material,
                        bool reserve);                                       // 0x1400c63b0
-    explicit ConsumeRawMaterial(const Object::InternalPtr<ComponentEntity>* storage);   // 0x1400c6440
+    explicit ConsumeRawMaterial(ComponentEntity* const* storage);   // 0x1400c6440
     // 0x1400c64b0: append {material, count} (reserving it in the storage first when +0x38 is set).
     void AddMaterial(ComponentDescription* material, int count);
     // Retail 0x140022130: frees the +0x28 consume list, then Action's dtor.

@@ -187,13 +187,13 @@ void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* pa
     // B4 FORWARD: 11 outside caller files (action_pf_roots_drop, citizenai_actionctors, the
     // Work/ action builders) hold the two refs as uint64_t*.
     return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2,
-        reinterpret_cast<const Object::InternalPtr<CitizenComponent>*>(param_3),
-        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(param_4), param_5));
+        reinterpret_cast<CitizenComponent* const*>(param_3),
+        reinterpret_cast<ComponentEntity* const*>(param_4), param_5));
 }
 
 // 0x1400c5da0: +0x20 = *param_3 ; +0x28 = *param_4 ; +0x30 = param_2 ; +0x34 = param_5.
-CompleteTask::CompleteTask(uint32_t taskIndexArg, const Object::InternalPtr<CitizenComponent>* workEntityArg,
-                           const Object::InternalPtr<ComponentEntity>* targetEntityArg,
+CompleteTask::CompleteTask(uint32_t taskIndexArg, CitizenComponent* const* workEntityArg,
+                           ComponentEntity* const* targetEntityArg,
                            uint32_t taskParamArg)
     : workEntity(*workEntityArg),
       targetEntity(*targetEntityArg),

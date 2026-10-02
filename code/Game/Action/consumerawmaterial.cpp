@@ -301,12 +301,12 @@ void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
 void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
     // B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the entity as uint64_t*.
     return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
-        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(param_2)));
+        reinterpret_cast<ComponentEntity* const*>(param_2)));
 }
 
 // 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (one qword: count and capacity;
 // +0x38 untouched).
-ConsumeRawMaterial::ConsumeRawMaterial(const Object::InternalPtr<ComponentEntity>* storage)
+ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage)
     : _field20(*storage),
       _field28(nullptr),
       _field30(0),
@@ -394,13 +394,13 @@ void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
     // B4 FORWARD: 3 outside callers (Component/citizenai_actionctors.cpp,
     // Work/work_act_perform.cpp) hold the entity as uint64_t* and the material as an integer.
     return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
-        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(p2),
+        reinterpret_cast<ComponentEntity* const*>(p2),
         reinterpret_cast<ComponentDescription*>(p3), p5));
 }
 
 // 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 (one qword) ; +0x38 = p5 (byte); then
 // the consume-list append 0x1400c64b0(this, material, 1) (R8D = 1, retail 0x1400c6412).
-ConsumeRawMaterial::ConsumeRawMaterial(const Object::InternalPtr<ComponentEntity>* storage,
+ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage,
                                        ComponentDescription* material, bool reserve)
     : _field20(*storage),
       _field28(nullptr),

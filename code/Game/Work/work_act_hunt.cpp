@@ -279,10 +279,8 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
                 ComponentEntity* gateVal = *messageTarget;           // lVar11 = *param_9
                 uint32_t baseVal = static_cast<uint32_t>(cells[iteration]);   // uVar1 = *param_7 (current)
                 // the inlined CreateNaturalResource ctor (+0x20 param_3 raw, +0x28 *param_9,
-                // +0x30 *param_7) — the real ctor. LEFT: its C signature (ACT-b) takes the
-                // description and the entity reference as integers.
-                new (obj) CreateNaturalResource(reinterpret_cast<uint64_t>(plantType),
-                                                reinterpret_cast<uint64_t*>(&gateVal), baseVal);
+                // +0x30 *param_7) — the real ctor (typed by B.4 ACT-b).
+                new (obj) CreateNaturalResource(plantType, &gateVal, baseVal);
                 cnr = obj;
             }
             WAH_IbpCtor(&ibpA, cnr);

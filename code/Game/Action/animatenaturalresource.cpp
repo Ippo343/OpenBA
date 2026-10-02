@@ -146,11 +146,11 @@ void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t p
     // ENDGAME B.3.8 ACT: the real ctor (AnimateNaturalResource.h). A by-address door.
     // B4 FORWARD: 1 outside caller (Work/work_base_actionctor.cpp) holds the entity as uint64_t*.
     return static_cast<Object::Base*>(new (self) AnimateNaturalResource(
-        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(param_2), param_3, param_4));
+        reinterpret_cast<ComponentEntity* const*>(param_2), param_3, param_4));
 }
 
 // 0x1400c57d0: +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
-AnimateNaturalResource::AnimateNaturalResource(const Object::InternalPtr<ComponentEntity>* entity,
+AnimateNaturalResource::AnimateNaturalResource(ComponentEntity* const* entity,
                                                uint32_t animIndexArg, bool wait)
     : _field20(*entity),
       animIndex(static_cast<int32_t>(animIndexArg)),

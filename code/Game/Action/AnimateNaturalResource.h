@@ -24,7 +24,7 @@ class AnimateNaturalResource final : public Action {
 
 public:
     AnimateNaturalResource();                                                   // create 0x140021dc0
-    AnimateNaturalResource(const Object::InternalPtr<ComponentEntity>* entity, uint32_t animIndex, bool waitForAnim);   // 0x1400c57d0
+    AnimateNaturalResource(ComponentEntity* const* entity, uint32_t animIndex, bool waitForAnim);   // 0x1400c57d0
     ~AnimateNaturalResource() override = default;              // [0] 0x140021e30
     void Persist(void* stream) override;                       // [3] 0x1400c5660
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5600
