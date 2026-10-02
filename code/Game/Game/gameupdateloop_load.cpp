@@ -91,8 +91,8 @@ extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5
 extern "C" void  Pathfinder_Seed(void* game, int dim);    // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
 extern "C" void  Region_Seed(void* game, int dim);        // region_seed.cpp (keystone A — region map @ game+0x70)
 extern "C" void  CharManager_Seed();                      // charmanager_seed.cpp (move-tick tail — char spatial-hash mgr @ GW+0x88)
-extern "C" void  StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
-extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);                    // starttown.cpp (M5 5c — ECS spawn)
+extern "C" void  StartTown_ComputeCamera(MapGenerator* startConfig, Map* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
+extern "C" void  StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoop* world);                  // starttown.cpp (M5 5c — ECS spawn)
 
 // ============================================================
 // Load-specific Runtime resolves not yet in engine_funcs.h
@@ -1385,7 +1385,7 @@ void GameUpdateLoop::Load() {
             // CreateNaturalResource): classify every cell into a terrain type
             // (buildable / shore / water / mountain). Prerequisite for the
             // start-town spiral spawn-finder. See code/Game/Game/maptilegrid.cpp.
-            void* game = m_game;
+            Map* game = m_game;
             if (game && dim > 0)
                 MapTileGrid_Build(game, (int)dim);
 
@@ -1418,7 +1418,7 @@ void GameUpdateLoop::Load() {
             // FUN_1400a3300 (call site 0x14009761d). The ECS spawn at the same
             // tile is deferred. See code/Game/Game/starttown.cpp.
             {
-                void* startCfg   = m_mapConfig;   // mapGen
+                MapGenerator* startCfg = m_mapConfig;   // mapGen
                 PlayerController* playerCtrl = m_playerController;
                 if (startCfg && playerCtrl && game && dim > 0) {
                     float camPos[3] = { 0, 0, 0 };
