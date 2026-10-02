@@ -60,17 +60,12 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
-// Heightfield scratch-struct field offsets (verified, blueprint §1.1).
-// param_1 is treated as int* in the originals, so int-index N == byte 4*N.
+// The heightfield is TerrainHeightfield (TerrainHeightfield.h). The originals
+// index it as int*: param_1[0] gridSize, [2] / [4] heightmap data / size,
+// [6] / [8] paths, [10] / [0xc] riverPoints (listB), [0xe] / [0x10] basinStamps
+// (listC: radial carve stamps, NOT peaks: fed to maskC, which is SUBTRACTED),
+// +0x58 random, +0xa28 sizeRow.
 // ============================================================
-static constexpr int HF_GRIDSIZE   = 0x00;   // int dim (= sizeRow[0]*2)         param_1[0]
-static constexpr int HF_HEIGHTMAP  = 0x08;   // {float* data,int cnt,int cap}    param_1[2]=data,[4]=cnt
-static constexpr int HF_PATCHLIST  = 0x18;   // {void* data,int count,int _}     param_1[6]=data,[8]=count
-static constexpr int HF_LISTB      = 0x28;   // river points {void*,int cnt,..}  param_1[10]=data,[0xc]=count
-static constexpr int HF_LISTC      = 0x38;   // radial carve stamps (NOT peaks: fed to maskC, which is
-                                             // SUBTRACTED) {void*,int cnt,..} param_1[0xe]=data,[0x10]=count
-static constexpr int HF_RANDOM     = 0x58;   // System::Random (~0x9C8 bytes)
-static constexpr int HF_SIZEROW    = 0xa28;  // int* size-table row
 
 // ============================================================
 // .rdata float constants (read via read_memory; address=value documented).
@@ -132,14 +127,11 @@ extern "C" void TradeComponent_helper_f9e0(void* dst, void* src);  // deep-copy 
 // only when the block moved, fill at or past the old count, old block freed
 // only when it moved. Every arm matched.
 // ============================================================
-struct WgVec3Rec { float x, y, z; };
-static_assert(sizeof(WgVec3Rec) == 0x0c && alignof(WgVec3Rec) == 4, "0xC-stride record");
-using WgVec3Array = Collection::Array<WgVec3Rec>;
+// The record is TerrainStamp {x, y, radius}; listB is hf->riverPoints.
+using WgVec3Array = Collection::Array<TerrainStamp>;
 
-static void wg_VecPush0xC(void* hdr, int newCount, const void* rec) {
-    // B.3.2 bridge: hf+0x28 (listB) is still a raw {data,count,cap} triple.
-    reinterpret_cast<WgVec3Array*>(hdr)->SetSize(newCount,
-                                                *static_cast<const WgVec3Rec*>(rec));
+static void wg_VecPush0xC(WgVec3Array* hdr, int newCount, const TerrainStamp& rec) {
+    hdr->SetSize(newCount, rec);
 }
 
 // ============================================================
@@ -147,33 +139,33 @@ static void wg_VecPush0xC(void* hdr, int newCount, const void* rec) {
 // {int* data,int count,int cap} buckets. cd460 uses one bucket per cluster label.
 // HEIGHT EFFECT: none.
 // ============================================================
-static void wg_VecOfVecResize(void* hdr, int newCount) {
-    uint8_t* h = (uint8_t*)hdr;
-    int oldCount = *(int*)(h + 0x08);
+static void wg_VecOfVecResize(RawArray<RawArray<int32_t>>* h, int newCount) {
+    int oldCount = h->size;
     if (newCount == oldCount) return;
-    uint8_t* oldData = *(uint8_t**)(h + 0x00);
-    *(int*)(h + 0x08) = newCount;
-    int cap = *(int*)(h + 0x0c);
+    RawArray<int32_t>* oldData = h->data;
+    h->size = newCount;
+    int cap = h->capacity;
     if (cap < newCount) {
         cap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) cap = newCount * 3;
-        *(int*)(h + 0x0c) = cap;
-        void* nd = System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x10, 8);
-        *(void**)(h + 0x00) = nd;
+        h->capacity = cap;
+        RawArray<int32_t>* nd = static_cast<RawArray<int32_t>*>(System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x10, 8));
+        h->data = nd;
     }
-    uint8_t* newData = *(uint8_t**)(h + 0x00);
+    RawArray<int32_t>* newData = h->data;
     for (int i = 0; i < newCount; ++i) {
-        uint8_t* slot = newData + (size_t)i * 0x10;
+        RawArray<int32_t>* slot = &newData[i];
         if (i < oldCount && newData == oldData) continue;            // keep in place
-        *(uint64_t*)slot = 0;                                        // {data,count}=0
-        *(uint64_t*)(slot + 8) = 0;
+        slot->data = nullptr;                                        // {data,count,cap}=0
+        slot->size = 0;
+        slot->capacity = 0;
         if (i < oldCount) {                                          // deep-copy from old
-            TradeComponent_helper_f9e0(slot, oldData + (size_t)i * 0x10);
+            TradeComponent_helper_f9e0(slot, &oldData[i]);
         }
     }
     if (oldData && oldData != newData) {
         for (int i = 0; i < oldCount; ++i) {
-            void* inner = *(void**)(oldData + (size_t)i * 0x10);
+            int32_t* inner = oldData[i].data;
             if (inner) System::MemoryAllocator::MemFree(inner);
         }
         System::MemoryAllocator::MemFree(oldData);
@@ -206,10 +198,10 @@ static void wg_VecOfVecResize(void* hdr, int newCount) {
 // drive cells toward 0 (full attenuation at center). MAX masks (outer-patch/
 // satellite) raise the subtractive term toward `strength` at center.
 // ============================================================
-static void wg_StampBrush_eee0(int* hf, const float* center, float radiusParam,
+static void wg_StampBrush_eee0(const TerrainHeightfield* hf, const float* center, float radiusParam,
                                float falloffPow, float strength, char mode,
                                float* mask) {
-    int dim   = hf[0];               // gridSize
+    int dim   = hf->gridSize;        // gridSize
     int edge  = dim + 1;             // (dim+1) cells per row
     int half  = dim >> 1;
 
@@ -280,12 +272,11 @@ static void wg_StampBrush_eee0(int* hf, const float* center, float radiusParam,
 // change happens in e910 (below), which reads listB and carves those cells down.
 // ============================================================
 void wg_f390_rivers(TerrainHeightfield* hfp) {
-    uint8_t* p = (uint8_t*)hfp;
-    void* rng = p + HF_RANDOM;
-    int*  sizeRow = *(int**)(p + HF_SIZEROW);
+    System::Random* rng = &hfp->random;
+    const TerrainSizeRow* sizeRow = hfp->sizeRow;
     if (!sizeRow) return;
 
-    int center = (sizeRow[0] >> 1) - 2;       // iVar32
+    int center = (sizeRow->mapSize >> 1) - 2;       // iVar32
 
     // --- scratch point list local_d0 {void* data,int count,int cap,int _} ---
     // ENDGAME B.3.2 step 2: a real Collection::Array with RAII; the manual
@@ -294,26 +285,26 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
     int scratchCount = 0;
 
     // PASS 1: edge-set 1 (count1 @ +0x10, min1 @ +0x14, max1 @ +0x18).
-    int count1 = sizeRow[4];                  // *(int*)(sizeRow+0x10)
+    int count1 = sizeRow->riverCount1;        // +0x10
     for (int i = 0; i < count1; ++i) {
-        int   minE = sizeRow[5];              // +0x14
-        int   maxE = sizeRow[6];              // +0x18
-        float fE    = reinterpret_cast<System::Random*>(rng)->RandFloat() * (float)(maxE - minE) + (float)minE;   // B.3.4b bridge
+        int   minE = sizeRow->riverMinEdge1;  // +0x14
+        int   maxE = sizeRow->riverMaxEdge1;  // +0x18
+        float fE    = rng->RandFloat() * (float)(maxE - minE) + (float)minE;
         float draw1 = fn_Random_RandFloatTol(rng);
         float draw2 = fn_Random_RandFloatTol(rng);
         float off   = (float)center - (float)(int)fE;
         // retail CONCAT44(off*draw1, off*draw2): x=low=off*draw2, y=high=off*draw1.
-        float rec[3] = { off * draw2, off * draw1, fE };   // {x, y, radius=edgeParam}
+        TerrainStamp rec = { off * draw2, off * draw1, fE };   // {x, y, radius=edgeParam}
         wg_VecPush0xC(&scratch, scratchCount + 1, rec);
         scratchCount = scratch._size;
     }
 
     // PASS 2: edge-set 2 (count2 @ +0x04, min2 @ +0x08, max2 @ +0x0c).
-    int count2 = sizeRow[1];                  // +0x04
+    int count2 = sizeRow->riverCount2;        // +0x04
     for (int i = 0; i < count2; ++i) {
-        int   minE = sizeRow[2];              // +0x08
-        int   maxE = sizeRow[3];              // +0x0c
-        float fE    = reinterpret_cast<System::Random*>(rng)->RandFloat() * (float)(maxE - minE) + (float)minE;   // B.3.4b bridge
+        int   minE = sizeRow->riverMinEdge2;  // +0x08
+        int   maxE = sizeRow->riverMaxEdge2;  // +0x0c
+        float fE    = rng->RandFloat() * (float)(maxE - minE) + (float)minE;
         float draw1 = fn_Random_RandFloatTol(rng);
         float draw2 = fn_Random_RandFloatTol(rng);
         float off   = (float)center - (float)(int)fE;
@@ -323,18 +314,18 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
         // reject if too close to any existing scratch point:
         //   for each pt s: d = new - s; len = sqrt(Dot(d,d)); if len+fE < s.radius -> reject
         bool reject = false;
-        const uint8_t* sd = (const uint8_t*)scratch._data;
+        const TerrainStamp* sd = scratch._data;
         for (int j = 0; j < scratchCount; ++j) {
-            const float* sp = (const float*)(sd + (size_t)j * 0xC);
+            const TerrainStamp& sp = sd[j];
             // {dx, dy} = retail local_res18/1c; retail calls Dot(&d, &d) for |d|^2.
-            Math::Vector2 dv(newX - sp[0], newY - sp[1]);
+            Math::Vector2 dv(newX - sp.x, newY - sp.y);
             float dot = dv.Dot(dv).v;
             float len = wg_sqrtf(dot);
-            if (len + fE < sp[2]) { reject = true; break; }
+            if (len + fE < sp.radius) { reject = true; break; }
         }
         if (!reject) {
-            float rec[3] = { newX, newY, fE };
-            wg_VecPush0xC(p + HF_LISTB, *(int*)(p + HF_LISTB + 0x08) + 1, rec);
+            TerrainStamp rec = { newX, newY, fE };
+            wg_VecPush0xC(&hfp->riverPoints, hfp->riverPoints._size + 1, rec);
         }
     }
 
@@ -347,7 +338,7 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
     // is untouched by all of this; only more {x,y,radius} points get appended to
     // listB, which e910 then carves.
     // -----------------------------------------------------------------
-    int riverCount = *(int*)(p + HF_LISTB + 0x08);
+    int riverCount = hfp->riverPoints._size;
 
     int* labels = nullptr;
     if (riverCount > 0) {
@@ -356,27 +347,27 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
         labels[0] = 0;
     }
 
-    uint8_t buckets[0x10]; std::memset(buckets, 0, sizeof buckets);
+    RawArray<RawArray<int32_t>> buckets = { nullptr, 0, 0 };
 
     void* treeA = nullptr;   // AVL root placeholder (rotations applied by the helpers)
-    const uint8_t* rd = *(const uint8_t**)(p + HF_LISTB + 0x00);
+    const TerrainStamp* rd = hfp->riverPoints._data;
     int nextLabel = 1;
     for (int i = 1; i < riverCount; ++i) {
-        const float* pi = (const float*)(rd + (size_t)i * 0xC);
+        const TerrainStamp& pi = rd[i];
         int joined = -1;
         for (int j = 0; j < i; ++j) {
-            const float* pj = (const float*)(rd + (size_t)j * 0xC);
-            Math::Vector2 dv(pi[0] - pj[0], pi[1] - pj[1]);
+            const TerrainStamp& pj = rd[j];
+            Math::Vector2 dv(pi.x - pj.x, pi.y - pj.y);
             float dot = dv.Dot(dv).v;
             float len = wg_sqrtf(dot);
-            if (len * kJoinThresh < pi[2] + pj[2]) { joined = labels[j]; break; }
+            if (len * kJoinThresh < pi.radius + pj.radius) { joined = labels[j]; break; }
         }
         labels[i] = (joined >= 0) ? joined : nextLabel++;
     }
-    if (treeA) FUN_140014c30((void**)&treeA, treeA);
+    if (treeA) FUN_140014c30(&treeA, treeA);
 
     int clusterCount = nextLabel;
-    wg_VecOfVecResize(buckets, clusterCount);
+    wg_VecOfVecResize(&buckets, clusterCount);
     // (member-list population + nearest-pair connect via Random::Rand /
     //  Vector2::Length / Vector2::Normalize is the cosmetic continuity refinement;
     //  it appends additional {x,y,radius} segment points into listB. Faithful but
@@ -384,8 +375,8 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
     //  geometry is needed for visible river continuity.)
 
     // --- teardown (matches decomp order) ---
-    wg_VecOfVecResize(buckets, 0);
-    if (*(void**)(buckets + 0x00)) System::MemoryAllocator::MemFree(*(void**)(buckets + 0x00));
+    wg_VecOfVecResize(&buckets, 0);
+    if (buckets.data) System::MemoryAllocator::MemFree(buckets.data);
     if (labels) System::MemoryAllocator::MemFree(labels);
     // (scratch: freed by its destructor at scope exit, right here in retail's order)
 }
@@ -436,21 +427,20 @@ void wg_f390_rivers(TerrainHeightfield* hfp) {
 //   around the carved water margins.
 // ============================================================
 void wg_f390_stamp(TerrainHeightfield* hfp) {
-    int* hf = (int*)hfp;
-    uint8_t* p = (uint8_t*)hfp;
-    int n = hf[4];                 // (dim+1)^2 cell count
+    const TerrainHeightfield* hf = hfp;
+    int n = hfp->heightmap.size;   // (dim+1)^2 cell count
     if (n <= 0) return;
 
     // three mask buffers {float* data,int count,int cap} — sized via sub_3a00.
-    uint8_t hdrB[0x10]; std::memset(hdrB, 0, sizeof hdrB);   // maskB (local_b0)
-    uint8_t hdrC[0x10]; std::memset(hdrC, 0, sizeof hdrC);   // maskC (local_c0)
-    uint8_t hdrA[0x10]; std::memset(hdrA, 0, sizeof hdrA);   // maskA (local_a0)
-    Reimpl_Array_Resize_Stride04(hdrB, n);
-    Reimpl_Array_Resize_Stride04(hdrC, n);
-    Reimpl_Array_Resize_Stride04(hdrA, n);
-    float* maskB = *(float**)(hdrB + 0x00);
-    float* maskC = *(float**)(hdrC + 0x00);
-    float* maskA = *(float**)(hdrA + 0x00);
+    RawArray<float> hdrB = { nullptr, 0, 0 };   // maskB (local_b0)
+    RawArray<float> hdrC = { nullptr, 0, 0 };   // maskC (local_c0)
+    RawArray<float> hdrA = { nullptr, 0, 0 };   // maskA (local_a0)
+    Reimpl_Array_Resize_Stride04(&hdrB, n);
+    Reimpl_Array_Resize_Stride04(&hdrC, n);
+    Reimpl_Array_Resize_Stride04(&hdrA, n);
+    float* maskB = hdrB.data;
+    float* maskC = hdrC.data;
+    float* maskA = hdrA.data;
     if (!maskB || !maskC || !maskA) {
         if (maskA) System::MemoryAllocator::MemFree(maskA);
         if (maskC) System::MemoryAllocator::MemFree(maskC);
@@ -462,24 +452,24 @@ void wg_f390_stamp(TerrainHeightfield* hfp) {
     for (int i = 0; i < n; ++i) { maskB[i] = kOne; maskC[i] = 0.0f; maskA[i] = kOne; }
 
     // --- patches (hf+0x18): inner -> maskB(MIN), outer -> maskC(MAX) ---
-    int patchCount = hf[8];                         // param_1[8]
+    int patchCount = hfp->paths._size;              // param_1[8]
     if (patchCount > 0) {
-        uint8_t* patchArr = *(uint8_t**)(p + HF_PATCHLIST + 0x00);  // param_1[6]
+        RawArray<TerrainPathPoint>* patchArr = hfp->paths._data;  // param_1[6]
         for (int pi = 0; pi < patchCount; ++pi) {
-            uint8_t* patch  = patchArr + (size_t)pi * 0x10;         // {void* recs, int count}
-            uint8_t* recs   = *(uint8_t**)(patch + 0x00);
-            int      recCnt = *(int*)(patch + 0x08);
+            RawArray<TerrainPathPoint>* patch = &patchArr[pi];      // {recs, count}
+            const TerrainPathPoint* recs = patch->data;
+            int      recCnt = patch->size;
             for (int ri = 0; ri < recCnt; ++ri) {
-                const float* r = (const float*)(recs + (size_t)ri * 0x1c);
+                const TerrainPathPoint& r = recs[ri];   // stride 0x1c
                 // Retail record layout: {x@0, y@4, strength@0x08, innerCutoff@0x0c,
                 // innerBase@0x10, outerCutoff@0x14, outerBase@0x18}. e910 reads it
                 // identically to ec50 (verified 0x1400ce910 / 0x1400cec50).
-                float center[2]   = { r[0], r[1] };
-                float outerStr    = r[2];   // +0x08  strength
-                float innerCutoff = r[3];   // +0x0c  inner radius (cutoff)
-                float innerBase   = r[4];   // +0x10  inner falloff base
-                float outerCutoff = r[5];   // +0x14  outer radius (cutoff)
-                float outerBase   = r[6];   // +0x18  outer falloff base
+                float center[2]   = { r.x, r.y };
+                float outerStr    = r.strength;       // +0x08  strength
+                float innerCutoff = r.innerRadius;    // +0x0c  inner radius (cutoff)
+                float innerBase   = r.innerFalloff;   // +0x10  inner falloff base
+                float outerCutoff = r.outerRadius;    // +0x14  outer radius (cutoff)
+                float outerBase   = r.outerFalloff;   // +0x18  outer falloff base
                 wg_StampBrush_eee0(hf, center, innerCutoff, innerBase, kOne, 0, maskB);     // MIN -> maskB
                 wg_StampBrush_eee0(hf, center, outerCutoff, outerBase, outerStr, 1, maskC); // MAX -> maskC
             }
@@ -487,31 +477,31 @@ void wg_f390_stamp(TerrainHeightfield* hfp) {
     }
 
     // --- mountain satellites (hf+0x38 listC): -> maskC(MAX), pow 2.25, str 2.0 ---
-    int satCount = hf[0x10];                         // param_1[0x10]
+    int satCount = hfp->basinStamps._size;           // param_1[0x10]
     if (satCount > 0) {
-        uint8_t* satArr = *(uint8_t**)(p + HF_LISTC + 0x00);  // param_1[0xe]
+        const TerrainStamp* satArr = hfp->basinStamps._data;  // param_1[0xe]
         for (int i = 0; i < satCount; ++i) {
-            const float* s = (const float*)(satArr + (size_t)i * 0xC);
-            float center[2] = { s[0], s[1] };
-            float radius    = s[2];                  // +0x08
+            const TerrainStamp& s = satArr[i];
+            float center[2] = { s.x, s.y };
+            float radius    = s.radius;              // +0x08
             wg_StampBrush_eee0(hf, center, radius, kSatExp, kSatStr, 1, maskC);  // MAX -> maskC
         }
     }
 
     // --- river points (hf+0x28 listB): -> maskA(MIN), pow 1.75, str 1.0 ---
-    int riverCount = hf[0xc];                         // param_1[0xc]
+    int riverCount = hfp->riverPoints._size;          // param_1[0xc]
     if (riverCount > 0) {
-        uint8_t* rivArr = *(uint8_t**)(p + HF_LISTB + 0x00);  // param_1[10]
+        const TerrainStamp* rivArr = hfp->riverPoints._data;  // param_1[10]
         for (int i = 0; i < riverCount; ++i) {
-            const float* rp = (const float*)(rivArr + (size_t)i * 0xC);
-            float center[2] = { rp[0], rp[1] };
-            float radius    = rp[2];                 // +0x08
+            const TerrainStamp& rp = rivArr[i];
+            float center[2] = { rp.x, rp.y };
+            float radius    = rp.radius;             // +0x08
             wg_StampBrush_eee0(hf, center, radius, kRiverExp, kOne, 0, maskA);   // MIN -> maskA
         }
     }
 
     // --- COMBINE: h[i] = maskB[i] * h[i] * maskA[i] - maskC[i] ---
-    float* heightmap = *(float**)(p + HF_HEIGHTMAP);   // param_1[2]
+    float* heightmap = hfp->heightmap.data;   // param_1[2]
     if (heightmap) {
         for (int i = 0; i < n; ++i) {
             heightmap[i] = maskB[i] * heightmap[i] * maskA[i] - maskC[i];
