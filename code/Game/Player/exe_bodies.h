@@ -42,7 +42,6 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14
 extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2);  // 0x1400f9ad0
 
 // ---- pathtool_setselected.cpp
-extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2);  // 0x1400dd710
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60

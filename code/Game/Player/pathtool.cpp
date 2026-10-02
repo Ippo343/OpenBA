@@ -35,7 +35,7 @@
 //               (this call site passes (keyMap, dir, origin))
 //   0x1400aa530 PlayerRay_TerrainMarch_aa530 -- intersect the ray with the terrain
 //   0x1400a0280 PlayerEdit_EntityAtCell_a0280 -- entity at a map cell
-//   0x1400dd710 PathTool_helper_d710 -- SetSelectedEntity (+ highlighting)
+//   0x1400dd710 PathTool::SetSelected -- SetSelectedEntity (+ highlighting)
 //   0x1401008c0 PlayerTileRender_DrawOverlay_08c0 -- the tile overlay submit
 // NOTE: the former s_fn_SubmitDebugDraw helper was removed — it resolved a
 // dropped-digit-typo address (0x1400c08c0, mid-function in FUN_1400c0690) and was
@@ -49,27 +49,11 @@ static inline const Input::KeyMap* GetKeyMap() {
     return Input::Configuration::_singleton->_keyMap;
 }
 
-// 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three
-// inlined Collection::Array<T>::~Array bodies, in this order:
-//   MemFree([+0x50]); +0x50 = +0x58 = 0     (segment list, 8-byte pairs)
-//   MemFree([+0x40]); +0x40 = +0x48 = 0     (point list, int32)
-//   MemFree([+0x30]); +0x30 = +0x38 = 0     (route list, 0x200c records)
-// through `[0x140152b68]` = System::MemoryAllocator::MemFree (the same static
-// InternalMemFree reaches; MemFree(null) is a no-op in retail, which calls it
-// unconditionally). Then Tool's restamp and `~Internal` (the compiler chain).
-PathTool::~PathTool() {
-    Object::detail::InternalMemFree(_field50);
-    _field50 = nullptr;
-    _field58 = 0;   // size + capacity dwords (one qword store in retail)
-    _field5C = 0;
-    Object::detail::InternalMemFree(_field40);
-    _field40 = nullptr;
-    _field48 = 0;
-    _field4C = 0;
-    Object::detail::InternalMemFree(_field30);
-    _field30 = nullptr;
-    _field38 = nullptr;
-}
+// 0x1400de950 — ~PathTool: the leaf restamp, then three inlined
+// Collection::Array<T>::~Array bodies (+0x50, +0x40, +0x30: MemFree the buffer,
+// zero data / size / capacity), then Tool's restamp and `~Internal`. B4 PLAYER:
+// the three arrays are Collection::Array members (PathTool.h), so the compiler's
+// member destructors are those bodies, in that order.
 
 // ============================================================
 // PathTool::OnKey (vtable +0x30, Slot6) — Path creation input handler
@@ -162,11 +146,8 @@ char PathTool::OnKey(char key) {
 
     // If we found an entity and it differs from current selection, update
     if (entityIBP != nullptr) {
-        // LEFT: PathTool::selectedEntity (+0x28) and 0x1400dd710 still carry the
-        // InternalBasePtr as an integer (pathtool_setselected.cpp, not yet converted).
-        uint64_t tmpIBP = reinterpret_cast<uint64_t>(entityIBP);
-        if (selectedEntity != tmpIBP) {
-            PathTool_helper_d710(reinterpret_cast<int64_t>(this), &tmpIBP);
+        if (selectedEntity != entityIBP) {
+            SetSelected(&entityIBP);
         }
     }
 
@@ -207,8 +188,8 @@ void PathTool::Draw(Video::Context* context, char) {
 
     // ---- Build tile array from point markers (+0x40, +0x48) ----
     Collection::Array<ToolTileRecord> tiles;
-    const int32_t* pointArray = _field40;
-    int pointCount  = _field48;
+    const int32_t* pointArray = points._data;
+    int pointCount  = points._size;
 
     for (int i = 0; i < pointCount; i++) {
         int cellIdx = pointArray[i];
@@ -223,12 +204,12 @@ void PathTool::Draw(Video::Context* context, char) {
 
     // ---- Build line array from segments (+0x50, +0x58) ----
     Collection::Array<ToolSegmentRecord> lines;
-    const int32_t* segArray  = _field50;
-    int segCount = _field58;
+    const PathSegment* segArray = segments._data;
+    int segCount = segments._size;
 
     for (int i = 0; i < segCount; i++) {
-        int cellA = segArray[i * 2];
-        int cellB = segArray[i * 2 + 1];
+        int cellA = segArray[i].minCell;
+        int cellB = segArray[i].maxCell;
         ToolSegmentRecord rec;
         rec.col1    = cellA % mapWidth;
         rec.row1    = cellA / mapWidth;
@@ -257,7 +238,15 @@ bool PathTool::IsSelected(uint64_t* param2) {
     // Call CheckPtr on self->selectedEntity to resolve any lazy pointer
 
     // Compare the stream value to the selected entity
-    return *param2 == selectedEntity;
+    // LEFT: Tool slot 10 takes the handle as a uint64_t (Tool.h; its caller
+    // Component/nomadcomponent.cpp, COMP, passes it so).
+    return *param2 == reinterpret_cast<uint64_t>(selectedEntity);
+}
+
+// [13] 0x140026b60 `MOV RAX,[RCX+0x28]; MOV [RDX],RAX; MOV RAX,RDX; RET`.
+uint64_t* PathTool::GetSelected(uint64_t* ret) const {
+    *ret = reinterpret_cast<uint64_t>(selectedEntity);   // LEFT: the slot's uint64_t handle, as slot 10
+    return ret;
 }
 
 // ============================================================

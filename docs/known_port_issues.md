@@ -455,6 +455,7 @@ TUT (rows 80-84, 88-89):
 | 84 | `NamedExternalRef::Resolve` (`goal_exe_helpers.cpp`, 0x1400265b0) | the same load-on-miss (`FindOrLoad` of the normalised name) and a re-read of the factory generation after it | find-only, one generation read | SUSPECTED (TUT; not re-read) |
 | 88 | `TimeGoalInstance::CheckGoalState` (`timegoalinstance.cpp`) | tests `goal` for null before IsDerivedFrom and the narrowed goal for null before reading `requiredYears` (the miss returns 0) | 0x1400dacb0: `CMOVNZ RBX,RDI` then `MOV ECX,[RBX+0x30]` -- no test; a non-TimeGoal reads through null | CONFIRMED (TUT) |
 | 89 | `TutorialHighlightDialog::PlaceOnElement` / `PlaceOnEntity` (`tutorialhighlightdialog.cpp`) | null tests on `glow`, `glowGroup`, `arrow`, the target element, the Video::Device singleton and the UI | not read | SUSPECTED (TUT) |
+| 77 | `PathTool::ClearHighlight` / `SetHighlight` / `BuildRoutes` (`pathtool_setselected.cpp`, 0x1400dd250 / 0x1400dd0f0 / 0x1400dd770) | DROPPED in B4: the file-local finder skipped a null component slot and a zero HighlightComponent type id; the route builder's A* wait still gives up after 20,000,000 spins (KEPT) | 0x140007080 is `FindComponent<HighlightComponent>` (no null test, ComponentEntity.h); retail's wait has no bound | SUSPECTED for the spin bound (retail not re-read in B4); the finder now `ComponentEntity::FindComponent<T>()` (PLAYER) |
 
 ### 14e. Stores that may normalise where retail copies
 
