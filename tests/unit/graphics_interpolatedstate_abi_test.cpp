@@ -68,21 +68,23 @@ namespace {
 
 bool NearF(float a, float b) { return std::fabs(a - b) <= 1e-5f; }
 
+// The seven floats of a Transform, by name: rotation x/y/z/w (+0x00..+0x0c),
+// then translation x/y/z (+0x10..+0x18).
 bool SameTransform(const Math::Transform& a, const Math::Transform& b) {
-    const float* pa = reinterpret_cast<const float*>(&a);
-    const float* pb = reinterpret_cast<const float*>(&b);
-    for (int i = 0; i < 7; ++i)
-        if (!NearF(pa[i], pb[i])) return false;
-    return true;
+    return NearF(a.rotation.x, b.rotation.x) && NearF(a.rotation.y, b.rotation.y) &&
+           NearF(a.rotation.z, b.rotation.z) && NearF(a.rotation.w, b.rotation.w) &&
+           NearF(a.translation.x, b.translation.x) &&
+           NearF(a.translation.y, b.translation.y) &&
+           NearF(a.translation.z, b.translation.z);
 }
 
 // A Transform with recognisable, distinct components in both halves, so a
 // direction mistake cannot hide behind a symmetric value.
 Math::Transform MakeTransform(float qx, float tx) {
     Math::Transform t;
-    float* p = reinterpret_cast<float*>(&t);
-    p[0] = qx; p[1] = 0.0f; p[2] = 0.0f; p[3] = std::sqrt(1.0f - qx * qx);  // unit quat
-    p[4] = tx; p[5] = tx * 2.0f; p[6] = tx * 3.0f;                          // translation
+    t.rotation.x = qx; t.rotation.y = 0.0f; t.rotation.z = 0.0f;
+    t.rotation.w = std::sqrt(1.0f - qx * qx);                                 // unit quat
+    t.translation.x = tx; t.translation.y = tx * 2.0f; t.translation.z = tx * 3.0f;
     return t;
 }
 
@@ -152,11 +154,12 @@ UNIT_TEST(graphics_interpolatedstate_lerp_runs_previous_to_current) {
     // The translation is a plain component-wise lerp, so the midpoint is
     // checkable in closed form even though the rotation is not.
     const Math::Transform mid = s.Lerp(Math::Scalar(0.5f));
-    const float* pm = reinterpret_cast<const float*>(&mid);
-    const float* pc = reinterpret_cast<const float*>(&s._current);
-    const float* pp = reinterpret_cast<const float*>(&s._previous);
-    for (int i = 4; i < 7; ++i)
-        CHECK(NearF(pm[i], pp[i] + (pc[i] - pp[i]) * 0.5f));
+    const Math::Vector3& pm = mid.translation;
+    const Math::Vector3& pc = s._current.translation;
+    const Math::Vector3& pp = s._previous.translation;
+    CHECK(NearF(pm.x, pp.x + (pc.x - pp.x) * 0.5f));
+    CHECK(NearF(pm.y, pp.y + (pc.y - pp.y) * 0.5f));
+    CHECK(NearF(pm.z, pp.z + (pc.z - pp.z) * 0.5f));
 }
 
 UNIT_TEST(graphics_interpolatedstate_lerp_does_not_mutate) {
