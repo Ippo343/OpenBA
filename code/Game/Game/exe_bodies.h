@@ -111,7 +111,9 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV);  // 0x1400f8ff0
 extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream);  // 0x1400b04d0
 
 // ---- goals_serialize.cpp
-extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* , int32_t* outParam);  // 0x1400f9240
+class WorkScheduler;
+namespace IO { class Stream; }
+extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, void* , int32_t* outParam);  // 0x1400f9240  // B4 FORWARD: 1 outside caller(s)
 
 // ---- keystone_a_gamedtor.cpp
 extern "C" void Game_Dtor_9ed60(int64_t param_1);  // 0x14009ed60

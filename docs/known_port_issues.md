@@ -405,6 +405,11 @@ stated condition.
   type-id test is dead once the type is registered); `StorageCanAdd` sums the stored weight through
   `StorageComponent::QueryCount` instead of `CitizenComp_StorageComponent_QueryCount`, whose null
   test is unreachable there (0x14012c560 has already dereferenced the storage).
+- KEPT (GAME-b): `ProfessionList::Startup` returns on a null `ExternalFactory::_singleton` and a 0
+  Profession type id, and skips an external that is not a Profession; 0x1400a90a0 calls FindNext
+  on the singleton unguarded and reads +0x4e of the null it substitutes for a non-Profession.
+  CONFIRMED. DROPPED (GAME-b): the old body's null test of the list itself (its one caller,
+  `GameUpdateLoop::Startup`, tests `m_professionList` first; retail has none).
 
 ### 14e. Stores that may normalise where retail copies
 

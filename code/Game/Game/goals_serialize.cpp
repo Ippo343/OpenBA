@@ -1,83 +1,63 @@
 // code/Game/Game/goals_serialize.cpp
 //
-// Port of exe 0x1400f9240 (Ghidra: TradeComponent_helper_9240) — the manager object at
-// GameUpdateLoop+0x118 serializer, called from the master GameUpdateLoop serialize
+// Port of exe 0x1400f9240 (Ghidra: TradeComponent_helper_9240): WorkScheduler::Serialize,
+// the serializer of the work scheduler at GameUpdateLoop+0x118 (Game/WorkScheduler.h; the
+// member the tree calls m_tutorial), called from the master GameUpdateLoop serialize
 // (0x140095a90) during SAVE/LOAD. Despite the Ghidra "Trade*" auto-naming (an artifact of
-// decompiler similarity heuristics, not a real namespace — see reference_misnamed_component_finders),
-// the tree this function walks at self+0x30 is the SAME work-slot tree WorkComponent::CheckWorkSlot
-// already documents at *(g_pGameWorldSingleton+0x118)+0x30 (code/Game/Component/workcomponent.cpp).
-// self == *(g_pGameWorldSingleton+0x118) is the manager itself.
+// decompiler similarity heuristics, not a real namespace), the tree this function walks at
+// +0x30 is the SAME work-id tree WorkComponent::CheckWorkSlot walks.
 //
-// Self layout (byte offsets, derived from the decompile — no separate type header; every
-// field is walked via raw pointer arithmetic exactly as Ghidra shows, matching the codebase's
-// established style for this kind of BST-heavy internal manager, e.g. workcomponent.cpp /
-// action_base_complete.cpp):
-//   +0x00        int      field0                        (serialized directly)
-//   +0x04        int      field1                        (serialized directly)
-//   +0x08        uint     field2                        (serialized directly)
-//   +0x10        Layout-A tree root  "workCountTree"     (scratch bookkeeping, never itself
-//                                                          serialized — built/consumed during LOAD)
-//   +0x18        int      "insert counter" for workCountTree (also used as scratch key source)
-//   +0x30        Layout-B tree root  "idTree" — slot[0] of the 15-slot description-tree array
-//                passed to TradeDescription_impl_d060 as (self+0x30, count). This is the SAME
-//                tree WorkComponent::CheckWorkSlot walks (*(g_pGameWorldSingleton+0x118)+0x30).
-//   +0x40..+0x11F  14 more Layout-B tree headers (root@0,count@8, stride 0x10) — d060 slots[1..14].
-//                Only touched by the id-removal pass (erase-by-key via ca60 across all 14).
-//   +0x120       Layout-C (0x38-node) tree root passed to TradeWork_impl_d5f0.
-//
-// Node layouts (see code/Game/Action/action_pf_avl.cpp for the shared rotation family):
-//   Layout A (0x28 node): value@0x00(8B, low32=sort key), parent@0x08, left@0x10, right@0x18,
-//                          balance/height@0x20. Rebalance: 0x14001a8c0.
-//   Layout B (0x30 node): key@0x00(4B), payload/IBP@0x08(8B), parent@0x10, left@0x18, right@0x20,
-//                          balance@0x28, height@0x2a. Rebalance: 0x140013480.
-//   Layout C (0x38 node): key@0x00(8B), subtree(Layout-B)@0x08, int@0x10, parent@0x18, left@0x20,
-//                          right@0x28, balance/height@0x30. Rebalance: 0x140014b40 (already
-//                          ported as TradeWork_impl_4b40 — code/Game/Component/keystone_a_restree.cpp).
+// Layout (Game/WorkScheduler.h; node types Game/WorkSchedulerNodes.h):
+//   +0x00 / +0x04 int, +0x08 uint   serialized directly
+//   +0x10  the 0x28-node "work count" tree (WorkSchedulerCountNode), count +0x18: never itself
+//          serialized, rebuilt on LOAD from version-2 saves
+//   +0x30  fifteen {root, count} trees of 0x30 nodes (WorkSchedulerIdNode: work id -> Work);
+//          trees[0] is the id tree WorkComponent::CheckWorkSlot walks; the other 14 are only
+//          touched here by the dead-id removal
+//   +0x120 the 0x38-node bucket tree (WorkSchedulerBucketNode: Profession* -> its own id tree)
 //
 // Sub-callees:
-//   0x1400f8270  TradeComponent_helper_8270   — NEW (this file) — SAVE-only vtbl+0x48 walk over
-//                the idTree (self+0x30).
-//   0x14002d060  TradeDescription_impl_d060   — NEW (this file) — 14/15-slot Layout-B array
-//                serializer. Calls 0x140013480 (rebalance, ALREADY ported/registered —
-//                Pf_AvlRebalanceB_13480, code/Game/Action/action_pf_avl.cpp).
-//   0x14002d5f0  TradeWork_impl_d5f0          — NEW (this file) — Layout-C tree serializer.
-//   0x14002d340  TradeWork_impl_d5f0_sub_d340 — NEW (this file) — single Layout-B tree
-//                serializer (same shape as one d060 slot body); called from d5f0.
-//   0x14002ccf0  TradeWork_impl_ccf0          — NEW (this file) — Layout-C BST insert.
-//   0x14002ceb0  TradeWork_impl_ccf0_sub_ceb0 — NEW (this file) — Layout-C node copy-ctor.
-//   0x14002cfb0  FUN_14002cfb0                — NEW (this file) — Layout-B subtree deep-copy
-//                (recursive), used by ceb0.
-//   0x140018020  FUN_140018020 (ExternalRef serialize) — ALREADY ported/registered
-//                (Reimpl_ExternalPtr_Serialize_StringTable, standalone/address_registry.cpp).
-//   0x14001a8c0  Layout-A rebalance — ALREADY ported (Pf_AvlRebalanceA_a8c0).
-//   0x14001ca60  generic BST erase  — ALREADY ported (WorkCellBST_Remove_ca60).
-//   0x14001a6e0  Layout-A BST erase — ALREADY ported (WorkBST_BSTRemove_a6e0).
-//   0x140014c30  Layout-A post-order free — ALREADY ported (WorkBase_TreeNodeFree_14c30).
-//   0x14000e320  Layout-B post-order free — ALREADY ported (WorkBase_TreeNodeFree_e320).
-//
-// DWORD_1401c6cf8 ("TypeInfo_Work" per Ghidra) is Work's type record: the load-time
-// IsDerivedFrom filter in d060/d340 reads Work::TypeId() (ENDGAME B.3.9 RF). The zero-filled
-// storage cell this file used to register for it went at ENDGAME B.3.9 TR (no reader left).
+//   0x1400f8270  WorkScheduler::ValidateAll  — SAVE-side pre-pass: slot 9 on every Work.
+//   0x14002d060  SerializeIdTrees            — the 14/15-tree array serializer.
+//   0x14002d340  SerializeIdTree             — one id tree (0x14002d060 inlines the same body
+//                                              per tree).
+//   0x14002d5f0  SerializeBucketTree         — the bucket tree.
+//   0x14002ccf0  InsertBucket                — bucket-tree insert-or-find.
+//   0x14002ceb0  CopyBucketNode              — bucket node copy-ctor.
+//   0x14002cfb0  CopyIdSubtree               — recursive id-subtree deep copy, used by ceb0.
+//   0x140018020  Reimpl_ExternalPtr_Serialize_StringTable (ExternalPtr<Profession>)
+//   0x14001a8c0 / 0x140013480 / 0x140014b40  the three rebalance drivers (C forwarders)
+//   0x14001ca60  WorkCellBST_Remove_ca60     — 0x30-node erase
+//   0x14001a6e0  WorkBST_BSTRemove_a6e0      — 0x28-node erase
+//   0x140014c30 / 0x14000e320  WorkBase_TreeNodeFree_14c30 / _e320 — post-order frees
 //
 // Byte-faithful port — every branch, walk, and rebuild step mirrors the decompile. In-order BST
 // walks (Ghidra's coalesced goto-successor idiom) are rewritten as clean iterator loops via the
-// BstLeftmost*/BstNext* helpers below; this is a structural cleanup only (the two forms are
-// provably equivalent — the classic parent-pointer in-order successor algorithm), not a logic change.
+// Leftmost / Next templates below; this is a structural cleanup only (the classic parent-pointer
+// in-order successor algorithm), not a logic change.
+//
+// B.4 GAME-b: every node and the scheduler are read by NAME. The casts left are the arguments of
+// the C declarations other blocks own (the rebalance drivers, Action/exe_bodies.h and
+// Player/exe_bodies.h; the two erases, Work/exe_bodies.h): each takes the tree as an integer
+// pointer. They are funnelled through the four Rebalance / Erase wrappers below.
 
 #include "object/TypeInfo.h"
-#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/GameUpdateLoop.h"   // GameUpdateLoop::_singleton
+#include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"
+#include "Game/Profession.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Object/factory_registration.h"
 #include "Work/Work.h"                // Work::TypeId() -- cell 0x1401c6cf8 (ENDGAME B.3.9 RF)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include "Component/WorkComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
 #include <new>
 #include "Game/exe_bodies.h"
 #include "Action/exe_bodies.h"   // Pf_AvlRebalanceA_a8c0 / B_13480
@@ -88,633 +68,456 @@
 namespace {
 
 // ============================================================
-// Sub-callees, ported elsewhere and called by name (B3R):
-//   0x14001a8c0 Pf_AvlRebalanceA_a8c0 / 0x140013480 Pf_AvlRebalanceB_13480 (Action/exe_bodies.h)
-//   0x140014b40 TradeWork_impl_4b40                                     (Player/exe_bodies.h)
-//   0x14001ca60 WorkCellBST_Remove_ca60 (Layout B / C-subtree erase)    (Work/exe_bodies.h)
-//   0x14001a6e0 WorkBST_BSTRemove_a6e0  (Layout A erase)                (Work/exe_bodies.h)
-//   0x140014c30 WorkBase_TreeNodeFree_14c30 (Layout A post-order free)  (Work/exe_bodies.h)
-//   0x14000e320 WorkBase_TreeNodeFree_e320  (Layout B post-order free)  (Work/exe_bodies.h)
-//   0x140018020 Reimpl_ExternalPtr_Serialize_StringTable                (Game/exe_bodies.h)
+// The C declarations of other blocks' tree primitives take the tree header and the cursor as
+// integers. LEFT: their headers (Action/exe_bodies.h ACT-a, Player/exe_bodies.h, Work/
+// exe_bodies.h WORK-a) are not this block's.
 // ============================================================
+void RebalanceIdTree(WorkSchedulerIdNode** root, WorkSchedulerIdNode* from) {        // 0x140013480
+    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));
+}
+void RebalanceCountTree(WorkSchedulerCountNode** root, WorkSchedulerCountNode* from) { // 0x14001a8c0
+    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));
+}
+void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode* from) { // 0x140014b40
+    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));
+}
+void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);
+}
+void EraseCountNode(WorkSchedulerCountNode** root, WorkSchedulerCountNode* node) {    // 0x14001a6e0
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);
+}
 
 // ============================================================
-// Generic in-order BST walk helpers (parent-pointer successor algorithm).
-// Layout B: parent@0x10, left@0x18, right@0x20.  Layout A: parent@0x08, left@0x10, right@0x18.
+// Generic in-order BST walk (parent-pointer successor algorithm) and search, over a node
+// type that names `parent`, `left`, `right`.
 // ============================================================
-
-static uint8_t* BstLeftmostB(uint8_t* node) {
+template <class Node>
+Node* Leftmost(Node* node) {
     if (!node) return nullptr;
-    while (*reinterpret_cast<uint8_t**>(node + 0x18)) node = *reinterpret_cast<uint8_t**>(node + 0x18);
+    while (node->left) node = node->left;
     return node;
 }
-static uint8_t* BstNextB(uint8_t* node) {
-    uint8_t* right = *reinterpret_cast<uint8_t**>(node + 0x20);
-    if (right) return BstLeftmostB(right);
-    uint8_t* parent = *reinterpret_cast<uint8_t**>(node + 0x10);
-    uint8_t* cur = node;
-    while (parent && *reinterpret_cast<uint8_t**>(parent + 0x20) == cur) {
+template <class Node>
+Node* Next(Node* node) {
+    if (node->right) return Leftmost(node->right);
+    Node* parent = node->parent;
+    Node* cur = node;
+    while (parent && parent->right == cur) {
         cur = parent;
-        parent = *reinterpret_cast<uint8_t**>(parent + 0x10);
+        parent = parent->parent;
     }
     return parent;
 }
 
-static uint8_t* BstLeftmostA(uint8_t* node) {
-    if (!node) return nullptr;
-    while (*reinterpret_cast<uint8_t**>(node + 0x10)) node = *reinterpret_cast<uint8_t**>(node + 0x10);
-    return node;
-}
-static uint8_t* BstNextA(uint8_t* node) {
-    uint8_t* right = *reinterpret_cast<uint8_t**>(node + 0x18);
-    if (right) return BstLeftmostA(right);
-    uint8_t* parent = *reinterpret_cast<uint8_t**>(node + 0x08);
-    uint8_t* cur = node;
-    while (parent && *reinterpret_cast<uint8_t**>(parent + 0x18) == cur) {
-        cur = parent;
-        parent = *reinterpret_cast<uint8_t**>(parent + 0x08);
+// Search by int32 key (the id and count nodes).
+template <class Node>
+Node* FindByKey(Node* root, int32_t key) {
+    Node* node = root;
+    while (node != nullptr) {
+        if (key < node->key) {
+            node = node->left;
+        } else if (node->key < key) {
+            node = node->right;
+        } else {
+            return node;
+        }
     }
-    return parent;
+    return nullptr;
 }
 
 // ============================================================
-// Layout-A insert (0x28 node): value@0x00 (8B, low32 = sort key), parent@0x08, left@0x10,
-// right@0x18, balance/height@0x20. *treeRoot is the tree's root-pointer field.
-// Returns the (found-or-inserted) node; *outInserted reports whether a NEW node was made
-// (retail's per-slot counter increments only on genuine insert, not on found-existing).
+// 0x28-node insert: the element is one qword {key, workId}. *treeRoot is the tree's root
+// field. Returns the (found-or-inserted) node; *outInserted reports whether a NEW node was
+// made (retail's per-slot counter increments only on genuine insert, not on found-existing).
 // ============================================================
-static int32_t* LayoutA_Insert(int32_t** treeRoot, uint64_t value, bool* outInserted) {
+WorkSchedulerCountNode* CountTreeInsert(WorkSchedulerCountNode** treeRoot, int32_t key,
+                                        uint32_t workId, bool* outInserted) {
     *outInserted = false;
-    int32_t key = static_cast<int32_t>(value & 0xFFFFFFFFu);
-    int32_t* root = *treeRoot;
+    WorkSchedulerCountNode* root = *treeRoot;
     if (root == nullptr) {
-        int32_t* node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+        WorkSchedulerCountNode* node = static_cast<WorkSchedulerCountNode*>(
+            System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
         if (node) {
-            *reinterpret_cast<uint64_t*>(node) = value;
-            node[2] = 0; node[3] = 0; node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0;
+            node->key = key;
+            node->workId = workId;
+            node->parent = nullptr; node->left = nullptr; node->right = nullptr;
+            node->balance = 0; node->height = 0;
         }
         *treeRoot = node;
         *outInserted = true;
         return node;
     }
-    int32_t* parent = root;
-    int32_t* node = nullptr;
+    WorkSchedulerCountNode* parent = root;
+    WorkSchedulerCountNode* node = nullptr;
     for (;;) {
-        if (*parent <= key) {
-            if (key <= *parent) {
+        if (parent->key <= key) {
+            if (key <= parent->key) {
                 return parent; // found existing — no insert
             }
-            int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
+            WorkSchedulerCountNode* right = parent->right;
             if (right == nullptr) {
-                node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+                node = static_cast<WorkSchedulerCountNode*>(
+                    System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
                 if (node) {
-                    *reinterpret_cast<uint64_t*>(node) = value;
-                    *reinterpret_cast<int32_t**>(node + 2) = parent;
-                    node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0;
+                    node->key = key;
+                    node->workId = workId;
+                    node->parent = parent;
+                    node->left = nullptr; node->right = nullptr;
+                    node->balance = 0; node->height = 0;
                 }
-                *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18) = node;
+                parent->right = node;
                 break;
             }
             parent = right;
         } else {
-            int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x10);
+            WorkSchedulerCountNode* left = parent->left;
             if (left == nullptr) {
-                node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+                node = static_cast<WorkSchedulerCountNode*>(
+                    System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
                 if (node) {
-                    *reinterpret_cast<uint64_t*>(node) = value;
-                    *reinterpret_cast<int32_t**>(node + 2) = parent;
-                    node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0;
+                    node->key = key;
+                    node->workId = workId;
+                    node->parent = parent;
+                    node->left = nullptr; node->right = nullptr;
+                    node->balance = 0; node->height = 0;
                 }
-                *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x10) = node;
+                parent->left = node;
                 break;
             }
             parent = left;
         }
     }
-    int64_t cursor = reinterpret_cast<int64_t>(parent);
-    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(treeRoot), &cursor);
+    RebalanceCountTree(treeRoot, parent);
     *outInserted = true;
     return node;
 }
 
-// Layout-A BST search by int32 key. left@0x10, right@0x18.
-static int32_t* LayoutA_Find(int32_t* root, int32_t key) {
-    int32_t* node = root;
-    while (node != nullptr) {
-        if (key < *node) {
-            node = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(node) + 0x10);
-        } else if (*node < key) {
-            node = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(node) + 0x18);
-        } else {
-            return node;
-        }
+// A fresh 0x30 id node {key, work} under `parent` (null for a new root).
+WorkSchedulerIdNode* NewIdNode(int32_t key, Object::InternalPtr<Work> work,
+                               WorkSchedulerIdNode* parent) {
+    WorkSchedulerIdNode* node = static_cast<WorkSchedulerIdNode*>(
+        System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
+    if (node) {
+        node->key = key;
+        node->work = work;
+        node->parent = parent;
+        node->left = nullptr; node->right = nullptr;
+        node->balance = 0; node->height = 0;
     }
-    return nullptr;
+    return node;
 }
 
-// Layout-B BST search by int32 key. left@0x18, right@0x20.
-static int32_t* LayoutB_Find(int32_t* root, int32_t key) {
-    int32_t* node = root;
-    while (node != nullptr) {
-        if (key < *node) {
-            node = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(node) + 0x18);
-        } else if (*node < key) {
-            node = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(node) + 0x20);
-        } else {
-            return node;
-        }
-    }
-    return nullptr;
-}
-
-} // namespace
-
 // ============================================================
-// 0x14002cfb0 — recursive deep-copy of a Layout-B (0x30 node) subtree.
-// param_1 is unused by retail beyond being forwarded (allocator context placeholder).
+// 0x14002cfb0 — recursive deep-copy of a 0x30-node subtree. (Retail's first argument is only
+// forwarded to the recursion.)
 // ============================================================
-extern "C" int32_t* Goals_LayoutB_DeepCopy_cfb0(uint64_t param_1, int32_t* src) {
-    int32_t* dst = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+WorkSchedulerIdNode* CopyIdSubtree(const WorkSchedulerIdNode* src) {
+    WorkSchedulerIdNode* dst = static_cast<WorkSchedulerIdNode*>(
+        System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
     if (dst != nullptr) {
-        dst[0] = src[0];
-        *reinterpret_cast<uint64_t*>(dst + 2) = *reinterpret_cast<uint64_t*>(src + 2); // payload/IBP @0x08
-        *reinterpret_cast<uint64_t*>(dst + 4) = 0; // parent
-        *reinterpret_cast<uint64_t*>(dst + 6) = 0; // left
-        *reinterpret_cast<uint64_t*>(dst + 8) = 0; // right
-        dst[10] = 0; // balance+height (4B @ 0x28)
+        dst->key = src->key;
+        dst->work = src->work;   // payload @0x08
+        dst->parent = nullptr;
+        dst->left = nullptr;
+        dst->right = nullptr;
+        dst->balance = 0; dst->height = 0;
     }
     // Faithful: retail derefs `dst` unconditionally here even on OOM (dst==null) — no guard added.
-    *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(dst) + 0x2a) =
-        *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(src) + 0x2a);
-    *reinterpret_cast<int16_t*>(dst + 10) = *reinterpret_cast<int16_t*>(src + 10);
+    dst->height = src->height;
+    dst->balance = src->balance;
 
-    if (*reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(src) + 0x18) != nullptr) {
-        int32_t* leftSrc = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(src) + 0x18);
-        int32_t* leftCopy = Goals_LayoutB_DeepCopy_cfb0(param_1, leftSrc);
-        *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(dst) + 0x18) = leftCopy;
-        *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(leftCopy) + 0x10) = dst;
+    if (src->left != nullptr) {
+        WorkSchedulerIdNode* leftCopy = CopyIdSubtree(src->left);
+        dst->left = leftCopy;
+        leftCopy->parent = dst;
     }
-    if (*reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(src) + 0x20) != nullptr) {
-        int32_t* rightSrc = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(src) + 0x20);
-        int32_t* rightCopy = Goals_LayoutB_DeepCopy_cfb0(param_1, rightSrc);
-        *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(dst) + 0x20) = rightCopy;
-        *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(rightCopy) + 0x10) = dst;
+    if (src->right != nullptr) {
+        WorkSchedulerIdNode* rightCopy = CopyIdSubtree(src->right);
+        dst->right = rightCopy;
+        rightCopy->parent = dst;
     }
     return dst;
 }
 
 // ============================================================
-// 0x14002ceb0 — Layout-C (0x38 node) copy-ctor. dst = fresh 0x38 buffer, src = {key@0,
-// subtreeRoot@8, int@0x10}, parent = the new node's parent pointer.
+// 0x14002ceb0 — bucket node copy-ctor: `dst` is a fresh 0x38 buffer, `src` the record, `parent`
+// the new node's parent.
 // ============================================================
-extern "C" uint8_t* Goals_LayoutC_CopyCtor_ceb0(uint8_t* dst, const uint8_t* src, void* parent) {
-    *reinterpret_cast<uint64_t*>(dst) = *reinterpret_cast<const uint64_t*>(src); // key
-    *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;
-    *reinterpret_cast<uint32_t*>(dst + 0x10) = 0;
-    if (src + 0x08 != dst + 0x08) { // always true at our call sites; kept for fidelity
-        const int32_t* srcSubtree = *reinterpret_cast<int32_t* const*>(src + 0x08);
-        if (srcSubtree != nullptr) {
-            int32_t* copy = Goals_LayoutB_DeepCopy_cfb0(0, const_cast<int32_t*>(srcSubtree));
-            *reinterpret_cast<int32_t**>(dst + 0x08) = copy;
+WorkSchedulerBucketNode* CopyBucketNode(WorkSchedulerBucketNode* dst, const WorkSchedulerBucket* src,
+                                        WorkSchedulerBucketNode* parent) {
+    dst->bucket.key = src->key;
+    dst->bucket.entries.root = nullptr;
+    dst->bucket.entries.count = 0;
+    if (&src->entries != &dst->bucket.entries) { // always true at our call sites; kept for fidelity
+        if (src->entries.root != nullptr) {
+            dst->bucket.entries.root = CopyIdSubtree(src->entries.root);
         }
-        *reinterpret_cast<uint32_t*>(dst + 0x10) = *reinterpret_cast<const uint32_t*>(src + 0x10);
+        dst->bucket.entries.count = src->entries.count;
     }
-    *reinterpret_cast<void**>(dst + 0x18) = parent;
-    *reinterpret_cast<uint64_t*>(dst + 0x20) = 0; // left
-    *reinterpret_cast<uint64_t*>(dst + 0x28) = 0; // right
-    *reinterpret_cast<uint32_t*>(dst + 0x30) = 0; // balance/height
+    dst->parent = parent;
+    dst->left = nullptr;
+    dst->right = nullptr;
+    dst->balance = 0; dst->height = 0;
     return dst;
 }
 
 // ============================================================
-// 0x14002ccf0 — Layout-C BST insert. treeField = {root@0, count@8}. pKey = {u64 key@0,
-// subtreeRoot@8, int@0x10} (the record to insert-or-find). On existing key: writes the
-// existing node to *pOut. Otherwise allocates via ceb0, links, rebalances (0x140014b40).
+// 0x14002ccf0 — bucket-tree insert. On an existing key: writes the existing node to *pOut.
+// Otherwise allocates via ceb0, links, rebalances (0x140014b40).
 // ============================================================
-extern "C" void** Goals_LayoutC_Insert_ccf0(uint64_t* treeField, void** pOut, const uint8_t* pKey) {
-    uint64_t key = *reinterpret_cast<const uint64_t*>(pKey);
-    uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
-    uint8_t* result;
+WorkSchedulerBucketNode** InsertBucket(WorkSchedulerBucketNode** treeRoot, int32_t* treeCount,
+                                       WorkSchedulerBucketNode** pOut, const WorkSchedulerBucket* rec) {
+    Profession* const key = rec->key;   // compared as unsigned qwords (pointer order)
+    WorkSchedulerBucketNode* root = *treeRoot;
+    WorkSchedulerBucketNode* result;
     if (root == nullptr) {
-        uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
-        result = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, nullptr) : nullptr;
-        *reinterpret_cast<uint8_t**>(treeField) = result;
+        WorkSchedulerBucketNode* buf = static_cast<WorkSchedulerBucketNode*>(
+            System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerBucketNode), 8));
+        result = buf ? CopyBucketNode(buf, rec, nullptr) : nullptr;
+        *treeRoot = result;
     } else {
-        uint8_t* cur = root;
-        uint8_t* parent = cur;
+        WorkSchedulerBucketNode* cur = root;
+        WorkSchedulerBucketNode* parent = cur;
         for (;;) {
             parent = cur;
-            uint64_t nodeKey = *reinterpret_cast<uint64_t*>(parent);
+            Profession* const nodeKey = parent->bucket.key;
             if (nodeKey <= key) {
                 if (key <= nodeKey) {
                     *pOut = parent;
                     return pOut;
                 }
-                cur = *reinterpret_cast<uint8_t**>(parent + 0x28); // right
+                cur = parent->right;
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
-                    uint8_t* node = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, parent) : nullptr;
-                    *reinterpret_cast<uint8_t**>(parent + 0x28) = node;
+                    WorkSchedulerBucketNode* buf = static_cast<WorkSchedulerBucketNode*>(
+                        System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerBucketNode), 8));
+                    WorkSchedulerBucketNode* node = buf ? CopyBucketNode(buf, rec, parent) : nullptr;
+                    parent->right = node;
                     result = node;
-                    goto rebalance;
+                    break;
                 }
             } else {
-                cur = *reinterpret_cast<uint8_t**>(parent + 0x20); // left
+                cur = parent->left;
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
-                    uint8_t* node = buf ? Goals_LayoutC_CopyCtor_ceb0(buf, pKey, parent) : nullptr;
-                    *reinterpret_cast<uint8_t**>(parent + 0x20) = node;
+                    WorkSchedulerBucketNode* buf = static_cast<WorkSchedulerBucketNode*>(
+                        System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerBucketNode), 8));
+                    WorkSchedulerBucketNode* node = buf ? CopyBucketNode(buf, rec, parent) : nullptr;
+                    parent->left = node;
                     result = node;
-                    goto rebalance;
+                    break;
                 }
             }
         }
-    rebalance:
-        int64_t cursor = reinterpret_cast<int64_t>(parent);
-        TradeWork_impl_4b40(reinterpret_cast<int64_t*>(treeField), &cursor);
+        RebalanceBucketTree(treeRoot, parent);
     }
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(treeField) + 0x08) += 1; // count++
+    *treeCount += 1;
     *pOut = result;
     return pOut;
 }
 
 // ============================================================
-// 0x1400f8270 — TradeComponent_helper_8270 (SAVE-side pre-pass). In-order walk of the
-// idTree (self+0x30, Layout B); CheckPtr the payload IBP then call vtbl+0x48 on the
-// pointed entity (self, no extra args).
+// 0x14002d340 — one id tree. On LOAD, rebuilds the tree from the stream; on SAVE, walks it
+// in-order. Each Work is IsDerivedFrom-filtered against Work::TypeId() (non-Work -> null).
 // ============================================================
-extern "C" void Goals_SavePrepass_8270(void* selfV) {
-    uint8_t* selfB = reinterpret_cast<uint8_t*>(selfV);
-    uint8_t* root = *reinterpret_cast<uint8_t**>(selfB + 0x30);
-    for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-        uint8_t* ibpField = node + 0x08;
-        void* entity = *reinterpret_cast<void**>(ibpField);
-        reinterpret_cast<Work*>(entity)->Validate();   // B.3.x bridge (slot 9; 0x1400f82b1 RCX only)
-    }
-}
+void SerializeIdTree(WorkSchedulerTree* tree, IO::Serializer& ser) {
+    int32_t count = tree->count;
+    ser.Serialize(count, nullptr);
 
-// ============================================================
-// 0x14002d340 — single Layout-B tree serializer (same shape as one d060 slot body).
-// treeField = {root@0, count@8}. On LOAD, rebuilds the tree from the stream; on SAVE,
-// walks it in-order. IsDerivedFrom-filters payload against Work::TypeId() (nulls non-Work).
-// ============================================================
-extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serializer) {
-    int32_t count = static_cast<int32_t>(treeField[1]);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
-            // Retail re-reads *param_1 on every iteration — the previous insertion
+            // Retail re-reads the root on every iteration — the previous insertion
             // may have installed (or rebalanced) the root. Hoisting this read out of
             // the loop (as an earlier copy of the d060 body did) leaves `root` pinned
             // at the entry value, so every key takes the "empty tree" path and
             // overwrites the single root node instead of building the tree.
-            int32_t* root = reinterpret_cast<int32_t*>(treeField[0]);
+            WorkSchedulerIdNode* root = tree->root;
             int32_t key = 0;
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
-            void* payload = nullptr;
-            reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
-                payload = nullptr;
-            }
-            int32_t* node = LayoutB_Find(root, key);
+            ser.Serialize(key, nullptr);
+            Object::InternalPtr<Work> payload;
+            payload.Serialize(ser, Work::TypeId());   // nulls a non-Work
+            WorkSchedulerIdNode* node = FindByKey(root, key);
             if (node == nullptr) {
                 if (root == nullptr) {
-                    node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
-                    if (node) {
-                        node[0] = key;
-                        *reinterpret_cast<int32_t**>(node + 2) = reinterpret_cast<int32_t*>(payload);
-                        node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0; node[9] = 0; node[10] = 0;
-                    }
-                    treeField[0] = reinterpret_cast<int64_t>(node);
+                    tree->root = NewIdNode(key, payload, nullptr);
                 } else {
-                    int32_t* parent = root;
-                    int32_t* fresh = nullptr;
+                    WorkSchedulerIdNode* parent = root;
                     for (;;) {
-                        if (*parent <= key) {
-                            int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20);
-                            if (right == nullptr) {
-                                fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
-                                if (fresh) {
-                                    fresh[0] = key;
-                                    *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
-                                    *reinterpret_cast<int32_t**>(fresh + 4) = parent;
-                                    fresh[6] = 0; fresh[7] = 0; fresh[8] = 0; fresh[9] = 0; fresh[10] = 0;
-                                }
-                                *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20) = fresh;
+                        if (parent->key <= key) {
+                            if (parent->right == nullptr) {
+                                parent->right = NewIdNode(key, payload, parent);
                                 break;
                             }
-                            parent = right;
+                            parent = parent->right;
                         } else {
-                            int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
-                            if (left == nullptr) {
-                                fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
-                                if (fresh) {
-                                    fresh[0] = key;
-                                    *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
-                                    *reinterpret_cast<int32_t**>(fresh + 4) = parent;
-                                    fresh[6] = 0; fresh[7] = 0; fresh[8] = 0; fresh[9] = 0; fresh[10] = 0;
-                                }
-                                *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18) = fresh;
+                            if (parent->left == nullptr) {
+                                parent->left = NewIdNode(key, payload, parent);
                                 break;
                             }
-                            parent = left;
+                            parent = parent->left;
                         }
                     }
-                    int64_t cursor = reinterpret_cast<int64_t>(parent);
-                    Pf_AvlRebalanceB_13480(treeField, &cursor);
-                    node = fresh;
+                    RebalanceIdTree(&tree->root, parent);
                 }
-                treeField[1] += 1;
+                tree->count += 1;
             }
         }
     } else {
-        uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
-        for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
-            reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            void* payload = *reinterpret_cast<void**>(node + 0x08);
-            if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
-                *reinterpret_cast<void**>(node + 0x08) = nullptr;
-            }
-        }
-    }
-}
-
-
-// ============================================================
-// 0x14002d060 — 14/15-slot Layout-B tree array serializer. count = number of slots
-// (0xe or 0xf, version-gated by the caller). arrayBase = base of the {root,count} header
-// array (stride 0x10). outParam forwarded through (unused directly here, matches retail:
-// it's read by param_4 but never dereferenced inside this function body).
-// ============================================================
-
-extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, int64_t* arrayBase, int32_t* /*outParam*/) {
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    int64_t* slot = arrayBase;
-    for (int32_t s = 0; s < count; ++s, slot += 2) {
-        int32_t slotCount = static_cast<int32_t>(slot[1]);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(slotCount, nullptr);   // B.3.4 bridge
-
-        if (loading) {
-            for (int32_t i = 0; i < slotCount; ++i) {
-                int32_t key = 0;
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
-                void* payload = nullptr;
-                reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-                if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
-                    payload = nullptr;
-                }
-                int32_t* root = reinterpret_cast<int32_t*>(slot[0]);
-                int32_t* existing = LayoutB_Find(root, key);
-                if (existing == nullptr) {
-                    if (root == nullptr) {
-                        int32_t* node = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
-                        if (node) {
-                            node[0] = key;
-                            *reinterpret_cast<int32_t**>(node + 2) = reinterpret_cast<int32_t*>(payload);
-                            node[4] = 0; node[5] = 0; node[6] = 0; node[7] = 0; node[8] = 0; node[9] = 0; node[10] = 0;
-                        }
-                        slot[0] = reinterpret_cast<int64_t>(node);
-                    } else {
-                        int32_t* parent = root;
-                        int32_t* fresh = nullptr;
-                        for (;;) {
-                            if (*parent <= key) {
-                                int32_t* right = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20);
-                                if (right == nullptr) {
-                                    fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
-                                    if (fresh) {
-                                        fresh[0] = key;
-                                        *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
-                                        *reinterpret_cast<int32_t**>(fresh + 4) = parent;
-                                        fresh[6] = 0; fresh[7] = 0; fresh[8] = 0; fresh[9] = 0; fresh[10] = 0;
-                                    }
-                                    *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x20) = fresh;
-                                    break;
-                                }
-                                parent = right;
-                            } else {
-                                int32_t* left = *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18);
-                                if (left == nullptr) {
-                                    fresh = reinterpret_cast<int32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
-                                    if (fresh) {
-                                        fresh[0] = key;
-                                        *reinterpret_cast<int32_t**>(fresh + 2) = reinterpret_cast<int32_t*>(payload);
-                                        *reinterpret_cast<int32_t**>(fresh + 4) = parent;
-                                        fresh[6] = 0; fresh[7] = 0; fresh[8] = 0; fresh[9] = 0; fresh[10] = 0;
-                                    }
-                                    *reinterpret_cast<int32_t**>(reinterpret_cast<uint8_t*>(parent) + 0x18) = fresh;
-                                    break;
-                                }
-                                parent = left;
-                            }
-                        }
-                        int64_t cursor = reinterpret_cast<int64_t>(parent);
-                        Pf_AvlRebalanceB_13480(slot, &cursor);
-                    }
-                    slot[1] += 1;
-                }
-            }
-        } else {
-            uint8_t* root = reinterpret_cast<uint8_t*>(slot[0]);
-            for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
-                reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-                void* payload = *reinterpret_cast<void**>(node + 0x08);
-                if (payload != nullptr && !::Object::IsDerivedFromNullSafe(payload, Work::TypeId())) {
-                    *reinterpret_cast<void**>(node + 0x08) = nullptr;
-                }
-            }
+        for (WorkSchedulerIdNode* node = Leftmost(tree->root); node; node = Next(node)) {
+            ser.Serialize(node->key, nullptr);
+            node->work.Serialize(ser, Work::TypeId());   // nulls a non-Work
         }
     }
 }
 
 // ============================================================
-// 0x14002d5f0 — Layout-C (0x38 node) tree serializer. param_1 = {root@0, count@8}.
+// 0x14002d060 — the 14/15-tree array serializer. count = number of trees (0xe or 0xf,
+// version-gated by the caller). Retail inlines 0x14002d340's body for each tree (the stream
+// direction is read once; it does not change between trees). Its fourth register (R9) is
+// spilled to its home slot and never read; 0x1400f9240 leaves it unset.
 // ============================================================
-extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializer) {
-    int32_t count = static_cast<int32_t>(treeField[1]);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+void SerializeIdTrees(IO::Serializer& ser, int32_t count, WorkSchedulerTree* trees) {
+    for (int32_t s = 0; s < count; ++s) {
+        SerializeIdTree(&trees[s], ser);
+    }
+}
 
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+// ============================================================
+// 0x14002d5f0 — the bucket tree serializer.
+// ============================================================
+void SerializeBucketTree(WorkSchedulerBucketNode** treeRoot, int32_t* treeCount, IO::Serializer& ser) {
+    int32_t count = *treeCount;
+    ser.Serialize(count, nullptr);
+
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
-            // Record layout (retail's local_40/local_38/local_30 triple):
-            //   +0x00 u64 external key, +0x08 subtree root, +0x10 u32 subtree count.
-            // The {root,count} header d340 fills IS record+0x08 — retail passes
-            // &local_38, not a separate pair. Building the subtree somewhere else and
-            // then inserting the record loses every Work subtree on load.
-            uint8_t recordBuf[0x18];
-            std::memset(recordBuf, 0, sizeof(recordBuf));
-            Reimpl_ExternalPtr_Serialize_StringTable(recordBuf, serializer);
+            // Record layout (retail's local_40/local_38/local_30 triple): the key and the
+            // {root,count} header d340 fills — retail passes &local_38, not a separate pair.
+            // Building the subtree somewhere else and then inserting the record loses every
+            // Work subtree on load.
+            WorkSchedulerBucket rec = {};
+            Reimpl_ExternalPtr_Serialize_StringTable(&rec.key, &ser);   // ExternalPtr<Profession> (0x140018020)
+            SerializeIdTree(&rec.entries, ser);
 
-            int64_t* subtreeField = reinterpret_cast<int64_t*>(recordBuf + 8);
-            Goals_SingleTree_Serialize_d340(subtreeField, serializer);
-
-            void* outNode = nullptr;
-            Goals_LayoutC_Insert_ccf0(reinterpret_cast<uint64_t*>(treeField), &outNode, recordBuf);
+            WorkSchedulerBucketNode* outNode = nullptr;
+            InsertBucket(treeRoot, treeCount, &outNode, &rec);
             // The insert deep-copies the record, so the subtree we just built is ours to
             // release — retail's FUN_14000e320 free-then-MemFree pair on the same header.
-            if (subtreeField[0] != 0) {
-                void* subRoot = reinterpret_cast<void*>(subtreeField[0]);
-                WorkBase_TreeNodeFree_e320(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x18)); // left
-                WorkBase_TreeNodeFree_e320(subtreeField, *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(subRoot) + 0x20)); // right
+            if (rec.entries.root != nullptr) {
+                WorkSchedulerIdNode* subRoot = rec.entries.root;
+                WorkBase_TreeNodeFree_e320(&rec.entries, subRoot->left);
+                WorkBase_TreeNodeFree_e320(&rec.entries, subRoot->right);
                 System::MemoryAllocator::MemFree(subRoot);
             }
         }
     } else {
-        uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
-        // Layout-C in-order walk: parent@0x18, left@0x20, right@0x28.
-        auto leftmostC = [](uint8_t* n) -> uint8_t* {
-            if (!n) return nullptr;
-            while (*reinterpret_cast<uint8_t**>(n + 0x20)) n = *reinterpret_cast<uint8_t**>(n + 0x20);
-            return n;
-        };
-        auto nextC = [&leftmostC](uint8_t* n) -> uint8_t* {
-            uint8_t* right = *reinterpret_cast<uint8_t**>(n + 0x28);
-            if (right) return leftmostC(right);
-            uint8_t* parent = *reinterpret_cast<uint8_t**>(n + 0x18);
-            uint8_t* cur = n;
-            while (parent && *reinterpret_cast<uint8_t**>(parent + 0x28) == cur) {
-                cur = parent;
-                parent = *reinterpret_cast<uint8_t**>(parent + 0x18);
-            }
-            return parent;
-        };
-        for (uint8_t* cNode = leftmostC(root); cNode; cNode = nextC(cNode)) {
-            Reimpl_ExternalPtr_Serialize_StringTable(cNode, serializer);
-            // Retail passes plVar5+1 — the node's OWN {root@+0x08, count@+0x10}
-            // header. Copying the root into a stack pair with a zeroed count made
-            // d340 write "0 entries" and then walk the real subtree anyway, so the
-            // save stream carried N records the load never read back: the reader
-            // stopped at count 0 and hit those records as the next record's key.
-            Goals_SingleTree_Serialize_d340(
-                reinterpret_cast<int64_t*>(cNode + 0x08), serializer);
+        for (WorkSchedulerBucketNode* cNode = Leftmost(*treeRoot); cNode; cNode = Next(cNode)) {
+            Reimpl_ExternalPtr_Serialize_StringTable(&cNode->bucket.key, &ser);
+            // Retail passes the node's OWN {root, count} header. Copying the root into a
+            // stack pair with a zeroed count made d340 write "0 entries" and then walk the
+            // real subtree anyway, so the save stream carried N records the load never read
+            // back: the reader stopped at count 0 and hit those records as the next record's key.
+            SerializeIdTree(&cNode->bucket.entries, ser);
         }
     }
 }
 
-// ============================================================
-// 0x1400f9240 — main manager serializer.
-// ============================================================
-extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, int32_t* outParam) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+} // namespace
 
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+// ============================================================
+// 0x1400f8270 — the SAVE-side pre-pass. In-order walk of the id tree (+0x30), slot 9 on each
+// Work (CheckPtr, a bare RET, first).
+// ============================================================
+void WorkScheduler::ValidateAll() {
+    for (WorkSchedulerIdNode* node = Leftmost(trees[0].root); node; node = Next(node)) {
+        node->work->Validate();   // slot 9; 0x1400f82b1 RCX only
+    }
+}
 
-    bool saving = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 1);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+// ============================================================
+// 0x1400f9240 — the scheduler's serializer (version 3).
+// ============================================================
+void WorkScheduler::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 3);
+
+    bool saving = (static_cast<int>(stream.GetDirection()) == 1);   // IO::Stream::GetDirection, retail 0x180006200
     if (saving) {
-        Goals_SavePrepass_8270(selfV);
+        ValidateAll();
     }
 
-    int32_t version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    int32_t version = ser.GetVersion();
     int32_t slotCount = (version > 2) ? 0xf : 0xe;
 
-    Goals_TreeArray_Serialize_d060(serializerBuf, slotCount, reinterpret_cast<int64_t*>(self + 0x30), outParam);
-    Goals_WorkTree_Serialize_d5f0(reinterpret_cast<int64_t*>(self + 0x120), serializerBuf);
+    SerializeIdTrees(ser, slotCount, trees);
+    SerializeBucketTree(&field_0x120, &field_0x128, ser);
 
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int32_t*>(self + 0x00), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int32_t*>(self + 0x04), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<uint32_t*>(self + 0x08), nullptr);   // B.3.4 bridge
+    ser.Serialize(field_0x00, nullptr);
+    ser.Serialize(field_0x04, nullptr);
+    ser.Serialize(stepCount, nullptr);
 
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+    bool loading = (static_cast<int>(stream.GetDirection()) == 0);   // IO::Stream::GetDirection, retail 0x180006200
     if (loading) {
-        int32_t* workCountRoot = *reinterpret_cast<int32_t**>(self + 0x10);
+        WorkSchedulerCountNode* workCountRoot = field_0x10;
 
-        // --- Stage 1: walk the idTree (self+0x30), notify each entity (vtbl+0x60), and for
-        // version==2 entries build the workCountTree (self+0x10) keyed by the running counter
-        // at self+0x18. ---
+        // --- Stage 1: walk the id tree (+0x30), notify each Work (slot 12), and for
+        // version==2 entries build the +0x10 tree keyed by the running counter at +0x18. ---
         {
-            uint8_t* idRoot = *reinterpret_cast<uint8_t**>(self + 0x30);
-            for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
-                uint8_t* ibpField = node + 0x08;
-                void* entity = *reinterpret_cast<void**>(ibpField);
+            for (WorkSchedulerIdNode* node = Leftmost(trees[0].root); node; node = Next(node)) {
+                Work* work = node->work.Get();
 
                 // 0x1400f9335..0x1400f9340: the version is passed as EDX to slot 12.
-                const int32_t slot12Ver = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-                reinterpret_cast<Work*>(entity)->Slot12(slot12Ver);   // B.3.x bridge (slot 12)
+                const int32_t slot12Ver = ser.GetVersion();
+                work->Slot12(slot12Ver);
 
-                int32_t ver = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+                int32_t ver = ser.GetVersion();
                 if (ver == 2) {
-                    int32_t counter = *reinterpret_cast<int32_t*>(self + 0x18);
-                    uint32_t hi = *reinterpret_cast<uint32_t*>(*reinterpret_cast<uint8_t**>(ibpField) + 0x20);
-                    uint64_t value = static_cast<uint64_t>(static_cast<uint32_t>(counter)) |
-                                      (static_cast<uint64_t>(hi) << 32);
+                    int32_t counter = field_0x18;
+                    uint32_t workId = static_cast<uint32_t>(node->work->field_20);
                     bool inserted = false;
-                    LayoutA_Insert(&workCountRoot, value, &inserted);
+                    CountTreeInsert(&workCountRoot, counter, workId, &inserted);
                     if (inserted) {
-                        *reinterpret_cast<int32_t*>(self + 0x18) = counter + 1;
+                        field_0x18 = counter + 1;
                     }
                 }
             }
-            *reinterpret_cast<int32_t**>(self + 0x10) = workCountRoot;
+            field_0x10 = workCountRoot;
         }
 
-        // --- Stage 2: re-walk the idTree; for entries whose entity+0x10 field is nonzero,
-        // collect the bare id into local_60 (a fresh Layout-A set). ---
-        int32_t* localFoundRoot = nullptr;
+        // --- Stage 2: re-walk the id tree; for Works whose entity (+0x10) is set, collect the
+        // bare id into a fresh 0x28-node set (retail's local_60). ---
+        WorkSchedulerCountNode* localFoundRoot = nullptr;
         int32_t localFoundCount = 0;
         {
-            uint8_t* idRoot = *reinterpret_cast<uint8_t**>(self + 0x30);
-            for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
-                uint8_t* ibpField = node + 0x08;
-                void* entity = *reinterpret_cast<void**>(ibpField);
-                if (*reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(entity) + 0x10) != 0) {
-                    uint64_t value = static_cast<uint32_t>(*reinterpret_cast<int32_t*>(node)); // key only; upper 32 unused by retail
+            for (WorkSchedulerIdNode* node = Leftmost(trees[0].root); node; node = Next(node)) {
+                Work* work = node->work.Get();
+                if (work->field_10 != nullptr) {
                     bool inserted = false;
-                    LayoutA_Insert(&localFoundRoot, value, &inserted);
+                    CountTreeInsert(&localFoundRoot, node->key, 0, &inserted); // key only; upper 32 unused by retail
                     localFoundCount++;
                 }
             }
         }
 
-        // --- Stage 3: scan the live GameWorld entity list; for each entity, find its
-        // WorkComponent (TypeId_WorkComponent), look its workId up in the world work-slot
-        // tree (*g_pGameWorldSingleton+0x118)+0x30 == self+0x30's OWN tree), and if present,
-        // erase the matching id from localFoundRoot (it's still alive). ---
+        // --- Stage 3: scan the live entity list; for each entity, find its WorkComponent,
+        // look its workId up in the id tree (the world's m_tutorial +0x30 == this tree), and if
+        // present, erase the matching id from localFoundRoot (it's still alive). ---
         if (GameUpdateLoop::_singleton != nullptr) {
-            uint8_t* gameWorld = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-            void* entityListObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_entityList;   // B.3.8 bridge
-            int32_t entityCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entityListObj) + 0x10);
-            void* entityArrayBase = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entityListObj) + 0x08);
+            GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+            EntityList* entityList = gameWorld->m_entityList;
+            int32_t entityCount = entityList->masterArray.count;
 
             for (int32_t i = 0; i < entityCount; ++i) {
-                void* entity = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entityArrayBase) + i * 8);
+                ComponentEntity* entity = entityList->masterArray.data[i];
+                WorkComponent* workComponent = entity->FindComponent<WorkComponent>();
+                if (workComponent != nullptr) {
+                    int32_t workId = workComponent->workId;
 
-                void* workComponent = nullptr;
-                int32_t compCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x38);
-                if (compCount > 0) {
-                    void* compArrayBase = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(entity) + 0x30);
-                    for (int32_t c = 0; c < compCount; ++c) {
-                        void** slot = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(compArrayBase) + c * 8);
-                        void* comp = *slot;
-                        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-                        if (tid == WorkComponent::TypeId()) {
-                            void* obj = *slot;
-                            bool derived = ::Object::IsDerivedFromNullSafe(obj, WorkComponent::TypeId());
-                            workComponent = derived ? obj : nullptr;
-                            break;
-                        }
-                    }
-                }
-
-                void* ibp = nullptr;
-                new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(workComponent));   // B.3.3 bridge
-                if (ibp != nullptr) {
-                    int32_t workId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(ibp) + 0x28);
-
-                    uint8_t* slotRoot = reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_tutorial);   // B.3.8 bridge
-                    slotRoot = *reinterpret_cast<uint8_t**>(slotRoot + 0x30);
-                    int32_t* slotNode = LayoutB_Find(reinterpret_cast<int32_t*>(slotRoot), workId);
-
+                    WorkSchedulerIdNode* slotNode = FindByKey(gameWorld->m_tutorial->trees[0].root, workId);
                     if (slotNode != nullptr) {
-                        int32_t* found = LayoutA_Find(localFoundRoot, workId);
+                        WorkSchedulerCountNode* found = FindByKey(localFoundRoot, workId);
                         if (found != nullptr) {
-                            WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&localFoundRoot), found);
+                            EraseCountNode(&localFoundRoot, found);
                         }
                     }
                 }
@@ -722,91 +525,88 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
         }
 
         // --- Stage 4: for every id remaining in localFoundRoot (genuinely dead), remove it
-        // from the 14/15-tree array, workCountTree, and the Layout-C work tree, then delete
-        // the entity and drop it from the idTree itself. ---
+        // from the 14 other trees, the +0x10 tree and the bucket tree, then delete the Work
+        // and drop it from the id tree itself. ---
         if (localFoundRoot != nullptr) {
-            for (uint8_t* idNode = BstLeftmostA(reinterpret_cast<uint8_t*>(localFoundRoot)); idNode; ) {
-                int32_t deadId = *reinterpret_cast<int32_t*>(idNode);
-                uint8_t* nextIdNode = BstNextA(idNode); // capture successor before any mutation below
+            for (WorkSchedulerCountNode* idNode = Leftmost(localFoundRoot); idNode; ) {
+                int32_t deadId = idNode->key;
+                WorkSchedulerCountNode* nextIdNode = Next(idNode); // capture successor before any mutation below
 
-                int32_t* idTreeNode = LayoutB_Find(reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(self + 0x30)), deadId);
+                WorkSchedulerIdNode* idTreeNode = FindByKey(trees[0].root, deadId);
                 if (idTreeNode != nullptr) {
-                    // Erase the id from all 14 remaining slot-array trees (self+0x40..+0x11F).
-                    int64_t* slot = reinterpret_cast<int64_t*>(self + 0x40);
-                    for (int32_t s = 0; s < 14; ++s, slot += 2) {
-                        int32_t* subRoot = reinterpret_cast<int32_t*>(slot[0]);
-                        int32_t* match = LayoutB_Find(subRoot, deadId);
+                    // Erase the id from the 14 remaining trees (+0x40..+0x11F).
+                    for (int32_t s = 1; s < 15; ++s) {
+                        WorkSchedulerIdNode* match = FindByKey(trees[s].root, deadId);
                         if (match != nullptr) {
-                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(slot), match);
+                            EraseIdNode(&trees[s], match);
                         }
                     }
 
-                    uint8_t* ibpField = reinterpret_cast<uint8_t*>(idTreeNode) + 0x08; // node+0x08
-                    void* entity = *reinterpret_cast<void**>(ibpField);
-                    int32_t orderKey = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x24);
+                    Work* work = idTreeNode->work.Get();
+                    int32_t orderKey = work->field_24;
 
-                    int32_t* workCountRoot2 = *reinterpret_cast<int32_t**>(self + 0x10);
-                    int32_t* wcMatch = LayoutA_Find(workCountRoot2, orderKey);
+                    WorkSchedulerCountNode* workCountRoot2 = field_0x10;
+                    WorkSchedulerCountNode* wcMatch = FindByKey(workCountRoot2, orderKey);
                     if (wcMatch != nullptr) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&workCountRoot2), wcMatch);
-                        *reinterpret_cast<int32_t**>(self + 0x10) = workCountRoot2;
+                        EraseCountNode(&workCountRoot2, wcMatch);
+                        field_0x10 = workCountRoot2;
                     }
 
-                    uint8_t keyOutBuf[0x20];
-                    std::memset(keyOutBuf, 0, sizeof(keyOutBuf));
-                    uint64_t* keyPtr = static_cast<uint64_t*>(
-                        reinterpret_cast<Work*>(entity)->GetTarget(keyOutBuf));   // B.3.x bridge (slot 10)
+                    // Slot 10 writes the Work's target Profession into the return slot (every
+                    // Work's GetTarget returns the slot it was handed).
+                    Profession* target[4] = {};
+                    work->GetTarget(target);
 
-                    uint8_t* workTreeRoot = *reinterpret_cast<uint8_t**>(self + 0x120);
-                    uint8_t* cNode = workTreeRoot;
+                    // The keys compare as unsigned qwords (pointer order).
+                    Profession* const targetKey = target[0];
+                    WorkSchedulerBucketNode* cNode = field_0x120;
                     while (cNode != nullptr) {
-                        uint64_t nodeKey = *reinterpret_cast<uint64_t*>(cNode);
-                        if (*keyPtr < nodeKey) {
-                            cNode = *reinterpret_cast<uint8_t**>(cNode + 0x20); // left
-                        } else if (nodeKey < *keyPtr) {
-                            cNode = *reinterpret_cast<uint8_t**>(cNode + 0x28); // right
+                        Profession* const nodeKey = cNode->bucket.key;
+                        if (targetKey < nodeKey) {
+                            cNode = cNode->left;
+                        } else if (nodeKey < targetKey) {
+                            cNode = cNode->right;
                         } else {
                             break;
                         }
                     }
                     if (cNode != nullptr) {
-                        int32_t* subtreeRoot = *reinterpret_cast<int32_t**>(cNode + 0x08);
-                        int32_t* subMatch = LayoutB_Find(subtreeRoot, deadId);
+                        WorkSchedulerIdNode* subMatch = FindByKey(cNode->bucket.entries.root, deadId);
                         if (subMatch != nullptr) {
-                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(cNode + 0x08), subMatch);
+                            EraseIdNode(&cNode->bucket.entries, subMatch);
                         }
                     }
 
-                    reinterpret_cast< ::Object::InternalBasePtr*>(ibpField)->DeletePtr(
-                        );   // B.3.3 bridge
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(self + 0x30), idTreeNode);
+                    idTreeNode->work.DeletePtr();
+                    EraseIdNode(&trees[0], idTreeNode);
                 }
 
                 idNode = nextIdNode;
             }
         }
 
-        // --- Stage 5: final walk over the idTree (self+0x30) calling vtbl+0x48 (same shape
-        // as the SAVE-side pre-pass). ---
+        // --- Stage 5: final walk over the id tree calling slot 9 (same shape as the SAVE-side
+        // pre-pass). ---
         {
-            uint8_t* idRoot = *reinterpret_cast<uint8_t**>(self + 0x30);
-            for (uint8_t* node = BstLeftmostB(idRoot); node; node = BstNextB(node)) {
-                uint8_t* ibpField = node + 0x08;
-                void* entity = *reinterpret_cast<void**>(ibpField);
-                reinterpret_cast<Work*>(entity)->Validate();   // B.3.x bridge (slot 9; 0x1400f99a4 RCX only)
+            for (WorkSchedulerIdNode* node = Leftmost(trees[0].root); node; node = Next(node)) {
+                node->work->Validate();   // slot 9; 0x1400f99a4 RCX only
             }
         }
 
-        // --- Stage 6: free localFoundRoot (Layout-A post-order free of children, then the
-        // root node itself). ---
+        // --- Stage 6: free localFoundRoot (post-order free of the children, then the root
+        // node itself). ---
         if (localFoundRoot != nullptr) {
-            uint8_t* rootB = reinterpret_cast<uint8_t*>(localFoundRoot);
-            WorkBase_TreeNodeFree_14c30(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x10)); // left
-            WorkBase_TreeNodeFree_14c30(&localFoundRoot, *reinterpret_cast<void**>(rootB + 0x18)); // right
+            WorkSchedulerCountNode* rootNode = localFoundRoot;
+            WorkBase_TreeNodeFree_14c30(&localFoundRoot, rootNode->left);
+            WorkBase_TreeNodeFree_14c30(&localFoundRoot, rootNode->right);
             System::MemoryAllocator::MemFree(localFoundRoot);
         }
         (void)localFoundCount;
     }
+}
 
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a). Retail passes RCX and
+// RDX only; the tree's caller passes two more arguments nothing reads.
+extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, void*, int32_t*) {
+    self->Serialize(*stream);
 }
