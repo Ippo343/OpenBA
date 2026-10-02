@@ -45,6 +45,10 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/OrchardComponent.h"
+#include "Component/NaturalResourceComponent.h"   // B4: OrchardSlot::resource
+#include "Component/FruitComponent.h"             // B4: OrchardSlot::fruit
+#include "Entity/ComponentEntity.h"               // B4: the component array by name
+#include "Entity/EntityList.h"                    // B4: GameUpdateLoop::m_entityList
 
 namespace {
 
@@ -83,11 +87,11 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
     if (frameNum < kStartFrame || (frameNum % kTickFrames) != 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(gw + 0xe8);
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    EntityList* entityList = gw->m_entityList;                   // +0xe8
     if (!entityList) return;
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
+    ComponentEntity** arr = entityList->masterArray.data;        // +0x08
+    int       n   = entityList->masterArray.count;               // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) return;
 
@@ -95,40 +99,37 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
     float matMax = 0.0f, ripeMax = 0.0f;
 
     for (int i = 0; i < n; ++i) {
-        void** eslot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *eslot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
-        void* orchComp = nullptr;
+        int       cN = ent->_componentCount;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        OrchardComponent* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[c].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
-                orchComp = comp;
+            if (comp->Type() == tidOrchardComp) {
+                orchComp = static_cast<OrchardComponent*>(comp);   // exact type id
                 break;
             }
         }
         if (!orchComp) continue;
         ++orchards;
 
-        uintptr_t oc    = reinterpret_cast<uintptr_t>(orchComp);
-        int       count = *reinterpret_cast<int32_t*>(oc + 0x58);
-        uintptr_t slots = *reinterpret_cast<uintptr_t*>(oc + 0x50);
+        int       count = orchComp->slotCount;                   // +0x58
+        OrchardSlot* slots = orchComp->slots;                    // +0x50
         if (!slots || count <= 0) continue;
 
         for (int s = 0; s < count; ++s) {
-            uintptr_t slot = slots + static_cast<uintptr_t>(s) * 0x28;
-            if (*reinterpret_cast<int32_t*>(slot + 0x04) != 1) continue;  // only planted+bound
+            OrchardSlot& slot = slots[s];                        // stride 0x28
+            if (slot.state != 1) continue;  // only planted+bound   (+0x04)
             ++slotsSeen;
 
-            void* natRes = *reinterpret_cast<void**>(slot + 0x10);
-            void* fruit  = *reinterpret_cast<void**>(slot + 0x18);
+            NaturalResourceComponent* natRes = slot.resource;   // +0x10
+            FruitComponent* fruit  = slot.fruit;                 // +0x18
             if (!natRes) continue;
 
-            float* pMat = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(natRes) + 0x28);
+            float* pMat = &natRes->resourceScale;                // +0x28
             if (*pMat < kMature) {
                 *pMat += s_step;
                 if (*pMat > kMature) *pMat = kMature;
@@ -139,8 +140,7 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
                 // on its own now that its gate passes; we simply add to it, so the two
                 // sources compose rather than fight.
                 if (fruit) {
-                    float* pRipe = reinterpret_cast<float*>(
-                        reinterpret_cast<uintptr_t>(fruit) + 0x30);
+                    float* pRipe = &fruit->ripeness;             // +0x30
                     if (*pRipe < kMature) {
                         *pRipe += s_step;
                         if (*pRipe > kMature) *pRipe = kMature;
