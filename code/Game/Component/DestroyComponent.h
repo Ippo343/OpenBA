@@ -60,6 +60,7 @@ public:
     bool TargetIsCurrent();                                       // 0x14011e5b0
     bool IsBeingDemolished();                                     // 0x14011e690
     bool BeginBurning(const System::Time* time);                  // 0x14011e7b0
+    bool InRemovalState();                                        // 0x14011e710 (B4 PLAYER; body in Player/tool_base_path.cpp)
     void StopBurning();                                           // 0x14011ea10
     void ScatterContents(int baseX, int baseY, int width, int depth);  // 0x14011c530
     void RubbleStep();                                            // 0x14011d5d0

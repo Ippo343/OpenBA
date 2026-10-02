@@ -66,6 +66,11 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
+#include "Component/ComponentDescription.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
 
 namespace {
 
@@ -105,40 +110,24 @@ void SegInsertBefore(SegNode* at, SegNode* n) {
 }
 
 // ---- component lookup ---------------------------------------------------------
-// ComponentEntity: +0x30 = component IBP array, +0x38 = count. Each component's
-// virtual slot 2 (+0x10) is Type().
-void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
-    if (!typeId) return nullptr;
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(entityIBPSlot);
+// ComponentEntity::FindComponent<T> (ComponentEntity.h): the walk over the +0x30
+// component array (+0x38 count), Type() then IsDerivedFrom. A null entity has no
+// components here (the tree's own guard, kept).
+template <class T>
+T* FindComponentOn(ComponentEntity* entity) {
     if (!entity) return nullptr;
-
-    const int count = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t arr   = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    if (!arr) return nullptr;
-
-    for (int i = 0; i < count; i++) {
-        void* slot = reinterpret_cast<void*>(arr + static_cast<int64_t>(i) * 8);
-        void* comp = *reinterpret_cast<void**>(slot);
-        if (!comp) continue;
-        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (id == typeId) {
-            if (!Object::IsDerivedFromNullSafe(comp, typeId)) return nullptr;
-            return comp;
-        }
-    }
-    return nullptr;
+    return entity->FindComponent<T>();
 }
 
-// Stamp cell rect + rotation onto a Map/Build-style component.
-void StampCells(void* comp, int col, int row, int w, int h, int rotation) {
+// Stamp cell rect + rotation onto the entity's MapComponent.
+void StampCells(MapComponent* comp, int col, int row, int w, int h, int rotation) {
     if (!comp) return;
-    uintptr_t c = reinterpret_cast<uintptr_t>(comp);
-    *reinterpret_cast<int16_t*>(c + 0x28) = static_cast<int16_t>(col);
-    *reinterpret_cast<int16_t*>(c + 0x2a) = static_cast<int16_t>(row);
-    *reinterpret_cast<int16_t*>(c + 0x2c) = static_cast<int16_t>(w);
-    *reinterpret_cast<int16_t*>(c + 0x2e) = static_cast<int16_t>(h);
+    comp->tileX0 = static_cast<int16_t>(col);
+    comp->tileY0 = static_cast<int16_t>(row);
+    comp->tileX1 = static_cast<int16_t>(w);
+    comp->tileY1 = static_cast<int16_t>(h);
     while (rotation < 0) rotation += 0x168;      // retail normalises by +360 until >= 0
-    *reinterpret_cast<int32_t*>(c + 0x30) = rotation;
+    comp->extraField = rotation;
 }
 
 // World-space centre of a cell rect: sample the terrain position of the two opposite
@@ -146,10 +135,10 @@ void StampCells(void* comp, int col, int row, int w, int h, int rotation) {
 // (0x1400fa218..0x1400fa363) and once per segment (0x1400fa6f1..0x1400fa7e4) — via
 // FUN_14009f3e0 (Reimpl_MapGetTerrainPos). Cell -> map-space is (col - c, row - c) with
 // c = (gridSize >> 1) - 0.5, and the final z is forced to 0 (0x1400fa35d).
-bool CellRectCentre(uint32_t* mapGrid, int col0, int row0, int col1, int row1, float out[3]) {
+bool CellRectCentre(Map* mapGrid, int col0, int row0, int col1, int row1, float out[3]) {
     out[0] = out[1] = out[2] = 0.0f;
     if (!mapGrid) return false;
-    const int   W = static_cast<int>(mapGrid[0]);
+    const int   W = mapGrid->size;
     const float c = static_cast<float>(W >> 1) - 0.5f;
     float inA[3] = { static_cast<float>(col0) - c, static_cast<float>(row0) - c, 0.0f };
     float inB[3] = { static_cast<float>(col1) - c, static_cast<float>(row1) - c, 0.0f };
@@ -162,75 +151,60 @@ bool CellRectCentre(uint32_t* mapGrid, int col0, int row0, int col1, int row1, f
     return true;
 }
 
-// Build the yaw+offset transform and apply it to a ModelComponent.
-// Transform occupies model+0x148 .. +0x168 (0x20 bytes); +0x168 caches the yaw.
+// Build the yaw+offset transform and apply it to a ModelComponent: the Transform at
+// +0x148 (0x1c bytes), the cached yaw at +0x168, and the MeshInstance's transform.
 //
-// ⚠ The offset is NOT decorative and was the reason a placed bridge was never built.
+// The offset is NOT decorative and was the reason a placed bridge was never built.
 // Retail passes the cell-rect centre computed above as FromYawPitchOffset's 4th
 // argument (0x1400fa57c `LEA R9,[RBP-0x38]` for the master, 0x1400faa5d
 // `LEA R9,[RSP+0x50]` per segment); the ZERO argument one slot over is the PITCH
-// (`LEA R8,[RSP+0x30]` / `[RBP-0x70]`, both explicitly stored 0). An earlier reading
-// of this function had the two swapped and dropped the position, which left every
-// bridge entity's transform at the world origin. The transform is what
+// (`LEA R8,[RSP+0x30]` / `[RBP-0x70]`, both explicitly stored 0). The transform is what
 // FUN_140122be0 (GatherRawMaterials' CalcBestTargetPos) walks to find a tile a
-// builder can stand on, so with it at the origin the gather bailed
-// "no target pos (found==0)" forever and no material was ever hauled.
-void ApplyYaw(void* model, float yawDeg, const float offset[3]) {
+// builder can stand on.
+void ApplyYaw(ModelComponent* model, float yawDeg, const float offset[3]) {
     if (!model) return;
     Math::Vector3 off(offset ? offset[0] : 0.f,
                       offset ? offset[1] : 0.f,
                       offset ? offset[2] : 0.f);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawDeg, 0.f, off);
 
-    uintptr_t m = reinterpret_cast<uintptr_t>(model);
-    std::memcpy(reinterpret_cast<void*>(m + 0x148), &xform, 0x1c);
-    *reinterpret_cast<float*>(m + 0x168) = yawDeg;
-    reinterpret_cast<Graphics::Geometry*>(m + 0x28)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
+    model->transform = xform;   // the seven dwords at +0x148
+    model->yaw = yawDeg;        // +0x168
+    model->meshInstance.SetTransform(model->transform);
 }
 
 // ---- picking ------------------------------------------------------------------
-// Retail tail of the per-segment block (0x1400faab3 .. 0x1400fab7b): scan the SEGMENT
-// entity's components for the PickingComponent (type id DAT_1401c7c10), then
+// Retail tail of the per-segment block (0x1400faab3 .. 0x1400fab7b): find the SEGMENT
+// entity's PickingComponent (type id DAT_1401c7c10), then
 //
-//     *(pickComp + 0x30) = masterEntity;                       // always
-//     if (*(int*)(pickComp + 0x28) >= 0)                       // already has a mesh
-//         Picking::Scene::SetMeshUserData(gw->pickScene, meshId,
-//                                         *(pickComp + 0x30), 0, 0, nullptr);
+//     pick->userData = masterEntity;                            // always
+//     if (pick->pickingId >= 0)                                 // already has a mesh
+//         Picking::Scene::SetMeshUserData(gw->pickScene, pickingId, userData, 0, 0, nullptr);
 //
 // i.e. every deck piece is re-OWNED by the master bridge entity, so a click anywhere
 // on the span selects the bridge as one object. +0x30 is exactly what
 // PickingComponent::OnAdded later hands to Picking::Scene::AddMesh as the pick
-// userData, so seating it here is the load-bearing half; the SetMeshUserData call only
-// covers the case where the clone arrived with a mesh already registered.
-//
-// This is the fix behind the edittool.cpp:833 guard: a segment whose +0x30 was never
-// seated registers (or leaves) garbage user data, and EditTool's pick deref faults on
-// it. Slot 0x1401529a0 is registered in standalone/address_registry.cpp.
-void SeatSegmentPickOwner(void* segIBPSlot, void* masterEntity, uint32_t tidPicking,
-                          void* gameWorld) {
-    void* pc = FindComponentOn(segIBPSlot, tidPicking);
+// userData, so seating it here is the load-bearing half.
+void SeatSegmentPickOwner(ComponentEntity* seg, ComponentEntity* masterEntity,
+                          GameUpdateLoop* gameWorld) {
+    PickingComponent* pc = FindComponentOn<PickingComponent>(seg);
     if (!pc) return;
-    uintptr_t p = reinterpret_cast<uintptr_t>(pc);
-    *reinterpret_cast<void**>(p + 0x30) = masterEntity;
+    pc->userData = masterEntity;
 
-    const int meshId = *reinterpret_cast<int32_t*>(p + 0x28);
+    const int meshId = pc->pickingId;
     if (meshId < 0) return;              // no mesh yet — OnAdded/RegisterMesh reads +0x30
 
-    void* scene = gameWorld ? *reinterpret_cast<void**>(
-                                  reinterpret_cast<uintptr_t>(gameWorld) + 0x70) : nullptr;
+    Picking::Scene* scene = gameWorld ? gameWorld->m_pickingScene : nullptr;
     if (scene)
-        reinterpret_cast<Picking::Scene*>(scene)->SetMeshUserData(static_cast<uint32_t>(meshId),   // B.3.7 bridge
-                      *reinterpret_cast<void**>(p + 0x30), 0, 0, nullptr);
+        scene->SetMeshUserData(static_cast<uint32_t>(meshId), pc->userData, 0, 0, nullptr);
 }
 
-// Clone a ComponentEntity (0x48 bytes) from a template/description entity.
-void* CloneEntity(void* templateEntity) {
+// Construct a ComponentEntity (0x48 bytes) from a template/description.
+ComponentEntity* CloneEntity(void* templateEntity) {
     if (!templateEntity) return nullptr;
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (!mem) return nullptr;
-    return ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
-                                               templateEntity);   // 0x1400c3720
+    return ComponentEntity_CtorFromDescription(mem, templateEntity);   // 0x1400c3720
 }
 
 }  // namespace
@@ -256,20 +230,18 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
     if (!BridgeTool_ValidatePath_Impl(this, startCell, snapped, &bodyLen)) return 0;
     if (bodyLen <= 0) return 0;
 
-    const uintptr_t desc = reinterpret_cast<uintptr_t>(bridgeDesc);
+    const CreateBridgeDescription* desc = bridgeDesc;
     if (!desc) return 0;
-    const uint32_t maskBody = *reinterpret_cast<uint32_t*>(desc + 0x20);
-    const int      radius   = *reinterpret_cast<int*>(desc + 0x34);
+    const uint32_t maskBody = desc->_u20;
+    const int      radius   = desc->_i34;
 
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return 0;
-    uint32_t* mapGrid = *reinterpret_cast<uint32_t**>(
-                            reinterpret_cast<uintptr_t>(gameWorld) + 0xf8);
+    Map* mapGrid = gameWorld->m_game;
     if (!mapGrid) return 0;
-    const int width = static_cast<int>(mapGrid[0]);
+    const int width = mapGrid->size;
     if (width <= 0) return 0;
-    const int64_t terrainBase = *reinterpret_cast<int64_t*>(
-                                    reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
+    const MapCell* terrainBase = mapGrid->cells;
     if (!terrainBase) return 0;
 
     // ---- 1. Build the segment list ------------------------------------------------
@@ -327,9 +299,8 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         bool found = false;
         for (int row = minRow; row <= maxRow && !found; row++) {
             for (int col = minCol; col <= maxCol; col++) {
-                const uintptr_t cell = static_cast<uintptr_t>(terrainBase)
-                                     + static_cast<int64_t>(width * row + col) * 0x30;
-                const uint32_t bit = 1u << (*reinterpret_cast<uint8_t*>(cell + 0x29) & 0x1f);
+                const MapCell* cell = &terrainBase[width * row + col];
+                const uint32_t bit = 1u << (cell->terrainType & 0x1f);
                 if (maskBody & bit) { bodyCol = col; bodyRow = row; found = true; break; }
             }
         }
@@ -338,16 +309,9 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
     const int stepRow = (bodyRow != maxRow) ? 1 : 0;   // vertical run
 
     // ---- 3. Master entity ----------------------------------------------------------
-    void* master = CloneEntity(descriptionPtr);
-    void* masterIBP = nullptr;
-    new (&masterIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
+    ComponentEntity* master = CloneEntity(descriptionPtr);
+    ComponentEntity* masterIBP = master;   // the InternalBasePtr's eight bytes
     if (!master) return 0;
-
-    const uint32_t tidMap     = MapComponent::TypeId();
-    const uint32_t tidModel   = ModelComponent::TypeId();
-    const uint32_t tidMulti   = MultiObjectComponent::TypeId();
-    const uint32_t tidPicking = PickingComponent::TypeId();
 
     {
         int mw = stepCol * bodyLen, mh = stepRow * bodyLen;
@@ -357,16 +321,16 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         if (mh < crossH) mh = crossH;
         const int mCol = bodyCol - radius * stepRow;
         const int mRow = bodyRow - radius * stepCol;
-        StampCells(FindComponentOn(&masterIBP, tidMap), mCol, mRow, mw, mh, stepRow * 0x5a);
+        StampCells(FindComponentOn<MapComponent>(masterIBP), mCol, mRow, mw, mh, stepRow * 0x5a);
         float centre[3];
         CellRectCentre(mapGrid, mCol, mRow, mCol + mw - 1, mRow + mh - 1, centre);
-        ApplyYaw(FindComponentOn(&masterIBP, tidModel),
+        ApplyYaw(FindComponentOn<ModelComponent>(masterIBP),
                  static_cast<float>(stepRow) * 90.0f, centre);
     }
-    void* multi = FindComponentOn(&masterIBP, tidMulti);
+    MultiObjectComponent* multi = FindComponentOn<MultiObjectComponent>(masterIBP);
 
     // ---- 4. Per-segment entities ---------------------------------------------------
-    void* entityList = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0xe8);
+    EntityList* entityList = gameWorld->m_entityList;
     int   cursorCol = bodyCol, cursorRow = bodyRow;
     int   placedCells = 0, placedSegs = 0;
     g_BridgeLastMaster = master;
@@ -391,43 +355,39 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         else if (rawSize == 4) tplIdx = 3;
         else if (rawSize == 8) tplIdx = 4;
 
-        void* tpl = *reinterpret_cast<void**>(desc + 0x38 + static_cast<int64_t>(tplIdx) * 8);
-        void* seg = CloneEntity(tpl);
+        void* tpl = desc->_refs[tplIdx];
+        ComponentEntity* seg = CloneEntity(tpl);
         if (seg) {
-            void* segIBP = nullptr;
-            new (&segIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(seg));   // B.3.3 bridge
+            ComponentEntity* segIBP = seg;   // the InternalBasePtr's eight bytes
 
-
-            StampCells(FindComponentOn(&segIBP, tidMap), cursorCol, cursorRow, segW, segH, rot);
+            StampCells(FindComponentOn<MapComponent>(segIBP), cursorCol, cursorRow, segW, segH, rot);
             float segCentre[3];
             CellRectCentre(mapGrid, cursorCol, cursorRow,
                            cursorCol + segW - 1, cursorRow + segH - 1, segCentre);
-            ApplyYaw(FindComponentOn(&segIBP, tidModel), static_cast<float>(rot), segCentre);
+            ApplyYaw(FindComponentOn<ModelComponent>(segIBP), static_cast<float>(rot), segCentre);
 
             // Append to the master's MultiObjectComponent (array +0x48, count +0x50).
             if (multi) {
-                uintptr_t m = reinterpret_cast<uintptr_t>(multi);
-                const int newCount = *reinterpret_cast<int*>(m + 0x50) + 1;
+                const int newCount = multi->childCount + 1;
                 // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
-                // align 8, new tail zeroed. Element is the 8-byte segment
-                // InternalBasePtr written into the new slot just below.
-                GameColl::ArrayAt<GameColl::Ptr8>(m, 0x48).SetSize(newCount);
-                uintptr_t arr = *reinterpret_cast<uintptr_t*>(m + 0x48);
-                if (arr) {
-                    *reinterpret_cast<uint64_t*>(arr + static_cast<int64_t>(newCount - 1) * 8) =
-                        reinterpret_cast<uint64_t>(segIBP);
-                    *reinterpret_cast<int*>(m + 0x50) = newCount;
+                // align 8, new tail zeroed. LEFT: MultiObjectComponent (block COMP)
+                // declares the array as three fields, so the grow goes through
+                // coll_bridge's ArrayAt view of +0x48.
+                GameColl::ArrayAt<GameColl::Ptr8>(multi, 0x48).SetSize(newCount);
+                if (multi->children) {
+                    multi->children[newCount - 1] = Object::InternalPtr<ComponentEntity>(segIBP);
+                    multi->childCount = newCount;
                 }
             }
 
             // Re-own the segment's pick mesh to the master (retail 0x1400faab3..fab7b),
             // BEFORE the register — that is the window PickingComponent::OnAdded reads.
-            SeatSegmentPickOwner(&segIBP, master, tidPicking, gameWorld);
+            SeatSegmentPickOwner(segIBP, master, gameWorld);
 
             if (entityList && tpl) {
-                const int categoryId = *reinterpret_cast<int*>(
-                                           reinterpret_cast<uintptr_t>(tpl) + 0x20);
+                // LEFT: CreateBridgeDescription::_refs (block COMP-c) is `void*[5]`.
+                const int categoryId = static_cast<int>(
+                    reinterpret_cast<const ComponentDescription*>(tpl)->_category);
                 EntityList_RegisterEntity_Impl(entityList, &segIBP, categoryId);
             }
 
@@ -449,12 +409,10 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
     // ---- 5. Finish: stamp the cell total, register the master, free the list --------
     if (multi)
-        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(multi) + 0x58) =
-            static_cast<uint32_t>(placedCells);
+        multi->multiCount = placedCells;
 
     if (entityList) {
-        const int categoryId = *reinterpret_cast<int*>(
-                                   reinterpret_cast<uintptr_t>(descriptionPtr) + 0x20);
+        const int categoryId = static_cast<int>(descriptionPtr->_category);
         EntityList_RegisterEntity_Impl(entityList, &masterIBP, categoryId);
     }
 
@@ -463,11 +421,10 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         System::MemoryAllocator::MemFree(n);
         n = next;
     }
-
     fprintf(stderr, "[Bridge] CalcPath: start=%d end=%d snapped=%d len=%d -> %d segments, "
             "%d cells, master=%p multi=%p (stepCol=%d stepRow=%d radius=%d)\n",
             startCell, endCell, snapped, bodyLen, placedSegs, placedCells,
-            master, multi, stepCol, stepRow, radius);
+            static_cast<void*>(master), static_cast<void*>(multi), stepCol, stepRow, radius);
     fflush(stderr);
 
     return 1;

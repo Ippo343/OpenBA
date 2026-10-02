@@ -179,3 +179,7 @@ Metric at `e36cb873`: **16,728** to remove.
 | 33 | W1-TUT | `c7e1120a` | Tutorial / Goal: every Goal and Tutorial class by name; `StatGoal::StatValue`, TutorialInstance and TutorialSetupDialog members; `NamedExternalRef`; the second CalcMaxWorkers port forwards to the member: 1320 -> 79 in 68 files (two by-name fixes in the merge for GAME-b's ProfessionList / Scenario typings) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok (tutorial and goal-dialog routes unchanged) · tools ok | 0 |
 
 Metric at `c7e1120a`: **15,485** to remove.
+
+| 34 | W1-ACT-b | `b3e86f74` | Action b: the 17 action classes by name, Persist through `Action::Persist`, typed ctors; `RegionGraph::Init`, `RegionPairCache::Expire` members; six storage lookups lose a null test retail lacks (14d): 1183 -> 90 in 38 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok · `sa-stress` exit 0, empty crash log, update 1.88 ms/frame, p95 2.79 (flagged; three agents building; recorded) | 0 |
+
+Metric at `b3e86f74`: **14,368** to remove.

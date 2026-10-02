@@ -62,212 +62,158 @@
 #include "Player/exe_bodies.h"
 #include "volume/Volume.h"
 #include "object/TypeInfo.h"
+#include "Component/ComponentDescription.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
+#include "ui/DialogController.h"
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Called by name (the exe dispatch slots 0x140152950 / 0x1401528a8 name them):
-//   Box::GetCorners(this, outVec3x8)  -> RtVolume_Box_GetCorners
-//   Rectangle::Rectangle(this)        -> RtVolume_Rectangle_Ctor (volume/Volume.h)
-//   0x1400fec70 PlayerScreenRect_BuildCorners_ec70 -- 4 footprint corners from a tile rect
-//   0x1400fe960 PlayerScreenRect_AccumulateRect_fe960 -- N corners -> a screen rectangle
-//   (Player/exe_bodies.h)
-// ---------------------------------------------------------------------------
-
-// DAT_1401c4d40 — "BuildRequirementUI" (parent UI::DialogController). The CreateBar
-// controller type used to filter GetController. RegisterType_BuildRequirementUI.
-uint32_t BuildReqUICtrlTypeId() {
-    return BuildRequirementUI::TypeId();
+// System::String empty test: (*p==0) || (*(int*)(*p - 8) == 0) — GetLength's read.
+inline bool StringIsEmpty(const System::String& s) {
+    return (s._data == nullptr) || (s.GetLength() == 0);
 }
 
-// DWORD_1401c7f58 — "ToolbarDescription" (parent Description). The component on the
-// tool's description entity that supplies textStatus content. ToolbarDescription_RegisterType.
-uint32_t ToolbarDescTypeId() {
-    return ToolbarDescription::TypeId();
-}
-
-// e360 IsDerivedFrom target — UI::ImageElement type-id. In the exe this is read as
-// *(uint32_t*)*(void**)0x140151500 (the import slot holds the ImageElement _typeInfo
-// pointer). ENDGAME B.3.9 TR: the class's own accessor (was the slot, then the
-// ?_typeInfo@ export by name, cached in a function-local static).
-uint32_t ImageElementTypeId() {
-    return UI::ImageElement::TypeId();
-}
-
-// System::String empty test: (*p==0) || (*(int*)(*p - 8) == 0).
-inline bool StringIsEmpty(const void* sysStr) {
-    const uint8_t* p = *reinterpret_cast<const uint8_t* const*>(sysStr);
-    return (p == nullptr) || (*reinterpret_cast<const int*>(p - 8) == 0);
+// The dialog's element of that name as the TextElement the CreateBar holds there.
+UI::TextElement* FindText(UI::DialogInstance* dialog, const System::String& name) {
+    UI::Element* elem = dialog->FindElement(name).Get();
+    return static_cast<UI::TextElement*>(elem);   // the CreateBar's text labels
 }
 
 }  // namespace
 
 // ============================================================================
-// UpdateToolUI_e600 (0x14005e600) — set the "textSize" element
+// BuildRequirementUI::SetSizeText (0x14005e600) — set the "textSize" element
 // ============================================================================
-// param_1 = the BuildRequirementUI controller; param_2 = a System::String*.
-// Finds "textSize" on the controller's DialogInstance (controller+0x18), sets it
-// as text-parameter 0, and hides/shows the element by whether the string is empty.
-extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
+// Finds "textSize" on the controller's DialogInstance (+0x18), sets the string as
+// text-parameter 0, and hides/shows the element by whether the string is empty.
+void BuildRequirementUI::SetSizeText(const System::String* str) {
     System::String nameStr("textSize");
 
-    void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;   // controller+0x18 = DialogInstance IBP
-    void* dialog = *reinterpret_cast<void**>(dlgIBP);
-
-    uint64_t elemBuf = 0;                              // InternalPtr retbuf
-    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
-    void* elem = reinterpret_cast<void*>(elemBuf);     // *retbuf = element ptr
+    UI::TextElement* elem = FindText(_dialog, nameStr);
 
     if (elem) {
-        reinterpret_cast<UI::TextElement*>(elem)->SetParameter(  // B.3.6 bridge
-            0, *static_cast<const System::String*>(str));
+        elem->SetParameter(0, *str);
 
         // hide/show by empty string
-        System::String tmp(*reinterpret_cast<const System::String*>(str));
-        bool isEmpty = StringIsEmpty(&tmp);
+        System::String tmp(*str);
+        bool isEmpty = StringIsEmpty(tmp);
 
-        reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);  // B.3.6 bridge
+        elem->SetFlagsOnOff(isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);
     }
 }
 
 // ============================================================================
-// UpdateToolUI_e420 (0x14005e420) — set the "textStatus" element
+// BuildRequirementUI::SetStatusText (0x14005e420) — set the "textStatus" element
 // ============================================================================
-// Scans the controller's description entity (controller+0x30) component list for
-// the ToolbarDescription component, then finds "textStatus" and sets:
-//   SetText(elem, UIString(comp.stringTable, costString))
-//   SetParameter(elem, 0, (System::String)UIString(comp.stringTable, comp+0x40))
+// Scans the controller's description (+0x30) for the ToolbarDescription, then finds
+// "textStatus" and sets:
+//   SetText(elem, UIString(desc.stringTable, costString))
+//   SetParameter(elem, 0, (System::String)UIString(desc.stringTable, desc+0x40))
 //   hide/show by whether costString is empty.
-extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
-    void* descEntity = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x30);
+void BuildRequirementUI::SetStatusText(const System::String* costStr) {
+    ComponentDescription* descEntity = description;
     if (!descEntity) {
         return;
     }
 
-    // Find the ToolbarDescription-typed component (base +0x28, count +0x30).
-    void* comp = nullptr;
+    // Find the ToolbarDescription (the sub-description list: base +0x28, count +0x30).
+    ToolbarDescription* comp = nullptr;
     {
-        int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(descEntity) + 0x30);
-        uint32_t tid = ToolbarDescTypeId();
+        int count = descEntity->_subDescCount;
+        uint32_t tid = ToolbarDescription::TypeId();
         for (int i = 0; i < count; i++) {
-            uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(descEntity) + 0x28);
-            void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();  // B.3.8 bridge
-            if (t == tid) {
-                void* obj = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                comp = Object::IsDerivedFromNullSafe(obj, tid) ? obj : nullptr;
+            Description* c = descEntity->_subDescs[i];
+            if (c->Type() == tid) {
+                Description* obj = descEntity->_subDescs[i];
+                comp = Object::IsDerivedFromNullSafe(obj, tid) ? static_cast<ToolbarDescription*>(obj)
+                                                              : nullptr;
                 break;
             }
         }
     }
 
     System::String nameStr("textStatus");
-    void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
-    void* dialog = *reinterpret_cast<void**>(dlgIBP);
-    uint64_t elemBuf = 0;
-    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
-    void* elem = reinterpret_cast<void*>(elemBuf);
+    UI::TextElement* elem = FindText(_dialog, nameStr);
     if (!elem) {
         return;
     }
 
-    // Defensive: the original assumes the ToolbarDescription component always
-    // exists (comp != null) and unconditionally derefs comp+0x30. Guard it so a
-    // standalone description entity that lacks the component leaves textStatus
-    // empty instead of null-derefing. (The retail invariant holds; this only
-    // matters for degraded standalone data.)
+    // Defensive: the original assumes the ToolbarDescription always exists and
+    // unconditionally derefs comp+0x30 (a guard the tree keeps; known_port_issues 14d).
     if (!comp) {
         return;
     }
 
-    void* stringTable = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x30);
+    UI::StringTable* stringTable = comp->_stringTable;
 
 
     // UIString_A = UIString(stringTable, costString); SetText(elem, UIString_A).
-    uint8_t uiA[16] = {};
-    ::new (uiA) UI::String(
-        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
-        *static_cast<const System::String*>(costStr));
-    uint8_t uiA_copy[16];
-    std::memcpy(uiA_copy, uiA, 16);
-    reinterpret_cast<UI::TextElement*>(elem)->SetText(  // B.3.6 bridge
-        reinterpret_cast<const UI::String*>(uiA_copy));
+    UI::String uiA(Object::ExternalPtr<UI::StringTable>(stringTable), *costStr);
+    UI::String uiA_copy(uiA);
+    elem->SetText(&uiA_copy);
 
-    // UIString_B = UIString(stringTable, comp+0x40); SetParameter(elem, 0, (SysStr)UIString_B).
-    uint8_t uiB[16] = {};
-    ::new (uiB) UI::String(
-        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
-        *reinterpret_cast<const System::String*>(reinterpret_cast<uintptr_t>(comp) + 0x40));
-    System::String sysB;
-    ::new (&sysB) System::String(
-        reinterpret_cast<const UI::String*>(uiB)->operator System::String());  // B.3.6 bridge
-    reinterpret_cast<UI::TextElement*>(elem)->SetParameter(0, sysB);  // B.3.6 bridge
+    // UIString_B = UIString(stringTable, desc+0x40); SetParameter(elem, 0, (SysStr)UIString_B).
+    UI::String uiB(Object::ExternalPtr<UI::StringTable>(stringTable), comp->_str2);
+    System::String sysB(uiB.operator System::String());
+    elem->SetParameter(0, sysB);
 
     // hide/show by whether costString (UIString_A) is empty.
-    System::String sysA;
-    ::new (&sysA) System::String(
-        reinterpret_cast<const UI::String*>(uiA)->operator System::String());  // B.3.6 bridge
+    System::String sysA(uiA.operator System::String());
     System::String sysA_copy(sysA);
-    bool isEmpty = StringIsEmpty(&sysA_copy);
+    bool isEmpty = StringIsEmpty(sysA_copy);
 
-    reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);  // B.3.6 bridge
+    elem->SetFlagsOnOff(isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);
 }
 
 // ============================================================================
-// UpdateToolUI_e700 (0x14005e700) — set the per-axis size-region elements
+// BuildRequirementUI::SetSizeMultiplier (0x14005e700) — the per-cost labels
 // ============================================================================
-// controller+0x38 = the size multiplier (param_8). For each of controller+0x58
-// size-region elements (element IBP array at +0x40, size int array at +0x50):
-//   text = "%i"  formatted from  sizeArray[i] * multiplier.
-extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x38) = param_8;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(ctrl) + 0x58);
+// +0x38 = the size multiplier (param_8). For each of the +0x58 costs (label element
+// array +0x40, quantity array +0x50): text = "%i" of quantity[i] * multiplier.
+void BuildRequirementUI::SetSizeMultiplier(uint32_t param_8) {
+    field_0x38 = param_8;
+    int count = countCount;
     if (count <= 0) return;
     // Retail indexes the label-element array (+0x40, count at +0x48) using the REQUIREMENT
     // count (+0x58) and never null-checks the element — safe only because the two arrays
     // move together there (one labelBuild%i element per requirement). In standalone they can
-    // diverge (e.g. BuildRequirementUI's "labelBuild%i" FindElement loop coming up short),
-    // and the bridge tool's first drag faulted in UI::TextElement::SetParameter on a null
-    // element. Log the shape once and skip null entries rather than fault.
+    // diverge, and the bridge tool's first drag faulted in UI::TextElement::SetParameter on
+    // a null element. Log the shape once and skip null entries rather than fault (a guard
+    // retail lacks; known_port_issues 14d).
     {
         static bool s_logged = false;
         if (!s_logged) {
             s_logged = true;
-            uintptr_t c = reinterpret_cast<uintptr_t>(ctrl);
             fprintf(stderr, "[e700] ctrl=%p reqCount(+0x58)=%d labelCount(+0x48)=%u "
                     "labelArr(+0x40)=%p sizeArr(+0x50)=%p\n",
-                    ctrl, count, *reinterpret_cast<uint32_t*>(c + 0x48),
-                    *reinterpret_cast<void**>(c + 0x40), *reinterpret_cast<void**>(c + 0x50));
+                    static_cast<void*>(this), count, static_cast<uint32_t>(labelCount),
+                    static_cast<void*>(labelData), static_cast<void*>(countData));
             fflush(stderr);
         }
     }
     for (int i = 0; i < count; i++) {
-        uintptr_t sizeArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x50);
-        int mult = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(ctrl) + 0x38);
-        int val = *reinterpret_cast<int*>(sizeArr + static_cast<int64_t>(i) * 4) * mult;
+        int mult = static_cast<int>(field_0x38);
+        int val = countData[i] * mult;
 
         System::String s = System::String::Format("%i", static_cast<uint64_t>(static_cast<uint32_t>(val)));
 
-        uintptr_t elemArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(ctrl) + 0x40);
-        void* elem = nullptr;
+        UI::Element** elemArr = labelData;
+        UI::Element* elem = nullptr;
         if (elemArr) {
-            void* elemIBP = reinterpret_cast<void*>(elemArr + static_cast<int64_t>(i) * 8);
-            elem = *reinterpret_cast<void**>(elemIBP);
+            elem = elemArr[i];
         }
         if (elem) {
-            reinterpret_cast<UI::TextElement*>(elem)->SetParameter(0, s);  // B.3.6 bridge
+            static_cast<UI::TextElement*>(elem)->SetParameter(0, s);   // the labelBuild%i text labels
         } else {
             // Loud: retail would have faulted here, so this means our controller state is
-            // wrong upstream (label array shorter than the requirement count), not that the
-            // skip is correct behaviour.
+            // wrong upstream (label array shorter than the requirement count).
             static int s_warned = 0;
             if (s_warned < 4) {
                 s_warned++;
                 fprintf(stderr, "[e700] WARN: null label element at i=%d (reqCount=%d, "
                         "labelArr=%p) — skipping; upstream BuildRequirementUI state is short\n",
-                        i, count, reinterpret_cast<void*>(elemArr));
+                        i, count, static_cast<void*>(elemArr));
                 fflush(stderr);
             }
         }
@@ -275,104 +221,77 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
 }
 
 // ============================================================================
-// UpdateToolUI_e360 (0x14005e360) — tint the "imageIcon" element
+// BuildRequirementUI::SetIconColor (0x14005e360) — tint the "imageIcon" element
 // ============================================================================
 // Finds "imageIcon" on the controller's DialogInstance, type-checks it as a
 // UI::ImageElement, and calls its virtual slot +0x50 (SetColor) with the tint
 // (0xffffffff valid / 0xffff0000 invalid).
-extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
+void BuildRequirementUI::SetIconColor(uint32_t color) {
     System::String nameStr("imageIcon");
 
-    void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
-    void* dialog = *reinterpret_cast<void**>(dlgIBP);
-    uint64_t elemBuf = 0;
-    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
-    void* elemIBP = &elemBuf;
-    void* obj = *reinterpret_cast<void**>(elemIBP);
+    UI::Element* obj = _dialog->FindElement(nameStr).Get();
 
-    uint32_t imgTid = ImageElementTypeId();
-    void* ptr = (obj && Object::IsDerivedFromNullSafe(obj, imgTid)) ? obj : nullptr;
+    uint32_t imgTid = UI::ImageElement::TypeId();
+    UI::Element* ptr = (obj && Object::IsDerivedFromNullSafe(obj, imgTid)) ? obj : nullptr;
 
-    uint64_t ibp = 0;
-    new (&ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-
-    if (ibp != 0) {
-        void* elem = reinterpret_cast<void*>(ibp);
-        // virtual slot +0x50 = ImageElement::SetColor(this, color). Receiver proved:
-        // DialogInstance::FindElement's result, narrowed by IsDerivedFrom(ImageElement).
-        reinterpret_cast<UI::Element*>(elem)->SetColor(color);  // B.3.6 bridge
+    if (ptr != nullptr) {
+        // virtual slot +0x50 = SetColor(this, color).
+        ptr->SetColor(color);
     }
 }
 
 // ============================================================================
 // UpdateToolUI_ebb0 (0x1400febb0) — box corners -> transformed Vector3[8]
 // ============================================================================
-// Fills outCorners[0..23] (8 Vector3) from the placement Box, clamping each
-// corner componentwise to (1e6, 1e6, 2.5) then applying the mesh Transform.
-// Returns 8 (the corner count). param_1 is a dummy the original never reads.
-extern "C" uint32_t UpdateToolUI_ebb0(void* /*dummy*/, void* box, void* transform, float* outCorners) {
-    RtVolume_Box_GetCorners(static_cast<const struct Box*>(box),
-                            reinterpret_cast<Math::Vector3*>(outCorners));
-    const float clampConst[3] = { 1000000.0f, 1000000.0f, 2.5f };  // 0x49742400,0x49742400,0x40200000
-    float* corner = outCorners;
+// Fills outCorners[0..7] from the placement Box, clamping each corner componentwise
+// to (1e6, 1e6, 2.5) then applying the mesh Transform. Returns 8 (the corner count).
+// param_1 is a dummy the original never reads.
+extern "C" uint32_t UpdateToolUI_ebb0(const void* /*dummy*/, const ::Box* box,
+                                      const Math::Transform* transform, Math::Vector3* outCorners) {
+    RtVolume_Box_GetCorners(box, outCorners);
+    const Math::Vector3 clampConst(1000000.0f, 1000000.0f, 2.5f);  // 0x49742400,0x49742400,0x40200000
+    Math::Vector3* corner = outCorners;
     for (int i = 0; i < 8; i++) {
-        {
-            Math::Vector3 r = reinterpret_cast<const Math::Vector3*>(corner)->Min(
-                *reinterpret_cast<const Math::Vector3*>(clampConst));
-            corner[0] = r.x; corner[1] = r.y; corner[2] = r.z;
-        }
-        {
-            Math::Vector3 r2 = reinterpret_cast<const Math::Transform*>(transform)->operator*(
-                *reinterpret_cast<const Math::Vector3*>(corner));
-            corner[0] = r2.x; corner[1] = r2.y; corner[2] = r2.z;
-        }
-        corner += 3;
+        *corner = corner->Min(clampConst);
+        *corner = transform->operator*(*corner);
+        corner += 1;
     }
     return 8;
 }
 
 // ============================================================================
-// UpdateToolUI_fc60 (0x1400ffc60) — populate + position the CreateBar
+// UpdateCreateBar (0x1400ffc60) — populate + position the CreateBar
 // ============================================================================
-// Signature MUST match placementtool.cpp's fn_operator_fc60_t exactly:
-//   (dialogPtr, W, H, costStringPtr, valid, param_6, param_7, param_8,
-//    startCell, endCell, box, transform)
-// dialogPtr = the tool's DialogInstance IBP slot (first 8 bytes = DialogInstance*,
-// +0x08/+0x0c = the cached smoothed x/y coords seeded to -1.0 by OpenToolDialog).
-extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void* param_4,
-                                  char param_5, char param_6, char param_7, int param_8,
-                                  int param_9, int param_10, void* param_11, void* param_12) {
+// param_1 = the tool's owner, the PlayerToolManager (Tool +0x10): +0x00 the open
+// dialog, +0x08/+0x0C the smoothed x/y coords OpenToolDialog seeds to -1.0.
+// (PlayerToolManager.h is block GAME-b's: a free function over the typed manager.)
+void UpdateCreateBar(PlayerToolManager* param_1, int param_2, int param_3,
+                     const System::String* param_4, char param_5, char param_6, char param_7,
+                     int param_8, int param_9, int param_10, const ::Box* param_11,
+                     const Math::Transform* param_12) {
     // No dialog open -> nothing to update.
-    if (*reinterpret_cast<void**>(param_1) == nullptr) return;
-    void* dialog = *reinterpret_cast<void**>(param_1);
+    if (param_1->field_0x00 == nullptr) return;
+    UI::DialogInstance* dialog = param_1->field_0x00;
 
     // Resolve the CreateBar controller (BuildRequirementUI) from the dialog.
-    uint32_t ctrlTid = BuildReqUICtrlTypeId();
-    uint64_t ctrlBuf = 0;
-    ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(
-        reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(ctrlTid));  // B.3.6 bridge
-    void* ctrl = nullptr;
-    if (ctrlBuf != 0) {
-        void* c = reinterpret_cast<void*>(ctrlBuf);
-        if (Object::IsDerivedFromNullSafe(c, ctrlTid)) ctrl = c;
+    uint32_t ctrlTid = BuildRequirementUI::TypeId();
+    UI::DialogController* found = dialog->GetController(ctrlTid).Get();
+    BuildRequirementUI* ctrl = nullptr;
+    if (found != nullptr) {
+        if (Object::IsDerivedFromNullSafe(found, ctrlTid)) ctrl = static_cast<BuildRequirementUI*>(found);
     }
-    uint64_t ctrlIBP = 0;
-    new (&ctrlIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(ctrl));   // B.3.3 bridge
     // One-shot diagnostic: confirm the CreateBar controller resolved (type-ids correct)
-    // — else the populate silently no-ops here. Logs once; A/B-safe (only when fc60 runs).
+    // — else the populate silently no-ops here.
     {
         static bool s_logged = false;
         if (!s_logged) {
             s_logged = true;
-            fprintf(stderr, "[fc60] ctrlTid=%u ctrl=%p ctrlIBP=%llx (0 => wrong type-id, populate skipped)\n",
-                    ctrlTid, ctrl, (unsigned long long)ctrlIBP);
+            fprintf(stderr, "[fc60] ctrlTid=%u ctrl=%p (null => wrong type-id, populate skipped)\n",
+                    ctrlTid, static_cast<void*>(ctrl));
             fflush(stderr);
         }
     }
-    if (ctrlIBP == 0) return;  // no live controller
+    if (ctrl == nullptr) return;  // no live controller
 
     // --- Size text (controller-cached) ---
     if (param_6 == 0) {
@@ -385,40 +304,33 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
             fmtBuf = System::String::Format("%i",
                                  static_cast<uint64_t>(static_cast<uint32_t>(param_2)));
         }
-        UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), &fmtBuf);
-        UpdateToolUI_e700(reinterpret_cast<void*>(ctrlIBP), static_cast<uint32_t>(param_8));
+        ctrl->SetSizeText(&fmtBuf);
+        ctrl->SetSizeMultiplier(static_cast<uint32_t>(param_8));
     } else {
         System::String emptyStr;                       // null System::String -> clears "textSize"
-        UpdateToolUI_e600(reinterpret_cast<void*>(ctrlIBP), &emptyStr);
+        ctrl->SetSizeText(&emptyStr);
     }
 
     // --- Status text (cost) + icon tint ---
-    UpdateToolUI_e420(reinterpret_cast<void*>(ctrlIBP), param_4);
+    ctrl->SetStatusText(param_4);
     uint32_t color = (param_5 != 0) ? 0xffffffffu : 0xffff0000u;
-    UpdateToolUI_e360(reinterpret_cast<void*>(ctrlIBP), color);
+    ctrl->SetIconColor(color);
 
     // --- Build the 8 footprint corners (default-constructed = zero) ---
-    float corners[24] = {};   // 8 * Vector3
+    Math::Vector3 corners[8];
     uint32_t cornerCount = 0;
     const bool boxPath = (param_9 < 0) || (param_10 < 0);
     if (boxPath) {
         // Single building / no drag: use the mesh Box, clamped + transformed, then
         // an extra componentwise Min against (1e6, 1e6, 3.0).
         cornerCount = UpdateToolUI_ebb0(nullptr, param_11, param_12, corners);
-        const float clampConst[3] = { 1000000.0f, 1000000.0f, 3.0f };  // 0x49742400,0x49742400,0x40400000
+        const Math::Vector3 clampConst(1000000.0f, 1000000.0f, 3.0f);  // 0x49742400,0x49742400,0x40400000
         for (int i = 0; i < 8; i++) {
-            {
-                Math::Vector3 r = reinterpret_cast<const Math::Vector3*>(&corners[i * 3])->Min(
-                    *reinterpret_cast<const Math::Vector3*>(clampConst));
-                corners[i * 3 + 0] = r.x;
-                corners[i * 3 + 1] = r.y;
-                corners[i * 3 + 2] = r.z;
-            }
+            corners[i] = corners[i].Min(clampConst);
         }
     } else {
         // Drag rectangle: project start/end cells to world corners.
-        int mapW = *reinterpret_cast<int*>(
-            *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8));
+        int mapW = GameUpdateLoop::_singleton->m_game->size;
         if (mapW != 0) {
             cornerCount = PlayerScreenRect_BuildCorners_ec70(
                 static_cast<uint64_t>(static_cast<uint32_t>(param_9 % mapW)),  // p1 (unused by ec70)
@@ -431,34 +343,29 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     }
 
     // --- Project corners into a screen rectangle ---
-    float rect[4] = {};   // Volume::Rectangle {minX, minY, maxX, maxY}
-    RtVolume_Rectangle_Ctor(reinterpret_cast<struct Rectangle*>(rect));
-    uint8_t ok = PlayerScreenRect_AccumulateRect_fe960(0, cornerCount, corners, rect);
+    struct Rectangle rect;   // Volume::Rectangle {min.xy, max.xy}
+    RtVolume_Rectangle_Ctor(&rect);
+    uint8_t ok = PlayerScreenRect_AccumulateRect_fe960(0, cornerCount, corners, &rect);
     if (ok == 0) return;
 
     // --- Read the dialog root bounds (+0x68 left, +0x6c top, +0x70 right, +0x74 bottom) ---
-    // GetRoot returns InternalPtr<Element> by value (hidden retbuf); rootIBP == &rootRetbuf.
-    uint64_t rootRetbuf = 0;
-    void* rootIBP = ::new (&rootRetbuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(dialog)->GetRoot());  // B.3.6 bridge
-    void* rootElem = rootIBP ? *reinterpret_cast<void**>(rootIBP) : nullptr;
+    UI::Element* rootElem = dialog->GetRoot().Get();
     {
         static bool s_rootLogged = false;
         if (!s_rootLogged) { s_rootLogged = true;
-            fprintf(stderr, "[fc60] post-fe960: rect=(%.0f,%.0f,%.0f,%.0f) "
-                    "rootIBP=%p rootElem=%p\n", rect[0], rect[1], rect[2], rect[3],
-                    rootIBP, rootElem);
+            fprintf(stderr, "[fc60] post-fe960: rect=(%.0f,%.0f,%.0f,%.0f) rootElem=%p\n",
+                    rect.min.x, rect.min.y, rect.max.x, rect.max.y, static_cast<void*>(rootElem));
             fflush(stderr);
         }
     }
     if (!rootElem) return;
-    int left   = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x68);
-    int top    = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x6c);
-    int right  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x70);
-    int bottom = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x74);
+    int left   = rootElem->_layoutLeft;
+    int top    = rootElem->_layoutTop;
+    int right  = rootElem->_layoutRight;
+    int bottom = rootElem->_layoutBottom;
 
     // --- Compute the centered target position from the projected rect ---
-    const float minX = rect[0], minY = rect[1], maxX = rect[2], maxY = rect[3];
+    const float minX = rect.min.x, minY = rect.min.y, maxX = rect.max.x, maxY = rect.max.y;
     float cx = (minX + maxX) * 0.5f;                   // DAT_140172114 = 0.5
     float cy = boxPath ? minY                          // box branch: cy = rect min-y
                        : (minY + maxY) * 0.5f;         // cells branch: cy = rect centroid-y
@@ -468,8 +375,10 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     int screenY = static_cast<int>(cy) - halfH;
 
     // --- Smooth toward the target (0.25 new / 0.75 cached); first frame (cached<0) snaps ---
-    float* cachedX = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(param_1) + 0x08);
-    float* cachedY = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(param_1) + 0x0c);
+    // LEFT: the manager's +0x08 / +0x0C floats are one `uint64_t field_0x08` in
+    // block GAME-b's header.
+    float* cachedX = reinterpret_cast<float*>(&param_1->field_0x08);
+    float* cachedY = cachedX + 1;
     if (*cachedX >= 0.0f) {
         *cachedX = static_cast<float>(screenX) * 0.25f + *cachedX * 0.75f;  // DAT_140172100 / DAT_140172124
         *cachedY = static_cast<float>(screenY) * 0.25f + *cachedY * 0.75f;
@@ -478,17 +387,28 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
         *cachedY = static_cast<float>(screenY);
     }
 
-    reinterpret_cast<UI::DialogInstance*>(dialog)->SetUpperLeft(static_cast<int>(*cachedX),  // B.3.6 bridge
-                                       static_cast<int>(*cachedY), true);
+    dialog->SetUpperLeft(static_cast<int>(*cachedX), static_cast<int>(*cachedY), true);
     {
         static bool s_posLogged = false;
         if (!s_posLogged) {
             s_posLogged = true;
             fprintf(stderr, "[fc60] positioned CreateBar: rect=(%.1f,%.1f,%.1f,%.1f) "
                     "root=(%d,%d,%d,%d) -> upperLeft=(%d,%d)\n",
-                    rect[0], rect[1], rect[2], rect[3], left, top, right, bottom,
+                    rect.min.x, rect.min.y, rect.max.x, rect.max.y, left, top, right, bottom,
                     static_cast<int>(*cachedX), static_cast<int>(*cachedY));
             fflush(stderr);
         }
     }
+}
+
+// B4 FORWARD: 1 outside caller (standalone/tool_harness.cpp, which also takes its
+// address) — the old C signature.
+extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void* param_4,
+                                  char param_5, char param_6, char param_7, int param_8,
+                                  int param_9, int param_10, void* param_11, void* param_12) {
+    UpdateCreateBar(reinterpret_cast<PlayerToolManager*>(param_1), param_2, param_3,   // B4 FORWARD
+                    reinterpret_cast<const System::String*>(param_4),                  // B4 FORWARD
+                    param_5, param_6, param_7, param_8, param_9, param_10,
+                    reinterpret_cast<const ::Box*>(param_11),                         // B4 FORWARD
+                    reinterpret_cast<const Math::Transform*>(param_12));              // B4 FORWARD
 }

@@ -29,6 +29,9 @@
 #include "Player/dragtool.h"
 #include "Object/exe_type.h"
 
+class CreateDragDescription;   // Component/CreateDragDescription.h
+class MapDescription;          // Component/MapDescription.h
+
 class DragPlacementTool final : public DragTool {
     DECLARE_EXE_TYPE(DragPlacementTool)
 
@@ -40,13 +43,13 @@ public:
     void Startup() override;                                               // [4]  0x1400fc3e0
     void Shutdown() override {}                                            // [5]  0x1400fc3d0 RET
     void Update(void*, char) override {}                                   // [7]  0x1400fc3c0 RET
-    void Draw(void* context, char active) override;                        // [8]  0x1400fbe40
+    void Draw(Video::Context* context, char active) override;                        // [8]  0x1400fbe40
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x1400fb900
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,
                   int* outCostA, int* outCostB, int* outLength) override;  // [14] 0x1400fbae0
 
-    void* placementDesc;   // +0x38 CreatePlacedDescription* (DAT_1401c7430) — Startup
-    void* areaDesc;        // +0x40 area (Map) description* (DAT_1401c7a18) — Startup
+    CreateDragDescription* placementDesc;   // +0x38 cell 0x1401c7430 (CreateDragDescription) — Startup (B4 PLAYER)
+    MapDescription* areaDesc;               // +0x40 cell 0x1401c7a18 (MapDescription) — Startup (B4 PLAYER)
 };
 
 

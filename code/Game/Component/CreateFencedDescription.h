@@ -45,7 +45,7 @@ public:
     int32_t _i64;                               // +0x64
     bool _b68;                                  // +0x68
     uint8_t _pad69[7];                          // +0x69 never written by the ctor
-    void* _ref70;                               // +0x70 ExternalPtr (a raw pointer)
+    class ComponentDescription* _ref70;         // +0x70 ExternalPtr (a raw pointer; B4 PLAYER H4: the template whose entities FencedTool::CalcPath clears, 0x1401018d0)
 };
 
 static_assert(sizeof(CreateFencedDescription) == 0x78, "CreateFencedDescription is 0x78 (create 0x1400048e0 MemAlloc(0x78))");

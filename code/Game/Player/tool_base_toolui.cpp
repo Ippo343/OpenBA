@@ -20,6 +20,8 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ComponentDescription.h"
+#include "Game/PlayerToolManager.h"
 #include "ui/DialogInstance.h"  // ENDGAME B.3.8 CB4: the real UI::DialogInstance
 #include "ui/Dialog.h"          // UI::Dialog::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include <new>
@@ -81,87 +83,77 @@
 //   - g_pGameWorldSingleton, ExternalFactory::_singleton, UI::Dialog::TypeId()
 //   - DWORD_1401c7f58  — exe type-id storage global (ResolveAddr, lazily)
 //   No unregistered exe sub-calls.
-extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint64_t param_3) {
-    uint64_t* slot = reinterpret_cast<uint64_t*>(param_1);
+// B.4 PLAYER: param_1 is the tool's owner, the PlayerToolManager (Tool +0x10):
+// its +0x00 holds the dialog, +0x08 / +0x0C the two cached floats.
+extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner,
+                                                           UI::DialogInstance** ret,
+                                                           ComponentDescription* description) {
+    UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
 
     // (1) Close any existing dialog and null the IBP.
-    if (*slot != 0) {
-        uint64_t local = *slot;
-        void* ui = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
-        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
-        new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *slot = local;
+    if (owner->field_0x00 != nullptr) {
+        Object::InternalPtr<UI::DialogInstance> local(owner->field_0x00);
+        ui->CloseDialog(&local);
+        owner->field_0x00 = nullptr;
     }
 
-    void* ui = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x98);
+    ui = GameUpdateLoop::_singleton->m_userInterface;
 
-    // (2) Load "Dialog/CreateBar.rsc" and type-check it against the External type.
-    void* resource = nullptr;
+    // (2) Load "Dialog/CreateBar.rsc" and type-check it against the Dialog type.
+    const UI::Dialog* resource = nullptr;
     {
         System::Filename fname("Dialog/CreateBar.rsc");
-        void* obj = nullptr;
+        const Object::External* obj = nullptr;
         if (::Object::ExternalFactory::_singleton) {
-            ::Object::ExternalFactory* efactory =
-                ::Object::ExternalFactory::_singleton;  // B.3.3 bridge
-            obj = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname)));
+            obj = ::Object::ExternalFactory::_singleton->FindOrLoad(fname);
         }
         if (obj && Object::IsDerivedFromNullSafe(obj, UI::Dialog::TypeId())) {
-            resource = obj;
+            resource = static_cast<const UI::Dialog*>(obj);
         }
     }
 
     // (3) Allocate + construct the DialogInstance (the real class: its compiler
     // table is the one retail's copy at 0x14015f5a0 describes).
-    void* dialog = System::MemoryAllocator::MemAlloc(0xB8, 8);
-    void* dialogToWrap = nullptr;
-    if (dialog) {
-        ::new (dialog) UI::DialogInstance(
-            reinterpret_cast<UI::UserInterface*>(ui),            // B.3.8 bridge
-            reinterpret_cast<const UI::Dialog*>(resource),       // B.3.8 bridge
+    void* storage = System::MemoryAllocator::MemAlloc(0xB8, 8);
+    UI::DialogInstance* dialog = nullptr;
+    if (storage) {
+        dialog = ::new (storage) UI::DialogInstance(
+            ui, resource,
             Object::InternalPtr<UI::DialogInstance>(),           // parent: null
-            reinterpret_cast<Object::Base*>(param_3),            // B.3.8 bridge (description entity)
+            description,                                         // the data source
             nullptr, 0);
-        dialogToWrap = dialog;
     }
 
-    // (4) Wrap into IBP, store, and add to the UI.
+    // (4) Store it in the manager, and add it to the UI.
+    owner->field_0x00 = dialog;
     {
-        uint64_t newIBP = 0;
-        new (&newIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(dialogToWrap));   // B.3.3 bridge
-        *slot = newIBP;
-        uint64_t addIBP = newIBP;
-        reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(  // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addIBP));
+        Object::InternalPtr<UI::DialogInstance> addIBP(dialog);
+        ui->AddDialog(&addIBP);
     }
 
-    // (5) Reset the two cached float coords to -1.0f.
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x08) = 0xbf800000u;
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x0c) = 0xbf800000u;
+    // (5) Reset the two cached float coords (+0x08, +0x0C) to -1.0f. Retail
+    // stores the dword 0xbf800000 twice; the manager's header (block GAME-b)
+    // declares the eight bytes as one uint64_t `field_0x08`, so the pair is one
+    // store of the same bytes.
+    owner->field_0x08 = 0xbf800000bf800000ull;
 
-    // (6) Probe the description's component list for the CreateBar type id.
-    // 0x1401c7f58 is ToolbarDescription's cell (Table 1).
+    // (6) Probe the description's sub-descriptions for the ToolbarDescription
+    // (cell 0x1401c7f58); retail calls IsDerivedFrom on the match and discards it.
     {
         const uint32_t tid = ToolbarDescription::TypeId();
-        if (param_3) {
-            int n = *reinterpret_cast<int*>(param_3 + 0x30);
-            uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(param_3 + 0x28);
+        if (description) {
+            int n = description->_subDescCount;
+            Description** subs = description->_subDescs;
             for (int i = 0; i < n; i++) {
-                void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-                if (t == tid) {
-                    void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                    (void)Object::IsDerivedFromNullSafe(c, tid);  // probe; result discarded
+                if (subs[i]->Type() == tid) {
+                    (void)Object::IsDerivedFromNullSafe(subs[i], tid);  // probe; result discarded
                     break;
                 }
             }
         }
     }
 
-    // (7) Return *param_1 through param_2.
-    *reinterpret_cast<uint64_t*>(param_2) = *slot;
-    return param_2;
+    // (7) Return the manager's dialog through the hidden slot.
+    *ret = owner->field_0x00;
+    return ret;
 }
