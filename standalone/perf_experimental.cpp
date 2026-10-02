@@ -17,6 +17,7 @@
 #include <vector>
 #include "math/Math.h"       // -Iruntime/types
 #include "volume/Volume.h"   // B3R: RtVolume_Frustum_MulTransform3
+#include "Component/ModelComponent.h"   // B4: meshInstance / transform by name
 
 namespace PerfX {
 
@@ -92,7 +93,7 @@ bool     s_simRanThisFrame = false;
 uint8_t* s_rootOnly = nullptr;
 bool     s_rootOnlyResolved = false;
 long     s_counts[kCntMax];
-std::vector<void*> s_culledModels;   // models whose pose was left root-only this frame
+std::vector<ModelComponent*> s_culledModels;   // models whose pose was left root-only this frame
 struct DeferredPick { void* model; void* scene; uint32_t id; PickXfCtor_t ctor; PickSetXf_t set; };
 std::vector<DeferredPick> s_deferredPicks;   // citizens whose pick transform was not pushed
 struct DeferredReplay { void* obj; void (*fn)(void*); };
@@ -106,11 +107,13 @@ void ResolveRootOnly() {
     s_rootOnlyResolved = true;
     // Graphics::MeshInstance::_rootOnlyUpdates (retail: import slot 0x140151f30),
     // the class static (ENDGAME B.3.9 SS2).
+    // LEFT: the class static is a bool; the flag pointer is uint8_t* because
+    // modelcomponent.cpp (COMP) holds PerfX::RootOnlyFlag() as one.
     s_rootOnly = reinterpret_cast<uint8_t*>(&::Graphics::MeshInstance::_rootOnlyUpdates);
     g_rootOnlyPtr = s_rootOnly;
 }
 
-void RefreshFrustum(void* renderer) {
+void RefreshFrustum(::Graphics::Renderer* renderer) {
     s_haveFrustum = false;
     if (!renderer) return;
     // Renderer::GetCullCamera returns a reference into the camera object; before the first
@@ -119,21 +122,23 @@ void RefreshFrustum(void* renderer) {
     // address of the returned reference does not dereference it, so the range test below
     // still runs before any load.
     const ::Graphics::Camera* camera =
-        &reinterpret_cast<::Graphics::Renderer*>(renderer)->GetCullCamera();  // B.3.5 bridge
-    if (reinterpret_cast<intptr_t>(camera) <= 0x10000 ||
-        reinterpret_cast<uintptr_t>(camera) >= 0x00007fffffff0000ull) return;
+        &renderer->GetCullCamera();
+    if (reinterpret_cast<intptr_t>(camera) <= 0x10000 ||  // CAST-OK: ptr_int
+        reinterpret_cast<uintptr_t>(camera) >= 0x00007fffffff0000ull) return;  // CAST-OK: ptr_int
     alignas(16) uint8_t camFrustum[256] = {0};
     alignas(16) uint8_t worldFrustum[256] = {0};
     // B.3.5: the retslot door's body moved to the call site — exactly one
     // construction, into the SAME caller storage the door used to be handed.
-    ::new (static_cast<void*>(camFrustum)) ::Frustum(camera->GetFrustum());
+    const ::Frustum* camF = ::new (static_cast<void*>(camFrustum)) ::Frustum(camera->GetFrustum());
     // Graphics::Camera keeps its world transform at +0x64; the copy is
     // Math::Transform3's copy ctor, now through the real class's named field.
     static_assert(offsetof(::Graphics::Camera, _cameraToWorld) == 0x64,
                   "Camera::_cameraToWorld @ +0x64 — the offset this read used to spell out");
     Math::Transform3 camXf3 = camera->_cameraToWorld;
     // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z (0x1800f9310), explicit slot.
-    RtVolume_Frustum_MulTransform3(reinterpret_cast<const ::Frustum*>(camFrustum),
+    // LEFT: the result slot is raw caller storage the retslot body constructs into
+    // (Volume.h's RtVolume_Frustum_MulTransform3, R-CORE).
+    RtVolume_Frustum_MulTransform3(camF,
                                    reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);
     std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
@@ -152,16 +157,15 @@ void FlushCulled() {
     ResolveRootOnly();
     uint8_t saved = s_rootOnly ? *s_rootOnly : 0;
     if (s_rootOnly) *s_rootOnly = 0;
-    int64_t zeroTime = 0;
-    for (void* model : s_culledModels) {
-        uintptr_t s = reinterpret_cast<uintptr_t>(model);
+    const System::Time zeroTime{};   // _ticks 0
+    for (ModelComponent* model : s_culledModels) {
+        ::Graphics::Geometry* geo = &model->meshInstance;   // +0x28
         // GEOM_CULL left the render-scene transform stale: push model+0x148 first.
         // The receiver is the Geometry the vtable dispatch below also drives: every
         // drawable component in this port embeds its Geometry at owner+0x28
         // (scene_watch.cpp:176-178 and engine/types/ModelComponent.h).
         if (Cfg().geomCull)
-            reinterpret_cast<::Graphics::Geometry*>(s + 0x28)->SetTransform(
-                *reinterpret_cast<const Math::Transform*>(s + 0x148));  // B.3.5 bridge
+            geo->SetTransform(model->transform);   // +0x148
         // ENDGAME B.3.5 caller batch, COORDINATOR RULING. This was a hand-inlined
         // read of slot 1 (`vt + 0x8`) on the same proved `Graphics::Geometry` at
         // owner+0x28, guarded by `if (upd)` — a test of the OBJECT'S OWN VTABLE
@@ -172,8 +176,7 @@ void FlushCulled() {
         // the virtual call it always was. The OBJECT-pointer reasoning above — the
         // receiver is proved from the code that produced it, not from its name —
         // is unchanged, and `Cfg().geomCull` still guards the SetTransform above.
-        reinterpret_cast<::Graphics::Geometry*>(s + 0x28)                // B.3.5 bridge
-            ->Update(*reinterpret_cast<const System::Time*>(&zeroTime));
+        geo->Update(zeroTime);
     }
     if (Cfg().trace)
         std::fprintf(stderr, "[PerfX] flushed %zu culled poses (sim idle)\n", s_culledModels.size());
@@ -239,7 +242,7 @@ unsigned s_batchSerial = 0;
 long s_cntBatchPerTick = 0;
 
 BatchSlot* BatchEntry(const void* model) {
-    unsigned h = (unsigned)(((reinterpret_cast<uintptr_t>(model) >> 4) * 2654435761u) & 32767);
+    unsigned h = (unsigned)(((reinterpret_cast<uintptr_t>(model) >> 4) * 2654435761u) & 32767);  // CAST-OK: hash
     for (int probe = 0; probe < 64; ++probe) {
         BatchSlot& e = s_batchTbl[h];
         if (e.serial == s_batchSerial && e.key == model) return &e;
@@ -250,7 +253,7 @@ BatchSlot* BatchEntry(const void* model) {
 }
 
 bool AnimationHasRootMotion(const uint8_t* anim) {
-    RootMotionSlot& e = s_rootMotionTbl[(unsigned)(((reinterpret_cast<uintptr_t>(anim) >> 4) * 2654435761u) & 4095)];
+    RootMotionSlot& e = s_rootMotionTbl[(unsigned)(((reinterpret_cast<uintptr_t>(anim) >> 4) * 2654435761u) & 4095)];  // CAST-OK: hash
     if (e.key == anim) return e.has;
     const int nodes = *reinterpret_cast<const int*>(anim + 0x4c);
     const int frames = *reinterpret_cast<const int*>(anim + 0x50);
@@ -268,6 +271,9 @@ bool AnimationHasRootMotion(const uint8_t* anim) {
 
 // True when this model's root-motion offset would differ between one update of N ticks
 // and N updates of one tick (see above).
+// LEFT: the walk below reads the instance AnimationState's layers and the Animation
+// records through R-GFX's untyped PODs (MeshAnimationState / MeshAnimationLayer keep
+// `_group` an untyped ExternalPtr and the Animation's key table unnamed).
 bool NeedsPerTickRootUpdate(const void* model) {
     const uint8_t* state = reinterpret_cast<const uint8_t*>(model) + 0x28 + 0xd8;
     const int count = *reinterpret_cast<const int*>(state + 0x10);
@@ -296,7 +302,7 @@ bool NeedsPerTickRootUpdate(const void* model) {
 
 uint8_t* RootOnlyFlag() { ResolveRootOnly(); return s_rootOnly; }
 
-void BeginFrame(void* renderer) {
+void BeginFrame(::Graphics::Renderer* renderer) {
     if (!Cfg().master) return;
     ResolveRootOnly();
     // The sim did not run last frame (pause / speed 0) but poses were left stale before
@@ -357,7 +363,7 @@ static VisSlot s_visTbl[8192];
 
 static bool CachedVisible(const float* p, float m) {
     if (!s_haveFrustum) return true;
-    VisSlot& e = s_visTbl[((reinterpret_cast<uintptr_t>(p) >> 4) * 2654435761u) & 8191];
+    VisSlot& e = s_visTbl[((reinterpret_cast<uintptr_t>(p) >> 4) * 2654435761u) & 8191];  // CAST-OK: hash
     if (e.key == p && e.serial == s_frameSerial) return e.vis;
     const bool v = PlanesVisible(p, m);
     e.key = p; e.serial = s_frameSerial; e.vis = v;
@@ -368,7 +374,7 @@ bool PointVisible(const float* p) {
     return CachedVisible(p, Cfg().cullMargin);
 }
 
-bool AnimCullSkip(void* model) {
+bool AnimCullSkip(ModelComponent* model) {
     if (!Cfg().animCull) return false;
     if (!s_simRanThisFrame) {
         // First model tick of this frame: the previous frame's skip list is superseded
@@ -381,7 +387,8 @@ bool AnimCullSkip(void* model) {
     }
     ResolveRootOnly();
     if (!s_rootOnly || *s_rootOnly != 0) return false;   // intermediate iteration: already root-only
-    const float* pos = reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158);
+    const Vector3& t = model->transform.translation;     // +0x158
+    const float pos[3] = { t.x, t.y, t.z };
     if (PointVisible(pos)) { ++s_counts[kCntModelVisible]; return false; }
     ++s_counts[kCntModelCulled];
     s_culledModels.push_back(model);
@@ -405,7 +412,8 @@ void SetIteration(int index, int count) {
     if (index == 0) ++s_batchSerial;   // new sim frame: every per-model skip count is stale
 }
 
-bool AnimBatchDecide(void* model, const void* time, int64_t* timeOut) {
+bool AnimBatchDecide(ModelComponent* model, const void* time, int64_t* timeOut) {
+    // LEFT: `time` is the void* Component::Update hands ModelComponent (COMP's signature).
     const int64_t tick = *reinterpret_cast<const int64_t*>(time);
     *timeOut = tick;
     if (s_iterCount <= 1) return false;                       // speed 1: nothing to batch
@@ -415,8 +423,9 @@ bool AnimBatchDecide(void* model, const void* time, int64_t* timeOut) {
         // The per-frame visibility cache makes this answer identical on every iteration
         // of the frame, so a model skipped on the intermediate ones is exactly the model
         // that gets the N x tick here.
-        batch = s_haveFrustum && !s_flushing &&
-                !PointVisible(reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158));
+        const Vector3& t = model->transform.translation;   // +0x158
+        const float pos[3] = { t.x, t.y, t.z };
+        batch = s_haveFrustum && !s_flushing && !PointVisible(pos);
     }
     if (!batch) return false;
     BatchSlot* e = BatchEntry(model);

@@ -36,6 +36,9 @@
 #pragma once
 #include <cstdint>
 
+class ModelComponent;                    // Component/ModelComponent.h
+namespace Graphics { class Renderer; }   // runtime/types/graphics/Camera.h
+
 namespace PerfX {
 
 // Resolved once (first BeginFrame) into a plain global so the per-tick queries below are
@@ -65,7 +68,7 @@ inline bool TerrainSidecar()  { return g_flags.terrainSidecar; }    // 1-byte te
 // GameUpdateLoop::Update start: refresh the per-frame world frustum from the renderer's
 // cull camera and flush any deferred visual state when the sim did not run last frame
 // (pause), so a paused pan never shows a stale pose.
-void BeginFrame(void* renderer);
+void BeginFrame(Graphics::Renderer* renderer);
 // Draw side: the terrain collect pass hands over the world-space Volume::Frustum it
 // computed (6 planes {nx,ny,nz,d}); the cull camera reference is only valid inside Draw.
 void SetWorldFrustum(const void* frustum);
@@ -87,10 +90,10 @@ void SetIteration(int index, int count);
 // on the last iteration when intermediate ones were skipped for this model). A model whose
 // root-motion offset the move tick samples per tick (blend, non-instanced root motion) is
 // never skipped, so walk speed matches the unbatched sim exactly.
-bool AnimBatchDecide(void* modelComponent, const void* time, int64_t* timeOut);
+bool AnimBatchDecide(ModelComponent* modelComponent, const void* time, int64_t* timeOut);
 // ModelComponent tick: decide whether this model's animation pose update may stay
 // root-only this iteration. Records the model for a later flush.
-bool AnimCullSkip(void* modelComponent);
+bool AnimCullSkip(ModelComponent* modelComponent);
 
 // Picking: an off-screen citizen skips its Picking::Scene::SetTransform; the deferred
 // push is replayed on pause so a click while paused still hits the right mesh.
