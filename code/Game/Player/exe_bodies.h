@@ -38,10 +38,10 @@ extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell);
 extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell, int* outLength);  // 0x1400fb2d0
 
 // ---- keystone_a_removalcalcpath.cpp
-extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);  // 0x1400f8d50
-extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1);  // 0x14011dfa0
+extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);  // 0x1400f8d50 B4 FORWARD -> WorkScheduler::FindWorkAtCell: 2 outside callers (Action/action_base_cnr.cpp, Component/destroycomponent_states.cpp)
+extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1);  // 0x14011dfa0 B4 FORWARD -> DestroyComponent::RunStateMachine: 1 outside caller (Dialog/upgradeui.cpp)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
-extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2);  // 0x1400f9ad0
+extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2);  // 0x1400f9ad0 B4 FORWARD -> WorkScheduler::PrioritizeWork: 1 outside caller (Component/firecomponent_ignite.cpp)
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
