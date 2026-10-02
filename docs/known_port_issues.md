@@ -296,6 +296,12 @@ in the code carries a comment.
 | 47 | `PathfinderThread::ApplyCommand` case 5 (`action_pf_astar.cpp`) | holds the lock through the ready store | 0x1400a6430 unlocks after the result-array resize (0x1400a658b) | CONFIRMED (ACT-a) |
 | 48 | `PathfinderThread::ApplyCommand`'s 64 KB path buffer | `static` (one worker thread uses it) | on the stack (0x1400a6436) | CONFIRMED (ACT-a) |
 | 49 | `RegionPairCache::Store` (`action_pf_region.cpp`) | writes 0 to `RegionPairEntry::field_0x0C` | 0x1400a5b30 stores a stale stack dword there (never read) | CONFIRMED (ACT-a) |
+| 70 | `PlacementTool::CreateAt` (`tool_base_tile.cpp`) | passes 250.0f as the DAT_140172248 argument of the footprint test 0x14009d580 (the old comment said 0x447a0000 == 250) | the cell holds 0x447a0000 = 1000.0f (read 2026-10-02); `placementtool.cpp` already uses 1000.0f for the same cell | CONFIRMED (PLAYER) |
+| 71 | the tool registry node (`ToolRegistryNode`, `Dialog/toolbardialog.cpp`, DLG-d's) | 0x30 bytes, no balance field | the node allocator 0x14002df10 allocates 0x38 bytes with a balance byte at +0x30; `tool_activation_standalone.cpp` reads it through its own 0x38 `ToolModeNode` | CONFIRMED (PLAYER); header of a finished block, left for the coordinator |
+| 72 | `TrackedEntityNode::key` (`PlayerToolManager.h`, GAME-b's) | typed `ComponentEntity*` | 0x1401001f0 stores a dialog description there | CONFIRMED (PLAYER); naming / typing only, GAME-b's header |
+| 73 | `Tool::dialogPtr` (+0x10, `Tool.h`) | the name says dialog | holds the owning `PlayerToolManager` (SelectTool 0x140102b60 stores it at 0x140102dc2); B4 typed it `PlayerToolManager*` and kept the name (14f) | CONFIRMED (PLAYER); naming only |
+| 74 | guards the PLAYER bodies keep that retail lacks | `FencedTool::Startup`'s missing-description bail, `BridgeTool::Draw`'s two cell-range checks, `RemovalCalc_helper_e4d0` / `_dfa0`'s missing-StateMachine bail, EditTool's citizen-position fallback (`TryProjectEntityModelPos`) | retail dereferences / has no fallback | CONFIRMED from the tree's own comments; kept as they were, no new guard added (PLAYER) |
+| 75 | the tool overlay arrays of `fencedtool.cpp` and `pathtool.cpp` | B4 replaced their hand-written arrays (first grow to capacity 3) with `Collection::Array` (first grow to capacity 1) | the inlined SetSize grow; allocation size only, every record is the same | SUSPECTED harmless (PLAYER; retail's inlined grow not re-read) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
