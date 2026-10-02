@@ -234,7 +234,7 @@ void TownHallUI::InitProfessions() {
         reinterpret_cast<const UI::ElementDescription*>(templateChild->_description);   // LEFT: Element::_description is void* (R-UI-a)
 
     // Set table size to profession count x 1
-    int profCount = profList->arrayCount;
+    int profCount = profList->professions.GetSize();
     table->SetSize(profCount, 1);
 
     // Iterate rows
@@ -275,7 +275,7 @@ void TownHallUI::InitProfessions() {
         profEntry.button = button;
 
         // Get profession type entry: profList->types[i]
-        uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->arrayData)[i];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+        uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->professions.GetData())[i];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
         profEntry.workers = i;  // profession index
 
         // Insert into profession BST at +0x50
@@ -1385,7 +1385,7 @@ void TownHallUI::UpdateInventory() {
     CitizenBehavior* town =
         reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
     ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
-    int profCount = profList->arrayCount;
+    int profCount = profList->professions.GetSize();
 
     // Phase 1: Zero counters and resize entity arrays for each profession
     for (int p = 0; p < profCount; p++) {
@@ -1399,7 +1399,7 @@ void TownHallUI::UpdateInventory() {
     // Phase 2: For each profession, look up the town's profession tree
     // (+0x100) to find the buildings of that profession, count worker slots
     for (int p = 0; p < profCount; p++) {
-        uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->arrayData)[p];   // LEFT: GAME-b void*
+        uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->professions.GetData())[p];   // LEFT: GAME-b void*
 
         // Look up profession type in the town's profession tree (+0x100)
         void* bstNode = town->field_0x100;   // the node walk below stays raw: CitizenBehavior types no node (WORK-a)
@@ -1648,7 +1648,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         for (int i = 0; i < toAdd; i++) {
             // The seat functions take the town manager and the profession as integers.
             const int64_t townKey = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (Component/Game exe_bodies.h)
-            const int64_t profKey = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_professionList->arrayData)[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+            const int64_t profKey = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_professionList->professions.GetData())[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
 
             int64_t retBuf[2] = {0, 0};
             FindAvailableBuilding(townKey, retBuf, static_cast<uint64_t>(profKey));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
@@ -1682,7 +1682,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         int toRemove = current - desired;
         for (int i = 0; i < toRemove; i++) {
             void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t*>(GameUpdateLoop::_singleton->m_professionList->arrayData)[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+            uint64_t profId = reinterpret_cast<uint64_t*>(GameUpdateLoop::_singleton->m_professionList->professions.GetData())[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
         }
     }
@@ -1721,7 +1721,7 @@ bool TownReady() {
         reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
     ProfessionList* profList = gw->m_professionList;
     if (!townMgr || !profList) return false;
-    if (profList->arrayCount <= 0 || profList->arrayData == nullptr) return false;
+    if (profList->professions.GetSize() <= 0 || profList->professions.GetData() == nullptr) return false;
     if (gw->m_dayCounter == nullptr) return false;
     if (townMgr->field_0x150 == nullptr) return false;           // stat-history series
     if (townMgr->professionResources == nullptr) return false;   // production records
@@ -1765,7 +1765,7 @@ void DiagPrint(const char* where, const TownHallUI* self) {
         ProfessionList* profList = gw->m_professionList;
         fprintf(stderr, "[TownHallSA]   gw=%p townMgr=%p profList=%p profCnt=%d clock=%p hist(+150)=%p prod(+170)=%p\n",
                 static_cast<void*>(gw), gw->m_citizenList, static_cast<void*>(profList),
-                profList ? profList->arrayCount : -1,
+                profList ? profList->professions.GetSize() : -1,
                 gw->m_dayCounter,
                 townMgr ? townMgr->field_0x150 : nullptr,
                 townMgr ? static_cast<void*>(townMgr->professionResources) : nullptr);
@@ -1909,7 +1909,7 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
 void TownHallUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (!townhallui_sa::Built(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
-    int profCount = GameUpdateLoop::_singleton->m_professionList->arrayCount;
+    int profCount = GameUpdateLoop::_singleton->m_professionList->professions.GetSize();
 
     if (msg == 0x12) {
         if (id > 0x1998 && id <= 0x1999 + profCount)

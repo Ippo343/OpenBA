@@ -42,9 +42,7 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // Mirrors the inline ctor from ProfessionList_Factory (0x14001e5c0).
 // External() and the 0x14015ef50 stamp are the compiler's; then zero all fields.
 ProfessionList::ProfessionList() {
-    arrayData = nullptr;
-    arrayCount = 0;
-    arrayCapacity = 0;
+    // +0x20 professions: Collection::Array() is the three zero stores.
     field_0x30 = nullptr;
     field_0x38 = nullptr;
     childProfession = nullptr;
@@ -63,11 +61,8 @@ ProfessionList::ProfessionList() {
 // ArrayDtorImpl exactly; Profession* is trivially destructible so there is no
 // element step). Trait-derived row: byteCopy, no init, no destroy, align 8 —
 // the same row Startup's append below uses.
-ProfessionList::~ProfessionList() {
-    // B.3.2 bridge: the header is still spelled `arrayData` + `arrayCount` /
-    // `arrayCapacity`, not a Collection::Array member.
-    reinterpret_cast<Collection::Array<void*>*>(&arrayData)->~Array();
-}
+// The array is the `professions` member: the compiler runs its ~Array.
+ProfessionList::~ProfessionList() {}
 
 // ============================================================
 // ProfessionList::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
@@ -98,17 +93,13 @@ Object::External* ProfessionList::Construct() {
 // ExternalPtr<Profession> refs at +0x30, +0x38, +0x40, +0x48
 // using FUN_140018020 (typed ExternalPtr serialize). Returns AL=1.
 bool ProfessionList::Serialize(void* stream) {
-    // Stack-allocated serializer (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
     // Serialize four ExternalPtr<Profession> references
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_0x30, serializer);         // +0x30
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_0x38, serializer);         // +0x38
-    Reimpl_ExternalPtr_Serialize_StringTable(&childProfession, serializer);    // +0x40
-    Reimpl_ExternalPtr_Serialize_StringTable(&studentProfession, serializer);  // +0x48
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_0x30, &serializer);         // +0x30
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_0x38, &serializer);         // +0x38
+    Reimpl_ExternalPtr_Serialize_StringTable(&childProfession, &serializer);    // +0x40
+    Reimpl_ExternalPtr_Serialize_StringTable(&studentProfession, &serializer);  // +0x48
     return true;
 }
 
@@ -141,43 +132,39 @@ bool ProfessionList::Serialize(void* stream) {
 // retail does not have (SetSizeCore skips a null element address instead).
 // Caller batch CB6: the list's and each Profession's fields are read by name;
 // the by-name fallback for the Profession type id is Profession::TypeId().
-extern "C" void ProfessionList_Startup_Impl(void* profList) {
-    ProfessionList* const self = static_cast<ProfessionList*>(profList);   // B.3.8 bridge
-    if (!self || !::Object::ExternalFactory::_singleton)
+// The tree keeps three tests retail 0x1400a90a0 lacks (known_port_issues 14d,
+// GAME-b): the null ExternalFactory singleton and the 0 type id return early, and
+// an external that is not a Profession is skipped where retail reads +0x4e of the
+// null it substitutes.
+void ProfessionList::Startup() {
+    if (!::Object::ExternalFactory::_singleton)
         return;
-
-    // B.3.2 bridge: ProfessionList+0x20 is still a raw {data, count|cap} header.
-    auto* profArray = reinterpret_cast<Collection::Array<void*>*>(&self->arrayData);
 
     // 0x1401c5a98 is Profession's type-id cell (Table 1).
     uint32_t profTid = Profession::TypeId();
     if (!profTid) return;
 
-    void* factory = ::Object::ExternalFactory::_singleton;
-    // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
-    // The singleton is still read through the EXISTING door, so the guard
-    // above still gates the same cell and the same registered body still runs.
-    const ::Object::ExternalFactory* efactory =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    const ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     const ::Object::External* found = efactory->FindNext(profTid, nullptr);
     for (; found; found = efactory->FindNext(profTid, found)) {
-        void* it = const_cast<::Object::External*>(found);   // B.3.3 bridge
-        if (!::Object::IsDerivedFromNullSafe(it, profTid)) continue;
-        if (static_cast<Profession*>(it)->isAvailable == 0) continue;  // +0x4e: not player-selectable
+        if (!found->IsDerivedFrom(profTid)) continue;
+        // LEFT: FindNext returns a const External*; the array holds Profession*.
+        Profession* prof = const_cast<Profession*>(static_cast<const Profession*>(found));
+        if (prof->isAvailable == 0) continue;  // +0x4e: not player-selectable
 
         // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).
-        profArray->SetSize(profArray->GetSize() + 1, it);
+        professions.SetSize(professions.GetSize() + 1, prof);
     }
 
     // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.
-    int n = self->arrayCount;                                    // +0x28 count
-    uintptr_t* arr = reinterpret_cast<uintptr_t*>(self->arrayData);  // +0x20 (DLG-c: arrayData typed Profession**)
+    int n = professions.GetSize();                               // +0x28 count
+    Profession** arr = professions.GetData();                    // +0x20
     if (n > 1 && arr) {
         for (int i = 1; i < n; i++) {
-            uintptr_t key = arr[i];
-            int keyPri = reinterpret_cast<const Profession*>(key)->field48;   // +0x48
+            Profession* key = arr[i];
+            int keyPri = key->field48;   // +0x48
             int j = i - 1;
-            while (j >= 0 && reinterpret_cast<const Profession*>(arr[j])->field48 > keyPri) {
+            while (j >= 0 && arr[j]->field48 > keyPri) {
                 arr[j + 1] = arr[j];
                 j--;
             }
@@ -187,8 +174,15 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
 
 #ifdef _DEBUG
     printf("[ProfessionList] Startup: %d professions in array (tid=0x%08x)\n",
-           self->arrayCount, profTid);
+           professions.GetSize(), profTid);
 #endif
+}
+
+// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a).
+// (Its one caller tests the pointer for null first; the old body's own test of it
+// was unreachable and is gone.)
+extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList) {
+    profList->Startup();
 }
 
 // ============================================================

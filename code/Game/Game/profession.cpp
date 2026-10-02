@@ -40,15 +40,12 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // Profession::Profession (0x1400a9030)
 // ============================================================
 // External() and the 0x14015efa0 stamp are the compiler's; then the defaults.
+// The three System::String members (+0x30 / +0x38 / +0x40) are constructed
+// empty (null data), retail's three zero stores.
 Profession::Profession() {
     // ExternalPtr fields
     stringTable = nullptr;
     spriteSheet = nullptr;
-
-    // String fields (zero = empty COW string)
-    stringName = 0;
-    stringDesc = 0;
-    stringTool = 0;
 
     // Numeric fields
     field48 = 0;
@@ -64,14 +61,10 @@ Profession::Profession() {
 // Profession::~Profession / DeletingDtor (vtable +0x00)
 // ============================================================
 // Original: 0x14001e6f0
-// Destroys 3 strings at +0x40, +0x38, +0x30 (in reverse order); External::
-// ~External is the compiler's chain; MemFree if flags & 1.
-Profession::~Profession() {
-    // B.3.1 bridge: Profession's String fields are still POD members.
-    reinterpret_cast<System::String*>(&stringTool)->~String();  // +0x40
-    reinterpret_cast<System::String*>(&stringDesc)->~String();  // +0x38
-    reinterpret_cast<System::String*>(&stringName)->~String();  // +0x30
-}
+// Destroys 3 strings at +0x40, +0x38, +0x30 (in reverse order): the compiler's
+// member destruction. External::~External is the compiler's chain; MemFree if
+// flags & 1.
+Profession::~Profession() {}
 
 // ============================================================
 // Profession::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
@@ -100,34 +93,25 @@ Object::External* Profession::Construct() {
 // Original: 0x1400a8f10
 // Creates a Serializer(stream, version=0), then serializes each field.
 bool Profession::Serialize(void* stream) {
-    // Stack-allocated serializer (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
     // Serialize ExternalPtr fields
-    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, serializer);  // +0x20 (0x14000bf40)
-    Reimpl_ExternalPtr_Serialize_StringTable(&spriteSheet, serializer);  // +0x28 (0x14000bd30)
+    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);  // +0x20 (0x14000bf40)
+    Reimpl_ExternalPtr_Serialize_StringTable(&spriteSheet, &serializer);  // +0x28 (0x14000bd30)
 
     // Serialize String fields
-    reinterpret_cast<System::String*>(&stringName)->Serialize(serializer);  // +0x30
-    reinterpret_cast<System::String*>(&stringDesc)->Serialize(serializer);  // +0x38
-    reinterpret_cast<System::String*>(&stringTool)->Serialize(serializer);  // +0x40
+    stringName.Serialize(&serializer);  // +0x30
+    stringDesc.Serialize(&serializer);  // +0x38
+    stringTool.Serialize(&serializer);  // +0x40
 
     // Serialize numeric fields
-    // field48 declared int32_t == int door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(field48, nullptr);     // +0x48   // B.3.4 bridge
-    // field4C/field4D declared uint8_t, not exactly bool: cast kept
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&field4C), nullptr);    // +0x4C   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&field4D), nullptr);    // +0x4D   // B.3.4 bridge
-    // skillMult1/2 declared float == float door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(skillMult1, nullptr); // +0x54   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(skillMult2, nullptr); // +0x58   // B.3.4 bridge
-    // priority declared int32_t == int door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(priority, nullptr);     // +0x50   // B.3.4 bridge
-    // isAvailable declared uint8_t, not exactly bool: cast kept
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&isAvailable), nullptr); // +0x4E   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    serializer.Serialize(field48, nullptr);      // +0x48 int
+    serializer.Serialize(field4C, nullptr);      // +0x4C bool
+    serializer.Serialize(field4D, nullptr);      // +0x4D bool
+    serializer.Serialize(skillMult1, nullptr);   // +0x54 float
+    serializer.Serialize(skillMult2, nullptr);   // +0x58 float
+    serializer.Serialize(priority, nullptr);     // +0x50 int
+    serializer.Serialize(isAvailable, nullptr);  // +0x4E bool
     return true;
 }
 

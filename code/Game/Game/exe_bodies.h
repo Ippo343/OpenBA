@@ -123,7 +123,8 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);  // 0x1400a5140
 
 // ---- professionlist.cpp
-extern "C" void ProfessionList_Startup_Impl(void* profList);  // 0x1400a90a0
+class ProfessionList;
+extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x1400a90a0  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_arrays.cpp
 extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream);  // 0x1400988c0
