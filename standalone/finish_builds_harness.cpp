@@ -33,6 +33,8 @@
 #include "Object/factory_registration.h"
 #include "Component/BuildComponent.h"
 #include "Component/StateMachineComponent.h"
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -55,15 +57,14 @@ void Init() {
     std::fflush(stderr);
 }
 
-void* FindComp(void* ent, uint32_t tid) {
+Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    const uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
@@ -74,12 +75,11 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
     Init();
     if (s_interval <= 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    const uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(gw) + 0xe8);
-    const uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
-    const int n = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+    EntityList* entityList = gw->m_entityList;                                        // +0xe8
+    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;      // +0x08
+    const int n = entityList ? entityList->masterArray.count : 0;                     // +0x10
     if (!arr || n <= 0) return;
 
     const uint32_t tidBuild = BuildComponent::TypeId();
@@ -88,16 +88,15 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
 
     int scanned = 0, stamped = 0, alreadyBuilt = 0;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        void* bc = FindComp(ent, tidBuild);
+        BuildComponent* bc = static_cast<BuildComponent*>(FindComp(ent, tidBuild));   // exact type id
         if (!bc) continue;                       // not a constructable structure
         ++scanned;
-        void* sm = FindComp(ent, tidSM);
+        StateMachineComponent* sm = static_cast<StateMachineComponent*>(FindComp(ent, tidSM));
         if (!sm) continue;
-        const int cur  = *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x50);
-        const int pend = *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x52);
+        const int cur  = sm->stateMachine.currentInput;    // +0x50
+        const int pend = sm->stateMachine.pendingState;    // +0x52
         if (cur == 2 || pend == 2) { ++alreadyBuilt; continue; }
 
         // Drive the BuildComponent's OWN completion rather than poking the state.
@@ -115,10 +114,10 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
             // bc+0x48 is progress, bc+0x4c the build multiplier. State8Update completes
             // on progress >= target; a saturated progress satisfies that whatever the
             // target works out to, and the transition is still made by retail code.
-            *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(bc) + 0x48) = 0x40000000;
+            bc->laborProgress = 0x40000000;            // +0x48
             ++stamped;
         } else {
-            *reinterpret_cast<int8_t*>(static_cast<uint8_t*>(sm) + 0x52) = 8;
+            sm->stateMachine.pendingState = 8;         // +0x52
             ++stamped;
         }
     }
