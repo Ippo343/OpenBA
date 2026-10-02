@@ -187,3 +187,7 @@ Metric at `b3e86f74`: **14,368** to remove.
 | 35 | W1-PLAYER (first part) | `0dd2b4c0` | Player: Tool, PlacementTool, RemovalTool, RoadTool, BridgeTool, DragPlacementTool, FencedTool, PathTool by name; `behaviour:` the tool overlay arrays grow as retail's inlined grow does 0x1400dc542 / 0x1400dd47c (first record capacity 1, the tree had 3): 2230 -> 935 in 49 files (eight files still to do; `838dc71f` inside the branch does not build: `git bisect skip`) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok (placement, road placed) · `sa-stress` exit 0, update 1.78 ms/frame, p95 2.44 (agents building) | 0 |
 
 Metric at `0dd2b4c0`: **13,080** to remove.
+
+| 36 | W1-GAME-b (second part) | `266bd17f` | Game b: the geometry and serialize bodies by name; the `TradeWork_impl_*` bodies are WorldGeometry members (`Serialize` 0x1400b04d0, `BuildTerrainMesh` 0x1400ac1e0, `UploadHeightImage` 0x1400ac780 ...); `WorldGeometryElements.h`; one shared typed external-ref serializer: 1526 -> 134 in 44 files (block finished) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 2.01 ms/frame, p95 3.31 (agents building); `devlost.sh` not run (owed at the close: geometry draw changed) | 0 |
+
+Metric at `266bd17f`: **12575** to remove.
