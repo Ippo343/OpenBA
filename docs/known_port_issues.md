@@ -424,6 +424,13 @@ stated condition.
   `ShowTool_ShowCarried`, a second guarded port of 0x1401173b0's toolId < 0 branch beside
   `ShowCitizenTool` (row 45 is the other copy's difference); `Pf_RegionPairCacheTick_5d10`'s null
   tests. SUSPECTED unless an address range is quoted.
+- DROPPED (ACT-b, seen in B11): ConsumeRawMaterial AbstractImpl / CheckEntity, DropOffRawMaterial
+  AbstractImpl (two finds), PickupRawMaterial AbstractImpl and PickupStoredRawMaterial AbstractImpl
+  / CheckEntity find the StorageComponent through `ComponentEntity::FindComponent<StorageComponent>`
+  instead of `fn_FindComponent_Storage` (`entity_findcomponent.cpp`), whose null-entity return and
+  null-slot skip retail's 0x140006270 lacks (the tree's own 0x140006270 forwarder,
+  `WorkBase_FindComponent_6270`, already delegates to the template). A null entity there now
+  faults where the old body returned no storage.
 - KEPT (GAME-b): `ProfessionList::Startup` returns on a null `ExternalFactory::_singleton` and a 0
   Profession type id, and skips an external that is not a Profession; 0x1400a90a0 calls FindNext
   on the singleton unguarded and reads +0x4e of the null it substitutes for a non-Profession.
@@ -448,10 +455,20 @@ stated condition.
   RenderState's six flags). Identical only if the byte is always 0 or 1. SUSPECTED; the settings
   flags were the same question and retail copies raw (0x14007248f), so those are `uint8_t`.
 - (ACT-b) Now `bool`: `AnimateNaturalResource` +0x2C (0x1400c5660 serializes it as bool),
-  `ConsumeRawMaterial` +0x38, `CreateRawMaterial`'s natural-resource / place-near flags,
-  `HuntAnimal` +0x38, `PerformWork::useTool` and `PickupStoredRawMaterial` +0x40. Their ctors
-  take `bool`, so the C doors convert a `uint8_t`; retail copies the byte raw (0x1400c640f,
-  0x1400c9796). Identical while callers pass 0 / 1. The array appends of ConsumeRawMaterial /
+  `ConsumeRawMaterial` +0x38, `CreateRawMaterial` +0x50 / +0x51, `DropOffRawMaterial` +0x20,
+  `HuntAnimal` +0x38, `PerformWork::useTool` +0x40, `PickupStoredRawMaterial` +0x40 and
+  `RemoveNaturalResource` +0x30. The typed ctors copy the byte (B11: `movzbl` / `mov %dl`, as the
+  old ctors did); the NORMALISATION (`setne`) is at the seven `uint8_t` -> `bool` conversions of
+  the C entry points, where retail's ctor copies the byte raw:
+  `animatenaturalresource.cpp:145` (0x1400c57d0), `removenaturalresource.cpp:218` (0x1400cadf0),
+  `dropoffrawmaterial.cpp:276` (0x1400c7cd0), `consumerawmaterial.cpp:392` (0x1400c63b0, raw copy
+  read at 0x1400c640f), `pickupstoredrawmaterial.cpp:421` (0x1400ca520),
+  `createrawmaterial.cpp:379` (0x1400c71a0) and `performwork.cpp:252` (the `void*` ctor reached
+  through `Pf_PerformWorkCtor7_9720`, 0x1400c9720, raw copy read at 0x1400c9796). Retail not
+  re-read for the other five. H8 checked in B11: every caller of the seven passes a literal 0 / 1
+  (directly, or through `CitizenAI_PerformWorkCtor4_c1070`'s 1 / 0, `WorkAct_GatherRawMatCtor_bf790`'s
+  `useAnimal` / `param_14` 0 / 1, `WorkAct_PerformWorkCtor_c1eb0`'s 0 / 1), so no stored value
+  differs from the old tree's. The array appends of ConsumeRawMaterial /
   PickupStoredRawMaterial keep retail's `&array[i] != nullptr` test, which an -O2 compiler may fold.
 
 ### 14f. Names that mislead (naming only)
