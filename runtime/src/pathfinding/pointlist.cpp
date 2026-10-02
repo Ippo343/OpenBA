@@ -96,7 +96,7 @@ void ReleasePointsRange(Point* data, int count) {
         // The release idiom IS `~String` (0x180006c80). `Point::name` keeps its
         // raw-pointer type (PointList.h), so the destructor is spelled out
         // over the same eight bytes.
-        reinterpret_cast<System::String*>(&data[i].name)->~String();
+        reinterpret_cast<System::String*>(&data[i].name)->~String();  // LEFT: POD String / Filename slot read as the class (H10 bridge)
     }
 }
 
@@ -130,9 +130,9 @@ void PointArraySetSize(Collection::Array<Point>* a, int32_t newSize) {
             // registering the address (batch D2, 2026-09-12).
             const Point* src = &oldData[i];
             dst->name = nullptr;
-            if (void* s = src->name) {
+            if (char* s = src->name) {
                 dst->name = s;
-                ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(s) - 4));
+                ++RtSystem::StringRefCount(s);
             }
             dst->pos[0] = src->pos[0];
             dst->pos[1] = src->pos[1];
@@ -140,8 +140,11 @@ void PointArraySetSize(Collection::Array<Point>* a, int32_t newSize) {
             dst->radius = src->radius;
         } else {
             // retail's else arm: THREE zero qwords over the whole 0x18 stride
-            uint64_t* q = reinterpret_cast<uint64_t*>(dst);
-            q[0] = 0; q[1] = 0; q[2] = 0;
+            dst->name   = nullptr;                // +0x00
+            dst->pos[0] = 0.0f;                   // +0x08 qword (pos[0], pos[1]), H7
+            dst->pos[1] = 0.0f;
+            dst->pos[2] = 0.0f;                   // +0x10 qword (pos[2], radius), H7
+            dst->radius = 0.0f;
         }
     }
     if (oldData == a->_data) {
@@ -221,14 +224,14 @@ Object::Base* PointList::CreateInPlaceObject(void* place) {
 // array field before the first. Per Point: String, kArrayFloat(n=3) at +8,
 // kScalarFloat at +0x14.
 bool PointList::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 
     Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
+    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
                                               : rt::io::encoding_vtbl::kCreateWriter;
     using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
+    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     ser.readerWriter = rw;
 
     // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
@@ -238,7 +241,7 @@ bool PointList::Serialize(void* streamv) {
     // The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
     // interchangeable (Serializer.h). SerializeInt +0xa0, SerializeFloat +0x80,
     // SerializeFloatArray +0x28.
-    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 
     auto serializeArray = [&](Collection::Array<Point>* arr) {
         int32_t n = arr->_size;
@@ -248,7 +251,7 @@ bool PointList::Serialize(void* streamv) {
             Point* p = &arr->_data[i];
             // `Point::name` keeps its raw-pointer type (PointList.h), so the
             // member call is spelled over the same eight bytes.
-            reinterpret_cast<System::String*>(&p->name)->Serialize(&ser);
+            reinterpret_cast<System::String*>(&p->name)->Serialize(&ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
             rwc->SerializeFloatArray(3, p->pos, nullptr);
             rwc->SerializeFloat(p->radius, nullptr);
         }
