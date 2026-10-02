@@ -33,6 +33,7 @@
 #include "Component/RadiusDescription.h"
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
+#include "Game/WorldGeometryElements.h"   // GeometryBatch (the decal element)
 
 // The radius tessellation 0x1400ace40 (TradeWork_impl_ace40, tool_base_highlight_tess.cpp)
 // and the tile-entry array grow 0x14001fa80 (Pf_VectorResize60_fa80, Action/exe_bodies.h)
@@ -232,68 +233,94 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 }
 
 // ============================================================
-// 0x1400b0d80 — tile-slot manager: find/grow a free 0x60-byte slot in the renderer's
-// entry array (param_1+0x1f0 base, +0x1f8 count), write the tile entry, tessellate it
-// via 0x1400ace40. Returns the slot index (or -1 if param_8/target is null). 1:1 port
-// of TradeWork_impl_0d80 (19 args; param_18 is unused/dead).
+// 0x1400b0d80 — the decal slot manager: find a free 0x60-byte GeometryBatch in
+// WorldGeometry::Decals() (+0x1F0), or grow the array by one from a zeroed
+// template (slot -1); write the decal; tessellate it via 0x1400ace40. Returns the
+// slot index (or -1 if the material is null). 1:1 port (19 args; param_18 is
+// unused/dead). A WorldGeometry member in retail; LEFT free: WorldGeometry.h is
+// block GAME-c-2's (running).
 // ============================================================
+namespace {
+int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
+             int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
+             uint8_t param_9, uint32_t param_10, uint32_t param_11,
+             uint32_t param_12, uint32_t param_13, uint32_t param_14,
+             char param_15, int param_16, int param_17, uint8_t param_19) {
+    if (material == nullptr) return -1;
+
+    RawArray<GeometryBatch>& decals = geom->Decals();
+    int iVar3 = 0;
+    int iVar2 = decals.size;                                     // count
+    bool grew = false;
+    if (0 < iVar2) {
+        const GeometryBatch* batch = decals.data;
+        do {
+            if (batch->slot < 0) {                                // free slot marker
+                if (-1 < iVar3) { grew = false; goto haveSlot; }
+                break;
+            }
+            iVar3++;
+            batch++;                                              // stride 0x60 bytes
+        } while (iVar3 < iVar2);
+    }
+    // no free slot -> grow the array by 1 from a zeroed template (slot = -1)
+    {
+        GeometryBatch tmpl;
+        std::memset(&tmpl, 0, sizeof(tmpl));
+        tmpl.slot = -1;
+        // LEFT: 0x14001fa80 is a C door in block ACT-b's Action/exe_bodies.h taking
+        // the array header and the element as integers.
+        Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(&decals),
+                               decals.size + 1,
+                               reinterpret_cast<uint64_t*>(&tmpl));
+        System::MemoryAllocator::MemFree(tmpl.indices.data);
+        System::MemoryAllocator::MemFree(tmpl.vertices.data);
+        iVar3 = iVar2;
+        grew = true;
+    }
+haveSlot:
+    (void)grew;
+    iVar2 = (geom->_gridSize - geom->_fieldC4) >> 1;
+    GeometryBatch* entry = &decals.data[iVar3];
+    entry->material = material;
+    entry->slot = iVar3;
+    entry->minX = iVar2 + param_2;
+    entry->minY = iVar2 + param_3;
+    entry->maxX = iVar2 + param_4;
+    entry->maxY = param_5 + iVar2;
+    entry->field_0x3C = param_6;
+    entry->field_0x40 = static_cast<int32_t>(param_7);
+    // LEFT: +0x44 / +0x5D are `bool` fields (GAME-b's WorldGeometryElements.h);
+    // retail stores the caller's raw byte, which a bool store would normalise (H8).
+    *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;
+    // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
+    // (the callers pass the bits in integer registers / stack slots).
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[1]) = param_11;
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[2]) = param_12;
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;
+    entry->field_0x5C = true;
+    *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: as +0x44
+    // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
+    TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);
+    return iVar3;
+}
+}  // namespace
+
+// B4 FORWARD: 1 outside caller (Component/decalcomponent.cpp binds it by a local
+// extern "C" of this shape, the geometry and the material as integers).
 extern "C" int TradeWork_impl_0d80(int64_t param_1, int param_2, int param_3, int param_4,
                                    int param_5, uint8_t param_6, uint32_t param_7, int64_t param_8,
                                    uint8_t param_9, uint32_t param_10, uint32_t param_11,
                                    uint32_t param_12, uint32_t param_13, uint32_t param_14,
                                    char param_15, int param_16, int param_17,
                                    uint64_t /*param_18 unused*/, uint8_t param_19) {
-    if (param_8 == 0) return -1;
-
-    int iVar3 = 0;
-    int iVar2 = *reinterpret_cast<int*>(param_1 + 0x1f8);          // count
-    bool grew = false;
-    if (0 < iVar2) {
-        int* piVar1 = reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_1 + 0x1f0) + 0x28);
-        do {
-            if (*piVar1 < 0) {                                    // free slot marker
-                if (-1 < iVar3) { grew = false; goto haveSlot; }
-                break;
-            }
-            iVar3++;
-            piVar1 += 0x18;                                       // stride 0x60 bytes
-        } while (iVar3 < iVar2);
-    }
-    // no free slot -> grow the array by 1 from a zeroed template (entry+0x28 = -1)
-    {
-        uint8_t tmpl[0x60];
-        std::memset(tmpl, 0, sizeof(tmpl));
-        *reinterpret_cast<int32_t*>(tmpl + 0x28) = -1;
-        Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(param_1 + 0x1f0),
-                               *reinterpret_cast<int*>(param_1 + 0x1f8) + 1,
-                               reinterpret_cast<uint64_t*>(tmpl));
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(tmpl + 0x18));
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(tmpl + 0x08));
-        iVar3 = iVar2;
-        grew = true;
-    }
-haveSlot:
-    (void)grew;
-    iVar2 = (*reinterpret_cast<int*>(param_1 + 0xc0) - *reinterpret_cast<int*>(param_1 + 0xc4)) >> 1;
-    int64_t entry = (int64_t)iVar3 * 0x60 + *reinterpret_cast<int64_t*>(param_1 + 0x1f0);
-    *reinterpret_cast<int64_t*>(entry + 0x00) = param_8;
-    *reinterpret_cast<int*>(entry + 0x28) = iVar3;
-    *reinterpret_cast<int*>(entry + 0x2c) = iVar2 + param_2;
-    *reinterpret_cast<int*>(entry + 0x30) = iVar2 + param_3;
-    *reinterpret_cast<int*>(entry + 0x34) = iVar2 + param_4;
-    *reinterpret_cast<int*>(entry + 0x38) = param_5 + iVar2;
-    *reinterpret_cast<uint8_t*>(entry + 0x3c) = param_6;
-    *reinterpret_cast<uint32_t*>(entry + 0x40) = param_7;
-    *reinterpret_cast<uint8_t*>(entry + 0x44) = param_9;
-    *reinterpret_cast<uint32_t*>(entry + 0x48) = param_10;
-    *reinterpret_cast<uint32_t*>(entry + 0x4c) = param_11;
-    *reinterpret_cast<uint32_t*>(entry + 0x50) = param_12;
-    *reinterpret_cast<uint32_t*>(entry + 0x54) = param_13;
-    *reinterpret_cast<uint32_t*>(entry + 0x58) = param_14;
-    *reinterpret_cast<uint8_t*>(entry + 0x5c) = 1;
-    *reinterpret_cast<uint8_t*>(entry + 0x5d) = param_19;
-    TradeWork_impl_ace40(param_1, iVar3, param_15, param_16, param_17);
-    return iVar3;
+    return AddDecal(reinterpret_cast<WorldGeometry*>(param_1), param_2, param_3, param_4,   // LEFT: B4 FORWARD
+                    param_5, param_6, param_7,
+                    reinterpret_cast<Graphics::MaterialInstance*>(param_8),   // LEFT: B4 FORWARD
+                    param_9, param_10, param_11, param_12, param_13, param_14,
+                    param_15, param_16, param_17, param_19);
 }
 
 // ============================================================
@@ -320,13 +347,11 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
 
     const uint32_t uv = 0x3f800000u;   // the bits of 1.0f (kRdata_14017214c), passed in an int register
 
-    // LEFT: 0x1400b0d80 (below) still takes the decal system and the material as
-    // integers; Component/decalcomponent.cpp binds it by a local extern "C" of that shape.
-    return TradeWork_impl_0d80(reinterpret_cast<int64_t>(highlightMgr),
-                               col - r, row - r, r + col, r + row,
-                               0xff, 0, reinterpret_cast<int64_t>(target), 0,
-                               uv, 0, 0, uv, uv,
-                               1, r - 2, r + 2, 0, 1);
+    return AddDecal(highlightMgr,                                   // 0x1400b0d80
+                    col - r, row - r, r + col, r + row,
+                    0xff, 0, target, 0,
+                    uv, 0, 0, uv, uv,
+                    1, r - 2, r + 2, 1);
 }
 
 // B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp) passes the description as an integer.
