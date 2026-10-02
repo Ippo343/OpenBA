@@ -236,7 +236,7 @@ void* SendComponentMessage::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3,
                                            uint32_t param_4, uint64_t* param_5, uint32_t param_6) {
-    // B4 FORWARD: outside callers (Action/action_pf_ctors.cpp, action_pf_roots_drop.cpp, the
+    // B4 FORWARD: outside callers (Action/action_pf_ctors.cpp, the
     // Component citizen builders, the Work action builders) hold the refs as uint64_t*.
     return static_cast<Object::Base*>(
         new (param_1) SendComponentMessage(reinterpret_cast<ComponentEntity* const*>(param_2), param_3,

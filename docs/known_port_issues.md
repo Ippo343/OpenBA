@@ -296,6 +296,8 @@ in the code carries a comment.
 | 47 | `PathfinderThread::ApplyCommand` case 5 (`action_pf_astar.cpp`) | holds the lock through the ready store | 0x1400a6430 unlocks after the result-array resize (0x1400a658b) | CONFIRMED (ACT-a) |
 | 48 | `PathfinderThread::ApplyCommand`'s 64 KB path buffer | `static` (one worker thread uses it) | on the stack (0x1400a6436) | CONFIRMED (ACT-a) |
 | 49 | `RegionPairCache::Store` (`action_pf_region.cpp`) | writes 0 to `RegionPairEntry::field_0x0C` | 0x1400a5b30 stores a stale stack dword there (never read) | CONFIRMED (ACT-a) |
+| 51 | `PerformWork` ctor, tool-less time scaling (`performwork.cpp`) | reads the low dword of `requiredTime` (+0x30) and of `Time(desc->_f114)` as float bits and multiplies them | 0x1400c9720 calls `Time::AsSeconds` (IAT 0x140151318) on both (0x1400c9808 / 0x1400c9814), multiplies, and rebuilds with `Time(float)` (0x140152b00) | CONFIRMED (ACT-b; the two puns are LEFT at the site) |
+| 52 | `RemoveAnimal::Persist` (`removeanimal.cpp`) | validates the loaded +0x20 against `FireDescription::TypeId()` (cell 0x1401c4218), so a loaded RemoveAnimal always loses its entity | 0x1400ca870 tests ComponentEntity (`MOV EDX,[0x1401c5d70]` at 0x1400ca8e1) | CONFIRMED (ACT-b) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -405,6 +407,22 @@ stated condition.
   type-id test is dead once the type is registered); `StorageCanAdd` sums the stored weight through
   `StorageComponent::QueryCount` instead of `CitizenComp_StorageComponent_QueryCount`, whose null
   test is unreachable there (0x14012c560 has already dereferenced the storage).
+- KEPT (ACT-b): `AnimateNaturalResource::Execute`'s null-ModelComponent return (0x1400c55b0 reads
+  +0x28 unguarded); `CompleteTask::AbstractImpl`'s null singleton / `m_tutorial` return
+  (0x1400c5b40); `CreateRawMaterial::AbstractImpl`'s zero-batch return (0x1400c6c22 divides by it);
+  the `MoveTo` ctor's `charDescTid &&` and `random ?` tests (0x1400c9170 has neither);
+  the `PerformWork` ctor's null-CitizenDescription skip of the scaling (0x1400c97e2..0x1400c97ee:
+  CMOVNZ picks null on an IsDerivedFrom miss and +0x114 is read unguarded, CONFIRMED);
+  `PickupStoredRawMaterial`'s null-RawMaterialDescription guards in the ctor and AbstractImpl
+  (0x1400ca520 / 0x1400c9d40 read +0x48 unguarded); `PlayAnimation::AbstractImpl`'s null-target
+  return, readable-memory stale-target probe and null-CharacterComponent return (0x140042420);
+  `RemoveNaturalResource` AbstractImpl / CheckEntity null-NaturalResourceComponent returns
+  (0x1400cab10 / 0x1400caaa0); `SendComponentMessage::AbstractImpl`'s canonical / dying /
+  readability probes and sentinel-slot skip (0x1400caef0); `ShowTool`'s null-citizen returns in
+  AbstractImpl / CheckEntity / GetTarget (0x140042710 / 0x1400426d0 / 0x140042680) and
+  `ShowTool_ShowCarried`, a second guarded port of 0x1401173b0's toolId < 0 branch beside
+  `ShowCitizenTool` (row 45 is the other copy's difference); `Pf_RegionPairCacheTick_5d10`'s null
+  tests. SUSPECTED unless an address range is quoted.
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -423,6 +441,12 @@ stated condition.
   (`SpriteSheet::m_field50`, `TextDescription::_b84/_b85`, the ribbon / scroll `_vertical`,
   RenderState's six flags). Identical only if the byte is always 0 or 1. SUSPECTED; the settings
   flags were the same question and retail copies raw (0x14007248f), so those are `uint8_t`.
+- (ACT-b) Now `bool`: `AnimateNaturalResource` +0x2C (0x1400c5660 serializes it as bool),
+  `ConsumeRawMaterial` +0x38, `CreateRawMaterial`'s natural-resource / place-near flags,
+  `HuntAnimal` +0x38, `PerformWork::useTool` and `PickupStoredRawMaterial` +0x40. Their ctors
+  take `bool`, so the C doors convert a `uint8_t`; retail copies the byte raw (0x1400c640f,
+  0x1400c9796). Identical while callers pass 0 / 1. The array appends of ConsumeRawMaterial /
+  PickupStoredRawMaterial keep retail's `&array[i] != nullptr` test, which an -O2 compiler may fold.
 
 ### 14f. Names that mislead (naming only)
 
@@ -472,6 +496,21 @@ stated condition.
   node tree (`InteractNodePosition` / `InteractNodeCount`), and `ActCNR_NR_*` on the ModelComponent
   mesh selection (`ModelMeshGroupCount`, `ModelMeshCount`, `ModelSelectMesh`), not on a
   NaturalResourceComponent. (ACT-a)
+- (ACT-b) `CreateRawMaterial` +0x28 is the working CitizenComponent, and the yield picks
+  `_lowCreateCount` while its `education` < `CitizenDescription::maxEducation` (the tree said
+  building age / maturity); `RemoveNaturalResource`'s "growth value / threshold" are the same pair
+  and +0x248 is the workplace. `HuntAnimal` +0x20 is the HuntComponent and +0x28 the hunting
+  citizen (the tree: "animal", "herd"); 0x140005500 finds the AnimalComponent and 0x1400227e0 the
+  WildAnimalComponent (the tree: a model component, "HerdComponent"); 0x1400052c0 is
+  NaturalResourceComponent and 0x140003f60 ModelComponent (createnaturalresource.cpp's old banner
+  swapped them). `MoveTo`: +0x468 plays when a path starts and +0x46C when it ends (the tree's
+  idle / walk were swapped); +0x470 ("bridge flag") is SetMovementCosts' profile; +0x474 ("road
+  flag") is set when the nearest other character within 0.5 faces this one; +0x30 ("path data") is
+  the CharacterDescription; +0x20 / +0x24 are a PathTicket. `PickupStoredRawMaterial` +0x20 is the
+  carrying citizen and +0x28 the storage entity. `ShowTool_ShowCarried`'s "+0xb8 +0x120 sceneId"
+  store lands on `CitizenComponent::toolId` (+0x1D8), its "StateMachineComponent" is
+  `CitizenComponent::character`, and its scale Vector4 is `MeshInstance::_color`. The function the
+  tree called `Game::UpdateTimedEvents` (0x1400a5d10) is `RegionPairCache::Expire`.
 
 ### 14g. Commit messages that state something nobody verified
 

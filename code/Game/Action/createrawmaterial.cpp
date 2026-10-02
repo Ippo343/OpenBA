@@ -380,7 +380,7 @@ void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float p
                                         uint64_t* param_4, uint64_t* param_5, uint64_t param_6,
                                         uint32_t param_7, uint32_t param_8, uint8_t param_9,
                                         uint64_t* param_10, uint32_t param_11) {
-    // B4 FORWARD: outside callers (Action/action_pf_roots_drop.cpp, Work/work_act_consume.cpp,
+    // B4 FORWARD: outside callers (Work/work_act_consume.cpp,
     // Work/work_act_rawmat.cpp) hold the template as an integer and the refs as uint64_t*.
     return static_cast<Object::Base*>(new (param_1) CreateRawMaterial(
         reinterpret_cast<ComponentDescription*>(param_2), param_3,

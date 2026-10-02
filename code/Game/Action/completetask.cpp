@@ -184,7 +184,7 @@ void* CompleteTask::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3,
                                    uint64_t* param_4, uint32_t param_5) {
-    // B4 FORWARD: 11 outside caller files (action_pf_roots_drop, citizenai_actionctors, the
+    // B4 FORWARD: 10 outside caller files (citizenai_actionctors, the
     // Work/ action builders) hold the two refs as uint64_t*.
     return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2,
         reinterpret_cast<CitizenComponent* const*>(param_3),

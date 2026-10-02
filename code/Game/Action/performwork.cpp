@@ -240,7 +240,7 @@ void* PerformWork::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType,
                                int64_t time, uint8_t param_6, int param_7) {
-    // B4 FORWARD: outside callers (Action/action_pf_roots_drop.cpp, the Work action
+    // B4 FORWARD: outside callers (the Work action
     // builders) hold the citizen reference as void*.
     return static_cast<Object::Base*>(
         new (self) PerformWork(entity, animIndex, actionType, time, param_6, param_7));

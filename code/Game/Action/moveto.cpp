@@ -619,7 +619,7 @@ void* MoveTo::CreateInPlaceObject(void* storage) {
 // ============================================================
 void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4,
                          float* destination, int param_6, int param_7, float speed) {
-    // B4 FORWARD: 14 outside caller files (Action/action_pf_roots_drop.cpp, the Component
+    // B4 FORWARD: 13 outside caller files (the Component
     // citizen / animal / nomad builders, the Work action builders) hold the character
     // reference as void*.
     return static_cast<Object::Base*>(
