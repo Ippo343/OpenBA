@@ -46,6 +46,13 @@
 #include "Player/exe_bodies.h"
 #include "Component/ComponentDescription.h"
 #include "Component/CreateFencedDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/MultiObjectComponent.h"
+#include "Component/PickingComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
+#include "Game/PlayerToolManager.h"
 #include "Action/exe_bodies.h"
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
@@ -66,77 +73,76 @@
 //   0x140003110 ActHunt_DynArraySetCount_3110 (Action/exe_bodies.h) -- IBP append
 //   0x1401018d0 DragPlacementTool_ClearPathEntities_1018d0, 0x1400dbf90
 //   PlayerEdit_FencedAnchorCalc_dbf90 (Player/exe_bodies.h)
-//   the finder leaves (FindOn below): 0x140004680 FloorComponent_FindResData (map),
-//   0x140003f60 ActCNR_FindComponent_3f60 (model; "ClearPathQueue" misnomer),
-//   0x140026a30 BuildComponent_FindStorage26a30 (picking -- the body's name says
-//   storage; the address and this use say PickingComponent), 0x140004740
-//   InteractComponent_FindWorkplaceComponent (MultiObject)
+//   the finder leaves: 0x140004680 FindComponent<MapComponent>, 0x140003f60
+//   FindComponent<ModelComponent>, 0x140026a30 FindComponent<PickingComponent>,
+//   0x140004740 FindComponent<MultiObjectComponent>
 namespace {
 
-typedef void (*FinderFn)(int64_t entity, void* outIBP);
-
-void FindMap(int64_t e, void* out)     { FloorComponent_FindResData(reinterpret_cast<void*>(e), out); }   // 0x140004680
-void FindModel(int64_t e, void* out)   { ActCNR_FindComponent_3f60(static_cast<uintptr_t>(e), out); }     // 0x140003f60
-void FindPicking(int64_t e, void* out) { BuildComponent_FindStorage26a30(e, out); }                       // 0x140026a30
-
-// Find a component on an entity through one of the exe finder leaves; returns
-// the raw component pointer (finders write an IBP through the out param).
-void* FindOn(FinderFn finder, void* entity, void* entityIBPSlot) {
-    (void)entity;
-    int64_t out = 0;
-    finder(*reinterpret_cast<int64_t*>(entityIBPSlot), &out);
-    return reinterpret_cast<void*>(out);
+// A section template of the fence description (CreateFencedDescription +0x28).
+// LEFT: block COMP-c declares `_refs` as `void*[6]` (its ctor loops over them as
+// void*&), so the typed template is reached through this one cast.
+ComponentDescription* SectionTemplate(const CreateFencedDescription* desc, int idx) {
+    return reinterpret_cast<ComponentDescription*>(desc->_refs[idx]);
 }
 
 // Stamp cell rect + rotation onto a MapComponent (+0x28 shorts, +0x30 degrees
 // normalised into [0,360) by repeated +360 exactly like retail).
-void StampMapRect(void* mapComp, int x, int y, int w, int h, int rotDeg) {
+void StampMapRect(MapComponent* mapComp, int x, int y, int w, int h, int rotDeg) {
     if (!mapComp) return;
-    uintptr_t c = reinterpret_cast<uintptr_t>(mapComp);
-    *reinterpret_cast<int16_t*>(c + 0x28) = static_cast<int16_t>(x);
-    *reinterpret_cast<int16_t*>(c + 0x2a) = static_cast<int16_t>(y);
-    *reinterpret_cast<int16_t*>(c + 0x2c) = static_cast<int16_t>(w);
-    *reinterpret_cast<int16_t*>(c + 0x2e) = static_cast<int16_t>(h);
+    mapComp->tileX0 = static_cast<int16_t>(x);
+    mapComp->tileY0 = static_cast<int16_t>(y);
+    mapComp->tileX1 = static_cast<int16_t>(w);
+    mapComp->tileY1 = static_cast<int16_t>(h);
     while (rotDeg < 0) rotDeg += 0x168;
-    *reinterpret_cast<int32_t*>(c + 0x30) = rotDeg;
+    mapComp->extraField = rotDeg;
 }
 
 // Model transform = FromYawPitchOffset(yawDeg, 0, offset) into model+0x148,
 // yaw cached at +0x168 (UN-normalised float, matching retail), then
 // Geometry::SetTransform. Same helper family as bridgetool_calcpath's ApplyYaw.
-void ApplyModelYaw(void* model, float yawDeg, const float offset[3]) {
+void ApplyModelYaw(ModelComponent* model, float yawDeg, const float offset[3]) {
     if (!model) return;
     Math::Vector3 off(offset[0], offset[1], offset[2]);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawDeg, 0.f, off);
-    uintptr_t m = reinterpret_cast<uintptr_t>(model);
-    std::memcpy(reinterpret_cast<void*>(m + 0x148), &xform, 0x1c);
-    *reinterpret_cast<float*>(m + 0x168) = yawDeg;
-    reinterpret_cast<Graphics::Geometry*>(m + 0x28)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
+    model->transform = xform;   // the seven dwords at +0x148
+    model->yaw = yawDeg;        // +0x168
+    model->meshInstance.SetTransform(model->transform);
 }
 
 // 0x1401290d0 — seat the shelter's pick owner: pickComp+0x30 = master entity;
 // if the pick mesh is already registered (+0x28 >= 0), re-point its user data.
-void SeatPickOwner_1290d0(void* pickComp, void** masterIBPSlot) {
+void SeatPickOwner_1290d0(PickingComponent* pickComp, ComponentEntity* const* masterIBPSlot) {
     if (!pickComp) return;
-    uintptr_t p = reinterpret_cast<uintptr_t>(pickComp);
-    *reinterpret_cast<void**>(p + 0x30) = *masterIBPSlot;
-    if (*reinterpret_cast<int32_t*>(p + 0x28) < 0) return;
-    void* gw = GameUpdateLoop::_singleton;
-    void* scene = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x70) : nullptr;
+    pickComp->userData = *masterIBPSlot;
+    if (pickComp->pickingId < 0) return;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    Picking::Scene* scene = gw ? gw->m_pickingScene : nullptr;
     if (scene)
-        reinterpret_cast<Picking::Scene*>(scene)->SetMeshUserData(*reinterpret_cast<uint32_t*>(p + 0x28),   // B.3.7 bridge
-                      *reinterpret_cast<void**>(p + 0x30), 0, 0, nullptr);
+        scene->SetMeshUserData(static_cast<uint32_t>(pickComp->pickingId),
+                      pickComp->userData, 0, 0, nullptr);
 }
 
 // Grid cell -> world pos via the 0x14009f3e0 terrain query (bridge CellRectCentre
 // idiom): map-space = (col - c, row - c), c = (gridDim >> 1) - 0.5.
-void CellWorldPos(int* mapGrid, int col, int row, float out[3]) {
+void CellWorldPos(Map* mapGrid, int col, int row, float out[3]) {
     out[0] = out[1] = out[2] = 0.f;
     if (!mapGrid) return;
-    const float c = static_cast<float>(*mapGrid >> 1) - 0.5f;
+    const float c = static_cast<float>(mapGrid->size >> 1) - 0.5f;
     float in[3] = { static_cast<float>(col) - c, static_cast<float>(row) - c, 0.f };
-    Reimpl_MapGetTerrainPos(reinterpret_cast<uint32_t*>(mapGrid), out, in, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(mapGrid, out, in, '\0', nullptr);
+}
+
+// Append the entity to the master's MultiObject list (0x140003110 on +0x48).
+void AppendChild(MultiObjectComponent* multi, ComponentEntity* entity) {
+    ComponentEntity* val = entity;
+    ActHunt_DynArraySetCount_3110(&multi->children, multi->childCount + 1, &val);
+}
+
+// Register the entity with the EntityList under its template's category (+0x20).
+void RegisterWithList(GameUpdateLoop* gw, ComponentEntity* entity, const ComponentDescription* tmpl) {
+    ComponentEntity* val = entity;
+    int prio = static_cast<int>(tmpl->_category);
+    EntityList_RegisterEntity_Impl(gw->m_entityList, &val, prio);
 }
 
 // ============================================================
@@ -148,10 +154,10 @@ void CellWorldPos(int* mapGrid, int col, int row, float out[3]) {
 //   The new entity is appended to the master's MultiObject list + registered.
 // ============================================================
 void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
-                           int w, int h, int angleDeg, void** multiObjIBPSlot) {
-    void* gw = GameUpdateLoop::_singleton;
+                           int w, int h, int angleDeg, MultiObjectComponent* const* multiObjIBPSlot) {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
+    Map* mapGrid = gw->m_game;
 
     float a[3], b[3], centre[3];
     CellWorldPos(mapGrid, x, y, a);
@@ -160,21 +166,17 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
     centre[1] = (a[1] + b[1]) * 0.5f;
     centre[2] = 0.0f;                       // retail zeroes z (0x1400dbdfa)
 
-    uintptr_t desc = reinterpret_cast<uintptr_t>(self->fencedDesc);
-    void* sectionTmpl = *reinterpret_cast<void**>(desc + 0x28 + static_cast<int64_t>(sectionIdx) * 8);
+    ComponentDescription* sectionTmpl = SectionTemplate(self->fencedDesc, sectionIdx);
     if (!sectionTmpl) return;
 
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* ent = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), sectionTmpl) : nullptr;
-    int64_t entIBP = 0;
-    new (&entIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
-    if (!entIBP) return;
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, sectionTmpl) : nullptr;
+    if (!ent) return;
 
-    void* mapComp = FindOn(FindMap, ent, &entIBP);
+    MapComponent* mapComp = ent->FindComponent<MapComponent>();   // 0x140004680
     StampMapRect(mapComp, x, y, w, h, angleDeg);
 
-    void* model = FindOn(FindModel, ent, &entIBP);
+    ModelComponent* model = ent->FindComponent<ModelComponent>();   // 0x140003f60
     if (model) ApplyModelYaw(model, static_cast<float>(angleDeg), centre);
 
     // Report WHERE every fence piece is put. A "gate model ended up in a lake" report is
@@ -187,24 +189,18 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
             fprintf(stderr, "[FencePiece] idx=%d%s cell=(%d,%d) %dx%d angle=%d "
                             "world=(%.2f, %.2f, %.2f) mapWidth=%d\n",
                     sectionIdx, (sectionIdx == 5) ? " GATE" : "", x, y, w, h, angleDeg,
-                    centre[0], centre[1], centre[2], mapGrid ? *mapGrid : -1);
+                    centre[0], centre[1], centre[2], mapGrid ? mapGrid->size : -1);
             fflush(stderr);
         }
     }
 
     // Append to the master's MultiObject list (arr at +0x48, count at +0x50).
-    uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiObjIBPSlot);
+    MultiObjectComponent* multi = *multiObjIBPSlot;
     if (multi) {
-        int64_t val = entIBP;
-        ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(multi + 0x48),
-                                      *reinterpret_cast<int32_t*>(multi + 0x50) + 1, &val);
+        AppendChild(multi, ent);
     }
 
-    {
-        int64_t val = entIBP;
-        int prio = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(sectionTmpl) + 0x20);
-        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8), &val, prio);
-    }
+    RegisterWithList(gw, ent, sectionTmpl);
 }
 
 // ============================================================
@@ -222,7 +218,7 @@ void SpawnFencePiece_dbc80(FencedTool* self, int sectionIdx, int x, int y,
 // ============================================================
 void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
                    int shMinX, int shMinY, int shMaxX, int shMaxY,
-                   int angleDeg, void** multiObjIBPSlot) {
+                   int angleDeg, MultiObjectComponent* const* multiObjIBPSlot) {
     bool prevFence  = false;   // bVar2: previous cell was a fence cell
     bool afterGap   = false;   // bVar5: a shelter gap has been seen on this run
     bool prevLong   = false;   // bVar3: previous spawn was a long piece
@@ -238,8 +234,7 @@ void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
 
     // bVar4: TRUE when the shelter touches none of this run's cells.
     bool noShelterOnRun = true;
-    uintptr_t desc = reinterpret_cast<uintptr_t>(self->fencedDesc);
-    if (*reinterpret_cast<uint8_t*>(desc + 0x68) != 0 && y0 <= y1) {
+    if (self->fencedDesc->_b68 != 0 && y0 <= y1) {
         for (int yy = y0; yy <= y1; ++yy)
             for (int xx = x0; xx <= x1; ++xx)
                 if (shMinX <= xx && xx <= shMaxX && shMinY <= yy && yy <= shMaxY)
@@ -274,17 +269,17 @@ void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
                         idx = 3; ang = angleDeg; spawned1Cell = true;      // 1-cell Straight
                     }
                     if (spawned1Cell) {
-                        void* val = *multiObjIBPSlot;
+                        MultiObjectComponent* val = *multiObjIBPSlot;
                         SpawnFencePiece_dbc80(self, idx, x, y, 1, 1, ang, &val);
                         gateLatch = gateLatch2;
                     } else if (gateLatch || !prevLong || !noShelterOnRun) {
-                        void* val = *multiObjIBPSlot;
+                        MultiObjectComponent* val = *multiObjIBPSlot;
                         SpawnFencePiece_dbc80(self, 4, x, y, wLong, hLong, angleDeg, &val); // StraightLong
                         x += stepX; lookX += stepX; y += stepY;
                         prevLong = true;
                         gateLatch = gateLatch2;
                     } else {
-                        void* val = *multiObjIBPSlot;
+                        MultiObjectComponent* val = *multiObjIBPSlot;
                         SpawnFencePiece_dbc80(self, 5, x, y, wLong, hLong, angleDeg, &val); // Gate
                         x += stepX; lookX += stepX; y += stepY;
                         gateLatch = true;
@@ -310,7 +305,7 @@ void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
 // 0x1400dae00 — FencedTool::CalcPath (Slot13). Returns 1 on commit, 0 on abort.
 // ============================================================
 bool FencedTool::CalcPath(int startCell, int endCell) {
-    void* gw = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw || !fencedDesc) {
         return 0;
     }
@@ -324,8 +319,8 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
         return 0;
     }
 
-    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
-    const int W = *mapGrid;
+    Map* mapGrid = gw->m_game;
+    const int W = mapGrid->size;
     int minCol = static_cast<int>(startCell) % W, minRow = static_cast<int>(startCell) / W;
     int maxCol = static_cast<int>(endCell) % W,   maxRow = static_cast<int>(endCell) / W;
     if (maxCol < minCol) { int t = minCol; minCol = maxCol; maxCol = t; }
@@ -334,10 +329,10 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     // 2. Edit-mode guard (re-fence must match the stored rect). Retail reads
     //    tool+0x10 unconditionally; null-guarded here (SA: the placement dialog
     //    object may be absent in harness flows — treated as "not editing").
-    uint8_t* editObj = reinterpret_cast<uint8_t*>(dialogPtr);
-    if (editObj && *(editObj + 0x80) != 0) {
-        int sc = *reinterpret_cast<int32_t*>(editObj + 0x98);
-        int ec = *reinterpret_cast<int32_t*>(editObj + 0x9c);
+    PlayerToolManager* editObj = dialogPtr;
+    if (editObj && editObj->field_0x80 != 0) {
+        int sc = editObj->field_0x98;
+        int ec = editObj->field_0x9C;
         if (minCol != sc % W || minRow != sc / W || maxCol != ec % W || maxRow != ec / W) {
             return 0;
         }
@@ -350,70 +345,55 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
     float yawF = 0.f;
     PlayerEdit_FencedAnchorCalc_dbf90(this, &shMinX, &shMinY, &shMaxX,
                                       &shMaxY, shelterPos, &yawBits);
-    std::memcpy(&yawF, &yawBits, sizeof yawF);
+    std::memcpy(&yawF, &yawBits, sizeof yawF);   // CAST-OK: float_bits
     const int yawI = static_cast<int>(yawF);
 
     // 4. Master entity from the tool's description template (tool+0x20).
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* master = mem ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), descriptionPtr) : nullptr;
-    int64_t masterIBP = 0;
-    new (&masterIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
-    if (!masterIBP) return 0;
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* master = mem ? ComponentEntity_CtorFromDescription(mem, descriptionPtr) : nullptr;
+    if (!master) return 0;
 
-    void* masterMap = FindOn(FindMap, master, &masterIBP);
+    MapComponent* masterMap = master->FindComponent<MapComponent>();   // 0x140004680
     StampMapRect(masterMap, minCol, minRow, rectW, rectH, yawI);
 
-    int64_t multiIBP = 0;
-    InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(masterIBP), &multiIBP);
+    MultiObjectComponent* multi = master->FindComponent<MultiObjectComponent>();   // 0x140004740
 
     {
         const ComponentDescription* clearTmpl = fencedDesc->_ref70;
-        DragPlacementTool_ClearPathEntities_1018d0(reinterpret_cast<void*>(masterIBP), minCol, minRow,
+        DragPlacementTool_ClearPathEntities_1018d0(master, minCol, minRow,
                                                    maxCol, maxRow, clearTmpl);
     }
 
     // 5. Shelter entity from sections[0].
-    void* shelterTmpl = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(fencedDesc) + 0x28);
-    void* smem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* shelter = (smem && shelterTmpl) ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(smem), shelterTmpl) : nullptr;
-    int64_t shelterIBP = 0;
-    new (&shelterIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(shelter));   // B.3.3 bridge
-    if (shelterIBP) {
-        void* shMap = FindOn(FindMap, shelter, &shelterIBP);
+    ComponentDescription* shelterTmpl = SectionTemplate(fencedDesc, 0);
+    ComponentEntity* smem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* shelter = (smem && shelterTmpl) ? ComponentEntity_CtorFromDescription(smem, shelterTmpl) : nullptr;
+    if (shelter) {
+        MapComponent* shMap = shelter->FindComponent<MapComponent>();   // 0x140004680
         StampMapRect(shMap, static_cast<int>(shMinX), static_cast<int>(shMinY),
                      static_cast<int>(shMaxX - shMinX) + 1,
                      static_cast<int>(shMaxY - shMinY) + 1, yawI);
 
-        void* shModel = FindOn(FindModel, shelter, &shelterIBP);
+        ModelComponent* shModel = shelter->FindComponent<ModelComponent>();   // 0x140003f60
         if (shModel) ApplyModelYaw(shModel, yawF, shelterPos);
 
-        void* shPick = FindOn(FindPicking, shelter, &shelterIBP);
-        void* masterVal = reinterpret_cast<void*>(masterIBP);
+        PickingComponent* shPick = shelter->FindComponent<PickingComponent>();   // 0x140026a30
+        ComponentEntity* masterVal = master;
         SeatPickOwner_1290d0(shPick, &masterVal);
 
-        if (multiIBP) {
-            int64_t val = shelterIBP;
-            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(multiIBP + 0x48),
-                                          *reinterpret_cast<int32_t*>(multiIBP + 0x50) + 1, &val);
+        if (multi) {
+            AppendChild(multi, shelter);
         }
-        {
-            int64_t val = shelterIBP;
-            int prio = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(shelterTmpl) + 0x20);
-            EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
-                                           &val, prio);
-        }
+        RegisterWithList(gw, shelter, shelterTmpl);
     }
 
     // 6. Perimeter cell count on the MultiObjectComponent.
-    if (multiIBP)
-        *reinterpret_cast<int32_t*>(multiIBP + 0x58) = (rectH + rectW) * 2 - 4;
+    if (multi)
+        multi->multiCount = (rectH + rectW) * 2 - 4;
 
     const int sMinX = static_cast<int>(shMinX), sMinY = static_cast<int>(shMinY);
     const int sMaxX = static_cast<int>(shMaxX), sMaxY = static_cast<int>(shMaxY);
-    void* multiVal = reinterpret_cast<void*>(multiIBP);
+    MultiObjectComponent* multiVal = multi;
 
     // 7. Corners (skip any the shelter covers) + 4 edge runs.
     if (minCol < sMinX || sMaxX < minCol || minRow < sMinY || sMaxY < minRow)
@@ -435,13 +415,7 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
                   sMinX, sMinY, sMaxX, sMaxY, 0x5a, &multiVal);
 
     // 8. Register the master entity (priority from the tool's own template).
-    {
-        int64_t val = masterIBP;
-        int prio = *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uintptr_t>(descriptionPtr) + 0x20);
-        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
-                                       &val, prio);
-    }
+    RegisterWithList(gw, master, descriptionPtr);
 
     return 1;
 }
