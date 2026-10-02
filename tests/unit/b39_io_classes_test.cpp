@@ -169,40 +169,36 @@ B39_IO_RW_STUBS(BinaryWriter)
 namespace {
 
 // A stream reached ONLY through the four slots the family uses (retail +0x10
-// Write, +0x18 Read, +0x20 SetCurrentPos, +0x28 GetCurrentPos) -- the same
-// shape a live IO::Stream presents -- over a 256-byte buffer, counting reads.
-// B3X W1: IO::Stream has a virtual destructor, so a live table is the
-// compiler's (D1, D0, then retail slots 1..6 one index up) and the family
-// calls the members by name through it: the hand table below is in that
-// order, each entry placed with RetailSlot<IO::Stream>.
-struct FakeStream {
-    const void* const* vt;
+// Write, +0x18 Read, +0x20 SetCurrentPos, +0x28 GetCurrentPos) over a 256-byte
+// buffer, counting reads. B.4 TESTS: it IS an IO::Stream (the class is real
+// since B3X W1), so the family's by-name member calls go through the
+// compiler's own table (D1, D0, then retail slots 1..6 one index up) -- the
+// table a live stream presents -- instead of a hand-built one.
+static_assert(RetailSlot<IO::Stream>(0x10 / 8) == 3 && RetailSlot<IO::Stream>(0x28 / 8) == 6,
+              "Write .. GetCurrentPos at compiler slots 3 .. 6");
+struct FakeStream final : IO::Stream {
     uint8_t buf[256];
     int32_t pos;
     int32_t reads;
-};
-bool FsWrite(void* s, int32_t n, void* src) {
-    FakeStream* f = static_cast<FakeStream*>(s);
-    std::memcpy(f->buf + f->pos, src, (size_t)n); f->pos += n; return true;
-}
-bool FsRead(void* s, int32_t n, void* dst) {
-    FakeStream* f = static_cast<FakeStream*>(s);
-    std::memcpy(dst, f->buf + f->pos, (size_t)n); f->pos += n; ++f->reads; return true;
-}
-bool FsSeek(void* s, int32_t p) { static_cast<FakeStream*>(s)->pos = p; return true; }
-int32_t FsPos(void* s) { return static_cast<FakeStream*>(s)->pos; }
-static_assert(RetailSlot<IO::Stream>(0x10 / 8) == 3 && RetailSlot<IO::Stream>(0x28 / 8) == 6,
-              "Write .. GetCurrentPos at compiler slots 3 .. 6");
-const void* const kFakeStreamVt[7] = {
-    nullptr, nullptr, nullptr,                   // D1, D0, GetSource (never reached)
-    reinterpret_cast<const void*>(&FsWrite), reinterpret_cast<const void*>(&FsRead),
-    reinterpret_cast<const void*>(&FsSeek),  reinterpret_cast<const void*>(&FsPos),
-};
 
+    FakeStream() : buf(), pos(0), reads(0) {}
+    ~FakeStream() override = default;   // _encoding stays null: ~Stream frees nothing
+
+    bool Write(int n, const void* src) override {
+        std::memcpy(buf + pos, src, (size_t)n); pos += n; return true;
+    }
+    bool Read(int n, void* dst) override {
+        std::memcpy(dst, buf + pos, (size_t)n); pos += n; ++reads; return true;
+    }
+    bool SetCurrentPos(int p) override { pos = p; return true; }
+    uint32_t GetCurrentPos() const override { return (uint32_t)pos; }
+    uint32_t GetSize() const override { return 0; }   // never reached by the family
+};
 
 void InitFake(FakeStream& f) {
-    std::memset(&f, 0, sizeof f);
-    f.vt = kFakeStreamVt;
+    std::memset(f.buf, 0, sizeof f.buf);
+    f.pos = 0;
+    f.reads = 0;
 }
 
 // A Serializer's 16 bytes pointing at the fake stream (the Serializer ctor
@@ -212,7 +208,7 @@ struct SerBuf { alignas(8) uint8_t b[16]; };
 IO::Serializer& SerOver(SerBuf& sb, FakeStream& f) {
     std::memset(sb.b, 0, sizeof sb.b);
     IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(sb.b);
-    s._stream = reinterpret_cast<IO::Stream*>(&f);
+    s._stream = &f;
     return s;
 }
 
@@ -270,7 +266,7 @@ UNIT_TEST(b39_io_binarywriter_ctor_and_dtor_frame_the_record) {
     CHECK_EQ(Dword(f, 4), -1);
     CHECK_EQ(Dword(f, 8), 7);
     int32_t payload = 0x1234;
-    FsWrite(&f, 4, &payload);                            // one field of the record
+    f.Write(4, &payload);                                // one field of the record
     w->~BinaryWriter();                                  // retail flags 0: no free
     CHECK_EQ((uint32_t)Dword(f, 16), 0xbbbbbbbbu);       // trailer
     CHECK_EQ(Dword(f, 4), 8);                            // len = 16 - 8, back-patched
