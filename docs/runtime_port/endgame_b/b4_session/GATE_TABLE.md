@@ -201,3 +201,7 @@ Metric at `bd70c96f`: **12135** to remove.
 Metric at `06c62180`: **11,523** to remove.
 
 R-CORE (row 38) routes at `06c62180`: ui ok · tools ok · `sa-stress` exit 0, update 1.89 ms/frame, p95 2.72 (three agents building).
+
+| 39 | W2-STANDALONE (first part) | `7229ae9e` | standalone: the four game-logic files moved to `code/Game/Game`; autostart, modal_driver, mouse_inject, stress_harness, main and ten harnesses by name: 1746 -> 1286 in 78 files (tool_harness and 17 harnesses still to do) | exit 0 · 918 / 0 · 0 (the gate counted 10: the moved files' standing warnings under their new paths; baseline paths updated) | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.80 ms/frame, p95 2.41 (agents building) | 0 |
+
+Metric at `7229ae9e`: **11,063** to remove.

@@ -67,8 +67,8 @@ public:
         virtual char HasStates() = 0;
 
         // +0x08 / +0x10 zeroed by every family ctor; +0x18 the owner.
-        void*      _data08 = nullptr;   // +0x08
-        void*      _data10 = nullptr;   // +0x10
+        Controller* _data08 = nullptr;   // +0x08
+        Controller* _data10 = nullptr;   // +0x10
         Component* _owner  = nullptr;   // +0x18 — read by every slot body
 
     protected:
