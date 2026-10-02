@@ -466,6 +466,8 @@ struct RegionPairCache {
 
     uint32_t Find(int a, int b) const;       // 0x1400a5ac0, 0xffffffff when absent
     void     Store(int a, int b, uint32_t distance);   // 0x1400a5b30
+    // region_paircache.cpp (B.4 ACT-b): advance the clock by *dt, expire old entries.
+    void     Expire(const int64_t* dt);                // 0x1400a5d10
 };
 static_assert(sizeof(RegionPairCache) == 0x38, "RegionPairCache is MemAlloc(0x38)");
 static_assert(offsetof(RegionPairCache, newestTime) == 0x00, "RegionPairCache::newestTime @ +0x00");
