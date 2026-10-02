@@ -199,3 +199,5 @@ Metric at `bd70c96f`: **12135** to remove.
 | 38 | W1-R-CORE | `06c62180` | runtime core: Array element operations by name through `AssignAs` / `InitAs` / `DestroyAs` (about 35 element types), the picking scene grid on typed arrays, Thread and RtSink typed: 941 -> 329 in 108 files; floor ceilings raised (FLOOR.md) | exit 0 · 918 / 0 · 0 | ok | 5/5 | see row 39 for tools / stress | 0 |
 
 Metric at `06c62180`: **11,523** to remove.
+
+R-CORE (row 38) routes at `06c62180`: ui ok · tools ok · `sa-stress` exit 0, update 1.89 ms/frame, p95 2.72 (three agents building).
