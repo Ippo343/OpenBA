@@ -77,6 +77,8 @@
 #include "Component/RadiusDescription.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/ResidenceComponent.h"
+#include "Component/ResidenceDescription.h"
+
 #include "Component/SpawnComponent.h"
 #include "Component/StateMachineComponent.h"
 #include "Component/StorageComponent.h"
@@ -157,7 +159,7 @@ extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP,
 // StartTown_RunOnCreatePass when each house's ResidenceComponent::OnCreate fires. Used by
 // StartTown_AssignFoundingHousing to pair families to houses (townMgr+0x20 is never
 // populated in standalone — see the capture site). Cleared at the start of each spawn.
-static std::vector<int64_t> g_foundingHouseIBPs;
+static std::vector<ComponentEntity*> g_foundingHouseIBPs;
 // Phase 4: founding-family CitizenComponents captured during AssignFoundingHousing;
 // the deferred employ pass seats idle adults from this list at the lodge.
 static std::vector<void*> g_foundingCitizens;
@@ -187,7 +189,7 @@ static size_t g_stressHouseFirstIdx = 0;
 // null if index is out of range.
 extern "C" void* StartTown_GetFoundingHouseEntity(int index) {
     if (index < 0 || (size_t)index >= g_foundingHouseIBPs.size()) return nullptr;
-    return reinterpret_cast<void*>(g_foundingHouseIBPs[(size_t)index]);
+    return g_foundingHouseIBPs[(size_t)index];
 }
 extern "C" int StartTown_GetFoundingHouseCount() {
     return (int)g_foundingHouseIBPs.size();
@@ -891,25 +893,24 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 // stamping the removal sentinel would (wrongly) mark the live building removed and
 // permanently exclude its components — e.g. StorageDisplayComponent::Update — from the
 // native tick, which is exactly the bug this omission fixes.
-static void StartTown_RunOnCreatePass(void* entityV) {
-    if (!entityV) return;
+static void StartTown_RunOnCreatePass(ComponentEntity* ent) {
+    if (!ent) return;
 
     const uint32_t s_tidResidence = ResidenceComponent::TypeId();   // caller batch CB6: was a lazy cache
 
-    uint8_t* ent = (uint8_t*)entityV;
-    uint32_t* entFlags = (uint32_t*)(ent + 0x40);
+    uint32_t* entFlags = &ent->_entityFlags;
     if ((*entFlags & 2) != 0 && s_tidResidence != 0) {
-        int count = *(int32_t*)(ent + ENT_COMP_CNT);
-        uintptr_t arr = *(uintptr_t*)(ent + ENT_COMP_ARR);
+        int count = ent->_componentCount;
+        Object::InternalPtr<Component>* arr = ent->_components;
         for (int i = 0; i < count; ++i) {
-            void** slot = (void**)(arr + (uintptr_t)i * 8);
-            void* comp = *slot;
+            Object::InternalPtr<Component>* slot = &arr[i];
+            Component* comp = slot->Get();
             if (!comp) continue;
-            if (((*(uint32_t*)((uint8_t*)comp + 0x20)) >> 1 & 1) == 0) continue;  // flag bit 1
-            // Slot 2 on an entity component-array element (proved Object::Base).
-            uint32_t tid = reinterpret_cast<const Object::Base*>(comp)->Type();   // B.3.8 bridge
+            if ((comp->_flags >> 1 & 1) == 0) continue;  // flag bit 1
+            // Slot 2 on an entity component-array element.
+            uint32_t tid = comp->Type();
             if (tid != s_tidResidence) continue;                 // ONLY ResidenceComponent
-            comp = *slot;
+            comp = slot->Get();
             if (!comp) continue;
             // BANISHED_LIVE_RESIDENCE_REGISTRY — GRADUATED to the default-on table 2026-08-15
             // (`=0` is now the kill-switch). See the A/B in component_factory_base.cpp:
@@ -936,16 +937,16 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             // rather than an invariant becomes a lie and disguises the gap it creates.
             //
             // Call the init half directly, skipping the erase.
-            ResidenceComponent_ResidenceInit(comp);   // 0x140129ef0
+            static_cast<ResidenceComponent*>(comp)->EvictResidents();   // 0x140129ef0
             // Capture the house's owner-entity IBP (ResidenceComponent+0x10 — the exact
             // value the original registration uses) for the founding-housing pass. We keep
             // the house IBPs here and pair them to families directly; that pairing is
             // independent of townMgr+0x20 and stays correct in both flag states.
-            g_foundingHouseIBPs.push_back(*reinterpret_cast<int64_t*>((uint8_t*)comp + 0x10));
+            g_foundingHouseIBPs.push_back(comp->_entity);
             fprintf(stderr, "[startTown::residence] ResidenceComponent::OnCreate fired "
-                            "(house #%zu captured, ownerIBP=%llx)\n",
+                            "(house #%zu captured, ownerIBP=%p)\n",
                             g_foundingHouseIBPs.size() - 1,
-                            (unsigned long long)g_foundingHouseIBPs.back());
+                            g_foundingHouseIBPs.back());
             fflush(stderr);
         }
     }
@@ -979,13 +980,15 @@ static void StartTown_RunOnCreatePass(void* entityV) {
 //      2026-07-27: 0x14012d230 is in no vtable). Calling it here is a stand-in for
 //      an SM that never reaches state 2 in this build.
 // Our CopyCtor already wires comp+0x10 (entity) and +0x18 (description).
-static void StartTown_WireStorage(void* entity, int /*entryIdx*/) {
+static void StartTown_WireStorage(ComponentEntity* entity, int /*entryIdx*/) {
     if (!entity) return;
-    void* storageComp = FindComponentOnEntity(entity, StorageComponent::TypeId());
+    StorageComponent* storageComp =
+        FindComponentOnEntity<StorageComponent>(entity, StorageComponent::TypeId());
     if (!storageComp) return;                      // not a storage building
     TownStorage_BuildCompleteInit_7ff0(storageComp);
 
-    void* slc = FindComponentOnEntity(entity, StorageLocationComponent::TypeId());
+    Component* slc = FindComponentOnEntity(entity, StorageLocationComponent::TypeId());
+
     // FAITHFUL registration set: retail's townMgr+0x00 ADD (d230) fires from the
     // StorageLocationComponent lifecycle, so ONLY `storagelocation`-bearing
     // templates (StorageBarn/StorageYard/StorageCart/Tavern) join the list. The
@@ -1012,8 +1015,9 @@ static void StartTown_WireStorage(void* entity, int /*entryIdx*/) {
 
 // Defined further down (resource model-variant section); used by the structures path
 // to swap a building from its foundation mesh to the completed-build mesh.
-static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
+static void ApplyResourceModelVariant(ComponentEntity* entity, uint32_t tidModel,
                                       int16_t variantIdx, int16_t modelVariant);
+
 
 // ── Construction-demo foundation (BANISHED_LIVE_BUILDCTRL) ────────────────────────
 // When the live BuildComponent state machine is on we leave exactly ONE start-town
@@ -3936,30 +3940,31 @@ extern "C" void* StartTown_SpawnColonistRetail(MapGenerator* startConfig, void* 
 // allocated (+0x50 null / +0x58 0) and a710's Roster(+0x50)[0] would deref null. Reproduce the
 // sizing here, TRUSTING the linked description at +0x18 (the established SA derive-or-trust
 // pattern). Idempotent; returns true when +0x50 is allocated with >=1 slot.
-static bool StartTown_EnsureResidenceRoster(void* resComp) {
+static bool StartTown_EnsureResidenceRoster(ResidenceComponent* resComp) {
     if (!resComp) return false;
-    uint8_t* rc = reinterpret_cast<uint8_t*>(resComp);
-    if (*reinterpret_cast<int64_t*>(rc + 0x50) != 0 && *reinterpret_cast<int32_t*>(rc + 0x58) >= 1)
+    ResidenceComponent* rc = resComp;
+    if (rc->residentSlots != nullptr && rc->residentSlotCount >= 1)
         return true;                                   // already sized
 
-    void* desc = *reinterpret_cast<void**>(rc + 0x18); // ResidenceDescription (trusted, no IsDerivedFrom)
+    const Description* linked = rc->_description;     // ResidenceDescription (trusted, no IsDerivedFrom)
+    const ResidenceDescription* desc = static_cast<const ResidenceDescription*>(linked);
     if (!desc) {
         fprintf(stderr, "[startTown::housing] residence roster: comp=%p has no description (+0x18) — "
                 "cannot size\n", resComp); fflush(stderr);
         return false;
     }
-    int capacity = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(desc) + 0x20);  // desc+0x20 = max occupants
+    int capacity = desc->_maxFamilies;  // desc+0x20 = max occupants
     if (capacity < 1) capacity = 1;
     if (capacity > 16) capacity = 16;                  // sanity clamp (guards a garbage read)
 
-    ResidenceComponent_ResizeResidentArray(reinterpret_cast<void*>(rc + 0x50), capacity);   // 0x140037ad0
+    rc->SetFamilyCount(capacity);   // 0x140037ad0
 
-    int64_t sa = *reinterpret_cast<int64_t*>(rc + 0x50);
-    int sc = *reinterpret_cast<int32_t*>(rc + 0x58);
+    ResidenceComponent::Family* sa = rc->residentSlots;
+    int sc = rc->residentSlotCount;
     fprintf(stderr, "[startTown::housing] residence roster sized: comp=%p desc=%p capacity=%d -> "
-            "+0x50=%llx +0x58=%d\n", resComp, desc, capacity, (unsigned long long)sa, sc);
+            "+0x50=%p +0x58=%d\n", resComp, desc, capacity, sa, sc);
     fflush(stderr);
-    return sa != 0 && sc >= 1;
+    return sa != nullptr && sc >= 1;
 }
 
 static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>>& families) {
@@ -3980,23 +3985,24 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
     bool prevRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
     for (size_t f = 0; f < families.size() && f < g_foundingHouseIBPs.size(); ++f) {
-        int64_t houseIBP = g_foundingHouseIBPs[f];
-        if (houseIBP == 0) continue;
+        ComponentEntity* houseIBP = g_foundingHouseIBPs[f];
+        if (houseIBP == nullptr) continue;
 
         // Locate the house's ResidenceComponent (c7cf0) — the RESIDENT roster the faithful
         // residence assigner (AssignWorkplace 0x1401163d0 -> a710) appends into. Its slot
         // array (+0x50) is sized to the residence capacity by ResidenceComponent::Serialize
         // during spawn (BANISHED_LIVE_RESIDENCE). Guard against an un-serialized roster
         // (null slot-array base / zero slots) so a710's Roster(+0x50)[0] can't deref null.
-        void* resComp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
+        ResidenceComponent* resComp =
+            FindComponentOnEntity<ResidenceComponent>(houseIBP, tidResidence);
         if (!resComp) {
             fprintf(stderr, "[startTown::housing] family[%zu] house#%zu has no ResidenceComponent "
                     "(c7cf0) — skip\n", f, f); fflush(stderr);
             continue;
         }
-        int64_t slotArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
-        int slotCnt = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x58);
-        if (slotArr == 0 || slotCnt < 1) {
+        ResidenceComponent::Family* slotArr = resComp->residentSlots;
+        int slotCnt = resComp->residentSlotCount;
+        if (slotArr == nullptr || slotCnt < 1) {
             // Roster array not sized (SA ResidenceComponent::Serialize bailed on the
             // IsDerivedFrom gate) — size it faithfully now, else a710 would deref null.
             if (!StartTown_EnsureResidenceRoster(resComp)) {
@@ -4004,8 +4010,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
                         "bring-up failed — skip\n", f, f); fflush(stderr);
                 continue;
             }
-            slotArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
-            slotCnt = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x58);
+            slotArr = resComp->residentSlots;
+            slotCnt = resComp->residentSlotCount;
         }
 
         int housed = 0, misfiled = 0;
@@ -4019,7 +4025,7 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
             // (c7cf0) slot[0] resident array (+0x50). It leaves +0x248 (workplace) UNTOUCHED
             // = 0, so the citizen is the retail founding default (unemployed laborer) and the
             // citizen-panel Profession button (id 0x227, reads +0x248) correctly greys out.
-            int64_t houseIBPLocal = houseIBP;
+            ComponentEntity* houseIBPLocal = houseIBP;
             CitizenComponent_AssignWorkplace(citComp, &houseIBPLocal, 0);
             int64_t home = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x238);
             int64_t work = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248);
@@ -4031,8 +4037,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
         // (retail reads *(*(c7cf0+0x50)+8) in FUN_1400d62a0's re-house loop).
         int residents = -1;
         {
-            int64_t sa = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
-            if (sa) residents = *reinterpret_cast<int32_t*>(sa + 8);
+            ResidenceComponent::Family* sa = resComp->residentSlots;
+            if (sa) residents = sa[0].count;
         }
         // ResidenceDescription carries TWO different numbers and they are easy to confuse:
         //   +0x20 = how many HOUSEHOLD SLOTS the house has (1 for a wood house; it is what
@@ -4046,13 +4052,14 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
         // Log both next to the actual resident count so over-filling is visible.
         int occupantCap = -1;
         {
-            void* rdesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(resComp) + 0x18);
-            if (rdesc) occupantCap = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(rdesc) + 0x24);
+            const Description* linked = resComp->_description;
+            const ResidenceDescription* rdesc = static_cast<const ResidenceDescription*>(linked);
+            if (rdesc) occupantCap = rdesc->_maxResidentsPerFamily;
         }
-        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu "
+        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%p): housed %d/%zu "
                 "members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=%d slots=%d "
                 "occupantCap(desc+0x24)=%d%s; +0x248!=0 (should be 0) on %d members\n",
-                f, f, (unsigned long long)houseIBP, housed, families[f].size(),
+                f, f, houseIBP, housed, families[f].size(),
                 residents, slotCnt, occupantCap,
                 (occupantCap >= 0 && residents >= occupantCap)
                     ? "  <-- FULL: this household can never have a child" : "",
@@ -4161,13 +4168,13 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     // winter OUT of the measurement, not to model a fuel economy.
     const int kSeedFuelPerHouse = 400;
     int seeded = 0, fuelSeeded = 0;
-    for (int64_t houseIBP : g_foundingHouseIBPs) {
+    for (ComponentEntity* houseIBP : g_foundingHouseIBPs) {
         if (!houseIBP) continue;
 
         // Per-house need: `residents * (int)(CitizenDescription+0xc4)` + margin — the
         // HasSufficientResources threshold. Resident slots at rescomp+0x50/+0x58 (the
         // state node at +0x28 is NOT touched).
-        void* rescomp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
+        void* rescomp = FindComponentOnEntity(houseIBP, tidResidence);
         int residents = 0, reqInt = 0;
         if (rescomp) {
             int64_t slotArr = *(int64_t*)((uint8_t*)rescomp + 0x50);
@@ -4196,7 +4203,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         // Seed the ONE household container (StorageComponent c7e78). Faithful accept gate
         // (StorageComponent_helper_c560): the storage flag mask (+0x3c) must intersect the
         // material's flags (+0x5c).
-        void* sc = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidStorage);
+        void* sc = FindComponentOnEntity(houseIBP, tidStorage);
         if (!sc) continue;
         uint32_t mask = *(uint32_t*)((uint8_t*)sc + 0x3c);
         if ((mask & foodFlags) == 0) {
@@ -4519,13 +4526,14 @@ static constexpr int RES_POOL_CAP = 0x7fffffff;
 
 // Mesh lookup mirroring ModelComponent::GetMeshFromDescription and the inline
 // formula in FUN_1401253d0: groupArray[variantIdx].subArray[modelVariant].
-static void* ResMeshFromModelDesc(void* modelDesc, int variantIdx, int modelVariant) {
+static Graphics::GraphicsMesh* ResMeshFromModelDesc(const ModelDescription* modelDesc,
+                                                    int variantIdx, int modelVariant) {
     if (!modelDesc || variantIdx < 0 || modelVariant < 0) return nullptr;
-    void* groupArray = *(void**)((uint8_t*)modelDesc + 0x20);
+    ModelMeshGroup* groupArray = modelDesc->_meshGroups;
     if (!groupArray) return nullptr;
-    void* sub = *(void**)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 8);
+    Graphics::GraphicsMesh** sub = groupArray[variantIdx].meshes;
     if (!sub) return nullptr;
-    return *(void**)((uint8_t*)sub + (int64_t)modelVariant * 8);
+    return sub[modelVariant];
 }
 
 // Standalone-safe port of FUN_1401253d0: set the ModelComponent's growth-stage
@@ -4536,23 +4544,22 @@ static void* ResMeshFromModelDesc(void* modelDesc, int variantIdx, int modelVari
 // linked +0x18 description, the IsDerivedFromOrTrust policy used throughout the
 // spawn path. Called BEFORE registration, so we just set fields + mesh; OnAdded
 // then does the single scene-add, rather than the original's remove/re-add.)
-static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
+static void ApplyResourceModelVariant(ComponentEntity* entity, uint32_t tidModel,
                                       int16_t variantIdx, int16_t modelVariant) {
     // B.3.5: the SetMesh readiness term went with the door; B3R: the IBP ctor's too.
-    void* mc = FindComponentOnEntity(entity, tidModel);
+    ModelComponent* mc = FindComponentOnEntity<ModelComponent>(entity, tidModel);
     if (!mc) return;
-    uintptr_t mcIBP = 0;
-    new (&mcIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mc));   // B.3.3 bridge
-    uint8_t* m = (uint8_t*)mcIBP;
+    ::Object::InternalPtr<ModelComponent> mcIBP(mc);
+    ModelComponent* m = mcIBP.Get();
     if (!m) return;
-    void* modelDesc = *(void**)(m + 0x18);
-    *(int16_t*)(m + 0x164) = variantIdx;
-    *(int16_t*)(m + 0x166) = modelVariant;
+    const Description* linked = m->_description;
+    const ModelDescription* modelDesc = static_cast<const ModelDescription*>(linked);
+    m->meshGroup = variantIdx;
+    m->meshIndex = modelVariant;
     if (modelVariant >= 0) {
-        void* mesh = ResMeshFromModelDesc(modelDesc, variantIdx, modelVariant);
+        Graphics::GraphicsMesh* mesh = ResMeshFromModelDesc(modelDesc, variantIdx, modelVariant);
         if (mesh)
-            reinterpret_cast<Graphics::MeshInstance*>(m + 0x28)->SetMesh(
-                Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
+            m->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
     }
 }
 
