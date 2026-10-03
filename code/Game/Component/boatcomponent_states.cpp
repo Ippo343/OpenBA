@@ -543,7 +543,7 @@ char BoatComponent::State2Enter() {
 // state 2 EVENT 0 — 0x140044f00      (the post releases the merchant)
 // ============================================================
 // Reads nothing of its receiver: stays free (B1).
-extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
+extern "C" char BoatCtrl_State2_Event0(BoatComponent* /*self*/, void* smV) {
     RequestTransition(smV, 3);
     return 1;
 }
@@ -552,7 +552,7 @@ extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
 // EVENT 1 on states 0/1/2 — 0x140045670   (abort: go straight to GONE)
 // ============================================================
 // Reads nothing of its receiver: stays free (B1).
-extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
+extern "C" char BoatCtrl_Event1_Abort(BoatComponent* /*self*/, void* smV) {
     RequestTransition(smV, 4);
     return 1;
 }
@@ -637,64 +637,64 @@ char BoatComponent::State4Tick() {
 // handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer,
 // this component, so each entry is a one-line adapter that calls the member.
 namespace {
-char BoatState0Enter(BoatComponent* b)               { return b->State0Enter(); }    // 53f0
-char BoatState0Update(BoatComponent* b)              { return b->State0Update(); }   // 5190
-char BoatState0Tick(BoatComponent* b, void* sm)      { return b->State0Tick(sm); }   // 5250
-char BoatState1Enter(BoatComponent* b)               { return b->State1Enter(); }    // 5150
-char BoatState1Tick(BoatComponent* b, void* sm)      { return b->State1Tick(sm); }   // 4ff0
-char BoatState2Enter(BoatComponent* b)               { return b->State2Enter(); }    // 4f70
-char BoatState3Enter(BoatComponent* b)               { return b->State3Enter(); }    // 4ec0
-char BoatState3Tick(BoatComponent* b, void* sm)      { return b->State3Tick(sm); }   // 4d10
-char BoatState4Enter(BoatComponent* b)               { return b->State4Enter(); }    // 4cd0
-char BoatState4Tick(BoatComponent* b)                { return b->State4Tick(); }     // 4c40
+char BoatState0Enter(BoatComponent* b, void* /*sm*/)               { return b->State0Enter(); }    // 53f0
+char BoatState0Update(BoatComponent* b, void* /*sm*/)              { return b->State0Update(); }   // 5190
+char BoatState0Tick(BoatComponent* b, void* sm, void* /*time*/)      { return b->State0Tick(sm); }   // 5250
+char BoatState1Enter(BoatComponent* b, void* /*sm*/)               { return b->State1Enter(); }    // 5150
+char BoatState1Tick(BoatComponent* b, void* sm, void* /*time*/)      { return b->State1Tick(sm); }   // 4ff0
+char BoatState2Enter(BoatComponent* b, void* /*sm*/)               { return b->State2Enter(); }    // 4f70
+char BoatState3Enter(BoatComponent* b, void* /*sm*/)               { return b->State3Enter(); }    // 4ec0
+char BoatState3Tick(BoatComponent* b, void* sm, void* /*time*/)      { return b->State3Tick(sm); }   // 4d10
+char BoatState4Enter(BoatComponent* b, void* /*sm*/)               { return b->State4Enter(); }    // 4cd0
+char BoatState4Tick(BoatComponent* b, void* /*sm*/, void* /*time*/)                { return b->State4Tick(); }     // 4c40
 }  // namespace
 
 // Idempotent: the installer runs once per component instance.
 extern "C" void BoatCtrl_PopulateTable() {
-    ::ControllerLive::StateTable& t = BoatDispatch::table;
+    auto& t = BoatDispatch::table;
     if (t.count != 0) return;
     using namespace ::ControllerLive;
 
     // TableRegisterState(t, id, enter, trans30, trans38, update)
     // state 0 — outbound along the route
     TableRegisterState(t, 0,
-        reinterpret_cast<void*>(&BoatState0Enter),    // 53f0
-        reinterpret_cast<void*>(&BoatState0Tick),     // 5250  (R9)
+        &BoatState0Enter,    // 53f0
+        &BoatState0Tick,     // 5250  (R9)
         nullptr,                                      // retail: always 0
-        reinterpret_cast<void*>(&BoatState0Update));  // 5190  (R8)
+        &BoatState0Update);  // 5190  (R8)
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 4, nullptr);
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&BoatCtrl_Event1_Abort));   // 5670
+    TableAddEvent(t, 1, &BoatCtrl_Event1_Abort);   // 5670
 
     // state 1 — final approach
     TableRegisterState(t, 1,
-        reinterpret_cast<void*>(&BoatState1Enter),    // 5150
-        reinterpret_cast<void*>(&BoatState1Tick),     // 4ff0
+        &BoatState1Enter,    // 5150
+        &BoatState1Tick,     // 4ff0
         nullptr, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 4, nullptr);
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&BoatCtrl_Event1_Abort));
+    TableAddEvent(t, 1, &BoatCtrl_Event1_Abort);
 
     // state 2 — docked (posts event 9 to the post on entry)
     TableRegisterState(t, 2,
-        reinterpret_cast<void*>(&BoatState2Enter),    // 4f70
+        &BoatState2Enter,    // 4f70
         nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 4, nullptr);
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&BoatCtrl_State2_Event0));  // 4f00
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&BoatCtrl_Event1_Abort));
+    TableAddEvent(t, 0, &BoatCtrl_State2_Event0);  // 4f00
+    TableAddEvent(t, 1, &BoatCtrl_Event1_Abort);
 
     // state 3 — departing
     TableRegisterState(t, 3,
-        reinterpret_cast<void*>(&BoatState3Enter),    // 4ec0
-        reinterpret_cast<void*>(&BoatState3Tick),     // 4d10
+        &BoatState3Enter,    // 4ec0
+        &BoatState3Tick,     // 4d10
         nullptr, nullptr);
     TableAddTransition(t, 4, nullptr);
 
     // state 4 — gone
     TableRegisterState(t, 4,
-        reinterpret_cast<void*>(&BoatState4Enter),    // 4cd0
-        reinterpret_cast<void*>(&BoatState4Tick),     // 4c40
+        &BoatState4Enter,    // 4cd0
+        &BoatState4Tick,     // 4c40
         nullptr, nullptr);
 
     std::fprintf(stderr, "[BoatCtrl] table built: %d states (0..4)\n", t.count);

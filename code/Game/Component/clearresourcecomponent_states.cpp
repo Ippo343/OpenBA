@@ -135,10 +135,10 @@ using ClearResourceDispatch = ::ControllerLive::Dispatcher<ClearResourceCtrlTag>
 
 extern "C" void ClearResourceCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = ClearResourceDispatch::table;
+    auto& t = ClearResourceDispatch::table;
     if (t.count != 0) return;   // idempotent
     // The whole class: state 2, enter = sub_8560 (destroy the job), -> {3}.
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&ClearResource_State2Enter),
+    TableRegisterState(t, 2, &ClearResource_State2Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }

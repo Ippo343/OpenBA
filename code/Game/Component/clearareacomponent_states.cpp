@@ -479,10 +479,10 @@ char ClearAreaComponent::State2Enter() {
 // The state table's handler adapters: the controller hands each one its owner
 // (node+0x18), the ClearAreaComponent.
 static char CA_State0Enter(ClearAreaComponent* c, void* sm)    { return c->State0Enter(sm); }     // 0x140117960
-static char CA_State0PerFrame(ClearAreaComponent* c, void* sm) { return c->State0PerFrame(sm); }  // 0x1401178f0
-static char CA_State0Update(ClearAreaComponent* c)             { return c->State0Update(); }      // 0x140117890
+static char CA_State0PerFrame(ClearAreaComponent* c, void* sm, void* /*time*/) { return c->State0PerFrame(sm); }  // 0x1401178f0
+static char CA_State0Update(ClearAreaComponent* c, void* /*sm*/)             { return c->State0Update(); }      // 0x140117890
 static char CA_State1Enter(ClearAreaComponent* c, void* sm)    { return c->State1Enter(sm); }     // 0x140117820
-static char CA_State2Enter(ClearAreaComponent* c)              { return c->State2Enter(); }       // 0x1401177f0
+static char CA_State2Enter(ClearAreaComponent* c, void* /*sm*/)              { return c->State2Enter(); }       // 0x1401177f0
 
 // B4 FORWARD: tool_harness.cpp drives state 0's enter directly.
 extern "C" char ClearArea_State0Enter(void* data, void* sm) {
@@ -504,13 +504,13 @@ using ClearAreaDispatch = ::ControllerLive::Dispatcher<ClearAreaCtrlTag>;
 //   trans38Handler(arg5)            -> slot +0x38 DrawAlt    (PER-FRAME)
 extern "C" void ClearAreaCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = ClearAreaDispatch::table;
+    auto& t = ClearAreaDispatch::table;
     if (t.count != 0) return;   // idempotent
     // state 0: enter=State0Enter (dispatch harvest), update=State0Update (stop slot),
     //          per-frame=State0PerFrame (finish when clear). transitions -> {1, 3}.
-    TableRegisterState(t, 0, reinterpret_cast<void*>(&CA_State0Enter),
-                       nullptr, reinterpret_cast<void*>(&CA_State0PerFrame),
-                       reinterpret_cast<void*>(&CA_State0Update));
+    TableRegisterState(t, 0, &CA_State0Enter,
+                       nullptr, &CA_State0PerFrame,
+                       &CA_State0Update);
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 0x15: cancel/removal path — not reached from the clear flow; register the
@@ -519,12 +519,12 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 1: model-finalize on entry (helper_7820: 8270 + request 1->2) -> {2, 3}.
-    TableRegisterState(t, 1, reinterpret_cast<void*>(&CA_State1Enter),
+    TableRegisterState(t, 1, &CA_State1Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 2: model-finalize on entry (helper_77f0: broadcast event 1) -> {3}.
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&CA_State2Enter),
+    TableRegisterState(t, 2, &CA_State2Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }

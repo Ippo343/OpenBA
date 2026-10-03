@@ -36,7 +36,7 @@ class ComponentDescription;
 class LivestockComponent;
 class AnimalComponent;
 
-struct PastureCtrlTag {};
+struct PastureCtrlTag { using Owner = class PastureComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class PastureComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(PastureComponent)

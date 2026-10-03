@@ -41,7 +41,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct WPCCtrlTag {};
+struct WPCCtrlTag { using Owner = class WorkPlaceComponent; };   // the handlers' receiver (controller_state_table.h)
 class Profession;         // Game/Profession.h
 class CitizenComponent;   // Component/CitizenComponent.h
 

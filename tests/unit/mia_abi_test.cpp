@@ -182,15 +182,15 @@ UNIT_TEST(mia_component_own_slots_land_on_retail_indices) {
 // ===========================================================================
 void* g_miaSeenData = nullptr;
 void* g_miaSeenSm   = nullptr;
-char MiaEnterHandler(void* data, void* sm) { g_miaSeenData = data; g_miaSeenSm = sm; return 5; }
+char MiaEnterHandler(ClearResourceComponent* data, void* sm) { g_miaSeenData = data; g_miaSeenSm = sm; return 5; }
 
 UNIT_TEST(mia_controller_member_raw_dispatch) {
     using Ctl = ClearResourceComponent::StateController;
     using Dispatch = ::ControllerLive::Dispatcher<ClearResourceCtrlTag>;
     auto& t = Dispatch::table;
-    const ::ControllerLive::StateTable saved = t;   // empty in the host test (no static init linked)
+    const auto saved = t;   // empty in the host test (no static init linked)
     t = {};
-    ::ControllerLive::TableRegisterState(t, 2, reinterpret_cast<void*>(&MiaEnterHandler),
+    ::ControllerLive::TableRegisterState(t, 2, &MiaEnterHandler,
                                          nullptr, nullptr, nullptr);
     ::ControllerLive::TableAddTransition(t, 3, nullptr);
 

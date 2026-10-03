@@ -32,7 +32,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct CemeteryCtrlTag {};
+struct CemeteryCtrlTag { using Owner = class CemeteryComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class CemeteryComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(CemeteryComponent)

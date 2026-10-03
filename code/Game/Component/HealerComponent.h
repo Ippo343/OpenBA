@@ -30,7 +30,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct HealerCtrlTag {};
+struct HealerCtrlTag { using Owner = class HealerComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class HealerComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(HealerComponent)

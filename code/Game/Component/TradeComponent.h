@@ -35,7 +35,7 @@
 #include "system/String.h"
 #include "system/Value.h"      // System::Time
 
-struct TradeCtrlTag {};
+struct TradeCtrlTag { using Owner = class TradeComponent; };   // the handlers' receiver (controller_state_table.h)
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 

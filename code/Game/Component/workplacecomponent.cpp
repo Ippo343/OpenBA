@@ -672,25 +672,25 @@ void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
 //     the natural profession, register under it) transitions {3}; 3 enter=ed60
 //     ("demolish": release workers + BST-erase) transitions {6,4,5}.
 
-static char WPC_EnterConstructionState(WorkPlaceComponent* c) { return c->EnterConstruction(); }   // 0x14012ee40
-static char WPC_EnterBuiltStateNode(WorkPlaceComponent* c)    { return c->EnterBuilt(); }          // 0x14012edf0
-static char WPC_EnterDemolishState(WorkPlaceComponent* c)     { return c->EnterDemolish(); }       // 0x14012ed60
+static char WPC_EnterConstructionState(WorkPlaceComponent* c, void* /*sm*/) { return c->EnterConstruction(); }   // 0x14012ee40
+static char WPC_EnterBuiltStateNode(WorkPlaceComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }          // 0x14012edf0
+static char WPC_EnterDemolishState(WorkPlaceComponent* c, void* /*sm*/)     { return c->EnterDemolish(); }       // 0x14012ed60
 
 using WPCCtrlDispatch = ::ControllerLive::Dispatcher<WPCCtrlTag>;
 
 // Built ONCE at static-init time, as retail's state-table builder does (B38 D6/D7).
 static void WorkPlaceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = WPCCtrlDispatch::table;
+    auto& t = WPCCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
-    TableRegisterState(t, 0, reinterpret_cast<void*>(&WPC_EnterConstructionState),
+    TableRegisterState(t, 0, &WPC_EnterConstructionState,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&WPC_EnterBuiltStateNode),
+    TableRegisterState(t, 2, &WPC_EnterBuiltStateNode,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&WPC_EnterDemolishState),
+    TableRegisterState(t, 3, &WPC_EnterDemolishState,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

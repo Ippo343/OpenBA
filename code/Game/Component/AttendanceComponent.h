@@ -34,7 +34,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct AttendanceCtrlTag {};
+struct AttendanceCtrlTag { using Owner = class AttendanceComponent; };   // the handlers' receiver (controller_state_table.h)
 class CitizenComponent;   // Component/CitizenComponent.h
 
 class AttendanceComponent final : public ControllerComponent {

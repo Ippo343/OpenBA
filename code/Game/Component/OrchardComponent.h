@@ -36,7 +36,7 @@ class NaturalResourceComponent;
 class FruitComponent;
 class ComponentDescription;
 
-struct OrchardCtrlTag {};
+struct OrchardCtrlTag { using Owner = class OrchardComponent; };   // the handlers' receiver (controller_state_table.h)
 
 // One tree position of the orchard, stride 0x28 (Array element of +0x50; resized by
 // 0x140009f80, serialized by 0x14000a230 as int, int, three InternalPtrs, bool).
