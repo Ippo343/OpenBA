@@ -405,12 +405,12 @@ extern "C" Video::Context* RtVideo_Context_Ctor(Video::Context* self, Video::Dev
     self->_defaultRenderBuffer = rb;
 
     Video::ImageBuffer* color =
-        static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
+        static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));  // LEFT: class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)
     if (color) ::new (color) Video::ImageBuffer();
     self->_defaultColorImage = color;
 
     Video::ImageBuffer* depth =
-        static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
+        static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));  // LEFT: class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)
     if (depth) ::new (depth) Video::ImageBuffer();
     self->_defaultDepthImage = depth;
 

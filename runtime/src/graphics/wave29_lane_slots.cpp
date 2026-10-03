@@ -288,7 +288,7 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // the embedded +0x60 with the pointer-to-array +0x70 cost Wave 6 an
     // integration run, and is silent whenever the garbage count reads 0.
     const bool ok =
-        reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+        reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: H5 MeshInstance::_animation raw storage
             ->::Graphics::AnimationState::Update(
                 timeRef,
                 GetMesh()->GetNodes(),                 // &mesh->_nodes (+0x60)
@@ -413,7 +413,7 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
     // `_triangleLists._data`, and +0x14 of the 24-byte record is
     // `TriangleList::_f14`.
     const GraphicsMesh::DetailLevel* const levels =
-        reinterpret_cast<const GraphicsMesh::DetailLevel*>(GetMesh()->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        GetMesh()->_detailLevels._data;
     const GraphicsMesh::TriangleList* const rec = levels[hi]._triangleLists._data;
     // UNGUARDED, and deliberately: retail dereferences `levels` and `rec`
     // without a test. If either is null here, something upstream handed us a

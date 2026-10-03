@@ -177,11 +177,11 @@ bool VideoProgram::Serialize(IO::Stream& streamv) {
     RtObject_ExternalPtrSerialize_VertexLayout(
         reinterpret_cast<RtObject::External**>(&_vertexLayout), pod);    // 0x180055090
     RtObject_ExternalPtrSerialize_VertexProgram(
-        reinterpret_cast<RtObject::External**>(&_vertexProgram), pod);   // 0x1800542a0
+        reinterpret_cast<RtObject::External**>(&_vertexProgram), pod);   // 0x1800542a0  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
     RtObject_ExternalPtrSerialize_PixelProgram(
-        reinterpret_cast<RtObject::External**>(&_pixelProgram), pod);    // 0x180055380
+        reinterpret_cast<RtObject::External**>(&_pixelProgram), pod);    // 0x180055380  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
     RtObject_ExternalPtrSerialize_RenderState(
-        reinterpret_cast<RtObject::External**>(&_renderState), pod);     // 0x180055670
+        reinterpret_cast<RtObject::External**>(&_renderState), pod);     // 0x180055670  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
 
     if ((_vertexLayout.Get() || _vertexProgram.Get() || _pixelProgram.Get() || _renderState.Get())
         && stream.GetDirection() == IO::kReading) {

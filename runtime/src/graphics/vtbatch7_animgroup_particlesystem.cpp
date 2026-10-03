@@ -375,11 +375,11 @@ bool AnimationGroup::Serialize(IO::Stream& streamv) {
         rtcoll::RtColl_ArraySetSize_18005a220(&_tags, n);
     }
     {
-        uint8_t* p = _tags._data;
-        for (int32_t i = 0; i < n; ++i, p += 0x18) {
-            StrSer(p + 0x00, ser);
-            StrSer(p + 0x08, ser);
-            ser._readerWriter->SerializeFloat(*reinterpret_cast<float*>(p + 0x10), nullptr);
+        Tag* p = _tags._data;
+        for (int32_t i = 0; i < n; ++i, ++p) {           // stride 0x18
+            StrSer(&p->_string00, ser);
+            StrSer(&p->_string08, ser);
+            ser._readerWriter->SerializeFloat(p->_float10, nullptr);
         }
     }
 

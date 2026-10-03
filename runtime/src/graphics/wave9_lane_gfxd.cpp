@@ -266,7 +266,7 @@ Graphics::Camera* RtGraphics_Camera_DefaultCtor(Graphics::Camera* self) {
 // B.4: the element views, once each, as the `Graphics::RendererSceneEntry` it is
 // (LEFT: the ArraySpec callback hands bytes, array_internal.h), then its fields.
 uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
-    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);
+    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     const Graphics::RendererSceneEntry* const src =
         reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);
     dst->_scene        = src->_scene;                  // +0x00
@@ -287,7 +287,7 @@ uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
 // Retail 0x180062860 — default construct. Returns `dst` (`MOV RAX,RBX`).
 // +0xf8 is 0x40 and +0xf4 is -1; +0xfc is not written.
 uint8_t* SceneEntryInit(uint8_t* dstv) {
-    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);
+    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     dst->_scene        = nullptr;
     dst->_renderBuffer = nullptr;
     RtGraphics_Camera_DefaultCtor(&dst->_camera);
@@ -331,7 +331,7 @@ void SceneEntryInitSpec(uint8_t* dst) { SceneEntryInit(dst); }
 // +0x24..+0x2f and +0x34..+0x37 alone.
 void DrawItemAssign(uint8_t* dst, const uint8_t* src) { std::memcpy(dst, src, 0x38); }
 void DrawItemInit(uint8_t* dstv) {
-    Graphics::RendererDrawItem* const dst = reinterpret_cast<Graphics::RendererDrawItem*>(dstv);
+    Graphics::RendererDrawItem* const dst = reinterpret_cast<Graphics::RendererDrawItem*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     dst->_geometry = nullptr;                          // +0x00
     dst->_material = nullptr;                          // +0x08
     dst->_instance = nullptr;                          // +0x10
@@ -348,7 +348,7 @@ void DrawableAssign(uint8_t* dst, const uint8_t* src) { std::memcpy(dst, src, 0x
 void DrawableInit(uint8_t* dst) {
     const uint32_t zero = 0u;
     std::memset(dst + 0x00, 0, 8);
-    std::memcpy(dst + 0x08, &zero, 4);
+    std::memcpy(dst + 0x08, &zero, 4);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
 }
 
 // ============================================================================
@@ -578,7 +578,7 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
                         const Camera& camera, int shaderDetail, int detailId,
                         int shader, uint32_t materialTypeFlags) {
     alignas(RendererSceneEntry) uint8_t raw[sizeof(RendererSceneEntry)];  // ON PURPOSE
-    RendererSceneEntry* const rec = reinterpret_cast<RendererSceneEntry*>(raw);
+    RendererSceneEntry* const rec = reinterpret_cast<RendererSceneEntry*>(raw);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
 
     rec->_scene        = scene;
     rec->_renderBuffer = renderBuffer;

@@ -116,13 +116,12 @@ namespace {
 // CALL [RAX+0x30]` -- the companion's slot 6, `Serialize`, on the buffer's
 // `platformData` (header+0x08, what PlatformConstruct wrote). That is
 // `?Serialize@IndexBuffer/VertexBuffer@Video@@` (0x1800f5a20) inlined.
-// LEFT: `platformData` is a `void*` in Buffers.h (video's header, not this
-// block's), so the one view of it as its companion is here.
+// B.4 (R-GFX): `platformData` is typed in Buffers.h.
 inline void SerializeBuffer(Video::IndexBuffer& buf, IO::Serializer& ser) {
-    static_cast<Video::IndexBufferData*>(buf.platformData)->Serialize(&ser);   // faithful: unguarded
+    buf.platformData->Serialize(&ser);   // faithful: unguarded
 }
 inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
-    static_cast<Video::VertexBufferData*>(buf.platformData)->Serialize(&ser);  // faithful: unguarded
+    buf.platformData->Serialize(&ser);   // faithful: unguarded
 }
 
 // ---------------------------------------------------------------------------
@@ -170,11 +169,11 @@ inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
 // `rt::io::Serializer*`, External.h -- not this block's header).
 inline void ExtBase(void* slot, IO::Serializer& ser) {
     RtObject_ExternalPtrSerialize_GraphicsMesh(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));  // LEFT: POD ExternalPtr serialize thunk (External.h, R-OBJ / wave X)
 }
 inline void ExtMat(void* slot, IO::Serializer& ser) {
     RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));  // LEFT: POD ExternalPtr serialize thunk (External.h, R-OBJ / wave X)
 }
 // 0x1800136f0, the TriangleList `Array<>::SetSize`, is called by its body
 // name `rtcoll::RtColl_ArraySetSize_1800136f0` (Collection.h), on the typed

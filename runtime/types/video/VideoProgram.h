@@ -197,10 +197,9 @@ public:
     const void* GetData() const;
 
     // ?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z  0x1800f4520.
-    // `context` is a `Video::Context&`, spelled `void*` because `Video::Context`
-    // is block D1's class and is still the 0x2168-byte POD `RtVideo::Context`
-    // today; the body casts. It converts with that class, not with this one.
-    void SetupShaders(void* context) const;
+    // B.4 (R-GFX): retail's `Context&` (`AEAVContext@2@`); its one caller is
+    // graphics/wave21_lane_gfxbody.cpp's MaterialInstance::Setup.
+    void SetupShaders(class Context& context) const;
 
     // ?Bind@VideoProgram@Video@@QEBAXAEAVContext@2@H@Z  0x1800f4830 — not ported.
     // Nothing in the tree calls it; the four Context setters SetupShaders inlines
