@@ -380,7 +380,7 @@ void AppendPackfile(::IO::FileSystem* self, ::IO::PackageFile* obj) {
         // capacity, then times 8. Ghidra's C prints this as a zero extension.
         const uint64_t bytes =
             static_cast<uint64_t>(static_cast<int64_t>(self->_packfileCapacity)) * 8u;
-        self->_packfiles = static_cast<::IO::PackageFile**>(RtMemAlloc(bytes, 8));
+        self->_packfiles = static_cast<::IO::PackageFile**>(RtMemAlloc(bytes, 8));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
     }
     int64_t k = (old == self->_packfiles) ? static_cast<int64_t>(oldN) : 0;
     for (; k < static_cast<int64_t>(newN); ++k) {
@@ -652,7 +652,7 @@ void FileSystem::ClosePackages() {
         // The 0x180008340 row itself is UNCHANGED and stays registered in
         // avl_trees.cpp: `code/` still reaches it by address.
         RtIO::PackfileIndexSet::DestroySubtree(
-            reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));
+            reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
     }
     // Zeroed unconditionally, even when root was already null.
     _packfileIndexCount = 0;
@@ -755,7 +755,7 @@ void FileSystem::LoadPackages() {
     // B3R RT-IO: the call is rtsort::SortByKey70 by name (it was the address
     // door, which resolved to the same body).
     if (_packfileCount > 1) {
-        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles), _packfileCount);
+        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles), _packfileCount);  // LEFT: SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70
     }
 
     // ---- LOOP 2: the user/mod pack filenames already on the FileSystem -----
@@ -832,8 +832,8 @@ void FileSystem::LoadPackages() {
                                         static_cast<uint32_t>(pi);
                 RtIO::PackfileIndexNode* out = nullptr;
                 rtavl::FilenameSetInsert(                                   // B.3.x bridge
-                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),
-                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);
+                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
                 ++inserted;
             }
 

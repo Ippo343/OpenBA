@@ -195,7 +195,7 @@ bool ConfigHasKey(::System::Configuration* cfg, const char* key) {
     // Unexported (no name in either build): 0x18002ace0 is
     // RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
     return RtSystem_ConfigMap_Find(
-        map, reinterpret_cast<const RtSystem::String*>(&k)) != nullptr;   // B.3.x bridge
+        map, reinterpret_cast<const RtSystem::String*>(&k)) != nullptr;   // B.3.x bridge  // LEFT: SIG RtSystem_ConfigMap_Find takes void* map / the RtSystem::String POD (system/Configuration.h, R-SYS-1)
 }
 
 // The `-pathres` / `-pathdat` / `-pathpkg` override, which retail emits three
@@ -290,7 +290,7 @@ System::Filename FileSystem::GetRootDirectory() {
 
     // ~f and ~utf8 are retail's two releases at 0x1800ad6d1/0x1800ad6e3; only
     // the WideString, whose class does not exist yet, is still released by hand.
-    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));
+    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
 
     // Safe to replay: reads no FileSystem state and allocates a fresh buffer
     // every call, so ours and theirs never share a pointer and only the TEXT
@@ -328,7 +328,7 @@ void FileSystem::SetupDirectories() {
         System::Filename f(cmdPath);
 
         if (_existsInPackfileGate != 0 &&
-            ExistsInPackfile(*reinterpret_cast<const RtSystem::Filename*>(&f))) {   // B.3.x bridge
+            ExistsInPackfile(*reinterpret_cast<const RtSystem::Filename*>(&f))) {   // B.3.x bridge  // LEFT: SIG FileSystem::CreatePath / ExistsInPackfile keep the RtSystem::Filename POD parameter (outside callers: video/save_image_to_file, engine/updateloop_loadresources, object/external_path_win; wave X)
             exists = true;
         } else if (_platformExistsGate == 0) {
             exists = false;
@@ -338,10 +338,10 @@ void FileSystem::SetupDirectories() {
             // from the class side of the same eight bytes.
             RtIO::WideString ws{nullptr};
             RtIO::RtSystem_WideString_CtorFromString(&ws,
-                reinterpret_cast<const RtSystem::String*>(&f));
+                reinterpret_cast<const RtSystem::String*>(&f));  // LEFT: SIG RtSystem_WideString_CtorFromString takes the RtSystem::String POD (system/, R-SYS)
             // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
             exists = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-            RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));
+            RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
         }
         // ~f is retail's release at 0x1800abe02.
     }
@@ -361,7 +361,7 @@ void FileSystem::SetupDirectories() {
         if (fi.handle != -1) {
             const int size = static_cast<int>(static_cast<uint32_t>(fi.size));
             const int n    = size + 1;
-            char* buf = static_cast<char*>(
+            char* buf = static_cast<char*>(  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
                 RtIO::RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(n)), 4));
             std::memset(buf, 0, static_cast<size_t>(n));   // 0x1800881b0
             ReadFile(fi, size, buf);

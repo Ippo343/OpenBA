@@ -191,7 +191,7 @@ namespace {
 // System::String is exactly that one pointer).
 void ReleaseStrSlot(char** slot) {
     // ~String (0x180006c80), including retail's release asymmetry (String.h).
-    reinterpret_cast<System::String*>(slot)->~String();
+    reinterpret_cast<System::String*>(slot)->~String();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
 }
 
 // ??0FileStream@IO@@QEAA@XZ (0x1800aaa10): ENDGAME B.3.9 IO (W2) -- the door
@@ -456,7 +456,7 @@ bool IO::FileStream::Create(const System::Filename& path) {
     // LEFT: CreatePath keeps the POD parameter while
     // runtime/src/video/save_image_to_file.cpp (R-VIDEO) calls it with one.
     ::IO::FileSystem::_singleton->CreatePath(
-        *reinterpret_cast<const RtSystem::Filename*>(&path));  // 1800aa919
+        *reinterpret_cast<const RtSystem::Filename*>(&path));  // 1800aa919  // LEFT: SIG FileSystem::CreatePath / ExistsInPackfile keep the RtSystem::Filename POD parameter (outside callers: video/save_image_to_file, engine/updateloop_loadresources, object/external_path_win; wave X)
 
     // ---- 1800aa91e..1800aa958: this->filename = *path -------------------
     // ENDGAME B.3.1 step 2: this whole block IS `System::String::operator=`
@@ -466,7 +466,7 @@ bool IO::FileStream::Create(const System::Filename& path) {
     // which is exactly the one pointer a String is, so it is reached as one.
     // NOTE there is NO AdjustDelimiters here: retail's Create does not
     // normalise, so this is String's operator=, not Filename's.
-    reinterpret_cast<System::String&>(_filename) = path.AsString();
+    reinterpret_cast<System::String&>(_filename) = path.AsString();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
 
     _direction = 1;                                             // 1800aa959
 
@@ -737,7 +737,7 @@ bool FileStream::Open(const System::Filename& path) {
     // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
     // `System::String::operator=` (0x1800c9810) — the short-circuit that jumps
     // past BOTH halves is the class's, and Open does not normalise either.
-    reinterpret_cast<System::String&>(_filename) = path.AsString();
+    reinterpret_cast<System::String&>(_filename) = path.AsString();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
 
     _direction = 0;                                       // 1800aaccd — READING
 

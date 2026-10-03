@@ -362,7 +362,7 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     fi->winHandle = h;          // 1800adddd
 
     RtIO::RtString_ReleaseInline(
-        reinterpret_cast<RtSystem::String*>(&ws));           // 1800adde1
+        reinterpret_cast<RtSystem::String*>(&ws));           // 1800adde1  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
 
     // `LEA RAX,[RCX-1] ; CMP RAX,-3 ; JA fail` — an UNSIGNED test that rejects
     // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0): unsigned
@@ -399,7 +399,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
     // ---- PACKED ---------------------------------------------------------
     // The pack index is the TOP BYTE of the tag (§1).
     const uint32_t packIndex =
-        static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(&fi->handle)[3]);
+        static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(&fi->handle)[3]);  // LEFT: retail reads the TOP BYTE of the tag (MOVZX byte [+3]); a shift would change the load width
     PackageFile* const pkg = _packfiles[packIndex];          // 1800ace31/39
 
     RtIO::FileInfo pack = pkg->IO::PackageFile::GetFileInfo();  // 1800ace3d

@@ -141,10 +141,9 @@ WideStr* WideFromString(WideStr* ret, const System::String* s) {
 // nulls it. Reproduced, not tidied.
 void WideRelease(WideStr* w) {
     if (!w->data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;
+    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;  // CAST-OK: string_header
     if (--*rc == 0) {
-        w->data = reinterpret_cast<wchar_t*>(
-            reinterpret_cast<char*>(w->data) - 8);
+        w->data = reinterpret_cast<wchar_t*>(reinterpret_cast<char*>(w->data) - 8);  // CAST-OK: string_header
         RtSystem::RtMemFree(w->data);
     } else {
         w->data = nullptr;
@@ -394,7 +393,7 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     // in retail's order (the UTF-8 String first, then the WideString).
     {
         RtIO::WideStr w{};  w.data = nullptr;                // 1800adefc
-        reinterpret_cast<System::WideString*>(&w)->Set(      // B.3.x bridge
+        reinterpret_cast<System::WideString*>(&w)->Set(      // B.3.x bridge  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
             tempFile);                                       // 1800adf0f
 
         // AsUTF8's hidden return slot is still POD-shaped (System::WideString
@@ -402,7 +401,7 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
         // steals it: `utf8Pod` is left null, so ~utf8 is the one release.
         RtSystem::String utf8Pod{};  utf8Pod.data = nullptr; // 1800adf15
         ::new (&RtIO::Sys(utf8Pod)) System::String(           // B.3.x bridge
-            reinterpret_cast<const System::WideString*>(&w)->AsUTF8());   // 1800adf21
+            reinterpret_cast<const System::WideString*>(&w)->AsUTF8());   // 1800adf21  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
         System::String utf8(std::move(RtIO::Sys(utf8Pod)));
 
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
@@ -613,7 +612,7 @@ FileSystem::~FileSystem() {
     // its ADDRESS as `this` and the root as the node.
     void* tree = &_packfileIndexRoot;
     rtavl::SubtreeFree(tree,                          // 1800ac6ff
-        reinterpret_cast<rtsetavl::Node*>(_packfileIndexRoot));
+        reinterpret_cast<rtsetavl::Node*>(_packfileIndexRoot));  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
 
     _packfileIndexRoot  = nullptr;                    // 1800ac706
     _packfileIndexCount = 0;                          // 1800ac709
@@ -623,7 +622,7 @@ FileSystem::~FileSystem() {
 
     // Step 4 — the POD array free, our own copy. See the note above.
     RtIO::PodArrayDtor(
-        reinterpret_cast<RtIO::PodArray*>(&_packfiles));  // 1800ac71a
+        reinterpret_cast<RtIO::PodArray*>(&_packfiles));  // 1800ac71a  // LEFT: H5 FileSystem::_packfiles is raw storage of a Collection::Array<PackageFile*>
 
     // Step 5
     // The three path fields are `RtSystem::String` members, so ~String is

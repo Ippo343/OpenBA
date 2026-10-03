@@ -398,9 +398,9 @@ using RtSystem::RtSystem_WideString_CtorFromString;
 // The one remaining POD reinterpretation this file needs: System::WideString is
 // not a B.3.1 class, so its ctor still takes the POD `RtSystem::String*` and the
 // class values here have to be handed over as those same eight bytes.
-static const String* AsString(const Filename* f) { return reinterpret_cast<const String*>(f); }
+static const String* AsString(const Filename* f) { return reinterpret_cast<const String*>(f); }  // LEFT: RtSystem_WideString_CtorFromString takes the RtSystem::String POD (system/, R-SYS)
 static const String* AsPodString(const System::String& s) {
-    return reinterpret_cast<const String*>(&s);
+    return reinterpret_cast<const String*>(&s);  // LEFT: RtSystem_WideString_CtorFromString takes the RtSystem::String POD (system/, R-SYS)
 }
 
 // Case-insensitive ASCII compare, sign-preserving. Duplicated from
@@ -429,14 +429,14 @@ static int StriCmpAscii(const char* a, const char* b) {
 // The destination is a raw array element, so the copy ctor is placement-
 // constructed into it — which is exactly what retail's CALL does.
 static void AssignFilename(uint8_t* d, const uint8_t* s) {
-    new (d) System::Filename(*reinterpret_cast<const System::Filename*>(s));
+    new (d) System::Filename(*reinterpret_cast<const System::Filename*>(s));  // CAST-OK: elem_stride
 }
 
 // 0x180009af0. RCX is spilled at 0x180009af9 and never read again, which is why
 // lane Q's ElemDestroy signature carries an ignored first argument at all.
 void DestroyFilenameArray(void* /*ignoredThis*/, uint8_t* base, int count) {
     if (count <= 0) return;                        // TEST R8D,R8D ; JLE ret
-    System::Filename* slot = reinterpret_cast<System::Filename*>(base);
+    System::Filename* slot = reinterpret_cast<System::Filename*>(base);  // CAST-OK: elem_stride
     for (int i = 0; i < count; ++i, ++slot) {
         // ENDGAME B.3.1 step 2: ~Filename (0x180006980) IS this loop body, step
         // for step — the `TEST RAX,RAX ; JZ next` null test, the decrement of
@@ -468,8 +468,8 @@ static const rtcoll::ArraySpec kSpec_Filename = {
     /*seed zero       */ 0x00, 0x08 };
 
 void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill), &kSpec_Filename);
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(a), n,  // CAST-OK: elem_stride
+                        static_cast<const uint8_t*>(fill), &kSpec_Filename);  // CAST-OK: elem_stride
 }
 
 // ENDGAME B.3.2 step 2 — the internal caller now names the container it acts
@@ -584,7 +584,7 @@ bool FileSystem::PlatformExists(const RtSystem::Filename& pathRef) const {
     RtIO::WideString ws{nullptr};
     RtIO::RtSystem_WideString_CtorFromString(&ws, RtIO::AsString(path));
     const bool ours = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));
+    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
 
     return ours;
 }
@@ -626,7 +626,7 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
         h = ::FindFirstFileW(w.data, &fd);
         // Retail's release order: the WideString first (0x1800ad823), then the
         // concatenation (~search, 0x1800ad850).
-        RtString_ReleaseInline(reinterpret_cast<String*>(&w));
+        RtString_ReleaseInline(reinterpret_cast<String*>(&w));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
     }
 
     // --- 0x1800ad888-0x1800ad9f1: the FILE loop -----------------------------
@@ -653,7 +653,7 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
             // Retail's order: entry (0x1800ad915), full (0x1800ad94e),
             // utf8 (0x1800ad97f), nameW (0x1800ad9b0) — the first three are
             // the destructors, in reverse declaration order, which is that.
-            RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));
+            RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
         } while (::FindNextFileW(h, &fd));
         ::FindClose(h);
     }
@@ -666,7 +666,7 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
             WideString w2{nullptr};
             RtSystem_WideString_CtorFromString(&w2, AsPodString(star));
             h2 = ::FindFirstFileW(w2.data, &fd);
-            RtString_ReleaseInline(reinterpret_cast<String*>(&w2));
+            RtString_ReleaseInline(reinterpret_cast<String*>(&w2));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
             // ~star is retail's second release here.
         }
 
@@ -692,7 +692,7 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
 
                 // subDir, sub and utf8 are released by their destructors, in
                 // retail's order (reverse of declaration).
-                RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));
+                RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
             } while (::FindNextFileW(h2, &fd));
             ::FindClose(h2);
         }

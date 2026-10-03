@@ -335,7 +335,7 @@ void* RtColl_ArrayFilenameAssign_1800091f0(void* dstv, const void* srcv) {
     if (dst == src) return dst;
     // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
     // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).
-    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();
+    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
     ArrayAssignGrow(dst, src, 8, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
         Filename* d = dst->data + i;
@@ -535,7 +535,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // trait-derived `Collection::Array<System::Filename>` needs no explicit
     // spec. `files` stays the `ModArray` POD (Mod is not yet a class), so this
     // is the transitional bridge, not a field re-type.
-    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();
+    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
 
     RtColl_SetDestroySubtree_180010470(&self->set, self->set.root);   // +0x60
     self->set.root = nullptr;
@@ -551,8 +551,8 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // `destroy = nullptr` and the class's dtor is exactly `ArrayFreeBuffer`
     // (`MemFree(_data)` then zero the three fields) through the same
     // `rtcoll::MemFree` door (0x1800c7ad0) — no explicit spec needed.
-    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40
-    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30
+    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
 
     char** shared[3] = { &self->description, &self->author, &self->name };
     for (int i = 0; i < 3; ++i) {
@@ -761,7 +761,7 @@ void Modification::SaveList() {
         // not-yet-converted `Mod`, so it is reached through a cast.
         char* ref;
         {
-            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge
+            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge  // LEFT: H5 Mod::file is the RtSystem::Filename POD
                                      ->GetPathFilename(true));
 
             // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned

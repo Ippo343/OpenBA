@@ -789,7 +789,7 @@ void Modification::RefreshList() {
             //   * the retrace starts at the PARENT of the new node and takes a
             //     SLOT, re-read after every rotation.
             //   * a duplicate key returns the existing node and does not count.
-            reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);
+            reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);  // LEFT: H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
             // ~key releases here, retail's 0x1800afeb5 release -- the last
             // statement of the loop body, exactly where retail's release sat.
         }
@@ -824,9 +824,9 @@ void Modification::RefreshList() {
                 System::String::Format("%s%s", "ModEnabled_", nameRef));
             // The settings map's node is `RtIo::SettingsMapNode` {key, value};
             // the finder (R-CORE's, system/Configuration.h) returns it as void*.
-            const RtIo::SettingsMapNode* node = static_cast<const RtIo::SettingsMapNode*>(
+            const RtIo::SettingsMapNode* node = static_cast<const RtIo::SettingsMapNode*>(  // LEFT: SIG RtSystem_ConfigMap_Find returns void* (system/Configuration.h, R-SYS-1)
                 RtSystem_ConfigMap_Find(                         // 0x18002ace0  B.3.x bridge
-                    pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));
+                    pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));  // LEFT: SIG RtSystem_ConfigMap_Find takes void* map / the RtSystem::String POD (system/Configuration.h, R-SYS-1)
             if (node != nullptr) {
                 const char* v = node->value._data;               // +0x08
                 const int cmp = (v == nullptr) ? -1 : std::strcmp(v, "true");
@@ -839,9 +839,9 @@ void Modification::RefreshList() {
             System::Filename keyStr;
             ::new (&keyStr.AsString()) System::String(
                 System::String::Format("%s%s", "ModIndex_", nameRef));
-            const RtIo::SettingsMapNode* node = static_cast<const RtIo::SettingsMapNode*>(
+            const RtIo::SettingsMapNode* node = static_cast<const RtIo::SettingsMapNode*>(  // LEFT: SIG RtSystem_ConfigMap_Find returns void* (system/Configuration.h, R-SYS-1)
                 RtSystem_ConfigMap_Find(                         // B.3.x bridge
-                    pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));
+                    pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));  // LEFT: SIG RtSystem_ConfigMap_Find takes void* map / the RtSystem::String POD (system/Configuration.h, R-SYS-1)
             if (node != nullptr) {
                 const char* v = node->value._data;               // +0x08
                 m->order = RtCrt_ParseInt10_18007f034(v);        // 0x18007f034

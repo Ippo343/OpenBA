@@ -504,7 +504,7 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
         const bool reading = (ser->_stream->_direction == rt::io::kDirectionReading);
 
         if (reading && len != 0)
-            RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),
+            RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),  // LEFT: SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)
                                          static_cast<int>(len) - 1);   // 0x1800c8220
 
         if (!wasWide || !reading || len == 0) {
@@ -535,7 +535,7 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
                 utf8Len += RtIo_TextCodec_EncodeOne(cp, &cp, 2);    // dst == &cp
         }
 
-        RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),
+        RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),  // LEFT: SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)
                                      utf8Len);                     // 0x180029d5b
         (*slot)[utf8Len] = 0;                                      // 0x180029d67
 
