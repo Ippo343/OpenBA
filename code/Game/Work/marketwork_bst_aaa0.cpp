@@ -157,7 +157,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
     // 8-byte store (trap #2 cuts both ways: widening it would smash the upper half).
     // (The Set container is two raw fields of MarketWork: the count is reached from
     // the root field's address: LEFT.)
-    *reinterpret_cast<int32_t*>(tree + 1) -= 1;
+    *reinterpret_cast<int32_t*>(tree + 1) -= 1;   // LEFT: the claim Set is two raw MarketWork fields
 
     ClaimNode* const right = z->right;
     if (right == nullptr) {
@@ -249,7 +249,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
     // ae38: CALL 0x140025920(tree, &cursor). (The retrace takes the header and the
     // cursor slot as int64_t*: LEFT.)
     PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree),
-                              reinterpret_cast<int64_t*>(useB ? &cursorB : &cursorA));
+                              reinterpret_cast<int64_t*>(useB ? &cursorB : &cursorA));   // LEFT: SIG PlayerTrade_Retrace_25920
 }
 
 // ============================================================================

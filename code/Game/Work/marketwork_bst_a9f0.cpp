@@ -107,7 +107,7 @@ extern "C" MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim
 
     // 0x14000d9d0 — deep-copy the 16-byte-element dynamic array from src+0x08.
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),   // LEFT: SIG ActRm_VectorClone_d9d0
                            reinterpret_cast<int64_t*>(&src->carries));
 
     n->parent  = parent;    // aeb5
@@ -170,7 +170,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
         MarketWork::ClaimNode* node = MarketBst_ae50(tree, src, nullptr);   // ab86: parent = NULL
         *tree = node;                                      // ab91
         *out  = node;                                      // ab94
-        *reinterpret_cast<int32_t*>(tree + 1) += 1;        // ac21
+        *reinterpret_cast<int32_t*>(tree + 1) += 1;        // ac21   // LEFT: the claim Set is two raw MarketWork fields (count reached from the root slot)
         return out;
     }
 
@@ -219,10 +219,10 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
 
     // ac0e — AVL retrace/rebalance starting from the PARENT (retraceSlot), not the new
     // node. (The retrace takes the header and the cursor slot as int64_t*: LEFT.)
-    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&retraceSlot));
+    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&retraceSlot));   // LEFT: SIG PlayerTrade_Retrace_25920
 
     *out = newNode;                                        // ac1e
-    *reinterpret_cast<int32_t*>(tree + 1) += 1;            // ac21
+    *reinterpret_cast<int32_t*>(tree + 1) += 1;            // ac21   // LEFT: the claim Set is two raw MarketWork fields
     return out;                                            // ac2f
 }
 
@@ -271,7 +271,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimNode** tree,
     tmp.carries.capacity = 0;                       //        AND cap in retail
 
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&tmp.carries), reinterpret_cast<int64_t*>(vec)); // aa32
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&tmp.carries), reinterpret_cast<int64_t*>(vec)); // aa32   // LEFT: SIG ActRm_VectorClone_d9d0
 
     MarketBst_ab60(tree, out, &tmp);                // aa43 (return value discarded here)
 
