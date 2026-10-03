@@ -204,7 +204,7 @@ namespace {
 //   GetPath 0x180006250, FindOrLoad 0x1800bf320, Base::IsDerivedFrom
 //   0x1800c0390, GetReferenceId 0x1800bf100, GetPathForReferenceId 0x1800bf1d0.
 bool IsDerivedFrom(const RtObject::External* obj, uint32_t typeId) {
-    return reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(typeId);
+    return reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(typeId);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // ENDGAME B.3.1 step 2 removed two of this file's name doors:
@@ -218,7 +218,7 @@ bool IsDerivedFrom(const RtObject::External* obj, uint32_t typeId) {
 // `Object::ExternalFactory::_singleton` (ENDGAME B.3.9 OBJ, B39_RULES D7).
 // The class and the POD are asserted field for field in External.h.
 ExternalFactory* Factory() {
-    return reinterpret_cast<ExternalFactory*>(                       // B.3.3 bridge
+    return reinterpret_cast<ExternalFactory*>(                       // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
         ::Object::ExternalFactory::_singleton);
 }
 
@@ -237,7 +237,7 @@ ExternalFactory* Factory() {
 int EncodingType(const Serializer* ser) {
     Encoding* enc = ser->stream->encoding;
     using GetTypeFn = int (*)(Encoding*);
-    return reinterpret_cast<GetTypeFn>(enc->vtable[0x10 / 8])(enc);
+    return reinterpret_cast<GetTypeFn>(enc->vtable[0x10 / 8])(enc);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 }
 
 // `MOV RCX,[RDI+8]; MOV RAX,[RCX]; XOR R8D,R8D; CALL [RAX+<slot>]`
@@ -248,12 +248,12 @@ int EncodingType(const Serializer* ser) {
 // ([[reference_encoding_vtable_offsets_differ_between_builds]]).
 // B3X W0: both by name (+0x78 SerializeBool, +0x98 SerializeUInt).
 void SerializeBool(Serializer* ser, bool* v) {
-    reinterpret_cast<::IO::ReaderWriter*>(ser->readerWriter)   // B.3.x bridge
+    reinterpret_cast<::IO::ReaderWriter*>(ser->readerWriter)   // B.3.x bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
         ->SerializeBool(*v, nullptr);
 }
 
 void SerializeUInt(Serializer* ser, uint32_t* v) {
-    reinterpret_cast<::IO::ReaderWriter*>(ser->readerWriter)   // B.3.x bridge
+    reinterpret_cast<::IO::ReaderWriter*>(ser->readerWriter)   // B.3.x bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
         ->SerializeUInt(*v, nullptr);
 }
 
@@ -313,13 +313,13 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
         // it is CONSTRUCTED INTO by the call and must not be constructed twice;
         // its release is the destructor at the return below.
         System::Filename scratch;               // [rbp+0x38]
-        RtObject::RtObject_External_GetPath(cur, reinterpret_cast<Filename*>(&scratch));
+        RtObject::RtObject_External_GetPath(cur, reinterpret_cast<Filename*>(&scratch));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
         const RtObject::External* found = RtObject::RtObject_ExternalFactory_FindOrLoad(
-            ::Factory(), reinterpret_cast<const Filename*>(&scratch));
+            ::Factory(), reinterpret_cast<const Filename*>(&scratch));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
         if (found != nullptr) {
             // The answer is genuinely discarded — retail calls it for the side
             // effect of nothing, and keeps the pointer it already had.
-            (void)IsDerivedFrom(found, *static_cast<const uint32_t*>(typeInfo));
+            (void)IsDerivedFrom(found, *static_cast<const uint32_t*>(typeInfo));  // LEFT: SIG ExternalPtr<T>::Serialize's `const void* typeInfo` (External.h; ~100 callers in other blocks' files: wave X)
         }
         return;
     }
@@ -355,7 +355,7 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
         if (stream->direction == rt::io::kDirectionReading) {   // 0x1800043c1
             System::Filename tmp;               // [rbp+0x48], another retslot
             RtObject::RtObject_ExternalFactory_GetPathForReferenceId(
-                factory, reinterpret_cast<Filename*>(&tmp), refId);
+                factory, reinterpret_cast<Filename*>(&tmp), refId);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
             // 0x1800043dd release-then-adopt plus the AdjustDelimiters that
             // follows it IS `Filename::operator=`, 0x180006770.
             path = tmp;
@@ -372,7 +372,7 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
         RtObject::External* cur = *self;
         if (cur != nullptr) {                   // saving: fill `path` from the object
             System::Filename tmp;               // [rbp+0x48], GetPath's retslot
-            RtObject::RtObject_External_GetPath(cur, reinterpret_cast<Filename*>(&tmp));
+            RtObject::RtObject_External_GetPath(cur, reinterpret_cast<Filename*>(&tmp));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
             path = tmp;                         // operator=, as above
         }
         path.AsString().Serialize(ser);         // 0x180004500; load fills `path`
@@ -385,15 +385,15 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
     if (stream->direction == rt::io::kDirectionReading) {
         const RtObject::External* loaded =
             RtObject::RtObject_ExternalFactory_FindOrLoad(
-                ::Factory(), reinterpret_cast<const Filename*>(&path));
+                ::Factory(), reinterpret_cast<const Filename*>(&path));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
         RtObject::External* result = nullptr;
         if (loaded != nullptr &&
-            IsDerivedFrom(loaded, *static_cast<const uint32_t*>(typeInfo))) {
+            IsDerivedFrom(loaded, *static_cast<const uint32_t*>(typeInfo))) {  // LEFT: as above
             // CMOVNE: the loaded object survives only if it IS a T. A resource
             // of the wrong type is dropped, not kept — this is the check the
             // exe-side sibling in code/Game/Component/ambient_externalptr_serialize.cpp
             // deliberately relaxes, and this one must not.
-            result = const_cast<RtObject::External*>(loaded);
+            result = const_cast<RtObject::External*>(loaded);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
         }
         *self = result;                         // 0x180004555
     }
@@ -420,7 +420,7 @@ void ExternalPtrSerializeArrayBody(Serializer& ser, int count, RtObject::Externa
 // us the eight bytes as an `External**`; it goes when they move in step 2.
 extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
                                                const void* typeInfo) {
-    reinterpret_cast< ::Object::ExternalPtr<External>*>(self)->Serialize(*ser, typeInfo);
+    reinterpret_cast< ::Object::ExternalPtr<External>*>(self)->Serialize(*ser, typeInfo);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // ============================================================================
@@ -546,7 +546,7 @@ EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ExternalList, ::Object::ExternalLi
 extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
                                                     External** elems, const void* typeInfo) {
     using Ptr = ::Object::ExternalPtr<External>;
-    Ptr::SerializeArray(*ser, count, reinterpret_cast<Ptr*>(elems), typeInfo);
+    Ptr::SerializeArray(*ser, count, reinterpret_cast<Ptr*>(elems), typeInfo);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.

@@ -105,10 +105,10 @@ using rtsetavl::Set;
 // safe by construction: `Node::element` is `uint8_t[0x10]` at +0x00 and
 // `sizeof(ReferenceEntry) == 0x10` is asserted in External.h.
 inline RtObject::ReferenceEntry* Elem(Node* n) {
-    return reinterpret_cast<RtObject::ReferenceEntry*>(n);
+    return reinterpret_cast<RtObject::ReferenceEntry*>(n->element);  // CAST-OK: elem_stride
 }
 inline const RtObject::ReferenceEntry* Elem(const Node* n) {
-    return reinterpret_cast<const RtObject::ReferenceEntry*>(n);
+    return reinterpret_cast<const RtObject::ReferenceEntry*>(n->element);  // CAST-OK: elem_stride
 }
 
 // ---------------------------------------------------------------------------

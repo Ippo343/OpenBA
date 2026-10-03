@@ -118,28 +118,6 @@ using RtSystem::Sys;
 // fuller layout here would be asserting something this lane did not measure.
 // ---------------------------------------------------------------------------
 
-// The Set header that `Object::Factory` begins with. `~Factory` writes exactly
-// these two fields at the end — `MOV [RBX],RAX` (qword) and `MOV [RBX+8],EAX`
-// (DWORD, not a qword).
-struct FactorySetHdr {
-    TypeNode* root;    // +0x00
-    int32_t   count;   // +0x08
-};
-
-// The Set header of `ExternalFactory::_resources` and `::_references`. Same
-// shape, and the same two closing stores (`MOV [RBX],RSI` / `MOV [RBX+8],ESI`).
-struct ObjSetHdr {
-    void*   root;      // +0x00
-    int32_t count;     // +0x08
-};
-
-// `Collection::Array<PathStackEntry>` as ~ExternalFactory reads it.
-struct PathStackArray {
-    PathStackEntry* data;      // +0x00
-    int32_t         size;      // +0x08
-    int32_t         capacity;  // +0x0c
-};
-
 // ---------------------------------------------------------------------------
 // The two already-ported callees, called by name (B3R RT-Core):
 //   0x1800093e0  rtavl::PtrArrayDtor -- a trivial J1-equivalent
@@ -181,12 +159,12 @@ struct PathStackArray {
 // registered type count (a few hundred types => under 20 frames). An explicit
 // stack would be a different program with a different overflow point.
 // ============================================================================
-void TypeSubtreeFree(void* set, TypeNode* node) {
+void TypeSubtreeFree(void* set, ::Object::Factory::TypeSet::Node* node) {
     if (node == nullptr)
         return;
     TypeSubtreeFree(set, node->left);
     TypeSubtreeFree(set, node->right);
-    rtavl::PtrArrayDtor(reinterpret_cast<uint8_t*>(node) + 0x20);
+    rtavl::PtrArrayDtor(&node->element.record.children);   // node + 0x20
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -223,16 +201,18 @@ void TypeSubtreeFree(void* set, TypeNode* node) {
 // argument SetNodeFree ignores anyway.
 // ============================================================================
 void RtObject_Factory_Dtor(void* self) {
-    FactorySetHdr* s = static_cast<FactorySetHdr*>(self);
-    TypeNode* root = s->root;
+    // `~Factory` writes exactly the Set header's two fields at the end —
+    // `MOV [RBX],RAX` (qword) and `MOV [RBX+8],EAX` (DWORD, not a qword).
+    ::Object::Factory::TypeSet& s = static_cast<::Object::Factory*>(self)->_types;   // LEFT: SIG RtObject_Factory_Dtor(void*) (TypeInfo.h; caller engine_lifecycle.cpp holds Object::Factory*: wave X)
+    ::Object::Factory::TypeSet::Node* root = s._root;
     if (root != nullptr) {
         TypeSubtreeFree(self, root->left);
         TypeSubtreeFree(self, root->right);
-        rtavl::PtrArrayDtor(reinterpret_cast<uint8_t*>(root) + 0x20);
+        rtavl::PtrArrayDtor(&root->element.record.children);   // root + 0x20
         rtalloc::FreeLockedIgnoringSelf(self, root);
     }
-    s->root  = nullptr;
-    s->count = 0;
+    s._root  = nullptr;
+    s._count = 0;
 }
 
 // ============================================================================
@@ -313,7 +293,7 @@ void RtObject_InternalFactory_Dtor(void* self) {
     // `int32_t`/`Internal*` element's trait-derived `~Array()` IS byte for
     // byte. Reverse declaration order is kept: persistIds (+0x10) before
     // objects (+0x00), matching the banner above.
-    auto* factory = static_cast<::RtObject::InternalFactory*>(self);
+    auto* factory = static_cast<::RtObject::InternalFactory*>(self);   // LEFT: SIG RtObject_InternalFactory_Dtor(void*) (wave X)
     factory->persistIds.~Array();   // retail 0x18001c750
     factory->objects.~Array();      // retail 0x18002fb70
 }
@@ -374,13 +354,12 @@ void PathStackDestroyRange(void* /*ignoredThis*/, PathStackEntry* p, int n) {
 //
 // *** THIS IS THE "DESTROYS ITS ELEMENTS" MEMBER of ~ExternalFactory. ***
 // ============================================================================
-void PathStackArrayDtor(void* self) {
-    PathStackArray* a = static_cast<PathStackArray*>(self);
-    PathStackDestroyRange(a, a->data, a->size);
-    RtSystem::RtMemFree(a->data);   // retail's `if (p)` lives inside 0x1800c7ad0
-    a->data     = nullptr;
-    a->size     = 0;
-    a->capacity = 0;
+void PathStackArrayDtor(Collection::Array<PathStackEntry>* a) {
+    PathStackDestroyRange(a, a->_data, a->_size);
+    RtSystem::RtMemFree(a->_data);   // retail's `if (p)` lives inside 0x1800c7ad0
+    a->_data     = nullptr;
+    a->_size     = 0;
+    a->_capacity = 0;
 }
 
 // ============================================================================
@@ -403,15 +382,13 @@ void PathStackArrayDtor(void* self) {
 // decrement. They are separate functions in retail for exactly this reason and
 // are kept separate here.
 // ============================================================================
-void ReferenceSubtreeFree(void* set, void* node) {
+void ReferenceSubtreeFree(void* set, RtObject::ReferenceSet::Node* node) {
     if (node == nullptr)
         return;
-    uint8_t* n = static_cast<uint8_t*>(node);
-    ReferenceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x18));
-    ReferenceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x20));
-    // ~Filename (0x180006980) over `ReferenceEntry::path`, addressed by offset
-    // because the node is raw container bytes here.
-    reinterpret_cast<System::Filename*>(n + 0x08)->~Filename();
+    ReferenceSubtreeFree(set, node->left);    // +0x18
+    ReferenceSubtreeFree(set, node->right);   // +0x20
+    // ~Filename (0x180006980) over `ReferenceEntry::path` (+0x08).
+    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();   // LEFT: H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -434,14 +411,13 @@ void ReferenceSubtreeFree(void* set, void* node) {
 // destruction states. They have no effect on the object and are not
 // reproduced.
 // ============================================================================
-void ResourceSubtreeFree(void* set, void* node) {
+void ResourceSubtreeFree(void* set, RtObject::ResourceSet::Node* node) {
     if (node == nullptr)
         return;
-    uint8_t* n = static_cast<uint8_t*>(node);
-    ResourceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x20));
-    ResourceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x28));
+    ResourceSubtreeFree(set, node->left);     // +0x20
+    ResourceSubtreeFree(set, node->right);    // +0x28
     // ~Filename over `ResourceEntry::path`, the key at +0x00.
-    reinterpret_cast<System::Filename*>(n)->~Filename();
+    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();   // LEFT: H10 as ReferenceSubtreeFree's
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -471,19 +447,19 @@ void ResourceSubtreeFree(void* set, void* node) {
 // at +0x0c of either Set header is written.
 // ============================================================================
 void RtObject_ExternalFactory_Dtor(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
+    ExternalFactory* f = static_cast<ExternalFactory*>(self);   // LEFT: SIG RtObject_ExternalFactory_Dtor(void*) (wave X)
 
-    PathStackArrayDtor(p + 0x30);
+    PathStackArrayDtor(&f->_pathStack);                           // this + 0x30
 
-    ObjSetHdr* refs = reinterpret_cast<ObjSetHdr*>(p + 0x20);
-    ReferenceSubtreeFree(refs, refs->root);
-    refs->root  = nullptr;
-    refs->count = 0;
+    RtObject::ReferenceSet& refs = f->_references;               // this + 0x20
+    ReferenceSubtreeFree(&refs, refs._root);
+    refs._root  = nullptr;
+    refs._count = 0;
 
-    ObjSetHdr* res = reinterpret_cast<ObjSetHdr*>(p + 0x10);
-    ResourceSubtreeFree(res, res->root);
-    res->root  = nullptr;
-    res->count = 0;
+    RtObject::ResourceSet& res = f->_resources;                  // this + 0x10
+    ResourceSubtreeFree(&res, res._root);
+    res._root  = nullptr;
+    res._count = 0;
 }
 
 }  // namespace RtObjFactoryDtor

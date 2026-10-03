@@ -218,10 +218,10 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     // handed is constructed into, not assigned to.
     System::Filename expanded;                                   // [RBP+0x38]
     RtObject_ExternalFactory_ExpandRelativePath(
-        self, reinterpret_cast<Filename*>(&expanded), path, true);
+        self, reinterpret_cast<Filename*>(&expanded), path, true);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
     External* found = RtObject_ExternalFactory_Find(
-        self, reinterpret_cast<const Filename*>(&expanded));    // private Find
+        self, reinterpret_cast<const Filename*>(&expanded));    // private Find  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
     const External* result = nullptr;
 
@@ -239,8 +239,8 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         // ---- 0x1800bf390: the MISS ----------------------------------------
         ++g_cc.cacheMiss;
         System::Filename compiled;                               // [RBP+0x40]
-        BuildCompiledPath(reinterpret_cast<const Filename*>(&expanded),
-                          reinterpret_cast<Filename*>(&compiled));
+        BuildCompiledPath(reinterpret_cast<const Filename*>(&expanded),  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                          reinterpret_cast<Filename*>(&compiled));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
         // ---- THE ONE INDEPENDENT ORACLE THIS BODY HAS ----------------------
         // The string `compiled` is the whole of the miss path's own work: what
@@ -251,7 +251,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         // share a file.
 
         External* loaded = RtObject_External_Load(
-            reinterpret_cast<const Filename*>(&compiled), nullptr);
+            reinterpret_cast<const Filename*>(&compiled), nullptr);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
         if (loaded != nullptr) {
             ++g_cc.loaded;

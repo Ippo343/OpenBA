@@ -96,7 +96,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     CharacterComponent* character = citizen->character;
     if (!character) return;
     // The action stack (base +0x48, top +0x60), as the stack ops take it.
-    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);
+    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: CharacterComponent::actions is raw fields (CharacterComponent.h, WORK-3); SIG Pf_ActStackPush_54e0
 
     // heading = Entity_impl_29a0(position, &buildingEntityValue) — used as PerformWork anim.
     ComponentEntity* buildingEntity = building ? *building : nullptr;
@@ -114,12 +114,12 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
             uint64_t outIBP = 0;
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             ComponentEntity* targetEntity = citizen->_entity;
-            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&targetEntity), &msgId, 0, &outIBP, 0);
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&targetEntity), &msgId, 0, &outIBP, 0);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0
         }
         if (character->field_0x58 != nullptr)
-            reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(
+            reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(   // LEFT: CharacterComponent::field_0x58 declared Action*, not InternalPtr<Action> (WORK-3)
                 );   // B.3.3 bridge
-        character->field_0x58 = reinterpret_cast<Action*>(act);
+        character->field_0x58 = reinterpret_cast<Action*>(act);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0 returns void*
     }
 
     // uVar2 = Random::Rand(*(gw+0xd8), 2) — tool/anim variant (0 or 1).
@@ -137,7 +137,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         if (mem) {
             uint64_t outIBP = 0;
             CitizenComponent* ent = *citizenRef;   // citizen
-            act = Pf_CompleteTaskCopyCtor_5da0(mem, priority, reinterpret_cast<uint64_t*>(&ent),
+            act = Pf_CompleteTaskCopyCtor_5da0(mem, priority, reinterpret_cast<uint64_t*>(&ent),   // LEFT: SIG Pf_CompleteTaskCopyCtor_5da0
                              &outIBP, taskParam);
         }
         void* ibp = act;
@@ -152,7 +152,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
             uint64_t outIBP = 0;
             uint32_t msgId = (altAnim & 0xff) ? s_msg75f0 : s_msg7008;
             ComponentEntity* bldg = building ? *building : nullptr;   // building entity
-            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&bldg), &msgId, 0, &outIBP, 0);
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&bldg), &msgId, 0, &outIBP, 0);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0
         }
         void* ibp = act;
         Pf_ActStackPush_54e0(stack, &ibp);
