@@ -163,8 +163,7 @@ uint64_t Work::StepProgress(CitizenComponent** citizen, uint32_t cellA, uint32_t
             // LEFT: the fall-through return carries the weather pointer's upper bytes.
             uint64_t resDefault = reinterpret_cast<uint64_t>(weather);
             CitizenBehavior* mapInfo = gw->m_citizenList;
-            // LEFT: the path-cost body takes the Map as its leading int.
-            int budget = Pf_IsDstReachable_f810(reinterpret_cast<int*>(gw->m_game), cellA, cellB, '\x01');
+            int budget = gw->m_game->PathDistance(cellA, cellB, '\x01');   // 0x14009f810
 
             Description* obj = (*citizen)->_description;
             CitizenDescription* stage = (Object::IsDerivedFromNullSafe(obj, CitizenDescription::TypeId()))
