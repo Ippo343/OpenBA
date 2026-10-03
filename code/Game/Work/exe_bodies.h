@@ -110,14 +110,10 @@ float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
 
 // ---- work_base_reimpl.cpp
 void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP);  // 0x140002ed0
-void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP);  // 0x140002f90
-void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP);  // 0x140003050
-void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP);  // 0x1400052c0
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP);  // 0x140006270
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 void WorkBase_TaskListCleanup_c5400(void* self);  // 0x1400c5400
-uint8_t WorkBase_ValidateTask_f7100(void* self, void*, void* taskIBP, void** out);  // 0x1400f7100 B4 FORWARD: 20 outside callers (Work::ValidateTask)
 int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB);  // 0x140008830
 uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
