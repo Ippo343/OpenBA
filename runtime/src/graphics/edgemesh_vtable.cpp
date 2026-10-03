@@ -116,13 +116,12 @@ namespace {
 // CALL [RAX+0x30]` -- the companion's slot 6, `Serialize`, on the buffer's
 // `platformData` (header+0x08, what PlatformConstruct wrote). That is
 // `?Serialize@IndexBuffer/VertexBuffer@Video@@` (0x1800f5a20) inlined.
-// LEFT: `platformData` is a `void*` in Buffers.h (video's header, not this
-// block's), so the one view of it as its companion is here.
+// B.4 (R-GFX): `platformData` is typed in Buffers.h.
 inline void SerializeBuffer(Video::IndexBuffer& buf, IO::Serializer& ser) {
-    static_cast<Video::IndexBufferData*>(buf.platformData)->Serialize(&ser);   // faithful: unguarded
+    buf.platformData->Serialize(&ser);   // faithful: unguarded
 }
 inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
-    static_cast<Video::VertexBufferData*>(buf.platformData)->Serialize(&ser);  // faithful: unguarded
+    buf.platformData->Serialize(&ser);   // faithful: unguarded
 }
 
 // ---------------------------------------------------------------------------

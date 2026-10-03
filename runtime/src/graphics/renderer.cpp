@@ -207,7 +207,7 @@ bool RtVideoDeviceUsesZeroToOneDepth() {
     // ENDGAME B.3.9 close (D7): the class static, read fresh (no cached door).
     // B.4: `Device::deviceData` (+0x100) and `DeviceData::Slot7`, by name. LEFT:
     // the field is `void*` in Device.h, viewed once as the companion it is.
-    return static_cast<::Video::DeviceData*>(::Video::Device::_singleton->deviceData)->Slot7();
+    return ::Video::Device::_singleton->deviceData->Slot7();
 }
 
 // ============================================================================
