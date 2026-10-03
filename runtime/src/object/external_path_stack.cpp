@@ -236,14 +236,16 @@ void RtObject_ExternalFactory_PopPath(ExternalFactory* self) {
 extern "C" void RtObject_PathStackDestroyRange_18002e8d0(void* ignoredThis,
                                                           uint8_t* base, int count) {
     (void)ignoredThis;
+    // The erased core's element bytes, handed to the element type.
+    RtObject::PathStackElement* const elems =
+        reinterpret_cast<RtObject::PathStackElement*>(base);  // CAST-OK: elem_stride
     for (int i = 0; i < count; ++i) {
-        uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
+        RtObject::PathStackElement& e = elems[i];
         ++RtObject::g_psc.elemsDestroyed;
         // ENDGAME B.3.1 step 2: retail's inlined release IS ~Filename
-        // (0x180006980). The element is raw container bytes, which is why the
-        // two halves are addressed by offset rather than through a struct.
-        reinterpret_cast<System::Filename*>(e + 8)->~Filename();   // filename
-        reinterpret_cast<System::Filename*>(e)->~Filename();       // directory
+        // (0x180006980), +0x08 before +0x00.
+        e.filename.~Filename();
+        e.directory.~Filename();
     }
 }
 
@@ -254,8 +256,12 @@ namespace rtcoll {
 // release-then-adopt: the destination is raw MemAlloc memory on the realloc arm
 // and freshly-vacated-by-destroy memory nowhere. It must NOT release `dst`.
 static void AssignPathStackEntry(uint8_t* dst, const uint8_t* src) {
-    new (dst)     System::Filename(*reinterpret_cast<const System::Filename*>(src));
-    new (dst + 8) System::Filename(*reinterpret_cast<const System::Filename*>(src + 8));
+    RtObject::PathStackElement* const d =
+        reinterpret_cast<RtObject::PathStackElement*>(dst);         // CAST-OK: elem_stride
+    const RtObject::PathStackElement* const s =
+        reinterpret_cast<const RtObject::PathStackElement*>(src);   // CAST-OK: elem_stride
+    new (&d->directory) System::Filename(s->directory);
+    new (&d->filename)  System::Filename(s->filename);
 }
 
 // stride 0x10, align 8 — the `SHL RDX,0x4` and the `MOV EDX,0x8` at
@@ -323,8 +329,8 @@ extern "C" void RtObject_PathStackSetSize_18002e220(void* a, int n, const void* 
 // (2) The shift is a copy-CONSTRUCT into memory the two releases immediately
 // above just vacated, not an assignment; using `ReleaseThenAdopt` here would
 // double-release.
-extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
-    rtcoll::ArrayHdr* a = static_cast<rtcoll::ArrayHdr*>(arrVoid);
+extern "C" void RtObject_PathStackRemoveAt_18002de30(
+        Collection::Array<RtObject::PathStackEntry>* a, int index) {
     ++RtObject::g_psc.removeAtCalls;
 
     // CONTROL 3, and note WHERE it perturbs. It removes a DIFFERENT, valid
@@ -342,22 +348,25 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
     if (index < a->_size) {
         int32_t i = index;
         do {
-            uint8_t* e = a->_data + static_cast<int64_t>(i) * 0x10;
-            reinterpret_cast<System::Filename*>(e + 8)->~Filename();
-            reinterpret_cast<System::Filename*>(e)->~Filename();
+            // `_data` is re-read at each of the three uses, as retail and the
+            // tree before B.4 did (the destructors in between are calls).
+            RtObject::PathStackElement* e =
+                reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+            e->filename.~Filename();
+            e->directory.~Filename();
 
             const int32_t next = i + 1;
             if (next < a->_size) {
-                uint8_t* dst = a->_data + static_cast<int64_t>(i) * 0x10;
+                RtObject::PathStackElement* dst =
+                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 as above
                 // Retail tests the COMPUTED address, which can only be null
                 // when _data is null and i == 0.
                 if (dst != nullptr) {
-                    const uint8_t* src = a->_data + static_cast<int64_t>(next) * 0x10;
+                    const RtObject::PathStackElement* src =
+                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: H10 as above
                     ++RtObject::g_psc.elemsShifted;
-                    new (dst)     System::Filename(
-                        *reinterpret_cast<const System::Filename*>(src));
-                    new (dst + 8) System::Filename(
-                        *reinterpret_cast<const System::Filename*>(src + 8));
+                    new (&dst->directory) System::Filename(src->directory);
+                    new (&dst->filename)  System::Filename(src->filename);
                 }
             }
             i = next;
@@ -375,15 +384,17 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
 // Copy-constructs the tail element into the caller's raw 0x10-byte slot, then
 // RemoveAt(size - 1). Returns the slot in RAX, as every by-value-out helper in
 // this DLL does.
-extern "C" void* RtObject_PathStackRemoveLast_18002ccb0(void* arrVoid, void* outVoid) {
-    rtcoll::ArrayHdr* a = static_cast<rtcoll::ArrayHdr*>(arrVoid);
-    uint8_t* out = static_cast<uint8_t*>(outVoid);
+extern "C" RtObject::PathStackEntry* RtObject_PathStackRemoveLast_18002ccb0(
+        Collection::Array<RtObject::PathStackEntry>* a, RtObject::PathStackEntry* out) {
     ++RtObject::g_psc.removeLastCalls;
 
     const int32_t idx = a->_size - 1;
-    const uint8_t* e = a->_data + static_cast<int64_t>(idx) * 0x10;
-    new (out)     System::Filename(*reinterpret_cast<const System::Filename*>(e));
-    new (out + 8) System::Filename(*reinterpret_cast<const System::Filename*>(e + 8));
+    const RtObject::PathStackElement* e =
+        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;   // LEFT: H10 as RemoveAt's
+    RtObject::PathStackElement* o =
+        reinterpret_cast<RtObject::PathStackElement*>(out);                    // LEFT: H10 as RemoveAt's
+    new (&o->directory) System::Filename(e->directory);
+    new (&o->filename)  System::Filename(e->filename);
     RtObject_PathStackRemoveAt_18002de30(a, idx);
     return out;
 }

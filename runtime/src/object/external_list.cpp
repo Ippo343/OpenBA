@@ -77,7 +77,7 @@ constexpr int kEncCreateWriter = 0x20;   // CALL [RAX+0x20]
 // B3X W0: the ReaderWriter's [RAX+0xa0] (SerializeInt) and [RAX] (slot 0,
 // the deleting destructor) are called by name below.
 
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 
 }  // namespace
 
@@ -96,11 +96,11 @@ bool ExternalList::Serialize(IO::Stream& streamv) {
     void** fvt    = VTableOf(factory);
     const int which = (stream->mode == 0) ? kEncCreateReader : kEncCreateWriter;
     using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
     ser.readerWriter = rw;
 
     int32_t n = _count;
-    reinterpret_cast<::IO::ReaderWriter*>(rw)->SerializeInt(n, nullptr);   // +0xa0 (B.3.x bridge)
+    reinterpret_cast<::IO::ReaderWriter*>(rw)->SerializeInt(n, nullptr);   // +0xa0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 
     if (ser.stream->mode == 0) {
         rtcoll::RtColl_ArraySetSize_18002f070(&_resources, n);   // 0x18002f070
@@ -109,11 +109,11 @@ bool ExternalList::Serialize(IO::Stream& streamv) {
     // The ExternalPtrArraySerialize_External thunk (external_ptr_serialize.cpp),
     // an unexported internal: 0x18002f170.
     RtObject_ExternalPtrArraySerialize_External(
-        reinterpret_cast<rt::io::Serializer*>(&ser), n,
-        reinterpret_cast<RtObject::External**>(_resources));
+        reinterpret_cast<rt::io::Serializer*>(&ser), n,  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+        reinterpret_cast<RtObject::External**>(_resources));  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 
     if (rw != nullptr) {
-        delete reinterpret_cast<::IO::ReaderWriter*>(rw);        // slot 0 (B.3.x bridge)
+        delete reinterpret_cast<::IO::ReaderWriter*>(rw);        // slot 0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
     }
     return true;
 }

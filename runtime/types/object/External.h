@@ -328,57 +328,9 @@ struct ExternalList {
 static_assert(offsetof(ExternalList, _resources) == 0x20, "ExternalList::_resources @ +0x20");
 static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count @ +0x28");
 
-// ============================================================
-// Factory type-map offsets — MERGED INTO LANE A'S HEADER (Wave 3 integration).
-//
-// ExternalFactory::FindNext (0x1800be9d0) inlines an IsDerivedFrom walk over
-// Object::Factory's type map, and External::SaveText (0x1800bb9d0) reads a type
-// NAME out of the same map. This lane originally declared six offsets locally,
-// transcribed without interpretation, rather than edit Lane A's file mid-wave.
-//
-// Lane A independently pinned the same structure from the other side (Factory::
-// Startup, CreateObject, GetTypeIdFromName, IsDerivedFrom) and the two readings
-// agree field for field, so the local block is gone and TypeInfo.h is the one
-// source of truth:
-//
-//   this lane's `element`       = RtObject::TypeNode  (the node base)
-//   kTypeId        +0x00        = TypeNode::key
-//   kLeft +0x38 / kRight +0x40  = TypeNode::left / ::right
-//   kAncestorChain +0x08        = TypeNode::value, a TypeRecord
-//   kAncestorNext  +0x10        = TypeRecord::parent — the "ancestor chain"
-//                                 this lane saw walked to null IS the
-//                                 base-class chain
-//   kTypeInfoPtr   +0x10        = TypeRecord::info, and its +0x08 is
-//                                 BaseTypeInfo::name — so the pointer this lane
-//                                 declined to name IS a BaseTypeInfo*
-//
-// ENDGAME B.3.3 step 7: the `#include "TypeInfo.h"` that used to sit here — and
-// that fired from INSIDE `namespace RtObject`, which is why internal_class.h was
-// ever a separate header — is deleted. Step 5 hoisted it to line 43 at global
-// scope, so this one had been inert ever since.
-// ============================================================
-
-namespace FactoryTypeNodeOffsets {
-    // Kept as names so external.cpp's byte-offset arithmetic reads unchanged;
-    // every value is now DERIVED from Lane A's measured layout, not restated.
-    inline constexpr int kTypeId        = offsetof(RtObject::TypeNode, key);
-    inline constexpr int kAncestorChain = offsetof(RtObject::TypeNode, value);
-    inline constexpr int kAncestorNext  = offsetof(RtObject::TypeRecord, parent);
-    inline constexpr int kTypeInfoPtr   = offsetof(RtObject::TypeNode, value)
-                                        + offsetof(RtObject::TypeRecord, info);
-    inline constexpr int kLeft          = offsetof(RtObject::TypeNode, left);
-    inline constexpr int kRight         = offsetof(RtObject::TypeNode, right);
-}
-
-// The values Lane C transcribed from ExternalFactory's disassembly, asserted
-// against Lane A's independently measured layout. Two readings of the same
-// bytes from two different call sites; if either ever moves, this fails loudly.
-static_assert(FactoryTypeNodeOffsets::kTypeId        == 0x00, "type-map key");
-static_assert(FactoryTypeNodeOffsets::kAncestorChain == 0x08, "type-map value");
-static_assert(FactoryTypeNodeOffsets::kAncestorNext  == 0x10, "TypeRecord::parent");
-static_assert(FactoryTypeNodeOffsets::kTypeInfoPtr   == 0x10, "TypeRecord::info");
-static_assert(FactoryTypeNodeOffsets::kLeft          == 0x38, "type-map left");
-static_assert(FactoryTypeNodeOffsets::kRight         == 0x40, "type-map right");
+// (B.4 P2 R-OBJ: the `FactoryTypeNodeOffsets` byte offsets that external.cpp's
+// inlined IsDerivedFrom walk used are gone with their last reader: that walk
+// reads `Object::Factory::TypeSet::Node` / `TypeRecord` by name, TypeInfo.h.)
 
 }  // namespace RtObject
 
@@ -504,14 +456,14 @@ public:
         // 26 `T`s is a C++ class in this tree yet, so the shared body is typed
         // over `Object::External**`. It goes when `Object::External`'s hierarchy
         // is converted (ENDGAME section B.3 step 3).
-        ExternalPtrSerializeBody(reinterpret_cast<RtObject::External**>(&_ptr),
+        ExternalPtrSerializeBody(reinterpret_cast<RtObject::External**>(&_ptr),   // LEFT: H10 the shared body is typed over the RtObject::External POD; its ~100 callers are in other blocks' files (wave X)
                                  ser, typeInfo);
     }
 
     static void SerializeArray(rt::io::Serializer& ser, int count,
                                ExternalPtr* elems, const void* typeInfo) {
         ExternalPtrSerializeArrayBody(
-            ser, count, reinterpret_cast<RtObject::External**>(elems), typeInfo);
+            ser, count, reinterpret_cast<RtObject::External**>(elems), typeInfo);   // LEFT: as Serialize above
     }
 
     T* _ptr;   // +0x00 -- public: the array bulk-copy paths reach these bytes

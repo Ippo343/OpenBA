@@ -749,7 +749,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
     using rtresset::Elem;
     using rtresset::g_rc;
 
-    Set* set = reinterpret_cast<Set*>(&self->_resources);
+    Set* set = reinterpret_cast<Set*>(&self->_resources);  // CAST-OK: elem_stride
 
     rtresset::FilenameArray evicted;         // [RSP+0x28]
     evicted.data     = nullptr;              // 0x1800be337
@@ -771,7 +771,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             if (Elem(n)->usageMask == 0 || self->_cleanBitIndex < 0) {
                 ++g_rc.cleanEvicted;
                 rtresset::ArrayResize(&evicted, collected + 1,
-                                      reinterpret_cast<const RtSystem::Filename*>(n));
+                                      &Elem(n)->path);   // ResourceEntry::path, the key at +0x00
                 collected = evicted.size;    // 0x1800be396, RE-READ from the array
             }
             // in-order successor, transcribed from 0x1800be39a..0x1800be3e6
@@ -798,7 +798,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             if (ext) {
                 // vtable slot 0, scalar deleting destructor, flag 1.
                 // B3X W0: by name on the object's own hierarchy root.
-                delete reinterpret_cast<::Object::External*>(ext);   // 0x1800be465 (B.3.x bridge)
+                delete reinterpret_cast<::Object::External*>(ext);   // 0x1800be465 (B.3.x bridge)  // LEFT: H10 ResourceEntry::external is the RtObject::External POD
             }
             rtresset::Erase(set, hit);   // 0x1800be46e
         }

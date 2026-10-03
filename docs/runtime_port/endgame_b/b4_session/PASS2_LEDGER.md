@@ -122,3 +122,39 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - R-COLL renamed two allocators (`AllocTraits::Alloc` -> `Allocate`, `ListNodeAlloc` ->
   `AllocateListNode`) so their results match the tier-I allocation shape: they ARE allocation results;
   recorded so the audit can judge it.
+
+## Round 2 hand-ins (CAI-6, CAI-4, WORK-1, R-OBJ)
+### COMP-8 (owns `Game/WorkScheduler.h`)  <- CAI-6
+- Names for `WorkScheduler` fields, from the code: `field_0x00` the work-id counter (wraps at 0x7ffffffe),
+  `field_0x04` the queue-order counter, `field_0x10` / `field_0x18` the queue-order tree and its count,
+  `field_0x120` / `field_0x128` the per-profession bucket tree root and count. `WorkComponent::workFlags`
+  (+0x2c) and `Work::field_24` hold the posted work's queue-order key (row 201).
+### DLG-1 (owns `Game/Map.h` per the map) <- WORK-1
+- `Map::regionPairCache` is `int64_t*` (2 casts in Work files).
+### WORK-3 <- WORK-1
+- `CharacterComponent::actions` / `field_0x58` (2 casts in Work-1 files).
+### R-COLL second visit / wave X <- R-OBJ
+- `avl_trees.cpp:295-299` `Balance50` / `Height50` can now read `n->balance` / `n->height` (TypeInfo.h typed).
+- `array.cpp:854` copies `ExternalArrayElement::opaque` as one qword (really two int32s); `owned` is
+  retail's Filename (H5).
+### Wave X additions
+- CAI-6: `CitizenAI_WorkScheduler_Insert` / `_Post` / `_Rekey`, `Pf_AvlRebalanceA_a8c0`,
+  `Pf_AvlRebalanceB_13480`, `WorkCellBST_Insert_9a40`, `WorkCellBST_Remove_ca60`.
+- CAI-4: `Pf_AvlRotateB_e450` / `_e580` (int64_t), `CitizenAI_Reg_helper_e360` (retail 0x14000e360 serves
+  several node types: callers in citizenlist_serialize.cpp, action_pf_avl.cpp, tradeui_leaves.cpp).
+- WORK-1: `WorkCellBST_*`, `WorkBST_*`, `WorkGrid_*` / `ValidateCell` (map as `int*`),
+  `WorkComponent_CalcMaxWorkers`, `WorkGrid_TryAssignWorkplace_f8620`, `WorkAct_PerformWorkCtor_*`,
+  `GatherRawMatCtor`, `WorkAcc_FindComponent_6330`, `WorkLeaf_FreeStorageCapacity_116540`,
+  `StorageComponent_QueryAvailable`, the two ctors' `uint64_t` description arguments, the `Pf_*CopyCtor`
+  signatures. No caller left anywhere: `Pf_RegionPathLength_8ba0`, `Pf_RegionPairCacheInsert_5b30`
+  (action_pf_astar.cpp), `Pf_RegionSpiral_9d0a0` (action_pf_geom.cpp): delete.
+- R-OBJ: `RtObject_Factory_Dtor`, `InternalFactory_Dtor`, `ExternalFactory_Dtor` (caller
+  engine_lifecycle.cpp), `IsDerivedFromNullSafe(const void*)`, `ExternalPtr` `typeInfo`,
+  `RtObject_Type_Serialize(void*, void*)` (five callers in code/Game), `BaseTypeInfo::factoryFn` /
+  `inPlaceFactoryFn` (printed by standalone/main.cpp, compared in tests/unit/b39_ti_*), the
+  `ExternalPtr` serialize thunks and `InternalPtr<T>` bridges (about 100 callers).
+### Close
+- `elem_stride` is now 53 (R-COLL 31 + R-OBJ 12 + 10 standing) against a ceiling of 18.
+- R-OBJ: `Factory::Startup`'s unregistered-parent path still faults reading 0x28 as retail does, but GCC
+  now emits it as an explicit load + `ud2`.
+- Allocation results not matching the tier-I name shape: `TypeChildAlloc`, `InternalMemAlloc`.

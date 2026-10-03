@@ -47,6 +47,7 @@
 #include <new>
 
 #include "../../types/object/External.h"
+#include "../../types/object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
 #include "../../types/io/Stream.h"   // B.3.4 STREAMS (5/6): IO::Stream, the
                                      // parameter of SerializeReferenceTable,
                                      // and rt::io::Stream, the POD the ported
@@ -83,7 +84,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
                                                       const Filename* path, bool appendIdentifier);
 ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
                                                   ExternalPtr<External>* ret,
-                                                  const Filename* path, void* type);
+                                                  const Filename* path, ::Object::Type type);
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
@@ -102,19 +103,19 @@ namespace {
 // B.3.3 bridge — the class and the POD are asserted field for field in
 // External.h; these two spell the cast once instead of at thirty call sites.
 inline RtObject::ExternalFactory* Pod(ExternalFactory* f) {
-    return reinterpret_cast<RtObject::ExternalFactory*>(f);          // B.3.3 bridge
+    return reinterpret_cast<RtObject::ExternalFactory*>(f);          // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 inline const RtObject::ExternalFactory* Pod(const ExternalFactory* f) {
-    return reinterpret_cast<const RtObject::ExternalFactory*>(f);    // B.3.3 bridge
+    return reinterpret_cast<const RtObject::ExternalFactory*>(f);    // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 inline RtObject::External* Pod(External* e) {
-    return reinterpret_cast<RtObject::External*>(e);                 // B.3.3 bridge
+    return reinterpret_cast<RtObject::External*>(e);                 // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 inline const RtObject::External* Pod(const External* e) {
-    return reinterpret_cast<const RtObject::External*>(e);           // B.3.3 bridge
+    return reinterpret_cast<const RtObject::External*>(e);           // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 inline const RtObject::Filename* PodF(const System::Filename& f) {
-    return reinterpret_cast<const RtObject::Filename*>(&f);          // B.3.3 bridge
+    return reinterpret_cast<const RtObject::Filename*>(&f);          // B.3.3 bridge  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 }
 
 // A `System::Filename` returned by value out of an entry point that writes a
@@ -126,7 +127,7 @@ template <class Fn>
 inline System::Filename ByHiddenSlot(Fn call) {
     System::Filename out;                       // born null
     RtSystem::Filename* slot =
-        reinterpret_cast<RtSystem::Filename*>(&out);                 // B.3.3 bridge
+        reinterpret_cast<RtSystem::Filename*>(&out);                 // B.3.3 bridge  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
     // The callee placement-constructs; `out` is null, so nothing is leaked by
     // overwriting its one pointer field.
     call(slot);
@@ -180,12 +181,12 @@ ExternalFactory* ExternalFactory::Get() {
 }
 
 const External* ExternalFactory::Find(const System::Filename& path) const {
-    return reinterpret_cast<const External*>(                        // B.3.3 bridge
+    return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
         RtObject::RtObject_ExternalFactory_Find(Pod(this), PodF(path)));
 }
 
 const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev) const {
-    return reinterpret_cast<const External*>(                        // B.3.3 bridge
+    return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
         RtObject::RtObject_ExternalFactory_FindNext(Pod(this), typeId, Pod(prev)));
 }
 
@@ -241,7 +242,7 @@ void ExternalFactory::Add(External* external) {
 }
 
 const External* ExternalFactory::FindOrLoad(const System::Filename& path) {
-    return reinterpret_cast<const External*>(                        // B.3.3 bridge
+    return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
         RtObject::RtObject_ExternalFactory_FindOrLoad(Pod(this), PodF(path)));
 }
 
@@ -291,7 +292,7 @@ void ExternalFactory::ForceUnload(const System::Filename& path) {
 void ExternalFactory::SerializeReferenceTable(IO::Stream& stream) {
     RtObject::RtObject_ExternalFactory_SerializeReferenceTable(
         Pod(this),
-        reinterpret_cast<rt::io::Stream*>(&stream));                 // B.3.4 bridge
+        reinterpret_cast<rt::io::Stream*>(&stream));                 // B.3.4 bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 }
 
 // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
@@ -384,9 +385,9 @@ ExternalPtr<External> ExternalList::Find(const System::Filename& path, uint32_t 
     RtObject::ExternalPtr<RtObject::External> raw;
     raw.ptr = nullptr;
     RtObject::RtObject_ExternalList_Find(
-        reinterpret_cast<const RtObject::ExternalList*>(this),       // B.3.3 bridge
-        &raw, PodF(path), reinterpret_cast<void*>(static_cast<uintptr_t>(type)));
-    return ExternalPtr<External>(reinterpret_cast<External*>(raw.ptr));  // B.3.3 bridge
+        reinterpret_cast<const RtObject::ExternalList*>(this),       // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+        &raw, PodF(path), ::Object::Type(type));
+    return ExternalPtr<External>(reinterpret_cast<External*>(raw.ptr));  // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 }  // namespace Object

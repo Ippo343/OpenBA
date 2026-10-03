@@ -136,11 +136,11 @@ namespace {
 // B3X W0: both by name -- `Object::Base::Type()` (slot 2, +0x10) and
 // `Object::External::Serialize` (slot 5, +0x28).
 uint32_t ExternalGetTypeId(External* self) {
-    return reinterpret_cast<const ::Object::Base*>(self)->Type();        // B.3.x bridge
+    return reinterpret_cast<const ::Object::Base*>(self)->Type();        // B.3.x bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 bool ExternalSerialize(External* self, IO::Stream& stream) {
-    return reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge
+    return reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // `if (fi->handle != -1) FileSystem::CloseFile(_singleton, fi);`
@@ -216,11 +216,11 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // NULL GUARDS" note), and this one does not.
     const uint32_t typeId = ExternalGetTypeId(self);
 
-    const Factory* factory = reinterpret_cast<const Factory*>(      // B.3.3 bridge
-        ::Object::Factory::_singleton);   // class static (B.3.9 OBJ, D7)
-    const TypeNode* node = factory->root;
+    const ::Object::Factory* factory =
+        ::Object::Factory::_singleton;   // class static (B.3.9 OBJ, D7)
+    const ::Object::Factory::TypeSet::Node* node = factory->_types._root;
     while (node != nullptr) {
-        const uint32_t key = node->key;
+        const uint32_t key = node->element.typeId;
         if (typeId < key)      node = node->left;    // 1800bba2a, +0x38
         else if (key < typeId) node = node->right;   // 1800bba24, +0x40
         else                   break;                // 1800bba22
@@ -229,7 +229,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     const char* typeName = nullptr;
     if (node != nullptr) {
         ++g_st.typeFound;
-        typeName = node->value.info->name;           // 1800bba35/39: [n+0x10]->[+0x08]
+        typeName = node->element.record.info->name;  // 1800bba35/39: [n+0x10]->[+0x08]
     } else {
         ++g_st.typeMissing;
     }
@@ -249,14 +249,14 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
         // the destructor lands on the same instruction the release did.
         System::String typeStr(typeName);            // 1800bba4a
 
-        const String* ctorType = reinterpret_cast<const String*>(&typeStr);
-        const String* ctorName = reinterpret_cast<const String*>(name);
+        const String* ctorType = reinterpret_cast<const String*>(&typeStr);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        const String* ctorName = reinterpret_cast<const String*>(name);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
         int           ctorVer  = 0;
         if (g_stCtl == 1) { ++g_stAtt; const String* t = ctorType; ctorType = ctorName; ctorName = t; }
         if (g_stCtl == 2) { ++g_stAtt; ctorVer = 1; }
         ts = ::new (tsMem) IO::TextFileStream(
-            *reinterpret_cast<const System::String*>(ctorType),
-            *reinterpret_cast<const System::String*>(ctorName), ctorVer);
+            *reinterpret_cast<const System::String*>(ctorType),  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+            *reinterpret_cast<const System::String*>(ctorName), ctorVer);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
     }                                                // 1800bba64
 
     // ---- 1800bba85..1800bba9f -------------------------------------------
@@ -266,7 +266,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     ts->_activeEncoding  = 2;                        // 1800bba90: [+0x6c] = 2
     if (g_stCtl == 3) { ++g_stAtt; ts->_activeEncoding = 3; }  // see the control note
 
-    if (ts->IO::FileStream::Create(*reinterpret_cast<const System::Filename*>(path))) {   // B.3.9 IO: the member
+    if (ts->IO::FileStream::Create(*reinterpret_cast<const System::Filename*>(path))) {   // B.3.9 IO: the member  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
         // ---- 1800bbaa3..1800bbb05 ---------------------------------------
         // The byte-order mark. `_activeEncoding` ALONE selects it — not
