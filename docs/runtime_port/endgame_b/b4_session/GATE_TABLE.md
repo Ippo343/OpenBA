@@ -249,3 +249,11 @@ Metric at `10db088d`: **7,388** to remove.
 | 57 | P2-R-OBJ | `24f32afa` | `TypeNode` balance / height two int16 (retail 0x180030540, row 100 CONFIRMED), the type tree and External's sets by name, `PathStackElement`: 200 -> 123 in 25 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
 
 Metric at `24f32afa`: **6,728** to remove.
+
+| 58 | P2-CAI-5 | `7c5a44e1` | citizenai_leisure by name; `LeisureCandidateSet.h` (retail 0x14010a560); three dead trampolines deleted (rows 240-241): 162 -> 11 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 59 | P2-CAI-2 | `db11a004` | citizenai_executor, findhelpers, findtarget, gather by name; `CitizenAI_sub_78c0` typed (rows 250-252): 299 -> 38 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 60 | P2-WORK-2 | `07520c0d` | consumeproduce, fishingwork, firework, marketwork, pickup, pasturework, gatherrawmaterials by name (row 260): 309 -> 181 in 20 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 61 | P2-R-GFX | `3183f57f` | the 0xb0 mesh element is `GraphicsMesh::DetailLevel` (retail 0x1800fefc0, row 102 CONFIRMED); `AnimationGroup::Tag`, `VertexProgram::Element` / `Stream`; `behaviour:` `GraphicsMesh::_detailLevels` / `_skinMaterials` are `Array` members (retail ctor 0x1800ff170, dtor 0x1800ff270): 181 -> 145 in 45 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 62 | P2-CAI-3 (+ CIT-3) | `9732f3fe` | citizenai_growup, handlers 1-3, citizenaicomponent by name (row 280): 212 -> 66 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+
+Metric at `9732f3fe`: **6,006** to remove.
