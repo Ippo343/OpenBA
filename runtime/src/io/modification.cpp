@@ -385,20 +385,17 @@ static_assert(offsetof(ModSetT::Node, right)  == offsetof(ModSetNode, right),  "
 // allocation writes through null. Transcribed, not guarded — the project's rule
 // is that a faithful crash names an upstream problem (an exhausted heap here),
 // and a guard would silently produce a half-built tree instead.
-void* RtColl_SetCloneSubtree_1800104f0(void* set, const void* srcv) {
-    const ModSetNode* src = static_cast<const ModSetNode*>(srcv);
+ModSetNode* RtColl_SetCloneSubtree_1800104f0(void* set, const ModSetNode* src) {
     ModSetNode* dup = SetNodeNew(set, &src->key, nullptr);
     dup->height = src->height;       // copied in THIS order: +0x22 then +0x20
     dup->balance = src->balance;
     if (src->left != nullptr) {
-        ModSetNode* c = static_cast<ModSetNode*>(
-            RtColl_SetCloneSubtree_1800104f0(set, src->left));
+        ModSetNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->left);
         dup->left = c;
         c->parent = dup;
     }
     if (src->right != nullptr) {
-        ModSetNode* c = static_cast<ModSetNode*>(
-            RtColl_SetCloneSubtree_1800104f0(set, src->right));
+        ModSetNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->right);
         dup->right = c;
         c->parent = dup;
     }
@@ -420,7 +417,7 @@ void* RtColl_SetCloneSubtree_1800104f0(void* set, const void* srcv) {
 // signature because retail's 0x180010470 takes it and ignores it.
 void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
     (void)set;
-    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));
+    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));   // LEFT: H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
 }
 
 // ============================================================================
@@ -472,8 +469,7 @@ void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src) {
     dst->set.count = 0;
     if (&src->set != &dst->set) {
         if (src->set.root != nullptr)
-            dst->set.root = static_cast<ModSetNode*>(
-                RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root));
+            dst->set.root = RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root);
         dst->set.count = src->set.count;
     }
 
@@ -520,8 +516,7 @@ void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src) {
             dst->set.count = 0;
         }
         if (src->set.root != nullptr)
-            dst->set.root = static_cast<ModSetNode*>(
-                RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root));
+            dst->set.root = RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root);
         dst->set.count = src->set.count;
     }
 

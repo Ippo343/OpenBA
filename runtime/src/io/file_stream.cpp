@@ -355,7 +355,7 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
     char* cur = *slot;
     if (cur == *incoming) return;                          // 1800ba2a4 / 1800ba2e5
     if (cur != nullptr) {
-        if (--reinterpret_cast<int32_t*>(cur)[-1] == 0) {  // 1800ba2ae
+        if (--reinterpret_cast<int32_t*>(cur)[-1] == 0) {  // 1800ba2ae  // CAST-OK: string_header
             *slot = cur - 8;                               // 1800ba2b7
             RtSystem::RtMemFree(*slot);                    // 1800ba2c0
         } else {
@@ -364,7 +364,7 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
     }
     char* nw = *incoming;                                  // 1800ba2cf
     *slot = nw;
-    if (nw != nullptr) ++reinterpret_cast<int32_t*>(nw)[-1];  // 1800ba2db
+    if (nw != nullptr) ++reinterpret_cast<int32_t*>(nw)[-1];  // 1800ba2db  // CAST-OK: string_header
 }
 
 // ---------------------------------------------------------------------------
@@ -409,14 +409,14 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
 // sound instrument; the mirror (corrupting a value that SHOULD differ)
 // exonerates a broken one.  Neither applies here: +0x60 must be EQUAL on both
 // subjects, because both are handed the same incoming pointer.
-extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
-                                              char* const* type,
-                                              char* const* name,
+extern "C" void RtIo_TextFileStream_SetObject(::IO::TextFileStream* self,
+                                              const System::String* type,
+                                              const System::String* name,
                                               int version) {
 
-    TfsReleaseAssign(&self->objectName, name);   // 1800ba294..ba2dd   arg2
-    self->objectVersion = version;               // 1800ba2de          arg3
-    TfsReleaseAssign(&self->objectType, type);   // 1800ba2e1..ba31e   arg1
+    TfsReleaseAssign(&self->_objectName, &name->_data);   // 1800ba294..ba2dd   arg2
+    self->_objectVersion = version;                      // 1800ba2de          arg3
+    TfsReleaseAssign(&self->_objectType, &type->_data);   // 1800ba2e1..ba31e   arg1
 
 }
 
@@ -796,10 +796,7 @@ TextFileStream::TextFileStream(const System::String& type,
     if (_encoding) RtSystem::RtMemFree(_encoding);
     _encoding = enc;                      // ..4e
 
-    RtIO::RtIo_TextFileStream_SetObject(                          // 1800ba45e
-        reinterpret_cast<RtIo::TextFileStream*>(this),
-        reinterpret_cast<char* const*>(&type),
-        reinterpret_cast<char* const*>(&name), version);
+    RtIO::RtIo_TextFileStream_SetObject(this, &type, &name, version);   // 1800ba45e
 }
 
 // ============================================================================

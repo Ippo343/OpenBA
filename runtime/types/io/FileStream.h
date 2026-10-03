@@ -674,7 +674,7 @@ public:
     char*   _objectType;       // +0x60  a System::String — ?GetObjectType@ LEAs it
     int32_t _requestedFormat;  // +0x68  ctor: 6 ("detect from the data")
     int32_t _activeEncoding;   // +0x6c  ctor: 6 — THE BOM SELECTOR
-    void*   _buffer;           // +0x70  owned, bare MemFree in the dtor door
+    uint8_t* _buffer;          // +0x70  owned, bare MemFree in the dtor door (the transcoded bytes OpenWithFormat installs)
     int32_t _bufSize;          // +0x78  bytes in _buffer — see the banner
     int32_t _bufCursor;        // +0x7c  position IN _buffer
 };

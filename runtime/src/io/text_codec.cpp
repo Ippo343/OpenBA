@@ -102,7 +102,7 @@ namespace {
 // The caller is responsible for `dst` having room for 4 bytes.
 // ============================================================================
 extern "C" int32_t RtIo_TextCodec_EncodeOne(int32_t cp, void* dstv, int32_t fmt) {
-    uint8_t* const d = static_cast<uint8_t*>(dstv);
+    uint8_t* const d = static_cast<uint8_t*>(dstv);  // CAST-OK: byte_io
 
     switch (fmt) {
         case 0:                                                    // 0x1800c9b7b
@@ -200,8 +200,8 @@ extern "C" int32_t RtIo_TextCodec_EncodeOne(int32_t cp, void* dstv, int32_t fmt)
 extern "C" int32_t RtIo_TextCodec_DecodeOne(int32_t fmtEcx, const void* srcv,
                                             const void* endv, int32_t* cp,
                                             int32_t fmtArg5) {
-    const uint8_t* src = static_cast<const uint8_t*>(srcv);
-    const uint8_t* const end = static_cast<const uint8_t*>(endv);
+    const uint8_t* src = static_cast<const uint8_t*>(srcv);  // CAST-OK: byte_io
+    const uint8_t* const end = static_cast<const uint8_t*>(endv);  // CAST-OK: byte_io
 
     switch (fmtArg5) {                 // the TABLE index is arg5
         case 0:                                                    // 0x1800c9fe1
@@ -307,8 +307,7 @@ bad:                                                               // 0x1800ca0d
 // trailing byte (`MOV WORD [RBP+0x18],0xBBEF / MOV BYTE [RBP+0x1A],0xBF`), so
 // the byte order in the file is EF BB BF / FF FE / FE FF.
 // ============================================================================
-extern "C" int32_t RtIo_TextCodec_DetectFormat(const void* srcv, int32_t len) {
-    const uint8_t* const src = static_cast<const uint8_t*>(srcv);
+extern "C" int32_t RtIo_TextCodec_DetectFormat(const uint8_t* src, int32_t len) {
 
     static const uint8_t kUtf8Bom[3]    = { 0xEF, 0xBB, 0xBF };
     static const uint8_t kUtf16LeBom[2] = { 0xFF, 0xFE };
@@ -354,13 +353,11 @@ extern "C" int32_t RtIo_TextCodec_DetectFormat(const void* srcv, int32_t len) {
 // the signature because removing it would shift args 7, 8 and 9.
 // ============================================================================
 extern "C" int32_t RtIo_TextCodec_ConvertText(int32_t srcFmt, uint8_t forceDetect,
-                                              const void* srcv, int32_t srcLen,
+                                              const uint8_t* src, int32_t srcLen,
                                               int32_t dstFmt, int32_t /*scratch*/,
                                               uint8_t appendTerminator,
-                                              void* dstv, int32_t dstCap) {
-    const uint8_t* src = static_cast<const uint8_t*>(srcv);
+                                              uint8_t* const dst, int32_t dstCap) {
     const uint8_t* const srcEnd = src + srcLen;
-    uint8_t* const dst = static_cast<uint8_t*>(dstv);
 
     int32_t produced = 0;                                   // EBX
     int32_t fmt = srcFmt;                                   // EBP
@@ -488,7 +485,7 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
                                           void* /*unused*/) {
     if (count <= 0) return;                                        // 0x180029bb0
 
-    char** slot = static_cast<char**>(datav);                      // R12
+    char** slot = static_cast<char**>(datav);                      // R12  // LEFT: SIG RtIo_SerializeStringArray (callers hand String* / raw Array data, wave X)
 
     for (int32_t i = 0; i < count; ++i, ++slot) {                  // 0x180029bf0
         // `len + 1`, or 0 for a null String. The length lives at `str - 8`
@@ -496,7 +493,7 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
         uint32_t tagged = 0;
         if (*slot != nullptr)
             tagged = static_cast<uint32_t>(
-                *reinterpret_cast<const int32_t*>(*slot - 8) + 1);
+                *reinterpret_cast<const int32_t*>(*slot - 8) + 1);  // CAST-OK: string_header
         tagged |= 0x80000000u;                                     // BTS EAX,31
 
         ser->_readerWriter->SerializeUInt(tagged, nullptr);    // +0x98
@@ -523,7 +520,7 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
 
         ser->_readerWriter->SerializeUShortArray(
             static_cast<int32_t>(len),
-            reinterpret_cast<uint16_t*>(tmp), nullptr);            // +0x50
+            reinterpret_cast<uint16_t*>(tmp), nullptr);            // +0x50  // CAST-OK: byte_io
 
         // `len*2 - 2`: the trailing NUL code unit is not transcoded.
         const uint8_t* const wideEnd =

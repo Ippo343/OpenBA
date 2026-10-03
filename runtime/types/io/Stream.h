@@ -829,8 +829,8 @@ static_assert(std::is_trivially_destructible<RtIo::CompressedMemoryStream>::valu
 // IO::CompressedStream members.)
 
 // ---- io/text_codec.cpp
-extern "C" int32_t RtIo_TextCodec_DetectFormat(const void* srcv, int32_t len);  // 0x1800c9d60
+extern "C" int32_t RtIo_TextCodec_DetectFormat(const uint8_t* src, int32_t len);  // 0x1800c9d60
 extern "C" int32_t RtIo_TextCodec_DecodeOne(int32_t fmtEcx, const void* srcv, const void* endv, int32_t* cp, int32_t fmtArg5);  // 0x1800c9fc0
 extern "C" int32_t RtIo_TextCodec_EncodeOne(int32_t cp, void* dstv, int32_t fmt);  // 0x1800c9b60
-extern "C" int32_t RtIo_TextCodec_ConvertText(int32_t srcFmt, uint8_t forceDetect, const void* srcv, int32_t srcLen, int32_t dstFmt, int32_t, uint8_t appendTerminator, void* dstv, int32_t dstCap);  // 0x1800ca260
+extern "C" int32_t RtIo_TextCodec_ConvertText(int32_t srcFmt, uint8_t forceDetect, const uint8_t* src, int32_t srcLen, int32_t dstFmt, int32_t, uint8_t appendTerminator, uint8_t* dst, int32_t dstCap);  // 0x1800ca260
 // ==== end B3R W0-P0c ====

@@ -722,8 +722,7 @@ bool TextFileStream::Read(int len, void* buf) {
     // bits (`MOVSLQ`) before the add, so a negative cursor addresses BACKWARDS
     // from the buffer rather than wrapping to a huge positive offset.
     std::memmove(buf,
-                 static_cast<const char*>(_buffer) +
-                     static_cast<int64_t>(_bufCursor),
+                 _buffer + static_cast<int64_t>(_bufCursor),
                  static_cast<size_t>(static_cast<int64_t>(len)));   // 1800ba921
 
     if (RtIO::g_tfsCtl == 3) { ++RtIO::g_tfsAtt; }
@@ -845,12 +844,12 @@ bool TextFileStream::Write(int len, const void* buf) {
 
     // ---- slow arm: transcode ----------------------------------------------
     ++RtIO::g_tfs.writeTranscode;
-    const uint8_t* const begin = static_cast<const uint8_t*>(buf);
+    const uint8_t* const begin = static_cast<const uint8_t*>(buf);  // CAST-OK: byte_io
     const uint8_t* const end   = begin + len;                   // 1800baa70
     const uint8_t* p           = begin;
 
     if (srcFormat == 6) {                                       // 1800baa74
-        srcFormat = RtIo_TextCodec_DetectFormat(buf, len);          // 1800baa7e
+        srcFormat = RtIo_TextCodec_DetectFormat(begin, len);        // 1800baa7e
         p = begin + RtIO::TfsBomSkip(srcFormat);                // 1800baaac
     }
 
@@ -874,9 +873,9 @@ bool TextFileStream::Write(int len, const void* buf) {
     }
 
     // Pass 2 — CONVERT into a fresh block, write it, free it.
-    void* dst = ::System::MemoryAllocator::MemAlloc(
-            static_cast<size_t>(outBytes), 4);                  // 1800bab2d
-    RtIo_TextCodec_ConvertText(_requestedFormat, 0, buf, len,       // 1800bab5d
+    uint8_t* dst = static_cast<uint8_t*>(::System::MemoryAllocator::MemAlloc(
+            static_cast<size_t>(outBytes), 4));                 // 1800bab2d
+    RtIo_TextCodec_ConvertText(_requestedFormat, 0, begin, len,     // 1800bab5d
                            _activeEncoding, 0, 0, dst, outBytes);
 
     DWORD written = 0;                                          // 1800bab74
