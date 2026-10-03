@@ -28,6 +28,7 @@
 #include "Object/exe_type.h"
 
 class CitizenComponent;
+namespace System { class Time; }
 
 class CitizenAIComponent final : public Component {
     DECLARE_EXE_TYPE(CitizenAIComponent)
@@ -45,7 +46,7 @@ public:
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x14010f340 PORT GAP
 
     // B.4 W1 COMP-b: the bodies whose receiver (RCX) is the CitizenAIComponent.
-    void     Decide(const int64_t* time);                         // 0x14010f3e0 (the body Update runs)
+    void     Decide(const System::Time* time);                    // 0x14010f3e0 (the body Update runs)
     void     TransitionState(char needsOnly);                     // 0x14010db90
     void     CheckEducation();                                    // 0x14010f7a0
     void     CheckAge();                                          // 0x14010f890

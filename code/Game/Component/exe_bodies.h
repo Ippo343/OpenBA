@@ -108,7 +108,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
 extern "C" int Storage_GetResourceCount2(int64_t param_1);  // 0x14012ab00
 
 // ---- citizenai_growup.cpp
-extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1);  // 0x140115e60 (CitizenAI state switch)
 
 // ---- citizenai_housing_idle.cpp
 extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b);  // 0x14000e360
