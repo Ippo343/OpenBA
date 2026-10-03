@@ -45,6 +45,13 @@
 #include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"  // B.4 W1 COMP-b: description fields by name
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"
+#include "Component/ModelComponent.h"
+#include "Component/AttendanceComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Action/PathSearch.h"            // CharacterGridWalker, RawArray<T>
+#include "Game/EventLog.h"
 #include "Game/Profession.h"
 #include "Game/Disease.h"                 // B.3.9 EXA: Disease::TypeId()
 #include "options.h"
@@ -68,12 +75,11 @@
 
 namespace {
 
-typedef uint8_t u8;
 
 // Exe bodies called by name: CitizenComp_FindCareBuilding 0x140111590,
 // AttendanceComponent_ReleaseLink59b0 0x1401159b0 (Entity_impl_59b0), the quadtree
-// walker Pf_QuadtreeInit_18dd0 0x140018dd0 / Pf_QuadtreeSubdivide_18880 0x140018880,
-// EventLog_AddCitizenEvent 0x140094e00.
+// walker CharacterGridWalker::Init 0x140018dd0 / ::Subdivide 0x140018880 (Action/PathSearch.h:
+// the 0x24-byte walker record is CharacterGridWalkerNode), EventLog::AddCitizenEvent 0x140094e00.
 // Runtime calls the original makes through exe import slots: V3 ctor3 0x140152a30,
 // V3 splat 0x140151320, Dot 0x140151298 (all direct Math::Vector3 calls),
 // Box::Intersect 0x140151e80 (RtVolume_Box_Intersect), StringTable::GetText(String&)
@@ -108,9 +114,9 @@ static inline float SecsPerMonth()  { return kRdata_140172234; }   // 0x14017223
 
 // Time(float seconds) -> int64 ticks, via the Runtime ctor.
 static inline int64_t TimeFromSeconds(float secs) {
-    int64_t t = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), secs);
-    return t;
+    System::Time t = { 0 };
+    RtSystem_Time_Ctor(&t, secs);
+    return t._ticks;
 }
 
 // ============================================================
@@ -175,11 +181,11 @@ static bool s_bootReported = false;
 static bool s_censusDone = false;
 static long s_censusTries = 0;
 
-static void PlagueHospitalCensus(void* gw, void* healerProf) {
+static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
     if (s_censusDone) return;
     ++s_censusTries;
 
-    uintptr_t mgr = gw ? *(uintptr_t*)((uintptr_t)gw + 0xf0) : 0;
+    CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
     if (!mgr) {
         if (s_censusTries == 1) {
             fprintf(stderr, "[Plague] BOOT: town manager (gw+0xf0) NULL — census re-arming\n");
@@ -188,9 +194,9 @@ static void PlagueHospitalCensus(void* gw, void* healerProf) {
         return;
     }
 
-    int attendance = *(int*)(mgr + 0x68);          // townMgr+0x60/+0x68 — what sub_1930 walks
-    int buildings  = *(int*)(mgr + 0x28);          // townMgr+0x20/+0x28 — the real building list
-    int citizens   = *(int*)(mgr + 0xa8);
+    int attendance = mgr->attendanceComponentCount;   // townMgr+0x60/+0x68 — what sub_1930 walks
+    int buildings  = mgr->field_0x28;                 // townMgr+0x20/+0x28 — the real building list
+    int citizens   = mgr->citizenCount;               // townMgr+0xa8
 
     if (attendance <= 0) {
         // NOT an assertion of absence. Say plainly that we cannot answer yet.
@@ -221,21 +227,21 @@ static void PlagueHospitalCensus(void* gw, void* healerProf) {
     // Registry is populated — an answer here is now meaningful.
     s_censusDone = true;
     uint32_t tidWpc = WorkPlaceComponent::TypeId();
-    uintptr_t arr = *(uintptr_t*)(mgr + 0x60);
+    AttendanceComponent** arr = mgr->attendanceComponents;
     int withWpc = 0, matches = 0;
     for (int i = 0; i < attendance && arr && tidWpc; i++) {
-        uintptr_t comp = *(uintptr_t*)(arr + (uintptr_t)i * 8);
+        AttendanceComponent* comp = arr[i];
         if (!comp) continue;
-        uintptr_t entity = *(uintptr_t*)(comp + 0x10);
+        ComponentEntity* entity = comp->_entity;
         if (!entity) continue;
-        int n = *(int*)(entity + 0x38);
-        uintptr_t comps = *(uintptr_t*)(entity + 0x30);
+        int n = entity->_componentCount;
+        Object::InternalPtr<Component>* comps = entity->_components;
         for (int j = 0; j < n && comps; j++) {
-            uintptr_t c = *(uintptr_t*)(comps + (uintptr_t)j * 8);
+            Component* c = comps[j].Get();
             if (!c) continue;
-            if (reinterpret_cast<Object::Base*>(c)->Type() != tidWpc) continue;   // B.3.8 bridge (slot 2)
+            if (c->Type() != tidWpc) continue;
             ++withWpc;
-            if (*(void**)(c + 0x48) == healerProf && healerProf != nullptr) ++matches;
+            if (static_cast<WorkPlaceComponent*>(c)->profession == healerProf && healerProf != nullptr) ++matches;
             break;
         }
     }
@@ -266,7 +272,7 @@ static void PlagueBootReport(CitizenComponent* citizen) {
         return;
     }
 
-    void* healerProf = desc->_professions[2];
+    Profession* healerProf = desc->_professions[2];
     void* diseaseList = nullptr;
     if (gw) diseaseList = gw->m_diseaseList;
 
@@ -296,15 +302,15 @@ static void PlagueBootReport(CitizenComponent* citizen) {
 // ============================================================
 // mgr = *(gw+0xf0): IBP array at +0xa0, count at +0xa8. Returns 1 on the first
 // entry whose +0x68 (Disease*) is set — the game allows one epidemic at a time.
-extern "C" char CitizenComp_AnyCitizenSick(void* mgr) {
+// The citizen roster is CitizenBehavior +0xa0 / +0xa8 (the null-manager test is the tree's).
+extern "C" char CitizenComp_AnyCitizenSick(const CitizenBehavior* mgr) {
     EnsureInit();
     if (!mgr) return 0;
-    int count = *(int*)((uintptr_t)mgr + 0xa8);
-    uintptr_t arr = *(uintptr_t*)((uintptr_t)mgr + 0xa0);
+    int count = mgr->citizenCount;
+    CitizenComponent* const* arr = mgr->citizens;
     for (int i = 0; i < count; i++) {
-        void* slot = (void*)(arr + (uintptr_t)i * 8);
-        uintptr_t citizen = *(uintptr_t*)slot;
-        if (*(int64_t*)(citizen + 0x68) != 0) return 1;
+        const CitizenComponent* citizen = arr[i];
+        if (citizen->disease != nullptr) return 1;
     }
     return 0;
 }
@@ -314,29 +320,27 @@ extern "C" char CitizenComp_AnyCitizenSick(void* mgr) {
 // ============================================================
 // arr = {data* @+0, count @+8, capacity @+0xc}. Resize to newCount: triple-capacity
 // heuristic on a single-element grow, copy preserved elements, fill new slots with
-// *fill. (The original's unrolled copy loop is semantically this.)
-extern "C" void CitizenComp_IntArrayResize(void* arrBase, int newCount, const uint32_t* fill) {
+// *fill. (The original's unrolled copy loop is semantically this.) Its one caller,
+// CatchDisease, grows an array of float running totals: the element is a float.
+extern "C" void CitizenComp_IntArrayResize(RawArray<float>* arr, int newCount, const float* fill) {
     EnsureInit();
-    uintptr_t* base = (uintptr_t*)arrBase;
-    int oldCount = *(int*)((uintptr_t)base + 8);
+    int oldCount = arr->size;
     if (newCount == oldCount) return;
 
-    uintptr_t oldData = *base;
-    *(int*)((uintptr_t)base + 8) = newCount;
-    int* capPtr = (int*)((uintptr_t)base + 0xc);
-    if (*capPtr < newCount) {
-        *capPtr = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) *capPtr = newCount * 3;
-        *base = (uintptr_t)System::MemoryAllocator::MemAlloc((uint64_t)*capPtr * 4, 4);
+    float* oldData = arr->data;
+    arr->size = newCount;
+    if (arr->capacity < newCount) {
+        arr->capacity = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) arr->capacity = newCount * 3;
+        arr->data = static_cast<float*>(System::MemoryAllocator::MemAlloc((uint64_t)arr->capacity * 4, 4));
     }
-    uintptr_t newData = *base;
+    float* newData = arr->data;
 
     int start = (oldData == newData) ? oldCount : 0;
     for (int i = start; i < newCount; i++) {
-        *(uint32_t*)(newData + (uintptr_t)i * 4) =
-            (i < oldCount) ? *(const uint32_t*)(oldData + (uintptr_t)i * 4) : *fill;
+        newData[i] = (i < oldCount) ? oldData[i] : *fill;
     }
-    if (oldData != newData && oldData) System::MemoryAllocator::MemFree((void*)oldData);
+    if (oldData != newData && oldData) System::MemoryAllocator::MemFree(oldData);
 }
 
 // ============================================================
@@ -357,91 +361,92 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
     if (!map || !pos || !radius || !outArr)
         return out;
 
-    // 0x2430-byte walker (0xFF records * 0x24 + header + map ptr at +0x2428).
-    alignas(16) u8 walker[0x2430];
-    Pf_QuadtreeInit_18dd0(reinterpret_cast<uintptr_t>(walker), map,
-                          0xbf800000u /* -1.0f bits */, 0x3f800000u /* +1.0f bits */);
+    // The signature is the C one other blocks' callers hold (tornadocomponent.cpp): the
+    // grid and the output array are typed once here.
+    const CharacterGrid* grid = reinterpret_cast<const CharacterGrid*>(map);   // LEFT: SIG Map_RadiusQuery_92990 (float* map)
+    RawArray<CharacterComponent*>* arr =
+        reinterpret_cast<RawArray<CharacterComponent*>*>(outArr);           // LEFT: SIG Map_RadiusQuery_92990 (void* outArr)
+
+    // The 0x2430-byte stack walker (retail: at RBP+0x10; top at walker+0x08, node r at
+    // walker+0x24 + r*0x24, cell at node+0x18, grid at walker+0x2428 — 0x140092a82,
+    // 0x140092b3b, 0x140092ad2), seeded with the -1.0f / +1.0f z pads.
+    CharacterGridWalker walker;
+    walker.Init(grid, -1.0f, 1.0f);   // 0x140018dd0
 
     float r  = *radius;
     float r2 = r * r;
 
     // Query box {min, max} around pos.
-    float qbox[6] = { pos[0] - r, pos[1] - r, pos[2] - r,
-                      pos[0] + r, pos[1] + r, pos[2] + r };
+    Box qbox = { Math::Vector3(pos[0] - r, pos[1] - r, pos[2] - r),
+                 Math::Vector3(pos[0] + r, pos[1] + r, pos[2] + r) };
 
-    uintptr_t* arr = (uintptr_t*)outArr;   // {data @+0, count @+8, cap @+0xc}
+    while (walker.top >= 0) {
+        const CharacterGridWalkerNode& rec = walker.nodes[walker.top];
+        int nodeId = rec.cell;
+        int nodeCount = grid->cellOccupancy[nodeId];
+        if (nodeCount <= 0) { walker.top--; continue; }
 
-    int* top = (int*)(walker + 0x8);
-    while (*top >= 0) {
-        u8* rec = walker + 0x24 + (uintptr_t)(*top) * 0x24;
-        int nodeId = *(int*)(rec + 0x18);
-        int nodeCount = *(int*)(*(uintptr_t*)((uintptr_t)map + 0x50) + (uintptr_t)nodeId * 4);
-        if (nodeCount <= 0) { (*top)--; continue; }
-
-        float* rp = (float*)rec;           // pos.xyz
-        float* re = (float*)(rec + 0xc);   // ext.xyz
+        const float* rp = rec.center;   // pos.xyz
+        const float* re = rec.extent;   // ext.xyz
         float sx = 2.0f * re[0], sy = 2.0f * re[1], sz = 1.0f * re[2];
-        float* zlo = (float*)(walker + 0x0c);   // (0, 0, -1)
-        float* zhi = (float*)(walker + 0x18);   // (0, 0, +1)
-        float nbox[6] = { rp[0] - sx + zlo[0], rp[1] - sy + zlo[1], rp[2] - sz + zlo[2],
-                          rp[0] + sx + zhi[0], rp[1] + sy + zhi[1], rp[2] + sz + zhi[2] };
-        if (!RtVolume_Box_Intersect(reinterpret_cast<const struct Box*>(qbox),
-                                    reinterpret_cast<const struct Box*>(nbox))) { (*top)--; continue; }
+        const float* zlo = walker.padLo;   // (0, 0, -1)
+        const float* zhi = walker.padHi;   // (0, 0, +1)
+        Box nbox = { Math::Vector3(rp[0] - sx + zlo[0], rp[1] - sy + zlo[1], rp[2] - sz + zlo[2]),
+                     Math::Vector3(rp[0] + sx + zhi[0], rp[1] + sy + zhi[1], rp[2] + sz + zhi[2]) };
+        if (!RtVolume_Box_Intersect(&qbox, &nbox)) { walker.top--; continue; }
 
-        int first = *(int*)(*(uintptr_t*)((uintptr_t)map + 0x30) + (uintptr_t)nodeId * 4);
+        int first = grid->cellHead[nodeId];
         if (first >= 0) {
-            uintptr_t recs = *(uintptr_t*)((uintptr_t)map + 0x10);
+            const CharacterGridSlot* recs = grid->slots;
             int idx = first;
             do {
-                uintptr_t linkIBP = *(uintptr_t*)(recs + (uintptr_t)idx * 0x18);
+                CharacterComponent* linkIBP = recs[idx].character.Get();
 
                 bool accept = true;
                 if (typeId != 0) {
                     accept = false;
-                    uintptr_t entity = *(uintptr_t*)(linkIBP + 0x10);
-                    int compCount = *(int*)(entity + 0x38);
-                    uintptr_t comps = *(uintptr_t*)(entity + 0x30);
+                    ComponentEntity* entity = linkIBP->_entity;
+                    int compCount = entity->_componentCount;
+                    Object::InternalPtr<Component>* comps = entity->_components;
                     for (int c = 0; c < compCount; c++) {
-                        void* compSlot = (void*)(comps + (uintptr_t)c * 8);
-                        uintptr_t comp = *(uintptr_t*)compSlot;
-                        if (static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type()) == typeId) { accept = true; break; }   // B.3.8 bridge (slot 2)
+                        Component* comp = comps[c].Get();
+                        if (static_cast<int>(comp->Type()) == typeId) { accept = true; break; }   // slot 2
                     }
                 }
 
                 if (accept) {
-                    uintptr_t link = linkIBP;
-                    uintptr_t model = *(uintptr_t*)(link + 0x68);
-                    Math::Vector3 diff(*(float*)(model + 0x158) - pos[0],
-                                       *(float*)(model + 0x15c) - pos[1],
-                                       *(float*)(model + 0x160) - pos[2]);
+                    CharacterComponent* link = linkIBP;
+                    const Math::Vector3& at = link->modelComponent->transform.translation;   // +0x68 -> +0x158
+                    Math::Vector3 diff(at.x - pos[0],
+                                       at.y - pos[1],
+                                       at.z - pos[2]);
                     float dist2 = diff.Dot(diff).v;
                     if (dist2 < r2) {
                         // inline 8-byte grow-array push (×3 capacity rule)
-                        int count = *(int*)((uintptr_t)arr + 8);
-                        uintptr_t oldData = *arr;
-                        *(int*)((uintptr_t)arr + 8) = count + 1;
-                        int* capPtr = (int*)((uintptr_t)arr + 0xc);
-                        if (*capPtr < count + 1) {
-                            *capPtr = count + 1;
-                            if (count != 0) *capPtr = (count + 1) * 3;
-                            *arr = (uintptr_t)System::MemoryAllocator::MemAlloc((uint64_t)*capPtr * 8, 8);
+                        int count = arr->size;
+                        CharacterComponent** oldData = arr->data;
+                        arr->size = count + 1;
+                        if (arr->capacity < count + 1) {
+                            arr->capacity = count + 1;
+                            if (count != 0) arr->capacity = (count + 1) * 3;
+                            arr->data = static_cast<CharacterComponent**>(
+                                System::MemoryAllocator::MemAlloc((uint64_t)arr->capacity * 8, 8));
                         }
-                        uintptr_t newData = *arr;
+                        CharacterComponent** newData = arr->data;
                         int start = (oldData == newData) ? count : 0;
                         for (int i = start; i <= count; i++) {
-                            *(uintptr_t*)(newData + (uintptr_t)i * 8) =
-                                (i < count) ? *(uintptr_t*)(oldData + (uintptr_t)i * 8)
-                                            : linkIBP;
+                            newData[i] = (i < count) ? oldData[i] : linkIBP;
                         }
-                        if (oldData != newData && oldData) System::MemoryAllocator::MemFree((void*)oldData);
+                        if (oldData != newData && oldData) System::MemoryAllocator::MemFree(oldData);
                     }
                 }
 
-                idx = *(int*)(recs + (uintptr_t)idx * 0x18 + 8);
+                // The ring link at slot +0x08 (0x140092ec7), which CharacterGrid.h names `prev`.
+                idx = recs[idx].prev;
             } while (idx != first);
         }
 
-        Pf_QuadtreeSubdivide_18880(reinterpret_cast<uintptr_t>(walker));   // pop node / push its children
+        walker.Subdivide();   // 0x140018880: pop node / push its children
     }
     return out;
 }
@@ -492,27 +497,28 @@ void CitizenComponent::Infect(Disease* disease) {
         // (0x140094e00): identical entry to the original inline block — color
         // 0xffff6060 (sev 3), type 0xb, icon 1, popup -1, tile -1 (null entity) —
         // including the drop-to-1x-speed tail on the settings +0x17 byte.
-        void* eventLog = gw->m_eventNotifier;
+        EventLog* eventLog = gw->m_eventNotifier;
         void* nameTable = disease->_stringTable;
         System::String diseaseName;
         bool haveName = false;
         if (nameTable) {
             // Disease::_stringTable is a void* member and _name the H5 raw String.
             ::new (&diseaseName) System::String(
-                reinterpret_cast<const UI::StringTable*>(nameTable)->GetText(  // B.3.6 bridge
-                    *reinterpret_cast<const System::String*>(&disease->_name)));
+                reinterpret_cast<const UI::StringTable*>(nameTable)->GetText(  // B.3.6 bridge   // LEFT: Disease.h (GAME-1) _stringTable void*
+                    *reinterpret_cast<const System::String*>(&disease->_name)));   // LEFT: Disease.h (GAME-1) H5 _name
             haveName = true;
         }
         if (eventLog) {
             // {3}/{4} unused by the type-0xb template; AddCitizenEvent maps null -> "".
-            EventLog_AddCitizenEvent(eventLog, 0xb, 3, nullptr,
-                                     haveName ? &diseaseName : nullptr, nullptr, nullptr);
+            // 0x140094e00, called by the member (the forwarder's null test is this one).
+            eventLog->AddCitizenEvent(0xb, 3, nullptr,
+                                      haveName ? &diseaseName : nullptr, nullptr, nullptr);
         }
     }
 
     this->disease = disease;
     CitizenDescription* desc = description;
-    float tol = fn_Random_RandFloatTol(rng);   // real fn (engine_funcs shim), not a ptr
+    float tol = rng->RandFloatTol();   // ?RandFloatTol@Random@System@@ 0x1800c8000
     field_0x70 = TimeFromSeconds(
         (tol * desc->_f98 + desc->_f94) * SecsPerMonth());
     field_0x78 = TimeFromSeconds(
@@ -545,7 +551,7 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
                     self, disease, (void*)GameUpdateLoop::_singleton), fflush(stderr);
         return;
     }
-    ((CitizenComponent*)self)->Infect((Disease*)disease);
+    ((CitizenComponent*)self)->Infect((Disease*)disease);   // LEFT: SIG CitizenComp_Infect (void* self / disease: 2 outside callers)
 }
 
 // ============================================================
@@ -585,21 +591,20 @@ void CitizenComponent::CatchDisease() {
     }
     int count = list->GetResourceCount();
 
-    struct { uintptr_t data; int count; int cap; } cum = { 0, 0, 0 };
+    RawArray<float> cum = { nullptr, 0, 0 };   // the running weight totals
     float total = 0.0f;
     for (int i = 0; i < count; i++) {
         ::Object::External* entry = list->_resources[i];
         Disease* d = Object::IsDerivedFromNullSafe(entry, s_tidDisease) ? static_cast<Disease*>(entry) : nullptr;
         total += d->_field3C;   // faithful: NULL deref if not Disease
-        uint32_t bits; memcpy(&bits, &total, 4);
-        CitizenComp_IntArrayResize(&cum, cum.count + 1, &bits);
+        CitizenComp_IntArrayResize(&cum, cum.size + 1, &total);
     }
 
     float target = rng->RandFloat() * total;
     float prev = 0.0f;
     int picked = -1;
     for (int i = 0; i < count; i++) {
-        float c = ((float*)cum.data)[i];
+        float c = cum.data[i];
         if (prev <= target && target < c) {
             ::Object::External* entry = list->_resources[i];
             Disease* d = Object::IsDerivedFromNullSafe(entry, s_tidDisease) ? static_cast<Disease*>(entry) : nullptr;
@@ -621,7 +626,7 @@ void CitizenComponent::CatchDisease() {
                 "target=%.4f -> NO BUCKET (nothing drawn)\n", self, count, total, target);
         fflush(stderr);
     }
-    if (cum.data) System::MemoryAllocator::MemFree((void*)cum.data);
+    if (cum.data) System::MemoryAllocator::MemFree(cum.data);
 }
 
 // ============================================================
@@ -651,32 +656,28 @@ void CitizenComponent::SpreadDisease() {
     uint32_t typeId = CitizenComponent::TypeId();   // cell 0x1401c7158 (D5)
     if (typeId == 0) return;
 
-    // ModelComponent's transform is raw storage (its owner's H5 member): read raw.
-    uintptr_t model = (uintptr_t)character->modelComponent;
-    float pos[3] = { *(float*)(model + 0x158), *(float*)(model + 0x15c),
-                     *(float*)(model + 0x160) };
+    // The model's translation (ModelComponent +0x148 transform, +0x158 translation).
+    const Math::Vector3& at = character->modelComponent->transform.translation;
+    float pos[3] = { at.x, at.y, at.z };
 
-    struct { uintptr_t data; int count; int cap; } found = { 0, 0, 0 };
+    RawArray<CharacterComponent*> found = { nullptr, 0, 0 };
     void* victim = nullptr;   // diag only
     void* scratch = nullptr;
-    // m_characterGrid is a void* member (the character quadtree): handed on raw.
-    Map_RadiusQuery_92990((float*)gw->m_characterGrid, &scratch, pos, &radius,
+    Map_RadiusQuery_92990((float*)gw->m_characterGrid, &scratch, pos, &radius,   // LEFT: SIG Map_RadiusQuery_92990 (float* map)
                           (int)typeId, &found);
 
-    for (int i = 0; i < found.count; i++) {
-        void* slot = (void*)(found.data + (uintptr_t)i * 8);
-        uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)slot + 0x10);
-        if (entity == (uintptr_t)_entity) continue;   // skip self
+    for (int i = 0; i < found.size; i++) {
+        ComponentEntity* entity = found.data[i]->_entity;
+        if (entity == _entity) continue;   // skip self
 
-        int64_t entityIBP = (int64_t)entity;
         CitizenComponent* citizenIBP = nullptr;
-        Entity_FindComponentByExeTypeId((void*)entityIBP, &citizenIBP, &typeId);
+        Entity_FindComponentByExeTypeId(entity, &citizenIBP, &typeId);
         if (citizenIBP && citizenIBP->disease == nullptr) {
             victim = citizenIBP;
             if (PlagueTraceOn()) {
                 fprintf(stderr, "[Plague] SPREAD citizen=%p roll=PASSED (%.4f <= %.4f) "
                         "radius=%.2f hits=%d -> INFECTING victim=%p\n",
-                        self, contagionRoll, contagion, radius, found.count, victim);
+                        self, contagionRoll, contagion, radius, found.size, victim);
                 fflush(stderr);
             }
             citizenIBP->Infect(disease);
@@ -687,10 +688,10 @@ void CitizenComponent::SpreadDisease() {
     if (!victim && PlagueTraceOn()) {
         fprintf(stderr, "[Plague] SPREAD citizen=%p roll=PASSED (%.4f <= %.4f) "
                 "radius=%.2f hits=%d -> NO ELIGIBLE VICTIM (all self or already sick)\n",
-                self, contagionRoll, contagion, radius, found.count);
+                self, contagionRoll, contagion, radius, found.size);
         fflush(stderr);
     }
-    System::MemoryAllocator::MemFree((void*)found.data);   // original frees even when null
+    System::MemoryAllocator::MemFree(found.data);   // original frees even when null
 }
 
 // ============================================================
@@ -762,14 +763,14 @@ char CitizenComponent::UpdateDisease(const System::Time* dtTime) {
         if (field_0x70 < 0) field_0x70 = 0;
 
         CitizenDescription* desc = description;
-        // m_citizenList is a void* member: the town health scale (+0x1a8) is read raw.
-        uintptr_t mgr = (uintptr_t)gw->m_citizenList;
+        // The town health scale is CitizenBehavior +0x1a8.
+        CitizenBehavior* mgr = gw->m_citizenList;
         System::Random* rng = gw->m_random;
 
         float t = 1.0f - health / desc->maxHealth;
         float a = (desc->_f84 - desc->_f7c) * t + desc->_f7c;
         float b = (desc->_f88 - desc->_f80) * t + desc->_f80;
-        float m = *(float*)(mgr + 0x1a8);
+        float m = mgr->field_0x1A8;
         float A = (desc->_f8c - a) * m + a;
         float B = (desc->_f90 - b) * m + b;
 
@@ -781,7 +782,7 @@ char CitizenComponent::UpdateDisease(const System::Time* dtTime) {
             return 1;
         }
         // field_0x60 is a System::Time held as its int64 ticks (CitizenComponent.h).
-        float elapsed = reinterpret_cast<const System::Time*>(&field_0x60)->AsSeconds();
+        float elapsed = reinterpret_cast<const System::Time*>(&field_0x60)->AsSeconds();   // LEFT: CitizenComponent.h (CIT-4) field_0x60 is int64_t ticks, retail System::Time
         field_0x60 = 0;
         float denom = A * MonthsPerYear() * SecsPerMonth() * B;
         float ratio = elapsed / denom;
