@@ -263,21 +263,11 @@ static void ReleaseInto(char** slot) {
 // (`INC R8W`, `SUB CX,R8W`). Reproduced by computing in uint16_t and
 // reinterpreting, so a pathological tree wraps where retail wraps.
 
-struct AvlNode {
-    char*    key;       // +0x00 — Filename::data
-    AvlNode* parent;    // +0x08
-    AvlNode* left;      // +0x10
-    AvlNode* right;     // +0x18
-    int16_t  balance;   // +0x20
-    int16_t  height;    // +0x22
-    uint32_t _pad24;    // +0x24
-};
-static_assert(sizeof(AvlNode) == sizeof(ModSetNode), "AvlNode is a view of ModSetNode");
-static_assert(offsetof(AvlNode, parent)  == 0x08, "0x180027f81 MOV [R8+8],RAX");
-static_assert(offsetof(AvlNode, left)    == 0x10, "0x180027f55 MOV RAX,[RDX+0x10]");
-static_assert(offsetof(AvlNode, right)   == 0x18, "0x180027e25 MOV RAX,[RDX+0x18]");
-static_assert(offsetof(AvlNode, balance) == 0x20, "0x180027529 MOV [RDX+0x20],CX");
-static_assert(offsetof(AvlNode, height)  == 0x22, "0x180027525 MOV [RDX+0x22],AX");
+// The node is `ModSetNode` itself (runtime/types/io/Modification.h): the key's
+// buffer at +0x00, parent / left / right at +0x08 / +0x10 / +0x18, the signed
+// balance / height pair at +0x20 / +0x22, each pinned there by this core's own
+// instructions.
+using AvlNode = ModSetNode;
 
 static inline int16_t ChildHeight(const AvlNode* c) {
     if (c == nullptr) return 0;                                  // XOR r,r
@@ -351,8 +341,8 @@ static void* AvlRotateLeft(AvlNode** root, AvlNode* n) {
 // non-null, in that order, and the second arm RE-READS `*cursor` because the
 // first arm may have rotated that node out from under it.
 extern "C" void RtColl_SetInsertFixup_1800274c0(void* rootv, void* cursorv) {
-    AvlNode** const root   = static_cast<AvlNode**>(rootv);
-    AvlNode** const cursor = static_cast<AvlNode**>(cursorv);
+    AvlNode** const root   = static_cast<AvlNode**>(rootv);     // LEFT: SIG PortedRetrace8 (erased void* signature, Collection.h R-COLL)
+    AvlNode** const cursor = static_cast<AvlNode**>(cursorv);   // LEFT: SIG as above
     if (*cursor == nullptr) return;                    // CMP qword [RDX],0 ; JZ
     do {
         AvlNode* n = *cursor;
@@ -430,14 +420,9 @@ namespace detail {
 void PortedRetrace8(void* set, void** slot) {               // 0x1800274c0
     RtIO::RtColl_SetInsertFixup_1800274c0(set, slot);
 }
-void* PortedRotateLeft8(void* set, void* n) {               // 0x180027e20
-    return RtIO::AvlRotateLeft(static_cast<RtIO::AvlNode**>(set),
-                               static_cast<RtIO::AvlNode*>(n));
-}
-void* PortedRotateRight8(void* set, void* n) {              // 0x180027f50
-    return RtIO::AvlRotateRight(static_cast<RtIO::AvlNode**>(set),
-                                static_cast<RtIO::AvlNode*>(n));
-}
+// PortedRotateLeft8 / PortedRotateRight8 (0x180027e20 / 0x180027f50 forwarders)
+// were deleted in B.4 P2 R-IO: no caller was left; the two rotations are
+// reached only from the retrace above.
 
 // `System::Filename`'s null state. Only a POINTER-shaped key has one, and the
 // descent treats it asymmetrically — a null NODE key skips the left test, a
@@ -474,8 +459,8 @@ static_assert(sizeof(ModFilenameSet::Node) == sizeof(ModSetNode),
 static_assert(offsetof(ModFilenameSet::Node, parent) == offsetof(ModSetNode, parent), "parent");
 static_assert(offsetof(ModFilenameSet::Node, left)   == offsetof(ModSetNode, left),   "left");
 static_assert(offsetof(ModFilenameSet::Node, right)  == offsetof(ModSetNode, right),  "right");
-static_assert(offsetof(ModFilenameSet::Node, balance) == offsetof(ModSetNode, w20),   "balance @ +0x20");
-static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, w22),   "height @ +0x22");
+static_assert(offsetof(ModFilenameSet::Node, balance) == offsetof(ModSetNode, balance), "balance @ +0x20");
+static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, height),  "height @ +0x22");
 
 // ===========================================================================
 // PART 2 — 0x180028610, Collection::Array<Mod>::SetSize(int n, const Mod& fill)
@@ -501,24 +486,22 @@ static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, w2
 // The `ADD RCX,RDI ; JZ` at 0x180028695 tests the ELEMENT address, not the
 // buffer, and is retail's only protection against a failed MemAlloc.
 // Transcribed, not hoisted — modification.cpp §4.
-extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void* fillv) {
-    ModArray* const a = static_cast<ModArray*>(av);
-    const Mod* const fill = static_cast<const Mod*>(fillv);
+extern "C" void RtColl_ArrayModSetSizeFill_180028610(ModArrayOf<Mod>* a, int n, const Mod* fill) {
 
     const int32_t oldSize = a->size;                    // MOV ESI,[RCX+8]
     if (n == oldSize) return;                           // CMP R14D,ESI ; JZ
 
-    Mod* const oldData = static_cast<Mod*>(a->data);   // MOV RBP,[RCX]  LEFT: ModArray's buffer is untyped (H5)
+    Mod* const oldData = a->data;                       // MOV RBP,[RCX]
     a->size = n;
     if (n > a->capacity) {
         a->capacity = n;
         if (n == oldSize + 1 && oldSize != 0)
             a->capacity = n + n * 2;                    // LEA EAX,[R14+R14*2]
-        a->data = ::System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(static_cast<int64_t>(a->capacity)) << 7, 8);
+        a->data = static_cast<Mod*>(::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(static_cast<int64_t>(a->capacity)) << 7, 8));
     }
 
-    Mod* const newData = static_cast<Mod*>(a->data);   // LEFT: as above
+    Mod* const newData = a->data;
     int32_t i = (oldData == newData) ? oldSize : 0;
     for (; i < n; ++i) {
         Mod* const dst = newData + i;                   // the 0x80 stride
@@ -624,7 +607,7 @@ void Modification::RefreshList() {
 
     // `this + 8` is the Array<Mod> header {mods, count, capacity}. Retail holds
     // it in RDI for the whole body and spills it at [RBP+0x208].
-    ModArray* const arr = reinterpret_cast<ModArray*>(&_mods);
+    ModArrayOf<Mod>* const arr = reinterpret_cast<ModArrayOf<Mod>*>(&_mods);   // LEFT: IO::Modification holds the Array<Mod> as three fields (_mods/_count/_capacity) that engine/ and save/ read by name (R-IO, wave X)
 
     // 0x1800af62c — UNCONDITIONAL. This is what makes the function idempotent
     // and therefore diffable; see the banner.
@@ -649,7 +632,7 @@ void Modification::RefreshList() {
 
     // 0x1800af65f..0x1800af669 — three zeroed slots. The pack-directory Filename
     // at [RBP+0x200] is NOT among them: GetPackDirectory constructs it.
-    ModArray found = { nullptr, 0, 0 };
+    RtIO::FilenameArray found = { nullptr, 0, 0 };
     {
         // `pattern` is a String::Set call (0x1800c95d0) landed on a Filename-
         // typed slot -- same eight bytes, and FindFiles wants both as
@@ -661,10 +644,8 @@ void Modification::RefreshList() {
 
         System::Filename packDir(fs->GetPackDirectory());        // 0x180007c10
 
-        static_cast<const ::IO::FileSystem*>(fs)->FindFiles(       // 0x1800ad7a0  B.3.x bridge
-            *reinterpret_cast<const RtSystem::String*>(&packDir),
-            *reinterpret_cast<const RtSystem::String*>(&pattern),
-            false, reinterpret_cast<RtIO::FilenameArray*>(&found));
+        static_cast<const ::IO::FileSystem*>(fs)->FindFiles(       // 0x1800ad7a0
+            packDir.AsString(), pattern.AsString(), false, &found);
     }  // ~packDir then ~pattern (reverse declaration order) release here --
        // retail released packDir then pattern too (0x1800af6b4, 0x1800af6ef).
 
@@ -672,7 +653,7 @@ void Modification::RefreshList() {
     // -----------------------------------------------------------------------
     // LOOP 1 — one iteration per .pkm found (0x1800af790 .. 0x1800b019f)
     // -----------------------------------------------------------------------
-    Filename* const foundData = static_cast<Filename*>(found.data);
+    Filename* const foundData = found.data;
     for (int32_t i = 0; i < found.size; ++i) {
         // The stack Mod, zeroed member by member at 0x1800af790..0x1800af7d7.
         // NOTE what is NOT zeroed: +0x24/+0x28/+0x2c (icon width, icon height,
@@ -892,26 +873,26 @@ void Modification::RefreshList() {
     for (int32_t i = 0; i < _count; ++i) {
         for (int32_t j = 0; j < _count; ++j) {
             if (i == j) continue;                                // CMP R13,R15 ; JZ
-            Mod* const mods = static_cast<Mod*>(arr->data);      // re-read, as retail does
-            AvlNode* node = reinterpret_cast<AvlNode*>(mods[i].set.root);
+            Mod* const mods = arr->data;                         // re-read, as retail does
+            AvlNode* node = mods[i].set.root;
             if (node == nullptr) continue;
             while (node->left != nullptr) node = node->left;     // 0x1800b0210
             while (node != nullptr) {
-                AvlNode* probe = reinterpret_cast<AvlNode*>(mods[j].set.root);
+                AvlNode* probe = mods[j].set.root;
                 bool hit = false;
                 while (probe != nullptr) {
                     // 0x1800b0234 — go LEFT while probe->key is non-null and
                     // node->key sorts before it (a null node->key sorts first).
                     bool goLeft;
-                    if (probe->key == nullptr)     goLeft = false;
-                    else if (node->key == nullptr) goLeft = true;
-                    else goLeft = (ModStrICmp(node->key, probe->key) < 0);
+                    if (probe->key.data == nullptr)     goLeft = false;
+                    else if (node->key.data == nullptr) goLeft = true;
+                    else goLeft = (ModStrICmp(node->key.data, probe->key.data) < 0);
                     if (goLeft) { probe = probe->left; continue; }
                     // 0x1800b0258 — a null node->key here is a MATCH, and so is
                     // any probe->key that does not sort before it.
-                    if (node->key == nullptr) { hit = true; break; }
-                    if (probe->key == nullptr) { probe = probe->right; continue; }
-                    if (ModStrICmp(probe->key, node->key) < 0) { probe = probe->right; continue; }
+                    if (node->key.data == nullptr) { hit = true; break; }
+                    if (probe->key.data == nullptr) { probe = probe->right; continue; }
+                    if (ModStrICmp(probe->key.data, node->key.data) < 0) { probe = probe->right; continue; }
                     hit = true;
                     break;
                 }
@@ -946,7 +927,7 @@ void Modification::RefreshList() {
     // argument is a stack slot the callee never reads.
     if (arr->size > 1) {
         void* scratch = nullptr;
-        RtIo_Modification_SortMods(static_cast<Mod*>(arr->data),   // LEFT: ModArray's buffer is untyped (H5)
+        RtIo_Modification_SortMods(arr->data,
                                    arr->size, &scratch);
     }
 

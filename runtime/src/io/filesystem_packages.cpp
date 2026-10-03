@@ -328,11 +328,7 @@ namespace {
 // body zeroes both at 0x1800ab48e/96 and never touches a capacity — so this is
 // deliberately NOT the full 16-byte ArrayHdr. FindFiles receives `&tmp` and
 // owns the growth.
-struct FoundArray {
-    Filename* data;
-    int32_t   count;
-    int32_t   _capacity;   // FindFiles' business, not read here
-};
+// FindFiles' out-parameter is `RtIO::FilenameArray` (runtime/types/io/FileSystem.h).
 
 // ClosePackages passes `IO::FileSystem::_singleton` (ord 4811, retail
 // 0x1801fc6a8), not its own `this`, to CloseFile — retail loads
@@ -582,7 +578,7 @@ static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndex
 // Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
 // this translation unit's `RtIO`-scoped names — the anonymous-namespace helpers
-// `AppendPackfile`, `IndexFind`, `PathStrICmp`, `FoundArray`,
+// `AppendPackfile`, `IndexFind`, `PathStrICmp`,
 // `FileSystemSingletonSlot`, `PackfileIndexSet` and the door typedefs — as
 // `RtIO::X`. Every POD is spelled `RtIO::` or `RtSystem::` and every real class
 // `System::` (B34_RULES section 7.2).
@@ -680,10 +676,10 @@ void FileSystem::LoadPackages() {
 
     ClosePackages();
 
-    RtIO::FoundArray found;
-    found.data      = nullptr;   // MOV qword ptr [RBP-0x20],0
-    found.count     = 0;         // MOV qword ptr [RBP-0x18],0
-    found._capacity = 0;
+    RtIO::FilenameArray found;
+    found.data     = nullptr;   // MOV qword ptr [RBP-0x20],0
+    found.size     = 0;         // MOV qword ptr [RBP-0x18],0
+    found.capacity = 0;
 
     // The two path values live only until FindFiles returns; the inner scope is
     // retail's release point, and the destructors run in retail's order —
@@ -699,16 +695,14 @@ void FileSystem::LoadPackages() {
         // GetPackDirectory RETURNED (RAX) as RDX, which is the same pointer as
         // &packDir — the hidden return slot is handed straight on. Fifth argument
         // goes on the stack at [RSP+0x20].
-        FindFiles(*reinterpret_cast<const RtSystem::String*>(&packDir),     // B.3.x bridge
-                  *reinterpret_cast<const RtSystem::String*>(&pattern),
-                  false, reinterpret_cast<RtIO::FilenameArray*>(&found));
+        FindFiles(packDir.AsString(), pattern, false, &found);
     }
 
     // ---- LOOP 1: one PackageFile per discovered *.pkg ---------------------
     // Retail allocates 0xF0 bytes aligned 8 under the allocator lock, runs the
     // constructor only `if (p)`, then ReadPackfile, then appends. ENDGAME
     // B.3.9 IO: the constructor is `IO::PackageFile`'s own, on the same block.
-    for (int32_t i = 0; i < found.count; ++i) {
+    for (int32_t i = 0; i < found.size; ++i) {
         void* block = RtIO::RtMemAlloc(0xF0u, 8);
         PackageFile* pkg = nullptr;
         if (block != nullptr)
@@ -853,12 +847,12 @@ void FileSystem::LoadPackages() {
     // block free is guarded only on the pointer). Note it uses the same
     // lock/Free/unlock as everywhere else; RtMemFree is that sequence with the
     // null test inside.
-    const int32_t foundCount = found.count;   // the shadow below runs after the zeroing
-    for (int64_t i = 0; i < static_cast<int64_t>(found.count); ++i)
+    const int32_t foundCount = found.size;   // the shadow below runs after the zeroing
+    for (int64_t i = 0; i < static_cast<int64_t>(found.size); ++i)
         RtIO::Sys(found.data[i]).~Filename();
     RtIO::RtMemFree(found.data);
     found.data  = nullptr;
-    found.count = 0;
+    found.size = 0;
 
 
 }

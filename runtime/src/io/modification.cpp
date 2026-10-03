@@ -362,8 +362,8 @@ static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
-    n->w20 = 0;                                           // MOV dword [RDI+0x20],EAX
-    n->w22 = 0;
+    n->balance = 0;                                       // MOV dword [RDI+0x20],EAX
+    n->height = 0;
     return n;
 }
 
@@ -388,8 +388,8 @@ static_assert(offsetof(ModSetT::Node, right)  == offsetof(ModSetNode, right),  "
 void* RtColl_SetCloneSubtree_1800104f0(void* set, const void* srcv) {
     const ModSetNode* src = static_cast<const ModSetNode*>(srcv);
     ModSetNode* dup = SetNodeNew(set, &src->key, nullptr);
-    dup->w22 = src->w22;             // copied in THIS order: +0x22 then +0x20
-    dup->w20 = src->w20;
+    dup->height = src->height;       // copied in THIS order: +0x22 then +0x20
+    dup->balance = src->balance;
     if (src->left != nullptr) {
         ModSetNode* c = static_cast<ModSetNode*>(
             RtColl_SetCloneSubtree_1800104f0(set, src->left));

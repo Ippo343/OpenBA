@@ -392,14 +392,8 @@ using RtSystem::RtSystem_WideString_CtorFromString;
 // Collection.h). Spelled locally with the element type so the append code below
 // reads as what it is; lane PKG's `FoundArray` in filesystem_packages.cpp is
 // the identical shape and is what the live call site passes.
-struct FilenameArray {
-    Filename* data;       // +0x00
-    int32_t   count;      // +0x08
-    int32_t   capacity;   // +0x0c
-};
-static_assert(sizeof(FilenameArray) == 0x10, "Collection::Array is 16 bytes");
-static_assert(offsetof(FilenameArray, count)    == 0x08, "0x180026880: MOV EBP,[RCX+0x8]");
-static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[RCX+0xc]");
+// `FilenameArray` (the 16-byte out-parameter header) is defined in
+// runtime/types/io/FileSystem.h, with the 0x180026880 pins that stood here.
 
 // The one remaining POD reinterpretation this file needs: System::WideString is
 // not a B.3.1 class, so its ctor still takes the POD `RtSystem::String*` and the
@@ -494,7 +488,7 @@ void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill) {
 static void AppendFilename(FilenameArray* out, const System::Filename* value) {
     // 0x1800ad900: `MOV EDX,[RDI+8] ; INC EDX` — newSize is size+1, read fresh
     // from the header each iteration.
-    rtcoll::AsArray<&kSpec_Filename>(out)->SetSizeFill(out->count + 1, value);
+    rtcoll::AsArray<&kSpec_Filename>(out)->SetSizeFill(out->size + 1, value);
 }
 
 // ============================================================================
@@ -711,17 +705,15 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
 
 namespace IO {
 
-void FileSystem::FindFiles(const RtSystem::String& dirRef,
-                           const RtSystem::String& patternRef,
+void FileSystem::FindFiles(const System::String& dir,
+                           const System::String& pattern,
                            bool recursive, RtIO::FilenameArray* out) const {
-    const RtSystem::String* const dir     = &dirRef;
-    const RtSystem::String* const pattern = &patternRef;
 
-    const int32_t before = out->count;
+    const int32_t before = out->size;
     (void)before;
     // The registered signature is retail's, so the two POD parameters come
     // through the one transitional bridge (pod_bridge.h).
-    RtIO::FindFilesImpl(this, RtIO::Sys(dir), RtIO::Sys(pattern), recursive, out);
+    RtIO::FindFilesImpl(this, &dir, &pattern, recursive, out);
 
 }
 

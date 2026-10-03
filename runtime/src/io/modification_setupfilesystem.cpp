@@ -324,12 +324,12 @@ PathIdNode* SnapshotFind(PathIdNode* node, const char* search) {
 // present, INCLUDING a directory. Retail compares against -1 and nothing else
 // (0x1800aefce `CMP EAX,-0x1 / SETNZ`).
 bool PlatformFileExists(const System::Filename* path) {
-    struct { void* data; } ws = { nullptr };
+    struct { wchar_t* data; } ws = { nullptr };   // WideString::_data
     // Filename read AS a String -- the same same-layout cast retail performs
     // by pointer cast throughout (Filename.h header note); WideString is not
     // a B.3.1 class, so it still wants the POD String pointer.
     ::new (static_cast<void*>(&ws)) System::WideString(path->AsString());   // 0x1800aefbf
-    const DWORD attrs = ::GetFileAttributesW(static_cast<LPCWSTR>(ws.data));
+    const DWORD attrs = ::GetFileAttributesW(ws.data);
     const bool ok = (attrs != 0xFFFFFFFFu);                    // 0x1800aefce
     RtString_ReleaseInline(reinterpret_cast<String*>(&ws));    // 0x1800aefd5
     return ok;
@@ -375,9 +375,8 @@ void Modification::SetupFileSystem() {
     // That is B34_RULES section 7.2's grep hazard; it presents as a build error
     // rather than a silent rebind, which is exactly why the rule says to spell
     // the POD namespace out.
-    RtIO::FileSystem* const fs =
-        reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-    void* const extFactory = ::Object::ExternalFactory::_singleton;
+    ::IO::FileSystem* const fsObj = ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
+    ::Object::ExternalFactory* const extFactory = ::Object::ExternalFactory::_singleton;
     // `Object::Factory::_singleton` is captured HERE, at 0x1800aebef, and used
     // only in act 4. Retail spills it to [RBP-0x39] across the whole function
     // rather than re-reading it, and so does this.
@@ -392,10 +391,7 @@ void Modification::SetupFileSystem() {
     // ENDGAME B.3.9 OBJ: the class record (the minted one is retired).
     const uint32_t kExternalTypeId = ::Object::External::TypeId();
 
-    const ::Object::ExternalFactory* const extFactoryObj =
-        static_cast<const ::Object::ExternalFactory*>(extFactory);
-    ::IO::FileSystem* const fsObj =
-        reinterpret_cast<::IO::FileSystem*>(fs);                     // B.3.x bridge
+    const ::Object::ExternalFactory* const extFactoryObj = extFactory;
 
     // ========================= ACT 1 — SNAPSHOT =============================
     PathIdSet snapshot = { nullptr, 0, 0 };                    // [RBP-0x49]
@@ -412,8 +408,7 @@ void Modification::SetupFileSystem() {
                 ::Object::ExternalFactory::GetCompiledPath(raw));
         }  // ~raw releases here, exactly where retail's 0x1800aec3c release sat
 
-        const uint32_t id = fsObj->GetPackfileId(              // 0x1800aec9f
-            *reinterpret_cast<const RtSystem::Filename*>(&compiled));
+        const uint32_t id = fsObj->GetPackfileId(compiled);    // 0x1800aec9f
         void* outSlot = nullptr;                               // [RBP-0x4?]
         rtpathid::Insert(reinterpret_cast<rtsetavl::Set*>(&snapshot),       // 0x1800aecb7
                          reinterpret_cast<rtsetavl::Node**>(&outSlot),
@@ -428,7 +423,7 @@ void Modification::SetupFileSystem() {
 
     {   // ~Array<Filename>(fs->userPackFilenames) -- 0x1800098d0, the body
         // modification.cpp owns.
-        RtIO::RtColl_ArrayFilenameDtor_1800098d0(&fs->userPackFilenames);   // 0x1800aed44
+        RtIO::RtColl_ArrayFilenameDtor_1800098d0(&fsObj->_userPackFilenames);   // 0x1800aed44
     }
 
     {
@@ -438,8 +433,8 @@ void Modification::SetupFileSystem() {
             Mod* const m = &_mods[i];
             m->order = i;                                      // 0x1800aed64
             if (m->enabled != 0)                               // 0x1800aed68
-                RtIO::RtColl_ArraySetSizeFill_180026880(&fs->userPackFilenames,   // 0x180026880
-                       fs->userPackFilenameCount + 1, &m->file);
+                RtIO::RtColl_ArraySetSizeFill_180026880(&fsObj->_userPackFilenames,   // 0x180026880
+                       fsObj->_userPackFilenameCount + 1, &m->file);
         }
     }
 
@@ -461,8 +456,7 @@ void Modification::SetupFileSystem() {
 
         // `TEST RBX,RBX` at 0x1800aeefd is redundant on the found path and is
         // kept; the id compare is what decides.
-        if (hit != nullptr && hit->value != fsObj->GetPackfileId(
-                *reinterpret_cast<const RtSystem::Filename*>(&compiled))) {
+        if (hit != nullptr && hit->value != fsObj->GetPackfileId(compiled)) {
             System::Filename compiled2;                         // [RBP+0x77]
             {
                 System::Filename raw2(AsExt(ext)->GetPath());   // 0x1800aef22  [RBP-0x51]
@@ -473,11 +467,11 @@ void Modification::SetupFileSystem() {
             // `FileSystem::Exists` OPEN-CODED with its two gate bytes; see the
             // banner for why this is not a call to Exists.
             bool present = false;
-            if (fs->existsInPackfileGate != 0) {               // 0x1800aef90
+            if (fsObj->_existsInPackfileGate != 0) {           // 0x1800aef90
                 present = fsObj->ExistsInPackfile(
                     *reinterpret_cast<const RtSystem::Filename*>(&compiled2));
             }
-            if (!present && fs->platformExistsGate != 0)       // 0x1800aefab
+            if (!present && fsObj->_platformExistsGate != 0)   // 0x1800aefab
                 present = PlatformFileExists(&compiled2);
 
             if (present) {
@@ -510,7 +504,7 @@ void Modification::SetupFileSystem() {
             } else {
                 // ---- drop it, 0x1800af195 ----------------------------------
                 System::Filename raw4(AsExt(ext)->GetPath());   // 0x1800af19d  [RBP-0x?]
-                static_cast<::Object::ExternalFactory*>(extFactory)->ForceUnload(raw4);   // 0x1800af1a9
+                extFactory->ForceUnload(raw4);                  // 0x1800af1a9
                 // ~raw4 releases here, retail's release right after ForceUnload
             }
 

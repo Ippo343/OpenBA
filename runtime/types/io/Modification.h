@@ -71,14 +71,20 @@ struct ModSetNode {
     ModSetNode*        parent;   // +0x08
     ModSetNode*        left;     // +0x10
     ModSetNode*        right;    // +0x18
-    uint16_t           w20;      // +0x20 — copied verbatim by the clone
-    uint16_t           w22;      // +0x22 — ditto
+    // +0x20 / +0x22: the AVL balance factor and height. SIGNED: the retrace
+    // (0x1800274c0) tests them with `CMP CX,1 / JLE`, `CMP word [RDX+0x20],-1 /
+    // JGE` and `TEST CX,CX / JS`, and AvlUpdate writes +0x20 = rh - lh, +0x22 =
+    // max(lh, rh) (0x180027529 / 0x180027525). The clone copies both verbatim.
+    int16_t            balance;  // +0x20
+    int16_t            height;   // +0x22
     uint32_t           _pad24;   // +0x24
 };
 static_assert(sizeof(ModSetNode) == 0x28, "node alloc at 0x180010570 asks for 0x28");
 static_assert(offsetof(ModSetNode, parent) == 0x08, "0x1800105e8 MOV [RDI+8],RSI");
 static_assert(offsetof(ModSetNode, left)   == 0x10, "0x180010535 MOV [RBX+0x10],RAX");
 static_assert(offsetof(ModSetNode, right)  == 0x18, "0x18001054e MOV [RBX+0x18],RAX");
+static_assert(offsetof(ModSetNode, balance) == 0x20, "0x180027529 MOV [RDX+0x20],CX");
+static_assert(offsetof(ModSetNode, height)  == 0x22, "0x180027525 MOV [RDX+0x22],AX");
 
 struct ModSet {
     ModSetNode* root;    // +0x00

@@ -348,7 +348,7 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
 
     // WideString ws(*name); CreateFileW(ws, ...). ??0WideString(const String&),
     // constructed into the POD slot and released by hand, as before.
-    struct { void* data; } ws = { nullptr };                 // 1800add98
+    struct { wchar_t* data; } ws = { nullptr };   // WideString::_data                 // 1800add98
     ::new (static_cast<void*>(&ws)) System::WideString(       // B.3.x bridge
         name.AsString());                                    // 1800addad
 
@@ -357,7 +357,7 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // (FILE_SHARE_READ), lpSecurityAttributes NULL, dwCreationDisposition 3
     // (OPEN_EXISTING), dwFlagsAndAttributes 0x80 (FILE_ATTRIBUTE_NORMAL),
     // hTemplateFile NULL.
-    const HANDLE h = ::CreateFileW(static_cast<LPCWSTR>(ws.data),
+    const HANDLE h = ::CreateFileW(ws.data,
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
     fi->winHandle = h;          // 1800adddd
 

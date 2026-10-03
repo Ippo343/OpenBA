@@ -169,7 +169,7 @@ namespace {
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static `::System::Configuration::_singleton`
 // IS this cell now (name door, address door and this member are the same eight
 // bytes) -- read fresh, no lazy cache, exactly as filesystem_startup.cpp reads it.
-void* ConfigurationSingleton() {
+::System::Configuration* ConfigurationSingleton() {
     return ::System::Configuration::_singleton;
 }
 
@@ -185,13 +185,13 @@ void* ConfigurationSingleton() {
 // (0x180026d40): assign, then normalise. Those sites assign through
 // `SysFile(<the FileSystem String member>)`.
 
-bool ConfigHasKey(void* cfg, const char* key) {
+bool ConfigHasKey(::System::Configuration* cfg, const char* key) {
     // ENDGAME B.3.9 SS1: the `cfg == nullptr` guard this used to carry was the
     // "belt" for the storage row not existing at all (see the header note);
     // that reason is gone now that `?_singleton@Configuration@System@@` is the
     // class static, so retail's genuinely-unguarded dereference is restored.
     System::String k(key);
-    void* map = static_cast<uint8_t*>(cfg) + 0x10;
+    void* map = &cfg->_mapRoot;                     // Configuration + 0x10
     // Unexported (no name in either build): 0x18002ace0 is
     // RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
     return RtSystem_ConfigMap_Find(
@@ -201,7 +201,7 @@ bool ConfigHasKey(void* cfg, const char* key) {
 // The `-pathres` / `-pathdat` / `-pathpkg` override, which retail emits three
 // times verbatim: look the key up, and if it is there rebuild the target as
 // `Format("%s%s%s\\", root, sub, <the switch's value>)`.
-void ApplyPathOverride(void* cfg, const char* key, System::Filename* target,
+void ApplyPathOverride(::System::Configuration* cfg, const char* key, System::Filename* target,
                        const char* rootData, const char* subData) {
     if (!ConfigHasKey(cfg, key)) return;
 
@@ -209,7 +209,7 @@ void ApplyPathOverride(void* cfg, const char* key, System::Filename* target,
     // The by-value return constructs `value` in place (retail's hidden
     // return slot), as the door that stood here did into a null String.
     System::String value(
-        static_cast<const ::System::Configuration*>(cfg)->GetCommandLineString(k));
+        cfg->GetCommandLineString(k));
 
     // assign-then-AdjustDelimiters == Filename::operator=(const String&),
     // retail 0x180026d40. The three manual releases retail's compiler emitted
@@ -312,7 +312,7 @@ void FileSystem::SetupDirectories() {
     System::Filename root(GetRootDirectory());
 
     // --- 0x1800abd2e: R13 = Configuration::_singleton ----------------------
-    void* const cfg = RtIO::ConfigurationSingleton();
+    ::System::Configuration* const cfg = RtIO::ConfigurationSingleton();
 
     // --- 0x1800abd44: String cmdPath = root + "cmd.txt" --------------------
     // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z, 0x1800c92d0. Retail passes the
@@ -368,7 +368,7 @@ void FileSystem::SetupDirectories() {
             CloseFile(fi);
 
             System::String text(buf);
-            static_cast<::System::Configuration*>(cfg)->SetCommandLine(text);
+            cfg->SetCommandLine(text);
             RtIO::RtMemFree(buf);
             // ~text is retail's release at 0x1800abf4b.
         }
@@ -385,7 +385,7 @@ void FileSystem::SetupDirectories() {
     if (RtIO::ConfigHasKey(cfg, "bin")) {
         System::String k("bin");
         System::String value(
-            static_cast<const ::System::Configuration*>(cfg)->GetCommandLineString(k));
+            cfg->GetCommandLineString(k));
         sub = value;   // retail's inlined operator= at 0x1800ac0b2
     }
 
@@ -394,10 +394,8 @@ void FileSystem::SetupDirectories() {
     // (`MOV R8D,dword [R13+0x20]` / `[R13+0x28]`). Both are zero on every boot
     // of this project — the constructor zeroes them and nothing writes them
     // before Engine::Startup step 3 — giving "Win" and "Data".
-    const int platformId = cfg ? *reinterpret_cast<const int32_t*>(
-                                      static_cast<const uint8_t*>(cfg) + 0x20) : 0;
-    const int buildId    = cfg ? *reinterpret_cast<const int32_t*>(
-                                      static_cast<const uint8_t*>(cfg) + 0x28) : 0;
+    const int platformId = cfg ? *reinterpret_cast<const int32_t*>(&cfg->_unusedData) : 0;  // LEFT: Configuration.h declares +0x20 `void* _unusedData`; retail reads a dword here (R-SYS-1)
+    const int buildId    = cfg ? cfg->_unusedCount : 0;                    // +0x28
     // Both are hidden-return-slot entry points owned by another file and still
     // POD-shaped, so the value lands in a POD and is stolen into the class.
     RtSystem::String platformPod{nullptr};
