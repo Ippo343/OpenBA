@@ -16,20 +16,16 @@
 //   9a40 (0x140029a40) id-map insert, 4b40 (0x140014b40) entity-tree rebalance,
 //   e320 (0x14000e320) node-free, ead0 (0x14012ead0)/eb50 (0x14012eb50) work-slot ops.
 //
-// Node layouts (verified against disassembly):
-//   0x30 node (cfb0 tree): +0x00 u32 key, +0x08 u64 payload, +0x10 parent, +0x18 left,
-//                          +0x20 right, +0x28 u16, +0x2a u16.
-//   0x38 node (ccf0 tree): +0x00 u64 key, +0x08 subtree(0x30 nodes), +0x10 u32, +0x18
-//                          parent, +0x20 left, +0x28 right, +0x30 u32 balance.
-//   0x28 node (88a0 primary): +0x00 u32 key(prio), +0x04 u32 id, +0x08 parent, +0x10 left,
-//                          +0x18 right, +0x20 u32 balance.
-//   0x30 node (88a0 category/final): +0x00 u32 id, +0x08 u64 payload, +0x10 parent,
-//                          +0x18 left, +0x20 right, +0x28 u32 balance.
+// Node layouts: Game/WorkSchedulerNodes.h (WorkSchedulerIdNode 0x30, WorkSchedulerCountNode
+// 0x28, WorkSchedulerBucketNode 0x38); the scheduler itself: Game/WorkScheduler.h.
 //
-// Faithful offset-by-offset port.
+// Faithful port; every node field is read by name.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"
 #include "Work/Work.h"   // B.3.8 CB1a (Work::GetTarget)
+#include "Component/WorkComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -40,153 +36,151 @@
 #include "Work/exe_bodies.h"
 #include "Player/exe_bodies.h"
 
-// ---- exe helpers: called by name (Action/Work/Player exe_bodies.h) ---------------
-
-static void* WS_Alloc(size_t n) {
-    return System::MemoryAllocator::MemAlloc((int)n, 8);
-}
-
 // ==================================================================================
-// FUN_14002cfb0 — recursive deep-copy of a 0x30-node subtree. param_1 = ctx (unused
-// beyond being threaded through recursion); src = source node. Returns the copy.
+// FUN_14002cfb0 — recursive deep-copy of a 0x30-node subtree. ctx = the tree header
+// being filled (unused beyond being threaded through recursion); src = source node.
+// Returns the copy.
 // ==================================================================================
-static void* WS_cfb0(void* ctx, uint8_t* src) {
-    uint8_t* dst = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
-    uint8_t* out = nullptr;
+static WorkSchedulerIdNode* WS_cfb0(WorkSchedulerTree* ctx, const WorkSchedulerIdNode* src) {
+    WorkSchedulerIdNode* dst = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
+    WorkSchedulerIdNode* out = nullptr;
     if (dst) {
-        *reinterpret_cast<uint32_t*>(dst + 0x00) = *reinterpret_cast<uint32_t*>(src + 0x00);
-        *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;
-        *reinterpret_cast<uint64_t*>(dst + 0x08) = *reinterpret_cast<uint64_t*>(src + 0x08);
-        *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;
-        *reinterpret_cast<uint64_t*>(dst + 0x18) = 0;
-        *reinterpret_cast<uint64_t*>(dst + 0x20) = 0;
-        *reinterpret_cast<uint32_t*>(dst + 0x28) = 0;
+        dst->key = src->key;
+        dst->work = Object::InternalPtr<Work>();
+        dst->work = src->work;
+        dst->parent = nullptr;
+        dst->left = nullptr;
+        dst->right = nullptr;
+        dst->balance = 0;
+        dst->height = 0;
         out = dst;
     }
     if (!out) return nullptr;
-    *reinterpret_cast<uint16_t*>(out + 0x2a) = *reinterpret_cast<uint16_t*>(src + 0x2a);
-    *reinterpret_cast<uint16_t*>(out + 0x28) = *reinterpret_cast<uint16_t*>(src + 0x28);
-    uint8_t* left = *reinterpret_cast<uint8_t**>(src + 0x18);
+    out->height = src->height;
+    out->balance = src->balance;
+    WorkSchedulerIdNode* left = src->left;
     if (left) {
-        void* c = WS_cfb0(ctx, left);
-        *reinterpret_cast<void**>(out + 0x18) = c;
-        if (c) *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(c) + 0x10) = out;
+        WorkSchedulerIdNode* c = WS_cfb0(ctx, left);
+        out->left = c;
+        if (c) c->parent = out;
     }
-    uint8_t* right = *reinterpret_cast<uint8_t**>(src + 0x20);
+    WorkSchedulerIdNode* right = src->right;
     if (right) {
-        void* c = WS_cfb0(ctx, right);
-        *reinterpret_cast<void**>(out + 0x20) = c;
-        if (c) *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(c) + 0x10) = out;
+        WorkSchedulerIdNode* c = WS_cfb0(ctx, right);
+        out->right = c;
+        if (c) c->parent = out;
     }
     return out;
 }
 
 // ==================================================================================
 // TradeWork_impl_ccf0_sub_ceb0 — 0x38-node copy-ctor. dst = fresh 0x38 buffer,
-// src = source node, parent = parent to record at dst+0x18.
+// src = the bucket record to copy, parent = parent to record at dst+0x18.
 // ==================================================================================
-static void* WS_ceb0(uint8_t* dst, uint8_t* src, void* parent) {
-    *reinterpret_cast<uint64_t*>(dst + 0x00) = *reinterpret_cast<uint64_t*>(src + 0x00);   // key
-    *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;                                          // subtree
-    *reinterpret_cast<uint32_t*>(dst + 0x10) = 0;
+static WorkSchedulerBucketNode* WS_ceb0(WorkSchedulerBucketNode* dst, const WorkSchedulerBucket* src,
+                                        WorkSchedulerBucketNode* parent) {
+    dst->bucket.key = src->key;                  // key
+    dst->bucket.entries.root = nullptr;          // subtree
+    dst->bucket.entries.count = 0;
     // The original guards `src+1 != dst+1` (self-copy); for distinct nodes copy subtree+int.
-    if (src + 0x08 != dst + 0x08) {
-        uint8_t* sub = *reinterpret_cast<uint8_t**>(src + 0x08);
+    if (&src->entries != &dst->bucket.entries) {
+        WorkSchedulerIdNode* sub = src->entries.root;
         if (sub) {
-            void* c = WS_cfb0(dst + 0x08, sub);
-            *reinterpret_cast<void**>(dst + 0x08) = c;
+            WorkSchedulerIdNode* c = WS_cfb0(&dst->bucket.entries, sub);
+            dst->bucket.entries.root = c;
         }
-        *reinterpret_cast<uint32_t*>(dst + 0x10) = *reinterpret_cast<uint32_t*>(src + 0x10);
+        dst->bucket.entries.count = src->entries.count;
     }
-    *reinterpret_cast<void**>(dst + 0x18) = parent;                                        // parent
-    *reinterpret_cast<uint64_t*>(dst + 0x20) = 0;                                          // left
-    *reinterpret_cast<uint64_t*>(dst + 0x28) = 0;                                          // right
-    *reinterpret_cast<uint32_t*>(dst + 0x30) = 0;                                          // balance
+    dst->parent = parent;                        // parent
+    dst->left = nullptr;                         // left
+    dst->right = nullptr;                        // right
+    dst->balance = 0;                            // balance
+    dst->height = 0;
     return dst;
 }
 
 // ==================================================================================
-// TradeWork_impl_ccf0 — BST insert (0x38 nodes) into the tree at treeField[0] (root),
-// treeField[1] = count. key at *pKey (u64). On existing key: writes node to *pOut and
-// returns. Otherwise allocates via ceb0, links, rebalances (4b40).
-//   treeField: longlong* {root@0, count@8}. pKey: ulonglong*. pOut: undefined8*.
+// TradeWork_impl_ccf0 — BST insert (0x38 nodes) into the scheduler's +0x120 tree
+// (root field_0x120, count field_0x128). key = pKey->key. On existing key: writes node
+// to *pOut and returns. Otherwise allocates via ceb0, links, rebalances (4b40).
 // ==================================================================================
-static void* WS_ccf0(uint64_t* treeField, void** pOut, uint64_t* pKey) {
-    uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
+static WorkSchedulerBucketNode** WS_ccf0(WorkScheduler* ws, WorkSchedulerBucketNode** pOut,
+                                         const WorkSchedulerBucket* pKey) {
+    WorkSchedulerBucketNode* root = ws->field_0x120;
     if (root == nullptr) {
-        uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x38));
-        uint8_t* node = nullptr;
-        if (n) node = reinterpret_cast<uint8_t*>(WS_ceb0(n, reinterpret_cast<uint8_t*>(pKey), nullptr));
-        *reinterpret_cast<uint8_t**>(treeField) = node;
+        WorkSchedulerBucketNode* n = static_cast<WorkSchedulerBucketNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerBucketNode), 8));
+        WorkSchedulerBucketNode* node = nullptr;
+        if (n) node = WS_ceb0(n, pKey, nullptr);
+        ws->field_0x120 = node;
         *pOut = node;
     } else {
-        uint8_t* cur = root;
-        uint8_t* parent = cur;
+        WorkSchedulerBucketNode* cur = root;
+        WorkSchedulerBucketNode* parent = cur;
         for (;;) {
             parent = cur;
-            uint64_t nodeKey = *reinterpret_cast<uint64_t*>(cur + 0x00);
-            if (nodeKey <= *pKey) {
-                if (*pKey <= nodeKey) {           // equal -> found existing
+            Profession* nodeKey = cur->bucket.key;
+            if (nodeKey <= pKey->key) {
+                if (pKey->key <= nodeKey) {       // equal -> found existing
                     *pOut = cur;
                     return pOut;
                 }
-                // *pKey > nodeKey -> go right (+0x28)
-                cur = *reinterpret_cast<uint8_t**>(parent + 0x28);
+                // key > nodeKey -> go right (+0x28)
+                cur = parent->right;
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(WS_Alloc(0x38));
-                    uint8_t* node = buf ? reinterpret_cast<uint8_t*>(WS_ceb0(buf, reinterpret_cast<uint8_t*>(pKey), parent)) : nullptr;
-                    *reinterpret_cast<uint8_t**>(parent + 0x28) = node;
+                    WorkSchedulerBucketNode* buf = static_cast<WorkSchedulerBucketNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerBucketNode), 8));
+                    WorkSchedulerBucketNode* node = buf ? WS_ceb0(buf, pKey, parent) : nullptr;
+                    parent->right = node;
                     cur = node;
                     break;
                 }
             } else {
-                // *pKey < nodeKey -> go left (+0x20)
-                cur = *reinterpret_cast<uint8_t**>(parent + 0x20);
+                // key < nodeKey -> go left (+0x20)
+                cur = parent->left;
                 if (cur == nullptr) {
-                    uint8_t* buf = reinterpret_cast<uint8_t*>(WS_Alloc(0x38));
-                    uint8_t* node = buf ? reinterpret_cast<uint8_t*>(WS_ceb0(buf, reinterpret_cast<uint8_t*>(pKey), parent)) : nullptr;
-                    *reinterpret_cast<uint8_t**>(parent + 0x20) = node;
+                    WorkSchedulerBucketNode* buf = static_cast<WorkSchedulerBucketNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerBucketNode), 8));
+                    WorkSchedulerBucketNode* node = buf ? WS_ceb0(buf, pKey, parent) : nullptr;
+                    parent->left = node;
                     cur = node;
                     break;
                 }
             }
         }
-        void* localTmp = parent;   // &local_res8 holds `parent` for the rebalance
-        TradeWork_impl_4b40(reinterpret_cast<int64_t*>(treeField), reinterpret_cast<int64_t*>(&localTmp));
+        WorkSchedulerBucketNode* localTmp = parent;   // &local_res8 holds `parent` for the rebalance
+        Avl38Retrace(&ws->field_0x120, &localTmp);   // 0x140014b40 (TradeWork_impl_4b40's body)
         *pOut = cur;
     }
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(treeField) + 0x08) += 1;   // count++
+    ws->field_0x128 += 1;   // count++
     return pOut;
 }
 
 // ==================================================================================
-// CitizenAI_helper_cb50 — build a temp key node (copying a sub-object via cfb0 from
-// pSrcKey), insert it into treeField via ccf0, then free the temp copy.
-//   param_1 = treeField, param_2 = pOut, pKey = ulonglong* key source,
-//   pSrcKey = optional {ptr@0, int@8} whose ptr is deep-copied.
+// CitizenAI_helper_cb50 — build a temp bucket record (copying its id tree via cfb0 from
+// pSrc), insert it into the +0x120 tree via ccf0, then free the temp copy.
+//   pKey = the bucket key, pSrc = optional {root, count} whose tree is deep-copied.
 // ==================================================================================
-static void* WS_cb50(uint64_t* treeField, void** pOut, uint64_t* pKey, void** pSrc) {
-    uint64_t local_key = *pKey;
-    void*    local_sub = nullptr;
-    uint32_t local_int = 0;
+static WorkSchedulerBucketNode** WS_cb50(WorkScheduler* ws, WorkSchedulerBucketNode** pOut,
+                                         Profession* const* pKey, const WorkSchedulerTree* pSrc) {
+    Profession* local_key = *pKey;
+    WorkSchedulerIdNode* local_sub = nullptr;
+    int32_t  local_int = 0;
     // Build a temp {key@0, sub@8, int@0x10} on the stack mirroring the node prefix.
-    struct { uint64_t key; void* sub; uint32_t i; uint32_t pad; } tmp;
-    tmp.key = local_key; tmp.sub = nullptr; tmp.i = 0; tmp.pad = 0;
-    if (pSrc != reinterpret_cast<void**>(&local_sub)) {
-        if (pSrc && *pSrc != nullptr) {
-            local_sub = WS_cfb0(&tmp.sub, reinterpret_cast<uint8_t*>(*pSrc));
-            tmp.sub = local_sub;
+    WorkSchedulerBucket tmp{};   // root, count and the padding zeroed
+    tmp.key = local_key;
+    if (pSrc != &tmp.entries) {
+        if (pSrc && pSrc->root != nullptr) {
+            local_sub = WS_cfb0(&tmp.entries, pSrc->root);
+            tmp.entries.root = local_sub;
         }
-        local_int = pSrc ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(pSrc) + 8) : 0;
-        tmp.i = local_int;
+        local_int = pSrc ? pSrc->count : 0;
+        tmp.entries.count = local_int;
     }
-    WS_ccf0(treeField, pOut, reinterpret_cast<uint64_t*>(&tmp));
+    WS_ccf0(ws, pOut, &tmp);
     // free the temp deep-copied subtree
-    if (tmp.sub) {
-        uint8_t* sub = reinterpret_cast<uint8_t*>(tmp.sub);
+    if (tmp.entries.root) {
+        WorkSchedulerIdNode* sub = tmp.entries.root;
         {
-            WorkBase_TreeNodeFree_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x18));
-            WorkBase_TreeNodeFree_e320(&tmp.sub, *reinterpret_cast<void**>(sub + 0x20));
+            WorkBase_TreeNodeFree_e320(&tmp.entries.root, sub->left);
+            WorkBase_TreeNodeFree_e320(&tmp.entries.root, sub->right);
         }
         System::MemoryAllocator::MemFree(sub);
     }
@@ -207,268 +201,277 @@ static void* WS_cb50(uint64_t* treeField, void** pOut, uint64_t* pKey, void** pS
 // ==================================================================================
 extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code,
                                               char fromExisting, int prio) {
-    uint8_t* schedB = reinterpret_cast<uint8_t*>(sched);
+    WorkScheduler* ws = reinterpret_cast<WorkScheduler*>(sched);   // LEFT: SIG CitizenAI_WorkScheduler_Insert
+    Object::InternalPtr<Work>* workRef = reinterpret_cast<Object::InternalPtr<Work>*>(pWorkIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Insert
 
     // --- assign id (wraps at 0x7ffffffe) ---
-    sched[0] += 1;
-    int id = sched[0];
-    if (id == 0x7ffffffe) sched[0] = 0;
+    ws->field_0x00 += 1;
+    int id = ws->field_0x00;
+    if (id == 0x7ffffffe) ws->field_0x00 = 0;
 
     // --- assign priority ---
     if (fromExisting == '\0') {
-        prio = sched[1];
-        sched[1] = prio + 1;
+        prio = ws->field_0x04;
+        ws->field_0x04 = prio + 1;
     } else {
         // dedup: while a primary node already holds `prio`, decrement and restart search
-        uint8_t* p = *reinterpret_cast<uint8_t**>(schedB + 0x10);
+        WorkSchedulerCountNode* p = ws->field_0x10;
         while (p != nullptr) {
-            int nodeKey = *reinterpret_cast<int*>(p + 0x00);
-            if (prio < nodeKey)      p = *reinterpret_cast<uint8_t**>(p + 0x10);   // left
-            else if (nodeKey < prio) p = *reinterpret_cast<uint8_t**>(p + 0x18);   // right
-            else { prio -= 1; p = *reinterpret_cast<uint8_t**>(schedB + 0x10); }
+            int nodeKey = p->key;
+            if (prio < nodeKey)      p = p->left;
+            else if (nodeKey < prio) p = p->right;
+            else { prio -= 1; p = ws->field_0x10; }
         }
     }
 
     // --- stamp the work IBP: +0x20 = id, +0x24 = prio ---
-    uint8_t* work = *reinterpret_cast<uint8_t**>(pWorkIBP);
-    *reinterpret_cast<int*>(work + 0x20) = id;
-    work = *reinterpret_cast<uint8_t**>(pWorkIBP);
-    *reinterpret_cast<int*>(work + 0x24) = prio;
+    Work* work = workRef->Get();
+    work->field_20 = id;
+    work = workRef->Get();
+    work->field_24 = prio;
 
     // --- insert into the primary AVL (0x28 nodes) at sched+0x10, keyed by prio ---
     // key node scratch = {prio, id}
     struct { int prio; int id; } keyNode = { prio, id };
-    uint8_t* proot = *reinterpret_cast<uint8_t**>(schedB + 0x10);
+    WorkSchedulerCountNode* proot = ws->field_0x10;
     if (proot == nullptr) {
-        uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x28));
+        WorkSchedulerCountNode* n = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
         if (n) {
-            *reinterpret_cast<int*>(n + 0x00) = keyNode.prio;
-            *reinterpret_cast<int*>(n + 0x04) = keyNode.id;
-            *reinterpret_cast<uint64_t*>(n + 0x08) = 0;
-            *reinterpret_cast<uint64_t*>(n + 0x10) = 0;
-            *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-            *reinterpret_cast<uint32_t*>(n + 0x20) = 0;
+            n->key = keyNode.prio;
+            n->workId = keyNode.id;
+            n->parent = nullptr;
+            n->left = nullptr;
+            n->right = nullptr;
+            n->balance = 0;
+            n->height = 0;
         }
-        *reinterpret_cast<uint8_t**>(schedB + 0x10) = n;
+        ws->field_0x10 = n;
     } else {
-        uint8_t* cur = proot;
-        uint8_t* parent = cur;
+        WorkSchedulerCountNode* cur = proot;
+        WorkSchedulerCountNode* parent = cur;
         bool linked = false;
         for (;;) {
             parent = cur;
-            int nodeKey = *reinterpret_cast<int*>(cur + 0x00);
+            int nodeKey = cur->key;
             if (nodeKey <= prio) {
                 if (prio <= nodeKey) break;   // equal (shouldn't happen post-dedup)
-                cur = *reinterpret_cast<uint8_t**>(parent + 0x18);   // right
+                cur = parent->right;
                 if (cur == nullptr) {
-                    uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x28));
+                    WorkSchedulerCountNode* n = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
                     if (n) {
-                        *reinterpret_cast<int*>(n + 0x00) = keyNode.prio;
-                        *reinterpret_cast<int*>(n + 0x04) = keyNode.id;
-                        *reinterpret_cast<void**>(n + 0x08) = parent;
-                        *reinterpret_cast<uint64_t*>(n + 0x10) = 0;
-                        *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                        *reinterpret_cast<uint32_t*>(n + 0x20) = 0;
+                        n->key = keyNode.prio;
+                        n->workId = keyNode.id;
+                        n->parent = parent;
+                        n->left = nullptr;
+                        n->right = nullptr;
+                        n->balance = 0;
+                        n->height = 0;
                     }
-                    *reinterpret_cast<uint8_t**>(parent + 0x18) = n;
+                    parent->right = n;
                     linked = true; break;
                 }
             } else {
-                cur = *reinterpret_cast<uint8_t**>(parent + 0x10);   // left
+                cur = parent->left;
                 if (cur == nullptr) {
-                    uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x28));
+                    WorkSchedulerCountNode* n = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
                     if (n) {
-                        *reinterpret_cast<int*>(n + 0x00) = keyNode.prio;
-                        *reinterpret_cast<int*>(n + 0x04) = keyNode.id;
-                        *reinterpret_cast<void**>(n + 0x08) = parent;
-                        *reinterpret_cast<uint64_t*>(n + 0x10) = 0;
-                        *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                        *reinterpret_cast<uint32_t*>(n + 0x20) = 0;
+                        n->key = keyNode.prio;
+                        n->workId = keyNode.id;
+                        n->parent = parent;
+                        n->left = nullptr;
+                        n->right = nullptr;
+                        n->balance = 0;
+                        n->height = 0;
                     }
-                    *reinterpret_cast<uint8_t**>(parent + 0x10) = n;
+                    parent->left = n;
                     linked = true; break;
                 }
             }
         }
         if (linked) {
-            void* tmp = parent;
-            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(schedB + 0x10), reinterpret_cast<int64_t*>(&tmp));
-            sched[6] += 1;   // +0x18 primary count
+            WorkSchedulerCountNode* tmp = parent;
+            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&ws->field_0x10), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
+            ws->field_0x18 += 1;   // +0x18 primary count
         }
     }
 
     // --- id-map insert (9a40) at sched+0x30. arg2 = &{prio,id} key node; arg3 =
-    //     &{id, pad, workPtr} (the mapped value; ec60 later reads node+0x08 = workPtr). ---
-    struct { int id; int pad; uint64_t workPtr; } mapVal;
-    mapVal.id = id; mapVal.pad = 0; mapVal.workPtr = *reinterpret_cast<uint64_t*>(pWorkIBP);
-    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(schedB + 0x30), &keyNode, reinterpret_cast<uint32_t*>(&mapVal));
+    //     &{id, pad, work} (the mapped value; ec60 later reads node+0x08 = the work). ---
+    struct { int id; int pad; Object::InternalPtr<Work> work; } mapVal;
+    mapVal.id = id; mapVal.pad = 0; mapVal.work = *workRef;
+    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&ws->trees[0]), &keyNode, &mapVal);   // LEFT: SIG WorkCellBST_Insert_9a40
 
-    // --- 14 category sub-trees at sched+0x40 (stride 0x10), driven by `code` bits ---
-    uint64_t workPtr = *reinterpret_cast<uint64_t*>(pWorkIBP);
+    // --- 14 category sub-trees at sched+0x40 (trees[1..14]), driven by `code` bits ---
+    const Object::InternalPtr<Work> workPtr = *workRef;
     uint32_t mask = 2;
     for (int t = 0; t < 14; ++t) {
         if (code & mask) {
-            uint8_t* treeField = schedB + 0x40 + (uintptr_t)t * 0x10;
-            uint8_t* croot = *reinterpret_cast<uint8_t**>(treeField);
+            WorkSchedulerTree* tree = &ws->trees[1 + t];
+            WorkSchedulerIdNode* croot = tree->root;
             if (croot == nullptr) {
-                uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
+                WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
                 if (n) {
-                    *reinterpret_cast<int*>(n + 0x00) = id;
-                    *reinterpret_cast<uint64_t*>(n + 0x08) = workPtr;
-                    *reinterpret_cast<uint64_t*>(n + 0x10) = 0;
-                    *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                    *reinterpret_cast<uint64_t*>(n + 0x20) = 0;
-                    *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+                    n->key = id;
+                    n->work = workPtr;
+                    n->parent = nullptr;
+                    n->left = nullptr;
+                    n->right = nullptr;
+                    n->balance = 0;
+                    n->height = 0;
                 }
-                *reinterpret_cast<uint8_t**>(treeField) = n;
+                tree->root = n;
             } else {
-                uint8_t* cur = croot;
-                uint8_t* parent = cur;
+                WorkSchedulerIdNode* cur = croot;
+                WorkSchedulerIdNode* parent = cur;
                 bool linked = false;
                 for (;;) {
                     parent = cur;
-                    int nodeKey = *reinterpret_cast<int*>(cur + 0x00);
+                    int nodeKey = cur->key;
                     if (nodeKey <= id) {
                         if (id <= nodeKey) break;
-                        cur = *reinterpret_cast<uint8_t**>(parent + 0x20);   // right
+                        cur = parent->right;
                         if (cur == nullptr) {
-                            uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
+                            WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
                             if (n) {
-                                *reinterpret_cast<int*>(n + 0x00) = id;
-                                *reinterpret_cast<uint64_t*>(n + 0x08) = workPtr;
-                                *reinterpret_cast<void**>(n + 0x10) = parent;
-                                *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                                *reinterpret_cast<uint64_t*>(n + 0x20) = 0;
-                                *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+                                n->key = id;
+                                n->work = workPtr;
+                                n->parent = parent;
+                                n->left = nullptr;
+                                n->right = nullptr;
+                                n->balance = 0;
+                                n->height = 0;
                             }
-                            *reinterpret_cast<uint8_t**>(parent + 0x20) = n;
+                            parent->right = n;
                             linked = true; break;
                         }
                     } else {
-                        cur = *reinterpret_cast<uint8_t**>(parent + 0x18);   // left
+                        cur = parent->left;
                         if (cur == nullptr) {
-                            uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
+                            WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
                             if (n) {
-                                *reinterpret_cast<int*>(n + 0x00) = id;
-                                *reinterpret_cast<uint64_t*>(n + 0x08) = workPtr;
-                                *reinterpret_cast<void**>(n + 0x10) = parent;
-                                *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                                *reinterpret_cast<uint64_t*>(n + 0x20) = 0;
-                                *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+                                n->key = id;
+                                n->work = workPtr;
+                                n->parent = parent;
+                                n->left = nullptr;
+                                n->right = nullptr;
+                                n->balance = 0;
+                                n->height = 0;
                             }
-                            *reinterpret_cast<uint8_t**>(parent + 0x18) = n;
+                            parent->left = n;
                             linked = true; break;
                         }
                     }
                 }
                 if (linked) {
-                    void* tmp = parent;
-                    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(treeField), reinterpret_cast<int64_t*>(&tmp));
+                    WorkSchedulerIdNode* tmp = parent;
+                    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&tree->root), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceB_13480
                 }
             }
-            *reinterpret_cast<uint32_t*>(treeField + 0x08) += 1;   // sub-tree count++
+            tree->count += 1;   // sub-tree count++
         }
         // signed-shift replicate: uVar17 = uVar17<<1 | (uVar17<0)
         mask = (mask << 1) | ((int)mask < 0 ? 1u : 0u);
     }
 
-    // --- per-PROFESSION bucket tree at sched+0x120 (0x38 nodes), keyed by the u64 the
-    //     work's vtable slot +0x50 returns. That slot is the work's "who can do this"
+    // --- per-PROFESSION bucket tree at sched+0x120 (0x38 nodes), keyed by the Profession
+    //     the work's vtable slot +0x50 returns. That slot is the work's "who can do this"
     //     getter, NOT an entity id: Pickup_Slot10 (0x1400f3a50) and
     //     GatherRawMaterials_Slot10 (0x1400ec510) both return *(*(gw+0xb0)+0x30), the
     //     Laborer key. It is the same key space the re-key (f8400) moves items between —
     //     its callers pass wpc+0x48 / *(*(gw+0xb0)+0x38) (Builder) / desc+0x20. Each bucket
     //     node holds its own id-keyed inner tree at +0x08 with a count at +0x10.
     //     If the bucket is absent, cb50 inserts a fresh one. ---
-    Work* wobj = *reinterpret_cast<Work**>(pWorkIBP);
+    Work* wobj = workRef->Get();
     Profession* slot50Buf[2] = {nullptr, nullptr};
     Profession** targetKey = wobj->GetTarget(slot50Buf);   // Work slot 10, retslot
 
-    uint8_t* froot = *reinterpret_cast<uint8_t**>(schedB + 0x120);
-    uint8_t* found = nullptr;
+    WorkSchedulerBucketNode* froot = ws->field_0x120;
+    WorkSchedulerBucketNode* found = nullptr;
     if (froot != nullptr) {
-        uint8_t* p = froot;
+        WorkSchedulerBucketNode* p = froot;
         while (p != nullptr) {
-            Profession* nk = *reinterpret_cast<Profession**>(p + 0x00);
-            if (*targetKey < nk)       p = *reinterpret_cast<uint8_t**>(p + 0x20);   // left([4])
+            Profession* nk = p->bucket.key;
+            if (*targetKey < nk)       p = p->left;
             else if (*targetKey == nk) { found = p; break; }
-            else                       p = *reinterpret_cast<uint8_t**>(p + 0x28);   // right([5])
+            else                       p = p->right;
         }
     }
     if (found == nullptr) {
         // cb50 builds+inserts a fresh bucket node whose key = the work's profession.
-        Work* wobj2 = *reinterpret_cast<Work**>(pWorkIBP);
+        Work* wobj2 = workRef->Get();
         Profession* keyBuf[2] = {nullptr, nullptr};
         Profession** freshKey = wobj2->GetTarget(keyBuf);   // Work slot 10, retslot
-        void* outNode = nullptr;
-        void* nullSrc[2] = { nullptr, nullptr };   // {ptr=0, int=0}: no subtree to copy
-        WS_cb50(reinterpret_cast<uint64_t*>(schedB + 0x120), &outNode,
-                reinterpret_cast<uint64_t*>(freshKey), nullSrc);   // LEFT: WS_cb50 takes the bucket key as u64 (its other callers pass integer keys)
-        found = reinterpret_cast<uint8_t*>(outNode);
+        WorkSchedulerBucketNode* outNode = nullptr;
+        const WorkSchedulerTree nullSrc{};   // {root=0, count=0}: no subtree to copy
+        WS_cb50(ws, &outNode, freshKey, &nullSrc);
+        found = outNode;
     }
 
     // --- inner tree hanging off the found profession bucket (+0x08), 0x30 nodes keyed by id ---
     if (found) {
-        uint8_t* innerField = found + 0x08;
-        uint64_t innerKeyPayload = *reinterpret_cast<uint64_t*>(pWorkIBP);
-        uint8_t* iroot = *reinterpret_cast<uint8_t**>(innerField);
+        WorkSchedulerTree* innerField = &found->bucket.entries;
+        const Object::InternalPtr<Work> innerKeyPayload = *workRef;
+        WorkSchedulerIdNode* iroot = innerField->root;
         if (iroot == nullptr) {
-            uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
+            WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
             if (n) {
-                *reinterpret_cast<int*>(n + 0x00) = id;
-                *reinterpret_cast<uint64_t*>(n + 0x08) = innerKeyPayload;
-                *reinterpret_cast<uint64_t*>(n + 0x10) = 0;
-                *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                *reinterpret_cast<uint64_t*>(n + 0x20) = 0;
-                *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+                n->key = id;
+                n->work = innerKeyPayload;
+                n->parent = nullptr;
+                n->left = nullptr;
+                n->right = nullptr;
+                n->balance = 0;
+                n->height = 0;
             }
-            *reinterpret_cast<uint8_t**>(innerField) = n;
+            innerField->root = n;
         } else {
-            uint8_t* cur = iroot;
-            uint8_t* parent = cur;
+            WorkSchedulerIdNode* cur = iroot;
+            WorkSchedulerIdNode* parent = cur;
             bool linked = false;
             for (;;) {
                 parent = cur;
-                int nodeKey = *reinterpret_cast<int*>(cur + 0x00);
+                int nodeKey = cur->key;
                 if (nodeKey <= id) {
                     if (id <= nodeKey) return id;   // already present
-                    cur = *reinterpret_cast<uint8_t**>(parent + 0x20);
+                    cur = parent->right;
                     if (cur == nullptr) {
-                        uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
+                        WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
                         if (n) {
-                            *reinterpret_cast<int*>(n + 0x00) = id;
-                            *reinterpret_cast<uint64_t*>(n + 0x08) = innerKeyPayload;
-                            *reinterpret_cast<void**>(n + 0x10) = parent;
-                            *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                            *reinterpret_cast<uint64_t*>(n + 0x20) = 0;
-                            *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+                            n->key = id;
+                            n->work = innerKeyPayload;
+                            n->parent = parent;
+                            n->left = nullptr;
+                            n->right = nullptr;
+                            n->balance = 0;
+                            n->height = 0;
                         }
-                        *reinterpret_cast<uint8_t**>(parent + 0x20) = n;
+                        parent->right = n;
                         linked = true; break;
                     }
                 } else {
-                    cur = *reinterpret_cast<uint8_t**>(parent + 0x18);
+                    cur = parent->left;
                     if (cur == nullptr) {
-                        uint8_t* n = reinterpret_cast<uint8_t*>(WS_Alloc(0x30));
+                        WorkSchedulerIdNode* n = static_cast<WorkSchedulerIdNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerIdNode), 8));
                         if (n) {
-                            *reinterpret_cast<int*>(n + 0x00) = id;
-                            *reinterpret_cast<uint64_t*>(n + 0x08) = innerKeyPayload;
-                            *reinterpret_cast<void**>(n + 0x10) = parent;
-                            *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
-                            *reinterpret_cast<uint64_t*>(n + 0x20) = 0;
-                            *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+                            n->key = id;
+                            n->work = innerKeyPayload;
+                            n->parent = parent;
+                            n->left = nullptr;
+                            n->right = nullptr;
+                            n->balance = 0;
+                            n->height = 0;
                         }
-                        *reinterpret_cast<uint8_t**>(parent + 0x18) = n;
+                        parent->left = n;
                         linked = true; break;
                     }
                 }
             }
             if (linked) {
-                void* tmp = parent;
-                Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(innerField), reinterpret_cast<int64_t*>(&tmp));
+                WorkSchedulerIdNode* tmp = parent;
+                Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&innerField->root), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceB_13480
             }
         }
-        *reinterpret_cast<uint32_t*>(found + 0x10) += 1;   // profession bucket count++
+        found->bucket.entries.count += 1;   // profession bucket count++
     }
 
     // The flat id-map at sched+0x30 is filed here (the 9a40 call above) and is the thing
@@ -485,45 +488,43 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
 // flag = param_3, pWorkIBP = the work IBP.
 // ==================================================================================
 extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, char flag, void* pWorkIBP) {
-    if (WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(workComp))) {
-        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(workComp));
+    WorkComponent* wc = reinterpret_cast<WorkComponent*>(workComp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+    if (wc->IsWorkPosted()) {          // 0x14012ead0
+        wc->CancelWork();              // 0x14012eb50
     }
     char prioFlag;
-    if (flag == '\0' || *reinterpret_cast<int*>(workComp + 0x2c) == (int)0x80000000)
+    if (flag == '\0' || wc->workFlags == 0x80000000u)
         prioFlag = '\0';
     else
         prioFlag = '\x01';
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    int* sched = *reinterpret_cast<int**>(gw + 0x118);
+    WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
     if (!sched) return;
 
     // Faithful to ec60: pass a pointer to a local copy of the work-ptr (88a0 only reads it).
-    void* localWork = *reinterpret_cast<void**>(pWorkIBP);
-    int assignedId = CitizenAI_WorkScheduler_Insert(sched, &localWork, code, prioFlag,
-                                                    *reinterpret_cast<int*>(workComp + 0x2c));
-    *reinterpret_cast<int*>(workComp + 0x28) = assignedId;
+    Object::InternalPtr<Work> localWork = *reinterpret_cast<Object::InternalPtr<Work>*>(pWorkIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+    int assignedId = CitizenAI_WorkScheduler_Insert(reinterpret_cast<int*>(sched), &localWork, code, prioFlag,   // LEFT: SIG CitizenAI_WorkScheduler_Insert
+                                                    wc->workFlags);
+    wc->workId = assignedId;
 
-    // Walk the sched+0x30 id-map (0x30 nodes: +0x00 id, +0x08 payload=workPtr, +0x18 left,
-    // +0x20 right) for the assigned id; on match write back workComp+0x2c = *(payload+0x24)
-    // (the work's stored priority). On miss, 0.
-    uint8_t* schedB = reinterpret_cast<uint8_t*>(sched);
-    uint8_t* p = *reinterpret_cast<uint8_t**>(schedB + 0x30);
-    uint8_t* payload = nullptr;
+    // Walk the sched+0x30 id-map (trees[0]) for the assigned id; on match write back
+    // workComp+0x2c = the work's stored priority (Work +0x24). On miss, 0.
+    WorkSchedulerIdNode* p = sched->trees[0].root;
+    Work* payload = nullptr;
     while (p != nullptr) {
-        int nk = *reinterpret_cast<int*>(p + 0x00);
+        int nk = p->key;
         if (nk <= assignedId) {
-            if (assignedId <= nk) { payload = *reinterpret_cast<uint8_t**>(p + 0x08); break; }
-            p = *reinterpret_cast<uint8_t**>(p + 0x20);   // right
+            if (assignedId <= nk) { payload = p->work.Get(); break; }
+            p = p->right;
         } else {
-            p = *reinterpret_cast<uint8_t**>(p + 0x18);   // left
+            p = p->left;
         }
     }
     if (payload) {
-        *reinterpret_cast<int*>(workComp + 0x2c) = *reinterpret_cast<int*>(payload + 0x24);
+        wc->workFlags = payload->field_24;
     } else {
-        *reinterpret_cast<int*>(workComp + 0x2c) = 0;
+        wc->workFlags = 0;
     }
     // The id-map half of the post is the one nothing downstream can see going wrong: a miss
     // here silently writes priority 0 into workComp+0x2c and makes the f8400 re-key a no-op
@@ -556,16 +557,18 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
                                               uint64_t oldKey, uint64_t newKey) {
     // [STANDALONE GUARD] Retail is only ever called from a live world.
     if (!sched) return;
-    uint8_t* schedB = reinterpret_cast<uint8_t*>(sched);
+    WorkScheduler* ws = reinterpret_cast<WorkScheduler*>(sched);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
+    Profession* const oldProf = reinterpret_cast<Profession*>(oldKey);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
+    Profession* const newProf = reinterpret_cast<Profession*>(newKey);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
     const int key = static_cast<int>(workId);
 
     // 1. The id-map entry (sched+0x30) — its +0x08 payload is what gets re-filed. Retail
     //    bails when the id is unknown, before touching either bucket.
-    uint8_t* idNode = *reinterpret_cast<uint8_t**>(schedB + 0x30);
+    WorkSchedulerIdNode* idNode = ws->trees[0].root;
     while (idNode) {
-        int nk = *reinterpret_cast<int*>(idNode + 0x00);
-        if (nk > key)      idNode = *reinterpret_cast<uint8_t**>(idNode + 0x18);   // left
-        else if (key > nk) idNode = *reinterpret_cast<uint8_t**>(idNode + 0x20);   // right
+        int nk = idNode->key;
+        if (nk > key)      idNode = idNode->left;
+        else if (key > nk) idNode = idNode->right;
         else break;
     }
     if (!idNode) {
@@ -577,32 +580,30 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
         return;
     }
 
-    uint64_t* outer = reinterpret_cast<uint64_t*>(schedB + 0x120);   // {root@0, count@8}
-
-    // 2. The OLD profession's bucket.
-    uint8_t* oldBucket = *reinterpret_cast<uint8_t**>(outer);
+    // 2. The OLD profession's bucket (the +0x120 tree).
+    WorkSchedulerBucketNode* oldBucket = ws->field_0x120;
     while (oldBucket) {
-        uint64_t bk = *reinterpret_cast<uint64_t*>(oldBucket + 0x00);
-        if (oldKey < bk)      oldBucket = *reinterpret_cast<uint8_t**>(oldBucket + 0x20);
-        else if (bk < oldKey) oldBucket = *reinterpret_cast<uint8_t**>(oldBucket + 0x28);
+        Profession* bk = oldBucket->bucket.key;
+        if (oldProf < bk)      oldBucket = oldBucket->left;
+        else if (bk < oldProf) oldBucket = oldBucket->right;
         else break;
     }
     if (!oldBucket) {
         // Retail still materialises the (empty) bucket for oldKey and then returns: with no
         // bucket there is nothing filed to move. cb50's temp node is freed inside cb50.
-        void* out = nullptr;
-        void* noSubtree[2] = { nullptr, nullptr };
-        uint64_t k = oldKey;
-        WS_cb50(outer, &out, &k, noSubtree);
+        WorkSchedulerBucketNode* out = nullptr;
+        const WorkSchedulerTree noSubtree{};
+        Profession* k = oldProf;
+        WS_cb50(ws, &out, &k, &noSubtree);
         return;
     }
 
     // 3. The item itself, in that bucket's inner id-keyed tree (bucket+0x08).
-    uint8_t* item = *reinterpret_cast<uint8_t**>(oldBucket + 0x08);
+    WorkSchedulerIdNode* item = oldBucket->bucket.entries.root;
     while (item) {
-        int nk = *reinterpret_cast<int*>(item + 0x00);
-        if (nk > key)      item = *reinterpret_cast<uint8_t**>(item + 0x18);
-        else if (key > nk) item = *reinterpret_cast<uint8_t**>(item + 0x20);
+        int nk = item->key;
+        if (nk > key)      item = item->left;
+        else if (key > nk) item = item->right;
         else break;
     }
     if (!item) {
@@ -610,22 +611,22 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     }
 
     // 4. Unfile it (ca60 frees the node and decrements bucket+0x10).
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(oldBucket + 0x08), item);   // 0x14001ca60
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&oldBucket->bucket.entries), item);   // 0x14001ca60 LEFT: SIG WorkCellBST_Remove_ca60
 
     // 5. The NEW profession's bucket, created if this is its first item.
-    uint8_t* newBucket = nullptr;
-    for (uint8_t* p = *reinterpret_cast<uint8_t**>(outer); p; ) {
-        uint64_t bk = *reinterpret_cast<uint64_t*>(p + 0x00);
-        if (newKey < bk)      p = *reinterpret_cast<uint8_t**>(p + 0x20);
-        else if (bk < newKey) p = *reinterpret_cast<uint8_t**>(p + 0x28);
+    WorkSchedulerBucketNode* newBucket = nullptr;
+    for (WorkSchedulerBucketNode* p = ws->field_0x120; p; ) {
+        Profession* bk = p->bucket.key;
+        if (newProf < bk)      p = p->left;
+        else if (bk < newProf) p = p->right;
         else { newBucket = p; break; }
     }
     if (!newBucket) {
-        void* out = nullptr;
-        void* noSubtree[2] = { nullptr, nullptr };
-        uint64_t k = newKey;
-        WS_cb50(outer, &out, &k, noSubtree);
-        newBucket = reinterpret_cast<uint8_t*>(out);
+        WorkSchedulerBucketNode* out = nullptr;
+        const WorkSchedulerTree noSubtree{};
+        Profession* k = newProf;
+        WS_cb50(ws, &out, &k, &noSubtree);
+        newBucket = out;
     }
     // [STANDALONE GUARD] Retail derefs the insert result unconditionally; ours can be null
     // if the allocator failed. Dropping the item is bad, but far better than a write to 0x08.
@@ -638,10 +639,10 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
 
     // 6. Re-file under the new key. The pair is {id, pad, payload}; 9a40 reads the u32 at +0
     //    and the u64 at +8, and bumps newBucket+0x10.
-    struct { uint32_t id; uint32_t pad; uint64_t payload; } pair;
+    struct { uint32_t id; uint32_t pad; Object::InternalPtr<Work> payload; } pair;
     pair.id      = workId;
     pair.pad     = 0;
-    pair.payload = *reinterpret_cast<uint64_t*>(idNode + 0x08);
+    pair.payload = idNode->work;
     void* outSlot = nullptr;
-    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(newBucket + 0x08), &outSlot, reinterpret_cast<uint32_t*>(&pair));
+    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&newBucket->bucket.entries), &outSlot, &pair);   // LEFT: SIG WorkCellBST_Insert_9a40
 }
