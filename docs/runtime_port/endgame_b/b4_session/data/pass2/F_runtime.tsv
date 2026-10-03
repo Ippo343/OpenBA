@@ -1,0 +1,488 @@
+file	file_casts	blocker	casts	declared_in	note
+runtime/src/collection/avl_trees.cpp	61	NOCLASS:AVL node families (TypeNode 0x50, String-pair 0x30, Filename 0x30) element bytes	51	runtime/src/collection/avl_trees.cpp + set_avl.h	one typed node per family owed; element bytes at +0 viewed raw
+runtime/src/collection/avl_trees.cpp	61	FIELD:RtObject::TypeNode::balance/height	5	runtime/types/object/TypeInfo.h	balance/height int16 at +0x48/+0x4a retail, one int32 in header (H8)
+runtime/src/collection/avl_trees.cpp	61	ERASED:rtcoll::ArrayHdr	3	runtime/types/collection/Collection.h	void* door of Array<T*> operator=/dtor pair
+runtime/src/collection/avl_trees.cpp	61	FIELD:RtObject::Factory::count	2	runtime/types/object/TypeInfo.h	Factory declared 8 bytes; count at +8 has no field
+runtime/src/collection/array_destroy.cpp	38	ERASED:rtcoll::ArrayHdr	34	runtime/types/collection/Collection.h + array_destroy.cpp	void* door / (stride,offset-table) Body A/B core; typed body per element owed
+runtime/src/collection/array_destroy.cpp	38	NOCLASS:Video::VertexProgram::Stream	4	runtime/types/video/VertexProgram.h	Stream element (inner ptr, count) has no type
+runtime/src/io/modification.cpp	36	FIELD:RtIO::ModArray::data	21	runtime/types/io/Modification.h	ModArray buffer untyped (data void*); Mod is POD (H5)
+runtime/src/io/modification.cpp	36	H5:Modification::files/bytes/ints arrays	9	runtime/types/io/Modification.h	Mod arrays held as raw {data,size,cap}; make real Array<>
+runtime/src/io/modification.cpp	36	ERASED:rtsetavl::Set/Node	6	runtime/types/io/Modification.h	Mod::set void* root / AvlNode set core
+runtime/src/collection/array.cpp	33	ERASED:rtcoll::ArrayHdr	6	runtime/types/collection/Collection.h	type-erased Array core
+runtime/src/collection/array.cpp	33	NOCLASS:Modification file-record {uint32, External*, Filename}	6	runtime/types/io/Modification.h	Mod element has no type in any header
+runtime/src/collection/array.cpp	33	NOCLASS:Video::VertexProgram::Element/Stream	6	runtime/types/video/VertexProgram.h	Element/Stream records have no type
+runtime/src/collection/array.cpp	33	FIELD:AnimationGroup::_tags	5	runtime/types/graphics/AnimationGroup.h	_tags raw Array<uint8_t>, no element type
+runtime/src/collection/array.cpp	33	POD:RtSystem::String/Filename/WideString	4	runtime/types/object/External.h (ExternalArrayElement::owned)	ExternalArrayElement::owned is char*, retail Filename
+runtime/src/collection/array.cpp	33	NOCLASS:RendererDrawGroup::items (3x Array<RendererDrawItem> at +0x1c0..0x1e0)	3	runtime/types/graphics/Camera.h	RendererDrawGroup items arrays viewed via ArrayHdr
+runtime/src/collection/array.cpp	33	NOCLASS:Video::PixelProgram::Sampler	2	runtime/types/video/PixelProgram.h	Sampler element has no type
+runtime/src/collection/array.cpp	33	H5:MaterialConstant::_head	1	runtime/types/graphics/Material.h	MaterialConstant +0x00 String is raw _head[8]
+runtime/src/collection/array_graphics_mesh.cpp	33	NOCLASS:GraphicsMesh::TriangleList element (0xb0)	29	runtime/types/graphics/GraphicsMesh.h	0xb0 TriangleList element has no type; header TriangleList is a different struct
+runtime/src/collection/array_graphics_mesh.cpp	33	FWD:B.3.5 bridge VertexBuffer/IndexBuffer ctor	4	runtime/src/collection/array_graphics_mesh.cpp	p -> Video buffers; needs TriangleList element typed
+runtime/types/collection/Collection.h	27	ERASED:rtsetavl::Set/Node	15	runtime/types/collection/Collection.h	Set core void* receivers / ported rotate bodies take void*
+runtime/types/collection/Collection.h	27	ERASED:rtcoll::ArrayHdr	8	runtime/types/collection/Collection.h	Array<T> -> Array<uint8_t> core call
+runtime/types/collection/Collection.h	27	NOCLASS:Set node/key view of erased node element	3	runtime/types/collection/Collection.h	element bytes of a type-erased node viewed as Key/Node
+runtime/types/collection/Collection.h	27	FLOOR:alloc_header	1	runtime/types/collection/Collection.h	ListNodeAlloc result (tier-I shape misses)
+runtime/src/graphics/mesh.cpp	25	SIG:Graphics-void*-doors	9	runtime/types/graphics/Mesh.h	C doors with void* self/vec3/time/list params
+runtime/src/graphics/mesh.cpp	25	FIELD:RtGraphics::ExternalPtrHandle::p	9	runtime/types/graphics/Geometry.h	untyped ExternalPtrHandle::p (void*) -> T*; callers hold the handle
+runtime/src/graphics/mesh.cpp	25	FIELD:GraphicsMesh::_detailLevels	4	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<DetailLevel>
+runtime/src/graphics/mesh.cpp	25	H5:MeshInstance::_animation	2	runtime/types/graphics/Mesh.h	0x18-byte retail AnimationState held as raw storage
+runtime/src/graphics/mesh.cpp	25	FIELD:GraphicsMesh::_skinMaterials	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<ExternalPtr<MaterialInstance>>
+runtime/src/io/modification_refresh.cpp	24	ERASED:rtsetavl::Set/Node	9	runtime/types/io/Modification.h	Mod::set void* root / AvlNode set core
+runtime/src/io/modification_refresh.cpp	24	FIELD:RtIO::ModArray::data	7	runtime/types/io/Modification.h	ModArray buffer untyped (data void*); Mod is POD (H5)
+runtime/src/io/modification_refresh.cpp	24	FIELD:Configuration/Persistence::settings map root (void*)	6	runtime/types/io/Persistence.h	R-CORE ConfigMap_Find returns void*, POD key
+runtime/src/io/modification_refresh.cpp	24	H5:Modification::files/bytes/ints arrays	2	runtime/types/io/Modification.h	Mod arrays held as raw {data,size,cap}; make real Array<>
+runtime/src/io/modification_setupfilesystem.cpp	22	POD:RtObject::External/Factory/FileSystem	12	runtime/types/object/External.h	R-IO holds Rt* POD views of External/Factory/FileSystem/ExternalFactory
+runtime/src/io/modification_setupfilesystem.cpp	22	POD:RtSystem::String/Filename/WideString	5	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/modification_setupfilesystem.cpp	22	ERASED:rtsetavl::Set/Node	4	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/io/modification_setupfilesystem.cpp	22	FLOOR:string_header	1	runtime/src/io/modification_setupfilesystem.cpp	string refcount header at data-4
+runtime/src/object/external_load.cpp	22	SIG:Encoding::MakeReaderWriter	12	runtime/types/io/Stream.h	Encoding vslot rw / SerializeInt on void* v; CompressedFileStream view
+runtime/src/object/external_load.cpp	22	FIELD:RtObject::BaseTypeInfo::factoryFn	4	runtime/types/object/TypeInfo.h	void* factoryFn / Factory node by offset
+runtime/src/object/external_load.cpp	22	NOCLASS:External dependency record {String,int32,int32} (0x10)	4	runtime/types/object/External.h	_refs elements read at +0/+8/+0xc
+runtime/src/object/external_load.cpp	22	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	Filename POD
+runtime/src/object/external_load.cpp	22	FLOOR:ptr_int	1	runtime/src/object/external_load.cpp	(unsigned long long) in a printf counter
+runtime/src/object/type_reflection.cpp	22	NOCLASS:TypeRecord at AVL node +8	18	runtime/src/object/type_reflection.cpp (TypeInfo.h)	TypeRecord laid at node+8; one typed node per family owed
+runtime/src/object/type_reflection.cpp	22	FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn	4	runtime/types/object/TypeInfo.h	void* -> function pointer types
+runtime/src/collection/set_core.cpp	20	ERASED:rtsetavl::Set/Node	14	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node/element receivers
+runtime/src/collection/set_core.cpp	20	ERASED:rtsetavl::Set/Node (RtObject::Factory/TypeNode 0x50)	6	runtime/types/collection/Collection.h	Factory/TypeNode family passes void* set/node
+runtime/src/ui/tabdescription.cpp	17	POD:ExternalPtr-Serialize-thunk	12	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/tabdescription.cpp	17	H5:String-members-held-as-raw-char*	4	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/tabdescription.cpp	17	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/object/factory_dtors.cpp	16	NOCLASS:Factory/InternalFactory/PathStack AVL set nodes	14	runtime/types/object/TypeInfo.h	dtor bodies read set nodes / embedded sets by offset (+0x08/+0x18/+0x20)
+runtime/src/object/factory_dtors.cpp	16	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	Filename dtor on raw node slot
+runtime/src/ui/userinterface.cpp	16	FIELD:UI::DialogInstance::_ui / UserInterface list element	11	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/ui/userinterface.cpp	16	SIG:Serialize-stream	2	runtime/types/object/External.h	Serialize(void* serializer) parameter
+runtime/src/ui/userinterface.cpp	16	FIELD:UI::UserInterface::_audioScene	1	runtime/types/ui/UserInterface.h	void* -> Audio::Scene*
+runtime/src/ui/userinterface.cpp	16	FIELD:Video::*::deviceData/platformData	1	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/ui/userinterface.cpp	16	FIELD:UI::SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	uint64_t -> ExternalPtr<MaterialInstance>
+runtime/src/object/external_ptr_serialize.cpp	15	SIG:ExternalPtr::Serialize-typeInfo	7	runtime/types/object/External.h	typeInfo void* (u32*) and External* views in ExternalPtr serialize
+runtime/src/object/external_ptr_serialize.cpp	15	POD:RtSystem::String/Filename/WideString	5	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_ptr_serialize.cpp	15	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/io/filesystem_setupdirs_win.cpp	14	OTHER:Configuration read by raw offset via void* cfg	9	runtime/types/system/Configuration.h	cfg passed void*; command-line/map fields read at +0x10/+0x20/+0x28
+runtime/src/io/filesystem_setupdirs_win.cpp	14	POD:RtSystem::String/Filename/WideString	5	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_class_doors.cpp	14	POD:RtObject::External/ExternalFactory/ExternalList	11	runtime/types/object/External.h	door void* -> RtObject POD / real class
+runtime/src/object/external_class_doors.cpp	14	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_class_doors.cpp	14	FLOOR:byte_io	1		memcpy / uintptr cast
+runtime/src/object/external_reftable.cpp	14	NOCLASS:External ref/resource sets embedded at self+0x10/+0x20	8	runtime/types/object/External.h	sets embedded at raw offsets, viewed as rtresset/rtrefset::Set
+runtime/src/object/external_reftable.cpp	14	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/object/external_reftable.cpp	14	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_reftable.cpp	14	FLOOR:ptr_int	1	(diagnostic counter)	(unsigned long long) in printf
+runtime/src/system/pod_bridge.h	14	POD:RtSystem::String/Filename/WideString	14	runtime/types/system/String.h + Filename.h	Sys() views of POD String/Filename/WideString as the classes (H10 bridge)
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	FIELD:Video::*::deviceData/platformData	4	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	POD:ExternalPtr-Serialize-thunk	3	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	FLOOR:string_header	1	runtime/src/graphics/graphicsmesh_vtable.cpp	string refcount header at name-4
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	FIELD:GraphicsMesh::_detailLevels	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<DetailLevel>
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	FIELD:GraphicsMesh::_skinMaterials	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<ExternalPtr<MaterialInstance>>
+runtime/src/graphics/graphicsmesh_vtable.cpp	13	FIELD:GraphicsMesh::_nodes	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<Node>
+runtime/src/io/text_codec.cpp	13	SIG:Encoding-codec-void*-params	8	runtime/types/io/Stream.h	Encoding Read/Write codec slots take void* src/dst/end
+runtime/src/io/text_codec.cpp	13	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/text_codec.cpp	13	SIG:Encoding::MakeReaderWriter	1	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/io/text_codec.cpp	13	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/io/text_codec.cpp	13	FLOOR:string_header	1	runtime/src/io/text_codec.cpp	string refcount header at data-4
+runtime/src/object/external_path_stack.cpp	13	NOCLASS:PathStack element {Filename,Filename}	10	runtime/src/object/external_path_stack.h	pair of Filenames at e / e+8 has no type
+runtime/src/object/external_path_stack.cpp	13	ERASED:rtcoll::ArrayHdr	3	runtime/src/object/external_path_stack.h	arrays held void*
+runtime/src/object/internal_class.cpp	13	SIG:Internal-void*-door	10	runtime/types/object/Internal.h	factory/serialize doors take void*; Internal** arrays
+runtime/src/object/internal_class.cpp	13	FIELD:RtObject::BaseTypeInfo::factoryFn	2	runtime/types/object/TypeInfo.h	void* factoryFn -> function pointer
+runtime/src/object/internal_class.cpp	13	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/font.cpp	12	POD:ExternalPtr-Serialize-thunk	6	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/font.cpp	12	H5:String-members-held-as-raw-char*	5	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/font.cpp	12	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/progressdescription.cpp	12	H5:String-members-held-as-raw-char*	7	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/progressdescription.cpp	12	POD:ExternalPtr-Serialize-thunk	4	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/progressdescription.cpp	12	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/io/filesystem_find_win.cpp	11	POD:RtSystem::String/Filename/WideString	10	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/filesystem_find_win.cpp	11	ERASED:rtcoll::ArrayHdr	1	runtime/types/collection/Collection.h + array*.cpp	void* door / type-erased Array core (ArrayHdr)
+runtime/src/object/external.cpp	11	NOCLASS:Factory type-node walk (kLeft/kRight offsets)	7	runtime/types/object/TypeInfo.h	walks Factory AVL TypeNode by offset
+runtime/src/object/external.cpp	11	POD:RtSystem::String/Filename/WideString	3	runtime/types/system/String.h + Filename.h	Filename POD API
+runtime/src/object/external.cpp	11	FIELD:Object::Factory::_singleton (void*)	1	runtime/types/object/TypeInfo.h	address of singleton viewed void**
+runtime/src/system/widestring.cpp	11	OTHER:utf8-utf16-transcoder-bytes	9	runtime/src/system/widestring.cpp	transcoders walk text as bytes; retype over char/wchar_t units
+runtime/src/system/widestring.cpp	11	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	POD String view bridge (H10)
+runtime/src/system/widestring.cpp	11	FLOOR:alloc_header	1	runtime/src/system/widestring.cpp	alloc result / string block header; tier-I shape misses RtMemAlloc spelling
+runtime/src/ui/description_common.h	11	POD:ExternalPtr-Serialize-thunk	6	runtime/types/object/External.h	description_common.h serialize helpers over External** / Dialog void*
+runtime/src/ui/description_common.h	11	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/ui/description_common.h	11	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/sliderdescription.cpp	11	H5:String-members-held-as-raw-char*	6	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/sliderdescription.cpp	11	POD:ExternalPtr-Serialize-thunk	4	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/sliderdescription.cpp	11	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/collection/array_graphics_anim.cpp	10	ERASED:rtcoll::ArrayHdr	10	runtime/types/collection/Collection.h	void* door held by graphics readers (AnimationState.h declarations)
+runtime/src/graphics/batchc_gfx_leaves.cpp	10	SIG:ArraySpec-element-callbacks	4	runtime/types/collection/Collection.h	element copy/dtor callbacks take void* selfv/srcv
+runtime/src/graphics/batchc_gfx_leaves.cpp	10	FIELD:GraphicsMesh::_detailLevels	3	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<DetailLevel>
+runtime/src/graphics/batchc_gfx_leaves.cpp	10	FIELD:Video::*::deviceData/platformData	2	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/batchc_gfx_leaves.cpp	10	FIELD:Video::Context::void*-members	1	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/graphics/wave27_lane_gfxpart.cpp	10	SIG:Graphics-void*-doors	5	runtime/types/graphics/Particle.h	void* particle/recv doors, bool/uint16 raw views
+runtime/src/graphics/wave27_lane_gfxpart.cpp	10	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/wave27_lane_gfxpart.cpp	10	FIELD:RtGraphics::ExternalPtrHandle::p	2	runtime/types/graphics/Geometry.h	untyped ExternalPtrHandle::p (void*) -> T*; callers hold the handle
+runtime/src/graphics/wave27_lane_gfxpart.cpp	10	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/io/file_stream.cpp	10	POD:RtSystem::String/Filename/WideString	4	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/file_stream.cpp	10	SIG:TextFileStream-ctor-POD	4	runtime/types/io/FileStream.h	R-IO ctor takes RtIo::TextFileStream* and char* const* type/name
+runtime/src/io/file_stream.cpp	10	FLOOR:string_header	2	runtime/src/io/file_stream.cpp	string refcount header at data-4
+runtime/src/ui/widgets_layout.cpp	10	FIELD:UI::GraphElement::_seriesData	7	runtime/types/ui/GraphElement.h	void* -> GraphSeries* (0x18-byte records)
+runtime/src/ui/widgets_layout.cpp	10	H5:String-members-held-as-raw-char*	3	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/io/persistence.cpp	9	SIG:Persistence-void*-self	5	runtime/types/io/Persistence.h	C-door void* self / RtIo::Persistence POD this
+runtime/src/io/persistence.cpp	9	FIELD:Configuration/Persistence::settings map root (void*)	3	runtime/types/system/Configuration.h + io/Persistence.h	settings map held as void* set root; type as rtsetavl::Set / MapNode
+runtime/src/io/persistence.cpp	9	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem String key
+runtime/src/system/configuration.cpp	9	FIELD:Configuration/Persistence::settings map root (void*)	9	runtime/types/system/Configuration.h + io/Persistence.h	settings map held as void* set root; type as rtsetavl::Set / MapNode
+runtime/src/graphics/animationstate.cpp	8	SIG:ArraySpec-element-callbacks	5	runtime/types/collection/Collection.h	element ctor/copy/dtor callbacks take void* dstv/srcv
+runtime/src/graphics/animationstate.cpp	8	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/animationstate.cpp	8	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/graphics/scene.cpp	8	POD:RtGraphics::Scene/Geometry	7	runtime/types/graphics/Scene.h	this viewed as RtGraphics POD for the picking/cull helpers
+runtime/src/graphics/scene.cpp	8	ERASED:rtcoll::ArrayHdr	1	runtime/types/collection/Collection.h + array*.cpp	void* door / type-erased Array core (ArrayHdr)
+runtime/src/io/filesystem_packages.cpp	8	H5:FileSystem::_packfiles	3	runtime/types/io/FileSystem.h	packfile array raw void**/PackageFile**; index set node
+runtime/src/io/filesystem_packages.cpp	8	POD:RtSystem::String/Filename/WideString	3	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/filesystem_packages.cpp	8	ERASED:rtsetavl::Set/Node	2	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/object/external_savetext_win.cpp	8	POD:RtSystem::String/Filename/WideString	5	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_savetext_win.cpp	8	SIG:External-void*-self	3	runtime/types/object/External.h	void* self -> Object::Base/External
+runtime/src/system/string.cpp	8	POD:RtSystem::String/Filename/WideString	3	runtime/types/system/String.h + Filename.h	POD String view bridge (H10)
+runtime/src/system/string.cpp	8	FLOOR:alloc_header	2	runtime/src/system/string.cpp	alloc result / string block header; tier-I shape misses RtMemAlloc spelling
+runtime/src/system/string.cpp	8	SIG:Serialize-stream	2	runtime/types/system/String.h	Serialize(void* serializer) parameter
+runtime/src/system/string.cpp	8	OTHER:utf8-utf16-transcoder-bytes	1	runtime/src/system/string.cpp	transcoders walk text as bytes; retype over char/wchar_t units
+runtime/src/ui/elementdescription_serialize.cpp	8	SIG:Encoding::MakeReaderWriter	4	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/ui/elementdescription_serialize.cpp	8	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/elementdescription_serialize.cpp	8	OTHER:int32 enum field via uint overload	1	runtime/types/ui/ElementDescription.h	enum serialized through uint door (H8)
+runtime/src/ui/elementdescription_serialize.cpp	8	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/elementdescription_serialize.cpp	8	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/application/message_callbacks.cpp	7	NOCLASS:cursor/message callback set element {message, callback}	7	runtime/src/application/message_callbacks.cpp	AVL element has no type; read as uint64_t/unsigned
+runtime/src/collection/set_clear.cpp	7	ERASED:rtsetavl::Set/Node	7	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node/element receivers
+runtime/src/engine/mainloop_video.cpp	7	NOCLASS:VideoResourceEntry	2	runtime/src/engine/mainloop_video.cpp	resource entry copy/dtor element has no type
+runtime/src/engine/mainloop_video.cpp	7	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	POD Filename / RtObject::External
+runtime/src/engine/mainloop_video.cpp	7	CONST:FindOrLoad	1	runtime/src/engine/mainloop_video.cpp	const_cast of FindOrLoad result
+runtime/src/engine/mainloop_video.cpp	7	FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn	1	runtime/types/object/TypeInfo.h	void* inPlaceFactoryFn -> fn ptr
+runtime/src/engine/mainloop_video.cpp	7	OTHER:byte array view	1	runtime/src/engine/mainloop_video.cpp	
+runtime/src/graphics/edgemesh_vtable.cpp	7	POD:ExternalPtr-Serialize-thunk	4	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/edgemesh_vtable.cpp	7	FIELD:Video::*::deviceData/platformData	2	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/edgemesh_vtable.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/graphics/imagebuffer_derived.cpp	7	FIELD:Video::Context::void*-members	3	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/graphics/imagebuffer_derived.cpp	7	SIG:ReflectionImageBuffer-slot-void*	3	runtime/types/graphics/ReflectionImageBuffer.h	slot takes renderer/camera/scene as void*
+runtime/src/graphics/imagebuffer_derived.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	7	NOCLASS:AnimationClip event / particle fields	3	runtime/types/graphics/AnimationGroup.h	raw event slots / float fields at +0x10
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	7	SIG:Serialize-stream	2	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	7	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	7	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/wave24_lane_gfxmat.cpp	7	POD:ExternalPtr-Serialize-thunk	4	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/wave24_lane_gfxmat.cpp	7	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/graphics/wave24_lane_gfxmat.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/graphics/wave24_lane_gfxmat.cpp	7	H5:MeshInstance::_animation	1	runtime/types/graphics/Mesh.h	0x18-byte retail AnimationState held as raw storage
+runtime/src/io/filesystem_createfile_win.cpp	7	FLOOR:string_header	3	runtime/src/io/filesystem_createfile_win.cpp	WideString block header at data-4/-8
+runtime/src/io/filesystem_createfile_win.cpp	7	FLOOR:win32	2	runtime/src/io/filesystem_createfile_win.cpp	Win32 handle / LPCWSTR / FILETIME / WideString<->UTF8
+runtime/src/io/filesystem_createfile_win.cpp	7	ERASED:rtsetavl::Set/Node	1	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/io/filesystem_createfile_win.cpp	7	POD:RtIO::PodArray	1	runtime/types/io/FileSystem.h	_packfiles viewed as RtIO::PodArray
+runtime/src/object/external_list.cpp	7	SIG:Encoding::MakeReaderWriter	4	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/object/external_list.cpp	7	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/object/external_list.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/picking/pickingmesh.cpp	7	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/picking/pickingmesh.cpp	7	H5:String-members-held-as-raw-char*	3	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/picking/pickingmesh.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/dialog_vtable.cpp	7	SIG:Encoding::MakeReaderWriter	4	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/ui/dialog_vtable.cpp	7	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/dialog_vtable.cpp	7	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/dialog_vtable.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/spinnerdescription.cpp	7	POD:ExternalPtr-Serialize-thunk	6	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/spinnerdescription.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/sprite.cpp	7	FIELD:UI::Sprite::spriteSheet	4	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/sprite.cpp	7	FIELD:UI::String::table	3	runtime/types/ui/String.h	void* table -> StringTable*
+runtime/src/ui/spritecapture_class.cpp	7	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/spritecapture_class.cpp	7	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/spritecapture_class.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/spritecapture_class.cpp	7	FIELD:UI::Sprite::spriteSheet	1	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/spritecapture_class.cpp	7	FIELD:UI::SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	uint64_t -> ExternalPtr<MaterialInstance>
+runtime/src/ui/textdescription.cpp	7	POD:ExternalPtr-Serialize-thunk	4	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/textdescription.cpp	7	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/textdescription.cpp	7	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/collection/set_avl_pathid.cpp	6	ERASED:rtsetavl::Set/Node	6	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node/element receivers
+runtime/src/graphics/wave27_lane_gfxbig.cpp	6	ERASED:rtsetavl::Set/Node	4	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/graphics/wave27_lane_gfxbig.cpp	6	FIELD:RendererDrawable::_object	2	runtime/types/graphics/Camera.h	const void* _object -> Light*/Geometry*
+runtime/src/graphics/wave9_lane_gfxd.cpp	6	SIG:ArraySpec-element-callbacks	5	runtime/types/collection/Collection.h	element ctor/copy callbacks take void* dstv/srcv/raw
+runtime/src/graphics/wave9_lane_gfxd.cpp	6	FLOOR:byte_io	1		memcpy / uintptr cast
+runtime/src/io/persistence_registry_win.cpp	6	FIELD:Configuration/Persistence::settings map root (void*)	4	runtime/types/system/Configuration.h + io/Persistence.h	settings map held as void* set root; type as rtsetavl::Set / MapNode
+runtime/src/io/persistence_registry_win.cpp	6	SIG:Persistence-void*-self	1	runtime/types/io/Persistence.h	C-door void* self / RtIo::Persistence POD this
+runtime/src/io/persistence_registry_win.cpp	6	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem String key
+runtime/src/object/external_path_win.cpp	6	POD:RtSystem::String/Filename/WideString	6	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/internal.cpp	6	SIG:Internal-void*-door	4	runtime/types/object/Internal.h	InternalPtr door takes void* p / const_cast gen
+runtime/src/object/internal.cpp	6	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/pathfinding/pointlist.cpp	6	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/pathfinding/pointlist.cpp	6	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/pathfinding/pointlist.cpp	6	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/userinterface_close.cpp	6	FIELD:UI::DialogInstance::_ui / UserInterface list element	5	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/ui/userinterface_close.cpp	6	FIELD:UI::UserInterface::_audioScene	1	runtime/types/ui/UserInterface.h	void* -> Audio::Scene*
+runtime/src/ui/userinterface_draw.cpp	6	H5:UserInterface::scStorage/_captureViewport	2	runtime/types/ui/UserInterface.h	raw SpriteContext storage; viewport void*
+runtime/src/ui/userinterface_draw.cpp	6	FIELD:UI::DialogInstance::_ui / UserInterface list element	2	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/ui/userinterface_draw.cpp	6	FIELD:UI::Sprite::spriteSheet	2	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/widget_common.h	6	LOCAL:UI::Element	4	runtime/src/ui/widget_common.h + ui/*Element.h	B(p,off) raw-offset accessors over void* p; headers declare the fields
+runtime/src/ui/widget_common.h	6	FIELD:UI::DialogInstance::_ui / UserInterface list element	2	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/ui/widgets_input.cpp	6	H5:String-members-held-as-raw-char*	3	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/widgets_input.cpp	6	H5:ComboElement::_sprites	1	runtime/types/ui/ComboElement.h	Sprite array element view
+runtime/src/ui/widgets_input.cpp	6	FIELD:UI::ComboElement::_openDialog	1	runtime/types/ui/ComboElement.h	void* -> DialogInstance* / ComboDialog*
+runtime/src/ui/widgets_input.cpp	6	FIELD:UI::DialogInstance::_ui / UserInterface list element	1	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/video/videoprogram.cpp	6	POD:ExternalPtr-Serialize-thunk	5	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/video/videoprogram.cpp	6	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/achievement/goal_serialize.cpp	5	POD:ExternalPtr-Serialize-thunk	3	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/achievement/goal_serialize.cpp	5	SIG:Serialize-stream	2	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/collision2d/collisionmesh.cpp	5	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/collision2d/collisionmesh.cpp	5	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/collision2d/collisionmesh.cpp	5	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/meshinstance_draw.cpp	5	FIELD:RtGraphics::ExternalPtrHandle::p	3	runtime/types/graphics/Geometry.h	untyped ExternalPtrHandle::p (void*) -> T*; callers hold the handle
+runtime/src/graphics/meshinstance_draw.cpp	5	CONST:buffer	1	runtime/src/graphics/meshinstance_draw.cpp	const_cast<void*> of a buffer arg
+runtime/src/graphics/meshinstance_draw.cpp	5	FIELD:GraphicsMesh::_detailLevels	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<DetailLevel>
+runtime/src/graphics/renderer.cpp	5	FLOOR:string_header	2	runtime/src/graphics/renderer.cpp	string refcount header at data-4
+runtime/src/graphics/renderer.cpp	5	FIELD:Video::*::deviceData/platformData	1	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/renderer.cpp	5	POD:RtGraphics::Camera	1	runtime/types/graphics/Camera.h	POD self viewed as Camera
+runtime/src/graphics/renderer.cpp	5	FLOOR:byte_io	1		memcpy / uintptr cast
+runtime/src/graphics/wave21_lane_gfxbody.cpp	5	SIG:Graphics-void*-doors	4	runtime/types/graphics/Camera.h	offset accessor template over void* p; RtVideo::Context view
+runtime/src/graphics/wave21_lane_gfxbody.cpp	5	FIELD:Video::Context::void*-members	1	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/io/filesystem_timestamp_win.cpp	5	FLOOR:win32	3	runtime/src/io/filesystem_timestamp_win.cpp	Win32 handle / LPCWSTR / FILETIME / WideString<->UTF8
+runtime/src/io/filesystem_timestamp_win.cpp	5	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/serialize_family.cpp	5	SIG:Serialize-stream	5	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/object/external_add.cpp	5	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_add.cpp	5	SIG:External-void*-self	1	runtime/types/object/External.h	void* self calls External::Serialize
+runtime/src/object/external_add.cpp	5	ERASED:rtsetavl::Set/Node	1	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/object/external_add.cpp	5	FLOOR:ptr_int	1	(diagnostic counter)	(unsigned long long) in printf
+runtime/src/object/external_compiled.cpp	5	POD:RtSystem::String/Filename/WideString	5	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/ui/dialog_create.cpp	5	FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn	3	runtime/types/object/TypeInfo.h	factoryFn void* -> fn ptr; Factory POD
+runtime/src/ui/dialog_create.cpp	5	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/element.cpp	5	FIELD:UI::Element::_border	4	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/element.cpp	5	ERASED:rtcoll::ArrayHdr	1	runtime/types/collection/Collection.h + array*.cpp	void* door / type-erased Array core (ArrayHdr)
+runtime/src/ui/radiodescription.cpp	5	FIELD:UI::ElementDescription::InternalPtr<Element> slots	4	runtime/types/ui/ElementDescription.h	InternalPtr<Element> slot viewed as Element**
+runtime/src/ui/radiodescription.cpp	5	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/scrolldescription.cpp	5	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/scrolldescription.cpp	5	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/scrolldescription.cpp	5	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/spritecapture.cpp	5	H5:SpriteCapture::_sprites	2	runtime/types/ui/SpriteCapture.h	_sprites raw header viewed as Array<Sprite>
+runtime/src/ui/spritecapture.cpp	5	FIELD:UI::Sprite::spriteSheet	2	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/spritecapture.cpp	5	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/spritecontext_flush.cpp	5	FIELD:Video::*::deviceData/platformData	3	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/ui/spritecontext_flush.cpp	5	FIELD:UI::Sprite::spriteSheet	1	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/spritecontext_flush.cpp	5	FIELD:UI::SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	uint64_t -> ExternalPtr<MaterialInstance>
+runtime/src/achievement/achievement_serialize.cpp	4	POD:ExternalPtr-Serialize-thunk	3	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/achievement/achievement_serialize.cpp	4	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/achievement/achievement_vtable.cpp	4	POD:ExternalPtr-Serialize-thunk	3	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/achievement/achievement_vtable.cpp	4	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/application/application_win.cpp	4	NOCLASS:cursor/message callback set element {message, callback}	4	runtime/src/application/message_callbacks.cpp	AVL element has no type; read as uint64_t/unsigned
+runtime/src/collection/introsort.cpp	4	NOCLASS:PackageFile priority view (SortByKey70)	2	runtime/types/io/FileSystem.h	void** packfile list element read at +0x70
+runtime/src/collection/introsort.cpp	4	ERASED:rtcoll::ArrayHdr	2	runtime/types/collection/Collection.h	void* door (audio hold void*)
+runtime/src/collision2d/surface.cpp	4	SIG:Encoding::MakeReaderWriter	3	runtime/types/io/Stream.h (Encoding slot)	Encoding reader-writer factory is a raw vslot returning void*
+runtime/src/collision2d/surface.cpp	4	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/engine/engine_platform_win.cpp	4	FLOOR:pe_walk	4	runtime/src/engine/engine_platform_win.cpp	module base + ghidra address
+runtime/src/graphics/material.cpp	4	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/material.cpp	4	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/graphics/material.cpp	4	OTHER:int32 enum field via uint overload	1	runtime/types/graphics/Material.h	_type serialized through uint door (H8)
+runtime/src/input/input.cpp	4	NOCLASS:KeyMap binding set nodes (rtsetavl24)	4	runtime/types/input/ (KeyMap)	binding AVL set/node held void*
+runtime/src/io/memory_stream.cpp	4	FLOOR:byte_io	4		memcpy / uintptr cast
+runtime/src/io/persistence_savelist_job.cpp	4	POD:RtSystem::String/Filename/WideString	4	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/persistence_saves_win.cpp	4	H5:Persistence::blockDescData/blockPtrData	2	runtime/types/io/Persistence.h	raw {data,size,cap} headers viewed as Array<>
+runtime/src/io/persistence_saves_win.cpp	4	SIG:Persistence-void*-self	2	runtime/types/io/Persistence.h	C-door void* self / RtIo::Persistence POD this
+runtime/src/io/serializer_class.cpp	4	SIG:Serialize-stream	4	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/save/saveload_draw.cpp	4	FIELD:Video::Context::void*-members	3	runtime/types/video/Context.h	ctx->_contextData/_renderBuffer; raw bytes
+runtime/src/save/saveload_draw.cpp	4	FIELD:Video::*::deviceData/platformData	1	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/system/thread_win.cpp	4	FWD:Thread slot calls stay raw (B34_RULES 3.1)	4	runtime/types/system/Thread.h	slot 1 would recurse; raw vslot calls
+runtime/src/ui/documenttext.cpp	4	H5:String-members-held-as-raw-char*	3	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/documenttext.cpp	4	FIELD:UI::Sprite::spriteSheet	1	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/documenttextelement.cpp	4	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/documenttextelement.cpp	4	FIELD:UI::UserInterface::_audioScene	1	runtime/types/ui/UserInterface.h	void* -> Audio::Scene*
+runtime/src/ui/documenttextelement.cpp	4	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/element_sprite_debug.cpp	4	SIG:UI-debug-extern-void*	4	runtime/src/ui/element_sprite_debug.cpp	code/Game void* extern self/spriteData
+runtime/src/ui/spritesheet_vtable.cpp	4	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/spritesheet_vtable.cpp	4	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/spritesheet_vtable.cpp	4	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/textelement.cpp	4	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/textelement.cpp	4	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/video/batchc_context_setlight.cpp	4	SIG:Video::Context::SetLight-void*-params	4	runtime/types/video/Context.h	direction/attenuation/colour/position passed as void*
+runtime/src/video/context_bind.cpp	4	FIELD:Video::Context::void*-members	4	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/video/context_ctor.cpp	4	FIELD:Video::Context::void*-members	4	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/audio/audio.cpp	3	SIG:Audio::Scene-void*-door	2	runtime/types/audio/Scene.h	Scene dtor/ctor doors take void* selfPtr
+runtime/src/audio/audio.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* serializer) parameter
+runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp	3	SIG:Serialize-stream	2	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp	3	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/graphics/cull.cpp	3	SIG:Graphics-void*-doors	3	runtime/types/graphics/Camera.h	CullStack ctor/ops take void* selfv/scenev
+runtime/src/graphics/wave29_lane_slots.cpp	3	NOCLASS:identity transform table	1	runtime/src/graphics/wave29_lane_slots.cpp	g_identityTable raw bytes as Math::Transform
+runtime/src/graphics/wave29_lane_slots.cpp	3	H5:MeshInstance::_animation	1	runtime/types/graphics/Mesh.h	0x18-byte retail AnimationState held as raw storage
+runtime/src/graphics/wave29_lane_slots.cpp	3	FIELD:GraphicsMesh::_detailLevels	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<DetailLevel>
+runtime/src/io/closure_batch2b_win.cpp	3	FLOOR:string_header	3	runtime/src/io/closure_batch2b_win.cpp	WideString block header at data-4/-8
+runtime/src/io/filesystem_openfile_win.cpp	3	FLOOR:win32	2	runtime/src/io/filesystem_openfile_win.cpp	Win32 handle / LPCWSTR / FILETIME / WideString<->UTF8
+runtime/src/io/filesystem_openfile_win.cpp	3	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/package_file_read_win.cpp	3	POD:RtSystem::String/Filename/WideString	3	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/text_file_stream_win.cpp	3	FLOOR:byte_io	3		memcpy / uintptr cast
+runtime/src/math/vector.cpp	3	SIG:Serialize-stream	3	runtime/types/math/ Serialize(void*)	Serialize(void* serializer) -> IO::Serializer&
+runtime/src/object/external_set.cpp	3	ERASED:rtsetavl::Set/Node	1	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/object/external_set.cpp	3	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_set.cpp	3	SIG:External-void*-self	1	runtime/types/object/External.h	void* ext -> External
+runtime/src/object/type_system.cpp	3	SIG:Internal-void*-door	2	runtime/types/object/Type.h	Base/Serializer void* self
+runtime/src/object/type_system.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* serializer) parameter
+runtime/src/system/error.cpp	3	OTHER:utf8-utf16-transcoder-bytes	3	runtime/src/system/error.cpp	transcoders walk text as bytes
+runtime/src/system/filename.cpp	3	POD:RtSystem::String/Filename/WideString	3	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/ui/characterset.cpp	3	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/characterset.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/comboelement.cpp	3	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/comboelement.cpp	3	FIELD:UI::ComboElement::_openDialog	1	runtime/types/ui/ComboElement.h	void* -> DialogInstance* / ComboDialog*
+runtime/src/ui/cursor.cpp	3	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/cursor.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/dialog.cpp	3	FIELD:UI::Element::UpdateState::config	1	runtime/types/ui/Element.h	updateState void*
+runtime/src/ui/dialog.cpp	3	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/dialog.cpp	3	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/editelement.cpp	3	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/editelement.cpp	3	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/element_common.h	3	FIELD:UI::Sprite::spriteSheet	2	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/element_common.h	3	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/element_vtable.cpp	3	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/element_vtable.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/layoutdescription.cpp	3	OTHER:int32 enum field via uint overload	2	runtime/types/ui/LayoutDescription.h	enum serialized through uint door (H8)
+runtime/src/ui/layoutdescription.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/layoutelement.cpp	3	FIELD:UI::Element::_border	3	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/numberelement.cpp	3	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/numberelement.cpp	3	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/pagedescription.cpp	3	FIELD:UI::ElementDescription::InternalPtr<Element> slots	2	runtime/types/ui/ElementDescription.h	InternalPtr<Element> slot viewed as Element**
+runtime/src/ui/pagedescription.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/ribbondescription.cpp	3	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/ribbondescription.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/sprite_debug.cpp	3	FIELD:UI::Sprite::spriteSheet	1	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/sprite_debug.cpp	3	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/sprite_debug.cpp	3	SIG:UI-debug-extern-void*	1	runtime/src/ui/sprite_debug.cpp	code/Game void* extern sprite
+runtime/src/ui/stringtable_factory.cpp	3	H5:String-members-held-as-raw-char*	2	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/stringtable_factory.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/tabledescription.cpp	3	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/ui/tabledescription.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/userinterface_frame.cpp	3	FIELD:UI::DialogInstance::_ui / UserInterface list element	2	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/ui/userinterface_frame.cpp	3	NOCLASS:UI frame scratch state	1	runtime/src/ui/userinterface_frame.cpp	&st viewed as bytes
+runtime/src/ui/userinterface_standalone.cpp	3	FIELD:UI::DialogInstance::_ui / UserInterface list element	2	runtime/types/ui/DialogInstance.h + UserInterface.h	void* _ui / node->element / slot -> UserInterface* / DialogInstance*
+runtime/src/ui/userinterface_standalone.cpp	3	FIELD:UI::UserInterface::_audioScene	1	runtime/types/ui/UserInterface.h	void* -> Audio::Scene*
+runtime/src/video/imagebuffer_platform_serialize.cpp	3	H5:ImageBuffer::levels	2	runtime/types/video/ImageBuffer.h	levels array raw header
+runtime/src/video/imagebuffer_platform_serialize.cpp	3	ERASED:rtcoll::ArrayHdr	1	runtime/types/collection/Collection.h + array*.cpp	void* door / type-erased Array core (ArrayHdr)
+runtime/src/video/video_program.cpp	3	FLOOR:byte_io	2		memcpy / uintptr cast
+runtime/src/video/video_program.cpp	3	SIG:VideoProgram-slot-Context&	1	runtime/types/video/VideoProgram.h	retail Context& arrives as void*
+runtime/types/object/Internal.h	3	SIG:Internal-void*-door	3	runtime/types/object/Internal.h	InternalBasePtr::Get returns void*
+runtime/src/application/platform_startup_win.cpp	2	NOCLASS:cursor/message callback set element {message, callback}	2	runtime/src/application/message_callbacks.cpp	AVL element has no type; read as uint64_t/unsigned
+runtime/src/collection/set_avl_e24.cpp	2	ERASED:rtsetavl::Set/Node	2	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node/element receivers
+runtime/src/engine/engine_lifecycle.cpp	2	SIG:Video::Device::operator new / ~Modification POD	2	runtime/types/video/Device.h	operator new returns void*; ??1 takes RtIO::Modification
+runtime/src/engine/engine_platform.cpp	2	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem String key
+runtime/src/engine/engine_platform.cpp	2	FIELD:Configuration/Persistence::settings map root (void*)	1	runtime/types/system/Configuration.h + io/Persistence.h	settings map held as void* set root; type as rtsetavl::Set / MapNode
+runtime/src/engine/loops.cpp	2	FIELD:Video::Context::void*-members	1	runtime/types/video/Context.h	_pixelConstantStaging raw bytes
+runtime/src/engine/loops.cpp	2	FIELD:MainLoopCallback::_func	1	runtime/types/engine/ (MainLoopCallback entry)	_func void* -> PostDrawFunc/PostUpdateFunc
+runtime/src/engine/singleton_ctors.cpp	2	POD:RtSystem::Random	1	runtime/types/system/	Random POD view
+runtime/src/engine/singleton_ctors.cpp	2	H5:Persistence::_workerVtable	1	runtime/types/io/Persistence.h	placement construction over embedded subobject
+runtime/src/graphics/animationstate_transforms.cpp	2	FIELD:RtGraphics::ExternalPtrHandle::p	1	runtime/types/graphics/Geometry.h	untyped ExternalPtrHandle::p (void*) -> T*; callers hold the handle
+runtime/src/graphics/animationstate_transforms.cpp	2	H5:AnimationState::tmpStorage	1	runtime/types/graphics/AnimationState.h	raw stack storage viewed as Instance, never constructed
+runtime/src/graphics/closure_batch2b.cpp	2	SIG:ArraySpec-element-callbacks	2	runtime/types/collection/Collection.h	element copy callbacks take void* self/src
+runtime/src/graphics/lights_vtable.cpp	2	POD:RtGraphics::Camera	1	runtime/types/graphics/Camera.h	POD camera view as Camera
+runtime/src/graphics/lights_vtable.cpp	2	FIELD:Video::*::deviceData/platformData	1	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/sunlight.cpp	2	FIELD:Video::*::deviceData/platformData	1	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/sunlight.cpp	2	FIELD:Video::Context::void*-members	1	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/graphics/wave23_lane_gfxbody.cpp	2	FIELD:Video::*::deviceData/platformData	1	runtime/types/video/Device.h, Buffers.h, graphics/GraphicsMesh.h Buffer	void* deviceData/platformData -> typed *Data
+runtime/src/graphics/wave23_lane_gfxbody.cpp	2	FIELD:Video::Context::void*-members	1	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/graphics/wave9_lane_gfx.cpp	2	NOCLASS:RendererDrawGroup::items	2	runtime/types/graphics/Camera.h	group+0x1c0+pass*0x10 Array<RendererDrawItem>
+runtime/src/io/filesystem_startup.cpp	2	OTHER:Configuration read by raw offset via void* cfg	1	runtime/types/system/Configuration.h	_singleton +0x10 command-line map
+runtime/src/io/filesystem_startup.cpp	2	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/filesystem_win.cpp	2	FLOOR:win32	2	runtime/src/io/filesystem_win.cpp	Win32 handle / LPCWSTR / FILETIME / WideString<->UTF8
+runtime/src/io/package_file_dtor.cpp	2	POD:RtSystem::String/Filename/WideString	2	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/io/package_file_serialize.cpp	2	SIG:Serialize-stream	2	runtime/types/object/External.h	bool* v door
+runtime/src/io/persistence_saves.cpp	2	SIG:Persistence-void*-self	1	runtime/types/io/Persistence.h	C-door void* self / RtIo::Persistence POD this
+runtime/src/io/persistence_saves.cpp	2	FIELD:Configuration/Persistence::settings map root (void*)	1	runtime/types/system/Configuration.h + io/Persistence.h	settings map held as void* set root; type as rtsetavl::Set / MapNode
+runtime/src/io/persistence_startup.cpp	2	FIELD:Configuration/Persistence::settings map root (void*)	2	runtime/types/io/Persistence.h	settings map void* root
+runtime/src/object/external_find.cpp	2	ERASED:rtsetavl::Set/Node	1	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/object/external_find.cpp	2	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_forceunload.cpp	2	ERASED:rtsetavl::Set/Node	1	runtime/types/collection/Collection.h, runtime/src/collection/set_avl.h	type-erased AVL Set core: void* set/node receivers
+runtime/src/object/external_forceunload.cpp	2	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/object/external_set.h	2	NOCLASS:ResourceEntry/ReferenceEntry set node element	2	runtime/src/object/external_set.h	rtresset/rtrefset node element views
+runtime/src/object/reference_set.h	2	NOCLASS:ResourceEntry/ReferenceEntry set node element	2	runtime/src/object/reference_set.h	rtresset/rtrefset node element views
+runtime/src/system/closure_batch2b.cpp	2	FLOOR:ptr_int	2	runtime/src/system/closure_batch2b.cpp	byte distance on uint64_t* block header
+runtime/src/system/value_types.cpp	2	OTHER:int32 field via uint overload (H8 signedness)	1	runtime/types/system/Value.h	serialize_signedness; needs retail field type
+runtime/src/system/value_types.cpp	2	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/src/ui/borderdescription.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/borderdescription.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/borderelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/buttonelement.cpp	2	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/buttonelement.cpp	2	FIELD:UI::Element::UpdateState::config	1	runtime/types/ui/Element.h	UpdateState.config void* -> Input::KeyMap*
+runtime/src/ui/combodescription.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/combodescription.cpp	2	FIELD:UI::ComboElement::_openDialog	1	runtime/types/ui/ComboElement.h	void* -> DialogInstance* / ComboDialog*
+runtime/src/ui/dialog_ctor_dtor.cpp	2	FIELD:UI::Dialog::_references	1	runtime/types/ui/Dialog.h	void** _references -> Array<ExternalPtr>
+runtime/src/ui/dialog_ctor_dtor.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/dialog_settings.cpp	2	FIELD:UI::DialogInstance::_userData	2	runtime/types/ui/DialogInstance.h	_userData raw settings byte buffer
+runtime/src/ui/documenttextdescription.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/documenttextdescription.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/element_bodies_b5.cpp	2	FIELD:UI::Sprite::spriteSheet	1	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/element_bodies_b5.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/graphelement.cpp	2	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/graphelement.cpp	2	FIELD:UI::GraphElement::_seriesData	1	runtime/types/ui/GraphElement.h	void* -> GraphSeries* (0x18-byte records)
+runtime/src/ui/groupelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/labeldescription.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/labeldescription.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/labelelement.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/labelelement.cpp	2	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/listelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/numberdescription.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/numberdescription.cpp	2	OTHER:int32 enum field via uint overload	1	runtime/types/ui/NumberDescription.h	byte flag via bool&
+runtime/src/ui/numbereditdescription.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/numbereditdescription.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/ui/progresselement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/ribbonelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/scrollelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/sliderelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/spinnerelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/spritecontext.cpp	2	FIELD:Video::Context::void*-members	2	runtime/types/video/Context.h	void* _renderBuffer/_imageBuffers/_indexBuffer/_pixelConstantStaging -> typed
+runtime/src/ui/tabelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/tableelement.cpp	2	FIELD:UI::Element::_border	2	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/tooltipdialog.cpp	2	FIELD:UI::Element::_toolTipString	2	runtime/types/ui/Element.h	void* _toolTipString / _name -> char* String
+runtime/src/ui/userinterface_showdialog.cpp	2	FIELD:UI::DialogInstance::_ui / UserInterface list element	2	runtime/types/ui/DialogInstance.h	ExternalPtr Get()+0x28 raw read
+runtime/src/video/context.cpp	2	CONST:video-void*	2	runtime/src/video/context.cpp	const_cast<void*> of image / render buffer args
+runtime/src/video/imagebuffer_vtable.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/video/imagebuffer_vtable.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/video/pixelprogram.cpp	2	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/video/pixelprogram.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/video/shaderprogram.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/video/shaderprogram.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/video/vertexlayout.cpp	2	H5:String-members-held-as-raw-char*	1	owning class headers (ui/*Description.h, Graphics, Video, Pathfinding, Picking)	System::String members held as raw char*/POD storage; make them real System::String
+runtime/src/video/vertexlayout.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/video/vertexprogram.cpp	2	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/video/vertexprogram.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/types/io/FileStream.h	2	SIG:Encoding-codec-void*-params	2	runtime/types/io/Stream.h	Encoding* from void* enc
+runtime/types/io/Stream.h	2	SIG:Encoding-codec-void*-params	2	runtime/types/io/Stream.h	Encoding* from void* enc
+runtime/types/object/External.h	2	POD:ExternalPtr-Serialize-thunk	2	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/types/system/Filename.h	2	H5:Filename-is-String	2	runtime/types/system/Filename.h	Filename IS a String; base-class would run String ctor/dtor (behaviour)
+runtime/src/achievement/achievement_state.cpp	1	CONST:this-const-cast	1	runtime/src/achievement/achievement_state.cpp	const_cast<Achievement*>(this) in a const accessor
+runtime/src/audio/audio_effectslot_serialize.cpp	1	POD:ExternalPtr-Serialize-thunk	1	runtime/types/object/External.h	ExternalPtr<T>::Serialize thunk takes RtObject::External** / rt::io::Serializer* PODs
+runtime/src/audio/audio_play_platform.cpp	1	FLOOR:win32	1	runtime/src/audio/audio_play_platform.cpp	const BYTE* view of buffer data
+runtime/src/audio/audio_stream_win.cpp	1	ERASED:rtcoll::ArrayHdr	1	runtime/types/collection/Collection.h + array*.cpp	void* door / type-erased Array core (ArrayHdr)
+runtime/src/audio/wave29_lane_avbody.cpp	1	SIG:Audio::Scene-void*-door	1	runtime/types/audio/Scene.h	callback userData is void*
+runtime/src/collection/array_internal.h	1	ERASED:rtcoll::ArrayHdr	1	runtime/src/collection/array_internal.h	AsArray bridge void* door -> ArrayWithSpec
+runtime/src/collection/linkedlist.cpp	1	FLOOR:alloc_header	1	runtime/src/collection/linkedlist.cpp	unit-test node allocator malloc result
+runtime/src/engine/engine.cpp	1	FIELD:Video::Device::gap50	1	runtime/types/video/Device.h	+0x50..0x5f raw gap -> VideoCallback
+runtime/src/engine/mainloop_frame.cpp	1	FIELD:MainLoopCallback::_func	1	runtime/types/engine/ (MainLoopCallback entry)	_func void* -> PostDrawFunc/PostUpdateFunc
+runtime/src/engine/updateloop_loadresources.cpp	1	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	POD Filename
+runtime/src/graphics/animation.cpp	1	SIG:Graphics-void*-doors	1	runtime/types/graphics/Animation.h	void* self door -> AnimationManager*
+runtime/src/graphics/sun_camera.cpp	1	POD:RtGraphics::Camera	1	runtime/types/graphics/Camera.h	POD camera view as Camera
+runtime/src/graphics/wave28_lane_gfxbody.cpp	1	FLOOR:byte_io	1		memcpy / uintptr cast
+runtime/src/input/input_platform_shutdown_win.cpp	1	NOCLASS:KeyMap binding set nodes (rtsetavl24)	1	runtime/types/input/ (KeyMap)	binding AVL set/node held void*
+runtime/src/input/keymap_save.cpp	1	NOCLASS:KeyMap binding set nodes (rtsetavl24)	1	runtime/types/input/ (KeyMap)	binding AVL set/node held void*
+runtime/src/io/persistence_worker_win.cpp	1	SIG:Persistence-void*-self	1	runtime/types/io/Persistence.h	C-door void* self / RtIo::Persistence POD this
+runtime/src/io/serializer.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* serializer) parameter
+runtime/src/math/transform.cpp	1	SIG:Serialize-stream	1	runtime/types/math/ Serialize(void*)	Serialize(void* serializer) -> IO::Serializer&
+runtime/src/object/internal_ptr_array_serialize.cpp	1	SIG:Internal-void*-door	1	runtime/types/object/Internal.h	TypedPtr elems
+runtime/src/picking/scene.cpp	1	SIG:Picking::Scene::InitGrid-door	1	runtime/src/picking/scene.cpp	void* door; GAME passes raw MemAlloc storage
+runtime/src/save/closure_batch2b.cpp	1	SIG:ArraySpec-element-callbacks	1	runtime/types/collection/Collection.h	element copy callbacks take void* self/src
+runtime/src/system/compression.cpp	1	FLOOR:alloc_header	1	runtime/src/system/compression.cpp	alloc result (tier-I misses RtMemAlloc)
+runtime/src/ui/animatedimagedescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/buttondescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/checkdescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/checkelement.cpp	1	FIELD:UI::Element::UpdateState::config	1	runtime/types/ui/Element.h	UpdateState.config void* -> Input::KeyMap*
+runtime/src/ui/clipregiondescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/clipregionelement.cpp	1	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/combodialog_ctor.cpp	1	FLOOR:alloc_header	1	runtime/src/ui/combodialog_ctor.cpp	InternalMemAlloc result
+runtime/src/ui/containerdescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/containerelement.cpp	1	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/editdescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/graphdescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/groupdescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/imagedescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/imageelement.cpp	1	FIELD:UI::Element::_border	1	runtime/types/ui/Element.h	_border is void*; type it Element* (unit test ui_element_abi_test.cpp:394 pins it)
+runtime/src/ui/listdescription.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/ui/spritecontext_add.cpp	1	FIELD:UI::Sprite::spriteSheet	1	runtime/types/ui/Sprite.h (+SpriteContext.h _currentSheet, Dialog.h _spriteSheet)	void* ExternalPtr<SpriteSheet> -> SpriteSheet*
+runtime/src/ui/textelement_cachetext.cpp	1	FIELD:UI::LabelElement::_paramsData	1	runtime/types/ui/LabelElement.h	_params._data void* -> String*
+runtime/src/ui/userinterface_hover.cpp	1	FIELD:UI::Element::_toolTipDialog	1	runtime/types/ui/Element.h	void* _toolTipDialog -> Dialog*
+runtime/src/video/device_startup.cpp	1	NOCLASS:device list node	1	runtime/src/video/device_startup.cpp	node read as unsigned
+runtime/src/video/renderstate.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h	Serialize(void* stream) slot parameter; retype to IO::Stream&
+runtime/src/video/save_image_to_file.cpp	1	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem view of Filename
+runtime/types/graphics/AnimationGroup.h	1	FIELD:AnimationGroup::_clips	1	runtime/types/graphics/AnimationGroup.h	_clips raw Array -> Array<Animation>
+runtime/types/graphics/GraphicsMesh.h	1	FIELD:GraphicsMesh::_nodes	1	runtime/types/graphics/GraphicsMesh.h	raw Array header -> Array<Node>
+runtime/types/graphics/Mesh.h	1	FIELD:RtGraphics::ExternalPtrHandle::p	1	runtime/types/graphics/Geometry.h	untyped ExternalPtrHandle::p (void*) -> T*; callers hold the handle
+runtime/types/object/TypeInfo.h	1	SIG:Internal-void*-door	1	runtime/types/object/TypeInfo.h	IsDerivedFrom on void* p
+runtime/types/ui/EditElement.h	1	POD:RtSystem::String/Filename/WideString	1	runtime/types/system/String.h + Filename.h	RtSystem POD API takes RtSystem::String/Filename; callers hold System:: classes (H10)
+runtime/types/ui/UserInterface.h	1	FIELD:UI::UserInterface::dialog-list-element	1	runtime/types/ui/UserInterface.h	list element void* dialog
