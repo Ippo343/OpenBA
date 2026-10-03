@@ -50,6 +50,7 @@
 #include "Game/PlayerToolManager.h"
 #include "Game/Minimap.h"
 #include "Game/WeatherSimulation.h"
+#include "Game/WeatherParticleGeometry.h"   // the effect slots' class
 #include "Game/EventLog.h"            // B4 GAME-a: the pointees the serializer reads by name
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "Entity/ComponentEntity.h"   // caller batch CB6: TypeId()
@@ -152,23 +153,39 @@ namespace {
 // +0x24..+0x27 are touched by NEITHER arm — the `unwritten` pair names the
 // trailing hole; +0x04..+0x07 is the second, non-contiguous one. The String
 // copy makes byteCopy=false and the String dtor is the destroy.
-void AssignEventEntry(uint8_t* dst, const uint8_t* src) {
-    *reinterpret_cast<uint32_t*>(dst) = *reinterpret_cast<const uint32_t*>(src);
-    // B.3.1 bridge: the event entry is still untyped bytes.
-    new (dst + 0x8) System::String(*reinterpret_cast<const System::String*>(src + 0x8));
-    memcpy(dst + 0x10, src + 0x10, 5 * 4);
+// The element is EventLogEntry (Game/EventLog.h), reached through
+// Collection.h's element adapters.
+void CopyEventEntry(EventLogEntry* dst, const EventLogEntry* src) {
+    dst->color = src->color;
+    new (&dst->text) System::String(src->text);
+    dst->eventType = src->eventType;   // +0x10..+0x23: five ints (was one 20-byte copy)
+    dst->severity  = src->severity;
+    dst->tileIndex = src->tileIndex;
+    dst->iconIndex = src->iconIndex;
+    dst->popup     = src->popup;
 }
 // ⚠ Seed values are load-bearing: id=-1, c=d=e=-1, a=b=0.
-void InitEventEntry(uint8_t* dst) {
-    *reinterpret_cast<uint32_t*>(dst) = 0xffffffff;
-    *reinterpret_cast<uint64_t*>(dst + 0x8) = 0;                 // null String
-    *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;                // a=b=0
-    *reinterpret_cast<uint64_t*>(dst + 0x18) = 0xffffffffffffffff; // c=d=-1
-    *reinterpret_cast<uint32_t*>(dst + 0x20) = 0xffffffff;       // e=-1
+void ZeroEventEntry(EventLogEntry* dst) {
+    dst->color = 0xffffffff;
+    dst->text._data = nullptr;         // null String (retail: one qword 0)
+    dst->eventType = 0;                // a=b=0 (retail: one qword store, H7)
+    dst->severity  = 0;
+    dst->tileIndex = -1;               // c=d=-1 (retail: one qword store, H7)
+    dst->iconIndex = -1;
+    dst->popup     = -1;               // e=-1
 }
-void DestroyEventEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
+void DestroyEventEntries(EventLogEntry* elems, int count) {
     for (int i = 0; i < count; i++)
-        reinterpret_cast<System::String*>(base + static_cast<size_t>(i) * 0x28 + 0x8)->~String();
+        elems[i].text.~String();
+}
+void AssignEventEntry(uint8_t* dst, const uint8_t* src) {
+    rtcoll::AssignAs<EventLogEntry, &CopyEventEntry>(dst, src);
+}
+void InitEventEntry(uint8_t* dst) {
+    rtcoll::InitAs<EventLogEntry, &ZeroEventEntry>(dst);
+}
+void DestroyEventEntry(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<EventLogEntry, &DestroyEventEntries>(ignoredThis, base, count);
 }
 const rtcoll::ArraySpec kSpec_EventEntry = {             // exe 0x1400199a0
     "Array<EventLogEntry>", 0x28, 8,
@@ -183,11 +200,35 @@ using EventEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // 0x1c, align 4. Copy writes +0x00..+0x18 and leaves +0x19..+0x1b (retail's
 // 4x-unrolled dword loop plus the bool); init memsets the whole stride.
 // Partial copy, so byteCopy=false; trivially destructible.
-void AssignCamView(uint8_t* dst, const uint8_t* src) {
-    memcpy(dst, src, 0x18);
-    dst[0x18] = src[0x18];
+// The element is PlayerCameraView (Game/PlayerToolManager.h).
+void CopyCamView(PlayerCameraView* dst, const PlayerCameraView* src) {
+    dst->position.x = src->position.x;   // +0x00..+0x17 (was one 0x18-byte copy)
+    dst->position.y = src->position.y;
+    dst->position.z = src->position.z;
+    dst->field_0x0C = src->field_0x0C;
+    dst->field_0x10 = src->field_0x10;
+    dst->field_0x14 = src->field_0x14;
+    dst->used = src->used;               // +0x18, the raw byte
 }
-void InitCamView(uint8_t* dst) { memset(dst, 0, 0x1c); }
+// retail memsets the whole 0x1C stride: every named field, the pad included (H7)
+void ZeroCamView(PlayerCameraView* dst) {
+    dst->position.x = 0.0f;
+    dst->position.y = 0.0f;
+    dst->position.z = 0.0f;
+    dst->field_0x0C = 0.0f;
+    dst->field_0x10 = 0.0f;
+    dst->field_0x14 = 0.0f;
+    dst->used = false;
+    dst->_pad19[0] = 0;
+    dst->_pad19[1] = 0;
+    dst->_pad19[2] = 0;
+}
+void AssignCamView(uint8_t* dst, const uint8_t* src) {
+    rtcoll::AssignAs<PlayerCameraView, &CopyCamView>(dst, src);
+}
+void InitCamView(uint8_t* dst) {
+    rtcoll::InitAs<PlayerCameraView, &ZeroCamView>(dst);
+}
 const rtcoll::ArraySpec kSpec_CamView = {                // exe 0x14002e000
     "Array<CameraView>", 0x1c, 4,
     &AssignCamView, &InitCamView, nullptr, false,
@@ -201,7 +242,7 @@ using CamViewArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
     // B.3.2 bridge: the event notifier's +0x18 header is still raw bytes.
-    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);
+    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);   // LEFT: EventLog.h (GAME-1): entries is three raw fields, not a Collection::Array (H5)
 }
 
 // ============================================================
@@ -275,11 +316,11 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
             if (!IsSaving(&stream)) {
                 WeatherEffect_SetEnabled(this, i, 1);
             }
-            // LEFT: the effect's two floats (+0xC4 / +0xC0) are the weather
-            // particle geometry's (weather_particles.cpp, GAME-c): read raw.
-            uint8_t* geo = reinterpret_cast<uint8_t*>(*slot);
-            ser.Serialize(*(float*)(geo + 0xc4), nullptr);
-            ser.Serialize(*(float*)(geo + 0xc0), nullptr);
+            // Every effect slot holds a WeatherParticleGeometry
+            // (WeatherEffect_SetEnabled builds it); its +0xC4 / +0xC0 floats.
+            WeatherParticleGeometry* geo = static_cast<WeatherParticleGeometry*>(*slot);
+            ser.Serialize(geo->_fadeDirection, nullptr);   // +0xC4
+            ser.Serialize(geo->_intensity, nullptr);       // +0xC0
         }
     }
 }
@@ -293,7 +334,7 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
 // ENDGAME B.3.2 step 2: see the kSpec_CamView row above EventLog_Resize_199a0.
 extern "C" void CamViewArray_Resize_e000(void* hdrVoid, int newCount) {
     // B.3.2 bridge: EntityUI+0x70 is still a raw header.
-    reinterpret_cast<CamViewArray*>(hdrVoid)->SetSize(newCount);
+    reinterpret_cast<CamViewArray*>(hdrVoid)->SetSize(newCount);   // LEFT: PlayerToolManager.h (PLAYER): cameraViews is three raw fields, not a Collection::Array (H5)
 }
 
 // ============================================================
@@ -670,11 +711,10 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
                 int loaded = 0, missing = 0;
                 for (int id = 0; id < refCount; ++id) {
                     void* fname[1] = { nullptr };
-                    ::new (static_cast<void*>(fname)) System::Filename(
+                    System::Filename* path = ::new (static_cast<void*>(fname)) System::Filename(
                         extFactory->GetPathForReferenceId((unsigned int)id));
-                    if (!fname[0]) continue;
-                    const void* pl = extFactory->FindOrLoad(
-                        *reinterpret_cast<const System::Filename*>(fname));
+                    if (!path->_data) continue;
+                    const void* pl = extFactory->FindOrLoad(*path);
                     if (pl) { ++loaded; }
                     else {
                         // Report them: these fail on the lazy path too, so the
@@ -682,13 +722,13 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
                         // is the kind of thing that turns into a null deref later.
                         if (++missing <= 20)
                             fprintf(stderr, "[PreloadRefs] MISS id=%d \"%s\"\n", id,
-                                    reinterpret_cast<const char*>(fname[0]));
+                                    path->_data);
                     }
                     // System::Filename is one refcounted char* (count at str-4,
                     // block at str-8); drop our reference so this does not leak one
                     // string per entry on every load.
-                    char* str = reinterpret_cast<char*>(fname[0]);
-                    int* rc = reinterpret_cast<int*>(str - 4);
+                    char* str = path->_data;
+                    int* rc = reinterpret_cast<int*>(str - 4);  // CAST-OK: string_header
                     if (--*rc == 0) System::MemoryAllocator::MemFree(str - 8);
                 }
                 extFactory->EnableReferenceMode(true);
