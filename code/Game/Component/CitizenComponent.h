@@ -46,9 +46,12 @@
 // +0xB8 (Graphics::MeshInstance) have destructors in retail that the tree's
 // defaulted dtor does not run, so they are raw storage of the right size here,
 // with the real type named on the line. Declaring the real type is the
-// `behaviour:` commit of B38 D2. System::Time fields are `int64_t` ticks: the
-// runtime's System::Time (runtime/types/system/Value.h) cannot be included into
-// the exe tree (its global `struct Time` collides with engine/types/common.h).
+// `behaviour:` commit of B38 D2. System::Time fields are `System::Time`
+// (runtime/types/system/Value.h: one int64 tick count, no vtable, trivially
+// constructible and destructible, so declaring it runs no code; B4 P2 CIT-4),
+// except +0x60 / +0x70 / +0x78 / +0x1E8, still `int64_t` ticks: member bodies in
+// citizen_updatehealth.cpp (CIT-2) and citizen_needsupdate.cpp (CIT-1) do integer
+// arithmetic on them (LEFT for those blocks / wave X).
 // InternalBasePtr / ExternalPtr members are declared as the bare pointer they
 // hold (`T*`, retail's layout: one qword; the tree's precedent is
 // ComponentEntity::_description).
@@ -70,6 +73,7 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time (8 bytes, trivial)
 
 class Disease;
 class Profession;
@@ -79,7 +83,7 @@ class CharacterComponent;
 class StatusIconComponent;
 class CitizenDescription;
 class WorkPlaceComponent;
-namespace System { class Time; }
+class ComponentDescription;
 
 class CitizenComponent final : public Component {
     DECLARE_EXE_TYPE(CitizenComponent)
@@ -169,19 +173,21 @@ public:
     float    pregnancyTimer;       // +0x4C > 0 counts down to a birth, < 0 counts up (the wait after one)
     float    health;               // +0x50 birth-risk ratio health / desc->maxHealth
     uint32_t statusFlags;          // +0x54 |= 1 hungry, |= 2 cold (Update)
-    int64_t  foodTimer;            // +0x58 System::Time: += dt; each desc->foodInterval -> ConsumeFood
-    int64_t  field_0x60;           // +0x60 System::Time: += dt (Update)
+    System::Time foodTimer;        // +0x58 += dt; each desc->foodInterval -> ConsumeFood
+    int64_t  field_0x60;           // +0x60 System::Time ticks: += dt (Update)
     Disease* disease;              // +0x68 ExternalPtr<Disease> (serialize helper 0x140030790)
-    int64_t  field_0x70;           // +0x70 System::Time, serialized
-    int64_t  field_0x78;           // +0x78 System::Time, serialized
+    int64_t  field_0x70;           // +0x70 System::Time ticks, serialized
+    int64_t  field_0x78;           // +0x78 System::Time ticks, serialized
     float    happiness;            // +0x80 the happiness update 0x140112ae0, clamped to [0, desc->maxHappiness]
     int32_t  field_0x84;           // +0x84 int, NOT written by the ctor, not serialized; the happiness
                                    //       update compares it with desc+0xB0
     uint32_t happinessFlags;       // +0x88 the bits the happiness update 0x140112ae0 scores
     uint8_t  _pad8C[4];            // +0x8C
-    int64_t  happinessTimer;       // +0x90 System::Time: += dt; each desc+0xA0 -> the happiness update
-    void*    consumedTypes;        // +0x98 Collection::Array<ExternalPtr<…>> data (H5 raw: MemFree'd by
-                                   //       the retail dtor); serialized by 0x1400049c0
+    System::Time happinessTimer;   // +0x90 += dt; each desc+0xA0 -> the happiness update
+    ComponentDescription** consumedTypes; // +0x98 Collection::Array<ExternalPtr<ComponentDescription>>
+                                   //       data (H5 raw triple: MemFree'd by the retail dtor);
+                                   //       serialized by 0x1400049c0 (validated ComponentDescription);
+                                   //       EatFrom 0x1401152e0 appends the eaten material's description
     int32_t  consumedTypeCount;    // +0xA0 Array count; the happiness update compares it with desc+0xA8/+0xAC
     int32_t  consumedTypeCapacity; // +0xA4 Array capacity
     int32_t  field_0xA8;           // +0xA8 int, ctor -1; serialized (version > 0)
@@ -195,14 +201,14 @@ public:
     int32_t  toolSceneId;          // +0x1DC int, ctor -1; NOT serialized; HideTool 0x1401176e0 guards >= 0
     int32_t  field_0x1E0;          // +0x1E0 int, ctor 4 (one qword store with +0x1E4); serialized (version > 1)
     int32_t  clothingLevel;        // +0x1E4 indexes desc->coldRate[]; reset to 0 when clothingTimer < 0
-    int64_t  clothingTimer;        // +0x1E8 System::Time: -= dt; < 0 -> clothingLevel = 0
+    int64_t  clothingTimer;        // +0x1E8 System::Time ticks: -= dt; < 0 -> clothingLevel = 0
     Profession* profession;        // +0x1F0 ExternalPtr<Profession> (0x140018020); Update reads its +0x4C
     Profession* pendingProfession; // +0x1F8 ExternalPtr<Profession>; != 0 -> HandleLifeEvent(7, its name)
-    int64_t  field_0x200;          // +0x200 System::Time: += dt (Update), not serialized
+    System::Time field_0x200;      // +0x200 += dt (Update), not serialized
     AttendanceComponent* school;   // +0x208 InternalPtr (cell 0x1401c3f40); != 0: schoolTime += dt
     int32_t  education;            // +0x210 raised to desc->maxEducation (Update)
     uint8_t  _pad214[4];           // +0x214
-    int64_t  schoolTime;           // +0x218 System::Time: += dt while school != 0 (version > 2)
+    System::Time schoolTime;       // +0x218 += dt while school != 0 (version > 2)
     bool     field_0x220;          // +0x220 bool; 0 at adulthood -> TryEnrolInSchool 0x140111840
     uint8_t  _pad221[7];           // +0x221
     AttendanceComponent* careBuilding; // +0x228 InternalPtr (cell 0x1401c3f40); FindCareBuilding 0x140111590
