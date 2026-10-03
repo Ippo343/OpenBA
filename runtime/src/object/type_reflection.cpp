@@ -206,11 +206,11 @@ BaseTypeInfo::BaseTypeInfo(const char* nameIn, const char* parentNameIn,
 
     name             = nameIn;
     parentName       = parentNameIn;
-    factoryFn        = reinterpret_cast<void*>(factory);
+    factoryFn        = reinterpret_cast<void*>(factory);   // LEFT: Object::BaseTypeInfo::factoryFn stays void* (standalone/main.cpp prints it with %p, tests/unit/b39_ti_* compare it with void*)
     typeId           = 0xFFFFFFFFu;
     _pad04           = 0;
     fileExtension    = fileExtensionIn;
-    inPlaceFactoryFn = reinterpret_cast<void*>(inPlace);
+    inPlaceFactoryFn = reinterpret_cast<void*>(inPlace);   // LEFT: as factoryFn above
     next             = prevHead;
     _firstTypeInfo   = this;
 
@@ -333,7 +333,7 @@ bool Factory::Startup() {
         entry._pad04               = 0;
         entry.record.typeId        = info->typeId;
         entry.record._pad04        = 0;
-        entry.record.info          = reinterpret_cast<RtObject::BaseTypeInfo*>(info);
+        entry.record.info          = reinterpret_cast<RtObject::BaseTypeInfo*>(info);   // LEFT: H10 POD mirror; TypeRecord::info is RtObject::BaseTypeInfo* and five files of other blocks read it as the POD
         entry.record.parent        = nullptr;
         entry.record.children      = nullptr;
         entry.record.childCount    = 0;
@@ -359,12 +359,11 @@ bool Factory::Startup() {
 
         // FAITHFUL: `LEA RBP,[RCX+8]` on a null RCX. A parentName naming an
         // unregistered type yields (TypeRecord*)8 and faults on the next line,
-        // exactly as retail does. uintptr_t arithmetic rather than
-        // `(char*)p + 8` only because null pointer arithmetic is UB in C++ and
-        // this must be the LEA, not whatever the optimiser concludes from a UB
-        // premise. The +8 IS `&node->element.record`, because `TypeEntry`'s key
-        // is 8 bytes wide and the record follows it — the same arithmetic the
-        // disassembly does, spelled the same way.
+        // exactly as retail does. The +8 IS `&p->element.record` (`TypeEntry`'s
+        // key is 8 bytes wide and the record follows it), and that is how it is
+        // spelled since B.4 P2: GCC lowers the member address to the same
+        // `p + 8` add on a null `p` (the B11 object comparison at -O0 and -O2
+        // checked that this body's code did not change).
         //
         // NOT A GUARD. The deref below is unchanged and still faults; this only
         // puts a NAME on the fault before it happens.
@@ -381,8 +380,7 @@ bool Factory::Startup() {
             std::fflush(stdout);
         }
 
-        TypeRecord* const parentRec =
-            reinterpret_cast<TypeRecord*>(reinterpret_cast<uintptr_t>(p) + 8);
+        TypeRecord* const parentRec = &p->element.record;
         node->element.record.parent = parentRec;
 
         // ---- Array<TypeRecord*>::SetSize(count + 1, &node->value) ----------
@@ -408,7 +406,7 @@ bool Factory::Startup() {
             // or more children is what exercises it.
             if (newSize == static_cast<int32_t>(oldSize) + 1 && oldSize != 0)
                 parentRec->childCapacity = newSize * 3;            // 32-bit LEA
-            parentRec->children = static_cast<TypeRecord**>(TypeChildAlloc(
+            parentRec->children = static_cast<TypeRecord**>(TypeChildAlloc(  // LEFT: TypeChildAlloc (TypeInfo.h) is the inlined Array<TypeRecord*> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape
                 static_cast<uint64_t>(
                     static_cast<int64_t>(parentRec->childCapacity)) * 8, 8));
         }
@@ -453,8 +451,7 @@ uint32_t Factory::GetTypeIdFromName(const char* name, bool existingOnly) const {
 // Returns `FindNode(id)->value.info->name`, unguarded.
 const char* Factory::GetTypeName(uint32_t typeId) const {
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
+    const TypeRecord* rec = &n->element.record;
     return rec->info->name;
 }
 
@@ -482,8 +479,7 @@ bool Factory::IsDerivedFrom(uint32_t typeId, uint32_t baseTypeId) const {
     // Retail's `ADD RAX,0x8` happens on the found pointer WHETHER OR NOT it is
     // null, so a missing registration reads address 0x8 and faults.
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
+    const TypeRecord* rec = &n->element.record;
     for (;;) {
         if (rec->typeId == baseTypeId) return true;
         rec = rec->parent;
@@ -495,16 +491,14 @@ bool Factory::IsDerivedFrom(uint32_t typeId, uint32_t baseTypeId) const {
 // value an unregistered name yields from GetTypeIdFromName.
 uint32_t Factory::GetParentType(uint32_t typeId) const {
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
+    const TypeRecord* rec = &n->element.record;
     return rec->parent ? rec->parent->typeId : 0u;
 }
 
 // ?GetChildTypeCount@Factory@Object@@QEBAHI@Z
 int32_t Factory::GetChildTypeCount(uint32_t typeId) const {
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
+    const TypeRecord* rec = &n->element.record;
     return rec->childCount;
 }
 
@@ -512,8 +506,7 @@ int32_t Factory::GetChildTypeCount(uint32_t typeId) const {
 // retail either; the Array read is raw.
 uint32_t Factory::GetChildType(uint32_t typeId, int32_t index) const {
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
+    const TypeRecord* rec = &n->element.record;
     return rec->children[index]->typeId;
 }
 
@@ -554,16 +547,14 @@ uint32_t Factory::GetTypeIdForFileExtension(const char* extension) const {
 // faults. No guard.
 Base* Factory::CreateObject(uint32_t typeId) const {
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
-    return reinterpret_cast<Base* (*)()>(rec->info->factoryFn)();
+    const TypeRecord* rec = &n->element.record;
+    return rec->info->factoryFn();
 }
 
 Base* Factory::CreateObject(uint32_t typeId, void* storage) const {
     const TypeSet::Node* n = _types.Find(typeId);
-    const TypeRecord* rec =
-        reinterpret_cast<const TypeRecord*>(reinterpret_cast<uintptr_t>(n) + 8);
-    return reinterpret_cast<Base* (*)(void*)>(rec->info->inPlaceFactoryFn)(storage);
+    const TypeRecord* rec = &n->element.record;
+    return rec->info->inPlaceFactoryFn(storage);
 }
 
 }  // namespace Object

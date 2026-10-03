@@ -46,6 +46,10 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Component/WorkComponent.h"
 #include "Game/ProfessionList.h"
+#include "Game/Map.h"
+#include "Action/PathSearch.h"   // RegionGraph::PathLength
+#include "Action/CompleteTask.h"
+#include "Action/Action.h"
 
 // ============================================================
 // Ctor (0x1400e5a90)
@@ -80,7 +84,7 @@ BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
     if (entityIBP) {
         // The site's InteractComponent (Work(entityIBP) stored *entityIBP in field_10)
         InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
-        int count = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(posComp), 1);
+        int count = InteractNodeCount(posComp, 1);   // 0x140123070
         // FUN_14000a590(&field_50, count): resizes the {data,count,cap} array in place,
         // writing field_58 = count. New bytes are uninitialised, so zero-fill below.
         Reimpl_Array_Resize_Byte(&field_50, count);
@@ -113,7 +117,7 @@ BuildStructure::~BuildStructure() {
 // OnComplete (0x1400e4f80)
 // ============================================================
 int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     field_50[slotIndex] = 0;
     return 0;
 }
@@ -122,7 +126,7 @@ int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** 
 // OnCancel (0x1400e4f40)
 // ============================================================
 int BuildStructure::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     field_50[slotIndex] = 0;
     return 0;
 }
@@ -178,10 +182,10 @@ void BuildStructure::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize bool at +0x48 (the field is uint8_t storage)
-    ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);
+    ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);   // LEFT: SIG WorkBST_BST_Serialize_296b0
 
     // Serialize count (+0x58), resize array on load
     int count = field_58;
@@ -203,26 +207,26 @@ void BuildStructure::Persist(IO::Stream& stream) {
 
 // ============================================================
 // Helper: check terrain connectivity between two grid cells.
-// Each cell is 0x30 bytes in the grid data array at mapGrid[0x20].
-//   +0x26: int16 zoneId
-//   +0x29: byte terrainType (bit index)
+// Each cell is a MapCell (0x30 bytes) of the map's cell array (Map +0x80).
+//   +0x26: zone (compared as int16)
+//   +0x29: terrainType (bit index)
 // Returns true if cells are walkably connected.
 // ============================================================
-static bool CheckCellConnectivity(uintptr_t gridData, int64_t cellA, int64_t cellB) {
-    uintptr_t entryA = gridData + cellA * 0x30;
-    uintptr_t entryB = gridData + cellB * 0x30;
+static bool CheckCellConnectivity(const MapCell* gridData, int64_t cellA, int64_t cellB) {
+    const MapCell& entryA = gridData[cellA];
+    const MapCell& entryB = gridData[cellB];
 
-    uint32_t bitA = 1u << (*(uint8_t*)(entryA + 0x29) & 0x1f);
-    uint32_t bitB = 1u << (*(uint8_t*)(entryB + 0x29) & 0x1f);
+    uint32_t bitA = 1u << (entryA.terrainType & 0x1f);
+    uint32_t bitB = 1u << (entryB.terrainType & 0x1f);
     uint32_t combined = bitA | bitB;
     uint32_t mask = combined | 0xe1fu;
 
     if (!(mask & bitA) || !(mask & bitB)) return false;
     if (combined & 0x1e0) return true;
 
-    int16_t zA = *(int16_t*)(entryA + 0x26);
+    int16_t zA = static_cast<int16_t>(entryA.zone);
     if (zA == 0) return false;
-    int16_t zB = *(int16_t*)(entryB + 0x26);
+    int16_t zB = static_cast<int16_t>(entryB.zone);
     if (zB == 0) return false;
     return zA == zB;
 }
@@ -261,7 +265,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
     }
 
     // --- Phase 2: Check if we have positions left to build ---
-    int totalPositions = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(posComp), 1);
+    int totalPositions = InteractNodeCount(posComp, 1);   // 0x140123070
     if (field_68 >= totalPositions) {
         return 1;
     }
@@ -274,7 +278,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
     // Calculate max builders if not yet done (WorkComponent +0x30)
     if (matDesc->workState == 0) {
-        matDesc->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        matDesc->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
     }
 
     // If at max builders, verify this citizen is on the builder list
@@ -311,17 +315,16 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
     }
 
     // --- Phase 5: Get map grid and building center cell ---
-    // The world map (GameUpdateLoop::m_game is still void*: LEFT)
-    int* mapGrid = (int*)GameUpdateLoop::_singleton->m_game;
+    // The world map
+    Map* map = GameUpdateLoop::_singleton->m_game;
 
-    // The citizen's position: CharacterComponent (+0x278) -> ModelComponent (+0x68);
-    // the transform is raw storage (H5): the float reads are LEFT.
-    uintptr_t posData = reinterpret_cast<uintptr_t>((*citizenPtr)->character->modelComponent);
+    // The citizen's position: CharacterComponent (+0x278) -> ModelComponent (+0x68)
+    // -> transform translation (+0x158)
+    const Math::Vector3& posData = (*citizenPtr)->character->modelComponent->transform.translation;
 
-    (void)*(float*)(posData + 0x160);  // centerY: available for future use
-    int gridSize = *mapGrid;
-    int buildingCell = WorldToCell(gridSize,
-        *(float*)(posData + 0x158), *(float*)(posData + 0x15c));
+    (void)posData.z;  // centerY: available for future use
+    int gridSize = map->size;
+    int buildingCell = WorldToCell(gridSize, posData.x, posData.y);
 
     int chosenIndex = -1;
     int attemptCount = 0;
@@ -349,67 +352,63 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
         // Get world position for this build point
         float candidatePos[3];
-        Pf_EntityResolvePos_2e20(
-            posComp, candidatePos, 1, chosenIndex, nullptr);
+        InteractNodePosition(posComp, candidatePos, 1, chosenIndex, nullptr);   // 0x140122e20
 
-        gridSize = *mapGrid;
+        gridSize = map->size;
         int candidateCell = WorldToCell(gridSize, candidatePos[0], candidatePos[1]);
 
         if (candidateCell != 0) {
-            Pf_ZoneRefresh_9c480(mapGrid);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
+            map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
 
-            uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20);
+            const MapCell* gridData = map->cells;
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
                 // Found accessible point -- get exact position
                 float bestPos[3];
-                Pf_EntityResolvePos_2e20(
-                    posComp, bestPos, 1, chosenIndex, nullptr);
+                InteractNodePosition(posComp, bestPos, 1, chosenIndex, nullptr);   // 0x140122e20
 
-                gridSize = *mapGrid;
+                gridSize = map->size;
                 int exactCell = WorldToCell(gridSize, bestPos[0], bestPos[1]);
 
                 // Calculate initial path cost
-                int bestPathCost = Pf_IsDstReachable_f810(
-                    mapGrid, (uint32_t)buildingCell, exactCell, 1);
+                int bestPathCost = map->PathDistance((uint32_t)buildingCell, exactCell, 1);   // 0x14009f810
 
                 // Iterate ALL positions to find a shorter path
                 int total = field_58;
-                int64_t centerCellOff = (int64_t)buildingCell * 0x30;
+                int64_t centerCellIdx = (int64_t)buildingCell;
                 if (total < 1) goto doSetupActions;
 
                 for (int posIdx = 0; posIdx < total; posIdx++) {
                     if (posIdx == chosenIndex) continue;
 
                     float testPos[3];
-                    Pf_EntityResolvePos_2e20(
-                        posComp, testPos, 1, posIdx, nullptr);
+                    InteractNodePosition(posComp, testPos, 1, posIdx, nullptr);   // 0x140122e20
 
-                    gridSize = *mapGrid;
+                    gridSize = map->size;
                     int testCell = WorldToCell(gridSize, testPos[0], testPos[1]);
 
                     // Check connectivity (first pass)
-                    Pf_ZoneRefresh_9c480(mapGrid);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
-                    gridData = *(uintptr_t*)(mapGrid + 0x20);
+                    map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
+                    gridData = map->cells;
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
 
                     // Check connectivity (second pass after re-invalidation)
-                    Pf_ZoneRefresh_9c480(mapGrid);   // retail sets RCX only (0x1400e532a / 54ea / 556c)
-                    gridData = *(uintptr_t*)(mapGrid + 0x20);
+                    map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
+                    gridData = map->cells;
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
 
                     // Get path region IDs from grid entries
-                    uintptr_t cEntry = gridData + centerCellOff;
-                    uintptr_t tEntry = gridData + (int64_t)testCell * 0x30;
-                    int32_t regionCenter = *(int32_t*)(cEntry + 0x18);
-                    int32_t regionTest = *(int32_t*)(tEntry + 0x18);
+                    const MapCell& cEntry = gridData[centerCellIdx];
+                    const MapCell& tEntry = gridData[(int64_t)testCell];
+                    int32_t regionCenter = cEntry.regionId;
+                    int32_t regionTest = tEntry.regionId;
 
                     if (regionCenter < 0) {
-                        regionCenter = Pf_RegionSpiral_9d0a0(mapGrid, buildingCell);
+                        regionCenter = map->NearestRegionId(buildingCell);   // 0x14009d0a0
                     }
                     if (regionTest < 0) {
-                        regionTest = Pf_RegionSpiral_9d0a0(mapGrid, testCell);
+                        regionTest = map->NearestRegionId(testCell);   // 0x14009d0a0
                     }
                     if (regionCenter < 0 || regionTest < 0) continue;
 
@@ -425,31 +424,30 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                             lo = (uint32_t)regionCenter;
                         }
 
-                        // Search path cache BST at mapGrid offset 0x78
-                        uintptr_t pathCache = *(uintptr_t*)((uintptr_t)mapGrid + 0x78);
-                        int* node = *(int**)(pathCache + 0x28);
+                        // Search the region pair cache's index (Map +0x78; index +0x28)
+                        RegionPairCache* pathCache = reinterpret_cast<RegionPairCache*>(map->regionPairCache);   // LEFT: Map.h regionPairCache is int64_t* (DLG-1)
+                        AvlNode30* node = pathCache->index.root;
                         dist = -1;
                         bool cached = false;
 
                         while (node != nullptr) {
-                            int nHi = node[0];
+                            int nHi = node->key0;
                             if ((int)hi < nHi) {
-                                node = *(int**)(node + 6);
+                                node = node->left;
                             } else if ((int)hi > nHi) {
-                                node = *(int**)(node + 8);
+                                node = node->right;
                             } else {
-                                int nLo = node[1];
+                                int nLo = node->key1;
                                 if ((int)lo < nLo) {
-                                    node = *(int**)(node + 6);
+                                    node = node->left;
                                 } else if ((int)lo <= nLo) {
-                                    // Exact match
-                                    int eIdx = node[2];
-                                    uintptr_t entries = *(uintptr_t*)(pathCache + 0x18);
-                                    dist = *(int32_t*)(entries + 8 + (int64_t)eIdx * 0x18);
+                                    // Exact match: the ring entry's distance (ring +0x18, entry +0x08)
+                                    int eIdx = node->key2;
+                                    dist = pathCache->ring.data[(int64_t)eIdx].distance;
                                     if (dist >= 0) cached = true;
                                     break;
                                 } else {
-                                    node = *(int**)(node + 8);
+                                    node = node->right;
                                 }
                             }
                         }
@@ -457,12 +455,9 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                         if (!cached) {
                             // Retail 0x1400e5630..0x1400e56a1: R9D = the smaller region id (`lo`), left there by
                             // the cache-key normalisation; 0x1400a8ba0 forwards R9 to 0x14001dc00 untouched.
-                            dist = Pf_RegionPathLength_8ba0(
-                                *(int**)((uintptr_t)mapGrid + 0x70),
-                                regionCenter, static_cast<uint32_t>(regionTest), static_cast<uint64_t>(lo));
-                            Pf_RegionPairCacheInsert_5b30(
-                                reinterpret_cast<uint64_t*>(*(void**)((uintptr_t)mapGrid + 0x78)),
-                                regionCenter, regionTest, dist);
+                            // (the forwarder of 0x1400a8ba0 never read its fourth argument, lo)
+                            dist = map->regionGraph->PathLength(regionCenter, static_cast<uint32_t>(regionTest));   // 0x1400a8ba0
+                            reinterpret_cast<RegionPairCache*>(map->regionPairCache)->Store(regionCenter, regionTest, dist);   // 0x1400a5b30  // LEFT: Map.h regionPairCache is int64_t* (DLG-1)
                         }
 
                         if (dist < 0) continue;
@@ -512,7 +507,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                     }
 
                     // Insert claimed position into BST at +0x60
-                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);
+                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);   // LEFT: SIG WorkBST_RegisterWork_1a30
 
                     // Mark build position as claimed
                     field_50[chosenIndex] = 1;
@@ -548,7 +543,10 @@ Profession** BuildStructure::GetTarget(Profession** retBuf) {
 
 // DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, not by the legacy
 // comment name "TypeInfo_CompleteTask" -- CompleteTask has its own cell, 0x1401c5e50).
-static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_t* outTask) {
+// known_port_issues row 221: retail's Validate calls Work::ValidateTask (0x1400f7100) at
+// 0x1400e4c67; this local copy tests the citizen against ComponentEntity and the actions
+// against CitizenComponent (typed only, LEFT).
+static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizenIBP, CompleteTask** outTask) {
     uint32_t taskTypeId = CitizenComponent::TypeId();
 
     static int s_dormant = 0, s_kept = 0, s_dropped = 0;
@@ -559,39 +557,33 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
     } };
 
     // Check IBP is valid
-    if (*(uintptr_t*)citizenIBP == 0) return false;
+    if (*citizenIBP == nullptr) return false;
 
     // DAT_1401c5d70 = ComponentEntity (ENDGAME B.3.9 D5: by cell).
-    bool isEntity = reinterpret_cast<const Object::Base*>(*(uintptr_t*)citizenIBP)->IsA(ComponentEntity::TypeId());   // B.3.x bridge (fn_IsA)
+    bool isEntity = (*citizenIBP)->IsA(ComponentEntity::TypeId());
     if (!isEntity) return false;
 
-    uintptr_t entity = *(uintptr_t*)citizenIBP;
+    // The citizen's CharacterComponent (+0x278)
+    CharacterComponent* character = (*citizenIBP)->character;
 
-    // Get state machine component at entity+0x278
-    uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
-
-    // Iterate action stack: smComp+0x48 = array ptr, smComp+0x60 = count
-    int actionCount = *(int*)(smComp + 0x60) + 1;  // original: 0x60 field + 1
+    // Iterate action stack: +0x48 = array, +0x60 = the running index
+    int actionCount = character->currentAction + 1;  // original: 0x60 field + 1
     if (actionCount <= 0) return false;
 
-    uintptr_t actionArray = *(uintptr_t*)(smComp + 0x48);
+    Action** actionArray = character->actions;
     for (int i = 0; i < actionCount; i++) {
-        uintptr_t actionIBP = *(uintptr_t*)(actionArray + i * 8);
+        Action* action = actionArray[i];
 
         // Check if this action is a CompleteTask
-        bool isCompleteTask = Object::IsDerivedFromNullSafe((void*)actionIBP, taskTypeId);
+        bool isCompleteTask = Object::IsDerivedFromNullSafe(action, taskTypeId);
         if (!isCompleteTask) continue;
 
-        // Found a CompleteTask — wrap in IBP and check priority match
-        uint8_t taskBuf[8];
-        new (taskBuf) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(isCompleteTask ? (void*)actionIBP : nullptr));   // B.3.3 bridge
-        uintptr_t taskPtr = *(uintptr_t*)taskBuf;
+        // Found a CompleteTask — check priority match
+        CompleteTask* taskPtr = isCompleteTask ? static_cast<CompleteTask*>(action) : nullptr;
 
-        if (taskPtr != 0) {
-            taskPtr = *(uintptr_t*)taskBuf;
-            // Check if task's priority (+0x30) matches work's priority (+0x20)
-            if (*(int*)(taskPtr + 0x30) == self->field_20) {
+        if (taskPtr != nullptr) {
+            // Check if task's index (+0x30) matches work's id (+0x20)
+            if (taskPtr->taskIndex == self->field_20) {
                 if (outTask) *outTask = taskPtr;
                 if (++s_kept <= 3 || s_kept % 500 == 0)
                     Rep::go(taskTypeId, s_dormant, s_kept, s_dropped);
@@ -620,16 +612,16 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
 int BuildStructure::Validate() {
 
     // Dynamic arrays for citizens to remove and their slot indices
-    void* removeList = nullptr;     // array of IBP keys (8 bytes each)
+    CitizenComponent** removeList = nullptr;   // array of citizen keys (8 bytes each)
     int removeCount = 0;
     int removeCap = 0;
 
-    void* slotList = nullptr;       // array of int slot indices (4 bytes each)
+    int* slotList = nullptr;        // array of int slot indices (4 bytes each)
     int slotCount = 0;
     int slotCap = 0;
 
-    // (the tree-helper signatures take the root slot as uintptr_t*: LEFT)
-    uintptr_t* treeRootPtr = reinterpret_cast<uintptr_t*>(&field_60);
+    // (the tree-helper signatures take the root slot as uintptr_t*)
+    uintptr_t* treeRootPtr = reinterpret_cast<uintptr_t*>(&field_60);   // LEFT: SIG WorkBST_BSTFindRemove_25520
 
     // BST in-order traversal: find leftmost node first
     AssignmentNode* root = field_60;
@@ -644,8 +636,8 @@ int BuildStructure::Validate() {
 
         // In-order traversal
         while (node != nullptr) {
-            uintptr_t citizenKey = (uintptr_t)node->element;
-            uintptr_t taskResult = 0;
+            CitizenComponent* citizenKey = node->element;
+            CompleteTask* taskResult = nullptr;
 
             bool hasTask = CheckCitizenHasTask(this, &citizenKey, &taskResult);
 
@@ -655,45 +647,45 @@ int BuildStructure::Validate() {
                 if (newCount != removeCount) {
                     if (removeCap < newCount) {
                         removeCap = (removeCount == 0) ? newCount : newCount * 3;
-                        void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)removeCap * 8, 8);
+                        CitizenComponent** newBuf = static_cast<CitizenComponent**>(System::MemoryAllocator::MemAlloc((uint64_t)removeCap * 8, 8));
                         if (removeList != newBuf) {
                             // Copy existing entries
                             for (int k = 0; k < removeCount; k++) {
-                                ((uint64_t*)newBuf)[k] = ((uint64_t*)removeList)[k];
+                                newBuf[k] = removeList[k];
                             }
                         }
                         // Set the new entry
-                        ((uint64_t*)newBuf)[removeCount] = citizenKey;
+                        newBuf[removeCount] = citizenKey;
                         if (removeList != newBuf) {
                             System::MemoryAllocator::MemFree(removeList);
                         }
                         removeList = newBuf;
                     } else {
-                        ((uint64_t*)removeList)[removeCount] = citizenKey;
+                        removeList[removeCount] = citizenKey;
                     }
                     removeCount = newCount;
                 }
             } else {
                 // Citizen has matching task — record the slot index from task+0x34
-                int slotIdx = *(int*)(taskResult + 0x34);
+                int slotIdx = taskResult->taskParam;
 
                 int newSlotCount = slotCount + 1;
                 if (newSlotCount != slotCount) {
                     if (slotCap < newSlotCount) {
                         slotCap = (slotCount == 0) ? newSlotCount : newSlotCount * 3;
-                        void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)slotCap * 4, 4);
+                        int* newBuf = static_cast<int*>(System::MemoryAllocator::MemAlloc((uint64_t)slotCap * 4, 4));
                         if (slotList != newBuf) {
                             for (int k = 0; k < slotCount; k++) {
-                                ((int*)newBuf)[k] = ((int*)slotList)[k];
+                                newBuf[k] = slotList[k];
                             }
                         }
-                        ((int*)newBuf)[slotCount] = slotIdx;
+                        newBuf[slotCount] = slotIdx;
                         if (slotList != newBuf) {
                             System::MemoryAllocator::MemFree(slotList);
                         }
                         slotList = newBuf;
                     } else {
-                        ((int*)slotList)[slotCount] = slotIdx;
+                        slotList[slotCount] = slotIdx;
                     }
                     slotCount = newSlotCount;
                 }
@@ -727,15 +719,15 @@ int BuildStructure::Validate() {
 
         // Process remove list: remove each citizen from the BST
         if (removeCount > 0) {
-            uint64_t* rList = (uint64_t*)removeList;
+            CitizenComponent** rList = removeList;
             for (int i = 0; i < removeCount; i++) {
                 // BST lookup to find the node
                 AssignmentNode* searchNode = field_60;
                 while (searchNode != nullptr) {
-                    if (rList[i] < (uint64_t)searchNode->element) {
+                    if (rList[i] < searchNode->element) {
                         searchNode = searchNode->left;  // left at +0x10
                     } else {
-                        if (rList[i] <= (uint64_t)searchNode->element) {
+                        if (rList[i] <= searchNode->element) {
                             // Found — remove from BST
                             WorkBST_BSTFindRemove_25520(treeRootPtr, searchNode);
                             break;
@@ -751,7 +743,7 @@ int BuildStructure::Validate() {
                 // Check if this slot index appears in the slotList
                 bool found = false;
                 for (int j = 0; j < slotCount; j++) {
-                    if (((int*)slotList)[j] == si) {
+                    if (slotList[j] == si) {
                         found = true;
                         break;
                     }

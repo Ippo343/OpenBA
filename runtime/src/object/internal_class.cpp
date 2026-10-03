@@ -137,7 +137,7 @@ void InternalMemFree(void* p) {
 }
 // Wave 2 ported this and proved it bit-exact over 16,035,064 calls.
 uint32_t InternalRand(::Random* random) {
-    return reinterpret_cast<System::Random*>(random)->Rand();   // 0x1800c7f90
+    return reinterpret_cast<System::Random*>(random)->Rand();   // 0x1800c7f90  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // B.3.4 STREAMS (6/6) — `Internal::Clone`'s two `IO::MemoryStream` locals.
@@ -164,7 +164,7 @@ void* MemoryStreamCtor(void* self) {
     return ::new (self) IO::MemoryStream();
 }
 void MemoryStreamDtor(void* self) {
-    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();
+    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 }
 
 #endif
@@ -201,7 +201,7 @@ void ArrayPtrSetSizeFill(Collection::Array<Internal*>* a, int newSize, Internal*
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(
+        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -227,7 +227,7 @@ void ArrayPtrSetSize(Collection::Array<Internal*>* a, int newSize) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(
+        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -255,7 +255,7 @@ void ArrayPtrReserve(Collection::Array<Internal*>* a, int n) {
         a->_capacity = n;
         if (n == oldSize + 1 && oldSize != 0)
             a->_capacity = n * 3;
-        a->_data = static_cast<Internal**>(
+        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     if (old != a->_data) {
@@ -283,7 +283,7 @@ void ArrayIntSetSize(Collection::Array<int32_t>* a, int newSize) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<int32_t*>(
+        a->_data = static_cast<int32_t*>(  // LEFT: InternalMemAlloc is the inlined Array<int32_t> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 2), 4));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -701,8 +701,8 @@ namespace {
 
 // `?_singleton@Factory@Object@@0PEAV12@EA` (Runtime 0x1801fc6e8) is the class
 // static `Object::Factory::_singleton` since ENDGAME B.3.9 OBJ (B39_RULES D7).
-RtObject::Factory** FactorySingletonSlot() {
-    return reinterpret_cast<RtObject::Factory**>(&Factory::_singleton);   // B.3.3 bridge
+Factory* const* FactorySingletonSlot() {
+    return &Factory::_singleton;
 }
 
 // (`Object::Internal`'s type id is `Internal::TypeId()`, the class record's
@@ -713,9 +713,8 @@ RtObject::Factory** FactorySingletonSlot() {
 
 // IO::Stream + 0x08 — `0 == reading`, non-zero == writing. The only field of
 // Stream this body touches.
-inline int32_t StreamMode(const void* stream) {
-    return *reinterpret_cast<const int32_t*>(
-        reinterpret_cast<const uint8_t*>(stream) + 0x08);
+inline int32_t StreamMode(const IO::Stream* stream) {
+    return stream->_direction;   // +0x08
 }
 
 // vtable slot 3 (+0x18) — `Object::Internal::Persist(IO::Stream&)`. B3X W0:
@@ -744,25 +743,25 @@ Internal* InternalFactory::PersistObject(IO::Stream& stream, uint32_t generation
         slot = persistIds[i];
         if (slot < 0) {
             // ---- the type-tree descent, 0x1800bff5f ------------------------
-            RtObject::Factory** const pSingleton = FactorySingletonSlot();
-            RtObject::TypeNode* node  = pSingleton ? (*pSingleton)->root : nullptr;
-            RtObject::TypeNode* found = nullptr;
+            using TypeNode = Factory::TypeSet::Node;
+            Factory* const* const pSingleton = FactorySingletonSlot();
+            TypeNode* node  = pSingleton ? (*pSingleton)->_types._root : nullptr;
+            TypeNode* found = nullptr;
             while (node != nullptr) {
-                if (typeId < node->key)  { node = node->left;  continue; }
-                if (node->key >= typeId) { found = node; break; }   // equal
+                if (typeId < node->element.typeId)  { node = node->left;  continue; }
+                if (node->element.typeId >= typeId) { found = node; break; }   // equal
                 node = node->right;
             }
             // A MISS LEAVES `found` NULL AND RETAIL DEREFERENCES IT.
-            RtObject::BaseTypeInfo* const info = found->value.info;   // node + 0x10
+            RtObject::BaseTypeInfo* const info = found->element.record.info;   // node + 0x10
             // Zero-argument: retail leaves `info` in RCX at the call site but
             // the factory is a static that reads nothing.
-            void* const created =
-                reinterpret_cast<void* (*)()>(info->factoryFn)();     // CALL [RCX+0x20]
+            Base* const created = info->factoryFn();                  // CALL [RCX+0x20]
 
             const uint32_t internalTypeId = Internal::TypeId();       // [0x1801f9c18]
             Internal* obj =                                           // 0x1800c0390
-                static_cast<const Base*>(created)->IsDerivedFrom(internalTypeId)
-                                ? static_cast<Internal*>(created)
+                created->IsDerivedFrom(internalTypeId)
+                                ? static_cast<Internal*>(created)     // B10: downcast after the type test
                                 : nullptr;                            // CMOVNZ RSI,RBX
 
             // UNGUARDED on purpose. Retail reads `_factoryIndex` (+0x08) BEFORE

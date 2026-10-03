@@ -39,6 +39,8 @@
 //   the secondary BST at param_1+0x120 (a {key@+0, valueRoot@+8, left@+0x20, right@+0x28}-style
 //   ordered tree) keyed by the citizen's +0x1f0 owner key.
 //
+// (B4 P2 CAI-4: the structs below are now Game/WorkSchedulerNodes.h WorkCandidateNode /
+//  WorkCandidateTree, and the source trees WorkSchedulerIdNode / WorkSchedulerBucketNode.)
 // === RECOVERED AVL NODE STRUCT (the transient result tree built by 7c90/8000, walked by 7b60,
 //     freed by 79b0 via e320, rebalanced by e360) — 0x30 bytes, MemAlloc(0x30,8):
 //     +0x00  void*   payload         (entity IBP / candidate object; node+0)
@@ -90,6 +92,13 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Game/WorkScheduler.h"        // WorkScheduler (GameUpdateLoop +0x118)
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode / BucketNode, WorkCandidateNode / Tree
+#include "Game/Map.h"                  // Map::size
+#include "Game/ProfessionList.h"
+#include "Game/Profession.h"
+#include "Component/ModelComponent.h"
+#include "Entity/CitizenBehavior.h"    // ProfessionResourceEntry
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
 extern "C" void* g_pBuildStructureWork;
@@ -105,8 +114,6 @@ namespace {
 // --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
 
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
-
 // A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
 // user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (Helper_e360) against a
 // corrupt/invalid child or parent link — observed in standalone when an idle citizen's work-
@@ -115,13 +122,14 @@ static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop
 // every link is valid this is a pure no-op; when one isn't, the walk treats it as absent
 // rather than dereferencing it. The transient tree is freed immediately after, so a slightly
 // less-balanced tree in that rare corrupt case only means a marginally different candidate pick.
-static inline bool ValidNode(int64_t p) {
-    uint64_t u = static_cast<uint64_t>(p);
+// NOT RETAIL: 0x14000e360 tests each link for null only (known_port_issues 14d row 210).
+static inline bool ValidNode(const WorkCandidateNode* p) {
+    uint64_t u = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
     return u >= 0x10000ULL && u < 0x0000800000000000ULL;
 }
 
-static inline void* NodeAlloc() {
-    return System::MemoryAllocator::MemAlloc(0x30, 8);
+static inline WorkCandidateNode* NodeAlloc() {
+    return static_cast<WorkCandidateNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
 }
 
 // Idle work-search counters, read by standalone/road_probe.cpp. The road wave needs to
@@ -135,21 +143,25 @@ long long g_idleBuilderTookWork = 0;
 }
 
 // Forward decls for the helper subtree.
-void          Helper_e360(int64_t* unused, int64_t* rootSlot);                          // 0x14000e360
-void          Helper_sub_8000(void* p1, void* keyHolder, int64_t* srcRootSlot, int64_t* dstRootSlot);   // 0x1400f8000
-void          Helper_sub_7c90(void* p1, void* keyHolder2, void* keyHolder3, int64_t* srcRootSlot, int64_t* dstRootSlot); // 0x1400f7c90
-uint8_t       Helper_sub_7b60(int64_t ctx, void** citizenHolder, int64_t* dstRootSlot); // 0x1400f7b60
-uint64_t      Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_t param_4, char param_5, char param_6); // 0x1400f79b0
-uint64_t      Helper_7550(int64_t param_1, void** param_2);                             // 0x1400f7550
+void          Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** walk);                // 0x14000e360
+void          Helper_sub_8000(void* p1, ComponentEntity* const* keyHolder,
+                              WorkSchedulerIdNode* const* srcRootSlot, WorkCandidateTree* dst);       // 0x1400f8000
+void          Helper_sub_7c90(void* p1, CitizenComponent* const* citizenHolder, ComponentEntity* const* keyHolder,
+                              WorkSchedulerIdNode* const* srcRootSlot, WorkCandidateTree* dst);       // 0x1400f7c90
+uint8_t       Helper_sub_7b60(WorkScheduler* ctx, CitizenComponent* const* citizenHolder, WorkCandidateTree* dst); // 0x1400f7b60
+uint64_t      Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_2,
+                              WorkSchedulerIdNode* const* param_3, Profession* param_4,
+                              char param_5, char param_6);                                 // 0x1400f79b0
+uint64_t      Helper_7550(WorkScheduler* param_1, CitizenComponent* const* param_2);      // 0x1400f7550
 
 // ============================================================
 // 0x14003f010 — memset(dst, byteVal, count). Pure leaf; just call memset.
 // ============================================================
-void* Helper_3f010(void* dst, uint64_t byteVal, uint64_t count) {
+void* Helper_3f010(unsigned char* dst, uint64_t byteVal, uint64_t count) {
     // Faithful to behaviour: fills `count` bytes with (byte)byteVal. The exe variant has
     // hand-unrolled 64-byte and 8-byte loops + a LOCK fence for large fills; the observable
     // effect is identical to memset.
-    unsigned char* p = reinterpret_cast<unsigned char*>(dst);
+    unsigned char* p = dst;
     unsigned char b = static_cast<unsigned char>(byteVal);
     for (uint64_t i = 0; i < count; ++i) p[i] = b;
     return dst;
@@ -159,42 +171,45 @@ void* Helper_3f010(void* dst, uint64_t byteVal, uint64_t count) {
 // 0x14000e360 — AVL rebalance walk up the right-spine of an insertion path.
 //   param_2 = &(node ptr); walks node = node->parent (+0x10) updating height/balance and
 //   rotating via e450/e580 until null. param_1 is the tree-root slot passed to the rotations.
+//   Retail's body serves every 0x30 node with links at +0x10/+0x18/+0x20 (B13); this file's
+//   callers pass the candidate tree (Game/WorkSchedulerNodes.h WorkCandidateNode).
 // ============================================================
-void Helper_e360(int64_t* rootSlot, int64_t* param_2) {
-    int64_t node = *param_2;
+void Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** param_2) {
+    int64_t* rotRoot = reinterpret_cast<int64_t*>(rootSlot);   // LEFT: SIG Pf_AvlRotateB_e450 / _e580 (int64_t* root)
+    WorkCandidateNode* node = *param_2;
     while (ValidNode(node)) {
-        int64_t n = *param_2;
+        WorkCandidateNode* n = *param_2;
         if (!ValidNode(n)) break;                                // corrupt slot -> stop the walk
-        int64_t parent = *reinterpret_cast<int64_t*>(n + 0x10);  // next up
-        int64_t left  = *reinterpret_cast<int64_t*>(n + 0x18);
-        int64_t right = *reinterpret_cast<int64_t*>(n + 0x20);
-        short hL = ValidNode(left)  ? static_cast<short>(*reinterpret_cast<short*>(left  + 0x2a) + 1) : 0;
-        short hR = ValidNode(right) ? static_cast<short>(*reinterpret_cast<short*>(right + 0x2a) + 1) : 0;
+        WorkCandidateNode* parent = n->parent;  // next up
+        WorkCandidateNode* left  = n->left;
+        WorkCandidateNode* right = n->right;
+        short hL = ValidNode(left)  ? static_cast<short>(left->height + 1) : 0;
+        short hR = ValidNode(right) ? static_cast<short>(right->height + 1) : 0;
         short h = (hR < hL) ? hL : hR;
-        *reinterpret_cast<short*>(n + 0x2a) = h;
-        *reinterpret_cast<short*>(n + 0x28) = static_cast<short>(hR - hL);
+        n->height = h;
+        n->balance = static_cast<short>(hR - hL);
 
         if (static_cast<short>(hR - hL) > 1) {
-            int64_t rc = *reinterpret_cast<int64_t*>(n + 0x20);
+            WorkCandidateNode* rc = n->right;
             if (ValidNode(rc)) {
                 // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
-                if (*reinterpret_cast<short*>(rc + 0x28) < 1 && *reinterpret_cast<short*>(rc + 0x28) < 0) {
-                    Pf_AvlRotateB_e580(rootSlot, rc);
+                if (rc->balance < 1 && rc->balance < 0) {
+                    Pf_AvlRotateB_e580(rotRoot, reinterpret_cast<int64_t>(rc));   // LEFT: SIG Pf_AvlRotateB_e580
                     n = *param_2;
                 }
-                if (ValidNode(n)) Pf_AvlRotateB_e450(rootSlot, n);
+                if (ValidNode(n)) Pf_AvlRotateB_e450(rotRoot, reinterpret_cast<int64_t>(n));   // LEFT: SIG Pf_AvlRotateB_e450
             }
         }
         n = *param_2;
-        if (ValidNode(n) && *reinterpret_cast<short*>(n + 0x28) < -1) {
-            int64_t lc = *reinterpret_cast<int64_t*>(n + 0x18);
+        if (ValidNode(n) && n->balance < -1) {
+            WorkCandidateNode* lc = n->left;
             if (ValidNode(lc)) {
                 // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
-                if (*reinterpret_cast<short*>(lc + 0x28) > -1 && *reinterpret_cast<short*>(lc + 0x28) > 0) {
-                    Pf_AvlRotateB_e450(rootSlot, lc);
+                if (lc->balance > -1 && lc->balance > 0) {
+                    Pf_AvlRotateB_e450(rotRoot, reinterpret_cast<int64_t>(lc));   // LEFT: SIG Pf_AvlRotateB_e450
                     n = *param_2;
                 }
-                if (ValidNode(n)) Pf_AvlRotateB_e580(rootSlot, n);
+                if (ValidNode(n)) Pf_AvlRotateB_e580(rotRoot, reinterpret_cast<int64_t>(n));   // LEFT: SIG Pf_AvlRotateB_e580
             }
         }
         *param_2 = parent;
@@ -203,79 +218,82 @@ void Helper_e360(int64_t* rootSlot, int64_t* param_2) {
 }
 
 // ============================================================
-// 0x1400f8000 — insert each source-tree node into the dst AVL keyed by (payload+0x24).
+// 0x1400f8000 — insert each source-tree node into the dst AVL keyed by (Work +0x24).
 //   param_1 unused-ish holder; param_2 = &(skip-key) (when non-null, only inserts the node
-//   whose payload+0x10 matches *param_2); param_3 = &srcRoot; param_4 = &dstRoot.
+//   whose Work +0x10 matches *param_2); param_3 = &srcRoot; param_4 = the dst tree.
 //   Source tree traversed in-order via node +0x10(parent)/+0x18(left)/+0x20(right).
 // ============================================================
-void Helper_sub_8000(void* param_1, void* param_2, int64_t* param_3, int64_t* param_4) {
-    if (*param_3 == 0) return;
-    int64_t cur = *param_3;
-    void* local_res8 = param_1;
+void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* const* param_2, WorkSchedulerIdNode* const* param_3,
+                     WorkCandidateTree* param_4) {
+    if (*param_3 == nullptr) return;
+    WorkSchedulerIdNode* cur = *param_3;
+    // retail's RCX home slot (0x1400f8000: the citizen), re-used as the descent node; the
+    // citizen it holds on entry is never read (every e360 call follows a store below).
+    WorkCandidateNode* local_res8 = nullptr;
     do {
         bool doInsert = false;
-        if (*reinterpret_cast<int64_t*>(param_2) == 0) {
+        if (*param_2 == nullptr) {
             doInsert = true;
         } else {
-            int64_t payload = *reinterpret_cast<int64_t*>(cur + 8);
-            int64_t k = *reinterpret_cast<int64_t*>(payload + 0x10);
-            if (k == *reinterpret_cast<int64_t*>(param_2)) doInsert = true;
+            Work* payload = cur->work.Get();
+            ComponentEntity* k = payload->field_10;
+            if (k == *param_2) doInsert = true;
         }
 
         if (doInsert) {
-            int64_t payload = *reinterpret_cast<int64_t*>(cur + 8);   // local_28
-            int costKey = *reinterpret_cast<int*>(payload + 0x24);    // iVar6 / local_20
+            Work* payload = cur->work.Get();   // local_28
+            int costKey = payload->field_24;   // iVar6 / local_20
             bool inserted = true;   // false on duplicate (JG/JGE 0x81fc -> skip INC + rebalance)
-            int64_t existing = *param_4;
-            if (existing == 0) {
-                int64_t* nn = reinterpret_cast<int64_t*>(NodeAlloc());
-                if (nn == nullptr) { *param_4 = 0; }
+            WorkCandidateNode* existing = param_4->root;
+            if (existing == nullptr) {
+                WorkCandidateNode* nn = NodeAlloc();
+                if (nn == nullptr) { param_4->root = nullptr; }
                 else {
-                    nn[0] = payload;
-                    *reinterpret_cast<int*>(nn + 1) = costKey;
-                    nn[2] = 0; nn[3] = 0; nn[4] = 0;
-                    *reinterpret_cast<int*>(nn + 5) = 0;
-                    *param_4 = reinterpret_cast<int64_t>(nn);
+                    nn->work = payload;
+                    nn->cost = costKey;
+                    nn->parent = nullptr; nn->left = nullptr; nn->right = nullptr;
+                    nn->balance = 0; nn->height = 0;   // retail: one dword store (0x1400f80bb)
+                    param_4->root = nn;
                 }
             } else {
                 bool descendLeft = false;
                 for (;;) {
-                    int64_t self = existing;
+                    WorkCandidateNode* self = existing;
                     // Track the descent node for the post-insert rebalance. The originals
                     // (0x1400f8000 / 0x1400f7c90) do `local_res8 = pIVar3` at the top of this
                     // loop, so Helper_e360 walks UP from the insertion node. The port left
                     // local_res8 pinned at param_1 (the citizen), so e360 read citizen fields
                     // as AVL links and faulted on the -1 they held (READ of -1 crash once an
                     // idle citizen's candidate tree grew past its root). Restore the update.
-                    local_res8 = reinterpret_cast<void*>(self);
-                    if (*reinterpret_cast<int*>(self + 8) <= costKey) {
+                    local_res8 = self;
+                    if (self->cost <= costKey) {
                         // self.key <= costKey
-                        if (costKey <= *reinterpret_cast<int*>(self + 8)) {
-                            // equal key: tiebreak on entity field +0x20
-                            int iv = *reinterpret_cast<int*>(payload + 0x20);
-                            int sv = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
+                        if (costKey <= self->cost) {
+                            // equal key: tiebreak on Work +0x20
+                            int iv = payload->field_20;
+                            int sv = self->work->field_20;
                             if (iv < sv) { descendLeft = true; }
                         }
                         if (!descendLeft) {
-                            if (costKey <= *reinterpret_cast<int*>(self + 8)) {
-                                if (costKey < *reinterpret_cast<int*>(self + 8)) { inserted = false; break; }
-                                int sv2 = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
-                                int iv2 = *reinterpret_cast<int*>(payload + 0x20);
+                            if (costKey <= self->cost) {
+                                if (costKey < self->cost) { inserted = false; break; }
+                                int sv2 = self->work->field_20;
+                                int iv2 = payload->field_20;
                                 if (iv2 <= sv2) { inserted = false; break; }
                             }
                             // go right (+0x20)
-                            int64_t rc = *reinterpret_cast<int64_t*>(self + 0x20);
-                            if (rc == 0) {
-                                int64_t* nn = reinterpret_cast<int64_t*>(NodeAlloc());
-                                if (nn == nullptr) { *reinterpret_cast<int64_t*>(self + 0x20) = 0; }
+                            WorkCandidateNode* rc = self->right;
+                            if (rc == nullptr) {
+                                WorkCandidateNode* nn = NodeAlloc();
+                                if (nn == nullptr) { self->right = nullptr; }
                                 else {
-                                    nn[0] = payload;
-                                    *reinterpret_cast<int*>(nn + 1) = costKey;
-                                    nn[2] = self; nn[3] = 0; nn[4] = 0;
-                                    *reinterpret_cast<int*>(nn + 5) = 0;
-                                    *reinterpret_cast<int64_t*>(self + 0x20) = reinterpret_cast<int64_t>(nn);
+                                    nn->work = payload;
+                                    nn->cost = costKey;
+                                    nn->parent = self; nn->left = nullptr; nn->right = nullptr;
+                                    nn->balance = 0; nn->height = 0;   // retail: one dword store (0x1400f81a0)
+                                    self->right = nn;
                                 }
-                                Helper_e360(param_4, reinterpret_cast<int64_t*>(&local_res8));
+                                Helper_e360(&param_4->root, &local_res8);
                                 break;
                             }
                             existing = rc;
@@ -284,17 +302,17 @@ void Helper_sub_8000(void* param_1, void* param_2, int64_t* param_3, int64_t* pa
                     }
                     // go left (+0x18)
                     {
-                        int64_t lc = *reinterpret_cast<int64_t*>(self + 0x18);
-                        if (lc == 0) {
-                            int64_t* nn = reinterpret_cast<int64_t*>(NodeAlloc());
+                        WorkCandidateNode* lc = self->left;
+                        if (lc == nullptr) {
+                            WorkCandidateNode* nn = NodeAlloc();
                             if (nn != nullptr) {
-                                nn[0] = payload;
-                                *reinterpret_cast<int*>(nn + 1) = costKey;
-                                nn[2] = self; nn[3] = 0; nn[4] = 0;
-                                *reinterpret_cast<int*>(nn + 5) = 0;
+                                nn->work = payload;
+                                nn->cost = costKey;
+                                nn->parent = self; nn->left = nullptr; nn->right = nullptr;
+                                nn->balance = 0; nn->height = 0;   // retail: one dword store (0x1400f81e3)
                             }
-                            *reinterpret_cast<int64_t*>(self + 0x18) = reinterpret_cast<int64_t>(nn);
-                            Helper_e360(param_4, reinterpret_cast<int64_t*>(&local_res8));
+                            self->left = nn;
+                            Helper_e360(&param_4->root, &local_res8);
                             break;
                         }
                         existing = lc;
@@ -303,67 +321,70 @@ void Helper_sub_8000(void* param_1, void* param_2, int64_t* param_3, int64_t* pa
                     }
                 }
             }
-            if (inserted) *reinterpret_cast<int*>(reinterpret_cast<char*>(param_4) + 8) = *reinterpret_cast<int*>(reinterpret_cast<char*>(param_4) + 8) + 1;
+            if (inserted) param_4->count = param_4->count + 1;
         }
         // (else: skip-key set and key didn't match -> no insert; matches the decompile's
         //  `if (key == *param_2) goto LAB_805c` which doInsert already captured above.)
 
         // in-order successor in the source tree (parent=+0x10, left=+0x18, right=+0x20)
-        int64_t rc = *reinterpret_cast<int64_t*>(cur + 0x20);
-        int64_t next;
-        if (rc == 0) {
-            int64_t up = *reinterpret_cast<int64_t*>(cur + 0x10);
-            if (up != 0) {
-                if (*reinterpret_cast<int64_t*>(up + 0x18) == cur) { next = up; goto advance; }
-                while (up != 0 && *reinterpret_cast<int64_t*>(up + 0x20) == cur) {
+        WorkSchedulerIdNode* rc = cur->right;
+        WorkSchedulerIdNode* next;
+        if (rc == nullptr) {
+            WorkSchedulerIdNode* up = cur->parent;
+            if (up != nullptr) {
+                if (up->left == cur) { next = up; goto advance; }
+                while (up != nullptr && up->right == cur) {
                     cur = up;
-                    up = *reinterpret_cast<int64_t*>(up + 0x10);
+                    up = up->parent;
                 }
             }
-            next = *reinterpret_cast<int64_t*>(cur + 0x10);
+            next = cur->parent;
         } else {
-            int64_t n2 = rc;
-            while (*reinterpret_cast<int64_t*>(n2 + 0x18) != 0) n2 = *reinterpret_cast<int64_t*>(n2 + 0x18);
+            WorkSchedulerIdNode* n2 = rc;
+            while (n2->left != nullptr) n2 = n2->left;
             next = n2;
         }
     advance:
         cur = next;
-    } while (cur != 0);
+    } while (cur != nullptr);
 }
 
 // ============================================================
 // 0x1400f7c90 — like 8000 but cost is computed (slope/distance via f810+sqrtf) and the source
-//   node is gated on (payload+0x10 == *param_3 skip-key) OR (param_3 holds null). param_1 holder,
-//   param_2 = &citizenIBP (for the citizen model cell), param_3 = &skipKey, param_4 = &srcRoot,
-//   param_5 = &dstRoot.
+//   node is gated on (Work +0x10 == *param_3 skip-key) OR (param_3 holds null). param_1 holder,
+//   param_2 = &citizen (for the citizen model cell), param_3 = &skipKey, param_4 = &srcRoot,
+//   param_5 = the dst tree.
 // ============================================================
-void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param_4, int64_t* param_5) {
-    int* mapGrid = *reinterpret_cast<int**>(GW() + 0xf8);
-    void* local_res8 = param_1;
+void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* const* param_2,
+                     ComponentEntity* const* param_3, WorkSchedulerIdNode* const* param_4,
+                     WorkCandidateTree* param_5) {
+    int* mapGrid = &GameUpdateLoop::_singleton->m_game->size;
+    // retail's RCX home slot (0x1400f7c95), re-used as the descent node (see 8000)
+    WorkCandidateNode* local_res8 = nullptr;
 
     // citizen model cell (clamped row*w+col) -> uVar11
-    int64_t cz = *reinterpret_cast<int64_t*>(param_2);
-    int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
+    CitizenComponent* cz = *param_2;
+    CharacterComponent* ch = cz->character;
+    ModelComponent* model = ch->modelComponent;
     int w = *mapGrid;
-    int col = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(w >> 1));
-    int row = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(w >> 1));
+    int col = static_cast<int>(model->transform.translation.x + static_cast<float>(w >> 1));
+    int row = static_cast<int>(model->transform.translation.y + static_cast<float>(w >> 1));
     if (col < 0) col = 0; if (w <= col) col = w - 1;
     if (row < 0) row = 0; if (w <= row) row = w - 1;
     uint32_t fromCell = static_cast<uint32_t>(w * row + col);
 
-    int64_t cur = *param_4;
-    while (cur != 0) {
+    WorkSchedulerIdNode* cur = *param_4;
+    while (cur != nullptr) {
         bool doInsert = false;
-        if (*reinterpret_cast<int64_t*>(param_3) == 0) {
+        if (*param_3 == nullptr) {
             doInsert = true;
         } else {
-            int64_t key = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(cur + 8) + 0x10);
-            if (key == *reinterpret_cast<int64_t*>(param_3)) doInsert = true;
+            ComponentEntity* key = cur->work->field_10;
+            if (key == *param_3) doInsert = true;
         }
 
         if (doInsert) {
-            uint32_t toCell = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(cur + 8) + 0x28);
+            uint32_t toCell = static_cast<uint32_t>(cur->work->field_28);
             int cost = Pf_IsDstReachable_f810(mapGrid, fromCell, toCell, '\x01');
             if (cost < 0) {
                 // unreachable via path graph -> euclidean fallback on grid coords
@@ -373,52 +394,54 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
                 float d = WorkImpl_Sqrtf_132010(static_cast<float>(dr * dr + dc * dc));
                 cost = static_cast<int>(d) + gw;
             }
-            int64_t payload = *reinterpret_cast<int64_t*>(cur + 8);   // local_38
-            int costKey = cost;                                       // local_30
+            Work* payload = cur->work.Get();   // local_38
+            int costKey = cost;                // local_30
             bool inserted = true;    // false on duplicate -> skip the count INC + rebalance
-            int64_t existing = *param_5;
-            if (existing == 0) {
-                int64_t* nn = reinterpret_cast<int64_t*>(NodeAlloc());
-                if (nn == nullptr) { *param_5 = 0; }
+            WorkCandidateNode* existing = param_5->root;
+            if (existing == nullptr) {
+                WorkCandidateNode* nn = NodeAlloc();
+                if (nn == nullptr) { param_5->root = nullptr; }
                 else {
-                    nn[0] = payload; *reinterpret_cast<int*>(nn + 1) = costKey;
-                    nn[2] = 0; nn[3] = 0; nn[4] = 0; *reinterpret_cast<int*>(nn + 5) = 0;
-                    *param_5 = reinterpret_cast<int64_t>(nn);
+                    nn->work = payload; nn->cost = costKey;
+                    nn->parent = nullptr; nn->left = nullptr; nn->right = nullptr;
+                    nn->balance = 0; nn->height = 0;   // retail: one dword store
+                    param_5->root = nn;
                 }
             } else {
                 bool descendLeft = false;
                 for (;;) {
-                    int64_t self = existing;
+                    WorkCandidateNode* self = existing;
                     // Track the descent node for the post-insert rebalance. The originals
                     // (0x1400f8000 / 0x1400f7c90) do `local_res8 = pIVar3` at the top of this
                     // loop, so Helper_e360 walks UP from the insertion node. The port left
                     // local_res8 pinned at param_1 (the citizen), so e360 read citizen fields
                     // as AVL links and faulted on the -1 they held (READ of -1 crash once an
                     // idle citizen's candidate tree grew past its root). Restore the update.
-                    local_res8 = reinterpret_cast<void*>(self);
-                    if (*reinterpret_cast<int*>(self + 8) <= costKey) {
-                        if (costKey <= *reinterpret_cast<int*>(self + 8)) {
-                            int iv = *reinterpret_cast<int*>(payload + 0x20);
-                            int sv = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
+                    local_res8 = self;
+                    if (self->cost <= costKey) {
+                        if (costKey <= self->cost) {
+                            int iv = payload->field_20;
+                            int sv = self->work->field_20;
                             if (iv < sv) descendLeft = true;
                         }
                         if (!descendLeft) {
-                            if (costKey <= *reinterpret_cast<int*>(self + 8)) {
-                                if (costKey < *reinterpret_cast<int*>(self + 8)) { inserted = false; break; }
-                                int sv2 = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self) + 0x20);
-                                int iv2 = *reinterpret_cast<int*>(payload + 0x20);
+                            if (costKey <= self->cost) {
+                                if (costKey < self->cost) { inserted = false; break; }
+                                int sv2 = self->work->field_20;
+                                int iv2 = payload->field_20;
                                 if (iv2 <= sv2) { inserted = false; break; }
                             }
-                            int64_t rc = *reinterpret_cast<int64_t*>(self + 0x20);
-                            if (rc == 0) {
-                                int64_t* nn = reinterpret_cast<int64_t*>(NodeAlloc());
-                                if (nn == nullptr) { *reinterpret_cast<int64_t*>(self + 0x20) = 0; }
+                            WorkCandidateNode* rc = self->right;
+                            if (rc == nullptr) {
+                                WorkCandidateNode* nn = NodeAlloc();
+                                if (nn == nullptr) { self->right = nullptr; }
                                 else {
-                                    nn[0] = payload; *reinterpret_cast<int*>(nn + 1) = costKey;
-                                    nn[2] = self; nn[3] = 0; nn[4] = 0; *reinterpret_cast<int*>(nn + 5) = 0;
-                                    *reinterpret_cast<int64_t*>(self + 0x20) = reinterpret_cast<int64_t>(nn);
+                                    nn->work = payload; nn->cost = costKey;
+                                    nn->parent = self; nn->left = nullptr; nn->right = nullptr;
+                                    nn->balance = 0; nn->height = 0;   // retail: one dword store
+                                    self->right = nn;
                                 }
-                                Helper_e360(param_5, reinterpret_cast<int64_t*>(&local_res8));
+                                Helper_e360(&param_5->root, &local_res8);
                                 break;
                             }
                             existing = rc;
@@ -426,16 +449,17 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
                         }
                     }
                     {
-                        int64_t self2 = existing;
-                        int64_t lc = *reinterpret_cast<int64_t*>(self2 + 0x18);
-                        if (lc == 0) {
-                            int64_t* nn = reinterpret_cast<int64_t*>(NodeAlloc());
+                        WorkCandidateNode* self2 = existing;
+                        WorkCandidateNode* lc = self2->left;
+                        if (lc == nullptr) {
+                            WorkCandidateNode* nn = NodeAlloc();
                             if (nn != nullptr) {
-                                nn[0] = payload; *reinterpret_cast<int*>(nn + 1) = costKey;
-                                nn[2] = self2; nn[3] = 0; nn[4] = 0; *reinterpret_cast<int*>(nn + 5) = 0;
+                                nn->work = payload; nn->cost = costKey;
+                                nn->parent = self2; nn->left = nullptr; nn->right = nullptr;
+                                nn->balance = 0; nn->height = 0;   // retail: one dword store
                             }
-                            *reinterpret_cast<int64_t*>(self2 + 0x18) = reinterpret_cast<int64_t>(nn);
-                            Helper_e360(param_5, reinterpret_cast<int64_t*>(&local_res8));
+                            self2->left = nn;
+                            Helper_e360(&param_5->root, &local_res8);
                             break;
                         }
                         existing = lc;
@@ -444,27 +468,27 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
                     }
                 }
             }
-            if (inserted) *reinterpret_cast<int*>(reinterpret_cast<char*>(param_5) + 8) = *reinterpret_cast<int*>(reinterpret_cast<char*>(param_5) + 8) + 1;
+            if (inserted) param_5->count = param_5->count + 1;
         }
 
         // in-order successor in src tree
-        int64_t rc = *reinterpret_cast<int64_t*>(cur + 0x20);
-        int64_t next;
-        if (rc == 0) {
-            next = *reinterpret_cast<int64_t*>(cur + 0x10);
-            if (next != 0) {
-                if (*reinterpret_cast<int64_t*>(next + 0x18) != cur) {
-                    int64_t up = next;
-                    while (up != 0 && *reinterpret_cast<int64_t*>(up + 0x20) == cur) {
+        WorkSchedulerIdNode* rc = cur->right;
+        WorkSchedulerIdNode* next;
+        if (rc == nullptr) {
+            next = cur->parent;
+            if (next != nullptr) {
+                if (next->left != cur) {
+                    WorkSchedulerIdNode* up = next;
+                    while (up != nullptr && up->right == cur) {
                         cur = up;
-                        up = *reinterpret_cast<int64_t*>(up + 0x10);
+                        up = up->parent;
                     }
-                    next = *reinterpret_cast<int64_t*>(cur + 0x10);
+                    next = cur->parent;
                 }
             }
         } else {
-            int64_t n2 = rc;
-            while (*reinterpret_cast<int64_t*>(n2 + 0x18) != 0) n2 = *reinterpret_cast<int64_t*>(n2 + 0x18);
+            WorkSchedulerIdNode* n2 = rc;
+            while (n2->left != nullptr) n2 = n2->left;
             next = n2;
         }
         cur = next;
@@ -472,48 +496,44 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
 }
 
 // ============================================================
-// 0x1400f7b60 — in-order walk of the dst result tree (param_3 = &dstRoot). For each node whose
-//   payload visit-stamp (payload+0x2c) != ctx.stamp (param_1+8): call payload vtable +0x48()
-//   (refresh), then payload vtable +0x20(payload, &citizen, ctx+0x130) -> int. 2 => stop/success
-//   (return 1). 1 => mark visited (payload+0x2c = ctx.stamp). 0 => skip. Walk uses node +0x10
+// 0x1400f7b60 — in-order walk of the dst result tree (param_3). For each node whose
+//   Work visit-stamp (Work +0x2c) != the scheduler's step count (param_1 +8): call Work slot 9
+//   Validate() (refresh), then slot 4 Execute(&citizen, &scheduler->time) -> int. 2 => stop/success
+//   (return 1). 1 => mark visited (Work +0x2c = step count). 0 => skip. Walk uses node +0x10
 //   parent / +0x18 left / +0x20 right.
 // ============================================================
-uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
-    int64_t cur = *param_3;
-    if (cur == 0) return 0;
+uint8_t Helper_sub_7b60(WorkScheduler* param_1, CitizenComponent* const* param_2, WorkCandidateTree* param_3) {
+    WorkCandidateNode* cur = param_3->root;
+    if (cur == nullptr) return 0;
     // descend to leftmost (+0x18)
-    while (*reinterpret_cast<int64_t*>(cur + 0x18) != 0) cur = *reinterpret_cast<int64_t*>(cur + 0x18);
+    while (cur->left != nullptr) cur = cur->left;
 
-    while (cur != 0) {
-        int64_t payload = *reinterpret_cast<int64_t*>(cur);
-        if (*reinterpret_cast<int*>(payload + 0x2c) != *reinterpret_cast<int*>(param_1 + 8)) {
-            payload = *reinterpret_cast<int64_t*>(cur);
+    while (cur != nullptr) {
+        if (cur->work->field_2c != static_cast<int32_t>(param_1->stepCount)) {
             // vtable +0x48 refresh
-            reinterpret_cast<Work*>(payload)->Validate();   // B.3.x bridge (slot 9; 0x1400f7bc3 RCX only)
-            payload = *reinterpret_cast<int64_t*>(cur);
-            CitizenComponent* citizen = reinterpret_cast<CitizenComponent*>(*param_2);  // local_res18[0] = *param_2 (citizen)
-            uint32_t r = static_cast<uint32_t>(reinterpret_cast<Work*>(payload)->Execute(
-                &citizen, reinterpret_cast<System::Time*>(param_1 + 0x130)));   // B.3.x bridge (slot 4; 0x1400f7be9); LEFT: param_1 is the scheduler as int64_t (WorkScheduler::time +0x130)
+            cur->work->Validate();   // slot 9; 0x1400f7bc3 RCX only
+            CitizenComponent* citizen = *param_2;  // local_res18[0] = *param_2 (citizen)
+            uint32_t r = static_cast<uint32_t>(cur->work->Execute(&citizen, &param_1->time));   // slot 4; 0x1400f7be9
             if (static_cast<int>(r) == 2) return 1;
             if (static_cast<int>(r) == 1) {
-                *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cur) + 0x2c) = *reinterpret_cast<int*>(param_1 + 8);
+                cur->work->field_2c = static_cast<int32_t>(param_1->stepCount);
             }
         }
         // in-order successor: node +0x20 (right) subtree's leftmost, else climb +0x10 parents
-        int64_t rc = *reinterpret_cast<int64_t*>(cur + 0x20);
-        if (rc == 0) {
-            int64_t up = *reinterpret_cast<int64_t*>(cur + 0x10);
-            if (up == 0) { cur = 0; continue; }
-            if (*reinterpret_cast<int64_t*>(up + 0x18) == cur) { cur = up; continue; }
+        WorkCandidateNode* rc = cur->right;
+        if (rc == nullptr) {
+            WorkCandidateNode* up = cur->parent;
+            if (up == nullptr) { cur = nullptr; continue; }
+            if (up->left == cur) { cur = up; continue; }
             // climb while cur is the right child
-            while (up != 0 && *reinterpret_cast<int64_t*>(up + 0x20) == cur) {
+            while (up != nullptr && up->right == cur) {
                 cur = up;
-                up = *reinterpret_cast<int64_t*>(up + 0x10);
+                up = up->parent;
             }
-            cur = *reinterpret_cast<int64_t*>(cur + 0x10);
+            cur = cur->parent;
         } else {
-            int64_t n2 = rc;
-            while (*reinterpret_cast<int64_t*>(n2 + 0x18) != 0) n2 = *reinterpret_cast<int64_t*>(n2 + 0x18);
+            WorkCandidateNode* n2 = rc;
+            while (n2->left != nullptr) n2 = n2->left;
             cur = n2;
         }
     }
@@ -526,10 +546,10 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
 //   (7c90 slope-aware vs 8000 plain). param_6 forces the "whole-list" mode (fresh empty key
 //   holder). On finish, frees the result tree via e320 + MemFree.
 //
-//   param_1 = helper ctx (the tree-root array base; +8 = stamp, +0x130 = passed to payload+0x20)
-//   param_2 = &citizenIBP
-//   param_3 = &srcSubtreeRoot (a node in the per-state remembered-target tree)
-//   param_4 = the citizen owner key (citizen+0x1f0)
+//   param_1 = the work scheduler (+8 = step count, +0x130 = the clock handed to Work slot 4)
+//   param_2 = &citizen
+//   param_3 = &srcSubtreeRoot (a node of a scheduler id tree)
+//   param_4 = the citizen's profession (citizen+0x1f0)
 //   param_5 = cost mode (1 => 7c90, 0 => 8000)
 //   param_6 = "all" flag
 // ============================================================
@@ -539,45 +559,46 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
 // param_2 and 7b60's citizen. local_50=[RBP-0x28], local_58=[RBP-0x30].
 //   8000(citizen, &skipKeyHolder, &srcRoot, &dstRoot)
 //   7c90(citizen, &citizen,      &skipKeyHolder, &srcRoot, &dstRoot)
-uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_t param_4,
+uint64_t Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_2,
+                         WorkSchedulerIdNode* const* param_3, Profession* param_4,
                          char param_5, char param_6) {
-    int64_t local_res20 = param_4;
-    int64_t citizen0 = *reinterpret_cast<int64_t*>(param_2);
-    int64_t gate = *reinterpret_cast<int64_t*>(citizen0 + 0x248);   // pIVar5 = *(citizen+0x248)
+    Profession* local_res20 = param_4;
+    CitizenComponent* citizen0 = *param_2;
+    ComponentEntity* gate = citizen0->workplace;   // pIVar5 = *(citizen+0x248)
 
-    int64_t ctorBuf[2] = {0, 0};  // local_res10 (IBP-Ctor scratch + 7b60 citizen holder)
     if (param_6 != '\0') {
-        new (ctorBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        gate = ctorBuf[0];   // fresh empty IBP -> typically 0
+        ::Object::InternalPtr<ComponentEntity> freshGate(nullptr);   // the IBP ctor 0x1400f79fb
+        gate = freshGate.Get();   // fresh empty IBP -> 0
     }
 
-    int64_t resultPair[2] = {0, 0};  // local_40 (dstRoot) + local_38 (count)
-    int64_t srcRoot = 0;             // [RBP+0x38] = *param_3 (walked source node)
-    int64_t local_50 = 0;            // [RBP-0x28]
-    int64_t local_58 = 0;            // [RBP-0x30]
+    WorkCandidateTree resultPair = {};   // local_40 (root) + local_38 (count)
+    WorkSchedulerIdNode* srcRoot = nullptr;   // [RBP+0x38] = *param_3 (walked source node)
+    ComponentEntity* local_50 = nullptr;      // [RBP-0x28]
+    CitizenComponent* local_58 = nullptr;     // [RBP-0x30]
+    CitizenComponent* citHolder = nullptr;    // local_res10: 7b60's citizen holder
 
     // BuildAndWalk(skipKeyHolder): srcRoot = *param_3; build the cost-keyed dst tree via 7c90
     // (slope cost) or 8000 (plain), then walk it via 7b60. citizen for 7b60 = *param_2.
-    auto BuildAndWalk = [&](int64_t skipKeyHolder) -> uint8_t {
-        srcRoot = *reinterpret_cast<int64_t*>(param_3);
+    auto BuildAndWalk = [&](ComponentEntity* skipKeyHolder) -> uint8_t {
+        srcRoot = *param_3;
         if (param_5 != '\0') {
-            local_58 = *reinterpret_cast<int64_t*>(param_2);  // citizen (RDX for 7c90)
-            local_50 = skipKeyHolder;                          // skip-key gate (R8 for 7c90)
-            Helper_sub_7c90(reinterpret_cast<void*>(citizen0), &local_58, &local_50, &srcRoot, &resultPair[0]);
+            local_58 = *param_2;            // citizen (RDX for 7c90)
+            local_50 = skipKeyHolder;       // skip-key gate (R8 for 7c90)
+            Helper_sub_7c90(citizen0, &local_58, &local_50, &srcRoot, &resultPair);
         } else {
-            local_50 = skipKeyHolder;                          // skip-key gate (RDX for 8000)
-            Helper_sub_8000(reinterpret_cast<void*>(citizen0), &local_50, &srcRoot, &resultPair[0]);
+            local_50 = skipKeyHolder;       // skip-key gate (RDX for 8000)
+            Helper_sub_8000(citizen0, &local_50, &srcRoot, &resultPair);
         }
-        ctorBuf[0] = *reinterpret_cast<int64_t*>(param_2);     // citizen for 7b60
-        return Helper_sub_7b60(param_1, reinterpret_cast<void**>(ctorBuf), &resultPair[0]);
+        citHolder = *param_2;               // citizen for 7b60
+        return Helper_sub_7b60(param_1, &citHolder, &resultPair);
     };
 
     uint64_t ret = 0;
     bool tryCommon = true;
 
-    if (gate != 0) {
-        int64_t citizen = *reinterpret_cast<int64_t*>(param_2);
-        if (local_res20 == *reinterpret_cast<int64_t*>(citizen + 0x1f0)) {
+    if (gate != nullptr) {
+        CitizenComponent* citizen = *param_2;
+        if (local_res20 == citizen->profession) {
             // key match: build with the +0x248 gate object as the skip-key holder
             uint8_t hit = BuildAndWalk(gate);
             if (hit != 0) { ret = 1; tryCommon = false; }
@@ -594,21 +615,21 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
         // yet home-assigned), so local_res20 can be 0 -> READ of 0x4c crash. Treat a null key as
         // "no remembered target" (remember flag unset); the common walk still runs when param_6.
         // TODO(2c-B follow-up): root-cause why some SA citizens have citizen+0x1f0 == 0.
-        if ((local_res20 != 0 && *reinterpret_cast<char*>(local_res20 + 0x4c) != '\0') || (param_6 != '\0')) {
-            int64_t freshIbp[2] = {0, 0};
-            new (freshIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            uint8_t hit = BuildAndWalk(freshIbp[0]);
+        // NOT RETAIL: 0x1400f7a8d reads the byte unguarded (known_port_issues 14d row 211).
+        if ((local_res20 != nullptr && local_res20->field4C) || (param_6 != '\0')) {
+            ::Object::InternalPtr<ComponentEntity> freshIbp(nullptr);   // the IBP ctor 0x1400f7aa6
+            uint8_t hit = BuildAndWalk(freshIbp.Get());
             ret = (hit != 0) ? 1 : 0;
         }
     }
     (void)local_58;
 
     // free the transient result tree
-    int64_t r = resultPair[0];
-    if (r != 0) {
-        WorkBase_TreeNodeFree_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x18));
-        WorkBase_TreeNodeFree_e320(&resultPair[0], *reinterpret_cast<void**>(r + 0x20));
-        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(r));
+    WorkCandidateNode* r = resultPair.root;
+    if (r != nullptr) {
+        WorkBase_TreeNodeFree_e320(&resultPair.root, r->left);
+        WorkBase_TreeNodeFree_e320(&resultPair.root, r->right);
+        System::MemoryAllocator::MemFree(r);
     }
     return ret;
 }
@@ -616,17 +637,17 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
 // ============================================================
 // 0x1400f7550 — roll a randomised list of candidate states, then for each (until success) walk
 //   the corresponding remembered-target subtree via 79b0.
-//   param_1 = tree-root array base (*(g_pGameWorldSingleton+0x118))
-//   param_2 = &citizenIBP
+//   param_1 = the work scheduler (GameUpdateLoop +0x118)
+//   param_2 = &citizen
 //   Returns CONCAT71(.., walkSucceeded).
 // ============================================================
-uint64_t Helper_7550(int64_t param_1, void** param_2) {
+uint64_t Helper_7550(WorkScheduler* param_1, CitizenComponent* const* param_2) {
     // 0x78-byte candidate buffer, slots at +i*8, low byte = state code, init 0xFF (terminator).
     unsigned char buf[0x78];
     Helper_3f010(buf, 0xffffffff, 0x78);
     char allFlag = 0;        // cVar9 / R15B
 
-    char canHouse = reinterpret_cast<CitizenComponent* const*>(param_2)[0]->CanFindHousing();
+    char canHouse = (*param_2)->CanFindHousing();
 
     uint32_t n;  // candidate count -> Rand range
     if (canHouse != 0) {
@@ -634,13 +655,13 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
         buf[0] = 0x0e;
         n = 1;
     } else {
-        // counters object at *(*(gw+0xf0) + 0x170)  -> piVar2 (int array)
-        int64_t listEnt = *reinterpret_cast<int64_t*>(GW() + 0xf0);
-        bool homeless = (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x1f0)
-                         == *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x38));
+        // the town's per-resource counters: CitizenBehavior (+0xF0) professionResources (+0x170)
+        CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
+        bool homeless = ((*param_2)->profession
+                         == GameUpdateLoop::_singleton->m_professionList->field_0x38);
         if (homeless) buf[0] = 0x0d;
         uint32_t idx = homeless ? 1u : 0u;
-        int* p = *reinterpret_cast<int**>(listEnt + 0x170);
+        ProfessionResourceEntry* p = listEnt->professionResources;
 
         // Each resource category below threshold -> emit a gather/work state code into the next
         // slot. The packed multi-byte writes mirror the exe (slot low byte = primary state id).
@@ -654,38 +675,38 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
             buf[idx * 8 + 0] = b0; buf[idx * 8 + 1] = b1; buf[idx * 8 + 2] = b2; buf[idx * 8 + 3] = b3; idx++;
         };
 
-        if (p[0x28] <= p[0x2a] / 10) emit1(1);
-        if (p[0x18] <= p[0x1a] / 10) { emit2(0x02, 0x04); buf[(idx - 1) * 8 + 2] = 10; }
-        if (p[0x20] <= p[0x22] / 10) { emit4(0x03, 0x06, 0x04, 0x0a); buf[(idx - 1) * 8 + 4] = 0x0c; }
-        if (p[0x00] <= p[0x02] / 10) emit2(0x04, 0x0a);
-        if (p[0x10] <= p[0x12] / 10) emit2(0x06, 0x0c);
-        if (p[0x08] <= p[0x0a] / 10) emit2(0x05, 0x0b);
-        if (p[0x50] <= p[0x52] / 10) emit1(9);
-        if (p[0x38] <= p[0x3a] / 10) emit2(0x07, 0x09);
-        if (p[0x30] <= p[0x32] / 10) emit1(8);
+        // (entry k's currentCount is int [k*8], its maxCount int [k*8+2] of the 0x20 stride)
+        if (p[5].currentCount  <= p[5].maxCount  / 10) emit1(1);
+        if (p[3].currentCount  <= p[3].maxCount  / 10) { emit2(0x02, 0x04); buf[(idx - 1) * 8 + 2] = 10; }
+        if (p[4].currentCount  <= p[4].maxCount  / 10) { emit4(0x03, 0x06, 0x04, 0x0a); buf[(idx - 1) * 8 + 4] = 0x0c; }
+        if (p[0].currentCount  <= p[0].maxCount  / 10) emit2(0x04, 0x0a);
+        if (p[2].currentCount  <= p[2].maxCount  / 10) emit2(0x06, 0x0c);
+        if (p[1].currentCount  <= p[1].maxCount  / 10) emit2(0x05, 0x0b);
+        if (p[10].currentCount <= p[10].maxCount / 10) emit1(9);
+        if (p[7].currentCount  <= p[7].maxCount  / 10) emit2(0x07, 0x09);
+        if (p[6].currentCount  <= p[6].maxCount  / 10) emit1(8);
         n = idx;
     }
 
     // Random start index in [0, n)
-    void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
-    uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n));   // B.3.4b bridge
+    System::Random* rng = GameUpdateLoop::_singleton->m_random;
+    uint32_t r = rng->Rand(static_cast<uint32_t>(n));
 
     // walk from buf[r*8] byte-by-byte until a negative (0xFF) terminator
     unsigned char* pc = buf + static_cast<int>(r) * 8;
     while (static_cast<signed char>(*pc) >= 0) {
-        int64_t citizen = *reinterpret_cast<int64_t*>(param_2);  // local_res18[0]
-        int64_t ownerKey = *reinterpret_cast<int64_t*>(citizen + 0x1f0);
+        CitizenComponent* citizen = *param_2;  // local_res18[0]
+        Profession* ownerKey = citizen->profession;
 
-        // tree root for this state code: param_1[(byte+3)*0x10], then follow +0x18 to leftmost
+        // tree root for this state code: param_1 +0x30 + byte*0x10, then follow +0x18 to leftmost
         int64_t stateByte = static_cast<int64_t>(static_cast<signed char>(*pc));
-        int64_t node = *reinterpret_cast<int64_t*>(param_1 + (stateByte + 3) * 0x10);
-        int64_t walked = node;  // local_res10
-        while (node != 0) { walked = node; node = *reinterpret_cast<int64_t*>(node + 0x18); }
+        WorkSchedulerIdNode* node = param_1->trees[stateByte].root;
+        WorkSchedulerIdNode* walked = node;  // local_res10
+        while (node != nullptr) { walked = node; node = node->left; }
 
-        void* citHolder = reinterpret_cast<void*>(citizen);  // &local_res18
-        void* walkedHolder = reinterpret_cast<void*>(walked);
-        uint64_t hit = Helper_sub_79b0(param_1, reinterpret_cast<void**>(&citHolder),
-                                       reinterpret_cast<void**>(&walkedHolder), ownerKey, '\x01', allFlag);
+        CitizenComponent* citHolder = citizen;  // &local_res18
+        WorkSchedulerIdNode* walkedHolder = walked;
+        uint64_t hit = Helper_sub_79b0(param_1, &citHolder, &walkedHolder, ownerKey, '\x01', allFlag);
         if (static_cast<char>(hit) != '\0') {
             return (static_cast<uint64_t>(hit) & 0xffffffffffffff00ULL) | 1;
         }
@@ -695,72 +716,69 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
 }
 
 // ============================================================
-// 0x1400f7830 — Idle: try the citizen's current owner-key subtree in the param_1+0x120 BST
-//   first (cost mode 8000, all=0). If that misses, fall back to 7550; if THAT also misses, try
-//   the "home key" (gameWorld+0xb0 +0x30) subtree once.
+// 0x1400f7830 — Idle: try the citizen's current profession's bucket in the scheduler's +0x120
+//   tree first (cost mode 8000, all=0). If that misses, fall back to 7550; if THAT also misses,
+//   try the ProfessionList +0x30 profession's bucket once.
 // ============================================================
-void Helper_7830(int64_t param_1, void** param_2) {
-    if (*reinterpret_cast<int*>(param_1 + 0x38) == 0) return;  // tree-array not populated
+void Helper_7830(WorkScheduler* param_1, CitizenComponent* const* param_2) {
+    if (param_1->trees[0].count == 0) return;  // tree-array not populated
     ++g_idleSearchCalls;
 
-    int64_t homeRoot = *reinterpret_cast<int64_t*>(GW() + 0xb0);
-    uint64_t homeKey = *reinterpret_cast<uint64_t*>(homeRoot + 0x30);
+    ProfessionList* homeRoot = GameUpdateLoop::_singleton->m_professionList;
+    Profession* homeKey = homeRoot->field_0x30;
 
-    uint64_t ownerKey = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x1f0);
+    Profession* ownerKey = (*param_2)->profession;
 
-    // (1) probe the param_1+0x120 BST for ownerKey
-    if (ownerKey == *reinterpret_cast<uint64_t*>(homeRoot + 0x38)) ++g_idleSearchByBuilder;
-    if (ownerKey != *reinterpret_cast<uint64_t*>(homeRoot + 0x30)) {
-        uint64_t* node = *reinterpret_cast<uint64_t**>(param_1 + 0x120);
+    // (1) probe the param_1+0x120 tree for ownerKey
+    if (ownerKey == homeRoot->field_0x38) ++g_idleSearchByBuilder;
+    if (ownerKey != homeRoot->field_0x30) {
+        WorkSchedulerBucketNode* node = param_1->field_0x120;
         while (node != nullptr) {
-            if (ownerKey < node[0]) {
-                node = reinterpret_cast<uint64_t*>(node[4]);          // +0x20 left
-            } else if (ownerKey <= node[0]) {
-                // equal: value subtree at node[1] (+0x08), descend +0x18 to leftmost
-                uint64_t v = node[1];
-                uint64_t walked = v;
-                while (v != 0) { walked = v; v = *reinterpret_cast<uint64_t*>(v + 0x18); }
-                int64_t citizen = *reinterpret_cast<int64_t*>(param_2);
-                void* citHolder = reinterpret_cast<void*>(citizen);
-                void* walkedHolder = reinterpret_cast<void*>(walked);
-                uint64_t hit = Helper_sub_79b0(param_1, reinterpret_cast<void**>(&citHolder),
-                                               reinterpret_cast<void**>(&walkedHolder),
-                                               static_cast<int64_t>(ownerKey), '\0', '\0');
-                if (ownerKey == *reinterpret_cast<uint64_t*>(homeRoot + 0x38)) {
+            if (ownerKey < node->bucket.key) {
+                node = node->left;          // +0x20 left
+            } else if (ownerKey <= node->bucket.key) {
+                // equal: the bucket's id tree (+0x08), descend +0x18 to leftmost
+                WorkSchedulerIdNode* v = node->bucket.entries.root;
+                WorkSchedulerIdNode* walked = v;
+                while (v != nullptr) { walked = v; v = v->left; }
+                CitizenComponent* citizen = *param_2;
+                CitizenComponent* citHolder = citizen;
+                WorkSchedulerIdNode* walkedHolder = walked;
+                uint64_t hit = Helper_sub_79b0(param_1, &citHolder, &walkedHolder,
+                                               ownerKey, '\0', '\0');
+                if (ownerKey == homeRoot->field_0x38) {
                     ++g_idleBuilderBucketHit;
                     if (static_cast<char>(hit) != '\0') ++g_idleBuilderTookWork;
                 }
                 if (static_cast<char>(hit) != '\0') return;
                 break;
             } else {
-                node = reinterpret_cast<uint64_t*>(node[5]);          // +0x28 right
+                node = node->right;         // +0x28 right
             }
         }
     }
 
     // (2) fall back to the full 7550 candidate roll
-    void* citHolder2 = *reinterpret_cast<void**>(param_2);
-    uint64_t hit2 = Helper_7550(param_1, reinterpret_cast<void**>(&citHolder2));
+    CitizenComponent* citHolder2 = *param_2;
+    uint64_t hit2 = Helper_7550(param_1, &citHolder2);
     if (static_cast<char>(hit2) != '\0') return;
 
     // (3) try the home-key subtree once
-    uint64_t* node = *reinterpret_cast<uint64_t**>(param_1 + 0x120);
+    WorkSchedulerBucketNode* node = param_1->field_0x120;
     while (node != nullptr) {
-        if (homeKey < node[0]) {
-            node = reinterpret_cast<uint64_t*>(node[4]);
-        } else if (homeKey <= node[0]) {
-            uint64_t v = node[1];
-            uint64_t walked = v;
-            while (v != 0) { walked = v; v = *reinterpret_cast<uint64_t*>(v + 0x18); }
-            int64_t citizen = *reinterpret_cast<int64_t*>(param_2);
-            void* citHolder = reinterpret_cast<void*>(citizen);
-            void* walkedHolder = reinterpret_cast<void*>(walked);
-            Helper_sub_79b0(param_1, reinterpret_cast<void**>(&citHolder),
-                            reinterpret_cast<void**>(&walkedHolder),
-                            static_cast<int64_t>(homeKey), '\0', '\0');
+        if (homeKey < node->bucket.key) {
+            node = node->left;
+        } else if (homeKey <= node->bucket.key) {
+            WorkSchedulerIdNode* v = node->bucket.entries.root;
+            WorkSchedulerIdNode* walked = v;
+            while (v != nullptr) { walked = v; v = v->left; }
+            CitizenComponent* citizen = *param_2;
+            CitizenComponent* citHolder = citizen;
+            WorkSchedulerIdNode* walkedHolder = walked;
+            Helper_sub_79b0(param_1, &citHolder, &walkedHolder, homeKey, '\0', '\0');
             return;
         } else {
-            node = reinterpret_cast<uint64_t*>(node[5]);
+            node = node->right;
         }
     }
 }
@@ -780,8 +798,8 @@ static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
 // 0x14010b340 — CitizenAIComponent::State_FindHousing  (state id 2)
 // ============================================================
 uint64_t CitizenAIComponent::State_FindHousing() {
-    int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
-    void* holder = citizen;   // local_res8[0]
+    WorkScheduler* treeBase = GameUpdateLoop::_singleton->m_tutorial;
+    CitizenComponent* holder = citizen;   // local_res8[0]
     Helper_7550(treeBase, &holder);
     return HandlerEpilogue(citizen);
 }
@@ -790,30 +808,17 @@ uint64_t CitizenAIComponent::State_FindHousing() {
 // 0x14010b2d0 — CitizenAIComponent::State_Idle  (state id 9)
 // ============================================================
 uint64_t CitizenAIComponent::State_Idle() {
-    int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
-    void* holder = citizen;   // local_res8[0]
+    WorkScheduler* treeBase = GameUpdateLoop::_singleton->m_tutorial;
+    CitizenComponent* holder = citizen;   // local_res8[0]
     Helper_7830(treeBase, &holder);
     return HandlerEpilogue(citizen);
 }
 
 // ============================================================
-// Registration thunks — expose the anonymous-namespace helper bodies at their original exe
-// addresses so any cross-TU ResolveAddr(Module::Exe, <addr>) resolves to our faithful port.
-// (The handlers above call the helpers directly via normal C++ calls; these thunks exist solely
-// so the address registry can map each sub-callee.)
+// 0x14000e360 by name for the other files' trees (Component/exe_bodies.h). Retail's rebalance
+// serves every 0x30 node with links at +0x10 / +0x18 / +0x20 and int16 balance / height at
+// +0x28 / +0x2A (ICF, B13); its callers hold the root slot and the walk slot as int64_t*.
 // ============================================================
-extern "C" uint64_t CitizenAI_Reg_helper_7550(int64_t a, void** b) { return Helper_7550(a, b); }
-extern "C" void     CitizenAI_Reg_helper_7830(int64_t a, void** b) { Helper_7830(a, b); }
-extern "C" uint64_t CitizenAI_Reg_helper_79b0(int64_t a, void** b, void** c, int64_t d, char e, char f) {
-    return Helper_sub_79b0(a, b, c, d, e, f);
+extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b) {
+    Helper_e360(reinterpret_cast<WorkCandidateNode**>(a), reinterpret_cast<WorkCandidateNode**>(b));   // LEFT: SIG CitizenAI_Reg_helper_e360 (wave X: callers in citizenlist_serialize / action_pf_avl / tradeui_leaves pass their own node types)
 }
-extern "C" uint8_t  CitizenAI_Reg_helper_7b60(int64_t a, void** b, int64_t* c) { return Helper_sub_7b60(a, b, c); }
-extern "C" void     CitizenAI_Reg_helper_7c90(void* a, void* b, void* c, int64_t* d, int64_t* e) {
-    Helper_sub_7c90(a, b, c, d, e);
-}
-extern "C" void     CitizenAI_Reg_helper_8000(void* a, void* b, int64_t* c, int64_t* d) {
-    Helper_sub_8000(a, b, c, d);
-}
-extern "C" void*    CitizenAI_Reg_helper_3f010(void* a, uint64_t b, uint64_t c) { return Helper_3f010(a, b, c); }
-extern "C" void     CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b) { Helper_e360(a, b); }
-
