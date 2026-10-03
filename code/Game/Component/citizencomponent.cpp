@@ -1822,7 +1822,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     };
     int shift = catShift(param_4);
 
-    ComponentEntity* storeEntity = *reinterpret_cast<ComponentEntity**>(param_3);
+    ComponentEntity* storeEntity = *reinterpret_cast<ComponentEntity**>(param_3);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (Component/exe_bodies.h, wave X)
     StorageComponent* store = storeEntity->FindComponent<StorageComponent>();
     // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
     // null bail: retail asserts the storage exists; in standalone an entity in a
@@ -1836,15 +1836,16 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     if (taskCount <= 0) { *param_2 = 0; return param_2; }
 
     // Find the RawMaterialDescription on a task entity, returning its derived ptr (or null).
-    auto findMat = [&](int64_t taskEntity) -> void* {
-        int rows = *reinterpret_cast<int*>(taskEntity + 0x30);
-        int64_t arr = *reinterpret_cast<int64_t*>(taskEntity + 0x28);
+    // The material template's sub-descriptions (ComponentDescription +0x28 / +0x30).
+    auto findMat = [&](ComponentDescription* taskEntity) -> RawMaterialDescription* {
+        int rows = taskEntity->_subDescCount;
+        Description** arr = taskEntity->_subDescs;
         for (int i = 0; i < rows; i++) {
-            int64_t comp = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+            Description* comp = arr[i];
+            uint32_t tid = comp->Type();   // slot 2
             if (tid == rawMatTid) {
-                void* obj = reinterpret_cast<void*>(comp);
-                return Object::IsDerivedFromNullSafe(obj, rawMatTid) ? obj : nullptr;
+                return Object::IsDerivedFromNullSafe(comp, rawMatTid)
+                           ? static_cast<RawMaterialDescription*>(comp) : nullptr;
             }
         }
         return nullptr;
@@ -1853,15 +1854,15 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     // Pass 1: count eligible slots; remember the last eligible index in `chosen`.
     uint32_t eligible = 0;
     for (int64_t row = 0; row < taskCount; row++) {
-        int64_t listBase = reinterpret_cast<int64_t>(store->storageSlots);   // void* array data: raw
-        int64_t entry = *reinterpret_cast<int64_t*>(listBase + row * 0x10);
-        void* mat = findMat(entry);
+        StorageComponent::Item* listBase = store->storageSlots;
+        ComponentDescription* entry = listBase[row]._resource;
+        RawMaterialDescription* mat = findMat(entry);
         bool bitSet = mat && shift >= 0 &&
-            ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(mat) + 0x5c) >> shift) & 1);
-        int demand = *reinterpret_cast<int*>(listBase + 8 + row * 0x10) -
-                     *reinterpret_cast<int*>(listBase + 0xc + row * 0x10);
+            ((mat->_flags >> shift) & 1);
+        int demand = listBase[row]._count -
+                     listBase[row]._reserve;
         if (bitSet && demand > 0) {
-            if (*reinterpret_cast<char*>(reinterpret_cast<uint8_t*>(mat) + 0x58) != '\0')
+            if (mat->_unknown58 != '\0')
                 chosen = eligible;
             eligible++;
         }
@@ -1874,14 +1875,13 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     // Pass 2: walk again, returning the chosen eligible slot's IBP.
     uint32_t cur = 0;
     for (int64_t row = 0; row < taskCount; row++) {
-        int64_t listBase = reinterpret_cast<int64_t>(store->storageSlots);   // void* array data: raw
-        int64_t* entryP = reinterpret_cast<int64_t*>(listBase + row * 0x10);
-        void* mat = findMat(*entryP);
+        StorageComponent::Item* entryP = store->storageSlots + row;
+        RawMaterialDescription* mat = findMat(entryP->_resource);
         bool bitSet = mat && shift >= 0 &&
-            ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(mat) + 0x5c) >> shift) & 1);
-        int demand = static_cast<int>(entryP[1]) - *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(entryP) + 0xc);
+            ((mat->_flags >> shift) & 1);
+        int demand = entryP->_count - entryP->_reserve;
         if (bitSet && demand > 0) {
-            if (chosen == cur) { *param_2 = *entryP; return param_2; }
+            if (chosen == cur) { *param_2 = reinterpret_cast<int64_t>(entryP->_resource); return param_2; }   // LEFT: SIG CitizenComp_Entity_impl_ef40 (int64_t out slot; Component/exe_bodies.h, wave X)
             cur++;
         }
     }
@@ -1928,9 +1928,9 @@ void CitizenComponent::UpdateHealth() {
 
 // CitizenComponent::UpdateHappiness (0x140112ae0; tree and Ghidra: "ConsumeFuel"):
 // recompute the citizen's happiness (+0x80) from this tick's +0x88 flag bits, then
-// drive it toward a target derived from the home tile (the map, GameUpdateLoop m_game:
-// a void* member whose tile array is read raw, via Entity_impl_7fb0's anchor cell) and
-// the home's household count. Closure-safe: callees 0x140087fb0/0x140008090 registered.
+// drive it toward a target derived from the home tile (the map's cells, GameUpdateLoop
+// m_game, via Entity_impl_7fb0's anchor cell) and the home's household count.
+// Closure-safe: callees 0x140087fb0/0x140008090 registered.
 void CitizenComponent::UpdateHappiness() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     float uv   = kRdata_14017214c;
@@ -1977,15 +1977,15 @@ void CitizenComponent::UpdateHappiness() {
 
     ComponentEntity* wpIBP = home;
     if (wpIBP != nullptr) {
-        int64_t mapInfo = reinterpret_cast<int64_t>(gw->m_game);
+        Map* mapInfo = gw->m_game;
         int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
-        int64_t tile = (int64_t)region * 0x30 + *reinterpret_cast<int64_t*>(mapInfo + 0x80);
-        int climate = ((*reinterpret_cast<char*>(tile + 0x20) != 0) +
-                       (*reinterpret_cast<char*>(tile + 0x1f) != 0) +
-                       (*reinterpret_cast<char*>(tile + 0x1e) != 0) +
-                       (*reinterpret_cast<char*>(tile + 0x1d) != 0) +
-                       (*reinterpret_cast<char*>(tile + 0x1c) != 0)) -
-                      (int)*reinterpret_cast<uint8_t*>(tile + 0x21);
+        const MapCell* tile = mapInfo->cells + (int64_t)region;
+        int climate = ((tile->field_0x1C[4] != 0) +    // +0x20
+                       (tile->field_0x1C[3] != 0) +    // +0x1f
+                       (tile->field_0x1C[2] != 0) +    // +0x1e
+                       (tile->field_0x1C[1] != 0) +    // +0x1d
+                       (tile->field_0x1C[0] != 0)) -   // +0x1c
+                      (int)tile->field_0x1C[5];                // +0x21
         if (climate < 0) climate = 0;
         ResidenceComponent* st = home->FindComponent<ResidenceComponent>();
         if (st->residentSlotCount > 1) climate >>= 2;
@@ -2019,14 +2019,14 @@ void CitizenComponent::UpdateHappiness() {
 void CitizenComponent::SetWorkplace(ComponentEntity* newWorkplace) {
     if (workplace != nullptr) {
         WorkPlaceComponent* building = workplace->FindComponent<WorkPlaceComponent>();
-        CitizenComponent* selfIBP = this;
-        WorkplaceComponent_Detach(reinterpret_cast<int64_t>(building), &selfIBP);
+        Object::InternalPtr<CitizenComponent> selfIBP(this);
+        building->Detach(&selfIBP);   // 0x14012f7e0
     }
     workplace = newWorkplace;
     if (newWorkplace != nullptr) {
         WorkPlaceComponent* building = workplace->FindComponent<WorkPlaceComponent>();
-        CitizenComponent* selfIBP = this;
-        WorkplaceComponent_Attach(reinterpret_cast<int64_t>(building), &selfIBP);
+        Object::InternalPtr<CitizenComponent> selfIBP(this);
+        building->Attach(&selfIBP);   // 0x14012fa20
     }
 }
 
@@ -2045,31 +2045,29 @@ void CitizenComponent::SetWorkplace(ComponentEntity* newWorkplace) {
 int g_sub40f0_exit = 0, g_sub40f0_count = 0, g_sub40f0_cap = 0, g_sub40f0_attTid = 0;
 
 bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
-    // AttendanceComponent's body (LEFT free: its header is COMP-a's). field30 (the
-    // queue count) is declared void* in AttendanceComponent.h: read raw.
+    // AttendanceComponent's body (LEFT free: its header is COMP-a's).
     g_sub40f0_exit = 0;
-    uint8_t* cp = reinterpret_cast<uint8_t*>(att);
-    void* obj = att->_description;
+    Description* obj = att->_description;
     uint32_t attTid = AttendanceDescription::TypeId();   // cell 0x1401c3f78 (NOT Residence)
-    void* res = (obj && attTid && Object::IsDerivedFromNullSafe(obj, attTid)) ? obj : nullptr;
-    int cap = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x20) : 0;
+    AttendanceDescription* res = (obj && attTid && Object::IsDerivedFromNullSafe(obj, attTid))
+                                     ? static_cast<AttendanceDescription*>(obj) : nullptr;
+    int cap = res ? res->_i20 : 0;
     g_sub40f0_attTid = (int)attTid;
     g_sub40f0_cap    = cap;
-    g_sub40f0_count  = *reinterpret_cast<int*>(cp + 0x30);
-    if (*reinterpret_cast<int*>(cp + 0x30) >= cap) { g_sub40f0_exit = 1; return false; }
+    g_sub40f0_count  = att->queueCount;
+    if (att->queueCount >= cap) { g_sub40f0_exit = 1; return false; }
 
     WorkPlaceComponent* bldg = att->_entity->FindComponent<WorkPlaceComponent>();
     if (bldg->workerCount == 0) { g_sub40f0_exit = 2; return false; }
 
-    int* mapInfo = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* mapInfo = GameUpdateLoop::_singleton->m_game;
     InteractComponent* posComp = att->_entity->FindComponent<InteractComponent>();
     float pos[3] = {0,0,0};
     Pf_EntityResolvePos_2e20(posComp, pos, 0, 0, nullptr);
 
-    // ModelComponent's transform is raw storage (its owner's H5 member): read raw.
-    int64_t homeComp = reinterpret_cast<int64_t>(citizen->character->modelComponent);
+    ModelComponent* homeComp = citizen->character->modelComponent;
 
-    int mapW = *mapInfo;
+    int mapW = mapInfo->size;
     float half = (float)(mapW >> 1);
     auto clampTile = [&](float v) -> int {
         int t = (int)(v + half);
@@ -2077,13 +2075,13 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
         if (mapW <= t) t = mapW - 1;
         return t;
     };
-    int homeX = clampTile(*reinterpret_cast<float*>(homeComp + 0x158));
-    int homeY = clampTile(*reinterpret_cast<float*>(homeComp + 0x15c));
+    int homeX = clampTile(homeComp->transform.translation.x);
+    int homeY = clampTile(homeComp->transform.translation.y);
     int posX  = clampTile(pos[0]);
     int posY  = clampTile(pos[1]);
     uint32_t fromCell = (uint32_t)(mapW * posY + posX);
     uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
-    char ok = WorkBase_ValidateCell_a00f0(mapInfo, 0xe1f, fromCell, toCell);
+    char ok = WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(mapInfo), 0xe1f, fromCell, toCell);   // LEFT: SIG WorkBase_ValidateCell_a00f0 (Work/exe_bodies.h, wave X)
     if (!ok) g_sub40f0_exit = 3;
     return ok != 0;
 }
@@ -2103,15 +2101,15 @@ int g_sub1930_walked = 0, g_sub1930_haveWpc = 0, g_sub1930_profMatch = 0,
 int g_sub1930_lastExit = 0, g_sub1930_lastCount = 0, g_sub1930_lastCap = 0;
 extern int g_sub40f0_exit, g_sub40f0_count, g_sub40f0_cap;
 
-// The town attendance registry hangs off GameUpdateLoop::m_citizenList (a void*
-// member): its entries are read raw (LEFT); each is an AttendanceComponent.
+// The town attendance registry is GameUpdateLoop::m_citizenList's
+// attendanceComponents (CitizenBehavior +0x60 / +0x68).
 AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclude, Profession* key) {
     g_sub1930_walked = g_sub1930_haveWpc = g_sub1930_profMatch =
         g_sub1930_reject40f0 = g_sub1930_accepted = 0;
-    int64_t list = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* list = GameUpdateLoop::_singleton->m_citizenList;
     ComponentEntity* srcWp = home;
     int bestCost = -1;
-    int count = *reinterpret_cast<int*>(list + 0x68);
+    int count = list->attendanceComponentCount;
     AttendanceComponent* best = nullptr;
     uint32_t srcRegion = 0xffffffff;
     if (srcWp != nullptr) {
@@ -2120,8 +2118,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     }
 
     for (int i = 0; i < count; i++) {
-        AttendanceComponent* cand =
-            *reinterpret_cast<AttendanceComponent**>(*reinterpret_cast<int64_t*>(list + 0x60) + (int64_t)i * 8);
+        AttendanceComponent* cand = list->attendanceComponents[i];
         if (cand == exclude) continue;
 
         // the WorkplaceComponent (DAT_1401c80e0) on the candidate's entity
@@ -2145,7 +2142,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         uint32_t dstRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&candSubIBP, nullptr));
         int cost = 1;
         if ((int)srcRegion >= 0) {
-            int* mapInfo = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+            int* mapInfo = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT: SIG WorkBase_CalcDistance_8830 (Work/exe_bodies.h, wave X)
             cost = WorkBase_CalcDistance_8830(mapInfo, dstRegion, srcRegion);
         }
         if (bestCost < 0 || cost < bestCost) {
@@ -2406,9 +2403,9 @@ void CitizenComponent::Startup() {
     // +0x288 = CitizenDescription: trust comp+0x18 (the copy-ctor stored it).
     // The original validates IsDerivedFrom(obj, CitizenDescription 0x1401c7190),
     // but that is unreliable in standalone's partial factory tree (GrowthComponent
-    // precedent), so trust the +0x18 pointer directly. Component::_description is a
-    // void* member (Component.h): the pointer is taken as the description it holds.
-    description = reinterpret_cast<CitizenDescription*>(_description);
+    // precedent), so trust the +0x18 pointer directly (Component::_description, a
+    // Description*): the pointer is taken as the description it holds.
+    description = reinterpret_cast<CitizenDescription*>(_description);   // LEFT: the tree skips retail's IsDerivedFrom 0x1401c7190 (a checked downcast once Component's _description is read as Description)
     if (description) {
         health = description->_f6c;
         happiness = description->maxHappiness;
@@ -2456,39 +2453,39 @@ DEFINE_EXE_TYPE(CitizenComponent, "Component")
 
 // B4 FORWARD: 1 outside caller(s) (standalone/death_harness.cpp)
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2) {
-    reinterpret_cast<CitizenComponent*>(selfV)->SetParent(*reinterpret_cast<CitizenComponent**>(param2));
+    reinterpret_cast<CitizenComponent*>(selfV)->SetParent(*reinterpret_cast<CitizenComponent**>(param2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
 }
 
 // B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
 // Component/destroycomponent_workerrelease.cpp)
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
-    *reinterpret_cast<ComponentEntity**>(param_2) =
-        reinterpret_cast<CitizenComponent*>(param_1)->FindWorkplace();
+    *reinterpret_cast<ComponentEntity**>(param_2) =   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
+        reinterpret_cast<CitizenComponent*>(param_1)->FindWorkplace();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
     return param_2;
 }
 
 // B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
 // Component/destroycomponent_workerrelease.cpp)
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
-    *reinterpret_cast<ComponentEntity**>(param_2) =
-        reinterpret_cast<CitizenComponent*>(param_1)->FindRankedWorkplace();
+    *reinterpret_cast<ComponentEntity**>(param_2) =   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
+        reinterpret_cast<CitizenComponent*>(param_1)->FindRankedWorkplace();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
     return param_2;
 }
 
 // B4 FORWARD: 1 outside caller(s) (standalone/death_harness.cpp)
 void CitizenComp_helper_1b90(int64_t selfV) {
-    reinterpret_cast<CitizenComponent*>(selfV)->GiveBirth();
+    reinterpret_cast<CitizenComponent*>(selfV)->GiveBirth();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
 }
 
 // B4 FORWARD: 6 outside caller(s) (Component/destroycomponent_workerrelease.cpp,
 // Component/workplacecomponent.cpp, Dialog/townhall_helpers.cpp, Entity/citizenbehavior.cpp,
 // Game/gameupdateloop.cpp, Game/starttown.cpp) and the town-manager bodies of this block
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
-    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));
+    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
 }
 
 // B4 FORWARD: 2 outside caller(s) (Component/attendancecomponent.cpp,
 // standalone/food_panel_harness.cpp)
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
-    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));
+    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
 }
