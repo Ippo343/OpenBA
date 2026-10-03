@@ -68,6 +68,11 @@
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
+#include "Game/Map.h"                          // Map::size / cells (GameUpdateLoop +0xF8)
+#include "Component/CharacterComponent.h"
+#include "Component/CharacterDescription.h"
+#include "Component/ModelComponent.h"
+#include "Component/PickingComponent.h"
 
 namespace {
 
@@ -91,14 +96,14 @@ static inline bool MoveTickTraceOn() {
 //   precheck [4] AbstractImpl(stack), main [5] Execute(stack, time),
 //   exit [7] Exit(stack).
 // ---------------------------------------------------------------------------
-static inline int CallPre(int64_t* node, void* stack) {
-    return reinterpret_cast<Action*>(node)->AbstractImpl(stack);   // B.3.x bridge (slot 4)
+static inline int CallPre(Action* node, ActionStack* stack) {
+    return node->AbstractImpl(stack);   // slot 4
 }
-static inline int CallMain(int64_t* node, void* stack, void* time) {
-    return reinterpret_cast<Action*>(node)->Execute(stack, time);   // B.3.x bridge (slot 5)
+static inline int CallMain(Action* node, ActionStack* stack, void* time) {
+    return node->Execute(stack, time);   // slot 5
 }
-static inline void CallExit(int64_t* node, void* stack) {
-    reinterpret_cast<Action*>(node)->Exit(stack);   // B.3.x bridge (slot 7)
+static inline void CallExit(Action* node, ActionStack* stack) {
+    node->Exit(stack);   // slot 7
 }
 
 
@@ -117,21 +122,19 @@ static inline void CallExit(int64_t* node, void* stack) {
 // (RBX = RCX = param_1 from 0x1400c4bbe) before `CALL [RAX+0x20]` at 0x1400c4bea.
 // (An older note here read it as RCX-only; the disassembly loads RDX.)
 // ===========================================================================
-extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
-    int64_t* node = *reinterpret_cast<int64_t**>(param_1 + 0x10);
+// B4 P2 CAI-2: no declaration outside this file; the stack is typed (Action.h ActionStack).
+extern "C" void CitizenAI_ActionFlush_c4bb0(ActionStack* param_1) {
+    Action* node = param_1->field_0x10;
     if (node != nullptr) {
         do {
-            *reinterpret_cast<uint8_t*>(node + 3) = 1;          // node+0x18 = 1
-            int iVar1 = CallPre(node, reinterpret_cast<void*>(param_1));   // slot 4 (node, stack)
+            node->_status = true;                                // node+0x18 = 1
+            int iVar1 = CallPre(node, param_1);                  // slot 4 (node, stack)
             if (iVar1 != 1) break;
-            node = reinterpret_cast<int64_t*>(node[2]);          // advance via node+0x10
+            node = node->_next.Get();                            // advance via node+0x10
         } while (node != nullptr);
-        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(param_1 + 0x10))->DeletePtr(
-            );   // B.3.3 bridge
+        reinterpret_cast< ::Object::InternalBasePtr*>(&param_1->field_0x10)->DeletePtr();   // B.3.3 bridge  // LEFT: Action.h (S2) ActionStack::field_0x10 is Action*, retail an InternalPtr<Action>
         // re-Ctor a default InternalBasePtr (null internal) and store into [stack+0x10]
-        node = nullptr;
-        new (&node) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<int64_t*>(param_1 + 0x10) = reinterpret_cast<int64_t>(node);
+        param_1->field_0x10 = nullptr;
     }
 }
 
@@ -140,63 +143,57 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
 // param_1 = stack object (== CharacterComponent+0x48); param_2 = Time* (forwarded to main).
 // ===========================================================================
 extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2) {
+    ActionStack* stack = reinterpret_cast<ActionStack*>(param_1);   // LEFT: SIG CitizenAI_ActionExecutor_c4c50
     bool bVar2 = false;            // R14: "stay" sticky flag → break the outer loop
     do {
-        int iVar1 = static_cast<int>(param_1[3]);                       // top index (stack+0x18)
-        int64_t* self = reinterpret_cast<int64_t*>(*param_1 + static_cast<int64_t>(iVar1) * 8);
-        if (*reinterpret_cast<int64_t*>(*param_1 + static_cast<int64_t>(iVar1) * 8) == 0) {
-            *reinterpret_cast<int*>(param_1 + 3) = iVar1 - 1;           // empty slot → pop
+        int iVar1 = stack->current;                                     // top index (stack+0x18)
+        ::Object::InternalPtr<Action>* self = &stack->actions[iVar1];
+        if (stack->actions[iVar1].Get() == nullptr) {
+            stack->current = iVar1 - 1;                                 // empty slot → pop
         } else {
             int iVar3 = 1;
             if (-1 < iVar1) {
-                int64_t* local_res8;
-                if (*reinterpret_cast<char*>(*self + 0x18) == '\0') {
+                Action* local_res8;
+                if (!self->Get()->_status) {
                     // PRECHECK phase: walk the node list, set +0x18=1, call precheck(node,stack).
-                    for (local_res8 = *reinterpret_cast<int64_t**>(
-                             *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
+                    for (local_res8 = stack->actions[stack->current].Get();
                          local_res8 != nullptr;
-                         local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
-                        *reinterpret_cast<uint8_t*>(local_res8 + 3) = 1;   // node+0x18 = 1
-                        iVar3 = CallPre(local_res8, param_1);
+                         local_res8 = local_res8->_next.Get()) {
+                        local_res8->_status = true;                     // node+0x18 = 1
+                        iVar3 = CallPre(local_res8, stack);
                         if (iVar3 != 1) goto LAB_d17;
                     }
                     iVar3 = 1;
                 }
 LAB_d17:
-                if (-1 < static_cast<int>(param_1[3])) {
+                if (-1 < stack->current) {
                     if (iVar3 == 1) {
                         // MAIN phase: walk the node list, call main(node,stack,time).
-                        for (local_res8 = *reinterpret_cast<int64_t**>(
-                                 *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
+                        for (local_res8 = stack->actions[stack->current].Get();
                              local_res8 != nullptr;
-                             local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
-                            iVar3 = CallMain(local_res8, param_1, param_2);
+                             local_res8 = local_res8->_next.Get()) {
+                            iVar3 = CallMain(local_res8, stack, param_2);
                             if (iVar3 != 1) goto LAB_d85;
                         }
                         iVar3 = 1;
                         bVar2 = true;
                     }
 LAB_d85:
-                    if ((-1 < static_cast<int>(param_1[3])) && (iVar3 == 0)) {
+                    if ((-1 < stack->current) && (iVar3 == 0)) {
                         // POP phase: walk the node list, for entered nodes clear +0x18 and
                         // call exit(node,stack); then DeletePtr the slot, re-Ctor, dec top.
-                        for (local_res8 = *reinterpret_cast<int64_t**>(
-                                 *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
+                        for (local_res8 = stack->actions[stack->current].Get();
                              local_res8 != nullptr;
-                             local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
-                            if (*reinterpret_cast<char*>(local_res8 + 3) != '\0') {  // node+0x18
-                                *reinterpret_cast<uint8_t*>(local_res8 + 3) = 0;
-                                CallExit(local_res8, param_1);
+                             local_res8 = local_res8->_next.Get()) {
+                            if (local_res8->_status) {                  // node+0x18
+                                local_res8->_status = false;
+                                CallExit(local_res8, stack);
                             }
                         }
-                        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>( *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8))->DeletePtr(
-                            );   // B.3.3 bridge
-                        int64_t local_res18 = 0;
-                        new (&local_res18) ::Object::InternalBasePtr(
-                            nullptr);   // B.3.3 bridge
-                        *reinterpret_cast<int64_t*>(
-                            *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8) = local_res18;
-                        *reinterpret_cast<int*>(param_1 + 3) = static_cast<int>(param_1[3]) - 1;
+                        stack->actions[stack->current].DeletePtr();
+                        ::Object::InternalPtr<Action> local_res18;      // re-Ctor (null internal)
+                        stack->actions[stack->current] = local_res18;
+                        stack->current = stack->current - 1;
                         goto LAB_e38;
                     }
                 }
@@ -207,9 +204,9 @@ LAB_d85:
 LAB_e38:
             if (bVar2) break;
         }
-    } while (-1 < static_cast<int>(param_1[3]));
-    if (static_cast<int>(param_1[3]) < 0) {
-        CitizenAI_ActionFlush_c4bb0(reinterpret_cast<int64_t>(param_1));
+    } while (-1 < stack->current);
+    if (stack->current < 0) {
+        CitizenAI_ActionFlush_c4bb0(stack);
     }
 }
 
@@ -231,7 +228,7 @@ namespace {
 //     negation below. A .rdata float stored as its bit pattern is read through RdataF.
 static inline float RdataF(uint32_t bits) {
     float f;
-    std::memcpy(&f, &bits, sizeof f);
+    std::memcpy(&f, &bits, sizeof f);   // CAST-OK: float_bits
     return f;
 }
 
@@ -253,48 +250,29 @@ static inline float RdataF(uint32_t bits) {
 // transcribed from the Runtime decompiles — note Dot's operand ORDER (y, x, z), kept
 // so the float result is the same to the bit. Non-trivial helpers (Normalize, Heading,
 // RootAnimationOffset) still go through the Runtime.
-//   ??0Vector3@Math@@QEAA@MMM@Z (0x1800152d0)          -> InlV3(out,x,y,z)
-//   ??0Vector3@Math@@QEAA@AEBVScalar@1@@Z (0x180015360) -> InlV3Splat(out,&s)
 //   ?Dot@Vector3@Math@@ (0x18001dff0)                   -> InlV3Dot(a,&ret,b)
-//   ?Dot@Vector2@Math@@ (0x18006c840)                   -> InlV2Dot(a,&ret,b)
-//   ?Intersect@Box@Volume@@ (0x180012160)               -> InlBoxIsect(a,b)
 //   ?Max@Scalar@Math@@ (0x18005ff60)                    -> InlScalarMax(&a,&ret,&b)
-static inline void InlV3(void* out, float x, float y, float z) {
-    float* o = static_cast<float*>(out); o[0] = x; o[1] = y; o[2] = z;
-}
-static inline void InlV3Splat(void* out, const float* s) {
-    float* o = static_cast<float*>(out); o[0] = *s; o[1] = *s; o[2] = *s;
-}
-static inline void* InlV3Dot(const void* a, void* ret, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0] + q[2] * p[2];
+// (B4 P2 CAI-2: the unused InlV3 / InlV3Splat / InlV2Dot / InlBoxIsect copies are gone.)
+static inline float* InlV3Dot(const float* p, float* ret, const float* q) {
+    *ret = q[1] * p[1] + q[0] * p[0] + q[2] * p[2];
     return ret;
 }
-static inline void* InlV2Dot(const void* a, void* ret, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    *static_cast<float*>(ret) = q[1] * p[1] + q[0] * p[0];
-    return ret;
-}
-static inline bool InlBoxIsect(const void* a, const void* b) {
-    const float* p = static_cast<const float*>(a); const float* q = static_cast<const float*>(b);
-    return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
-}
-static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
-    const float x = *static_cast<const float*>(a), y = *static_cast<const float*>(b);
-    *static_cast<float*>(ret) = (y < x) ? x : y;
+static inline float* InlScalarMax(const float* a, float* ret, const float* b) {
+    const float x = *a, y = *b;
+    *ret = (y < x) ? x : y;
     return ret;
 }
 
 // PerfX's deferred pick push (perf-only, PICK_CULL) builds its transform copy through
 // this: the Math::Transform copy constructor, which the exe slot 0x140151418 names.
 static void PickXfCtorMember(void* xformOut, void* transformIn) {
-    ::new (xformOut) Math::Transform(*static_cast<const Math::Transform*>(transformIn));   // B.3.1 bridge
+    ::new (xformOut) Math::Transform(*static_cast<const Math::Transform*>(transformIn));   // B.3.1 bridge  // LEFT: SIG PerfX::PickCullSkip (standalone/perf_experimental.h, SA)
 }
 // PerfX's deferred pick push (perf-only, PICK_CULL) replays through this: the
 // member Picking::Scene::SetTransform, which the exe slot 0x1401529a8 used to
 // be resolved for (the slot's registered target is the same member's door).
 static void PickSetXfMember(void* scene, uint32_t id, void* xform) {
-    reinterpret_cast<Picking::Scene*>(scene)->SetTransform(id, *static_cast<const Math::Transform*>(xform));   // B.3.7 bridge
+    reinterpret_cast<Picking::Scene*>(scene)->SetTransform(id, *static_cast<const Math::Transform*>(xform));   // B.3.7 bridge  // LEFT: SIG PerfX::PickCullSkip (standalone/perf_experimental.h, SA)
 }
 
 // Picking::Scene::AddMesh (Runtime 0x1801252e0) registers a pick mesh and returns its
@@ -328,46 +306,44 @@ static void PickRegFail(const char* why) {
     if (n < 8) { ++n; fprintf(stderr, "[PickReg] FAIL: %s\n", why); fflush(stderr); }
 }
 
-static int RegisterCitizenPickMesh(uint8_t* self) {
-    int64_t model    = *reinterpret_cast<int64_t*>(self + 0x68);   // ModelComponent
-    int64_t pickComp = *reinterpret_cast<int64_t*>(self + 0x70);   // PickingComponent
-    if (model == 0 || pickComp == 0) { PickRegFail("model/pickComp null"); return -1; }
+static int RegisterCitizenPickMesh(CharacterComponent* self) {
+    ModelComponent*   model    = self->modelComponent;     // +0x68
+    PickingComponent* pickComp = self->pickingComponent;   // +0x70
+    if (model == nullptr || pickComp == nullptr) { PickRegFail("model/pickComp null"); return -1; }
 
-    int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);  // sVar1
-    int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);  // sVar2
+    int16_t variantIdx   = model->meshGroup;   // sVar1 (+0x164)
+    int16_t modelVariant = model->meshIndex;   // sVar2 (+0x166)
     if (modelVariant < 0) { PickRegFail("modelVariant<0"); return -1; } // (-1 < sVar2) gate
 
     // The pick mesh comes from the PickingComponent's description (+0x18), which must
     // be a PickingDescription. Its pick-mesh table is at desc+0x20, indexed exactly
     // like the render mesh: *(*(desc+0x20) + variantIdx*0x10) + modelVariant*8.
-    void* desc = *reinterpret_cast<void**>(pickComp + 0x18);
+    Description* desc = pickComp->_description;
     if (desc == nullptr || s_tidPickingDesc == 0) {
         PickRegFail("desc null / tidPickingDesc 0"); return -1;
     }
-    if (!reinterpret_cast<const Object::Base*>(desc)->IsDerivedFrom(s_tidPickingDesc)) {   // B.3.x bridge
+    if (!desc->IsDerivedFrom(s_tidPickingDesc)) {
         PickRegFail("desc !PickingDescription"); return -1;
     }
-    int64_t meshTable = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
-    if (meshTable == 0) { PickRegFail("meshTable(desc+0x20) null"); return -1; }
-    int64_t group = *reinterpret_cast<int64_t*>(meshTable + static_cast<int64_t>(variantIdx) * 0x10);
-    if (group == 0) { PickRegFail("mesh group null"); return -1; }
-    void* meshHandle = *reinterpret_cast<void**>(group + static_cast<int64_t>(modelVariant) * 8);
+    PickingDescription::Group* meshTable = static_cast<PickingDescription*>(desc)->_groups;
+    if (meshTable == nullptr) { PickRegFail("meshTable(desc+0x20) null"); return -1; }
+    Picking::PickingMesh** group = meshTable[variantIdx].meshes;
+    if (group == nullptr) { PickRegFail("mesh group null"); return -1; }
+    Picking::PickingMesh* meshHandle = group[modelVariant];
     if (meshHandle == nullptr) {
         PickRegFail("meshHandle null"); return -1;
     }
 
     // Transform snapshot (0x1C bytes, model+0x148..+0x163) — the move-tick wrote it
     // this frame; the original copies it into a stack Transform passed by pointer.
-    uint8_t xform[0x1C];
-    std::memcpy(xform, reinterpret_cast<void*>(model + 0x148), sizeof(xform));
+    Math::Transform xform = model->transform;
 
-    void* scene = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x70);
-    void* owner = *reinterpret_cast<void**>(pickComp + 0x30);   // entity IBP value
-    uint32_t id = reinterpret_cast<Picking::Scene*>(scene)->AddMesh(   // B.3.7 bridge
-        Object::ExternalPtr<Picking::PickingMesh>(reinterpret_cast<Picking::PickingMesh*>(meshHandle)),
-        *reinterpret_cast<const Math::Transform*>(xform), owner, 0, 0, nullptr);
-    *reinterpret_cast<uint32_t*>(pickComp + 0x28) = id;
+    Picking::Scene* scene = GameUpdateLoop::_singleton->m_pickingScene;   // +0x70
+    void* owner = pickComp->userData;   // +0x30 entity IBP value
+    uint32_t id = scene->AddMesh(
+        Object::ExternalPtr<Picking::PickingMesh>(meshHandle),
+        xform, owner, 0, 0, nullptr);
+    pickComp->pickingId = static_cast<int32_t>(id);
     return static_cast<int>(id);
 }
 
@@ -380,14 +356,15 @@ static inline float fabs_f(float v) {
 
 extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
 
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
+extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* selfBytes, void* time) {
+    CharacterComponent* self = reinterpret_cast<CharacterComponent*>(selfBytes);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (charactercomponent.cpp's extern)
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
-    if (-1 < *reinterpret_cast<int*>(self + 0x60)) {
-        CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(self + 0x48), time);
+    if (-1 < self->currentAction) {
+        CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(&self->actions), time);   // LEFT: SIG CitizenAI_ActionExecutor_c4c50
     }
     // Crash-safety gate: char render-index < 0 (always in standalone) → skip the tail.
-    if (*reinterpret_cast<int*>(self + 0x40) < 0) {
+    if (self->characterIndex < 0) {
         return;
     }
 
@@ -401,16 +378,15 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     // slot 0x140151f30; the class static is that byte (ENDGAME B.3.9 SS2).
     uint8_t rootOnly = ::Graphics::MeshInstance::_rootOnlyUpdates ? 1 : 0;
 
-    int64_t model = *reinterpret_cast<int64_t*>(self + 0x68);
-    float fx = *reinterpret_cast<float*>(model + 0x158);
-    float fy = *reinterpret_cast<float*>(model + 0x15c);
-    float fz = *reinterpret_cast<float*>(model + 0x160);
+    ModelComponent* model = self->modelComponent;
+    float fx = model->transform.translation.x;   // +0x158
+    float fy = model->transform.translation.y;   // +0x15c
+    float fz = model->transform.translation.z;   // +0x160
     float pos[3] = { fx, fy, fz };
     const float mtEntryX = fx, mtEntryY = fy, mtEntryZ = fz;  // for movement trace
 
-    float fVar14 = *reinterpret_cast<float*>(self + 0x3c);
-    float fVar10 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x168) -
-                   *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
+    float fVar14 = self->field_0x3C;
+    float fVar10 = self->modelComponent->yaw - self->characterDescription->_f24;
     float fVar13 = fVar14 - fVar10;
     // Exe .rdata math constants (exe_constants.h; values verified against the exe):
     // 0x140172220=180, 0x140172238=360, 0x1401720e4=0.1 (turn epsilon),
@@ -431,7 +407,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         }
     }
     if (c1720e4 < fabs_f(fVar13)) {
-        float t = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x28);
+        float t = self->characterDescription->_slowSpeed;   // +0x28
         fVar14 = (fVar13 + fVar10) * (uvScale - t) + t * fVar10;
         if (fVar14 <= c172220) {
             if (fVar14 < c1722a0) fVar14 = fVar14 + c172238;
@@ -447,38 +423,36 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         // Retail retslot door; its body moves to the call site as exactly one
         // construction into the SAME storage the door wrote (the 4th float stays 0).
         ::new (static_cast<void*>(rootAnimVec)) Math::Vector3(
-            reinterpret_cast<const Graphics::MeshInstance*>(
-                *reinterpret_cast<int64_t*>(self + 0x68) + 0x28)
-                ->RootAnimationOffset());   // B.3.5 bridge
+            self->modelComponent->meshInstance.RootAnimationOffset());
     float dotOut = 0.0f;
     InlV3Dot(rootAnimVec, &dotOut, rootAnimVec);   // was s_slot_dot (Runtime call)
     // PERF (2026-09-05): 0x140132010 is our own WorkImpl_Sqrtf_132010 (= sqrtf); the
     // builtin compiles to SQRTSS, which is correctly rounded, so this is bit-identical
     // and saves an indirect call per character per tick (1.4% of the phase).
     float speed = __builtin_sqrtf(dotOut);
-    speed = speed * *reinterpret_cast<float*>(self + 0x38);
+    speed = speed * self->field_0x38;
     if (0.0f < speed) {
-        float ax = speed * *reinterpret_cast<float*>(self + 0x2c);
-        float ay = speed * *reinterpret_cast<float*>(self + 0x30);
-        float az = speed * *reinterpret_cast<float*>(self + 0x34);
+        float ax = speed * self->field_0x2C.x;
+        float ay = speed * self->field_0x2C.y;
+        float az = speed * self->field_0x2C.z;
         // two Vector3 ctors in the original (locals), result folded into pos.
         pos[0] = fx + ax; pos[1] = fy + ay; pos[2] = fz + az;
         fx = pos[0]; fy = pos[1];
     }
 
-    int* gameWorld = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    Map* gameWorld = GameUpdateLoop::_singleton->m_game;   // +0xF8
     bool blockedHandled = false;
     if (rootOnly == 0) {
-        int dim = *gameWorld;
+        int dim = gameWorld->size;
         int ix = static_cast<int>(fx + static_cast<float>(dim >> 1));
         int iy = static_cast<int>(fy + static_cast<float>(dim >> 1));
         if (ix < 0) ix = 0;
         if (dim <= ix) ix = dim - 1;
         if (iy < 0) iy = 0;
         if (dim <= iy) iy = dim - 1;
-        int64_t cellBase = *reinterpret_cast<int64_t*>(gameWorld + 0x20);
+        MapCell* cellBase = gameWorld->cells;   // +0x80
         // [PerfX] TERRAIN_SIDECAR: cells[dim*iy+ix].type via the mirror (perf_terrain.h).
-        if (PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(cellBase), gameWorld[0x22],
+        if (PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(cellBase), gameWorld->cellCount,   // LEFT: SIG PerfX::TerrainGet (standalone/perf_terrain.h, SA)
                               static_cast<int>(static_cast<int64_t>(dim) * iy + ix)) == 0x0b) {
             pos[2] = 0.0f; pos[0] = fx; pos[1] = fy;
             blockedHandled = true;     // goto LAB_14010981e
@@ -486,7 +460,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     }
 
     if (!blockedHandled) {
-        if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x3c) == '\0') {
+        if (!self->characterDescription->_b3c) {
             if (rootOnly == 0) {
                 float triOut[4] = { 0, 0, 0, 0 };
                 float* pf = nullptr;
@@ -494,7 +468,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
                 // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
                 // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
                 float maxThis  = pf ? pf[2] : 0.0f;
-                float maxOther = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x44);
+                float maxOther = self->characterDescription->_f44;
                 float maxRet   = maxThis;
                 if (pf) { fx = pf[0]; fy = pf[1]; }
                 InlScalarMax(&maxThis, &maxRet, &maxOther);   // was s_slot_max (Runtime call)
@@ -502,13 +476,13 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
                 pos[0] = fx; pos[1] = fy;
             }
         } else {
-            pos[2] = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x40);
+            pos[2] = self->characterDescription->_f40;
             pos[0] = fx; pos[1] = fy;
         }
     }
 
     // LAB_14010981e:
-    fVar14 = fVar14 + *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
+    fVar14 = fVar14 + self->characterDescription->_f24;
     // deg->half-angle: 0x1401720cc=0.0174533 (pi/180) * 0x140172114=0.5 (half angle for
     // the (-sin,cos) heading pair).
     float c1720cc = RdataF(kRdata_1401720cc);
@@ -528,16 +502,17 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     // and the sin/cos pair SWAPPED — corrupts the citizen render transform. The
     // original locals are, in ascending address: local_d0=0, local_cc=0,
     // local_c8=negSin, local_c4=cos, local_c0=CONCAT44(pos.y,pos.x), local_b8=pos.z.)
-    float xform[8];
-    xform[0] = 0.0f;   xform[1] = 0.0f;
-    xform[2] = negSin; xform[3] = c_ang;
-    xform[4] = pos[0]; xform[5] = pos[1];
-    xform[6] = pos[2]; xform[7] = 0.0f;
+    // (B4 P2 CAI-2: was a float[8] whose eighth float nothing read; Transform::operator=
+    //  copies the seven dwords.)
+    Math::Transform xform;
+    xform.rotation.x    = 0.0f;   xform.rotation.y    = 0.0f;
+    xform.rotation.z    = negSin; xform.rotation.w    = c_ang;
+    xform.translation.x = pos[0]; xform.translation.y = pos[1];
+    xform.translation.z = pos[2];
 
-    model = *reinterpret_cast<int64_t*>(self + 0x68);
-    *reinterpret_cast<Math::Transform*>(model + 0x148) =
-        *reinterpret_cast<const Math::Transform*>(xform);   // B.3.1 bridge (Transform::operator=)
-    *reinterpret_cast<float*>(model + 0x168) = fVar14;
+    model = self->modelComponent;
+    model->transform = xform;   // Transform::operator=
+    model->yaw = fVar14;
     // [PerfX GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the
     // Geometry (bounds, attached children, scene quadtree) on EVERY speed iteration; only
     // the last one is ever drawn, and the render-side interpolation is snapped from that
@@ -551,13 +526,12 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     if (pushGeom) {
         if (rootOnly != 0) {
             if (PerfX::GeomXfLastOnly()) { pushGeom = false; PerfX::Count(PerfX::kCntGeomXfSkipped); }
-        } else if (PerfX::GeomCull() && PerfX::ModelCulled(reinterpret_cast<void*>(model))) {
+        } else if (PerfX::GeomCull() && PerfX::ModelCulled(model)) {
             pushGeom = false; PerfX::Count(PerfX::kCntGeomCulled);
         }
     }
     if (pushGeom)
-        reinterpret_cast<Graphics::Geometry*>(model + 0x28)
-            ->SetTransform(*reinterpret_cast<const Math::Transform*>(model + 0x148));   // B.3.5 bridge
+        model->meshInstance.SetTransform(model->transform);   // Graphics::Geometry::SetTransform
 
     // ---- movement trace (proves the transform write moves the mesh) --------
     if (MoveTickTraceOn()) {
@@ -577,18 +551,18 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             // citizen moves but appliedYaw never changes, the facing pipeline is
             // not turning the mesh; if desiredFacing changes but appliedYaw lags,
             // it is the smoothing (desc+0x28). model is the ModelComponent (self+0x68).
-            float desiredFacing = *reinterpret_cast<float*>(self + 0x3c);
-            float appliedYaw    = model ? *reinterpret_cast<float*>(model + 0x168) : 0.0f;
+            float desiredFacing = self->field_0x3C;
+            float appliedYaw    = model ? model->yaw : 0.0f;
             // Log every move, plus a heartbeat every 240 calls even when static.
             if (moved || (s_calls % 240) == 0) {
                 fprintf(stderr,
                     "[MoveTick] cit#%d self=%p chIdx=%d pos=(%.4f,%.4f,%.4f) "
                     "delta=(%.5f,%.5f,%.5f) speed=%.4f vel38=%.4f stackTop=%d "
                     "facing(want=%.3f applied=%.3f)\n",
-                    slot, (void*)self, *reinterpret_cast<int*>(self + 0x40),
+                    slot, (void*)self, self->characterIndex,
                     pos[0], pos[1], pos[2], dx, dy, dz, speed,
-                    *reinterpret_cast<float*>(self + 0x38),
-                    *reinterpret_cast<int*>(self + 0x60),
+                    self->field_0x38,
+                    self->currentAction,
                     desiredFacing, appliedYaw);
                 fflush(stderr);
             }
@@ -596,12 +570,11 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         ++s_calls;
     }
 
-    if ((*reinterpret_cast<int64_t*>(self + 0x70) != 0) && (rootOnly == 0)) {
+    if ((self->pickingComponent != nullptr) && (rootOnly == 0)) {
         uint8_t localXform[136];
-        ::new (static_cast<void*>(localXform)) Math::Transform(
-            *reinterpret_cast<const Math::Transform*>(
-                *reinterpret_cast<int64_t*>(self + 0x68) + 0x148));   // B.3.1 bridge (Transform copy ctor)
-        uint32_t pickId = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x70) + 0x28);
+        Math::Transform* localXf = ::new (static_cast<void*>(localXform)) Math::Transform(
+            self->modelComponent->transform);   // Transform copy ctor
+        uint32_t pickId = static_cast<uint32_t>(self->pickingComponent->pickingId);
         // First time through (pick-id still unregistered) register the citizen mesh in
         // the Picking::Scene so it becomes clickable.
         if (static_cast<int>(pickId) < 0) {
@@ -616,19 +589,18 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             }
         }
         if (-1 < static_cast<int>(pickId)) {
-            void* pickScene = *reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x70);
+            Picking::Scene* pickScene = GameUpdateLoop::_singleton->m_pickingScene;   // +0x70
             // [PerfX PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so
             // its pick-scene transform is deferred; PerfX replays it if the sim pauses.
-            if (!PerfX::PickCullSkip(reinterpret_cast<void*>(model), pickScene, pickId,
+            if (!PerfX::PickCullSkip(model, pickScene, pickId,
                                      &PickXfCtorMember,
                                      &PickSetXfMember)) {
-                reinterpret_cast<Picking::Scene*>(pickScene)->SetTransform(pickId, *reinterpret_cast<const Math::Transform*>(localXform));   // B.3.7 bridge
+                pickScene->SetTransform(pickId, *localXf);
             }
         }
     }
 
-    CharMgr_sub_8660(*reinterpret_cast<float**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x88),
-                     *reinterpret_cast<int*>(self + 0x40));   // 0x140018660
+    CharMgr_sub_8660(reinterpret_cast<float*>(GameUpdateLoop::_singleton->m_characterGrid),   // LEFT: SIG CharMgr_sub_8660 (Component/exe_bodies.h, wave X)
+                     self->characterIndex);   // 0x140018660
 }
 
