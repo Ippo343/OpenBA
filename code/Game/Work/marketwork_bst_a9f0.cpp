@@ -108,7 +108,7 @@ extern "C" MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim
     // 0x14000d9d0 — deep-copy the 16-byte-element dynamic array from src+0x08.
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
     ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),   // LEFT: SIG ActRm_VectorClone_d9d0
-                           reinterpret_cast<int64_t*>(&src->carries));
+                           reinterpret_cast<int64_t*>(&src->carries));   // LEFT: SIG ActRm_VectorClone_d9d0
 
     n->parent  = parent;    // aeb5
     n->left    = nullptr;   // aeb9 — left
