@@ -1,0 +1,35 @@
+== gate baseline @ 0ba19d11 14:53:11 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  note: release target compiled 0 files (shared obj dir; perf is the real NDEBUG build)
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 918 tests, 0 failures
+route newgame: exit 0 crashlog=0 hang=no (32s)
+  RtUnresolved=0  
+  loader: calls=5683 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es)
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 428 lines md5 b983f144
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=4766 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (24s)
+resave 1: PASS (21075114 bytes)
+resave 2: PASS (21075114 bytes)
+resave 3: PASS (21075114 bytes)
+resave 4: PASS (21075114 bytes)
+resave 5: PASS (21075114 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   14:57:29

@@ -1,0 +1,614 @@
+file	file_casts	blocker	casts	declared_in	note
+code/Game/Entity/citizenbehavior.cpp	92	NOCLASS:PathGraph pair cache (m_pairs / m_bstRoot node: 0x28 BST nodes, int pairs)	33	Entity/CitizenBehavior.h	pair-cache BST and arrays untyped
+code/Game/Entity/citizenbehavior.cpp	92	H5:CitizenBehavior::field_0x150 (statistics history, 8 int Arrays raw)	23	Entity/CitizenBehavior.h	history is raw uintptr_t base of 8 Array<int>; ArrayAt<I32NoInit> casts
+code/Game/Entity/citizenbehavior.cpp	92	LOCAL:Map	10	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Entity/citizenbehavior.cpp	92	LOCAL:StorageComponent	10	Component/StorageComponent.h	storageSlots already Item*; item +0x28/+0x30 is the entity component array (ComponentEntity)
+code/Game/Entity/citizenbehavior.cpp	92	NOCLASS:CitizenBehavior profession/zone BST node (0x38 bytes, key at [0], L/R at [4]/[5])	6	Entity/CitizenBehavior.h	field_0x100 / field_0x160 are void* tree roots; node layout needs a struct
+code/Game/Entity/citizenbehavior.cpp	92	LOCAL:CitizenBehavior	4	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast stale
+code/Game/Entity/citizenbehavior.cpp	92	SIG:PathPairs_Clear_25b30	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Entity/citizenbehavior.cpp	92	LOCAL:CitizenDescription (downcast of Component::_description)	2	Component/CitizenDescription.h	_description is already Description*; cast is a stale downcast (static_cast)
+code/Game/Entity/citizenbehavior.cpp	92	SIG:BST find/erase (key as uint64_t)	1	Component/exe_bodies.h	profession key passed as integer
+code/Game/Entity/citizenbehavior.cpp	92	FWD:CitizenBehavior	1	Entity/citizenbehavior.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/diseasecomponent.cpp	47	LOCAL:EventLog	11	Game/EventLog.h	EventLog/EventLogEntry declared; raw +0x18/+0x20 array and entry fields
+code/Game/Component/diseasecomponent.cpp	47	LOCAL:Map	9	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/diseasecomponent.cpp	47	NOCLASS:DragTool description record (+0x30 table, +0x40 name String)	6	Dialog/ or Player/DragTool	record from DragTool_FindDescription_5160 untyped
+code/Game/Component/diseasecomponent.cpp	47	NOCLASS:Disease emitter geometry array (0x18 stride, 0x28 desc elems)	4	Component/DiseaseDescription.h	geometry array untyped
+code/Game/Component/diseasecomponent.cpp	47	LOCAL:EntityList	4	Entity/EntityList.h	m_entityList typed; raw +0x88/+0x90/+0x98/+0xA0/+0xD0 reads of declared Arrays
+code/Game/Component/diseasecomponent.cpp	47	LOCAL:Calendar	3	Game/Calendar.h	Time at +8 of the year clock read raw (B.3.4b)
+code/Game/Component/diseasecomponent.cpp	47	NOCLASS:StateMachine	3	Component/StateMachineComponent.h	StateMachineComponent +0x48 machine has no class; bytes read raw
+code/Game/Component/diseasecomponent.cpp	47	LOCAL:NaturalResourceComponent	2	Component/NaturalResourceComponent.h	byte at +0x2D written raw
+code/Game/Component/diseasecomponent.cpp	47	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/diseasecomponent.cpp	47	SIG:DragTool_FindDescription_5160	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/diseasecomponent.cpp	47	SIG:ActCNR_SetAnimIndex_126440	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/diseasecomponent.cpp	47	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/diseasecomponent.cpp	47	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/boatcomponent_route.cpp	45	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	14	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/boatcomponent_route.cpp	45	NOCLASS:BoatDescription route-table entry (name String, +0x08 Vector3, +0x14 yaw)	7	Component/BoatDescription.h	table at desc+0x20 (+0x30 data,+0x38 count) untyped
+code/Game/Component/boatcomponent_route.cpp	45	FIELD:BoatComponent::waypointField (void*, Array<Vector3> header)	4	Component/BoatComponent.h	type the waypoint array member
+code/Game/Component/boatcomponent_route.cpp	45	SIG:BoatRoute_FindWaterPath	4	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/boatcomponent_route.cpp	45	LOCAL:ModelComponent	2	Component/ModelComponent.h	Transform at +0x148 read raw
+code/Game/Component/boatcomponent_route.cpp	45	LOCAL:Map	2	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/boatcomponent_route.cpp	45	SIG:RoadTool_helper_6e30	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/boatcomponent_route.cpp	45	NOCLASS:WorldGeometry polygon record (+0 points, +8 count)	2	runtime/types/ WorldGeometry	_arrays[4].data untyped
+code/Game/Component/boatcomponent_route.cpp	45	POD:RtObject::Internal	1	runtime/types/object/	bridge from raw Internal word to the real class (B.3.3)
+code/Game/Component/boatcomponent_route.cpp	45	SIG:Pf_EnqueueCmd1_a6a30	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/boatcomponent_route.cpp	45	SIG:Pf_EnqueueCmd4_a68b0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/boatcomponent_route.cpp	45	FLOOR:vslot	1	n/a	vtable slot call through void***
+code/Game/Component/boatcomponent_route.cpp	45	FIELD:WorldGeometry::_arrayD8 (void*, int16_t heights)	1	runtime/types/ WorldGeometry	type as int16_t*
+code/Game/Component/boatcomponent_route.cpp	45	CONST:const_cast of cellPos	1	n/a	const_cast to float* for Reimpl_MapGetTerrainPos
+code/Game/Component/boatcomponent_route.cpp	45	FWD:BoatComponent	1	Component/boatcomponent_route.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/boatcomponent_route.cpp	45	SIG:BoatComponent::SetDestination (IBP as int64)	1	Component/BoatComponent.h	destination IBP passed as integer
+code/Game/Component/workplacecomponent.cpp	44	SIG:CitizenComp_FUN_14012c3f0	10	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workplacecomponent.cpp	44	NOCLASS:CitizenBehavior profession/zone BST node (0x38 bytes, key at [0], L/R at [4]/[5])	8	Entity/CitizenBehavior.h	field_0x100 / field_0x160 are void* tree roots; node layout needs a struct
+code/Game/Component/workplacecomponent.cpp	44	FWD:WorkPlaceComponent	8	Component/workplacecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/workplacecomponent.cpp	44	LOCAL:CitizenBehavior	3	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/workplacecomponent.cpp	44	SIG:BST find/erase (key as uint64_t)	3	Component/exe_bodies.h	profession key passed as integer
+code/Game/Component/workplacecomponent.cpp	44	SIG:TableRegisterState/TableAddEvent	3	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/workplacecomponent.cpp	44	LOCAL:Graphics::Scene	2	Game/GameUpdateLoop.h	m_graphicsScene already Graphics::Scene*; cast stale
+code/Game/Component/workplacecomponent.cpp	44	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/workplacecomponent.cpp	44	SIG:PlayerPath_Sub_11e710	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workplacecomponent.cpp	44	SIG:CitizenComp_sub_ffc0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workplacecomponent.cpp	44	SIG:CitizenComp_sub_0470	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workplacecomponent.cpp	44	SIG:WorkComponent_CalcMaxWorkers	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workplacecomponent.cpp	44	LOCAL:WorkScheduler	1	Game/WorkScheduler.h	m_tutorial already WorkScheduler*; cast stale
+code/Game/Component/orchardcomponent_states.cpp	42	SIG:TableRegisterState/TableAddEvent	22	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/orchardcomponent_states.cpp	42	SIG:CitizenAI_WorkScheduler_Post	5	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/orchardcomponent_states.cpp	42	NOCLASS:StateMachine	4	Component/StateMachineComponent.h	StateMachineComponent +0x48 machine has no class; bytes read raw
+code/Game/Component/orchardcomponent_states.cpp	42	LOCAL:Calendar	3	Game/Calendar.h	m_dayCounter typed; +8 Time / +0 year read raw
+code/Game/Component/orchardcomponent_states.cpp	42	SIG:WorkPlaceComponent_SetAccepting	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/orchardcomponent_states.cpp	42	LOCAL:WeatherSimulation	2	Game/WeatherSimulation.h	m_weather typed; +0x18 temperature read raw
+code/Game/Component/orchardcomponent_states.cpp	42	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/orchardcomponent_states.cpp	42	SIG:StateMachine_TickReimpl	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/orchardcomponent_states.cpp	42	LOCAL:Map	1	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/orchardcomponent_states.cpp	42	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/residencecomponent.cpp	39	NOCLASS:fire/ambient audio emitter record (+0x28 pos, +0x38 desc, +0x40 count)	19	Component/FireComponent.h	emitter data block has no struct; Audio::Scene cast of a raw scene word
+code/Game/Component/residencecomponent.cpp	39	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	7	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/residencecomponent.cpp	39	FWD:ResidenceComponent	3	Component/residencecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/residencecomponent.cpp	39	SIG:TableRegisterState/TableAddEvent	3	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/residencecomponent.cpp	39	FLOOR:crt	2	n/a	qsort comparator operands
+code/Game/Component/residencecomponent.cpp	39	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/residencecomponent.cpp	39	LOCAL:ResidenceComponent	1	Component/ResidenceComponent.h	residentSlots is Family* (typed); +0x10 stride read raw
+code/Game/Component/residencecomponent.cpp	39	SIG:FireComp_StartAudioEmitter_42c60	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/residencecomponent.cpp	39	SIG:TownRegistry_RegisterResidence (IBP as int64_t)	1	Component/exe_bodies.h	takes IBP value as int64_t
+code/Game/Component/destroycomponent_states.cpp	38	SIG:TableRegisterState/TableAddEvent	13	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/destroycomponent_states.cpp	38	LOCAL:Map	5	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/destroycomponent_states.cpp	38	LOCAL:StorageComponent	4	Component/StorageComponent.h	storageSlots already Item*; item +0x28/+0x30 is the entity component array (ComponentEntity)
+code/Game/Component/destroycomponent_states.cpp	38	LOCAL:EntityList	2	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/destroycomponent_states.cpp	38	SIG:CitizenAI_WorkScheduler_Post	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_states.cpp	38	LOCAL:PlayerToolManager	2	Game/PlayerToolManager.h	m_toolManager already typed; cast stale
+code/Game/Component/destroycomponent_states.cpp	38	LOCAL:ModelDescription	2	Component/ModelDescription.h	_meshGroups is ModelMeshGroup* (typed)
+code/Game/Component/destroycomponent_states.cpp	38	LOCAL:WorkScheduler	1	Game/WorkScheduler.h	m_tutorial already WorkScheduler*; cast stale
+code/Game/Component/destroycomponent_states.cpp	38	FLOOR:vslot	1	n/a	vtable slot call through void***
+code/Game/Component/destroycomponent_states.cpp	38	FWD:Work	1	Component/destroycomponent_states.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/destroycomponent_states.cpp	38	SIG:ActRm_PositionEntity_9760	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_states.cpp	38	POD:RtObject::Internal	1	runtime/types/object/	bridge from raw Internal word to the real class (B.3.3)
+code/Game/Component/destroycomponent_states.cpp	38	SIG:ToolTile_SetTransformFromYaw_3870	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_states.cpp	38	SIG:ActCNR_NR_SetVariant_1253d0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_states.cpp	38	SIG:CitizenComp_FUN_14012c3f0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Entity/entitylist.cpp	38	NOCLASS:EntityUI controller slots (+0x28 tool, tool+0x30 entity, entity+0x40 flags)	21	Dialog/EntityUI.h	UI dialog/tool objects read by offset
+code/Game/Entity/entitylist.cpp	38	SIG:WorkBST_*(uintptr_t* root)	6	Entity/exe_bodies.h	tree root passed as uintptr_t*; root is a raw word in EntityList
+code/Game/Entity/entitylist.cpp	38	FIELD:ComponentEntity::_externals (void*, holds a System::Time)	4	Entity/ComponentEntity.h	type _externals as System::Time / int64 ticks
+code/Game/Entity/entitylist.cpp	38	OTHER:UI dialog / IBP handles held as raw words	3	Dialog/	InternalPtr<DialogInstance> kept as uint64_t
+code/Game/Entity/entitylist.cpp	38	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Entity/entitylist.cpp	38	FIELD:ComponentEntity::_handle (category byte [3])	1	Entity/ComponentEntity.h	handle is an IBP word; category stored in byte 3
+code/Game/Entity/entitylist.cpp	38	SIG:EntityList::RegisterEntity/RemoveEntity	1	Entity/EntityList.h	entity IBP passed as integer/ComponentEntity**
+code/Game/Entity/entitylist.cpp	38	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/immigrationcomponent_states.cpp	34	SIG:TableRegisterState/TableAddEvent	13	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/immigrationcomponent_states.cpp	34	LOCAL:Map	7	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/immigrationcomponent_states.cpp	34	NOCLASS:CitizenBehavior profession/zone BST node (0x38 bytes, key at [0], L/R at [4]/[5])	5	Entity/CitizenBehavior.h	field_0x100 / field_0x160 are void* tree roots; node layout needs a struct
+code/Game/Component/immigrationcomponent_states.cpp	34	LOCAL:Calendar	2	Game/Calendar.h	m_dayCounter typed; +8 Time / +0 year read raw
+code/Game/Component/immigrationcomponent_states.cpp	34	LOCAL:ResidenceComponent	2	Component/ResidenceComponent.h	residentSlots is Family* (typed); +0x10 stride read raw
+code/Game/Component/immigrationcomponent_states.cpp	34	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/immigrationcomponent_states.cpp	34	SIG:ToolTile_SetTransformFromYaw_3870	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/immigrationcomponent_states.cpp	34	SIG:ActCNR_NR_SetVariant_1253d0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/immigrationcomponent_states.cpp	34	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/immigrationcomponent_states.cpp	34	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/cemeterycomponent.cpp	31	LOCAL:Map	12	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/cemeterycomponent.cpp	31	ERASED:Array<T>::SetSize hand-expanded instance	7	Collection/Array template	cemetery list erase copied by hand
+code/Game/Component/cemeterycomponent.cpp	31	LOCAL:CitizenBehavior	4	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/cemeterycomponent.cpp	31	SIG:TableRegisterState/TableAddEvent	2	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/cemeterycomponent.cpp	31	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/cemeterycomponent.cpp	31	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/cemeterycomponent.cpp	31	SIG:Pf_FineCellDirty_a8c90	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/cemeterycomponent.cpp	31	SIG:Pf_EnqueueCmd2_a6fe0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/cemeterycomponent.cpp	31	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/destroycomponent_state6.cpp	28	NOCLASS:Action stack header (+0 items,+8 count,+0x10 cursor IBP,+0x18 idx)	11	Action/ActionStack	stack header read by offset
+code/Game/Component/destroycomponent_state6.cpp	28	LOCAL:Graphics::GraphicsMesh	4	Graphics/GraphicsMesh.h	mesh sub-array at +0/+8 read raw
+code/Game/Component/destroycomponent_state6.cpp	28	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	3	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/destroycomponent_state6.cpp	28	LOCAL:CitizenBehavior	3	Entity/CitizenBehavior.h	town manager pointer is typed CitizenBehavior*; raw offset reads (+0x20/+0x28/+0x40/+0xA0) of fields the header declares
+code/Game/Component/destroycomponent_state6.cpp	28	LOCAL:ModelDescription	3	Component/ModelDescription.h	_meshGroups is ModelMeshGroup* (typed)
+code/Game/Component/destroycomponent_state6.cpp	28	FWD:Action	2	Component/destroycomponent_state6.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/destroycomponent_state6.cpp	28	LOCAL:CitizenComponent	1	Component/CitizenComponent.h	+0x278 AI link
+code/Game/Component/destroycomponent_state6.cpp	28	SIG:ActionStack_AbortForEntity_c52c0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Entity/componententity.cpp	28	LOCAL:EntityList	10	Entity/EntityList.h	m_entityList typed; raw +0x88/+0x90/+0x98/+0xA0/+0xD0 reads of declared Arrays
+code/Game/Entity/componententity.cpp	28	NOCLASS:IO::Serializer/Stream internal words (+0x24 / +0x8C position walk)	10	runtime/types/io/Serializer.h	diagnostic walk of serializer internals
+code/Game/Entity/componententity.cpp	28	FWD:EntityList	2	Entity/componententity.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Entity/componententity.cpp	28	FWD:Description	1	Entity/componententity.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Entity/componententity.cpp	28	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Entity/componententity.cpp	28	OTHER:Serialize(int&) door for a uint flags field	1	Entity/ComponentEntity.h	_entityFlags declared unsigned; Serialize takes int&
+code/Game/Entity/componententity.cpp	28	SIG:ComponentEntity::AddComponent/ctor (void* template/description)	1	Entity/ComponentEntity.h	template passed as void*
+code/Game/Entity/componententity.cpp	28	FIELD:ComponentEntity::_externals (void*, holds a System::Time)	1	Entity/ComponentEntity.h	type _externals as System::Time / int64 ticks
+code/Game/Entity/componententity.cpp	28	FIELD:ComponentEntity::_handle (category byte [3])	1	Entity/ComponentEntity.h	handle is an IBP word; category stored in byte 3
+code/Game/Component/cropfieldcomponent_states.cpp	26	SIG:TableRegisterState/TableAddEvent	11	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/cropfieldcomponent_states.cpp	26	LOCAL:Calendar	6	Game/Calendar.h	m_dayCounter already Calendar*; Time at +8 / year at +0 read raw
+code/Game/Component/cropfieldcomponent_states.cpp	26	LOCAL:WeatherSimulation	4	Game/WeatherSimulation.h	m_weather already typed; +0x18 temperature read raw
+code/Game/Component/cropfieldcomponent_states.cpp	26	LOCAL:Map	2	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/cropfieldcomponent_states.cpp	26	SIG:WorkPlaceComponent_SetAccepting	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/cropfieldcomponent_states.cpp	26	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/cropfieldcomponent_states.cpp	26	FWD:CropFieldComponent	1	Component/cropfieldcomponent_states.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/storagecomponent.cpp	26	ERASED:Array<T>::SetSize hand-expanded instance	20	Collection/Array template	SetSize copy on raw header
+code/Game/Component/storagecomponent.cpp	26	FWD:StorageComponent	3	Component/storagecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/storagecomponent.cpp	26	SIG:ActRm_StorageAdd_d000	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/storagecomponent.cpp	26	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/boatcomponent_states.cpp	25	SIG:TableRegisterState/TableAddEvent	14	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/boatcomponent_states.cpp	25	FIELD:BoatComponent::waypointField (void*, Array<Vector3> header)	5	Component/BoatComponent.h	type the waypoint array member
+code/Game/Component/boatcomponent_states.cpp	25	FLOOR:vslot	2	n/a	vtable slot call through void***
+code/Game/Component/boatcomponent_states.cpp	25	LOCAL:EntityList	2	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/boatcomponent_states.cpp	25	NOCLASS:StateMachine	1	Component/StateMachineComponent.h	StateMachineComponent +0x48 machine has no class; bytes read raw
+code/Game/Component/boatcomponent_states.cpp	25	SIG:StateMachine_TickReimpl	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/growthcomponent.cpp	25	LOCAL:Map	8	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/growthcomponent.cpp	25	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	3	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/growthcomponent.cpp	25	LOCAL:NaturalResourceComponent	2	Component/NaturalResourceComponent.h	byte at +0x2D written raw
+code/Game/Component/growthcomponent.cpp	25	LOCAL:WeatherSimulation	2	Game/WeatherSimulation.h	m_weather already typed; +0x18 temperature read raw
+code/Game/Component/growthcomponent.cpp	25	FLOOR:float_bits	2	n/a	float lane as dword
+code/Game/Component/growthcomponent.cpp	25	FWD:Component	1	Component/growthcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/growthcomponent.cpp	25	SIG:ActCNR_SetAnimIndex_126440	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/growthcomponent.cpp	25	FWD:NaturalResourceComponent	1	Component/growthcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/growthcomponent.cpp	25	SIG:0x140120c30 (cfg as intptr_t)	1	Component/exe_bodies.h	takes config as integer
+code/Game/Component/growthcomponent.cpp	25	SIG:ActCNR_SetupModelAtCell_126540	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/growthcomponent.cpp	25	SIG:ActCNR_SetGrowthProgress_120db0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/growthcomponent.cpp	25	NOCLASS:growth variant accumulator (acc4)	1	Component/GrowthComponent.h	accumulator record untyped
+code/Game/Component/growthcomponent.cpp	25	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/zonecomponent.cpp	24	NOCLASS:CitizenBehavior profession/zone BST node (0x38 bytes, key at [0], L/R at [4]/[5])	12	Entity/CitizenBehavior.h	field_0x160 tree untyped
+code/Game/Component/zonecomponent.cpp	24	SIG:ZoneComponent_sub_d360	4	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/zonecomponent.cpp	24	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	4	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/zonecomponent.cpp	24	LOCAL:CitizenBehavior	3	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/zonecomponent.cpp	24	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/ambientemittercomponent.cpp	23	ERASED:Array<T>::SetSize hand-expanded instance	19	Collection/Array template (runtime/types/collection)	SetSize body re-expanded on a raw header (+0 data,+8 count,+0xC cap); template instance not matched
+code/Game/Component/ambientemittercomponent.cpp	23	LOCAL:Audio::Scene	1	Game/GameUpdateLoop.h	m_audioScene already Audio::Scene*; cast stale
+code/Game/Component/ambientemittercomponent.cpp	23	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/ambientemittercomponent.cpp	23	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/ambientemittercomponent.cpp	23	OTHER:Serialize(int&) door for uint handle	1	Component/AmbientEmitterComponent.h	handle declared unsigned; Serialize takes int&
+code/Game/Component/clearareacomponent_states.cpp	23	LOCAL:Map	8	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/clearareacomponent_states.cpp	23	NOCLASS:BST node (int key, +0x18 left, +0x20 right)	5	Action/PathSearch.h	node type unknown
+code/Game/Component/clearareacomponent_states.cpp	23	SIG:TableRegisterState/TableAddEvent	5	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/clearareacomponent_states.cpp	23	FWD:ClearAreaComponent	3	Component/clearareacomponent_states.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/clearareacomponent_states.cpp	23	SIG:ClearArea	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/clearareacomponent_states.cpp	23	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/orchardcomponent.cpp	23	LOCAL:Map	9	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/orchardcomponent.cpp	23	FWD:OrchardComponent	4	Component/orchardcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/orchardcomponent.cpp	23	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	3	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/orchardcomponent.cpp	23	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	3	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/orchardcomponent.cpp	23	LOCAL:Calendar	2	Game/Calendar.h	m_dayCounter typed; +8 Time / +0 year read raw
+code/Game/Component/orchardcomponent.cpp	23	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/orchardcomponent.cpp	23	SIG:WorkPlaceComponent_SetAccepting	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	LOCAL:Map	6	Game/Map.h	m_game already Map*; cast stale
+code/Game/Component/pasturecomponent_states.cpp	23	FWD:PastureComponent	3	Component/pasturecomponent_states.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:TableRegisterState/TableAddEvent	3	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:WorkPlaceComponent_SetAccepting	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:ActRm_* (item as int64_t/uintptr_t)	2	Action/exe_bodies.h	item/template passed as integer
+code/Game/Component/pasturecomponent_states.cpp	23	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast stale
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:WorkAcc_FindComponent_6330	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:Pf_RecursiveChildSum_123070	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:ActRm_PositionEntity_9760	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:ActRm_ArrayUpsert_58fd0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:ActRm_DynArrayPush4_44810	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_states.cpp	23	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workcomponent.cpp	23	NOCLASS:WorkScheduler goals-tree node (+0x08 value IBP, +0x18/+0x20 children)	13	Game/WorkScheduler.h	goals tree node has no type
+code/Game/Component/workcomponent.cpp	23	LOCAL:WorkScheduler	4	Game/WorkScheduler.h	m_tutorial already WorkScheduler*; cast stale
+code/Game/Component/workcomponent.cpp	23	FWD:WorkComponent	3	Component/workcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/workcomponent.cpp	23	SIG:CitizenComp_FUN_14012c3f0	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/workcomponent.cpp	23	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/buildcomponent_state8.cpp	22	LOCAL:StorageComponent	6	Component/StorageComponent.h	stock/slot arrays read raw (stride 0x20/0x10)
+code/Game/Component/buildcomponent_state8.cpp	22	LOCAL:ModelDescription	5	Component/ModelDescription.h	_meshGroups is ModelMeshGroup* (typed)
+code/Game/Component/buildcomponent_state8.cpp	22	LOCAL:CitizenBehavior	5	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/buildcomponent_state8.cpp	22	POD:RtObject::Internal	1	runtime/types/object/	bridge from raw Internal word to the real class (B.3.3)
+code/Game/Component/buildcomponent_state8.cpp	22	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/buildcomponent_state8.cpp	22	SIG:BuildComponent_FindInQueue	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/buildcomponent_state8.cpp	22	LOCAL:BuildComponent	1	Component/BuildComponent.h	queue array of bare pointers erased by hand
+code/Game/Component/buildcomponent_state8.cpp	22	SIG:CitizenComp_FUN_14012c3f0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/buildcomponent_state8.cpp	22	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/ambientenvironmentdescription.cpp	21	ERASED:Array<T>::SetSize hand-expanded instance	19	Collection/Array template (runtime/types/collection)	SetSize body re-expanded on a raw header (+0 data,+8 count,+0xC cap); template instance not matched
+code/Game/Component/ambientenvironmentdescription.cpp	21	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/ambientenvironmentdescription.cpp	21	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/buildcomponent.cpp	20	LOCAL:EntityList	9	Entity/EntityList.h	removalList (+0xD0/+0xD8) read raw through worldData
+code/Game/Component/buildcomponent.cpp	20	SIG:TableRegisterState/TableAddEvent	6	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/buildcomponent.cpp	20	ERASED:Array<T>::SetSize hand-expanded instance	2	Collection/Array template (runtime/types/collection)	SetSize body re-expanded on a raw header (+0 data,+8 count,+0xC cap); template instance not matched
+code/Game/Component/buildcomponent.cpp	20	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/buildcomponent.cpp	20	FWD:ComponentEntity	1	Component/buildcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/buildcomponent.cpp	20	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tradecomponent_states.cpp	18	SIG:TableRegisterState/TableAddEvent	12	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/tradecomponent_states.cpp	18	NOCLASS:StateMachine	3	Component/StateMachineComponent.h	StateMachineComponent +0x48 machine has no class; bytes read raw
+code/Game/Component/tradecomponent_states.cpp	18	LOCAL:CitizenBehavior	2	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/tradecomponent_states.cpp	18	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/charmanager.cpp	17	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	12	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/charmanager.cpp	17	ERASED:Array<T>::SetSize hand-expanded instance	3	Collection/Array template (runtime/types/collection)	SetSize body re-expanded on a raw header (+0 data,+8 count,+0xC cap); template instance not matched
+code/Game/Component/charmanager.cpp	17	FWD:CharacterGrid	1	Component/charmanager.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/charmanager.cpp	17	SIG:CharMgr_IntArrayResize_21d0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/cropfieldcomponent.cpp	17	NOCLASS:StateMachine	6	Component/StateMachineComponent.h	StateMachine bytes read raw
+code/Game/Component/cropfieldcomponent.cpp	17	LOCAL:Map	5	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/cropfieldcomponent.cpp	17	LOCAL:NaturalResourceComponent	2	Component/NaturalResourceComponent.h	byte at +0x2D written raw
+code/Game/Component/cropfieldcomponent.cpp	17	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/cropfieldcomponent.cpp	17	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/cropfieldcomponent.cpp	17	SIG:WorkPlaceComponent_SetAccepting	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/cropfieldcomponent.cpp	17	SIG:PostEvent	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/firecomponent_ignite.cpp	15	LOCAL:Map	6	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/firecomponent_ignite.cpp	15	OTHER:void* component from a PORT GAP finder	1	Component/AmbientEmitterComponent.h	component handed as void*
+code/Game/Component/firecomponent_ignite.cpp	15	LOCAL:Audio::Scene	1	Game/GameUpdateLoop.h	m_audioScene already Audio::Scene*; cast stale
+code/Game/Component/firecomponent_ignite.cpp	15	NOCLASS:fire/ambient audio emitter record (+0x28 pos, +0x38 desc, +0x40 count)	1	Component/FireComponent.h	emitter data block has no struct; Audio::Scene cast of a raw scene word
+code/Game/Component/firecomponent_ignite.cpp	15	SIG:PlayerPath_Sub_11e710	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/firecomponent_ignite.cpp	15	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/firecomponent_ignite.cpp	15	LOCAL:WorkScheduler	1	Game/WorkScheduler.h	m_tutorial already WorkScheduler*; cast stale
+code/Game/Component/firecomponent_ignite.cpp	15	LOCAL:WeatherSimulation	1	Game/WeatherSimulation.h	m_weather already typed; +0x18 temperature read raw
+code/Game/Component/firecomponent_ignite.cpp	15	NOCLASS:fire speed record (+0x10)	1	Component/FireComponent.h	record untyped
+code/Game/Component/firecomponent_ignite.cpp	15	FWD:FireComponent	1	Component/firecomponent_ignite.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/nomadcomponent_states.cpp	15	SIG:TableRegisterState/TableAddEvent	9	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/nomadcomponent_states.cpp	15	LOCAL:Map	3	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/nomadcomponent_states.cpp	15	LOCAL:EntityList	1	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/nomadcomponent_states.cpp	15	SIG:Pf_ActStackPush_54e0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/nomadcomponent_states.cpp	15	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/toolbardescription.cpp	15	ERASED:Array<T>::SetSize hand-expanded instance	14	Collection/Array template	SetSize copy on raw header
+code/Game/Component/toolbardescription.cpp	15	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/absorbresourcecomponent.cpp	13	LOCAL:Map	3	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/absorbresourcecomponent.cpp	13	SIG:ActRm_StorageAdd_d000	3	Component/exe_bodies.h	takes storage and item as integers
+code/Game/Component/absorbresourcecomponent.cpp	13	LOCAL:EntityList	3	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/absorbresourcecomponent.cpp	13	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/absorbresourcecomponent.cpp	13	SIG:Pf_StorageCanAccept_cd80	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/absorbresourcecomponent.cpp	13	SIG:TableRegisterState/TableAddEvent	1	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/animalcomponent.cpp	13	LOCAL:Map	5	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/animalcomponent.cpp	13	LOCAL:EntityList	3	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/animalcomponent.cpp	13	SIG:ActMvDep_AnimHelper_50f0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/animalcomponent.cpp	13	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/animalcomponent.cpp	13	SIG:fn_FindComponent_Building	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/animalcomponent.cpp	13	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/animalcomponent.cpp	13	POD:RtObject::Internal	1	runtime/types/object/	bridge from raw Internal word to the real class (B.3.3)
+code/Game/Component/attendancecomponent_states.cpp	13	LOCAL:CitizenBehavior	5	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/attendancecomponent_states.cpp	13	SIG:TableRegisterState/TableAddEvent	3	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/attendancecomponent_states.cpp	13	SIG:WorkPlaceComponent_SetAccepting	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/attendancecomponent_states.cpp	13	SIG:CitizenComp_FUN_14012c3f0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/attendancecomponent_states.cpp	13	POD:RtObject::Internal	1	runtime/types/object/	bridge from raw Internal word to the real class (B.3.3)
+code/Game/Component/attendancecomponent_states.cpp	13	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_workerrelease.cpp	13	SIG:BST find/erase (key as uint64_t)	3	Component/exe_bodies.h	profession key passed as integer
+code/Game/Component/destroycomponent_workerrelease.cpp	13	FWD:WorkPlaceComponent	2	Component/destroycomponent_workerrelease.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/destroycomponent_workerrelease.cpp	13	FLOOR:ptr_int	1	n/a	pointer plausibility test
+code/Game/Component/destroycomponent_workerrelease.cpp	13	SIG:CitizenComp_sub_ffc0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_workerrelease.cpp	13	SIG:CitizenComp_sub_0470	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_workerrelease.cpp	13	LOCAL:WorkScheduler	1	Game/WorkScheduler.h	m_tutorial already WorkScheduler*; cast stale
+code/Game/Component/destroycomponent_workerrelease.cpp	13	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/destroycomponent_workerrelease.cpp	13	SIG:WorkComponent_CalcMaxWorkers	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_workerrelease.cpp	13	SIG:WorkBase_FindComponent_2ed0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/destroycomponent_workerrelease.cpp	13	SIG:WorkPlaceComponent_SetAccepting	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/clearareacomponent.cpp	12	LOCAL:Map	3	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/clearareacomponent.cpp	12	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/clearareacomponent.cpp	12	FWD:ComponentEntity	2	Component/clearareacomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/clearareacomponent.cpp	12	FWD:ClearAreaComponent	2	Component/clearareacomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/clearareacomponent.cpp	12	LOCAL:EntityList	1	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/clearareacomponent.cpp	12	NOCLASS:ClearArea resource list (+8 count)	1	Component/ClearAreaComponent.h	list header read raw
+code/Game/Component/clearareacomponent.cpp	12	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/controller_state_table.h	12	NOCLASS:StateMachine	11	Component/StateMachineComponent.h	StateMachineComponent +0x48 machine has no class; bytes read raw
+code/Game/Component/controller_state_table.h	12	SIG:TableRegisterState/TableAddEvent	1	Component/controller_state_table.h	handlers stored as void*
+code/Game/Component/happinesscomponent.cpp	12	SIG:TableRegisterState/TableAddEvent	5	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/happinesscomponent.cpp	12	LOCAL:Map	3	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/happinesscomponent.cpp	12	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/happinesscomponent.cpp	12	LOCAL:StorageComponent	1	Component/StorageComponent.h	storageSlots already Item*; item +0x28/+0x30 is the entity component array (ComponentEntity)
+code/Game/Component/happinesscomponent.cpp	12	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/herdcomponent.cpp	12	LOCAL:Map	5	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/herdcomponent.cpp	12	LOCAL:CitizenBehavior	2	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/herdcomponent.cpp	12	SIG:ToolTile_SetTransformFromYaw_3870	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/herdcomponent.cpp	12	FWD:HerdComponent	1	Component/herdcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/herdcomponent.cpp	12	FWD:AnimalComponent	1	Component/herdcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/herdcomponent.cpp	12	POD:Math::Vector3 (position passed as void*/float*)	1	Component/HerdComponent.h	position buffer handed as raw pointer
+code/Game/Component/herdcomponent.cpp	12	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/pasturecomponent.cpp	12	LOCAL:Map	5	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/pasturecomponent.cpp	12	FWD:AnimalComponent	1	Component/pasturecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/pasturecomponent.cpp	12	FWD:PastureComponent	1	Component/pasturecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/pasturecomponent.cpp	12	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/pasturecomponent.cpp	12	OTHER:InternalBasePtr held as raw word in array slot	1	Component/PastureComponent.h	array of bare pointers serialized as IBP
+code/Game/Component/pasturecomponent.cpp	12	SIG:Pf_RecursiveChildSum_123070	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent.cpp	12	SIG:Pf_FineCellDirty_a8c90	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent.cpp	12	SIG:Pf_EnqueueCmd2_a6fe0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/resourceproducecomponent_states.cpp	12	SIG:TableRegisterState/TableAddEvent	7	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/resourceproducecomponent_states.cpp	12	SIG:WorkPlaceComponent_SetAccepting	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/resourceproducecomponent_states.cpp	12	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/resourceproducecomponent_states.cpp	12	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/resourceproducecomponent_states.cpp	12	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/terraformcomponent.cpp	12	SIG:Pf_RegionDirty4_b150	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/terraformcomponent.cpp	12	SIG:Pf_FineCellDirty_a8c90	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/terraformcomponent.cpp	12	SIG:Pf_EnqueueCmd2_a6fe0	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/terraformcomponent.cpp	12	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/terraformcomponent.cpp	12	SIG:Pf-Act-helper (int64_t/uintptr_t/void* params)	1	Component/exe_bodies.h	helper takes the component/grid as integer
+code/Game/Component/terraformcomponent.cpp	12	FIELD:WorldGeometry::_arrayD8 (void*, int16_t heights)	1	runtime/types/ WorldGeometry	type as int16_t*
+code/Game/Component/terraformcomponent.cpp	12	POD:Math::Vector3	1	n/a	vertex array reinterpreted as Vector3
+code/Game/Component/terraformcomponent.cpp	12	LOCAL:Map	1	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/attendancecomponent.cpp	11	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	3	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/attendancecomponent.cpp	11	SIG:CitizenComp_FUN_14012c3f0	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/attendancecomponent.cpp	11	FWD:ComponentEntity	1	Component/attendancecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/attendancecomponent.cpp	11	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/attendancecomponent.cpp	11	OTHER:InternalBasePtr queue entries held as raw words	1	Component/AttendanceComponent.h	queue holds IBPs as CitizenComponent*
+code/Game/Component/attendancecomponent.cpp	11	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/attendancecomponent.cpp	11	SIG:CemeteryListErase_Reimpl	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/attendancecomponent.cpp	11	SIG:WorkPlaceComponent_SetAccepting	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/pasturecomponent_spawn.cpp	10	NOCLASS:StartCondition (starttown hands void*; +0xEC offX/+0xF0/+0xF4 radius/+0xF8 groupCount)	6	Game/starttown.cpp	start-condition record has no class
+code/Game/Component/pasturecomponent_spawn.cpp	10	FWD:PastureComponent	2	Component/pasturecomponent_spawn.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/pasturecomponent_spawn.cpp	10	LOCAL:Map	1	Game/Map.h	m_game already Map*; cast stale
+code/Game/Component/pasturecomponent_spawn.cpp	10	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	array at +0x60/+0x68 of the town manager
+code/Game/Component/buildcomponent_state1.cpp	9	LOCAL:CitizenBehavior	3	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/buildcomponent_state1.cpp	9	LOCAL:ModelDescription	2	Component/ModelDescription.h	_meshGroups array count read raw
+code/Game/Component/buildcomponent_state1.cpp	9	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/buildcomponent_state1.cpp	9	SIG:BuildComponent_FindInQueue	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/buildcomponent_state1.cpp	9	POD:RtObject::Internal	1	runtime/types/object/	bridge from raw Internal word to the real class (B.3.3)
+code/Game/Component/buildcomponent_state1.cpp	9	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/decalcomponent.cpp	9	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	4	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/decalcomponent.cpp	9	SIG:Decal fn (system/material as int64_t)	2	Component/exe_bodies.h	takes decal system/material as integer
+code/Game/Component/decalcomponent.cpp	9	FIELD:WorldGeometry::_arrayD8 (void*, int16_t heights)	1	runtime/types/ WorldGeometry	type as int16_t*
+code/Game/Component/decalcomponent.cpp	9	FWD:WorldGeometry	1	Component/decalcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/decalcomponent.cpp	9	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/firecomponent_smstate.cpp	9	NOCLASS:StateMachine	3	Component/StateMachineComponent.h	StateMachine bytes read raw
+code/Game/Component/firecomponent_smstate.cpp	9	FWD:DestroyComponent	3	Component/firecomponent_smstate.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/firecomponent_smstate.cpp	9	FLOOR:vslot	2	n/a	vtable slot call through void***
+code/Game/Component/firecomponent_smstate.cpp	9	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/floorcomponent.cpp	9	LOCAL:Map	4	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/floorcomponent.cpp	9	H5:Map::pickingScene (embedded Picking::Scene raw bytes)	2	Game/Map.h	embedded object kept as uint8_t[0x60]
+code/Game/Component/floorcomponent.cpp	9	FWD:ComponentEntity	1	Component/floorcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/floorcomponent.cpp	9	FWD:FloorComponent	1	Component/floorcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/floorcomponent.cpp	9	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/keystone_a_map.cpp	9	LOCAL:Map	8	Game/Map.h	cells (+0x80) read raw from int* param
+code/Game/Component/keystone_a_map.cpp	9	LOCAL:EntityList	1	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/mapcomponent.cpp	9	LOCAL:Map	4	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/mapcomponent.cpp	9	LOCAL:Minimap	3	Game/Minimap.h	m_imageCapture typed Minimap*; header exists (LEFT says no class) - check +4/+0x28 fields
+code/Game/Component/mapcomponent.cpp	9	FWD:MapComponent	1	Component/mapcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/mapcomponent.cpp	9	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/resourceproduce_creatework.cpp	9	SIG:Pf_RecursiveChildSum_123070	4	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/resourceproduce_creatework.cpp	9	FWD:FishingComponent	1	Component/resourceproduce_creatework.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/resourceproduce_creatework.cpp	9	FWD:HuntComponent	1	Component/resourceproduce_creatework.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/resourceproduce_creatework.cpp	9	FWD:HerbalistComponent	1	Component/resourceproduce_creatework.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/resourceproduce_creatework.cpp	9	FWD:ForesterComponent	1	Component/resourceproduce_creatework.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/resourceproduce_creatework.cpp	9	FWD:ConsumeProduceComponent	1	Component/resourceproduce_creatework.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/statemachinecomponent.cpp	9	NOCLASS:StateMachine	4	Component/StateMachineComponent.h	StateMachineComponent +0x48 machine has no class; bytes read raw
+code/Game/Component/statemachinecomponent.cpp	9	FIELD:ControllerComponent::Controller::_data08/_data10 (void*)	2	Component/ControllerComponent.h	type as Controller*
+code/Game/Component/statemachinecomponent.cpp	9	FWD:StateMachine	1	Component/statemachinecomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/statemachinecomponent.cpp	9	SIG:Tick	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/statemachinecomponent.cpp	9	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tornadocomponent.cpp	9	NOCLASS:Tornado ParticleComponent emitter array (instance / +0x7c)	3	Component/ParticleComponent.h	emitter element ParticleInstance incomplete
+code/Game/Component/tornadocomponent.cpp	9	SIG:Tornado_StrikeEntityCounted	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/tornadocomponent.cpp	9	SIG:Map_RadiusQuery_92990	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/tornadocomponent.cpp	9	FWD:ParticleComponent	1	Component/tornadocomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/tornadocomponent.cpp	9	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tornadocomponent.cpp	9	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/wellcomponent.cpp	9	LOCAL:Map	2	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/wellcomponent.cpp	9	LOCAL:CitizenBehavior	2	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/wellcomponent.cpp	9	SIG:TableRegisterState/TableAddEvent	2	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/wellcomponent.cpp	9	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/wellcomponent.cpp	9	FWD:CitizenBehavior	1	Component/wellcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/ambientenvironmentcomponent.cpp	8	LOCAL:Map	6	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/ambientenvironmentcomponent.cpp	8	LOCAL:WeatherSimulation	2	Game/WeatherSimulation.h	m_weather typed; +0x18 temperature read raw
+code/Game/Component/coll_bridge.h	8	ERASED:ArrayAt (coll_bridge.h B.3.2 bridge)	7	Component/coll_bridge.h	raw Array header reinterpreted
+code/Game/Component/coll_bridge.h	8	FLOOR:ptr_int	1	coll_bridge.h	pointer-to-word helper
+code/Game/Component/nomadcomponent.cpp	8	OTHER:UI dialog / IBP handles held as raw words	3	Dialog/	InternalPtr<DialogInstance> kept as uint64_t
+code/Game/Component/nomadcomponent.cpp	8	SIG:IsSelected	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/nomadcomponent.cpp	8	SIG:PlayerTrade_BSTFindRemove_2c690	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/nomadcomponent.cpp	8	FWD:PlayerToolManager	1	Component/nomadcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/nomadcomponent.cpp	8	SIG:PlayerToolManager::OnEntityRemoved (ComponentEntity* const* from uint64)	1	Player/PlayerToolManager.h	params as integer
+code/Game/Component/nomadcomponent.cpp	8	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/spawncomponent.cpp	8	SIG:ActCNR_SetGrowthProgress_120db0	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/spawncomponent.cpp	8	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/spawncomponent.cpp	8	LOCAL:Map	1	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/spawncomponent.cpp	8	SIG:can-place test 0x14009f5d0 (templ as intptr_t)	1	Player/exe_bodies.h	takes template as integer
+code/Game/Component/spawncomponent.cpp	8	SIG:ActCNR_SetupModelAtCell_126540	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/spawncomponent.cpp	8	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/animalwave_serialize.cpp	7	SIG:Serialize-stream	4	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/animalwave_serialize.cpp	7	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/animalwave_serialize.cpp	7	FWD:PopulationComponent	1	Component/animalwave_serialize.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/animalwave_serialize.cpp	7	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/particlecomponent.cpp	7	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	3	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/particlecomponent.cpp	7	LOCAL:Graphics::Scene	1	Game/GameUpdateLoop.h	m_graphicsScene already Graphics::Scene*; cast stale
+code/Game/Component/particlecomponent.cpp	7	LOCAL:Map	1	Game/Map.h	game void* local, cast to Map
+code/Game/Component/particlecomponent.cpp	7	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/particlecomponent.cpp	7	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/quarrycomponent_deform.cpp	7	POD:Math::Vector3 / probe buffer	2	n/a	float triple / probe buffer reinterpreted
+code/Game/Component/quarrycomponent_deform.cpp	7	SIG:Pf_* (RegionGraph/PathfinderThread passed as int64_t)	2	Action/exe_bodies.h	Pf_ helpers take the object as int64_t
+code/Game/Component/quarrycomponent_deform.cpp	7	FIELD:WorldGeometry::_arrayD8 (void*, int16_t heights)	1	runtime/types/ WorldGeometry	type as int16_t*
+code/Game/Component/quarrycomponent_deform.cpp	7	SIG:Pf_CellQuadRay_aa20	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/quarrycomponent_deform.cpp	7	LOCAL:Map	1	Game/Map.h	Map/MapCell typed; raw +0x80/+0x30-stride/+0x28 reads not yet converted (stale LEFT)
+code/Game/Component/tradecomponent_dock.cpp	7	SIG:Storage-count fn (item as uintptr_t/void*)	3	Component/exe_bodies.h	takes template as integer
+code/Game/Component/tradecomponent_dock.cpp	7	SIG:ActRm_StorageAdd_d000	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/tradecomponent_dock.cpp	7	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	town manager pointer is typed CitizenBehavior*; raw offset reads (+0x20/+0x28/+0x40/+0xA0) of fields the header declares
+code/Game/Component/tradecomponent_dock.cpp	7	SIG:CitizenComp_StorageComponent_QueryCount	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/exe_bodies.h	6	LOCAL:WorkPlaceComponent	5	Component/WorkPlaceComponent.h	roster at +0x60 / work-slot +0x30 raw reads
+code/Game/Component/exe_bodies.h	6	SIG:fn_StorageCountQuery	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/buildcomponent_sub8630.cpp	5	LOCAL:StorageComponent	4	Component/StorageComponent.h	storageSlots read raw
+code/Game/Component/buildcomponent_sub8630.cpp	5	FWD:BuildComponent	1	Component/buildcomponent_sub8630.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/component.cpp	5	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/component.cpp	5	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/component.cpp	5	FWD:Component	1	Component/component.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/component.cpp	5	SIG:Component_Helper1d10_Reimpl / ExternalPtrSerializeGeneric (void** field, void* serializer)	1	Component/Component.h	takes ExternalPtr field as void**
+code/Game/Component/decaldescription.cpp	5	ERASED:Array<T>::SetSize hand-expanded instance	4	Collection/Array template	SetSize copy on raw header
+code/Game/Component/decaldescription.cpp	5	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/fruitcomponent.cpp	5	LOCAL:Calendar	2	Game/Calendar.h	m_dayCounter already Calendar*; Time at +8 / year at +0 read raw
+code/Game/Component/fruitcomponent.cpp	5	LOCAL:WeatherSimulation	2	Game/WeatherSimulation.h	m_weather already typed; +0x18 temperature read raw
+code/Game/Component/fruitcomponent.cpp	5	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/healercomponent.cpp	5	SIG:TableRegisterState/TableAddEvent	2	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/healercomponent.cpp	5	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/healercomponent.cpp	5	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/keystone_a_restree.cpp	5	SIG:keystone_a_restree retrace (tree/out as int64_t*/untyped words)	3	Component/keystone_a_restree.h / PLAYER body	tree and cursor passed as untyped
+code/Game/Component/keystone_a_restree.cpp	5	SIG:TradeWork_impl_4b40	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/keystone_a_restree.cpp	5	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/modelcomponent.cpp	5	LOCAL:Graphics::Scene	2	Game/GameUpdateLoop.h	m_graphicsScene already Graphics::Scene*; cast stale
+code/Game/Component/modelcomponent.cpp	5	FWD:ComponentEntity	1	Component/modelcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/modelcomponent.cpp	5	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/modelcomponent.cpp	5	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/naturalresourcecomponent.cpp	5	NOCLASS:Component +0x28 MeshInstance (ModelComponent child)	2	Component/ModelComponent.h	found component read at +0x28
+code/Game/Component/naturalresourcecomponent.cpp	5	SIG:ActCNR_RemoveNatRes_1260f0	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/naturalresourcecomponent.cpp	5	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/naturalresourcecomponent.cpp	5	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/residence_heattick.cpp	5	SIG:ActRm_StorageSubtract_d150	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/residence_heattick.cpp	5	SIG:CitizenComp_Storage_GetResourceCount	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/residence_heattick.cpp	5	SIG:Storage_GetResourceCount2	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/residence_heattick.cpp	5	SIG:ActRm_GetResourceCategory_88f90	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/trackercomponent.cpp	5	SIG:Serialize-stream	3	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/trackercomponent.cpp	5	SIG:ActRm_ArrayResize16_da70	2	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/tradecomponent_serialize.cpp	5	SIG:TradeComponent serialize helper (void* component/entity)	2	Component/TradeComponent.h	arrives as void*
+code/Game/Component/tradecomponent_serialize.cpp	5	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tradecomponent_serialize.cpp	5	SIG:0x1400049c0 (array base as long long)	1	Component/exe_bodies.h	takes array base as integer
+code/Game/Component/componentdescription.cpp	4	SIG:Serialize-stream	4	Component/ComponentDescription.h	Serialize/Persist helper takes serializer/array as void*
+code/Game/Component/marketlocationcomponent.cpp	4	SIG:TableRegisterState/TableAddEvent	2	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/marketlocationcomponent.cpp	4	LOCAL:CitizenBehavior	1	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/marketlocationcomponent.cpp	4	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/rawmaterialcomponent.cpp	4	FWD:CitizenBehavior	1	Component/rawmaterialcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/rawmaterialcomponent.cpp	4	NOCLASS:entity chain walk (void* entity chain)	1	Component/RawMaterialComponent.h	chain element untyped
+code/Game/Component/rawmaterialcomponent.cpp	4	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/rawmaterialcomponent.cpp	4	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/spawndescription.cpp	4	NOCLASS:IO::Serializer internal words (+8 direction/state)	3	runtime/types/io/Serializer.h	reads serializer internals
+code/Game/Component/spawndescription.cpp	4	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/statusicon_geometry.cpp	4	FIELD:Video::Context::_unknown20f0 (uint64_t index cursor)	2	runtime/types/video/Context.h	type as short*
+code/Game/Component/statusicon_geometry.cpp	4	FIELD:Graphics::Geometry transform pair (declared as two Transforms)	1	Graphics/Geometry.h	pair at +0x84/+0xa0 typed as InterpolatedState
+code/Game/Component/statusicon_geometry.cpp	4	FIELD:UI::SpriteSheet::m_field30 (uint64_t ExternalPtr<MaterialInstance>)	1	runtime/types/ui/SpriteSheet.h	type as MaterialInstance*
+code/Game/Component/statusiconcomponent.cpp	4	FWD:StatusIconComponent	2	Component/statusiconcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/statusiconcomponent.cpp	4	FIELD:StatusIconComponent::_geometry (billboard vptr test)	1	Component/StatusIconComponent.h	guard reads billboard vptr
+code/Game/Component/statusiconcomponent.cpp	4	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/storagelocationcomponent.cpp	4	SIG:TableRegisterState/TableAddEvent	2	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/storagelocationcomponent.cpp	4	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/storagelocationcomponent.cpp	4	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/charactercomponent.cpp	3	LOCAL:CharacterGrid	2	Component/CharacterGrid.h	
+code/Game/Component/charactercomponent.cpp	3	SIG:CharacterComponent_MoveTick_1094c0 (this as uint8_t*)	1	Component/charactercomponent_funcs.h	takes component as uint8_t*
+code/Game/Component/charactercomponent_serialize.cpp	3	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/charactercomponent_serialize.cpp	3	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/charactercomponent_serialize.cpp	3	LOCAL:CharacterGrid	1	Component/CharacterGrid.h	
+code/Game/Component/clearresourcecomponent_states.cpp	3	LOCAL:EntityList	2	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/clearresourcecomponent_states.cpp	3	SIG:TableRegisterState/TableAddEvent	1	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/fishingcomponent_produce.cpp	3	LOCAL:Map	3	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/highlightcomponent.cpp	3	H5:HighlightComponent::edgeMeshInstance (embedded EdgeMeshInstance raw)	1	Component/HighlightComponent.h	embedded object raw; first word vptr
+code/Game/Component/highlightcomponent.cpp	3	NOCLASS:fire/ambient audio emitter record (+0x28 pos, +0x38 desc, +0x40 count)	1	Component/FireComponent.h	emitter data block has no struct; Audio::Scene cast of a raw scene word
+code/Game/Component/highlightcomponent.cpp	3	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/huntcomponent.cpp	3	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/huntcomponent.cpp	3	SIG:Component::Tick/Update(time)	1	Component/Component.h	elapsed ticks travel in the pointer slot
+code/Game/Component/huntcomponent.cpp	3	SIG:WorkComponent_CalcMaxWorkers	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/interactcomponent.cpp	3	FWD:ComponentEntity	1	Component/interactcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/interactcomponent.cpp	3	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/interactcomponent.cpp	3	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/livestockcomponent.cpp	3	LOCAL:CitizenBehavior	2	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/livestockcomponent.cpp	3	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/multiobjectcomponent.cpp	3	LOCAL:EntityList	1	Entity/EntityList.h	m_entityList already EntityList*; removalList IBPArray at +0xD0 declared
+code/Game/Component/multiobjectcomponent.cpp	3	SIG:TableRegisterState/TableAddEvent	1	Component/controller_state_table.h	state fn pointers passed to Table* as void*
+code/Game/Component/multiobjectcomponent.cpp	3	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/pickingcomponent.cpp	3	FWD:ComponentEntity	1	Component/pickingcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/pickingcomponent.cpp	3	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/pickingcomponent.cpp	3	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/tradecomponent.cpp	3	LOCAL:CitizenBehavior	2	Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast/offset read stale (field_0x100/0x160 tree root still void*)
+code/Game/Component/tradecomponent.cpp	3	SIG:CitizenAI_WorkScheduler_Post	1	Component/exe_bodies.h	function takes pointer as integer/int64_t*
+code/Game/Component/tradecomponent_livestock.cpp	3	LOCAL:Map	1	Game/Map.h	m_game already Map*; cast stale
+code/Game/Component/tradecomponent_livestock.cpp	3	FWD:TradeComponent	1	Component/tradecomponent_livestock.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/tradecomponent_livestock.cpp	3	FWD:ComponentDescription	1	Component/tradecomponent_livestock.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Entity/entity_findcomponent.cpp	3	SIG:FindComponent finder (void* out)	1	Entity/entity_findcomponent.cpp	out param is void*/Component**
+code/Game/Entity/entity_findcomponent.cpp	3	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Entity/entity_findcomponent.cpp	3	FWD:ComponentEntity	1	Entity/entity_findcomponent.cpp	B4 FORWARD forwarder: void*/int param cast to its class; retype the forwarder parameter
+code/Game/Component/clearresourcecomponent.cpp	2	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/consumeproduce_recipe_dump.cpp	2	SIG:consumeproduce_recipe_dump (void* description)	2	Component/consumeproducecomponent_funcs.h	description arrives as void*
+code/Game/Component/consumeproducecomponent.cpp	2	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createbridgedescription.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createbridgedescription.cpp	2	SIG:Reimpl_ExternalPtrArray_Serialize (array as long long)	1	runtime Serialize helper	takes ExternalPtr array base as long long
+code/Game/Component/createfenceddescription.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createfenceddescription.cpp	2	SIG:Reimpl_ExternalPtrArray_Serialize (array as long long)	1	runtime Serialize helper	takes ExternalPtr array base as long long
+code/Game/Component/createremovaldescription.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createremovaldescription.cpp	2	SIG:Reimpl_ExternalPtrArray_Serialize (array as long long)	1	runtime Serialize helper	takes ExternalPtr array base as long long
+code/Game/Component/destroycomponent.cpp	2	SIG:Serialize-stream	2	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/firecomponent.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/firecomponent.cpp	2	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/frustumoutlineelement.cpp	2	FIELD:ParticleComponent/FrustumOutline camera (void*)	1	Component/FrustumOutlineElement.h	type camera member as Graphics::Camera*
+code/Game/Component/frustumoutlineelement.cpp	2	LOCAL:Map	1	Game/Map.h	member already Map*/MapCell*; offset reads on grid/cell/world not converted (stale LEFT)
+code/Game/Component/immigrationcomponent.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/immigrationcomponent.cpp	2	OTHER:InternalPtr member declared as plain T* / raw word; InternalBasePtr has no typed view	1	Object::InternalBasePtr (runtime/types/object)	Serialize of a bare pointer member through an IBP cast
+code/Game/Component/interactdescription.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/interactdescription.cpp	2	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/tombstonecomponent.cpp	2	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tombstonecomponent.cpp	2	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/absorbresourcedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/ambient_externalptr_serialize.cpp	1	CONST:FindOrLoad	1	Object/External	const_cast of FindOrLoad result
+code/Game/Component/ambientemitterdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/ambientenvironmentcomponent_serialize.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/animaldescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/animaudioevent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/attendancedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/autopickupcomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/autopickupdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/boatcomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/boatdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/builddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/captureboxdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/cemeterydescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/characterdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/clearareadescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/clearresourcedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/consumeproducedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createdragdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createpathdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createplaceddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/createroaddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/cropfielddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/destroydescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/diseasedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/entity_finders_disaster.cpp	1	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
+code/Game/Component/environmentdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/firedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/fishingcomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/fishingdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/floordescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/forestercomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/foresterdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/fruitcomponent_serialize.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/fruitdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/frustumoutlinedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/growthcomponent_serialize.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/growthdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/happinessdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/healerdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/herbalistcomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/herbalistdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/herddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/highlightdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/huntdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/immigrationdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/livestockdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/mapdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/marketcomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/marketdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/marketlocationdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/minecomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/minedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/modeldescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/multiobjectdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/naturalresourcedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/nomaddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/orcharddescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/particledescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/pasturedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/pickingdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/populationcomponent.cpp	1	SIG:Component::Tick/Update(time)	1	Component/Component.h	Component::Tick/Update take void* time
+code/Game/Component/populationdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/quarrycomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/quarrydescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/radiusdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/rawmaterialdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/residencedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/selectdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/statemachinedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/statusicondescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/storagedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/storagedisplaycomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/storagedisplaydescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/storagelocationdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/terraformdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tombstonedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tornadodescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/trackerdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/tradedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/uicomponent_serialize.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/uidescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/valuedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/welldescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/wildanimalcomponent.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/wildanimaldescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/workdescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/workplacedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Component/zonedescription.cpp	1	SIG:Serialize-stream	1	Component/Component.h	Persist/Serialize override takes void* stream
+code/Game/Entity/exe_bodies.h	1	LOCAL:Component/ComponentEntity (raw +0x10/+0x18/+0x30/+0x38 reads)	1	Component/Component.h; Entity/ComponentEntity.h	Component::_entity/_description and ComponentEntity components array are declared; reads stay by offset
