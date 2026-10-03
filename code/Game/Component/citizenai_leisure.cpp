@@ -6,7 +6,7 @@
 //   0x14010a560  CitizenAI_State_Leisure           (state id 12, ~931 instr)
 //   0x1400899d0  CitizenAI_State_Leisure_sub_99d0  (private; tavern/social find-target)
 //   0x14002fd50  CitizenAI_State_Leisure_sub_fd50  (private; FindComponent scan, type 0x1c42c0)
-//   0x14004a720  CitizenAI_helper_a720             (private; "is this Storage usable?" predicate)
+//   0x14004a720  CitizenAI_helper_a720             (private; "is this HappinessComponent usable?" predicate)
 //
 // Leisure makes the citizen do something recreational: it picks a destination tile
 // (an InteractComponent-bearing building, e.g. a tavern, or a random nearby walkable
@@ -20,8 +20,9 @@
 //   Success epilogue writes field_0x30 = -1, statusFlags |= 4, field_0xB0 = 0 and
 //   leisureTimer = 0, then returns 1.
 //
-// GameWorld layout: GW+0xf8 = MapGrid (int*, [0]=width, +0x20=cell array base, cell
-//   stride 0x30). GW+0xd8 = System::Random. GW+0xf0 = entity list pair (EntityList**).
+// GameUpdateLoop: m_game (+0xf8) = the Map (size, cells: MapCell stride 0x30),
+//   m_random (+0xd8), m_citizenList (+0xf0) = CitizenBehavior (its happiness list).
+// The two candidate sets: Component/LeisureCandidateSet.h (B.4 P2 CAI-5).
 //
 // ALREADY-REGISTERED exe sub-callees (resolved via ResolveAddr; bodies NOT duplicated):
 //   0x14009f3e0 CharacterComponent_impl_f3e0 (GridToWorld; writes Vector3, XMM1=2nd ret) [reg]
@@ -65,14 +66,20 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // Map, MapCell (m_game)
+#include "Entity/CitizenBehavior.h"   // the happiness list (m_citizenList)
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/HappinessDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/HappinessComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ComponentDescription.h"
 #include "Component/CitizenAIComponent.h"
 #include "Component/CitizenComponent.h"
 #include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/LeisureCandidateSet.h"   // LeisureHomeNode, LeisureCellNode
+#include "Action/PathAvl.h"                  // AvlRebalance<AvlNode28> (0x14001a8c0)
 #include "Entity/ComponentEntity.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -89,12 +96,6 @@
 namespace {
 
 // --- registered exe sub-callees ---
-
-
-// AVL/BST node allocator (System::MemoryAllocator::MemAlloc(0x28,8)) and free wrapper.
-static inline void* NodeAlloc(uint64_t sz) {
-    return System::MemoryAllocator::MemAlloc(sz, 8);
-}
 
 static uint32_t s_tid_CitizenDescription   = 0;  // DWORD_1401c7190
 static uint32_t s_tid_HappinessDescription  = 0;  // DAT_1401c42f8
@@ -120,36 +121,29 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
-static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
+static inline Map* MapGrid() { return GameUpdateLoop::_singleton->m_game; }
 static inline System::Random* Rng() { return GameUpdateLoop::_singleton->m_random; }
-// Cell-array base lives at MapGrid+0x80 (Ghidra prints `piVar5 + 0x20` for int* piVar5;
-// disasm confirms MOV RCX,[R15+0x80]). Width is at MapGrid[0] (+0x00); stride 0x30.
-static inline int64_t CellArrayBase(int* mapGrid) {
-    return *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
-}
 
 // Virtual GetTypeId: original is `(**(code**)(**slot + 0x10))()` where slot is &entry,
 // *slot is the object, **slot is its vtable, vtable+0x10 (index 2) is GetTypeId, called
-// with the object as `this`. Returns the runtime type id of the object at *slot.
-static inline uint32_t VGetTypeId(int64_t* slot) {
-    void* obj = *reinterpret_cast<void**>(slot);
+// with the object as `this`. Returns the runtime type id of the object.
+static inline uint32_t VGetTypeId(const Object::Base* obj) {
     if (obj == nullptr) return 0xffffffff;
-    return reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
+    return obj->Type();   // slot 2
 }
 
-// Scan a component array [base @+arrOff, count @+cntOff of `node`] for the first entry
-// whose runtime type id == wantTid; returns the IsDerivedFrom-narrowed object or null.
-// Mirrors the inline scan loops in the original.
-static void* ScanArrAt(int64_t* node, int arrOff, int cntOff, uint32_t wantTid) {
-    if (node == nullptr) return nullptr;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(node) + cntOff);
-    uint64_t arr = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(node) + arrOff);
+// The object an element of a scanned array holds.
+static inline Component* ElemObj(const Object::InternalPtr<Component>& e) { return e.Get(); }
+static inline Description* ElemObj(Description* e) { return e; }
+
+// Scan the array [arr, count) for the first entry whose runtime type id == wantTid;
+// returns the IsDerivedFrom-narrowed object or null. Mirrors the inline scan loops in
+// the original (the array and the count are read once, by the caller).
+template <class E>
+static auto ScanArrAt(const E* arr, int count, uint32_t wantTid) -> decltype(ElemObj(*arr)) {
     for (int i = 0; i < count; ++i) {
-        int64_t* slot = reinterpret_cast<int64_t*>(arr + static_cast<uint64_t>(i) * 8);
-        if (VGetTypeId(slot) == wantTid) {
-            int64_t* slot2 = reinterpret_cast<int64_t*>(arr + static_cast<uint64_t>(i) * 8);
-            void* obj = *reinterpret_cast<void**>(slot2);
+        if (VGetTypeId(ElemObj(arr[i])) == wantTid) {
+            auto obj = ElemObj(arr[i]);
             bool ok = Object::IsDerivedFromNullSafe(obj, wantTid);
             return ok ? obj : nullptr;
         }
@@ -157,34 +151,39 @@ static void* ScanArrAt(int64_t* node, int arrOff, int cntOff, uint32_t wantTid) 
     return nullptr;
 }
 
-// node[6]/[7] scan (the bottom InteractComponent/Happiness/Map bound scans).
-static inline void* ScanArr(int64_t* node, uint32_t wantTid) {
-    return ScanArrAt(node, 0x30, 0x38, wantTid);
-}
-// node[5]'s Object::Type array scan (LAB_14010abbc validated-target radius lookup).
-//   node[5] = Object::Type; its array @+0x28, count @+0x30.
-static void* ScanType5(int64_t* node, uint32_t wantTid) {
+// The entity's component array (+0x30, count +0x38): the bottom
+// InteractComponent / Happiness / Map scans.
+static Component* ScanArr(const ComponentEntity* node, uint32_t wantTid) {
     if (node == nullptr) return nullptr;
-    uint64_t type = static_cast<uint64_t>(node[5]);
-    if (type == 0) return nullptr;
-    return ScanArrAt(reinterpret_cast<int64_t*>(type), 0x28, 0x30, wantTid);
+    int count = node->_componentCount;
+    return ScanArrAt(node->_components, count, wantTid);
+}
+// The entity description's sub-description array (+0x28, count +0x30)
+// (LAB_14010abbc validated-target radius lookup).
+static Description* ScanType5(const ComponentEntity* node, uint32_t wantTid) {
+    if (node == nullptr) return nullptr;
+    const ComponentDescription* type = node->_description;
+    if (type == nullptr) return nullptr;
+    int count = type->_subDescCount;
+    return ScanArrAt(type->_subDescs, count, wantTid);
 }
 
 } // namespace
 
 // ============================================================
 // 0x14004a720 — CitizenAI_helper_a720
-// "Is this entity's primary component (+0x18) a usable Storage?" — its state field
-// (+0x20) must not be 5 (closed/destroyed) and its +0x28 flag must be set.
+// "Is this HappinessComponent usable?" — its description's type (+0x20) must not be 5
+// and its registered flag (+0x28) must be set.
 // ============================================================
-static char CitizenAI_helper_a720(int64_t param_1) {
-    void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    void* narrowed = Object::IsDerivedFromNullSafe(obj, s_tid_HappinessDescription) ? obj : nullptr;
-    if ((narrowed == nullptr || *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(narrowed) + 0x20) != 5)
-        && *reinterpret_cast<char*>(param_1 + 0x28) != '\0') {
+static char CitizenAI_helper_a720(HappinessComponent* param_1) {
+    Description* obj = param_1->_description;
+    HappinessDescription* narrowed = Object::IsDerivedFromNullSafe(obj, s_tid_HappinessDescription)
+        ? static_cast<HappinessDescription*>(obj) : nullptr;
+    if ((narrowed == nullptr || narrowed->_happinessType != 5)
+        && param_1->registered) {
         // NOTE: original derefs narrowed+0x20 even when narrowed==0 (reads 0x20). Guarded
         // here: a null narrowed cannot be state-5, so treat as "usable" by the flag alone.
-        if (narrowed != nullptr && *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(narrowed) + 0x20) == 5)
+        if (narrowed != nullptr && narrowed->_happinessType == 5)
             return 0;
         return 1;
     }
@@ -193,76 +192,66 @@ static char CitizenAI_helper_a720(int64_t param_1) {
 
 // ============================================================
 // 0x14002fd50 — CitizenAI_State_Leisure_sub_fd50
-// FindComponent scan: walk the Object::Type array at (param_1+0x30) [count @ +0x38],
-// find the first child whose type id == HappinessComponent (DAT_1401c42c0), wrap the
-// IsDerivedFrom-narrowed result in an InternalBasePtr at param_2, return param_2.
+// FindComponent scan: walk the entity's component array (+0x30) [count @ +0x38],
+// find the first child whose type id == HappinessComponent (DAT_1401c42c0), store the
+// IsDerivedFrom-narrowed result (an InternalPtr) at param_2, return param_2.
 // ============================================================
-static int64_t* CitizenAI_State_Leisure_sub_fd50(int64_t param_1, int64_t* param_2) {
-    void* result = nullptr;
-    int count = *reinterpret_cast<int*>(param_1 + 0x38);
-    uint64_t arrBase = *reinterpret_cast<uint64_t*>(param_1 + 0x30);
+static HappinessComponent** CitizenAI_State_Leisure_sub_fd50(ComponentEntity* param_1,
+                                                            HappinessComponent** param_2) {
+    HappinessComponent* result = nullptr;
+    int count = param_1->_componentCount;
+    const Object::InternalPtr<Component>* arrBase = param_1->_components;
     int idx = 0;
-    int64_t byteOff = 0;
     while (idx < count) {
-        int64_t* slot = reinterpret_cast<int64_t*>(arrBase + byteOff);
-        if (VGetTypeId(slot) == s_tid_HappinessComponent) {
-            int64_t* slot2 = reinterpret_cast<int64_t*>(arrBase + static_cast<int64_t>(idx) * 8);
-            void* obj = *reinterpret_cast<void**>(slot2);
+        if (VGetTypeId(arrBase[idx].Get()) == s_tid_HappinessComponent) {
+            Component* obj = arrBase[idx].Get();
             if (Object::IsDerivedFromNullSafe(obj, s_tid_HappinessComponent))
-                result = obj;
+                result = static_cast<HappinessComponent*>(obj);
             break;
         }
         ++idx;
-        byteOff += 8;
     }
-    new (param_2) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(result));   // B.3.3 bridge
+    *param_2 = result;   // the InternalBasePtr ctor: `mov [rcx],rdx`
     return param_2;
 }
 
 // ============================================================
 // 0x1400899d0 — CitizenAI_State_Leisure_sub_99d0
-// Social/tavern find-target. Iterates a candidate entity list at (param_1+0x50)
-// [count @ +0x58]; for each, finds its InteractComponent (DAT_1401c7900), resolves its
-// world pos -> grid cell, queries BuildStructure_impl_f810 (NOT used here — see note),
-// and accumulates the reachable candidates into a grown array, then picks one at random.
+// Social/tavern find-target. Iterates the town's happiness components (CitizenBehavior
+// +0x50, count @ +0x58); for each, finds its entity's InteractComponent (DAT_1401c7900),
+// resolves its world pos -> grid cell, measures the path cost, and accumulates the
+// reachable, usable candidates into a grown array, then picks one at random.
 //
-// NOTE: the original calls BuildStructure_impl_f810 (0x14009f810), FUN_140132010 (sqrtf,
-// 0x140132010) and FUN_1400a00f0 — all REGISTERED. f810 is resolved here directly; the
-// brief stated f810/2e20/a00f0/132010 are reg + closure-safe.
-//
-// Writes the chosen entity's wrapped pointer (its +0x10 IBP payload) into *param_2, or a
-// null InternalBasePtr if no candidate qualifies. Returns param_2.
+// Writes the chosen component's entity (+0x10) into *param_2, or a null
+// InternalBasePtr if no candidate qualifies. Returns param_2.
 //   param_3 = source grid cell (citizen pos), param_4 = max distance (in cells, *2 budget)
 // ============================================================
-// Path cost 0x14009f810 = Pf_IsDstReachable_f810, sqrtf 0x140132010 = WorkImpl_Sqrtf_132010.
-static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param_2,
-                                                 uint32_t param_3, int param_4) {
+// Path cost 0x14009f810 = Map::PathDistance, sqrtf 0x140132010 = WorkImpl_Sqrtf_132010.
+static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param_1, ComponentEntity** param_2,
+                                                         uint32_t param_3, int param_4) {
 
-    int* mapGrid = MapGrid();
+    Map* mapGrid = MapGrid();
     uint32_t outCap = 0;          // (local_50 high dword)
     int matchCount = 0;           // pvVar18 / pvVar19 (entries written)
-    void* curArr = nullptr;       // pvVar21 / pvVar6 (current array ptr)
+    HappinessComponent** curArr = nullptr;   // pvVar21 / pvVar6 (current array ptr)
 
-    int listCount = *reinterpret_cast<int*>(param_1 + 0x58);
+    int listCount = param_1->happinessComponentCount;
     if (listCount > 0) {
         int idx = 0;
-        int64_t byteOff = 0;
         do {
-            int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x50) + byteOff);
-            int64_t entObj = *reinterpret_cast<int64_t*>(*slot + 0x10);
+            HappinessComponent* const* slot = &param_1->happinessComponents[idx];
+            ComponentEntity* entObj = (*slot)->_entity;
 
-            // find the entity's InteractComponent (scan Object::Type array @ entObj+0x30)
-            void* interact = nullptr;
-            interact = ScanArrAt(reinterpret_cast<int64_t*>(entObj), 0x30, 0x38, s_tid_InteractComponent);
-            int64_t interactIBP[2] = {0, 0};
-            new (interactIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
+            // find the entity's InteractComponent (scan its component array @ entObj+0x30)
+            Component* interact = nullptr;
+            interact = ScanArr(entObj, s_tid_InteractComponent);
+            Component* interactIBP[2] = {nullptr, nullptr};
+            interactIBP[0] = interact;   // the InternalBasePtr ctor: `mov [rcx],rdx`
 
             // resolve world pos -> clamped grid cell
             float posVec[4] = {0, 0, 0, 0};
-            Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP[0]), posVec, 0, 0, nullptr);
-            int w = *mapGrid;
+            Pf_EntityResolvePos_2e20(interactIBP[0], posVec, 0, 0, nullptr);
+            int w = mapGrid->size;
             int col = static_cast<int>(posVec[0] + static_cast<float>(w >> 1));
             int row = static_cast<int>(posVec[1] + static_cast<float>(w >> 1));
             if (col < 0) col = 0; if (w <= col) col = w - 1;
@@ -270,63 +259,59 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
             uint32_t destCell = static_cast<uint32_t>(w * row + col);
 
             // structure-path cost (or manhattan-ish euclidean fallback if unreachable)
-            int cost = Pf_IsDstReachable_f810(mapGrid, param_3, destCell, '\x01');
+            int cost = mapGrid->PathDistance(param_3, destCell, '\x01');
             if (cost < 0) {
-                int wgrid = *mapGrid;
+                int wgrid = mapGrid->size;
                 int dx = static_cast<int>(param_3) % wgrid - static_cast<int>(destCell) % wgrid;
                 int dy = static_cast<int>(param_3) / wgrid - static_cast<int>(destCell) / wgrid;
                 float d = WorkImpl_Sqrtf_132010(static_cast<float>(dy * dy + dx * dx));
                 cost = static_cast<int>(d) + wgrid;
             }
 
-            if (cost < param_4 * 2 && (static_cast<char>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
-                int64_t* slot2 = reinterpret_cast<int64_t*>(byteOff + *reinterpret_cast<int64_t*>(param_1 + 0x50));
-                int64_t node = *slot2;
-                void* prim = *reinterpret_cast<void**>(node + 0x18);
-                void* narrowed = Object::IsDerivedFromNullSafe(prim, s_tid_HappinessDescription) ? prim : nullptr;
-                if ((narrowed == nullptr || *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(narrowed) + 0x20) != 5)
-                    && *reinterpret_cast<char*>(node + 0x28) != '\0') {
-                    int64_t listBase = *reinterpret_cast<int64_t*>(param_1 + 0x50);
+            if (cost < param_4 * 2 && (static_cast<char>(WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(mapGrid), 0xe1f, param_3, destCell)) != '\0')) {   // LEFT: SIG WorkBase_ValidateCell_a00f0
+                HappinessComponent* node = param_1->happinessComponents[idx];
+                Description* prim = node->_description;
+                HappinessDescription* narrowed = Object::IsDerivedFromNullSafe(prim, s_tid_HappinessDescription)
+                    ? static_cast<HappinessDescription*>(prim) : nullptr;
+                if ((narrowed == nullptr || narrowed->_happinessType != 5)
+                    && node->registered) {
+                    HappinessComponent** listBase = param_1->happinessComponents;
                     uint32_t oldN = static_cast<uint32_t>(matchCount);
                     uint32_t newN = oldN + 1;
                     // grow array geometrically when needed
                     if (static_cast<int>(outCap) < static_cast<int>(newN)) {
                         uint32_t grow = (oldN != 0) ? newN * 3 : newN;
                         outCap = grow;
-                        void* fresh = NodeAlloc(static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(grow)) << 3));
+                        HappinessComponent** fresh = static_cast<HappinessComponent**>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(grow)) << 3), 8));
                         // copy existing entries into the fresh array
                         if (fresh) {
                             int copy = (curArr == fresh) ? matchCount : 0;
                             for (int k = copy; k < static_cast<int>(newN); ++k) {
-                                int64_t* dst = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(fresh) + static_cast<int64_t>(k) * 8);
-                                int64_t* srcOld = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(curArr) + static_cast<int64_t>(k) * 8);
-                                int64_t* srcList = reinterpret_cast<int64_t*>(listBase + static_cast<int64_t>(idx) * 8);
-                                int64_t* src = (k < static_cast<int>(oldN)) ? srcOld : srcList;
-                                if (dst) { *dst = 0; *dst = *src; }
+                                HappinessComponent** dst = fresh + k;
+                                HappinessComponent** src = (k < static_cast<int>(oldN)) ? curArr + k : listBase + idx;
+                                if (dst) { *dst = nullptr; *dst = *src; }
                             }
                         }
                         if (curArr != fresh && curArr != nullptr) System::MemoryAllocator::MemFree(curArr);
                         curArr = fresh;
                     } else {
                         // in-place append of the current entity into curArr[oldN]
-                        int64_t* dst = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(curArr) + static_cast<int64_t>(static_cast<int>(oldN)) * 8);
-                        int64_t* srcList = reinterpret_cast<int64_t*>(listBase + static_cast<int64_t>(idx) * 8);
-                        if (dst) { *dst = 0; *dst = *srcList; }
+                        HappinessComponent** dst = curArr + static_cast<int>(oldN);
+                        HappinessComponent** srcList = listBase + idx;
+                        if (dst) { *dst = nullptr; *dst = *srcList; }
                     }
                     matchCount = static_cast<int>(newN);
                 }
             }
 
             ++idx;
-            byteOff += 8;
         } while (idx < listCount);
 
         if (matchCount != 0) {
             uint32_t pick = Rng()->Rand(static_cast<uint32_t>(matchCount));
-            int64_t* chosen = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(curArr) + static_cast<uint64_t>(pick) * 8);
-            int64_t node = *chosen;
-            *param_2 = 0;
-            *param_2 = *reinterpret_cast<int64_t*>(node + 0x10);
+            HappinessComponent* node = curArr[pick];
+            *param_2 = nullptr;
+            *param_2 = node->_entity;
             if (curArr) System::MemoryAllocator::MemFree(curArr);
             return param_2;
         }
@@ -340,7 +325,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
 // 0x14010a560 — CitizenAI_State_Leisure  (state id 12)
 // Faithful goto-structured transliteration of the ~931-instruction original.
 // Local-name map to the Ghidra decompile:
-//   self=local_90 (param_1+0x38), pvVar26=CitizenDescription/scan-result, piVar5=mapGrid,
+//   self=local_90 (param_1+0x38), pvVar26=CitizenDescription/scan-result, piVar5=map,
 //   pRVar6/local_88=rng, uVar37=srcCell/local_res10, uVar14=homeCell, local_res20=target,
 //   iVar27=blockRadius, local_a0/9c/98=animDest, local_d8/d0=homeBst/count,
 //   local_c8/c0=cellBst/count, happinessMode=local_res10 low byte.
@@ -348,18 +333,19 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
 uint64_t CitizenAIComponent::State_Leisure() {
     EnsureInit();
 
-    int* piVar5 = MapGrid();
+    Map* piVar5 = MapGrid();
     System::Random* pRVar6 = GameUpdateLoop::_singleton->m_random;
 
     // pvVar26 = CitizenDescription on the citizen (its _description, IsDerivedFrom 0x1c7190).
-    void* descRaw = citizen->_description;
-    void* pvVar26 = Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription) ? descRaw : nullptr;
+    Description* descRaw = citizen->_description;
+    CitizenDescription* pvVar26 = Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription)
+        ? static_cast<CitizenDescription*>(descRaw) : nullptr;
 
-    // citizen ModelComponent transform (raw) -> grid cell (uVar37=srcCell).
-    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
-    int w0 = *piVar5;
-    int colC = static_cast<int>(static_cast<float>(w0 >> 1) + *reinterpret_cast<float*>(model + 0x158));
-    int rowC = static_cast<int>(static_cast<float>(w0 >> 1) + *reinterpret_cast<float*>(model + 0x15c));
+    // citizen ModelComponent transform translation -> grid cell (uVar37=srcCell).
+    ModelComponent* model = citizen->character->modelComponent;
+    int w0 = piVar5->size;
+    int colC = static_cast<int>(static_cast<float>(w0 >> 1) + model->transform.translation.x);
+    int rowC = static_cast<int>(static_cast<float>(w0 >> 1) + model->transform.translation.y);
     if (colC < 0) colC = 0; if (w0 <= colC) colC = w0 - 1;
     if (rowC < 0) rowC = 0; if (w0 <= rowC) rowC = w0 - 1;
     uint32_t uVar37 = static_cast<uint32_t>(w0 * rowC + colC);    // srcCell / local_res10
@@ -373,15 +359,15 @@ uint64_t CitizenAIComponent::State_Leisure() {
         uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
     }
 
-    int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37)) * 0x30;   // srcCell byte off
-    int64_t* local_res20 = *reinterpret_cast<int64_t**>(local_a8 + CellArrayBase(piVar5));  // target node
+    int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37));   // srcCell index (retail: its byte offset, *0x30)
+    ComponentEntity* local_res20 = piVar5->cells[local_a8].blocker;      // target entity
 
     {
         float fVar39 = pRVar6->RandFloat();
         if (fVar39 < kRandThresh) {
-            int64_t nullIBP = 0;
+            ComponentEntity* nullIBP = nullptr;
             new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            local_res20 = reinterpret_cast<int64_t*>(nullIBP);
+            local_res20 = nullIBP;
         }
     }
 
@@ -390,32 +376,32 @@ uint64_t CitizenAIComponent::State_Leisure() {
     int local_res18_w = 0;      // box width (low dword of local_res18)
     float local_a0 = 0, local_9c = 0, local_98 = 0;  // animDest vec
     bool happinessMode = false; // local_res10 low byte
-    int64_t* local_d8 = nullptr; uint32_t local_d0 = 0;   // home-box BST root/count
+    LeisureHomeNode* local_d8 = nullptr; uint32_t local_d0 = 0;   // home-box BST root/count
 
     if (local_res20 == nullptr) goto LAB_14010a7e0;
 
-    // ---- validated-target path: target must have a usable Storage + be reachable ----
+    // ---- validated-target path: target must have a usable HappinessComponent + be reachable ----
     {
-        int64_t happyIBP = 0;
-        CitizenAI_State_Leisure_sub_fd50(reinterpret_cast<int64_t>(local_res20), &happyIBP);
-        if (happyIBP == 0) goto LAB_14010a7e0;
+        HappinessComponent* happyIBP = nullptr;
+        CitizenAI_State_Leisure_sub_fd50(local_res20, &happyIBP);
+        if (happyIBP == nullptr) goto LAB_14010a7e0;
 
-        int64_t happyIBP2 = 0;
-        int64_t* pIVar17 = CitizenAI_State_Leisure_sub_fd50(reinterpret_cast<int64_t>(local_res20), &happyIBP2);
+        HappinessComponent* happyIBP2 = nullptr;
+        HappinessComponent** pIVar17 = CitizenAI_State_Leisure_sub_fd50(local_res20, &happyIBP2);
         char cVar12 = CitizenAI_helper_a720(*pIVar17);
         if (cVar12 == '\0') goto LAB_14010a7e0;
 
-        int64_t posIBP = 0;
-        int64_t* pp = reinterpret_cast<int64_t*>(WorkBase_FindComponent_2ed0(reinterpret_cast<int64_t>(local_res20), &posIBP));
+        void* posIBP = nullptr;
+        void** pp = reinterpret_cast<void**>(WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(local_res20), &posIBP));   // LEFT: SIG WorkBase_FindComponent_2ed0
         float dpos[4] = {0, 0, 0, 0};
-        if (pp) Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(*pp), dpos, 0, 0, nullptr);
-        int w = *piVar5;
+        if (pp) Pf_EntityResolvePos_2e20(*pp, dpos, 0, 0, nullptr);
+        int w = piVar5->size;
         int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos[0]);
         int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos[1]);
         if (tcol < 0) tcol = 0; if (w <= tcol) tcol = w - 1;
         if (trow < 0) trow = 0; if (w <= trow) trow = w - 1;
         uint32_t uVar35 = static_cast<uint32_t>(w * trow + tcol);
-        uint8_t reach = WorkBase_ValidateCell_a00f0(piVar5, 0xe1f, uVar37, uVar35);
+        uint8_t reach = WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(piVar5), 0xe1f, uVar37, uVar35);   // LEFT: SIG WorkBase_ValidateCell_a00f0
         if (static_cast<char>(reach) == '\0') goto LAB_14010a7e0;
         goto LAB_14010a83d;   // target validated
     }
@@ -424,18 +410,18 @@ LAB_14010a7e0:
     // social find-target (sub_99d0) at the CitizenDescription leisure radius (pvVar26+0xbc),
     // first from srcCell then homeCell.
     {
-        uint32_t radius = pvVar26 ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pvVar26) + 0xbc) : 0;
-        int64_t findBuf = 0;
-        int64_t* pr = CitizenAI_State_Leisure_sub_99d0(*reinterpret_cast<int64_t*>(GW() + 0xf0),
-                                                       &findBuf, uVar37, static_cast<int>(radius));
-        local_res20 = reinterpret_cast<int64_t*>(*pr);
+        uint32_t radius = pvVar26 ? pvVar26->_ibc : 0;
+        ComponentEntity* findBuf = nullptr;
+        ComponentEntity** pr = CitizenAI_State_Leisure_sub_99d0(GameUpdateLoop::_singleton->m_citizenList,
+                                                                &findBuf, uVar37, static_cast<int>(radius));
+        local_res20 = *pr;
         if (local_res20 == nullptr) {
             if (static_cast<int>(uVar14) >= 0) {
-                uint32_t radius2 = pvVar26 ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pvVar26) + 0xbc) : 0;
-                int64_t findBuf2 = 0;
-                int64_t* pr2 = CitizenAI_State_Leisure_sub_99d0(*reinterpret_cast<int64_t*>(GW() + 0xf0),
-                                                                &findBuf2, uVar14, static_cast<int>(radius2));
-                local_res20 = reinterpret_cast<int64_t*>(*pr2);
+                uint32_t radius2 = pvVar26 ? pvVar26->_ibc : 0;
+                ComponentEntity* findBuf2 = nullptr;
+                ComponentEntity** pr2 = CitizenAI_State_Leisure_sub_99d0(GameUpdateLoop::_singleton->m_citizenList,
+                                                                         &findBuf2, uVar14, static_cast<int>(radius2));
+                local_res20 = *pr2;
                 goto LAB_14010a83d;
             }
             goto LAB_14010a846;
@@ -450,30 +436,29 @@ LAB_14010a846:
     // (rand%count)-th in-order becomes local_res20. iVar27 ends = 6 for the bloom.
     {
         local_d8 = nullptr; local_d0 = 0;
-        int baseCol = static_cast<int>(uVar37) % *piVar5;
-        int boxRow = static_cast<int>(uVar37) / *piVar5 - 6;
+        int baseCol = static_cast<int>(uVar37) % piVar5->size;
+        int boxRow = static_cast<int>(uVar37) / piVar5->size - 6;
         for (int rows = 0xd; rows != 0; --rows) {
             for (int dxo = -6; dxo < 7; ++dxo) {
                 int cx = dxo + baseCol;
-                int w = *piVar5;
+                int w = piVar5->size;
                 if (cx >= 0 && cx < w && boxRow >= 0 && boxRow < w) {
-                    int64_t* plVar20 = reinterpret_cast<int64_t*>(
-                        static_cast<int64_t>(w * boxRow + dxo + baseCol) * 0x30 + CellArrayBase(piVar5));
-                    int64_t cand = 0;     // local_res18
-                    if (plVar20[0] == 0) {
-                        if (plVar20[1] == 0) { new (&cand) ::Object::InternalBasePtr(
+                    MapCell* plVar20 = &piVar5->cells[static_cast<int64_t>(w * boxRow + dxo + baseCol)];
+                    ComponentEntity* cand = nullptr;     // local_res18
+                    if (plVar20->blocker == nullptr) {
+                        if (plVar20->occupant == nullptr) { new (&cand) ::Object::InternalBasePtr(
                             nullptr); }   // B.3.3 bridge
-                        else cand = plVar20[1];
-                    } else cand = plVar20[0];
-                    if (cand != 0) {
-                        int64_t mapBuf = 0;     // local_b0
-                        FloorComponent_FindResData(reinterpret_cast<void*>(cand), &mapBuf);
-                        if (mapBuf != 0) {
+                        else cand = plVar20->occupant;
+                    } else cand = plVar20->blocker;
+                    if (cand != nullptr) {
+                        MapComponent* mapBuf = nullptr;     // local_b0
+                        FloorComponent_FindResData(cand, &mapBuf);
+                        if (mapBuf != nullptr) {
                             // local_b8 = cand
-                            char ok = citizen->CanReach(reinterpret_cast<ComponentEntity*>(cand));
+                            char ok = citizen->CanReach(cand);
                             if (ok != '\0') {
-                                int64_t outNode = 0;   // &local_a0 (out-node, result unused)
-                                { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);
+                                LeisureHomeNode* outNode = nullptr;   // &local_a0 (out-node, result unused)
+                                { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);   // LEFT: SIG WorkBST_RegisterWork_1a30
                                                    local_d0 = local_d0 + 1; }
                             }
                         }
@@ -488,34 +473,34 @@ LAB_14010a846:
         if (citizen->home != nullptr) {
             char ok = citizen->CanReach(citizen->home);   // local_res10 = home
             if (ok != '\0') {
-                int64_t key = reinterpret_cast<int64_t>(citizen->home);
+                ComponentEntity* key = citizen->home;
                 if (local_d8 == nullptr) {
-                    int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
-                    if (nd) { nd[0] = key; nd[1] = 0; nd[2] = 0; nd[3] = 0; *reinterpret_cast<int*>(nd + 4) = 0; }
+                    LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
+                    if (nd) { nd->element = key; nd->parent = nullptr; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
                     local_d0 = local_d0 + 1;
                     local_d8 = nd;
                 } else {
-                    uint64_t keyVal = static_cast<uint64_t>(key);   // compared as ulonglong (pointer key)
-                    int64_t* cur = local_d8; int64_t* ins = cur; bool done = false;
+                    ComponentEntity* keyVal = key;   // compared as ulonglong (pointer key)
+                    LeisureHomeNode* cur = local_d8; LeisureHomeNode* ins = cur; bool done = false;
                     do {
                         ins = cur;
-                        if (static_cast<uint64_t>(cur[0]) <= keyVal) {
-                            if (keyVal <= static_cast<uint64_t>(cur[0])) { done = true; break; }  // present
-                            cur = reinterpret_cast<int64_t*>(cur[3]);
+                        if (cur->element <= keyVal) {
+                            if (keyVal <= cur->element) { done = true; break; }  // present
+                            cur = cur->right;
                             if (cur == nullptr) {
-                                int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
-                                if (nd) { nd[0] = static_cast<int64_t>(keyVal); nd[1] = reinterpret_cast<int64_t>(ins); nd[2] = 0; nd[3] = 0; *reinterpret_cast<int*>(nd + 4) = 0; }
-                                ins[3] = reinterpret_cast<int64_t>(nd);
-                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));
+                                LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
+                                if (nd) { nd->element = keyVal; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
+                                ins->right = nd;
+                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
                                 local_d0 = local_d0 + 1; done = true; break;
                             }
                         } else {
-                            cur = reinterpret_cast<int64_t*>(cur[2]);
+                            cur = cur->left;
                             if (cur == nullptr) {
-                                int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
-                                if (nd) { nd[0] = static_cast<int64_t>(keyVal); nd[1] = reinterpret_cast<int64_t>(ins); nd[2] = 0; nd[3] = 0; *reinterpret_cast<int*>(nd + 4) = 0; }
-                                ins[2] = reinterpret_cast<int64_t>(nd);
-                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));
+                                LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
+                                if (nd) { nd->element = keyVal; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
+                                ins->left = nd;
+                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
                                 local_d0 = local_d0 + 1; done = true; break;
                             }
                         }
@@ -526,29 +511,29 @@ LAB_14010a846:
         // pick (rand%count)-th in-order node; its key (+0x00) is local_res20.
         if (static_cast<int>(local_d0) > 0) {
             uint32_t pick = pRVar6->Rand(static_cast<uint32_t>(local_d0));
-            int64_t* node = local_d8; int64_t* chosen = local_d8;
-            while (node != nullptr) { chosen = node; node = reinterpret_cast<int64_t*>(node[2]); }
+            LeisureHomeNode* node = local_d8; LeisureHomeNode* chosen = local_d8;
+            while (node != nullptr) { chosen = node; node = node->left; }
             for (uint32_t s = pick; s > 0; --s) {
                 if (chosen != nullptr) {
-                    int64_t* right = reinterpret_cast<int64_t*>(chosen[3]);
+                    LeisureHomeNode* right = chosen->right;
                     if (right == nullptr) {
-                        int64_t* parent = reinterpret_cast<int64_t*>(chosen[1]);
-                        if (parent != nullptr && reinterpret_cast<int64_t*>(parent[2]) != chosen) {
-                            while (parent != nullptr && reinterpret_cast<int64_t*>(parent[3]) == chosen) {
-                                chosen = parent; parent = reinterpret_cast<int64_t*>(parent[1]);
+                        LeisureHomeNode* parent = chosen->parent;
+                        if (parent != nullptr && parent->left != chosen) {
+                            while (parent != nullptr && parent->right == chosen) {
+                                chosen = parent; parent = parent->parent;
                             }
                         }
-                        chosen = reinterpret_cast<int64_t*>(chosen[1]);
+                        chosen = chosen->parent;
                     } else {
-                        do { chosen = right; right = reinterpret_cast<int64_t*>(chosen[2]); } while (right != nullptr);
+                        do { chosen = right; right = chosen->left; } while (right != nullptr);
                     }
                 }
             }
-            local_res20 = (chosen != nullptr) ? reinterpret_cast<int64_t*>(*chosen) : nullptr;
+            local_res20 = (chosen != nullptr) ? chosen->element : nullptr;
         }
         if (local_d8 != nullptr) {
-            { WorkBase_TreeNodeFree_14c30(&local_d8, reinterpret_cast<void*>(local_d8[2]));
-                             WorkBase_TreeNodeFree_14c30(&local_d8, reinterpret_cast<void*>(local_d8[3])); }
+            { WorkBase_TreeNodeFree_14c30(&local_d8, local_d8->left);
+                             WorkBase_TreeNodeFree_14c30(&local_d8, local_d8->right); }
             System::MemoryAllocator::MemFree(local_d8);
         }
         local_d8 = nullptr; local_d0 = 0;
@@ -556,19 +541,19 @@ LAB_14010a846:
     }
 
 LAB_14010abbc:
-    // validated/found target: scan its node[5] Object::Type array for HappinessDescription
-    // (0x1c42f8); iVar27 = that InteractComponent's radius (+0x2c).
+    // validated/found target: scan its description's sub-descriptions for
+    // HappinessDescription (0x1c42f8); iVar27 = its radius (+0x2c).
     {
-        void* pvr = ScanType5(local_res20, s_tid_HappinessDescription);
-        iVar27 = pvr ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pvr) + 0x2c) : 0;
+        Description* pvr = ScanType5(local_res20, s_tid_HappinessDescription);
+        iVar27 = pvr ? static_cast<HappinessDescription*>(pvr)->_i2c : 0;
     }
 
 LAB_after_target:
     // ---- decide box bounds (LAB_14010ae8a feeder) ----
     happinessMode = false;   // local_res10 low byte = 0
     if (local_res20 == nullptr) {
-        iVar13 = static_cast<int>(uVar37) / *piVar5;   // box row
-        iVar30 = static_cast<int>(uVar37) % *piVar5;   // box col
+        iVar13 = static_cast<int>(uVar37) / piVar5->size;   // box row
+        iVar30 = static_cast<int>(uVar37) % piVar5->size;   // box col
         iVar24 = 1;                                    // box height
         local_res18_w = 1;                             // box width
         // iVar27 keeps the value from the path that reached here (6 from home-box, or the
@@ -576,38 +561,30 @@ LAB_after_target:
         goto LAB_14010ae8a;
     }
 
-    // local_res20 != 0: scan node[6]/[7] for HappinessComponent (0x1c42c0) -> IBP local_res18.
+    // local_res20 != 0: scan its components for HappinessComponent (0x1c42c0) -> local_res18.
     {
-        void* hcomp = ScanArr(local_res20, s_tid_HappinessComponent);
-        int64_t local_res18 = 0;
-        new (&local_res18) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(hcomp));   // B.3.3 bridge
-        if (local_res18 == 0) {
+        HappinessComponent* local_res18 = static_cast<HappinessComponent*>(ScanArr(local_res20, s_tid_HappinessComponent));
+        if (local_res18 == nullptr) {
             happinessMode = false;   // LAB_14010adba
         } else {
-            void* hcomp2 = ScanArr(local_res20, s_tid_HappinessComponent);
-            int64_t local_res10n = 0;
-            new (&local_res10n) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(hcomp2));   // B.3.3 bridge
-            // LAB_14010ad7a: node[3] = HappinessDescription (0x1c42f8); if +0x20==5 || node[5]==0 -> false.
-            int64_t* hnode = reinterpret_cast<int64_t*>(local_res10n);
-            void* hdRaw = reinterpret_cast<void*>(hnode[3]);
-            void* hd = Object::IsDerivedFromNullSafe(hdRaw, s_tid_HappinessDescription) ? hdRaw : nullptr;
-            if (!((hd && *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(hd) + 0x20) == 5)
-                  || static_cast<char>(hnode[5]) == '\0')) {
+            HappinessComponent* local_res10n = static_cast<HappinessComponent*>(ScanArr(local_res20, s_tid_HappinessComponent));
+            // LAB_14010ad7a: +0x18 = HappinessDescription (0x1c42f8); if +0x20==5 || !registered -> false.
+            HappinessComponent* hnode = local_res10n;
+            Description* hdRaw = hnode->_description;
+            HappinessDescription* hd = Object::IsDerivedFromNullSafe(hdRaw, s_tid_HappinessDescription)
+                ? static_cast<HappinessDescription*>(hdRaw) : nullptr;
+            if (!((hd && hd->_happinessType == 5)
+                  || !hnode->registered)) {
                 happinessMode = true;   // local_res10 low byte = 1
             }
         }
         // third scan: MapComponent (0x1c79e0) -> local_b8; read bounds shorts (+0x28..+0x2e).
-        void* mapc = ScanArr(local_res20, s_tid_MapComponent);
-        int64_t local_b8 = 0;
-        new (&local_b8) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(mapc));   // B.3.3 bridge
-        int64_t* mnode = reinterpret_cast<int64_t*>(local_b8);
-        iVar30          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x28));
-        iVar13          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x2a));
-        local_res18_w   = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x2c));
-        iVar24          = static_cast<int>(*reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(mnode) + 0x2e));
+        MapComponent* local_b8 = static_cast<MapComponent*>(ScanArr(local_res20, s_tid_MapComponent));
+        MapComponent* mnode = local_b8;
+        iVar30          = static_cast<int>(mnode->tileX0);
+        iVar13          = static_cast<int>(mnode->tileY0);
+        local_res18_w   = static_cast<int>(mnode->tileX1);
+        iVar24          = static_cast<int>(mnode->tileY1);
     }
 
 LAB_14010ae8a:
@@ -615,59 +592,59 @@ LAB_14010ae8a:
         iVar13 = iVar13 - iVar27;                       // box row origin
         int iVar36 = local_res18_w + iVar27 * 2;        // box width
         uint32_t boxH = static_cast<uint32_t>(iVar24 + iVar27 * 2);  // box height
-        int64_t* local_c8 = nullptr; uint32_t local_c0 = 0;          // cell BST
+        LeisureCellNode* local_c8 = nullptr; uint32_t local_c0 = 0;  // cell BST
 
         for (int rr = static_cast<int>(boxH); rr > 0; --rr) {
             for (int cc = 0; cc < iVar36; ++cc) {
                 int iVar16 = cc + (iVar30 - iVar27);
-                int w = *piVar5;
+                int w = piVar5->size;
                 if (iVar16 >= 0 && iVar16 < w && iVar13 >= 0 && iVar13 < w) {
                     int cellIdx = w * iVar13 + cc + (iVar30 - iVar27);
                     int64_t lv = static_cast<int64_t>(cellIdx);
-                    if (*reinterpret_cast<uint8_t*>(CellArrayBase(piVar5) + 0x29 + lv * 0x30) < 3) {
-                        Pf_ZoneRefresh_9c480(piVar5);   // 0x14009c480 (RCX only)
-                        int64_t arrBase = CellArrayBase(piVar5);
-                        uint32_t mNew = 1u << (*reinterpret_cast<uint8_t*>(arrBase + lv * 0x30 + 0x29) & 0x1f);
-                        uint32_t mSrc = 1u << (*reinterpret_cast<uint8_t*>(arrBase + local_a8 + 0x29) & 0x1f);
+                    if (piVar5->cells[lv].terrainType < 3) {
+                        piVar5->FillZones();   // 0x14009c480 (RCX only)
+                        MapCell* arrBase = piVar5->cells;
+                        uint32_t mNew = 1u << (arrBase[lv].terrainType & 0x1f);
+                        uint32_t mSrc = 1u << (arrBase[local_a8].terrainType & 0x1f);
                         uint32_t both = mSrc | mNew;
                         uint32_t mask = both | 0xe1f;
                         bool match = false;
                         if ((mask & mSrc) != 0 && (mask & mNew) != 0) {
                             if ((both & 0x1e0) != 0) match = true;
                             else {
-                                short z0 = *reinterpret_cast<short*>(arrBase + local_a8 + 0x26);
-                                short z1 = *reinterpret_cast<short*>(arrBase + lv * 0x30 + 0x26);
+                                short z0 = arrBase[local_a8].zone;
+                                short z1 = arrBase[lv].zone;
                                 if (z0 != 0 && z1 != 0 && z0 == z1) match = true;
                             }
                         }
                         if (match) {
                             if (local_c8 == nullptr) {
-                                int* nd = reinterpret_cast<int*>(NodeAlloc(0x28));
-                                if (nd) { nd[0] = cellIdx; *reinterpret_cast<int64_t*>(nd + 2) = 0; *reinterpret_cast<int64_t*>(nd + 4) = 0; *reinterpret_cast<int64_t*>(nd + 6) = 0; nd[8] = 0; }
-                                local_c8 = reinterpret_cast<int64_t*>(nd);
+                                LeisureCellNode* nd = static_cast<LeisureCellNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureCellNode), 8));
+                                if (nd) { nd->key = cellIdx; nd->parent = nullptr; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
+                                local_c8 = nd;
                                 local_c0 = local_c0 + 1;
                             } else {
-                                int64_t* cur = local_c8; int64_t* ins = cur; bool done = false;
+                                LeisureCellNode* cur = local_c8; LeisureCellNode* ins = cur; bool done = false;
                                 do {
                                     ins = cur;
-                                    if (cellIdx < *reinterpret_cast<int*>(cur)) {
-                                        cur = reinterpret_cast<int64_t*>(cur[2]);
+                                    if (cellIdx < cur->key) {
+                                        cur = cur->left;
                                         if (cur == nullptr) {
-                                            int* nd = reinterpret_cast<int*>(NodeAlloc(0x28));
-                                            if (nd) { nd[0] = cellIdx; *reinterpret_cast<int64_t*>(nd + 2) = reinterpret_cast<int64_t>(ins); *reinterpret_cast<int64_t*>(nd + 4) = 0; *reinterpret_cast<int64_t*>(nd + 6) = 0; nd[8] = 0; }
-                                            ins[2] = reinterpret_cast<int64_t>(nd);
-                                            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_c8), reinterpret_cast<int64_t*>(&ins));
+                                            LeisureCellNode* nd = static_cast<LeisureCellNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureCellNode), 8));
+                                            if (nd) { nd->key = cellIdx; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
+                                            ins->left = nd;
+                                            AvlRebalance(&local_c8, &ins);   // 0x14001a8c0
                                             local_c0 = local_c0 + 1; done = true; break;
                                         }
-                                    } else if (cellIdx <= *reinterpret_cast<int*>(cur)) {
+                                    } else if (cellIdx <= cur->key) {
                                         done = true; break;  // present
                                     } else {
-                                        cur = reinterpret_cast<int64_t*>(cur[3]);
+                                        cur = cur->right;
                                         if (cur == nullptr) {
-                                            int* nd = reinterpret_cast<int*>(NodeAlloc(0x28));
-                                            if (nd) { nd[0] = cellIdx; *reinterpret_cast<int64_t*>(nd + 2) = reinterpret_cast<int64_t>(ins); *reinterpret_cast<int64_t*>(nd + 4) = 0; *reinterpret_cast<int64_t*>(nd + 6) = 0; nd[8] = 0; }
-                                            ins[3] = reinterpret_cast<int64_t>(nd);
-                                            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_c8), reinterpret_cast<int64_t*>(&ins));
+                                            LeisureCellNode* nd = static_cast<LeisureCellNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureCellNode), 8));
+                                            if (nd) { nd->key = cellIdx; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
+                                            ins->right = nd;
+                                            AvlRebalance(&local_c8, &ins);   // 0x14001a8c0
                                             local_c0 = local_c0 + 1; done = true; break;
                                         }
                                     }
@@ -683,28 +660,28 @@ LAB_14010ae8a:
         uint64_t uVar41 = 0;
         if (local_c0 != 0) {
             uint32_t pick = pRVar6->Rand(static_cast<uint32_t>(local_c0));
-            int64_t* node = local_c8; int64_t* puVar21 = local_c8;
-            while (node != nullptr) { puVar21 = node; node = reinterpret_cast<int64_t*>(node[2]); }
+            LeisureCellNode* node = local_c8; LeisureCellNode* puVar21 = local_c8;
+            while (node != nullptr) { puVar21 = node; node = node->left; }
             for (uint32_t s = pick; s > 0; --s) {
                 if (puVar21 != nullptr) {
-                    int64_t* right = reinterpret_cast<int64_t*>(puVar21[3]);
+                    LeisureCellNode* right = puVar21->right;
                     if (right == nullptr) {
-                        int64_t* parent = reinterpret_cast<int64_t*>(puVar21[1]);
-                        if (parent != nullptr && reinterpret_cast<int64_t*>(parent[2]) != puVar21) {
-                            while (parent != nullptr && reinterpret_cast<int64_t*>(parent[3]) == puVar21) {
-                                puVar21 = parent; parent = reinterpret_cast<int64_t*>(parent[1]);
+                        LeisureCellNode* parent = puVar21->parent;
+                        if (parent != nullptr && parent->left != puVar21) {
+                            while (parent != nullptr && parent->right == puVar21) {
+                                puVar21 = parent; parent = parent->parent;
                             }
                         }
-                        puVar21 = reinterpret_cast<int64_t*>(puVar21[1]);
+                        puVar21 = puVar21->parent;
                     } else {
-                        do { puVar21 = right; right = reinterpret_cast<int64_t*>(puVar21[2]); } while (right != nullptr);
+                        do { puVar21 = right; right = puVar21->left; } while (right != nullptr);
                     }
                 }
             }
-            int chosenCell = puVar21 ? *reinterpret_cast<int*>(puVar21) : 0;
+            int chosenCell = puVar21 ? puVar21->key : 0;
 
             // cell -> world centre.
-            int iv = *piVar5;
+            int iv = piVar5->size;
             float fVar39c = static_cast<float>(iv >> 1) - kCellBias;
             float inXY[2] = { static_cast<float>(chosenCell % iv) - fVar39c,
                               static_cast<float>(chosenCell / iv) - fVar39c };
@@ -722,15 +699,15 @@ LAB_14010ae8a:
 
             // entity to anim toward (local_res18): if happinessMode use target else null IBP.
             char cVar12 = happinessMode ? 1 : 0;
-            int64_t entIBP;
-            if (cVar12 == '\0') { entIBP = 0; new (&entIBP) ::Object::InternalBasePtr(
+            ComponentEntity* entIBP;
+            if (cVar12 == '\0') { entIBP = nullptr; new (&entIBP) ::Object::InternalBasePtr(
                 nullptr); }   // B.3.3 bridge
-            else entIBP = reinterpret_cast<int64_t>(local_res20);
-            int64_t local_res18 = entIBP;
+            else entIBP = local_res20;
+            ComponentEntity* local_res18 = entIBP;
 
             CitizenComponent* local_a8h = citizen;   // holder citizen (PlayAnimation self IBP)
             float fVar39t = pRVar6->RandFloatTol();
-            CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, &local_res18, reinterpret_cast<uint32_t*>(dest),
+            CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, reinterpret_cast<int64_t*>(&local_res18), reinterpret_cast<uint32_t*>(dest),   // LEFT: SIG CitizenAI_PlayAnimationCtor4_ba6b0
                                        fVar39t * kAgeMult + kAnimTimeBase,
                                        static_cast<uint32_t>(static_cast<unsigned char>(cVar12)));
 
@@ -742,30 +719,10 @@ LAB_14010ae8a:
         }
 
         if (local_c8 != nullptr) {
-            { WorkBase_TreeNodeFree_14c30(&local_c8, reinterpret_cast<void*>(local_c8[2]));
-                             WorkBase_TreeNodeFree_14c30(&local_c8, reinterpret_cast<void*>(local_c8[3])); }
+            { WorkBase_TreeNodeFree_14c30(&local_c8, local_c8->left);
+                             WorkBase_TreeNodeFree_14c30(&local_c8, local_c8->right); }
             System::MemoryAllocator::MemFree(local_c8);
         }
         return uVar41;
     }
 }
-
-// ------------------------------------------------------------
-// Registration trampolines (the 3 helpers are file-static; these give them external
-// linkage so standalone/reg_citizenai_leisure.cpp can register their exe addresses).
-// EnsureInit() must run before the helpers touch the resolved fn pointers / type-ids;
-// Leisure calls it, but a direct exe-address call into a helper might not, so we guard.
-// ------------------------------------------------------------
-extern "C" int64_t* CitizenAI_State_Leisure_sub_99d0_Reg(int64_t p1, int64_t* p2, uint32_t p3, int p4) {
-    EnsureInit();
-    return CitizenAI_State_Leisure_sub_99d0(p1, p2, p3, p4);
-}
-extern "C" int64_t* CitizenAI_State_Leisure_sub_fd50_Reg(int64_t p1, int64_t* p2) {
-    EnsureInit();
-    return CitizenAI_State_Leisure_sub_fd50(p1, p2);
-}
-extern "C" char CitizenAI_helper_a720_Reg(int64_t p1) {
-    EnsureInit();
-    return CitizenAI_helper_a720(p1);
-}
-

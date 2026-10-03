@@ -110,7 +110,7 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
 
     // 14002b618..b628 (0x14000da70 takes the array header as int64_t*: LEFT)
     if (SerIsLoading(serializer)) {
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70
     }
 
     // 14002b62d..b662: element loop. Note retail reloads the buffer pointer AFTER the
@@ -142,7 +142,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
     n->element.carries.count = 0;      // with capacity: one 8-byte zero
     n->element.carries.capacity = 0;
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -165,7 +165,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
 //   serializer [RDX]
 void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
 
-    int32_t* const treeCount = reinterpret_cast<int32_t*>(tree + 1);
+    int32_t* const treeCount = reinterpret_cast<int32_t*>(tree + 1);   // LEFT: the claim Set is two raw MarketWork fields
 
     // 14002b2b0..b2c0: node count in/out.
     int nodeCount = *treeCount;
@@ -188,7 +188,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             // still inserts the node — a null-keyed node, not a skipped one.
             // (InternalBasePtr::Serialize on the typed slot: the tree's InternalPtr is
             // the bare pointer; the slot is serialized through its base: LEFT.)
-            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);   // LEFT: H5 the key is InternalPtr<CitizenComponent> declared CitizenComponent*
             if (key != nullptr && !Object::IsDerivedFromNullSafe(key, CitizenComponent::TypeId())) {
                 key = nullptr;
             }
@@ -234,7 +234,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
                     // node we linked under), NOT from the new child. (The retrace takes
                     // the header and the cursor slot as int64_t*: LEFT.)
                     ClaimNode* parentSlot = cur;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&parentSlot));
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&parentSlot));   // LEFT: SIG PlayerTrade_Retrace_25920
                     *treeCount += 1;   // 14002b4ad
                 }
                 // Duplicate key falls through to 14002b4b1 WITHOUT bumping the count and
@@ -261,7 +261,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             // 14002b506..b524: write the key, and null it out in memory if it no longer
             // derives from the expected type. This MUTATES the live tree on save —
             // faithful, and deliberate in retail (it is how stale refs get culled).
-            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*serializer);
+            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*serializer);   // LEFT: H5 Claim::citizen is InternalPtr<CitizenComponent> declared CitizenComponent*
             CitizenComponent* key = node->element.citizen;
             if (key != nullptr && !Object::IsDerivedFromNullSafe(key, CitizenComponent::TypeId())) {
                 node->element.citizen = nullptr;
@@ -274,7 +274,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
-                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);
+                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {
