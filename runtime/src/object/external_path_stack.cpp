@@ -348,19 +348,22 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(
     if (index < a->_size) {
         int32_t i = index;
         do {
-            RtObject::PathStackElement* const elems =
-                reinterpret_cast<RtObject::PathStackElement*>(a->_data);   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
-            RtObject::PathStackElement* e = elems + i;
+            // `_data` is re-read at each of the three uses, as retail and the
+            // tree before B.4 did (the destructors in between are calls).
+            RtObject::PathStackElement* e =
+                reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
             e->filename.~Filename();
             e->directory.~Filename();
 
             const int32_t next = i + 1;
             if (next < a->_size) {
-                RtObject::PathStackElement* dst = elems + i;
+                RtObject::PathStackElement* dst =
+                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 as above
                 // Retail tests the COMPUTED address, which can only be null
                 // when _data is null and i == 0.
                 if (dst != nullptr) {
-                    const RtObject::PathStackElement* src = elems + next;
+                    const RtObject::PathStackElement* src =
+                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: H10 as above
                     ++RtObject::g_psc.elemsShifted;
                     new (&dst->directory) System::Filename(src->directory);
                     new (&dst->filename)  System::Filename(src->filename);
