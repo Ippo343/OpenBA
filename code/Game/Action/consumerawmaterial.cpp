@@ -59,11 +59,11 @@
 //   v1+: entity ref(+0x20), material count(+0x30), material list(+0x28)
 //   v2+: consume mode flag(+0x38)
 // ============================================================
-void ConsumeRawMaterial::Persist(void* stream) {
+void ConsumeRawMaterial::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Versioned serializer (version 2)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 2);
 
     // Serialize target entity (+0x20) with ComponentEntity type check
     _field20.InternalBasePtr::Serialize(ser);

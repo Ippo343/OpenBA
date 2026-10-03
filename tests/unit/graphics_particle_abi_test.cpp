@@ -254,7 +254,7 @@ public:
     virtual uint32_t    Type() const                   { Note(this, 2); return 0u; }
     virtual int32_t     GetFileVersion() const = 0;                      // [3] pure
     virtual uint32_t    Compile(const void* path)      { (void)path; Note(this, 4); return 1u; }
-    virtual bool        Serialize(void* stream) = 0;                     // [5] pure
+    virtual bool        Serialize(IO::Stream& stream) = 0;                     // [5] pure
     virtual ProbeExternal* Reconstruct() = 0;                            // [6] pure
     virtual void        Destruct() = 0;                                  // [7] pure
 };
@@ -268,7 +268,7 @@ public:
     const char* TypeName() const override        { Note(this, 101); return "Particle"; }
     uint32_t    Type() const override            { Note(this, 102); return 1u; }
     int32_t     GetFileVersion() const override  { Note(this, 103); return 0x1000; }
-    bool        Serialize(void*) override        { Note(this, 105); return true; }
+    bool        Serialize(IO::Stream&) override        { Note(this, 105); return true; }
     ProbeExternal* Reconstruct() override = 0;                           // [6] still pure
     void        Destruct() override = 0;                                 // [7] still pure
     virtual void* CreateSystem() const = 0;                              // [8] INTRODUCED
@@ -295,7 +295,7 @@ public:
     const char* TypeName() const override        { Note(this, 201); return "ParticleSystem"; }
     uint32_t    Type() const override            { Note(this, 202); return 2u; }
     int32_t     GetFileVersion() const override  { Note(this, 203); return 0x1001; }
-    bool        Serialize(void*) override        { Note(this, 205); return true; }
+    bool        Serialize(IO::Stream&) override        { Note(this, 205); return true; }
     ProbeExternal* Reconstruct() override        { Note(this, 206); return this; }
     void        Destruct() override              { Note(this, 207); }
     void*       CreateSystem() const override    { Note(this, 208); return this->kSentinel; }

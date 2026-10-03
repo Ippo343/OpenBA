@@ -79,7 +79,7 @@ constexpr int kConstruct      = 0x40;   // introduced per leaf — B7-1.6
 // `?Compile@External@Object@@`.
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -153,7 +153,7 @@ void CheckDtorPair() {
 namespace Pathfinding {
 int32_t PointList::GetFileVersion() const { Note(this, 3); return 5; }
 Object::External::CompileResult PointList::Compile(const System::Filename&) { Note(this, 4); return 1; }
-bool PointList::Serialize(void*) { Note(this, 5); return true; }
+bool PointList::Serialize(IO::Stream&) { Note(this, 5); return true; }
 Object::External* PointList::Reconstruct() { Note(this, 6); return this; }
 void PointList::Destruct() { Note(this, 7); }
 Object::External* PointList::Construct() { Note(this, 8); return this; }
@@ -377,7 +377,7 @@ UNIT_TEST(pathfinding_scene_layout) {
 namespace Picking {
 int32_t PickingMesh::GetFileVersion() const { Note(this, 3); return 9; }
 Object::External::CompileResult PickingMesh::Compile(const System::Filename&) { Note(this, 4); return 1; }
-bool PickingMesh::Serialize(void*) { Note(this, 5); return true; }
+bool PickingMesh::Serialize(IO::Stream&) { Note(this, 5); return true; }
 Object::External* PickingMesh::Reconstruct() { Note(this, 6); return this; }
 void PickingMesh::Destruct() { Note(this, 7); }
 Object::External* PickingMesh::Construct() { Note(this, 8); return this; }

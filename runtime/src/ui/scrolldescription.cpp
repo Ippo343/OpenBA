@@ -90,10 +90,10 @@ Object::External* ScrollDescription::Reconstruct() {
 void ScrollDescription::Destruct() { this->~ScrollDescription(); }
 
 // ?Serialize@ScrollDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x18011a940
-bool ScrollDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool ScrollDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 18011a95a (qualified)
+    UI::ElementDescription::Serialize(*stream);                 // 18011a95a (qualified)
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

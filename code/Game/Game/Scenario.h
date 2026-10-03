@@ -42,7 +42,7 @@ public:
 
     ~Scenario() override;                                          // [0] 0x14001eb40
     int32_t           GetFileVersion() const override;             // [3] 0x1400a9460
-    bool              Serialize(void* stream) override;            // [5] 0x1400a9370
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400a9370
     Object::External* Reconstruct() override;                      // [6] 0x14001ead0
     void              Destruct() override;                         // [7] 0x140001640
     Object::External* Construct() override;                        // [8] 0x14001ea70

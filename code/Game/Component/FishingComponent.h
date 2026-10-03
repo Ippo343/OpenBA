@@ -30,7 +30,7 @@ public:
 
     // 0x140034560: no body
     ~FishingComponent() override = default;                             // [0]  0x140034560
-    void        Persist(void* stream) override;                         // [3]  0x14011f050
+    void        Persist(IO::Stream& stream) override;                         // [3]  0x14011f050
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14011efe0
     char        OnEnterProducing() override;                            // [19] 0x14011ee80
     char        OnExitProducing() override;                             // [20] 0x14011ee50

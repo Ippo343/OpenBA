@@ -341,14 +341,14 @@ void VertexProgram::PlatformDestruct() {
 }
 
 // slot 5 — ?Serialize@VertexProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f6240)
-bool VertexProgram::Serialize(void* streamv) {
+bool VertexProgram::Serialize(IO::Stream& streamv) {
     // Retail CALLs 0x1800f5110 here. The QUALIFIED spelling is that call; an
     // unqualified `Serialize(stream)` would re-enter this function.
     this->ShaderProgram::Serialize(streamv);
 
     // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
     // keeps `External`'s `void*` parameter (R-OBJ's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 1);
 
     if (ser._readerWriter->GetVersion() == 0)

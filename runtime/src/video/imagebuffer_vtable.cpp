@@ -367,11 +367,11 @@ Object::External* ImageBuffer::Reconstruct() {
 //
 // ORACLE: see the file banner — emission prefix oracle, stop at 10.
 // ============================================================================
-bool ImageBuffer::Serialize(void* stream) {
+bool ImageBuffer::Serialize(IO::Stream& stream) {
     // LEFT (B.4 R-VIDEO): the slot's parameter is `IO::Stream&` in retail, but
     // `Object::External::Serialize` is declared `bool(void*)` across the whole
     // External family (R-OBJ's declaration).
-    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream& s = stream;
     {
         // Version 0: retail zeroes R8D at 0x1800f2714 for the `CMP [RDX+8],R8D`
         // and never reloads it before the factory call at 0x1800f2725/0x1800f272a.

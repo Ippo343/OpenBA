@@ -174,8 +174,8 @@ namespace UI {
 
 #define C3_DESC_MARKERS(CLS, TAG)                                                     \
     int32_t CLS::GetFileVersion() const { Note(this, TAG * 100 + 3); return TAG; }    \
-    bool CLS::Serialize(void* s) {                                                    \
-        Note(this, TAG * 100 + 5, reinterpret_cast<intptr_t>(s)); return true;       \
+    bool CLS::Serialize(IO::Stream& s) {                                                    \
+        Note(this, TAG * 100 + 5, reinterpret_cast<intptr_t>(&s)); return true;       \
     }                                                                                 \
     Object::External* CLS::Reconstruct() { Note(this, TAG * 100 + 6); return this; }  \
     void CLS::Destruct() { Note(this, TAG * 100 + 7); }                               \

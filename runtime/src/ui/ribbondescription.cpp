@@ -104,11 +104,11 @@ void RibbonDescription::Destruct() { this->~RibbonDescription(); }
 // 1800d60bf..1800d60d6) and a port that took its order from there would emit
 // the two bools and the int in the wrong sequence into every saved layout,
 // which the reader would then mis-parse. Each body's order is its own.
-bool RibbonDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
+bool RibbonDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                              // 1800d5f1a
+    ElementDescription::Serialize(*stream);                              // 1800d5f1a
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

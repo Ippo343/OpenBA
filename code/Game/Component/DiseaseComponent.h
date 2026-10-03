@@ -38,7 +38,7 @@ public:
 
     // no own work
     ~DiseaseComponent() override = default;                       // [0] 0x140004f80
-    void Persist(void* stream) override;                          // [3] 0x140048ca0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140048ca0
     void Startup() override;                                      // [4] 0x140048c50
     void OnAdded() override;                                      // [6] 0x140048c00
     void OnRemove() override;                                     // [7] 0x140048bb0

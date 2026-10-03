@@ -58,12 +58,12 @@ void* HerbalistComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HerbalistComponent());
 }
 
-void       HerbalistComponent::Persist(void* stream) {
+void       HerbalistComponent::Persist(IO::Stream& stream) {
     // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
     ResourceProduceComponent::Persist(stream);
 
     // Empty serializer block (subclass compat)
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (Persist takes void*)
+    { IO::Serializer scope(stream, 0); }
 }
 uintptr_t* HerbalistComponent::CreateWork(uintptr_t* out) { return HerbalistComponent_CreateWork(this, out); } // [18] 0x14004b160
 

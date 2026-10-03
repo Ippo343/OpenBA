@@ -168,7 +168,7 @@ public:
     // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
     DECLARE_TYPE(ShaderProgram)
 public:
-    bool          Serialize(void* stream) override;           // [5] 0x1800f5110
+    bool          Serialize(IO::Stream& stream) override;           // [5] 0x1800f5110
 
     // ---- the exported non-virtual members ------------------------------
     // Every `?…@ShaderProgram@Video@@` in the shipped export table is declared
@@ -288,7 +288,7 @@ public:
     DECLARE_TYPE(VertexProgram)
 public:
     int32_t           GetFileVersion() const override;            // [3] 0x1800f6230 — `MOV EAX,5`
-    bool              Serialize(void* stream) override;           // [5] 0x1800f6240
+    bool              Serialize(IO::Stream& stream) override;           // [5] 0x1800f6240
     Object::External* Reconstruct() override;                     // [6] 0x18004e6e0
     void              Destruct() override;                        // [7] 0x18004e710
     // [8] 0x18004e700. `virtual`, NOT `override`: `Object::External`'s and
@@ -361,7 +361,7 @@ public:
     DECLARE_TYPE(PixelProgram)
 public:
     int32_t           GetFileVersion() const override;            // [3] 0x1800f3a80 — `MOV EAX,5`
-    bool              Serialize(void* stream) override;           // [5] 0x1800f3a90
+    bool              Serialize(IO::Stream& stream) override;           // [5] 0x1800f3a90
     Object::External* Reconstruct() override;                     // [6] 0x18004ea60
     void              Destruct() override;                        // [7] 0x18004ea90
     virtual Object::External* Construct();                        // [8] 0x18004ea80 (RULE B5-16)

@@ -44,11 +44,10 @@
 //
 // +0x50 is the 8-byte Time the slot-9 Update advances, so without this the lodge's
 // accumulated hunt progress is silently dropped across a save/load.
-void HuntComponent::Persist(void* stream) {
+void HuntComponent::Persist(IO::Stream& stream) {
     ResourceProduceComponent::Persist(stream);
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser(stream, 0);
     huntProgress.Serialize(ser);
 }
 

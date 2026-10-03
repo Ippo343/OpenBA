@@ -90,10 +90,10 @@ static Description* ShowTool_FindComponentByTid(const ComponentDescription* host
 // ShowTool::Serialize (0x140042780)
 // Serializes: status(+0x18), citizen(+0x20) with type check, int(+0x28)
 // ============================================================
-void ShowTool::Persist(void* stream) {
+void ShowTool::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
     _field20.InternalBasePtr::Serialize(ser);
     if (_field20.Get() != nullptr) {
         if (!::Object::IsDerivedFromNullSafe(_field20.Get(), CitizenComponent::TypeId())) {   // cell 0x1401c7158

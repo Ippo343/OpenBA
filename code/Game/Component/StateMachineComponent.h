@@ -99,7 +99,7 @@ public:
 
     // 0x14012b9e0
     ~StateMachineComponent() override = default;                  // [0]  0x1400384a0
-    void Persist(void* stream) override;                          // [3]  0x14012b940
+    void Persist(IO::Stream& stream) override;                          // [3]  0x14012b940
     void Startup() override;                                      // [4]  0x14012b6a0
     void OnAdded() override;                                      // [6]  0x14012b660
     void Tick(void* time) override;                               // [8]  0x14012b640

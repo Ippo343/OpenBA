@@ -28,7 +28,7 @@ public:
     CompleteTask(uint32_t taskIndex, CitizenComponent* const* workEntity,
                  ComponentEntity* const* targetEntity, uint32_t taskParam);   // 0x1400c5da0
     ~CompleteTask() override = default;                        // [0] 0x140022030
-    void Persist(void* stream) override;                       // [3] 0x1400c5be0
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c5be0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5b40
     void CheckEntity() override;                               // [8] 0x1400c5ac0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c5a50

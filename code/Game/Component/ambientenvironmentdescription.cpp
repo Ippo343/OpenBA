@@ -123,8 +123,8 @@ AmbientEnvironmentDescription::~AmbientEnvironmentDescription() {
 }
 
 // [5] 0x140043950: stream order as retail.
-bool AmbientEnvironmentDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool AmbientEnvironmentDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     int count = _entryCount;
     ser.Serialize(count, nullptr);   // int count +0x28

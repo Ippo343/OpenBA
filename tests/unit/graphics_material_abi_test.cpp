@@ -142,7 +142,7 @@ void NoteDtor(const void* self) {
 // ---------------------------------------------------------------------------
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -816,21 +816,21 @@ UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
 namespace Graphics {
 
 int32_t     Material::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 5; }
-bool        Material::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        Material::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* Material::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        Material::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Material::Construct() { Note(this, kConstruct / 8); return this; }
 Material::~Material() { NoteDtor(this); }
 
 int32_t     MaterialInstance::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 4; }
-bool        MaterialInstance::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        MaterialInstance::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* MaterialInstance::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        MaterialInstance::Destruct() { Note(this, kDestruct / 8); }
 Object::External* MaterialInstance::Construct() { Note(this, kConstruct / 8); return this; }
 MaterialInstance::~MaterialInstance() {}
 
 int32_t     GraphicsMesh::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 0x3415; }
-bool        GraphicsMesh::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        GraphicsMesh::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* GraphicsMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        GraphicsMesh::Destruct() { Note(this, kDestruct / 8); }
 Object::External* GraphicsMesh::Construct() { Note(this, kConstruct / 8); return this; }
@@ -842,7 +842,7 @@ int32_t     EdgeMesh::GetFileVersion() const { Note(this, kGetFileVersion / 8); 
 Object::External::CompileResult EdgeMesh::Compile(const System::Filename&) {
     Note(this, kCompile / 8); return 1u;
 }
-bool        EdgeMesh::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        EdgeMesh::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* EdgeMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        EdgeMesh::Destruct() { Note(this, kDestruct / 8); }
 Object::External* EdgeMesh::Construct() { Note(this, kConstruct / 8); return this; }

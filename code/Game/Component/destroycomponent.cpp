@@ -75,10 +75,10 @@ void* DestroyComponent::CreateInPlaceObject(void* storage) {
 // 0x1401189b0), an empty controller scope, then one scope carrying field54 (int),
 // +0x58 (int), +0x51 (bool), the +0x60 ExternalPtr (0x140002340), destroyFlags
 // (+0x50, bool) and the Time at +0x48.
-void DestroyComponent::Persist(void* stream) {
+void DestroyComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    IO::Serializer ser(stream, 0);
     ser.Serialize(progress, nullptr);
     ser.Serialize(progressTarget, nullptr);
     ser.Serialize(hasBuildComponent, nullptr);   // +0x51

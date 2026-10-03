@@ -101,9 +101,9 @@ HighlightComponent::HighlightComponent()
 // tutorial save: retail's HighlightComponent record is 66 bytes, of which
 // Component::Persist is 50 and this scope the remaining 16. Skipping it desyncs
 // the stream for every object after this one.
-void HighlightComponent::Persist(void* stream) {
+void HighlightComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(stream, 0);
 }
 
 // [8] 0x14004c850 / [12] 0x14004c870. PORT GAP — B38 D9: never ported; the

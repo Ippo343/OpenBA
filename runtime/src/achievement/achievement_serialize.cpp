@@ -126,9 +126,8 @@ namespace Achievement {
 //   then _goals._size elements of _goals._data        -> 0x180005220
 // The SetSize (0x180005110) fires only when reading. Always `MOV AL,1`.
 // ============================================================================
-bool Achievement::Serialize(void* streamv) {
-    // External's slot 5 takes the stream as `void*` (object/External.h).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+bool Achievement::Serialize(IO::Stream& streamv) {
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);
     rt::io::Serializer* const podSer = reinterpret_cast<rt::io::Serializer*>(&ser);   // B.3.x bridge
 

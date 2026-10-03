@@ -57,13 +57,12 @@ StatGoal::~StatGoal() {
 // ============================================================
 // Calls base Goal::Serialize first, then serializes the stat-specific fields.
 // Retail ends in `MOV AL,1` (0x1400da9ee).
-bool StatGoal::Serialize(void* stream) {
+bool StatGoal::Serialize(IO::Stream& stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // The serializer (stack-local). LEFT: External::Serialize hands the stream
-    // in as void* (the runtime base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer (stack-local).
+    IO::Serializer ser(stream, 0);
 
     // statTypeA / statTypeB / comparisonType, each through the UINT door
     // (readerWriter vtable +0x98). Retail 0x1400da8e2.

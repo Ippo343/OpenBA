@@ -97,10 +97,9 @@ System::String& TutorialStep::DescText() {
     return *reinterpret_cast<System::String*>(&descStr);
 }
 
-bool TutorialStep::Serialize(void* stream) {
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool TutorialStep::Serialize(IO::Stream& stream) {
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // 1. Serialize bool at +0x20 (completed flag)
     serializer.Serialize(completed, nullptr);

@@ -29,7 +29,7 @@ public:
 
     // 0x140008440: no body
     ~MarketComponent() override = default;                              // [0]  0x140008440
-    void        Persist(void* stream) override;                         // [3]  0x14004ead0
+    void        Persist(IO::Stream& stream) override;                         // [3]  0x14004ead0
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14004ea40
 };
 

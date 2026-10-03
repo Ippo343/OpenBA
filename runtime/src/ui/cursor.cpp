@@ -108,8 +108,8 @@ Object::Base* Cursor::CreateInPlaceObject(void* place) {
 // THE SHEET COMES FIRST and the two ints after it — the reverse of the order
 // the fields sit in. Sequence, not layout, is what a stream records, and this
 // is the one place the difference is visible.
-bool Cursor::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);  // LEFT: the External slot takes void* (External.h, R-IO)
+bool Cursor::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
     // [RSP+0x28], [RSP+0x30]; 1800cd130..1800cd14d the factory by _direction.
     IO::Serializer ser(*stream, 0);

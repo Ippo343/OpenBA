@@ -41,6 +41,7 @@
 #include <type_traits>
 
 #include "../../runtime/types/object/Internal.h"
+#include "io/Stream.h"   // IO::MemoryStream: Persist takes IO::Stream&
 
 // The two unit-only seams runtime/src/object/internal_class.cpp defines under
 // -DBANISHED_UNIT_TEST. They do not exist in the standalone build.
@@ -105,7 +106,7 @@ public:
     }
 
     // Slot 3.
-    void Persist(void* /*stream*/) override { ++g_persistCalls; }
+    void Persist(IO::Stream&/*stream*/) override { ++g_persistCalls; }
 
     uint32_t payload;
 };
@@ -208,7 +209,8 @@ UNIT_TEST(internal_persist_is_empty_on_the_base_class) {
     FactoryScope scope;
     g_persistCalls = 0;
     TestInternal* obj = NewTestInternal();
-    obj->Object::Internal::Persist(nullptr);   // the non-virtual, base spelling
+    IO::MemoryStream stream;
+    obj->Object::Internal::Persist(stream);   // the non-virtual, base spelling
     CHECK_EQ(g_persistCalls, 0);
     ::Object::Destroy(obj);
 }

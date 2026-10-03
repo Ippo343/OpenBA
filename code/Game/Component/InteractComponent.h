@@ -31,7 +31,7 @@ public:
     // PORT GAP (retail 0x140123420) — B38 D2: retail frees the +0x28 array; the
     // tree never did (Inert_ScalarDtor). Kept as the tree's.
     ~InteractComponent() override = default;                      // [0] 0x1400352f0
-    void Persist(void* stream) override;                          // [3] 0x140123340
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140123340
     void OnAdded() override;                                      // [6] 0x140123110
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist

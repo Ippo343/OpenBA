@@ -349,8 +349,8 @@ void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader<Map
 }
 } // namespace
 
-bool MapGenerator::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool MapGenerator::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
 
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---

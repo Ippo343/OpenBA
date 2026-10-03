@@ -51,8 +51,8 @@ MapDescription::MapDescription()
 }
 
 // [5] 0x140124560: stream order as retail.
-bool MapDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool MapDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_cellType, nullptr);
     _footprint.Serialize(&ser);
     ser.Serialize(_claimOnAdd, nullptr);

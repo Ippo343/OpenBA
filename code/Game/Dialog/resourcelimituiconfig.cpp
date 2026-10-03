@@ -64,8 +64,8 @@
 // the class inherits.
 
 // [5] 0x140077b10 — read this row's resource index.
-bool ResourceLimitUIConfig::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+bool ResourceLimitUIConfig::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
     serializer.Serialize(_resourceIndex, nullptr);
     return true;
 }

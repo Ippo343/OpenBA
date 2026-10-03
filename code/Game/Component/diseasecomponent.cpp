@@ -826,10 +826,10 @@ DiseaseComponent::DiseaseComponent()
     OrFlagsInCtor(0x8b);
 }
 
-void DiseaseComponent::Persist(void* stream) {
+void DiseaseComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (Persist takes void*)
+    IO::Stream& s = stream;
     IO::Serializer ser(s, 1);
     Reimpl_ExternalPtr_Serialize_StringTable(&curedIdentity, &ser);   // 0x140002340 ExternalPtr<ComponentDescription>
     ser.Serialize(isPasture, nullptr);

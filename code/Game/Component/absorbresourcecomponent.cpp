@@ -151,10 +151,10 @@ AbsorbResourceComponent::~AbsorbResourceComponent() = default;
 // [3] 0x140105c00: Component::Persist plus TWO empty Serializer scopes — an
 // empty scope still occupies 16 bytes in the save encoding. Retail calls
 // 0x1401189b0 (Component::Persist) directly, not ControllerComponent's.
-void AbsorbResourceComponent::Persist(void* stream) {
+void AbsorbResourceComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    { IO::Serializer scope(stream, 0); }
 }
 
 // create 0x14002ea20: MemAlloc(0x48, 8), then the ctor.

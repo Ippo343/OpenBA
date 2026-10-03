@@ -92,8 +92,8 @@ Object::External* Profession::Construct() {
 // ============================================================
 // Original: 0x1400a8f10
 // Creates a Serializer(stream, version=0), then serializes each field.
-bool Profession::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool Profession::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
 
     // Serialize ExternalPtr fields
     Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);  // +0x20 (0x14000bf40)

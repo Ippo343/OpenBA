@@ -30,7 +30,7 @@ public:
 
     // 0x140035100: no body
     ~HuntComponent() override = default;                                // [0]  0x140035100
-    void        Persist(void* stream) override;                         // [3]  0x140122820
+    void        Persist(IO::Stream& stream) override;                         // [3]  0x140122820
     // [9] receives the System::Time BY VALUE (an 8-byte tick count in RDX); the
     // base declares the register as `void*`, so the body reads its bits.
     void        Update(void* time) override;                            // [9]  0x140122740

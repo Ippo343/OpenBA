@@ -51,9 +51,9 @@ int32_t CaptureBoxDescription::GetFileVersion() const {
 // [5] 0x1400791a0: base, then ExternalPtr +0x68, String +0x70; returns 1. (The
 // hand-built slot was a `void` function, so its AL was whatever the Serializer
 // dtor left there.)
-bool CaptureBoxDescription::Serialize(void* stream) {
+bool CaptureBoxDescription::Serialize(IO::Stream& stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (stream is void* in the slot)
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // ExternalPtr +0x68
     _spriteName.Serialize(&ser);                                      // String      +0x70
     return true;

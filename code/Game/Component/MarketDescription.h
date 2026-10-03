@@ -36,7 +36,7 @@ public:
 
     ~MarketDescription() override;                                         // [0] 0x1400083d0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14004ec80
-    bool              Serialize(void* stream) override;                    // [5] 0x14004ebb0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14004ebb0
     Object::External* Reconstruct() override;                              // [6] 0x140008360
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400083c0

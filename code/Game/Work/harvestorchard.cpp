@@ -576,15 +576,14 @@ Profession** HarvestOrchard::GetTarget(Profession** outPtr) {
 // ============================================================
 // HarvestOrchard::Serialize
 // ============================================================
-void HarvestOrchard::Persist(void* stream) {
+void HarvestOrchard::Persist(IO::Stream& stream) {
     Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
-    // (Persist's stream is void* in Work.h: LEFT)
     {
-        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer serializer(stream, 0);
     }
 
-    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer serializer2(stream, 0);
 
     // (the helper takes the container as uintptr_t*: LEFT)
     WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);

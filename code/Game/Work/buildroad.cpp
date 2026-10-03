@@ -101,12 +101,12 @@ void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t ce
 // Serializes: road type (+0x5c via stream vtable +0x98), cell index (+0x58),
 //   entity ref (+0x48), building desc (+0x50), material fields (+0x60..+0x68)
 // ============================================================
-void BuildRoad::Persist(void* stream) {
+void BuildRoad::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // Create IO::Serializer with version 1 (destroyed at the end, as retail)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer serializer(stream, 1);
 
     // Serialize road type (+0x5c) through the UINT door. Serializer+0x08 is the
     // READERWRITER, not the stream (the Stream is at +0x00), and its vtable

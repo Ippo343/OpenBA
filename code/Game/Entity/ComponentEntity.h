@@ -42,7 +42,7 @@ public:
 
     // 0x1400c3550
     ~ComponentEntity() override;                                  // [0] 0x140021a00
-    void          Persist(void* stream) override;                 // [3] 0x1400c3140
+    void          Persist(IO::Stream& stream) override;                 // [3] 0x1400c3140
 
     // ---- non-virtual members (retail addresses) ----
     void RefreshEntityFlags();                                    // 0x1400c3470

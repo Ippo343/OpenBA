@@ -148,8 +148,8 @@ Object::Base* StringTable::CreateInPlaceObject(void* place) {
     return ::new (place) StringTable();                      // 180002382 MOV RAX,RCX
 }
 
-bool StringTable::Serialize(void* streamV) {
-    IO::Stream* const stream = static_cast<IO::Stream*>(streamV);
+bool StringTable::Serialize(IO::Stream& streamV) {
+    IO::Stream* const stream = &streamV;
 
     // ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z (0x1800b9960), inlined by retail
     // (18011d957..18011d982): the stream, then CreateReader / CreateWriter of

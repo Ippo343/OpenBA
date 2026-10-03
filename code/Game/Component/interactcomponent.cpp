@@ -94,12 +94,11 @@ InteractComponent::InteractComponent()
 }
 
 // [3] 0x140123340 — the use-location IBP array (+0x28/+0x30) round-trips here.
-void InteractComponent::Persist(void* stream) {
+void InteractComponent::Persist(IO::Stream& stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser(stream, 0);
 
     // Serialize count
     int32_t count = useLocationCount;

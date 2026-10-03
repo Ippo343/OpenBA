@@ -121,12 +121,12 @@ void* ConsumeProduceComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x140118e00 (serialize) and [4] 0x140118ef0 (Startup: init the consume config
 // from the building's ConsumeProduceDescription).
-void       ConsumeProduceComponent::Persist(void* stream) {
+void       ConsumeProduceComponent::Persist(IO::Stream& stream) {
     // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
     ResourceProduceComponent::Persist(stream);
 
     // Create versioned serializer (version 1)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 1);
 
     // Serialize consumeResourceId at +0x50
     ser.Serialize(consumeResourceId, nullptr);
@@ -154,7 +154,7 @@ void       ConsumeProduceComponent::Persist(void* stream) {
     // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
     if (ser.GetVersion() == 0 && consumeResourceId < 0) {
         // Check if we're loading (stream direction == 0)
-        if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        if (static_cast<int>(stream.GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
             consumeResourceId = 0;
         }
     }

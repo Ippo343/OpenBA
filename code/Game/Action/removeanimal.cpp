@@ -59,11 +59,11 @@
 // Serializes status byte (+0x18) and entity ref at +0x20 with ComponentEntity
 // type validation on deserialization.
 // ============================================================
-void RemoveAnimal::Persist(void* stream) {
+void RemoveAnimal::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity ref at +0x20
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
     _field20.InternalBasePtr::Serialize(ser);
 
     // Type-check: retail tests ComponentEntity (cell 0x1401c5d70 at 0x1400ca8e1); the tree

@@ -101,7 +101,7 @@ public:
     DECLARE_TYPE(LayoutDescription)
 public:
     int32_t       GetFileVersion() const override;                // [3] 0x1800d3a00
-    bool          Serialize(void* stream) override;               // [5] 0x1800d3940
+    bool          Serialize(IO::Stream& stream) override;               // [5] 0x1800d3940
     Object::External* Reconstruct() override;                     // [6] 0x180042fc0
     void          Destruct() override;                            // [7] 0x180043100
     Object::InternalPtr<Element>* CreateInstance(

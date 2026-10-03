@@ -90,9 +90,9 @@ void* BoatComponent::CreateInPlaceObject(void* storage) {
 // 0x1401c7078), the +0x50 Vector3, the +0x70 route index and the +0x60 Vector3
 // route array (count at +0x68, resized on a load). A pointer whose object fails
 // its IsDerivedFrom check is cleared.
-void BoatComponent::Persist(void* stream) {
+void BoatComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    IO::Stream& io = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream is void* (Object::Base)
+    IO::Stream& io = stream;
     { IO::Serializer scope(io, 0); }
     IO::Serializer ser(io, 0);
     destination.Serialize(ser, ComponentEntity::TypeId());   // 0x140046635: MOV EDX,[0x1401c5d70]

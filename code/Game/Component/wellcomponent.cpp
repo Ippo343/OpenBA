@@ -337,14 +337,14 @@ WellComponent::WellComponent() : _controller(this) {
 // ============================================================
 // Component_Serialize + two empty serializer blocks (controller compat).
 
-void WellComponent::Persist(void* stream) {
+void WellComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // First empty serializer block (component section)
-    { IO::Serializer scope1(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    { IO::Serializer scope1(stream, 0); }
 
     // Second empty serializer block (controller section)
-    { IO::Serializer scope2(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+    { IO::Serializer scope2(stream, 0); }
 }
 
 // ============================================================

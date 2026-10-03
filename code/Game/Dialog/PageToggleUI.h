@@ -30,7 +30,7 @@ public:
     // 0x1400131c0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~PageToggleUI() override = default;                           // [0] 0x1400131c0
-    void Persist(void* /*stream*/) override {}   // [3] 0x1400759a0  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x1400759a0  RET 0 in retail
     void OnCreated() override;   // [4] 0x140075850
     void OnUpdateLayout() override;   // [7] 0x140075780
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,

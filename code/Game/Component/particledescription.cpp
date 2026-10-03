@@ -87,8 +87,8 @@ ParticleDescription::~ParticleDescription() {
 }
 
 // [5] 0x140053460: stream order as retail.
-bool ParticleDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ParticleDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_emitterCount, nullptr);   // emitterCount
     int count = _emitterCount;
     

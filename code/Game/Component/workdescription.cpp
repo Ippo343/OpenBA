@@ -51,8 +51,8 @@ WorkDescription::WorkDescription()
       _b34(false) {}
 
 // [5] 0x14012e8b0: stream order as retail.
-bool WorkDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool WorkDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_i24, nullptr);
     ser.Serialize(_i28, nullptr);
     ser.Serialize(_i2c, nullptr);

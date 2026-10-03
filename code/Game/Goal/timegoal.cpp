@@ -29,13 +29,12 @@ TimeGoal::TimeGoal() : requiredYears(1), requireOtherGoalsMet(0), _pad35{} {}
 // ============================================================
 // Calls base Goal::Serialize, then requiredYears (int) and
 // requireOtherGoalsMet (bool).
-bool TimeGoal::Serialize(void* stream) {
+bool TimeGoal::Serialize(IO::Stream& stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // Serialize requiredYears (+0x30)
     serializer.Serialize(requiredYears, nullptr);

@@ -60,7 +60,7 @@ public:
 
     // 0x14012a230
     ~ResidenceComponent() override;                               // [0]  0x140037610
-    void          Persist(void* stream) override;                 // [3]  0x14012a170
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14012a170
     void          Startup() override;                             // [4]  0x14012a120
     void          OnRemove() override;                            // [7]  0x14012a0e0
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0

@@ -208,7 +208,7 @@ public:
     // because `Object::External` declares the slot that way until STREAMS
     // lands `IO::Stream`. Changing it is block 4's job, on the base, and this
     // override follows it for free.
-    bool          Serialize(void* stream) override;             // [5] 0x1800b60a0
+    bool          Serialize(IO::Stream& stream) override;             // [5] 0x1800b60a0
     Object::External* Reconstruct() override;                   // [6] 0x1800252d0
     void          Destruct() override;                          // [7] 0x180025300
     // [8] — PackageFile's OWN new virtual. See the banner for the four pieces

@@ -41,7 +41,7 @@ public:
     ~TestCompiled() override { NoteLeafDtor(this); }
     DTOR_CHECK_RECORDING_DELETE
     int32_t           GetFileVersion() const override { return 1; }
-    bool              Serialize(void*) override { return true; }
+    bool              Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void              Destruct() override {}
 };
@@ -127,7 +127,7 @@ public:
     ~TestPlainExternal() override { NoteLeafDtor(this); }
     DTOR_CHECK_RECORDING_DELETE
     int32_t           GetFileVersion() const override { return 1; }
-    bool              Serialize(void*) override { return true; }
+    bool              Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void              Destruct() override {}
 };

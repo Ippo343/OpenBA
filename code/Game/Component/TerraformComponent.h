@@ -37,7 +37,7 @@ public:
     // PORT GAP (retail 0x1400575b0) — B38 D2: retail frees both undo arrays; the
     // tree never did (Inert_ScalarDtor). Kept as the tree's.
     ~TerraformComponent() override = default;                     // [0]  0x14000ce90
-    void Persist(void* stream) override;                          // [3]  0x140057500
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140057500
     void OnAdded() override;                                      // [6]  0x1400574f0 own RET
     void OnRemove() override;                                     // [7]  0x140057350
     void OnEvent(int eventId) override;                           // [12] 0x140057310

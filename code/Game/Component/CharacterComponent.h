@@ -43,7 +43,7 @@ public:
     // PORT GAP (retail 0x14002faa0) — B38 D2: retail releases the action stack
     // at +0x48 (0x1400c5150); the tree never did (Inert_ScalarDtor).
     ~CharacterComponent() override = default;                     // [0] 0x14002faa0
-    void Persist(void* stream) override;                          // [3] 0x140109ab0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140109ab0
     void Startup() override;                                      // [4] 0x140109a30
     void OnAdded() override;                                      // [6] 0x1401099c0 PORT GAP
     void OnRemove() override;                                     // [7] 0x140109980

@@ -39,7 +39,7 @@ public:
 
     // 0x1400e9190: frees both arrays
     ~ConsumeProduce() override;                                     // [0]  0x14002a190
-    void  Persist(void* stream) override;                           // [3]  0x1400e9020
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e9020
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400e7840
     int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;  // [6]  0x1400e77c0
     int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;    // [7]  0x1400e7780

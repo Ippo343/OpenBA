@@ -140,10 +140,10 @@ void* StorageLocationComponent::CreateInPlaceObject(void* storage) {
 //   Serializer_Ctor(local2, stream, 0)
 //   Serializer_Dtor(local2)
 
-void StorageLocationComponent::Persist(void* stream) {
+void StorageLocationComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream is void*
+    IO::Stream& s = stream;
     { IO::Serializer first(s, 0); }
     { IO::Serializer second(s, 0); }
 }

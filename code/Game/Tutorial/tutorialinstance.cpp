@@ -49,10 +49,9 @@ TutorialInstance::TutorialInstance()
 //   CMP [serializer+8],0  ; check if loading
 //   ...step adjustment loop...
 //   CALL [0x140152ad0]  ; Serializer::~Serializer
-void TutorialInstance::Persist(void* stream) {
-    // The serializer. LEFT: Internal::Persist hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+void TutorialInstance::Persist(IO::Stream& stream) {
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // 1. Serialize ExternalPtr<Tutorial> at +0x30
     TutWave_SerializeTutorialRef(&tutorialDef, &serializer);   // 0x1400262b0

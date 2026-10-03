@@ -412,7 +412,7 @@ public:
     // retail: TypeName 0x180045400, Type 0x1800453e0, TypeId 0x1800453f0, CreateNewObject 0x1800454f0
     DECLARE_TYPE_INHERITED_INPLACE(DialogInstance)
 public:
-    void Persist(void* stream) override;                          // [3] 0x180114fa0  RET
+    void Persist(IO::Stream& stream) override;                          // [3] 0x180114fa0  RET
     virtual void OnOpened();                                      // [4] 0x180114fb0
     virtual void OnClosed();                                      // [5] 0x180115330
     virtual void OnUpdateLayout();                                // [6] 0x1801153a0
@@ -420,7 +420,7 @@ public:
     virtual void OnElementEvent(Object::InternalPtr<Element>* element,
                                 int32_t a, int32_t b, int32_t c,
                                 int32_t d, int32_t e, void* userData);  // [8] 0x180114ed0
-    virtual void OnSerializeSettings(void* stream);               // [9] 0x180115470  RET
+    virtual void OnSerializeSettings(IO::Stream& stream);               // [9] 0x180115470  RET
 
     // ---- PORTED non-virtual members ---------------------------------------
     // Each registered door delegates with a QUALIFIED call. The RETSLOT

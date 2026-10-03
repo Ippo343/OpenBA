@@ -29,7 +29,7 @@ public:
 
     ~HuntDescription() override = default;                                 // [0] 0x1400350a0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x1401229e0
-    bool              Serialize(void* stream) override;                    // [5] 0x140122960
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140122960
     Object::External* Reconstruct() override;                              // [6] 0x140035040
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140035090

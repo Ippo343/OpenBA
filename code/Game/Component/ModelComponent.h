@@ -54,7 +54,7 @@ public:
 
     // 0x140124cd0
     ~ModelComponent() override;                                   // [0] 0x140035ad0
-    void Persist(void* stream) override;                          // [3] 0x140124b70
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140124b70
     void Startup() override;                                      // [4] 0x140124ac0
     void OnAdded() override;                                      // [6] 0x140124a30
     void OnRemove() override;                                     // [7] 0x1401249d0

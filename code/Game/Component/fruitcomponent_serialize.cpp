@@ -37,11 +37,10 @@
 // FruitComponent::Serialize (vtable slot [3], 0x14004a070)
 // ============================================================
 
-void FruitComponent::Persist(void* stream) {
-    if (!stream) return;
+void FruitComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 0);
 
     // InternalPtr<T>::Serialize: InternalBasePtr::Serialize, then the IsDerivedFrom
     // null-out (0x1401c7b30).

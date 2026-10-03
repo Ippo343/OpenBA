@@ -59,11 +59,11 @@ void GraphDescription::Destruct() { this->~GraphDescription(); }
 // THREE ints then ONE UNSIGNED. +0x74 goes through the kScalarUInt slot (+0x98)
 // while +0x68/+0x6c/+0x70 go through kScalarInt (+0xa0); the split is read off
 // 0x1800d1acd versus 0x1800d1a8e/0x1800d1aa3/0x1800d1ab8, not assumed.
-bool GraphDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool GraphDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                              // 1800d1a4a
+    ElementDescription::Serialize(*stream);                              // 1800d1a4a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;

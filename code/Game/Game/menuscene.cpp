@@ -181,7 +181,7 @@ void MenuScene::Destruct() { this->~MenuScene(); }
 // The outer Serializer (version 2), the name, the terrain Geometry (+0x28,
 // built on load), the camera controller (+0x88), then the arrays, the
 // GraphicsMesh reference, the atmosphere and the v2 tail.
-bool MenuScene::Serialize(void* stream) {
+bool MenuScene::Serialize(IO::Stream& stream) {
 
     // M3.5 Path B session 8 — Geometry deserialize sub-sequence.
     //
@@ -198,7 +198,7 @@ bool MenuScene::Serialize(void* stream) {
     // stream's IsLoading state (read by the inner serializers).
     if (!s_serializeLogged.exchange(true)) {
         printf("[MenuScene::Slot5_Serialize] standalone Geometry-deserialize path "
-               "(self=%p stream=%p)\n", (void*)this, stream);
+               "(self=%p stream=%p)\n", (void*)this, (void*)&stream);
         fflush(stdout);
     }
 
@@ -234,20 +234,7 @@ bool MenuScene::Serialize(void* stream) {
       }
     };
 
-    if (!stream) {
-        printf("[MenuScene::Slot5_Serialize] no stream — "
-               "skipping outer prelude (terrain will be missing)\n");
-        fflush(stdout);
-        buildGeometry();
-        if (!s_tailWarned.exchange(true)) {
-            printf("[MenuScene::Slot5_Serialize] tail unwired "
-                   "(outer_ctored=0) — atmosphere left at Init defaults\n");
-            fflush(stdout);
-        }
-        RZ_CHECK("Slot5 exit");
-        return true;
-    }
-    IO::Stream& io = *static_cast<IO::Stream*>(stream);   // LEFT: External::Serialize takes void* (R-CORE)
+    IO::Stream& io = stream;
     IO::Serializer outer(io, 2);
     name.Serialize(&outer);
     buildGeometry();

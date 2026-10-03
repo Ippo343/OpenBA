@@ -51,6 +51,7 @@
 #include "dtor_check.h"
 
 #include "video/ImageBuffer.h"
+#include "io/Stream.h"   // IO::MemoryStream: Serialize takes IO::Stream&
 #include "video/RenderState.h"
 #include "graphics/GeneratedImageBuffer.h"
 #include "graphics/FrameCopyImageBuffer.h"
@@ -167,7 +168,7 @@ public:
     virtual uint32_t    Compile(const void* path) {
         Note(this, 104, static_cast<long long>(reinterpret_cast<uintptr_t>(path))); return 1u;
     }
-    virtual bool        Serialize(void* stream) = 0;               // [5]
+    virtual bool        Serialize(IO::Stream& stream) = 0;               // [5]
     virtual void*       Reconstruct() = 0;                         // [6]
     virtual void        Destruct() = 0;                            // [7]
     virtual void*       Construct() = 0;                           // [8]
@@ -193,7 +194,7 @@ public:
     uint32_t    Type() const override     { Note(this, 2); return 0u; }
     int32_t     GetFileVersion() const override { Note(this, 3); return 0x1007; }
     uint32_t    Compile(const void*) override   { Note(this, 4); return 1u; }
-    bool        Serialize(void*) override       { Note(this, 5); return true; }
+    bool        Serialize(IO::Stream&) override       { Note(this, 5); return true; }
     void*       Reconstruct() override          { Note(this, 6); return this; }
     void        Destruct() override             { Note(this, 7); }
     void*       Construct() override            { Note(this, 8); return this; }
@@ -313,7 +314,8 @@ UNIT_TEST(video_imagebuffer_qualified_call_is_not_virtual) {
     MirrorGenerated* p = &probe;
 
     Reset();
-    p->Serialize(nullptr);                       // virtual -> the override
+    IO::MemoryStream stream;
+    p->Serialize(stream);                        // virtual -> the override
     CHECK_EQ(g_lastMark, 5);
 
     // The base-class arm: qualified, so it must NOT re-enter the override.

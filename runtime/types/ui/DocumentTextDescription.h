@@ -93,7 +93,7 @@ public:
     DECLARE_TYPE(DocumentTextDescription)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cfb20
-    bool        Serialize(void* stream) override;                 // [5] 0x1800cf8a0 (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x1800cf8a0 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x18003ba80
     void        Destruct() override;                              // [7] 0x18003bab0
     Object::InternalPtr<Element>* CreateInstance(

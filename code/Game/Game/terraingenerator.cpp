@@ -225,8 +225,8 @@ void TerrainGenerator::Destruct() { this->~TerrainGenerator(); }
 // ============================================================
 // Original: 0x1400b1690. ExternalPtr, String, bool, 3 filename strings with
 // version-0 resolution, and the dynamic terrain data array. Returns AL=1.
-bool TerrainGenerator::Serialize(void* stream) {
-    IO::Serializer s(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge  // LEFT: slot 5's void* stream
+bool TerrainGenerator::Serialize(IO::Stream& stream) {
+    IO::Serializer s(stream, 0);
     IO::Serializer* serializer = &s;   // destroyed at the return (retail's order)
 
     // Serialize ExternalPtr at +0x20

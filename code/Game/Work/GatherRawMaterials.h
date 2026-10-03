@@ -41,7 +41,7 @@ public:
 
     // 0x1400ec650: frees the BST and both arrays
     ~GatherRawMaterials() override;                                 // [0]  0x14002a410
-    void  Persist(void* stream) override;                           // [3]  0x1400ec560
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ec560
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]
     int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;  // [6]
     int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;    // [7]

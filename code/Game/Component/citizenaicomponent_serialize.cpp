@@ -57,12 +57,11 @@ uint32_t CitizenAISer_TidCitizenComponent() {
 
 } // namespace
 
-void CitizenAIComponent::Persist(void* stream) {
-    if (!stream) return;
+void CitizenAIComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
-    IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 5);   // B.3.4 bridge
+    IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(stream, 5);
 
     // citizen is an InternalPtr<CitizenComponent> (eight bytes): its serializer.
     reinterpret_cast<Object::InternalBasePtr*>(&citizen)->Serialize(*s);   // B.3.4 bridge

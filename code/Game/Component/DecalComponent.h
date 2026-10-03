@@ -41,7 +41,7 @@ public:
 
     // 0x14011b8b0
     ~DecalComponent() override = default;                         // [0]  0x1400338d0
-    void Persist(void* stream) override;                          // [3]  0x14011b820
+    void Persist(IO::Stream& stream) override;                          // [3]  0x14011b820
     void Startup() override;                                      // [4]  0x14011b7d0 TREE DIVERGENCE
     void OnAdded() override;                                      // [6]  0x14011b560
     void OnRemove() override;                                     // [7]  0x14011b510

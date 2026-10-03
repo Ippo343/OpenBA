@@ -81,8 +81,8 @@ HighlightDescription::~HighlightDescription() {
 }
 
 // [5] 0x14004c9d0: stream order as retail.
-bool HighlightDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool HighlightDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_groupCount, nullptr);   // groupCount
     int count = _groupCount;
     

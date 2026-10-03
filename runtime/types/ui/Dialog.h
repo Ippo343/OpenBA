@@ -338,7 +338,7 @@ public:
     DECLARE_TYPE(Dialog)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1801130b0
-    bool        Serialize(void* stream) override;                 // [5] 0x1801130c0
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x1801130c0
     Object::External* Reconstruct() override;                    // [6] 0x1800386b0
     void        Destruct() override;                              // [7] 0x1800387f0
     virtual Object::External* Construct();                        // [8] 0x180038750

@@ -38,7 +38,7 @@ public:
     // 0x140029470 minus the free: the restamp; the compiler chains
     // ~DialogController (and so ~Internal), which the tree's hand table skipped.
     ~TutorialUI() override = default;                              // [0] 0x140029470
-    void Persist(void* /*stream*/) override {}                     // [3] 0x1400e3aa0 RET
+    void Persist(IO::Stream&/*stream*/) override {}                     // [3] 0x1400e3aa0 RET
     void OnCreated() override;                                     // [4] 0x1400e37a0
     void OnUpdateLayout() override;                                // [7] 0x1400e3700
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,

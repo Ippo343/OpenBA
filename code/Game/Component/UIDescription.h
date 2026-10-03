@@ -50,7 +50,7 @@ public:
 
     ~UIDescription() override;                                             // [0] 0x140039700
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14012dfa0
-    bool              Serialize(void* stream) override;                    // [5] 0x14012de80
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14012de80
     Object::External* Reconstruct() override;                              // [6] 0x140039680
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400396e0

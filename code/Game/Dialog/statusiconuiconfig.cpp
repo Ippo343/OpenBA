@@ -61,8 +61,8 @@
 // the class inherits.
 
 // [5] 0x14007b400 — deserialize _showOnMainPage (ONE byte; retail MOV AL,1).
-bool StatusIconUIConfig::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+bool StatusIconUIConfig::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
     serializer.Serialize(_showOnMainPage, nullptr);
     return true;
 }

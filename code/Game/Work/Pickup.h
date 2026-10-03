@@ -41,7 +41,7 @@ public:
 
     // nothing of its own to free
     ~Pickup() override = default;                                   // [0]  0x14002c010
-    void  Persist(void* stream) override;                           // [3]  0x1400f3aa0
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f3aa0
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400f2f00
     int   Slot5(CitizenComponent** entityIBP, System::Time* context) override;           // [5]  0x1400f38f0 (re-target)
     int   OnComplete(CitizenComponent** arg1, ComponentEntity** arg2, int arg3) override;    // [6]  0x1400f2ec0

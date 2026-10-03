@@ -135,11 +135,11 @@ static inline int WorldToCell(int mapSize, float worldX, float worldY) {
 //   +0x46c walkAnimId, +0x470 bridgeFlag (version>0), +0x474 roadFlag,
 //   +0x478 speedMultiplier
 // ============================================================
-void MoveTo::Persist(void* stream) {
+void MoveTo::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Version 1: serialize all movement data
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 1);
 
     // The moving character (+0x28)
     character.InternalBasePtr::Serialize(ser);

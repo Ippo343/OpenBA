@@ -37,7 +37,7 @@ public:
     // PORT GAP (retail 0x14000c350) — B38 D2: retail frees the timer array at
     // +0x28; the tree never did (Inert_ScalarDtor).
     ~SpawnComponent() override = default;                         // [0] 0x14000c350
-    void Persist(void* stream) override;                          // [3] 0x140055ee0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140055ee0
     void Startup() override;                                      // [4] 0x140055e90
     void Update(void* time) override;                             // [9] 0x140055ad0
 

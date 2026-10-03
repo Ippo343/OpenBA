@@ -460,10 +460,10 @@ int PlantOrchard::GetPriority() {
 // PlantOrchard::Persist [3] -- 0x1400f4f50
 // Identical to PlantArea::Persist.
 // ============================================================
-void PlantOrchard::Persist(void* stream) {
+void PlantOrchard::Persist(IO::Stream& stream) {
     Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);
 

@@ -75,10 +75,11 @@ void PageDescription::Destruct() { this->~PageDescription(); }          // 0x180
 // grandparent would drop every child), QUALIFIED (this object wears the
 // leaf's table, whose slot 5 is this function), then one kScalarInt over
 // `_activePage` through a SECOND ReaderWriter opened on the same stream.
-bool PageDescription::Serialize(void* streamv) {
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
+bool PageDescription::Serialize(IO::Stream& streamv) {
+    void* const streamvRaw = &streamv;
+    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
-    GroupDescription::Serialize(stream);                       // 1800d542a
+    GroupDescription::Serialize(streamv);                       // 1800d542a
 
     rtdesc::Serializer ser = { stream, nullptr };
     IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800d545a

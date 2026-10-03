@@ -47,8 +47,8 @@ MarketDescription::~MarketDescription() {
 }
 
 // [5] 0x14004ebb0: stream order as retail.
-bool MarketDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool MarketDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_fillRatio, nullptr);
     // array @ +0x28 (count @ +0x30, element stride 8: {enum @+0, float @+4})
     ser.Serialize(_ratioCount, nullptr);

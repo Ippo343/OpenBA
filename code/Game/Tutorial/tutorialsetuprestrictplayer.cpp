@@ -133,10 +133,9 @@ TutorialSetupRestrictPlayer::~TutorialSetupRestrictPlayer() {
 // ============================================================
 // 5 int32 restriction fields and 2 ExternalRef strings; on load (serializer
 // mode == 0) each ExternalRef is resolved by name.
-bool TutorialSetupRestrictPlayer::Serialize(void* stream) {
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // Serialize 5 int32 fields: +0x20, +0x24, +0x28, +0x2C, +0x30
     serializer.Serialize(restrictMinX, nullptr);

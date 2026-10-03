@@ -43,7 +43,7 @@ public:
 
     // nothing of its own to free
     ~LocationWork() override = default;                             // [0]  0x14002a850
-    void  Persist(void* stream) override;                           // [3]  0x1400efba0
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400efba0
     int   Execute(CitizenComponent** citizenIBP, System::Time* context) override;  // [4]  0x1400ef880
     int   OnComplete(CitizenComponent** arg1, ComponentEntity** arg2, int arg3) override;    // [6]  0x1400ef850
     int   OnCancel(CitizenComponent** arg1, ComponentEntity** arg2, int arg3) override;      // [7]  0x1400ef820

@@ -87,10 +87,10 @@ void ButtonDescription::Destruct() { this->~ButtonDescription(); }
 //
 // The base call is QUALIFIED: this object wears the leaf's table, whose slot 5
 // is this very function.
-bool ButtonDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool ButtonDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ElementDescription::Serialize(stream);                 // 1801113fa
+    ElementDescription::Serialize(*stream);                 // 1801113fa
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;

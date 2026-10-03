@@ -23,7 +23,7 @@ DEFINE_EXE_ABSTRACT_TYPE(TutorialSetup, "Object::External")
 // TutorialSetup::Serialize (vtable +0x28, 0x1400e2000)
 // ============================================================
 // No fields: a Serializer(stream, 0) scope, created and destroyed; returns 1.
-bool TutorialSetup::Serialize(void* stream) {
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool TutorialSetup::Serialize(IO::Stream& stream) {
+    IO::Serializer scope(stream, 0);
     return true;
 }

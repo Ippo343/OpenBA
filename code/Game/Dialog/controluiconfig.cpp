@@ -61,8 +61,8 @@
 // [5] 0x14005fb70 — read the command id and the target component type.
 // Object::Type::Serialize is the exe import slot 0x1401516b0:
 // RtObject_Type_Serialize, called by name (B3R).
-bool ControlUIConfig::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+bool ControlUIConfig::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
     serializer.Serialize(_command, nullptr);
     RtObject::RtObject_Type_Serialize(&_componentType, &serializer);   // import slot 0x1401516b0
     return true;

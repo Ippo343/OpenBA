@@ -28,16 +28,15 @@ TimeGoalInstance::TimeGoalInstance() : elapsedTime{} {}
 // TimeGoalInstance::Persist (vtable +0x18, 0x1400dad30)
 // ============================================================
 // GoalInstance::Persist first, then the elapsed time via Time::Serialize.
-void TimeGoalInstance::Persist(void* stream) {
+void TimeGoalInstance::Persist(IO::Stream& stream) {
     // Achievement::GoalInstance::Persist (slot 3, retail 0x18009ef70) — QUALIFIED
     // (B37_RULES B7-13). Retail calls the base UNCONDITIONALLY; the base reads an
     // ExternalPtr + a uint off the stream, and skipping it desyncs everything
     // after this object.
     Achievement::GoalInstance::Persist(stream);
 
-    // The serializer. LEFT: Internal::Persist hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
     elapsedTime.Serialize(serializer);

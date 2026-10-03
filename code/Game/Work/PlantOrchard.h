@@ -40,7 +40,7 @@ public:
 
     // 0x1400f5010: frees the slot array and the BST
     ~PlantOrchard() override;                                       // [0]  0x14002c540
-    void  Persist(void* stream) override;                           // [3]  0x1400f4f50
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f4f50
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400f4af0
     int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int param4) override;  // [6]  0x1400f4a90
     int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int param4) override;    // [7]  0x1400f4a20

@@ -92,7 +92,7 @@ constexpr int kConstruct      = 0x40;   // introduced per leaf — RULE B6-1.1
 // `?Compile@External@Object@@`.
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -615,21 +615,21 @@ UNIT_TEST(b39_uid_font_deleting_dtor_both_arms) {
 namespace UI {
 
 int32_t     CharacterSet::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
-bool        CharacterSet::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        CharacterSet::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* CharacterSet::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        CharacterSet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* CharacterSet::Construct() { Note(this, kConstruct / 8); return this; }
 CharacterSet::~CharacterSet() { B39NoteDtor(this); }
 
 int32_t     Cursor::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
-bool        Cursor::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        Cursor::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* Cursor::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        Cursor::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Cursor::Construct() { Note(this, kConstruct / 8); return this; }
 Cursor::~Cursor() { B39NoteDtor(this); }
 
 int32_t     StringTable::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
-bool        StringTable::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        StringTable::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* StringTable::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        StringTable::Destruct() { Note(this, kDestruct / 8); }
 Object::External* StringTable::Construct() { Note(this, kConstruct / 8); return this; }
@@ -640,14 +640,14 @@ int32_t     SpriteSheet::GetFileVersion() const { Note(this, kGetFileVersion / 8
 Object::External::CompileResult SpriteSheet::Compile(const System::Filename&) {
     Note(this, kCompile / 8); return 1u;
 }
-bool        SpriteSheet::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        SpriteSheet::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* SpriteSheet::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        SpriteSheet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* SpriteSheet::Construct() { Note(this, kConstruct / 8); return this; }
 SpriteSheet::~SpriteSheet() {}
 
 int32_t     SpriteCapture::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
-bool        SpriteCapture::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        SpriteCapture::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* SpriteCapture::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        SpriteCapture::Destruct() { Note(this, kDestruct / 8); }
 Object::External* SpriteCapture::Construct() { Note(this, kConstruct / 8); return this; }
@@ -658,7 +658,7 @@ int32_t     Font::GetFileVersion() const { Note(this, kGetFileVersion / 8); retu
 Object::External::CompileResult Font::Compile(const System::Filename&) {
     Note(this, kCompile / 8); return 1u;
 }
-bool        Font::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool        Font::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* Font::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        Font::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Font::Construct() { Note(this, kConstruct / 8); return this; }

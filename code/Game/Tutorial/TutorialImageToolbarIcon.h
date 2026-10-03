@@ -31,7 +31,7 @@ public:
 
     ~TutorialImageToolbarIcon() override;                          // [0] 0x140028090
     int32_t           GetFileVersion() const override { return 0x1001; }  // [3] 0x1400e0bd0
-    bool              Serialize(void* stream) override;            // [5] 0x1400e0af0
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e0af0
     Object::External* Reconstruct() override;                      // [6] 0x140028070
     // [7] Destruct: TutorialImage's (the shared 0x140001640 body)
     Object::External* Construct() override;                        // [8] 0x140028060

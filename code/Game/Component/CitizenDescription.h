@@ -32,7 +32,7 @@ public:
 
     ~CitizenDescription() override;                                        // [0] 0x1400301f0
     int32_t           GetFileVersion() const override { return 17; }    // [3] 0x140114e00
-    bool              Serialize(void* stream) override;                    // [5] 0x140114900
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140114900
     Object::External* Reconstruct() override;                              // [6] 0x1400301c0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400301e0

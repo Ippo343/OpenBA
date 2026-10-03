@@ -398,11 +398,11 @@ int TendArea::GetPriority() {
 // TendArea::Persist [3] (0x1400f5900)
 // Work::Persist + Serializer(v0) + the set + tendMode.
 // ============================================================
-void TendArea::Persist(void* stream) {
+void TendArea::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // The set at +0x48
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&bstRoot), &ser);

@@ -267,7 +267,7 @@ public:
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x180116af0  dialog.cpp
     // [4] Compile — Object::External's own body, inherited unchanged.
-    bool        Serialize(void* stream) override;                 // [5] 0x180116b00  (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x180116b00  (IO::Stream&)
     // [6] Reconstruct, [7] Destruct — pure in Object::External, still pure.
     virtual Object::InternalPtr<Element>* CreateInstance(
         Object::InternalPtr<Element>* ret,

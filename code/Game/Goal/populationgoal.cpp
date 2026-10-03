@@ -30,13 +30,12 @@ PopulationGoal::PopulationGoal() : targetPop(100), _pad34{} {}
 // PopulationGoal::Serialize (vtable +0x28, 0x1400d7870)
 // ============================================================
 // Calls Goal::Serialize, then serializes targetPop (int32 at +0x30).
-bool PopulationGoal::Serialize(void* stream) {
+bool PopulationGoal::Serialize(IO::Stream& stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
     Achievement::Goal::Serialize(stream);
 
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // Serialize targetPop at +0x30
     serializer.Serialize(targetPop, nullptr);

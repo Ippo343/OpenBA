@@ -389,7 +389,7 @@ Internal::~Internal() {
 
 // ---- vtable slot 3 — 0x1800bfda0, a bare RET in retail AND in the profile
 // build. It exists so a subclass has something to override. MUST STAY EMPTY.
-void Internal::Persist(void* /*stream*/) {
+void Internal::Persist(IO::Stream&/*stream*/) {
 }
 
 // ============================================================================
@@ -484,7 +484,7 @@ Internal* Internal::Clone() {
     writeStream.cursor         = 0;                       // 0x1800bfbe0  +0x24
     writeStream.base.direction = 1;                       // 0x1800bfbe7  +0x08
     writeStream.ownsData       = 1;                       // 0x1800bfbee  +0x20
-    Persist(&writeStream);                                // 0x1800bfbfc slot 3
+    Persist(*reinterpret_cast<IO::Stream*>(&writeStream));   // 0x1800bfbfc slot 3   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
 
     // ---- the READ stream: 0x1800bfbff .. 0x1800bfc7f -----------------------
     RtIo::MemoryStream readStream;
@@ -504,7 +504,7 @@ Internal* Internal::Clone() {
     // `Base` non-virtually at offset 0, which every raw slot call in this tree
     // already assumes.
     Internal* const result = static_cast<Internal*>(clone);
-    result->Persist(&readStream);                         // 0x1800bfc7f slot 3
+    result->Persist(*reinterpret_cast<IO::Stream*>(&readStream));   // 0x1800bfc7f slot 3   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
 
     // ---- the two inlined destructors, READ FIRST ---------------------------
     // 0x1800bfc83..0x1800bfcbc restamps 0x1801555b0 then 0x1801549a0 and frees
@@ -655,12 +655,12 @@ void InternalFactory::ClearPersistState() {
 // side and back-patches the placeholder on the write side). The explicit call
 // on a raw buffer keeps the position welded to the statement, and a raw buffer
 // has no implicit destructor, so nothing can run twice.
-void InternalFactory::ResetPersistState(void* stream) {
+void InternalFactory::ResetPersistState(IO::Stream& stream) {
     const int kSerializerVersion = 0;   // retail's XOR R8D,R8D at 0x1800bfe6c
 
     alignas(8) uint8_t serStorage[sizeof(::IO::Serializer)];
     ::IO::Serializer* ser = ::new (static_cast<void*>(serStorage))   // B.3.4 bridge
-        ::IO::Serializer(*reinterpret_cast<::IO::Stream*>(stream), kSerializerVersion);
+        ::IO::Serializer(stream, kSerializerVersion);
 
     int count = _objects._size;
     ser->_readerWriter->SerializeInt(count, nullptr);   // +0xa0 (B3X W0: by name)
@@ -724,14 +724,14 @@ inline int32_t StreamMode(const void* stream) {
 
 }  // namespace
 
-Internal* InternalFactory::PersistObject(void* stream, uint32_t generation,
+Internal* InternalFactory::PersistObject(IO::Stream& stream, uint32_t generation,
                                          int index, uint32_t typeId) {
     int32_t* const persistIds = _persistIds._data;             // 0x1800bff27
     const int64_t i = index;                                   // MOVSXD RBX,R9D
 
     int32_t slot = index;
 
-    if (StreamMode(stream) != 0) {
+    if (StreamMode(&stream) != 0) {
         // ---- WRITE, 0x1800bffd4 --------------------------------------------
         if (persistIds[i] < 0) {
             persistIds[i] = static_cast<int32_t>(i);

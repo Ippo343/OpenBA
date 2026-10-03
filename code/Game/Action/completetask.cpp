@@ -38,11 +38,11 @@
 // Serialize (0x1400c5be0, vtable slot 3)
 // Serializes status, entity refs with type checks, task fields.
 // ============================================================
-void CompleteTask::Persist(void* stream) {
+void CompleteTask::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs + task fields (version 1)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 1);
 
     // Work citizen ref (+0x20) with type validation.
     workEntity.InternalBasePtr::Serialize(ser);

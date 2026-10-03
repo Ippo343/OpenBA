@@ -51,9 +51,9 @@ Disease::~Disease() {
 }
 
 // [5] 0x1400932d0 — returns AL=1.
-bool Disease::Serialize(void* stream) {
+bool Disease::Serialize(IO::Stream& stream) {
     alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, serializer);
     // B.3.1 bridge: the String field is its COW pointer.
     reinterpret_cast<System::String*>(&_name)->Serialize(serializer);

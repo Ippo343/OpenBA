@@ -55,7 +55,7 @@ public:
     // [1]/[2]: the abstract base answers its own record (DEFINE_EXE_TYPE,
     // ENDGAME B.3.9 RF); every leaf overrides both.
     // [1] TypeName 0x140037d30 and [2] Type 0x140037d20: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void        Persist(void* stream) override;                     // [3]  0x14012b4a0
+    void        Persist(IO::Stream& stream) override;                     // [3]  0x14012b4a0
     uint32_t    CommandMask(int command) override;                  // [13] 0x14012b520
     void        Command(int command) override;                      // [14] 0x14012b5a0
     int         GetDefaultState() const override { return 2; }      // [16] 0x1400026c0

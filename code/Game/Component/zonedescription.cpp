@@ -28,8 +28,8 @@
 #include <new>
 
 // [5] 0x140130430: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
-bool ZoneDescription::Serialize(void* stream) {
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ZoneDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer scope(stream, 0);
     return true;
 }
 

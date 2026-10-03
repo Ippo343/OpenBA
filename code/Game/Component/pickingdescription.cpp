@@ -68,8 +68,8 @@ PickingDescription::~PickingDescription() {
 }
 
 // [5] 0x140128d00: stream order as retail.
-bool PickingDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool PickingDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_groupCount, nullptr);   // groupCount
     int count = _groupCount;
 

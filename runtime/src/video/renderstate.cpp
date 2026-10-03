@@ -276,11 +276,11 @@ void RenderState::Initialize(const AlphaBlend& alphaBlend, const Depth& depth,
 // unlike the shader programs, which pass 1. `IO::Serializer`'s constructor is
 // that prologue and its destructor is the codec teardown at the end of the
 // body, so the local's SCOPE is what places both; see this file's banner.
-bool RenderState::Serialize(void* stream) {
+bool RenderState::Serialize(IO::Stream& stream) {
     // LEFT (B.4 R-VIDEO): the slot's parameter is `IO::Stream&` in retail, but
     // `Object::External::Serialize` is declared `bool(void*)` across the whole
     // External family (R-OBJ's declaration).
-    IO::Stream& s = *static_cast<IO::Stream*>(stream);
+    IO::Stream& s = stream;
     {
         IO::Serializer ser(s, 0);
 

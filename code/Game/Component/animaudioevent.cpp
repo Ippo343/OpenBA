@@ -42,8 +42,8 @@ AnimAudioEvent::AnimAudioEvent() : _sound(nullptr), _chance(1.0f), _pad2c{} {}
 // [5] 0x140087ed0: Serializer(stream, 0); ExternalPtr +0x20; float +0x28;
 // ~Serializer; return 1. (The hand-built slot was a `void` function, so its AL
 // was whatever the Serializer dtor left there.)
-bool AnimAudioEvent::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (stream is void* in the slot)
+bool AnimAudioEvent::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // +0x20 external audio reference (stream-identical generic external-ptr serialize)
     Reimpl_ExternalPtr_Serialize_StringTable(&_sound, &ser);
     // +0x28 float

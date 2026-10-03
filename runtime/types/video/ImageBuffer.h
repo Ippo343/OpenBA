@@ -279,7 +279,7 @@ public:
     DECLARE_TYPE(ImageBuffer)
 public:
     int32_t           GetFileVersion() const override;        // [3] 0x1800f26e0 — `MOV EAX,7`
-    bool              Serialize(void* stream) override;       // [5] 0x1800f26f0
+    bool              Serialize(IO::Stream& stream) override;       // [5] 0x1800f26f0
     Object::External* Reconstruct() override;                 // [6] 0x18001ea80
     void              Destruct() override;                    // [7] 0x18001eab0
     // [8] 0x18001eaa0. `virtual`, NOT `override`: `Object::External`'s and

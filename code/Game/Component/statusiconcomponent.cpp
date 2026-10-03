@@ -583,11 +583,11 @@ StatusIconComponent::StatusIconComponent() : _geometry(), iconId(-1), _pad104{} 
 // Serializes the activeMask icon state. Simple: Component_Serialize base,
 // then one uint via IO::Serializer(version 0). On load, writes back to +0xF0.
 
-void StatusIconComponent::Persist(void* stream) {
+void StatusIconComponent::Persist(IO::Stream& stream) {
     // Base class serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 0);
 
     // Serialize the mask as uint (copy to local, serialize, write back on load)
     uint32_t iconVal = _geometry.activeMask;

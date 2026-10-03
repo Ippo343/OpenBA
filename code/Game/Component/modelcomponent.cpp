@@ -199,12 +199,11 @@ ModelComponent::~ModelComponent() = default;
 // restore the mesh from the description's mesh groups.
 // Also conditionally calls OnAdded (+0x30) to re-add to scene.
 
-void ModelComponent::Persist(void* stream) {
+void ModelComponent::Persist(IO::Stream& stream) {
     // Base class serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser(stream, 0);
 
     ser.Serialize(meshGroup, nullptr);
     ser.Serialize(meshIndex, nullptr);

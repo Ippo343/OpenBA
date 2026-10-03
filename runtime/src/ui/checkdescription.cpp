@@ -77,10 +77,10 @@ void CheckDescription::Destruct() { this->~CheckDescription(); }
 // Note the base call is ButtonDescription::Serialize (0x1801113e0), NOT
 // ElementDescription::Serialize — this is the one place in this batch where the
 // base serializer is a sibling class's rather than the root's.
-bool CheckDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool CheckDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ButtonDescription::Serialize(stream);                  // 18011194a
+    ButtonDescription::Serialize(*stream);                  // 18011194a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 

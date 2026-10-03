@@ -54,12 +54,10 @@ TutorialImageInputKey::TutorialImageInputKey() {}
 // ============================================================
 // Slot5: Serialize (0x1400e07f0)
 // ============================================================
-bool TutorialImageInputKey::Serialize(void* stream) {
-    // LEFT (both blocks): External::Serialize hands the stream in as void* (the
-    // runtime base's signature).
+bool TutorialImageInputKey::Serialize(IO::Stream& stream) {
     // First serializer block: serialize +0x28, +0x2C as ints, then ExternalPtr at +0x20
     {
-        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer serializer(stream, 0);
         serializer.Serialize(imageWidth, nullptr);
         serializer.Serialize(imageHeight, nullptr);
         TutBase_SerializeImageRef(&imageRef, &serializer);
@@ -68,7 +66,7 @@ bool TutorialImageInputKey::Serialize(void* stream) {
     // Second serializer block: +0x30 (inputId) through the UINT door. Serializer
     // +0x08 is NOT "the internal stream": the Stream is at Serializer+0x00, and
     // +0x08 is the READERWRITER, whose vtable +0x98 is rw_vtbl::kScalarUInt.
-    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer serializer2(stream, 0);
     serializer2.Serialize(_inputId, nullptr);
     return true;
 }

@@ -26,7 +26,7 @@ public:
     AnimateNaturalResource();                                                   // create 0x140021dc0
     AnimateNaturalResource(ComponentEntity* const* entity, uint32_t animIndex, bool waitForAnim);   // 0x1400c57d0
     ~AnimateNaturalResource() override = default;              // [0] 0x140021e30
-    void Persist(void* stream) override;                       // [3] 0x1400c5660
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c5660
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5600
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c55b0
     void CheckEntity() override;                               // [8] 0x1400c55a0 own `RET 0` (same bytes as the base body)

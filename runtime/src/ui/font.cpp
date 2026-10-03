@@ -259,10 +259,10 @@ namespace UI {
 // The body reads its own fields at the file format's offsets (+0x20, +0x50,
 // +0x80 ...) through `p`, in FORMAT order, which is not declaration order;
 // every offset is asserted against a named member in Font.h.
-bool Font::Serialize(void* streamv) {
+bool Font::Serialize(IO::Stream& streamv) {
     // LEFT: the Serialize slot's parameter is `void*` in Object::External
     // (block R-IO); retail's is IO::Stream&.
-    IO::Stream* const stream = static_cast<IO::Stream*>(streamv);
+    IO::Stream* const stream = &streamv;
 
     // 0x180117704..0x180117720: `??0Serializer@IO@@` (0x1800b9960) INLINED —
     // the stream, a null reader/writer, then the encoding's CreateReader /

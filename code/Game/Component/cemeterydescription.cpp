@@ -33,8 +33,8 @@ CemeteryDescription::CemeteryDescription()
       _ref20(nullptr) {}
 
 // [5] 0x140047800: stream order as retail.
-bool CemeteryDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CemeteryDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     return true;
 }

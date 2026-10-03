@@ -32,7 +32,7 @@ public:
 
     ~InteractDescription() override;                                       // [0] 0x140035280
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x1401236a0
-    bool              Serialize(void* stream) override;                    // [5] 0x140123500
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140123500
     Object::External* Reconstruct() override;                              // [6] 0x140035250
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140035270

@@ -146,8 +146,8 @@ ComponentDescription::~ComponentDescription() {
 }
 
 // [5] 0x140118af0.
-bool ComponentDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ComponentDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // category enum (+0x20) through the UINT door. `serBuf + 8` was the
     // ReaderWriter, not an Encoding, and vtable +0x98 is rw_vtbl::kScalarUInt.

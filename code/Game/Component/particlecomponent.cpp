@@ -545,11 +545,10 @@ ParticleComponent::ParticleComponent()
 // ============================================================
 // ParticleComponent::Persist (0x140053270)
 // ============================================================
-void ParticleComponent::Persist(void* stream) {
+void ParticleComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
     IO::Serializer ser(*st, 0);
 
     int localCount = activeCount;

@@ -76,7 +76,7 @@ public:
 
     // 0x14011af60
     ~CropFieldComponent() override;                                     // [0]  0x1400330a0
-    void          Persist(void* stream) override;                       // [3]  0x14011ae70
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x14011ae70
     void          Startup() override;                                   // [4]  0x14011ae60
     uint32_t      CommandMask(int command) override;                    // [13] 0x14011ada0
     void          Command(int command) override;                        // [14] 0x14011acc0

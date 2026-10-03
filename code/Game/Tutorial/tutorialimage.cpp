@@ -43,10 +43,9 @@ TutorialImage::TutorialImage() : imageRef(nullptr), imageWidth(0), imageHeight(0
 // TutorialImage::Serialize (vtable +0x28, 0x1400e0330)
 // ============================================================
 // imageWidth (+0x28), imageHeight (+0x2C), then the ExternalPtr at +0x20.
-bool TutorialImage::Serialize(void* stream) {
-    // The serializer, version 0. LEFT: External::Serialize hands the stream in
-    // as void* (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool TutorialImage::Serialize(IO::Stream& stream) {
+    // The serializer, version 0.
+    IO::Serializer serializer(stream, 0);
 
     serializer.Serialize(imageWidth, nullptr);
     serializer.Serialize(imageHeight, nullptr);

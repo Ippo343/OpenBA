@@ -33,7 +33,7 @@ public:
     TimeGoalInstance();                                            // 0x1400dad90
 
     ~TimeGoalInstance() override = default;                        // [0] 0x140026800
-    void Persist(void* stream) override;                           // [3] 0x1400dad30
+    void Persist(IO::Stream& stream) override;                           // [3] 0x1400dad30
     void Startup() override {}                                     // [4] 0x1400daca0 RET
     void Update(const System::Time& time,
                 const Achievement::GoalList& list) override;       // [5] 0x1400dac30

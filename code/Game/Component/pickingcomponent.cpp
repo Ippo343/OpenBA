@@ -184,10 +184,10 @@ PickingComponent::PickingComponent() : pickingId(-1), _pad2C{}, userData(nullptr
 // ============================================================
 // PickingComponent::Persist (vtable slot [3], 0x140128bb0)
 // ============================================================
-void PickingComponent::Persist(void* stream) {
+void PickingComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // Serialize the userData InternalPtr
     reinterpret_cast<Object::InternalBasePtr*>(&userData)->Serialize(ser);   // H5: the member is the raw pointer the IBP holds

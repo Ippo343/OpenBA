@@ -48,7 +48,7 @@ public:
 
     // 0x140105c60
     ~AbsorbResourceComponent() override;                          // [0]  0x14002ebf0
-    void          Persist(void* stream) override;                 // [3]  0x140105c00
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x140105c00
     int         GetDefaultState() const override { return 0; }    // [16] 0x140003730
     Controller* GetController() override { return &_controller; } // [17] 0x140004080
 

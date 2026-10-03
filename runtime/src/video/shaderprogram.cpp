@@ -286,10 +286,10 @@ void ShaderProgram::PlatformSerialize(IO::Serializer& ser) {
 }
 
 // slot 5 — ?Serialize@ShaderProgram@Video@@UEAA_NAEAVStream@IO@@@Z 0x1800f5110
-bool ShaderProgram::Serialize(void* streamv) {
+bool ShaderProgram::Serialize(IO::Stream& streamv) {
     // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
     // keeps `External`'s `void*` parameter (R-OBJ's declaration).
-    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 1);
+    IO::Serializer ser(streamv, 1);
 
     SerializeParameters(ser, &_constants);   // +0x30 FIRST
     SerializeParameters(ser, &_textures);    // +0x20 second

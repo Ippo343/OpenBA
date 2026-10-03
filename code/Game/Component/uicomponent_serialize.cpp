@@ -39,11 +39,10 @@
 // UIComponent::Persist (vtable slot [3], 0x14012dd00)
 // ============================================================
 // B.3.8 CB1b: the body moved here from the free UIComponent_Serialize.
-void UIComponent::Persist(void* stream) {
-    if (!stream) return;
+void UIComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(stream, 0);
 
     int count = dataCount;   // +0x30
     ser.Serialize(count, nullptr);

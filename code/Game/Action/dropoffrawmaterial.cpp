@@ -61,11 +61,11 @@
 // Serialize (0x1400c7b10)
 // Serializes: status(+0x18), storage(+0x30), source(+0x38), resource(+0x28), flag(+0x20), count(+0x24)
 // ============================================================
-void DropOffRawMaterial::Persist(void* stream) {
+void DropOffRawMaterial::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs, resource type, flag, and count
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // The carrying citizen (+0x30)
     _field30.InternalBasePtr::Serialize(ser);

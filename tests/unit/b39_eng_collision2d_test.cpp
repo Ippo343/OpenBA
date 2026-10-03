@@ -36,7 +36,7 @@ void NoteDtor(const void* self) {
 
 namespace Collision2D {
 int32_t Surface::GetFileVersion() const { return 1; }
-bool Surface::Serialize(void*) { return true; }
+bool Surface::Serialize(IO::Stream&) { return true; }
 Object::External* Surface::Reconstruct() { return this; }
 void Surface::Destruct() {}
 Object::External* Surface::Construct() { return this; }
@@ -44,7 +44,7 @@ Surface::~Surface() { NoteDtor(this); }
 
 int32_t CollisionMesh::GetFileVersion() const { return 3; }
 Object::External::CompileResult CollisionMesh::Compile(const System::Filename&) { return 1; }
-bool CollisionMesh::Serialize(void*) { return true; }
+bool CollisionMesh::Serialize(IO::Stream&) { return true; }
 Object::External* CollisionMesh::Reconstruct() { return this; }
 void CollisionMesh::Destruct() {}
 Object::External* CollisionMesh::Construct() { return this; }

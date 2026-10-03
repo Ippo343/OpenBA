@@ -212,10 +212,8 @@ void SoundBuffer::PlatformSerialize(IO::Serializer& ser) {
 }
 
 // [5] 0x1800e0480.
-bool SoundBuffer::Serialize(void* streamv) {
-    // LEFT: slot [5] is `Serialize(IO::Stream&)`; Object::External declares
-    // the parameter `void*` (the object block's header).
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool SoundBuffer::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
     IO::Serializer ser(*stream, 0);
 
     ser._readerWriter->SerializeBool(_loopForever, nullptr);        // +0x78
@@ -381,9 +379,8 @@ Object::External::CompileResult SoundEffect::Compile(const System::Filename&) {
 }
 
 // [5] 0x1800e0aa0.
-bool SoundEffect::Serialize(void* streamv) {
-    // LEFT: slot [5]'s parameter is `void*` in Object::External (object block).
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool SoundEffect::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
     IO::Serializer ser(*stream, 0);
 
     ser._readerWriter->SerializeFloat(_radius, nullptr);            // +0x80

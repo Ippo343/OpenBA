@@ -42,10 +42,9 @@ TutorialSetupCamera::TutorialSetupCamera()
 // TutorialSetupCamera::Serialize (vtable +0x28, 0x1400e2120)
 // ============================================================
 // Serializes 4 int32 fields: cameraX, cameraChunkRow, cameraY, cameraChunkCol.
-bool TutorialSetupCamera::Serialize(void* stream) {
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool TutorialSetupCamera::Serialize(IO::Stream& stream) {
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     serializer.Serialize(cameraX, nullptr);
     serializer.Serialize(cameraChunkRow, nullptr);

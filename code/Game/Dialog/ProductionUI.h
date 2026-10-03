@@ -41,7 +41,7 @@ public:
     // (element dtor 0x140001740: MemFree, zero data / count / capacity), last
     // first: `lists`' own dtor does exactly that.
     ~ProductionUI() override = default;                           // [0] 0x1400132b0
-    void Persist(void* /*stream*/) override {}   // [3] 0x140076300  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x140076300  RET 0 in retail
     void OnCreated() override;   // [4] 0x140075da0
     void OnUpdateLayout() override;   // [7] 0x140075a20
 

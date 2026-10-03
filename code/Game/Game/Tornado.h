@@ -39,7 +39,7 @@ public:
     // retail's body is the restamp and ~Particle
     ~Tornado() override = default;                                    // [0] 0x140024f00
     int32_t GetFileVersion() const override;                          // [3] 0x1400d2370
-    bool Serialize(void* stream) override;                            // [5] 0x1400d2210
+    bool Serialize(IO::Stream& stream) override;                            // [5] 0x1400d2210
     Object::External* Reconstruct() override;                         // [6] 0x140024ee0
     void Destruct() override;                                         // [7] 0x140001640
     Graphics::ParticleInstance* CreateSystem() const override;        // [8] 0x1400d21b0

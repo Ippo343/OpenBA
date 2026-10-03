@@ -32,7 +32,7 @@ public:
 
     ~TutorialSetupGameSpeed() override = default;                  // [0] 0x140028ac0
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400e2df0
-    bool              Serialize(void* stream) override;            // [5] 0x1400e2d90
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e2d90
     Object::External* Reconstruct() override;                      // [6] 0x140028a70
     void              Destruct() override;                         // [7] 0x140001640
     void              Begin() override;                            // [8] 0x1400e2d60

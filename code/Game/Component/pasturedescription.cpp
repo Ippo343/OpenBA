@@ -29,8 +29,8 @@ PastureDescription::PastureDescription()
       _type(5) {}
 
 // [5] 0x140128220: stream order as retail.
-bool PastureDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool PastureDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;
 }

@@ -21,8 +21,8 @@
 #include <new>
 
 // [5] 0x14004f170: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
-bool MarketLocationDescription::Serialize(void* stream) {
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool MarketLocationDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer scope(stream, 0);
     return true;
 }
 

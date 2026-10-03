@@ -48,17 +48,17 @@ TrackerComponent::TrackerComponent()
 // ============================================================
 // Serialize the two Entry arrays (displayed, produced), plus trackerId at +0x48.
 
-void TrackerComponent::Persist(void* stream) {
+void TrackerComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // === the displayed list ===
     int localCount1 = displayedCount;
     ser.Serialize(localCount1, nullptr);
 
     // If loading, resize the array
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+    if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         // LEFT: 0x14000da70 takes the array header as int64_t* (Action block).
         ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&displayed), localCount1);   // 0x14000da70
     }
@@ -77,7 +77,7 @@ void TrackerComponent::Persist(void* stream) {
     int localCount2 = producedCount;
     ser.Serialize(localCount2, nullptr);
 
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+    if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&produced), localCount2);   // 0x14000da70
     }
 

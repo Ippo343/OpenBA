@@ -61,14 +61,13 @@ std::atomic<int> s_logCreate{0};
 //       }
 //   }
 //   IO::Serializer::~Serializer(local_20);
-void FinishTutorialInstance::Persist(void* stream) {
+void FinishTutorialInstance::Persist(IO::Stream& stream) {
     // Achievement::GoalInstance::Persist (slot 3, 0x18009ef70) — QUALIFIED (B7-13):
     // an unqualified call would dispatch back into this slot.
     Achievement::GoalInstance::Persist(stream);
 
-    // The serializer. LEFT: Internal::Persist hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // Serialize the InternalPtr at +0x20, then, if the deserialized object is
     // not a TutorialInstance, null it out: Object::Base::IsDerivedFrom (import

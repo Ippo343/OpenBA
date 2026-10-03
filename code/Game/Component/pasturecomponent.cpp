@@ -252,12 +252,11 @@ void* PastureComponent::CreateInPlaceObject(void* storage) {
 //   - the livestock type ExternalPtr
 //   - the animal count and array, each validated against LivestockComponent
 //   - capacity and production
-void PastureComponent::Persist(void* stream) {
+void PastureComponent::Persist(IO::Stream& stream) {
     // Base Component serialization
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
 
     // Empty serializer block (version 0, immediately destroyed)
     { IO::Serializer scope(*st, 0); }

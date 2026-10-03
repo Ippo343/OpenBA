@@ -77,7 +77,7 @@ public:
     DECLARE_TYPE(RibbonDescription)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d5ef0
-    bool        Serialize(void* stream) override;                 // [5] 0x1800d5f00 (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x1800d5f00 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x1800443c0
     void        Destruct() override;                              // [7] 0x180044520
     Object::InternalPtr<Element>* CreateInstance(

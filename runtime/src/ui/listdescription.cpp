@@ -117,10 +117,10 @@ Object::External* ListDescription::Reconstruct() {
 void ListDescription::Destruct() { this->~ListDescription(); }
 
 // ?Serialize@ListDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d4810
-bool ListDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool ListDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 1800d482a (qualified)
+    UI::ElementDescription::Serialize(*stream);                 // 1800d482a (qualified)
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 

@@ -37,7 +37,7 @@ public:
 
     // no own work
     ~CitizenAIComponent() override = default;                     // [0]  0x14002fcf0
-    void Persist(void* stream) override;                          // [3]  0x14010f960
+    void Persist(IO::Stream& stream) override;                          // [3]  0x14010f960
     void Startup() override;                                      // [4]  0x14010f920
     void OnAdded() override;                                      // [6]  0x14010f880 PORT GAP
     void Update(void* time) override;                             // [9]  0x14010f3e0

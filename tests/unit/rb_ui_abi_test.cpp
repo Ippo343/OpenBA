@@ -156,7 +156,7 @@ struct RbPanel final : UI::DialogController {
 };
 struct RbConfig final : UI::DialogControllerConfig {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };

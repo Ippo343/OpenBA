@@ -39,8 +39,8 @@ RadiusDescription::RadiusDescription()
       _radius(0x1e) {}
 
 // [5] 0x140055530: stream order as retail.
-bool RadiusDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool RadiusDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_radius, nullptr);
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_material, &ser);   // 0x140007140
     return true;

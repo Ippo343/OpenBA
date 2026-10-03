@@ -61,11 +61,11 @@
 // Serialize (0x1400cac50)
 // Serializes: status(+0x18), entity(+0x20) with type check, entity(+0x28) with type check, bool(+0x30)
 // ============================================================
-void RemoveNaturalResource::Persist(void* stream) {
+void RemoveNaturalResource::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs and harvest flag
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // The working citizen (+0x20)
     _field20.InternalBasePtr::Serialize(ser);

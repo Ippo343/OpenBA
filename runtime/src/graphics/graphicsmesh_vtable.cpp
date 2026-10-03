@@ -488,9 +488,8 @@ static void RtGraphics_GraphicsMeshTriangleList_Serialize(GraphicsMesh::DetailLe
 // ============================================================================
 namespace Graphics {
 
-bool GraphicsMesh::Serialize(void* streamv) {
-    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+bool GraphicsMesh::Serialize(IO::Stream& streamv) {
+    IO::Stream& stream = streamv;
 
     IO::Serializer ser(stream, 1);                 // VERSION 1 — see the note above
     IO::ReaderWriter* const rw = ser._readerWriter;

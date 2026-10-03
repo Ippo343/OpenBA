@@ -57,9 +57,9 @@ int32_t FrustumOutlineDescription::GetFileVersion() const {
 // [5] 0x14006c460: base, then ExternalPtr +0x68, String +0x70, int +0x78,
 // int +0x7c; returns 1. (The hand-built slot was a `void` function, so its AL
 // was whatever the Serializer dtor left there.)
-bool FrustumOutlineDescription::Serialize(void* stream) {
+bool FrustumOutlineDescription::Serialize(IO::Stream& stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // ExternalPtr +0x68
     _spriteName.Serialize(&ser);                                     // String      +0x70
     ser.Serialize(_width, nullptr);                                  // int +0x78

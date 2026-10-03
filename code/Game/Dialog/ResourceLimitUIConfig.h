@@ -27,7 +27,7 @@ public:
 
     ~ResourceLimitUIConfig() override = default;                   // [0] 0x140013880
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x140077b60
-    bool              Serialize(void* stream) override;            // [5] 0x140077b10
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x140077b10
     Object::External* Reconstruct() override;                      // [6] 0x140013830
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x1400137e0

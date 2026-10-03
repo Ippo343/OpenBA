@@ -420,7 +420,7 @@ public:
     virtual int32_t     GetFileVersion() const = 0;           // [3]
     virtual uint32_t    Compile(const void* path)             // [4] not pure in retail
                         { Note(this, 4); (void)path; return 1; }
-    virtual bool        Serialize(void* stream) = 0;           // [5]
+    virtual bool        Serialize(IO::Stream& stream) = 0;           // [5]
     virtual void*       Reconstruct() = 0;                     // [6]
     virtual void        Destruct() = 0;                        // [7]
 };
@@ -430,7 +430,7 @@ public:
     const char* TypeName() const override    { Note(this, 1); return "VertexLayout"; }
     uint32_t    Type() const override        { Note(this, 2); return 0xabcdu; }
     int32_t     GetFileVersion() const override { Note(this, 3); return 3; }
-    bool        Serialize(void*) override    { Note(this, 5); return true; }
+    bool        Serialize(IO::Stream&) override    { Note(this, 5); return true; }
     void*       Reconstruct() override       { Note(this, 6); return this; }
     void        Destruct() override          { Note(this, 7); }
     virtual void* Construct()                { Note(this, 8); return this; }   // [8]

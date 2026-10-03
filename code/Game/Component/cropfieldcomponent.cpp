@@ -238,11 +238,11 @@ void* CropFieldComponent::CreateInPlaceObject(void* storage) {
 }
 
 // [3] 0x14011ae70 (slot 3 is the first call into this class on a load-from-save).
-void CropFieldComponent::Persist(void* stream) {
+void CropFieldComponent::Persist(IO::Stream& stream) {
     // Base Component serialization
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (Persist takes void*)
+    IO::Stream& s = stream;
 
     // Empty serializer block (version 0, immediately destroyed)
     { IO::Serializer emptySerializer(s, 0); }

@@ -294,12 +294,12 @@ Profession** MarketWork::GetTarget(Profession** outPtr) {
 // Version 1+ (new format):
 //   Call MarketWork_helper_b290 directly on self+0x48.
 //
-void MarketWork::Persist(void* stream) {
+void MarketWork::Persist(IO::Stream& stream) {
     // Call Work::Serialize base
     Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
-    // Create serializer with version=1 (Persist's stream is void* in Work.h: LEFT)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);
+    // Create serializer with version=1
+    IO::Serializer serializer(stream, 1);
 
     int version = serializer.GetVersion();
 

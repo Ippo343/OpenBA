@@ -264,7 +264,7 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
     // ?PersistObject@InternalFactory@Object@@ (0x1800bff10), the member by
     // name (B3R RT-Core) on `Object::InternalFactory::Get()`.
     *self = reinterpret_cast<RtObject::Internal*>(
-        ::Object::InternalFactory::Get()->PersistObject(ser._stream, gen, index, type));
+        ::Object::InternalFactory::Get()->PersistObject(*ser._stream, gen, index, type));
 }
 
 }  // namespace Object

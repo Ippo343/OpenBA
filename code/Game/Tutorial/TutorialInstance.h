@@ -34,7 +34,7 @@ public:
     TutorialInstance();                                            // inlined in 0x140028120
 
     ~TutorialInstance() override = default;                        // [0] 0x1400281a0
-    void          Persist(void* stream) override;                  // [3] 0x1400e1520
+    void          Persist(IO::Stream& stream) override;                  // [3] 0x1400e1520
 
 public:
     int32_t  currentStep;        // +0x10: current step index (-1 = uninitialized)

@@ -73,9 +73,9 @@ BuildDescription::~BuildDescription() {
 }
 
 // [5] 0x140109140: stream order as retail.
-bool BuildDescription::Serialize(void* stream) {
+bool BuildDescription::Serialize(IO::Stream& stream) {
     if (!::System::MemoryAllocator::_singleton) return true;   // standalone: the allocator is unwired
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    IO::Serializer ser(stream, 0);
     // Preserve any already-populated requirement array across re-loads. The engine
     // re-invokes this Serialize for an already-loaded resource.
     //

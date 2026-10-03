@@ -25,7 +25,7 @@ public:
     // 0x140012720 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~ModBrowseUI() override = default;                            // [0] 0x140012720
-    void Persist(void* /*stream*/) override {}   // [3] 0x14006d390  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14006d390  RET 0 in retail
 
 };
 

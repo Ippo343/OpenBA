@@ -858,7 +858,7 @@ public:
     // *** ITS OWN, not `Object::External`'s. *** `MOV EAX,1 ; RET`, six bytes,
     // reading NEITHER `this` NOR the `Filename&` (no RCX, no RDX operand).
     CompileResult Compile(const System::Filename& path) override;  // [4] 0x1800a21c0
-    bool        Serialize(void* stream) override;           // [5] 0x1800a21d0
+    bool        Serialize(IO::Stream& stream) override;           // [5] 0x1800a21d0
     Object::External* Reconstruct() override;               // [6] 0x180012e10
     void        Destruct() override;                        // [7] 0x180012e40
     virtual Object::External* Construct();                  // [8] 0x180012e30 — B5-16

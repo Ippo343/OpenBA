@@ -105,10 +105,9 @@ void* ImmigrationComponent::CreateInPlaceObject(void* storage) {
 // Serializer scope (the controller block), then one scope carrying field50, the
 // +0x58 entity array (count, resize on a load, each InternalBasePtr — cleared when
 // it is not a ComponentEntity) and the Time at +0x48.
-void ImmigrationComponent::Persist(void* stream) {
+void ImmigrationComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
     { IO::Serializer scope(*st, 0); }
     IO::Serializer ser(*st, 0);
     ser.Serialize(arrivedCount, nullptr);

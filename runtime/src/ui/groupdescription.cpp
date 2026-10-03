@@ -121,10 +121,10 @@ void GroupDescription::Destruct() { this->~GroupDescription(); }
 // disassembly is `MOV RAX,[RSP+0x28] ; CMP dword [RAX+8],0` at
 // 0x180117d6c..0x180117d71, one deref deeper than the first test at
 // 0x180117d3c. Transcribed rather than folded.
-bool GroupDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool GroupDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ElementDescription::Serialize(stream);                     // 180117d1a
+    ElementDescription::Serialize(*stream);                     // 180117d1a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined              // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = ser._readerWriter; // 180117d4a

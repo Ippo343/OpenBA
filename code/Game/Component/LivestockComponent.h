@@ -35,7 +35,7 @@ public:
 
     // no own work
     ~LivestockComponent() override = default;                     // [0] 0x140035680
-    void Persist(void* stream) override;                          // [3] 0x140123e10
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140123e10
     void OnAdded() override;                                      // [6] 0x140123c70
     void OnRemove() override;                                     // [7] 0x140123c00
     void Update(void* time) override;                             // [9] 0x140123b50

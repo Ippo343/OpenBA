@@ -69,8 +69,8 @@ CreateRemovalDescription::~CreateRemovalDescription() {
 }
 
 // [5] 0x140119ac0: stream order as retail.
-bool CreateRemovalDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CreateRemovalDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_b20, nullptr);
     int count = _refCount;
     ser.Serialize(count, nullptr);   // a local copy, as retail

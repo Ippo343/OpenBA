@@ -91,11 +91,11 @@ static RawMaterialDescription* FindRawMaterialDesc(const ComponentDescription* d
 // Versioned serialization with version 3 serializer.
 // Version gates at 0, 1, 2, and 3 control which fields are serialized.
 // ============================================================
-void CreateRawMaterial::Persist(void* stream) {
+void CreateRawMaterial::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize resource data (version 3)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 3);
 
     // Type reference (+0x20)
     Reimpl_ExternalPtr_Serialize_StringTable(&descEntity, &ser);   // 0x140002340

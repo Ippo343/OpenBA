@@ -40,7 +40,7 @@ public:
     void AddMaterial(ComponentDescription* material, int count);
     // Retail 0x140022dd0: frees the +0x30 carrier list, then Action's dtor.
     ~PickupStoredRawMaterial() override;                       // [0] 0x140022dd0 (frees the +0x30 list)
-    void Persist(void* stream) override;                       // [3] 0x1400ca0d0
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400ca0d0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c9d40
     void CheckEntity() override;                               // [8] 0x1400c9c70
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c9bf0

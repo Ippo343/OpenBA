@@ -31,7 +31,7 @@ public:
 
     ~TerraformDescription() override = default;                            // [0] 0x14000ce30
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x140057730
-    bool              Serialize(void* stream) override;                    // [5] 0x1400576a0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x1400576a0
     Object::External* Reconstruct() override;                              // [6] 0x14000cdc0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14000ce20

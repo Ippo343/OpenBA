@@ -46,7 +46,7 @@ public:
     // PORT GAP (retail 0x1400016d0) — B38 D2: retail frees the emitter array at
     // +0x38; the tree never did (Inert_ScalarDtor). Kept as the tree's.
     ~AmbientEmitterComponent() override = default;                // [0] 0x1400016d0
-    void Persist(void* stream) override;                          // [3] 0x140042f30
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140042f30
     void OnAdded() override;                                      // [6] 0x140042ba0
     void OnRemove() override;                                     // [7] 0x140042b90 PORT GAP
 

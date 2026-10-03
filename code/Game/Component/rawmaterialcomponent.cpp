@@ -196,10 +196,10 @@ RawMaterialComponent::RawMaterialComponent()
 //   - age (Time accumulator)
 //   - profession (version >= 2 only)
 
-void RawMaterialComponent::Persist(void* stream) {
+void RawMaterialComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 2);   // LEFT: Component::Persist takes the stream as void* (the base's signature)
+    IO::Serializer ser(stream, 2);
 
     ser.Serialize(quantity, nullptr);
     age.Serialize(ser);

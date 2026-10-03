@@ -31,9 +31,9 @@ DEFINE_EXE_ABSTRACT_TYPE(AutoPickupWork, "Work")
 // QUALIFIED call here, or it would recurse through slot 3), then one EMPTY
 // Serializer(stream, 0) scope: AutoPickupWork has no fields of its own, but the
 // empty scope still occupies bytes in the save encoding.
-void AutoPickupWork::Persist(void* stream) {
+void AutoPickupWork::Persist(IO::Stream& stream) {
     Work::Persist(stream);
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(stream, 0);
 }
 
 // [8] 0x1400e3f30: find the AutoPickupComponent on the owning entity (+0x10) through

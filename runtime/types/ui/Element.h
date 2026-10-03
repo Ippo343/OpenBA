@@ -379,7 +379,7 @@ public:
     //         _ParentTypeName 0x180035410, CreateNewObject 0x180035450
     DECLARE_TYPE_INHERITED_INPLACE(Element)
 public:
-    void        Persist(void* stream) override;                   // [3] 0x180116870  (IO::Stream&)
+    void        Persist(IO::Stream& stream) override;                   // [3] 0x180116870  (IO::Stream&)
     virtual void ComputeSize() = 0;                               // [4] _purecall
     virtual void ComputeLayout(int32_t x, int32_t y,
                                int32_t w, int32_t h);             // [5] 0x1801168d0

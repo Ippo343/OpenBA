@@ -170,12 +170,12 @@ int BuildStructure::GetPriority() {
 // ============================================================
 // BuildStructure::Serialize (0x1400E5850)
 // ============================================================
-void BuildStructure::Persist(void* stream) {
+void BuildStructure::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // IO::Serializer block (version 0)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // Serialize bool at +0x48 (the field is uint8_t storage)
     ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);

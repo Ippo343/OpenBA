@@ -320,7 +320,7 @@ void DialogInstance::SaveSettings() {
     IO::Serializer ser(ms, 0);
     IO::ReaderWriter* rw = ser._readerWriter;
 
-    OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
+    OnSerializeSettings(ms);                   // own slot 9 — VIRTUAL
 
     int32_t count = _controllers._size;
     rw->SerializeInt(count, nullptr);           // +0xa0
@@ -332,7 +332,7 @@ void DialogInstance::SaveSettings() {
 
         IO::Serializer ser2(ms, 0);
 
-        _controllers._data[i]->OnSerializeSettings(&ms);   // controller slot 10 (re-read)
+        _controllers._data[i]->OnSerializeSettings(ms);   // controller slot 10 (re-read)
         // ~Serializer: `if (rw2) delete rw2`.
     }
     // ~Serializer (`if (rw) delete rw`), then ~MemoryStream.
@@ -377,7 +377,7 @@ void DialogInstance::OnOpened() {                              // [4]
     IO::Serializer ser(ms, 0);
     IO::ReaderWriter* rw = ser._readerWriter;
 
-    OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
+    OnSerializeSettings(ms);                   // own slot 9 — VIRTUAL
 
     int32_t count = 0;
     rw->SerializeInt(count, nullptr);           // +0xa0
@@ -401,7 +401,7 @@ void DialogInstance::OnOpened() {                              // [4]
         if (found < 0) {
             rw2->Skip();                        // +0x10
         } else {
-            _controllers._data[found]->OnSerializeSettings(&ms);   // controller slot 10
+            _controllers._data[found]->OnSerializeSettings(ms);   // controller slot 10
         }
         // ~Serializer: `if (rw2) delete rw2`.
     }

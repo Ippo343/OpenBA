@@ -35,7 +35,7 @@ public:
 
     // 0x140128c40
     ~PickingComponent() override = default;                       // [0]  0x140036fa0
-    void Persist(void* stream) override;                          // [3]  0x140128bb0
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140128bb0
     void Startup() override;                                      // [4]  0x140128c30 PORT GAP
     void OnAdded() override;                                      // [6]  0x140128b90
     void OnRemove() override;                                     // [7]  0x140128b50

@@ -28,7 +28,7 @@ public:
     RemoveNaturalResource(ComponentEntity* const* resource, CitizenComponent* const* citizen,
                           bool flag);   // 0x1400cadf0
     ~RemoveNaturalResource() override = default;               // [0] 0x140022fe0
-    void Persist(void* stream) override;                       // [3] 0x1400cac50
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400cac50
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400cab10
     void CheckEntity() override;                               // [8] 0x1400caaa0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400caa20

@@ -100,9 +100,9 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
 }
 
 // [5] 0x1401190e0: stream order as retail.
-bool ConsumeProduceDescription::Serialize(void* stream) {
+bool ConsumeProduceDescription::Serialize(IO::Stream& stream) {
     if (!::System::MemoryAllocator::_singleton) return true;   // standalone: unwired doors
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
     ser.Serialize(_recipeCount, nullptr);

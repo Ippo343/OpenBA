@@ -29,7 +29,7 @@ public:
 
     // 0x140130380
     ~ZoneComponent() override = default;                          // [0] 0x14003a870
-    void Persist(void* stream) override;                          // [3] 0x1401302f0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x1401302f0
     void OnAdded() override;                                      // [6] 0x1401301f0
     void OnRemove() override;                                     // [7] 0x140130080
 };

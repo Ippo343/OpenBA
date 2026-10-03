@@ -223,8 +223,9 @@ Object::Base* PointList::CreateInPlaceObject(void* place) {
 // only THEN _points (+0x30, count at +0x38) — retail serializes the SECOND
 // array field before the first. Per Point: String, kArrayFloat(n=3) at +8,
 // kScalarFloat at +0x14.
-bool PointList::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
+bool PointList::Serialize(IO::Stream& streamv) {
+    void* const streamvRaw = &streamv;
+    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
     Serializer ser = { stream, nullptr };
     void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)

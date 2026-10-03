@@ -654,17 +654,17 @@ void* ResidenceComponent::CreateInPlaceObject(void* storage) {
 //   Time::Serialize(self+0x48, local2)
 //   Serializer_Dtor(local2)
 
-void ResidenceComponent::Persist(void* stream) {
+void ResidenceComponent::Persist(IO::Stream& stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // Empty serializer block (version 0)
     {
-        IO::Serializer empty(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+        IO::Serializer empty(stream, 0);
     }
 
     // Versioned serializer block (version 0) with resident data
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 0);
 
     // Serialize the family count via a local copy
     // (same pattern as ConsumeProduceComponent — local copy needed so resize

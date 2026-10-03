@@ -85,10 +85,10 @@ void ContainerDescription::Destruct() { this->~ContainerDescription(); }
 // descriptions, and only THEN the two bools at +0x70/+0x71 — which sit between
 // the ints in memory. Sorting them into offset order would change the byte
 // stream a .rsc parses.
-bool ContainerDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool ContainerDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);              // 1800cceea (qualified)
+    UI::ElementDescription::Serialize(*stream);              // 1800cceea (qualified)
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;

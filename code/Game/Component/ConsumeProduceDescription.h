@@ -55,7 +55,7 @@ public:
 
     ~ConsumeProduceDescription() override;                                 // [0] 0x1400323e0
     int32_t           GetFileVersion() const override { return 12; }    // [3] 0x140119200
-    bool              Serialize(void* stream) override;                    // [5] 0x1401190e0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x1401190e0
     Object::External* Reconstruct() override;                              // [6] 0x1400323b0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400323d0

@@ -422,11 +422,10 @@ Object::Base* MaterialInstance::CreateInPlaceObject(void* place) {
     return ::new (place) MaterialInstance();
 }
 
-bool MaterialInstance::Serialize(void* streamv) {
+bool MaterialInstance::Serialize(IO::Stream& streamv) {
     ++g_matSerCalls;
 
-    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);                          // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* const rw = ser._readerWriter;
 

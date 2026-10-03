@@ -42,7 +42,7 @@ public:
     // PORT GAP (retail 0x140054660) — B38 D2: retail frees the arrays at +0x50
     // and +0x38; the tree never did (Inert_ScalarDtor).
     ~PopulationComponent() override = default;                    // [0]  0x14000b0a0
-    void Persist(void* stream) override;                          // [3]  0x1400544a0
+    void Persist(IO::Stream& stream) override;                          // [3]  0x1400544a0
     void Startup() override;                                      // [4]  0x140054220
     void OnAdded() override;                                      // [6]  0x1400541c0
     void OnRemove() override;                                     // [7]  0x140054180

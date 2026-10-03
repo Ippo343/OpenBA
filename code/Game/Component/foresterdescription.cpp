@@ -35,8 +35,8 @@ ForesterDescription::ForesterDescription()
       _type(0) {}
 
 // [5] 0x14011fa80: stream order as retail.
-bool ForesterDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+bool ForesterDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 1);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;

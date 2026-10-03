@@ -120,10 +120,10 @@ TextDescription::~TextDescription() {
 // THE LAST FIELD IS CONDITIONAL. `_i8c` is serialized only when the reader's
 // own version is >= 1, OR when the encoding's vtable slot 0 predicate says no.
 // The two are read in THAT order and the `||` short-circuits.
-bool TextDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool TextDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 18011ee4a
+    UI::ElementDescription::Serialize(*stream);                 // 18011ee4a
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 1.

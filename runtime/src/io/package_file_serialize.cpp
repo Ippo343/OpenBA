@@ -191,10 +191,10 @@ void RecArrayUInt(::IO::ReaderWriter* rw, int32_t n, uint32_t* data) {
 // that emits fields in a different order writes a different file.
 namespace IO {
 
-bool PackageFile::Serialize(void* streamv) {
+bool PackageFile::Serialize(IO::Stream& streamv) {
     // LEFT: the slot's parameter is `void*` (Object::External's slot 5 in
     // runtime/types/object/External.h, read-only to this block).
-    Serializer ser(*static_cast<Stream*>(streamv), 0);          // 1800b60ca..e6
+    Serializer ser(streamv, 0);          // 1800b60ca..e6
     ReaderWriter* const rw = ser._readerWriter;
 
     RtSystem::Sys(_name).Serialize(&ser);                       // 1800b60ea

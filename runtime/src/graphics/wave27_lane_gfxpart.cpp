@@ -247,11 +247,10 @@ uint32_t RngNext(System::Random& rng) {
 
 namespace Graphics {
 
-bool Particle::Serialize(void* streamv) {
+bool Particle::Serialize(IO::Stream& streamv) {
     ++g_particleSerialize;
 
-    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Stream& stream = streamv;
 
     IO::Serializer ser(stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;

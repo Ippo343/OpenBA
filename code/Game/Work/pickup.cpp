@@ -61,12 +61,12 @@
 //   + InternalBasePtr::Serialize(citizenIBP at +0x50) + IsDerivedFrom validate
 //   + if version > 0: the ExternalPtr<Profession> at +0x58 (0x140018020)
 // ============================================================
-void Pickup::Persist(void* stream) {
+void Pickup::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create serializer (version=2) (Persist's stream is void* in Work.h: LEFT)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 2);
+    // Create serializer (version=2)
+    IO::Serializer serializer(stream, 2);
 
     // Serialize the int status at +0x48
     serializer.Serialize(status, nullptr);

@@ -81,7 +81,7 @@ public:
     DECLARE_TYPE(NumberDescription)
 public:
     int32_t     GetFileVersion() const override;                 // [3] 0x180118e20
-    bool        Serialize(void* stream) override;                // [5] 0x180118e30
+    bool        Serialize(IO::Stream& stream) override;                // [5] 0x180118e30
     Object::External* Reconstruct() override;                    // [6] 0x18004a4c0
     void        Destruct() override;                             // [7] 0x18004a610
     Object::InternalPtr<Element>* CreateInstance(

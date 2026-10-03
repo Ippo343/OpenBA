@@ -68,21 +68,21 @@ void NoteDtor(const void* self) {
 // ===========================================================================
 namespace Achievement {
 int32_t     Achievement::GetFileVersion() const { return 3; }
-bool        Achievement::Serialize(void*) { return true; }
+bool        Achievement::Serialize(IO::Stream&) { return true; }
 Object::External* Achievement::Reconstruct() { return this; }
 void        Achievement::Destruct() {}
 Object::External* Achievement::Construct() { return this; }
 Achievement::~Achievement() { NoteDtor(this); }
 
-void        AchievementInstance::Persist(void*) {}
+void        AchievementInstance::Persist(IO::Stream&) {}
 AchievementInstance::~AchievementInstance() { ++g_aiDtorRuns; }
 
 int32_t     Goal::GetFileVersion() const { return 0x10000; }
-bool        Goal::Serialize(void*) { return true; }
+bool        Goal::Serialize(IO::Stream&) { return true; }
 Object::Type* Goal::GetInstanceType(Object::Type* ret) const { return ret; }
 Goal::~Goal() { NoteDtor(this); }
 
-void        GoalInstance::Persist(void*) {}
+void        GoalInstance::Persist(IO::Stream&) {}
 void        GoalInstance::Startup() {}
 void        GoalInstance::Update(const System::Time&, const GoalList&) {}
 Goal::GoalState GoalInstance::CheckGoalState() const { return Goal::kNotMet; }

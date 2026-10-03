@@ -56,8 +56,8 @@ CreateDragDescription::CreateDragDescription()
       _created(nullptr) {}
 
 // [5] 0x140119750: stream order as retail.
-bool CreateDragDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CreateDragDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_shape, nullptr);
     ser.Serialize(_i28, nullptr);
     ser.Serialize(_i2c, nullptr);

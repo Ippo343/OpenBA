@@ -35,8 +35,8 @@ OrchardDescription::OrchardDescription()
       _boostRate(0.0f) {}
 
 // [5] 0x140052300: stream order as retail.
-bool OrchardDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+bool OrchardDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 1);
     ser.Serialize(_spacingX, nullptr);
     ser.Serialize(_spacingY, nullptr);
     ser.Serialize(_boostRate, nullptr);

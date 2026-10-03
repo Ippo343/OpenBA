@@ -31,7 +31,7 @@ public:
 
     ~TutorialImageHotKey() override;                               // [0] 0x140027d70
     int32_t           GetFileVersion() const override { return 0x1001; }  // [3] 0x1400e0620
-    bool              Serialize(void* stream) override;            // [5] 0x1400e0540
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e0540
     Object::External* Reconstruct() override;                      // [6] 0x140027d50
     // [7] Destruct: TutorialImage's (the shared 0x140001640 body)
     Object::External* Construct() override;                        // [8] 0x140027d40

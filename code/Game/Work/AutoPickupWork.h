@@ -32,7 +32,7 @@ class AutoPickupWork : public Work {
 public:
     ~AutoPickupWork() override = default;                  // [0] 0x1400294e0
     // [1] TypeName 0x1400294d0 and [2] Type 0x1400294c0: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void          Persist(void* stream) override;          // [3] 0x1400e3f80
+    void          Persist(IO::Stream& stream) override;          // [3] 0x1400e3f80
     int           Cleanup() override;                      // [8] 0x1400e3f30
 
 protected:

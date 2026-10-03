@@ -196,7 +196,7 @@ int32_t GeneratedImageBuffer::GetFileVersion() const { return 7; }
 // qualified non-virtual call. It must stay qualified: an unqualified
 // `Serialize(stream)` would be a recursive virtual call into this very slot.
 // ============================================================================
-bool GeneratedImageBuffer::Serialize(void* stream) {
+bool GeneratedImageBuffer::Serialize(IO::Stream& stream) {
     Video::ImageBuffer::Serialize(stream);
     return true;
 }
@@ -233,7 +233,7 @@ int32_t FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
 // leaves a loaded object with the file's `kind` instead of 4.
 // Video::ImageBuffer::IsGenerated() is `kind == 4`, which is what 4 means here.
 // ============================================================================
-bool FrameCopyImageBuffer::Serialize(void* stream) {
+bool FrameCopyImageBuffer::Serialize(IO::Stream& stream) {
     _kind = 4;
     Video::ImageBuffer::Serialize(stream);
     _kind = 4;
@@ -437,11 +437,8 @@ void ReflectionImageBuffer::Generate(void* context, int32_t generation) const {
 // ============================================================================
 namespace Graphics {
 
-bool ReflectionImageBuffer::Serialize(void* stream) {
-    // B.3.5 bridge: the slot's parameter is `IO::Stream&` in retail, but
-    // `Object::External::Serialize` is declared `bool(void*)` across the whole
-    // External family and that signature is not this block's to change.
-    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
+bool ReflectionImageBuffer::Serialize(IO::Stream& stream) {
+    IO::Stream& s = stream;
 
     _kind = 5;
     Video::ImageBuffer::Serialize(stream);         // the BASE-CLASS arm, qualified

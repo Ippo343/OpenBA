@@ -155,7 +155,7 @@ public:
     DECLARE_TYPE(FrameCopyImageBuffer)
 public:
     int32_t           GetFileVersion() const override;             // [ 3] 0x1800a3c70 — 0x1007
-    bool              Serialize(void* stream) override;            // [ 5] 0x1800a3c40
+    bool              Serialize(IO::Stream& stream) override;            // [ 5] 0x1800a3c40
     Object::External* Reconstruct() override;                      // [ 6] 0x18001f130
     void              Destruct() override;                         // [ 7] 0x18001f160
     Object::External* Construct() override;                        // [ 8] 0x18001f150

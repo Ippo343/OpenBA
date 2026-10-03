@@ -50,7 +50,7 @@ public:
     // (stamp Work, ~Internal), which is what this empty dtor + the compiler chain
     // still does. Whether retail frees the +0x50 citizen BST here is not read.
     ~FireWork() override = default;                                 // [0]  0x14002a230
-    void  Persist(void* stream) override;                           // [3]  0x1400e9a50
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e9a50
     int   Execute(CitizenComponent** citizenIBP, System::Time* time) override;  // [4]  0x1400e9620
     int   OnComplete(CitizenComponent** citizenIBP, ComponentEntity** arg2, int arg3) override;    // [6]  0x1400e9600
     int   OnCancel(CitizenComponent** citizenIBP, ComponentEntity** arg2, int arg3) override;      // [7]  0x1400e95f0

@@ -38,8 +38,8 @@ QuarryDescription::QuarryDescription()
       _maxDepth(-7.0f) {}
 
 // [5] 0x140055320: stream order as retail.
-bool QuarryDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool QuarryDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_maxDepth, nullptr);
     ser.Serialize(_initialDepth, nullptr);
     Reimpl_ExternalPtr_Serialize_StringTable(&_floorMesh, &ser);   // 0x14000b7b0

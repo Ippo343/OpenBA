@@ -101,10 +101,10 @@ void ImageDescription::Destruct() { this->~ImageDescription(); }
 // NOTE THE TWO FIELD SERIALIZERS TAKE THE PAIR, NOT THE READER: both are
 // `LEA RDX,[RSP+0x28]` (0x180118503, 0x180118511), the {stream, readerWriter}
 // pair, which is why it has to live on this frame.
-bool ImageDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool ImageDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ElementDescription::Serialize(stream);                     // 1801184ca
+    ElementDescription::Serialize(*stream);                     // 1801184ca
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined              // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = ser._readerWriter; // 1801184fa

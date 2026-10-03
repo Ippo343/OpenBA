@@ -31,7 +31,7 @@ public:
     // 0x1400145f0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~ToolUI() override = default;                                 // [0] 0x1400145f0
-    void Persist(void* /*stream*/) override {}   // [3] 0x14007c070  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14007c070  RET 0 in retail
     void OnCreated() override;   // [4] 0x14007bd70
     void OnUpdate(const System::Time& time) override;   // [8] 0x14007b9b0
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,

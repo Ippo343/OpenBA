@@ -34,7 +34,7 @@ public:
     ~TutorialSetup() override = default;                           // [0] 0x140028390
     // [1] TypeName 0x140028380 and [2] Type 0x140028370: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     int32_t       GetFileVersion() const override { return 1; }    // [3] 0x1400e2040
-    bool          Serialize(void* stream) override;                // [5] 0x1400e2000
+    bool          Serialize(IO::Stream& stream) override;                // [5] 0x1400e2000
     // [6] Reconstruct, [7] Destruct: pure (External's)
     virtual void  Begin() = 0;                                     // [8] pure
     virtual void  Update(void* time) = 0;                          // [9] pure

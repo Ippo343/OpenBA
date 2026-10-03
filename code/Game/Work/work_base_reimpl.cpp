@@ -228,8 +228,8 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 // type 0x1401c8070) are post-validated and nulled on type mismatch; ints at +0x20/+0x28;
 // +0x24 is version-gated (copied from +0x20 pre-v1); two Times + an int at +0x30..+0x40
 // added at v3+.   Caller signature: void fn(void* self, void* stream)
-void Work::Persist(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 3);   // Persist's stream is void*
+void Work::Persist(IO::Stream& stream) {
+    IO::Serializer ser(stream, 3);
 
     // LEFT: +0x10 / +0x18 are InternalPtrs retail serializes through
     // InternalBasePtr::Serialize; the members are declared T* (their readers in

@@ -52,7 +52,7 @@ public:
     // [1]/[2]: the abstract base answers its own registration by name (B38 D4,
     // as the pilot's Component); every leaf overrides both.
     // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void        Persist(void* stream) override;                   // [3] 0x1400c4b40
+    void        Persist(IO::Stream& stream) override;                   // [3] 0x1400c4b40
     // [4]-[7] B4 P2 S2, LEFT void*: retail's actionStack is the ActionStack at
     // CharacterComponent +0x48 and `time` a System::Time*, but every caller holds them
     // untyped (CitizenAI_ActionExecutor_c4c50 takes the stack as int64_t* and the time

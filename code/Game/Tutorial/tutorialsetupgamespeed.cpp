@@ -69,10 +69,9 @@ void TutorialSetupGameSpeed::Begin() {
 // TutorialSetupGameSpeed::Serialize (vtable +0x28, 0x1400e2d90)
 // ============================================================
 // speed (int32) and _field24 (bool).
-bool TutorialSetupGameSpeed::Serialize(void* stream) {
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool TutorialSetupGameSpeed::Serialize(IO::Stream& stream) {
+    // The serializer.
+    IO::Serializer ser(stream, 0);
 
     ser.Serialize(speed, nullptr);
     ser.Serialize(_field24, nullptr);

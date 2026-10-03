@@ -45,7 +45,7 @@ public:
     // 0x1400e2bf0
     ~TutorialSetupDialog() override;                               // [0] 0x140028620
     int32_t           GetFileVersion() const override { return 6; }// [3] 0x1400e2be0
-    bool              Serialize(void* stream) override;            // [5] 0x1400e2a60
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e2a60
     Object::External* Reconstruct() override;                      // [6] 0x140028600
     void              Destruct() override;                         // [7] 0x140001640
     void              Begin() override;                            // [8] 0x1400e25f0

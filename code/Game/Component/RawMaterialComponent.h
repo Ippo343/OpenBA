@@ -35,7 +35,7 @@ public:
 
     // 0x1401293c0
     ~RawMaterialComponent() override = default;                   // [0] 0x1400373c0
-    void Persist(void* stream) override;                          // [3] 0x140129330
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140129330
     void Startup() override;                                      // [4] 0x1401292c0
     void OnAdded() override;                                      // [6] 0x1401291d0
     void Update(void* time) override;                             // [9] 0x140129130 PORT GAP

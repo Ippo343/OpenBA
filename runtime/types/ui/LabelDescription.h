@@ -83,7 +83,7 @@ public:
     DECLARE_TYPE(LabelDescription)
 public:
     int32_t     GetFileVersion() const override;                 // [3] 0x1800d2950
-    bool        Serialize(void* stream) override;                // [5] 0x1800d2820
+    bool        Serialize(IO::Stream& stream) override;                // [5] 0x1800d2820
     Object::External* Reconstruct() override;                    // [6] 0x180042530
     void        Destruct() override;                             // [7] 0x180042560
     Object::InternalPtr<Element>* CreateInstance(

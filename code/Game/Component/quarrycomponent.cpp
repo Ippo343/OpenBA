@@ -30,9 +30,9 @@ QuarryComponent::QuarryComponent() {
 
 // [3] 0x140055230 — Component::Persist (a direct call in retail) + one empty
 // Serializer scope.
-void QuarryComponent::Persist(void* stream) {
+void QuarryComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(stream, 0);
 }
 // [6] 0x140055220 / [7] 0x140055210 — the class's own `RET` bodies.
 void QuarryComponent::OnAdded() {}

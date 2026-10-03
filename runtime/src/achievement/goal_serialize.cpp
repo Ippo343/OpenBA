@@ -141,8 +141,8 @@ namespace Achievement {
 // The slot's parameter is `void*` because `Object::External` declares it so
 // (External.h); the object behind it is retail's `IO::Stream`.
 // ============================================================================
-bool Goal::Serialize(void* streamv) {
-    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 0);
+bool Goal::Serialize(IO::Stream& streamv) {
+    IO::Serializer ser(streamv, 0);
 
     RtObject_ExternalPtrSerialize_StringTable(                      // 0x1800042a0, Goal+0x20
         AsExt(&_stringTable), reinterpret_cast<rt::io::Serializer*>(&ser));
@@ -163,8 +163,8 @@ bool Goal::Serialize(void* streamv) {
 // +0x98 is `uint` in RETAIL (+0xb0 in the profile build — never copy offsets
 // from it). The record's NAME argument is NULL (`XOR R8D,R8D` at 0x18009efcc).
 // ============================================================================
-void GoalInstance::Persist(void* streamv) {
-    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 0);
+void GoalInstance::Persist(IO::Stream& streamv) {
+    IO::Serializer ser(streamv, 0);
 
     RtObject_ExternalPtrSerialize_Goal(                             // 0x180005dc0, GoalInstance+0x18
         AsExt(&_goal), reinterpret_cast<rt::io::Serializer*>(&ser));

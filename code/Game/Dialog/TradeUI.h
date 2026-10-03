@@ -128,7 +128,7 @@ public:
     void OnUpdate(const System::Time& time) override;   // [8] 0x1400827b0
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140081f20
-    void OnSerializeSettings(void* stream) override;   // [10] 0x1400868c0
+    void OnSerializeSettings(IO::Stream& stream) override;   // [10] 0x1400868c0
 
     // ---- non-virtual members (retail addresses) ---------------------------
     void OnTradeButton();                       // 0x140081420 (tradeui_checkout.cpp)

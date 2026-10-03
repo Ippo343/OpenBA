@@ -52,7 +52,7 @@ public:
     // [1] TypeName / [2] Type: the abstract base answers its own record
     // (DEFINE_EXE_TYPE, ENDGAME B.3.9 RF); every leaf overrides.
     // [1] TypeName 0x140031c40 and [2] Type 0x140031c30: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void        Persist(void* stream) override;                   // [3]  0x1401189b0
+    void        Persist(IO::Stream& stream) override;                   // [3]  0x1401189b0
     virtual void     Startup();                                   // [4]  0x140118a50 RET
     virtual void     Slot5();                                     // [5]  0x140118a60 RET
     virtual void     OnAdded();                                   // [6]  0x140118820 RET
@@ -99,6 +99,6 @@ static_assert(offsetof(Component, _description) == 0x18, "Component +0x18 (0x140
 static_assert(offsetof(Component, _flags)       == 0x20, "Component +0x20 flags = 0x80 (0x1401188e6)");
 
 // Door for Component::Persist (retail 0x1401189b0), reached by address (B38 D5).
-void Component_SerializeReimpl(void* self, void* stream);
+void Component_SerializeReimpl(void* self, IO::Stream& stream);
 // 0x140031d10 ExternalPtr<Description>::Serialize (the +0x18 reference).
 void Component_Helper1d10_Reimpl(void* extRefField, void* serializer);

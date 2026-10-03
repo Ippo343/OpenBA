@@ -32,7 +32,7 @@ public:
 
     // no own work
     ~AmbientEnvironmentComponent() override = default;            // [0] 0x140002170
-    void Persist(void* stream) override;                          // [3] 0x1400437e0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x1400437e0
     void Update(void* time) override;                             // [9] 0x140043690
 
     // ---- non-virtual members (retail addresses) ----

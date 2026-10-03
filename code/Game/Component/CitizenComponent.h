@@ -91,7 +91,7 @@ public:
     // frees the +0x98 array and runs ~String on +0x28; the tree's
     // Inert_ScalarDtor never did.
     ~CitizenComponent() override = default;                       // [0]  0x140030270
-    void Persist(void* stream) override;                          // [3]  0x140114160
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140114160
     void Startup() override;                                      // [4]  0x140114050
     void OnAdded() override;                                      // [6]  0x140114000
     void OnRemove() override;                                     // [7]  0x140113ca0

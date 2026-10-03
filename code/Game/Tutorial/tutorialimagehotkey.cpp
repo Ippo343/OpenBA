@@ -76,19 +76,17 @@ TutorialImageHotKey::~TutorialImageHotKey() {
 // ============================================================
 // Phase 1: the TutorialImage fields (int +0x28, int +0x2c, external ref +0x20)
 // Phase 2: the hot key string +0x30, resolved on load
-// LEFT (both phases): External::Serialize hands the stream in as void* (the
-// runtime base's signature).
-bool TutorialImageHotKey::Serialize(void* stream) {
+bool TutorialImageHotKey::Serialize(IO::Stream& stream) {
     // Phase 1: Base TutorialImage fields
     {
-        IO::Serializer ser1(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer ser1(stream, 0);
         ser1.Serialize(imageWidth, nullptr);
         ser1.Serialize(imageHeight, nullptr);
         TutBase_SerializeImageRef(&imageRef, &ser1);
     }
 
     // Phase 2: HotKey-specific fields
-    IO::Serializer ser2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser2(stream, 0);
 
     // Serialize String at +0x30
     hotkeyRef.Name().Serialize(&ser2);

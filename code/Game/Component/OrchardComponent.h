@@ -66,7 +66,7 @@ public:
 
     // 0x140051ed0
     ~OrchardComponent() override;                                       // [0]  0x140009a70
-    void          Persist(void* stream) override;                       // [3]  0x140051de0
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x140051de0
     void          Startup() override;                                   // [4]  0x140051dd0
     uint32_t      CommandMask(int command) override;                    // [13] 0x140051c90
     void          Command(int command) override;                        // [14] 0x140051ba0

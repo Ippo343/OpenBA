@@ -63,7 +63,7 @@ public:
 
     // 0x140108f30
     ~BuildComponent() override;                                   // [0]  0x14002f4d0
-    void          Persist(void* stream) override;                 // [3]  0x140108d80
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x140108d80
     void          Startup() override {}                           // [4]  0x140108d60 `RET 0` (own)
     void          OnAdded() override;                             // [6]  0x140108d40
     void          OnRemove() override;                            // [7]  0x140108cb0

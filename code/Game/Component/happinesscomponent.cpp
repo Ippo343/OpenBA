@@ -430,10 +430,10 @@ void* HappinessComponent::CreateInPlaceObject(void* storage) {
 // [3] 0x14004aa80 — registered round-trips (save/load wave 2026-08-28):
 // Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
 // then a scope carrying registered (+0x28) as a bool.
-void HappinessComponent::Persist(void* stream) {
+void HappinessComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    IO::Serializer ser(stream, 0);
     ser.Serialize(registered, nullptr);
 }
 

@@ -29,7 +29,7 @@ public:
 
     // 0x140006d60: no body
     ~HerbalistComponent() override = default;                           // [0]  0x140006d60
-    void        Persist(void* stream) override;                         // [3]  0x14004b200
+    void        Persist(IO::Stream& stream) override;                         // [3]  0x14004b200
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14004b160
 };
 

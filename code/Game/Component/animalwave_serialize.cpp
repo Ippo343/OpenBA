@@ -110,12 +110,12 @@ inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) 
 // The member PopulationComponent::Persist (populationcomponent.cpp) calls this body;
 // it reads the fields by name.
 // ============================================================
-extern "C" void PopulationComponent_Serialize_Real(void* selfP, void* stream) {
-    if (!selfP || !stream) return;
+extern "C" void PopulationComponent_Serialize_Real(void* selfP, IO::Stream& stream) {
+    if (!selfP) return;
     PopulationComponent* self = reinterpret_cast<PopulationComponent*>(selfP);   // B4 FORWARD receiver
     self->Component::Persist(stream);   // 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c47c8 is PopulationDescription's
     // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
@@ -150,11 +150,10 @@ extern "C" void PopulationComponent_Serialize_Real(void* selfP, void* stream) {
     ser.Serialize(self->field_0x6c, nullptr);
 }
 
-void AnimalComponent::Persist(void* stream) {
-    if (!stream) return;
+void AnimalComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // Persist's stream is void*
+    IO::Serializer ser(stream, 1);
 
     moveTimer.Serialize(ser);
     ser.Serialize(habitatCell, nullptr);
@@ -176,11 +175,10 @@ void AnimalComponent::Persist(void* stream) {
     }
 }
 
-void HerdComponent::Persist(void* stream) {
-    if (!stream) return;
+void HerdComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     int count = memberCount;
     ser.Serialize(count, nullptr);
@@ -199,11 +197,10 @@ void HerdComponent::Persist(void* stream) {
     ser.Serialize(populationCell, nullptr);
 }
 
-void LivestockComponent::Persist(void* stream) {
-    if (!stream) return;
+void LivestockComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
     SerializeValidatedIBP(&pasture, ser, PastureComponent::TypeId());
     productionTimer.Serialize(ser);
 }

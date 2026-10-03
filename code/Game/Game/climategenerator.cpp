@@ -84,10 +84,10 @@ void ClimateGenerator::Destruct() { this->~ClimateGenerator(); }
 // ============================================================
 // Original: 0x140092fa0. Serializes all fields using IO::Serializer with
 // version 0. Returns 1 (success) -- original returns AL=1.
-bool ClimateGenerator::Serialize(void* stream) {
+bool ClimateGenerator::Serialize(IO::Stream& stream) {
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(serializer)) IO::Serializer(stream, 0);
     IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20

@@ -42,7 +42,7 @@ public:
     // 0x140021390 minus the free: ~Array on +0x30 (MemFree the data, zero the
     // header), then ~DialogController (and so ~Internal: RemoveObject).
     ~StorageUI() override = default;                              // [0] 0x140021390
-    void Persist(void* /*stream*/) override {}   // [3] 0x1400b8ca0  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x1400b8ca0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400b8820
     void OnUpdateLayout() override;   // [7] 0x1400b8450
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.

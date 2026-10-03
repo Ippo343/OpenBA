@@ -91,10 +91,10 @@ void NumberDescription::Destruct() { this->~NumberDescription(); }
 //
 // FOUR DIFFERENT SCALAR SLOTS IN FOUR CONSECUTIVE CALLS. This is the body that
 // says what the four fields' types are; nothing else in the class does.
-bool NumberDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool NumberDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 180118e4a
+    UI::ElementDescription::Serialize(*stream);                 // 180118e4a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 

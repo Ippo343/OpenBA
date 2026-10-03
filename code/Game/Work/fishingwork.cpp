@@ -628,12 +628,12 @@ int FishingWork::Validate() {
 //   6. Serialize spotStates int array (+0x58)
 //   7. Serialize retryCount (+0x68)
 // ============================================================
-void FishingWork::Persist(void* stream) {
+void FishingWork::Persist(IO::Stream& stream) {
     // 1. Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // 2. Create IO::Serializer (version=0)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer serializer(stream, 0);
 
     // 3. Serialize citizenCount at +0x50
     int citizenCount = this->citizenCount;

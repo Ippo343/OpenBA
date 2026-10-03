@@ -178,8 +178,9 @@ void RecUInt(ReaderWriter* rw, void* v) {
 // slot 5 that way (IO::Stream is still spelled as the rt::io POD in this tree).
 namespace UI {
 
-bool ElementDescription::Serialize(void* streamArg) {
-    Stream* const stream = static_cast<Stream*>(streamArg);
+bool ElementDescription::Serialize(IO::Stream& streamArg) {
+    void* const streamArgRaw = &streamArg;
+    Stream* const stream = static_cast<Stream*>(streamArgRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 

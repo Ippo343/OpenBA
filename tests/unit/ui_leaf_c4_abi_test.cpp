@@ -141,7 +141,7 @@ struct BaseElementProbe final : UI::Element {
 };
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -153,8 +153,8 @@ struct BareExternalProbe final : Object::External {
 // ===========================================================================
 #define C4_DESC_MARKERS(CLS, TAG)                                                          \
     int32_t UI::CLS::GetFileVersion() const { Note(this, TAG * 100 + 3); return TAG; }      \
-    bool UI::CLS::Serialize(void* s) {                                                      \
-        Note(this, TAG * 100 + 5, reinterpret_cast<intptr_t>(s)); return true; }           \
+    bool UI::CLS::Serialize(IO::Stream& s) {                                                      \
+        Note(this, TAG * 100 + 5, reinterpret_cast<intptr_t>(&s)); return true; }           \
     Object::External* UI::CLS::Reconstruct() { Note(this, TAG * 100 + 6); return this; }    \
     void UI::CLS::Destruct() { Note(this, TAG * 100 + 7); }                                 \
     Object::InternalPtr<UI::Element>* UI::CLS::CreateInstance(                              \

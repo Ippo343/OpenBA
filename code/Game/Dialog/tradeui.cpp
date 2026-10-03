@@ -1392,7 +1392,7 @@ check_type14:
 // and combo state, then refreshes the sorted display.
 
 // [10] 0x1400868c0
-void TradeUI::OnSerializeSettings(void* stream) {
+void TradeUI::OnSerializeSettings(IO::Stream& stream) {
     if (!tradeui_sa::IsSetUp(this)) return;
 
     // Find "tradeTabs" TabElement
@@ -1405,7 +1405,7 @@ void TradeUI::OnSerializeSettings(void* stream) {
     int sortIndex = _sortCombo->_currentItem;
 
     // Create serializer
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // LEFT: the slot's IO::Stream& is spelled void* (DialogController.h)
+    IO::Serializer serializer(stream, 1);
 
     // Only serialize if version > 0 (newer save format)
     int version = serializer.GetVersion();

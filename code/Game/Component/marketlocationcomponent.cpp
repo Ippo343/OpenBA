@@ -128,12 +128,11 @@ void* MarketLocationComponent::CreateInPlaceObject(void* storage) {
 //   CALL Serializer_Ctor(local2, stream, 0)
 //   CALL Serializer_Dtor(local2)
 
-void MarketLocationComponent::Persist(void* stream) {
+void MarketLocationComponent::Persist(IO::Stream& stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
 
     // Two empty serializer blocks (version 0)
     { IO::Serializer block1(*st, 0); }

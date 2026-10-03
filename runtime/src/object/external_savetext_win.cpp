@@ -139,7 +139,7 @@ uint32_t ExternalGetTypeId(External* self) {
     return reinterpret_cast<const ::Object::Base*>(self)->Type();        // B.3.x bridge
 }
 
-bool ExternalSerialize(External* self, void* stream) {
+bool ExternalSerialize(External* self, IO::Stream& stream) {
     return reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge
 }
 
@@ -304,7 +304,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
         // The object writes itself into the stream, and ITS answer is
         // SaveText's answer.
         ++g_st.serialized;
-        result = ExternalSerialize(self, ts);
+        result = ExternalSerialize(self, *ts);
         if (result) ++g_st.serializeTrue;
     } else {
         ++g_st.createFailed;

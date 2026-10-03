@@ -358,8 +358,8 @@ void ComponentEntity::RefreshEntityFlags() {
 // Serializes entity state: description external, component count,
 // component IBPs, entity flags. On load, creates components from
 // factory and inserts them into the component array.
-void ComponentEntity::Persist(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+void ComponentEntity::Persist(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // Serialize description ExternalPtr at +0x28
     Reimpl_ExternalPtr_Serialize_StringTable(&_description, &ser);

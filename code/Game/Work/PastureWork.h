@@ -42,7 +42,7 @@ public:
 
     // 0x1400f2ce0: frees the +0x48 citizen BST
     ~PastureWork() override;                                        // [0]  0x14002bf70
-    void  Persist(void* stream) override;                           // [3]  0x1400f2c60
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f2c60
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400f2370
     int   OnComplete(CitizenComponent** param2, ComponentEntity** arg2, int arg3) override;  // [6]  0x1400f2350
     int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;  // [7]  0x1400f22c0

@@ -48,7 +48,7 @@ public:
 
     // 0x140128070
     ~PastureComponent() override;                                       // [0]  0x140036910
-    void          Persist(void* stream) override;                       // [3]  0x140127f40
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x140127f40
     void          Startup() override;                                   // [4]  0x140127a50
     void          OnAdded() override;                                   // [6]  0x140127a30
     void          OnRemove() override;                                  // [7]  0x1401277e0

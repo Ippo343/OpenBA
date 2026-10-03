@@ -37,7 +37,7 @@ public:
 
     // 0x1400e5920: frees the tree and the array
     ~BuildStructure() override;                                     // [0]  0x140029680
-    void  Persist(void* stream) override;                           // [3]  0x1400e5850
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e5850
     int   Execute(CitizenComponent** citizenPtr, System::Time* context) override;  // [4]  0x1400e4fc0
     int   OnComplete(CitizenComponent** citizenIBP, ComponentEntity** unused, int slotIndex) override;  // [6]  0x1400e4f80
     int   OnCancel(CitizenComponent** citizenIBP, ComponentEntity** unused, int slotIndex) override;    // [7]  0x1400e4f40

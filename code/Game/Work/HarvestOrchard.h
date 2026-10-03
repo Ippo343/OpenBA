@@ -38,7 +38,7 @@ public:
 
     // frees the slot array and the BST
     ~HarvestOrchard() override;                                     // [0]
-    void  Persist(void* stream) override;                           // [3]  0x1400edea0
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400edea0
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]
     int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int param4) override;  // [6]
     int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int param4) override;    // [7]

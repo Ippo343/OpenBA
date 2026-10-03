@@ -77,7 +77,7 @@ public:
     ~MenuScene() override;                                        // [0] 0x14001b830
     int32_t GetFileVersion() const override { return 1; }         // [3] 0x1400a3960
     CompileResult Compile(const System::Filename&) override { return 1; }   // [4] 0x1400a3620
-    bool Serialize(void* stream) override;                        // [5] 0x1400a3630
+    bool Serialize(IO::Stream& stream) override;                        // [5] 0x1400a3630
     Object::External* Reconstruct() override;                     // [6] 0x14001b810
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001b800

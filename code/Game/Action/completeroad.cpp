@@ -29,10 +29,10 @@
 // CompleteRoad::Serialize (0x1400c5880)
 // Serializes: status(+0x18), int(+0x20), uchar(+0x28), int(+0x24)
 // ============================================================
-void CompleteRoad::Persist(void* stream) {
+void CompleteRoad::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
     ser.Serialize(roadTileIndex, nullptr);   // +0x20
     ser.Serialize(roadDirection, nullptr);   // +0x28
     ser.Serialize(roadType, nullptr);        // +0x24

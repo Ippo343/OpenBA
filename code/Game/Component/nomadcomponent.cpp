@@ -230,11 +230,10 @@ void* NomadComponent::CreateInPlaceObject(void* storage) {
 // Component_Serialize + empty controller serializer + second serializer:
 //   IBP at +0x28, Vector3 at +0x30, Vector3 at +0x3C, int at +0x50, Time at +0x48
 
-void NomadComponent::Persist(void* stream) {
+void NomadComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
 
     // Empty controller serializer block
     { IO::Serializer scope(*st, 0); }

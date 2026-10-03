@@ -92,7 +92,7 @@ public:
     DECLARE_TYPE(TableDescription)
 public:
     int32_t       GetFileVersion() const override;                // [3] 0x18011e6e0
-    bool          Serialize(void* stream) override;               // [5] 0x18011e590
+    bool          Serialize(IO::Stream& stream) override;               // [5] 0x18011e590
     Object::External* Reconstruct() override;                     // [6] 0x180079050
     void          Destruct() override;                            // [7] 0x180079080
     Object::InternalPtr<Element>* CreateInstance(

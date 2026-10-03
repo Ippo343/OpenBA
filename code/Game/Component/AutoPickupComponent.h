@@ -32,7 +32,7 @@ public:
     // PORT GAP (retail 0x140044a80) — B38 D2: retail frees the +0x30 array; the
     // tree never did (Inert_ScalarDtor). Kept as the tree's.
     ~AutoPickupComponent() override = default;                    // [0]  0x140003590
-    void     Persist(void* stream) override;                      // [3]  0x1400449d0
+    void     Persist(IO::Stream& stream) override;                      // [3]  0x1400449d0
     void     Startup() override;                                  // [4]  0x140044990
     uint32_t CommandMask(int command) override;                   // [13] 0x140044970 PORT GAP
     void     Command(int command) override;                       // [14] 0x140044930 PORT GAP

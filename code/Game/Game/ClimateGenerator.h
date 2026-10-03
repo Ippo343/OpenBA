@@ -34,7 +34,7 @@ public:
     ~ClimateGenerator() override;                                 // [0] 0x140018f60
     int32_t GetFileVersion() const override { return 3; }         // [3] 0x1400930b0
     // [4] Compile: inherited (retail's slot is the Object::External import)
-    bool Serialize(void* stream) override;                        // [5] 0x140092fa0
+    bool Serialize(IO::Stream& stream) override;                        // [5] 0x140092fa0
     Object::External* Reconstruct() override;                     // [6] 0x140018f40
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x140018f30

@@ -82,8 +82,8 @@ DecalDescription::~DecalDescription() {
 }
 
 // [5] 0x14011b980: stream order as retail.
-bool DecalDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool DecalDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_initialAlpha, nullptr);   // sizeA
 
     // --- refArray (External* pool) at +0x28 ---

@@ -38,8 +38,8 @@ NomadDescription::NomadDescription()
       _materialGender1(nullptr) {}
 
 // [5] 0x14004ff20: stream order as retail.
-bool NomadDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool NomadDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_citizen, &ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_materialGender0, &ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_materialGender1, &ser);

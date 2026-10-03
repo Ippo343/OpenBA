@@ -64,14 +64,13 @@ BuildingGoal::~BuildingGoal() {
 //   2. the entry count (int, a local copy)
 //   3. on load (encoding mode 0): resize the array (0x14001b340)
 //   4. each entry: Filename temporary, String::Serialize, resolve if loading
-bool BuildingGoal::Serialize(void* stream) {
+bool BuildingGoal::Serialize(IO::Stream& stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED: an
     // unqualified call would dispatch back into this slot.
     Achievement::Goal::Serialize(stream);
 
-    // The serializer (stack-local). LEFT: External::Serialize hands the stream
-    // in as void* (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer (stack-local).
+    IO::Serializer serializer(stream, 0);
 
     // requireAll (bool at +0x30)
     serializer.Serialize(_field30, nullptr);

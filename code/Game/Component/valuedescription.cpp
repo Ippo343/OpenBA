@@ -48,8 +48,8 @@ ValueDescription::ValueDescription()
       _weight(0) {}
 
 // [5] 0x14005cd60: stream order as retail.
-bool ValueDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ValueDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_sprite, &ser);
     _name.Serialize(&ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);

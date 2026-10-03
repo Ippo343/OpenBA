@@ -20,8 +20,8 @@
 
 // [5] 0x14005d170: one EMPTY Serializer(stream, 0) scope (no payload), then
 // `MOV AL,1`. The old slot was declared `void` and returned whatever RAX held.
-bool WellDescription::Serialize(void* stream) {
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool WellDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer scope(stream, 0);
     return true;
 }
 

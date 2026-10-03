@@ -33,7 +33,7 @@ public:
 
     // 0x14011f5c0
     ~FloorComponent() override = default;                         // [0]  0x1400347f0
-    void Persist(void* stream) override;                          // [3]  0x14011f560
+    void Persist(IO::Stream& stream) override;                          // [3]  0x14011f560
     void OnAdded() override;                                      // [6]  0x14011f340
     void OnRemove() override;                                     // [7]  0x14011f2a0
     void Slot11() override;                                       // [11] 0x14011f540

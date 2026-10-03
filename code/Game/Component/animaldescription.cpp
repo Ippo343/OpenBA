@@ -56,8 +56,8 @@ AnimalDescription::~AnimalDescription() {
 }
 
 // [5] 0x140107050: stream order as retail.
-bool AnimalDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool AnimalDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // External*-array @ +0x48 (count @ +0x50, stride 8)
     ser.Serialize(_refCount, nullptr);
     int n = _refCount;

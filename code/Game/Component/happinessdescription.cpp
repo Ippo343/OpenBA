@@ -40,8 +40,8 @@ HappinessDescription::HappinessDescription()
       _i2c(0) {}
 
 // [5] 0x14004acb0: stream order as retail.
-bool HappinessDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool HappinessDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_happinessType, nullptr);
     ser.Serialize(_needsWorkers, nullptr);
     ser.Serialize(_needsGoods, nullptr);

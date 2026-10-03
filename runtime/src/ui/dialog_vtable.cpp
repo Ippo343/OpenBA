@@ -421,9 +421,10 @@ Object::External* Dialog::Reconstruct() {                      // [6] 0x1800386b
     return ::new (this) Dialog();
 }
 
-bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c0
+bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x1801130c0
     using namespace RtUiDlgV;
-    Stream* const stream = static_cast<Stream*>(streamv);
+    void* const streamvRaw = &streamv;
+    Stream* const stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);

@@ -92,8 +92,8 @@ Object::External* ProfessionList::Construct() {
 // Creates a Serializer(stream, version=0), then serializes four
 // ExternalPtr<Profession> refs at +0x30, +0x38, +0x40, +0x48
 // using FUN_140018020 (typed ExternalPtr serialize). Returns AL=1.
-bool ProfessionList::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ProfessionList::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
 
     // Serialize four ExternalPtr<Profession> references
     Reimpl_ExternalPtr_Serialize_StringTable(&field_0x30, &serializer);         // +0x30

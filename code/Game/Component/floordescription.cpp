@@ -34,8 +34,8 @@ FloorDescription::FloorDescription()
       _addOnCreate(false) {}
 
 // [5] 0x14011f680: stream order as retail.
-bool FloorDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool FloorDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // +0x20 ExternalPtr through exe 0x14000b7b0 (Reimpl_ExternalPtr_Serialize_StringTable).
     Reimpl_ExternalPtr_Serialize_StringTable(&_mesh, &ser);
     ser.Serialize(_addOnCreate, nullptr);

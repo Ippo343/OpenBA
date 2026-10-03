@@ -310,10 +310,10 @@ void* AttendanceComponent::CreateInPlaceObject(void* storage) {
 }
 
 // [3] 0x140044410.
-void AttendanceComponent::Persist(void* stream) {
+void AttendanceComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Stream& io = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream is void*
+    IO::Stream& io = stream;
 
     // Empty block — retail opens and closes a Serializer with nothing in it.
     { IO::Serializer empty(io, 0); }

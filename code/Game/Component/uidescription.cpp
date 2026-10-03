@@ -107,8 +107,8 @@ UIDescription::~UIDescription() {
 }
 
 // [5] 0x14012de80: stream order as retail.
-bool UIDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool UIDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
     //    to the registered Serialize2 (typeId trusted in standalone).

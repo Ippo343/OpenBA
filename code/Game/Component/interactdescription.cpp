@@ -97,8 +97,8 @@ InteractDescription::~InteractDescription() {
 }
 
 // [5] 0x140123500: stream order as retail.
-bool InteractDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool InteractDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
     Reimpl_ExternalPtr_Serialize_StringTable(&_points, &ser);
     

@@ -32,7 +32,7 @@ public:
     ~TutorialGoal() override = default;                            // [0] 0x140027220
     // [1] TypeName 0x140027210 and [2] Type 0x140027200: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     int32_t       GetFileVersion() const override { return 1; }    // [3] 0x1400dec70
-    bool          Serialize(void* stream) override;                // [5] 0x1400dec30
+    bool          Serialize(IO::Stream& stream) override;                // [5] 0x1400dec30
     // [6] Reconstruct, [7] Destruct: pure (External's)
     virtual bool  IsComplete(void* time, void* instance) = 0;      // [8] pure
 

@@ -36,11 +36,10 @@
 // ============================================================
 
 // [3] 0x1400437e0.
-void AmbientEnvironmentComponent::Persist(void* stream) {
-    if (!stream) return;
+void AmbientEnvironmentComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     position.Serialize(&ser);
     ser.Serialize(regionX, nullptr);
