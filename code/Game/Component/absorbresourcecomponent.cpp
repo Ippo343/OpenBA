@@ -124,7 +124,7 @@ char AbsorbResourceComponent::State0Tick() {
 // The table (controller_state_table.h) holds plain handler addresses called as
 // handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer, this
 // component, so the entry is a one-line adapter that calls the member.
-static char AbsorbResourceState0Tick(AbsorbResourceComponent* a) { return a->State0Tick(); }   // 0x140105950
+static char AbsorbResourceState0Tick(AbsorbResourceComponent* a, void* /*sm*/, void* /*time*/) { return a->State0Tick(); }   // 0x140105950
 
 // The retail table, transcribed from the static initializer 0x14014e4f0 ->
 // 0x14002ec70: ONE state, id 0, with only the per-frame TickAlt column (+0x18)
@@ -132,10 +132,10 @@ static char AbsorbResourceState0Tick(AbsorbResourceComponent* a) { return a->Sta
 // ONCE at static-init time, as retail's initializer does (B38 D6/D7).
 static void AbsorbResourceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = AbsorbResourceCtrlDispatch::table;
+    auto& t = AbsorbResourceCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
     TableRegisterState(t, 0, nullptr, nullptr,
-                       reinterpret_cast<void*>(&AbsorbResourceState0Tick), nullptr);
+                       &AbsorbResourceState0Tick, nullptr);
 }
 static const bool s_absorbResourceStateTableBuilt = (AbsorbResourceComponent_PopulateStateTable(), true);
 

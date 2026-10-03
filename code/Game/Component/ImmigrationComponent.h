@@ -33,7 +33,7 @@
 
 class ComponentEntity;
 
-struct ImmigrationCtrlTag {};
+struct ImmigrationCtrlTag { using Owner = class ImmigrationComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class ImmigrationComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(ImmigrationComponent)

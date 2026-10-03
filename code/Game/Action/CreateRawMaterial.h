@@ -33,7 +33,7 @@ public:
     ~CreateRawMaterial() override = default;                   // [0] 0x140022350
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c6f30
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6b40
-    bool GetTarget(void* param) override;                      // [9] 0x1400c6aa0
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c6aa0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     ComponentDescription* descEntity;   // +0x20 ExternalPtr<ComponentDescription>: the material template

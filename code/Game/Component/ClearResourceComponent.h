@@ -30,7 +30,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct ClearResourceCtrlTag {};
+struct ClearResourceCtrlTag { using Owner = class ClearResourceComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class ClearResourceComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(ClearResourceComponent)

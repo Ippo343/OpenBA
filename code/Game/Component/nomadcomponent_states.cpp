@@ -258,19 +258,19 @@ char NomadTickWalkOut(NomadComponent* c, void*, void*)         { return c->TickW
 
 extern "C" void NomadCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = NomadDispatch::table;
+    auto& t = NomadDispatch::table;
     if (t.count != 0) return;
-    TableRegisterState(t, 0, reinterpret_cast<void*>(&NomadEnterWalkIn), nullptr,
-                       reinterpret_cast<void*>(&NomadTickWalkIn), nullptr);
+    TableRegisterState(t, 0, &NomadEnterWalkIn, nullptr,
+                       &NomadTickWalkIn, nullptr);
     TableAddTransition(t, 1, nullptr);
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&NomadOnLeave));
+    TableAddEvent(t, 1, &NomadOnLeave);
 
-    TableRegisterState(t, 1, reinterpret_cast<void*>(&NomadEnterLoiter), nullptr,
-                       reinterpret_cast<void*>(&NomadTickLoiter), nullptr);
+    TableRegisterState(t, 1, &NomadEnterLoiter, nullptr,
+                       &NomadTickLoiter, nullptr);
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&NomadOnDestroy));
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&NomadOnLeave));
+    TableAddEvent(t, 0, &NomadOnDestroy);
+    TableAddEvent(t, 1, &NomadOnLeave);
 
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&NomadEnterWalkOut), nullptr,
-                       reinterpret_cast<void*>(&NomadTickWalkOut), nullptr);
+    TableRegisterState(t, 2, &NomadEnterWalkOut, nullptr,
+                       &NomadTickWalkOut, nullptr);
 }

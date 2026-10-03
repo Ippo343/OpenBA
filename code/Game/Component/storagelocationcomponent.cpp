@@ -71,7 +71,7 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
 // state-2 walk at this node, starving WPC's edf0 (so the completed barn stayed
 // registered as an available Builder workplace, capacity 4, and absorbed the
 // first 4 builders town-wide) and ClearArea's state-2 event-1 broadcast.
-static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
+static char StorageLoc_State2Enter(StorageLocationComponent* data, void* /*sm*/) {
     if (!data) return 0;
     TownRegistry_RegisterStorageLocation(data);
     return 0;
@@ -82,12 +82,12 @@ static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
 // The list base is the town manager itself (townMgr+0x00 is the array head), which is
 // the same object the state-2 append grows.
 // Returns 0 for the same reason as State2Enter above (retail d1f0 zeroes AL too).
-static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
+static char StorageLoc_State3Enter(StorageLocationComponent* data, void* /*sm*/) {
     if (!data) return 0;
     if (GameUpdateLoop::_singleton == nullptr) return 0;
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
-    StorageLocationComponent* self = reinterpret_cast<StorageLocationComponent*>(data);   // the dispatcher's void* component
+    StorageLocationComponent* self = data;   // the dispatcher's [node+0x18]
     ComponentEntity* entityRef = self->_entity;
     CemeteryListErase_Reimpl(&townMgr->field_0x00, &entityRef);
     return 0;
@@ -96,12 +96,12 @@ static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
 // Built ONCE at static-init time, as retail's SetupCrossRefs does (B38 D6/D7).
 static void StorageLocationComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = StorageCtrlDispatch::table;
+    auto& t = StorageCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&StorageLoc_State2Enter),
+    TableRegisterState(t, 2, &StorageLoc_State2Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&StorageLoc_State3Enter),
+    TableRegisterState(t, 3, &StorageLoc_State3Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

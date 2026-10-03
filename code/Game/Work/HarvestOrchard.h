@@ -39,12 +39,12 @@ public:
     // frees the slot array and the BST
     ~HarvestOrchard() override;                                     // [0]
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400edea0
-    int   Execute(void* entityIBP, void* context) override;  // [4]
-    int   OnComplete(void* param2, void* param3, int param4) override;  // [6]
-    int   OnCancel(void* param2, void* param3, int param4) override;    // [7]
+    int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int param4) override;  // [6]
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int param4) override;    // [7]
     int   Cleanup() override;                                       // [8]
     int   Validate() override;                          // [9]
-    void* GetTarget(void* outPtr) override;                         // [10]
+    Profession** GetTarget(Profession** outPtr) override;                         // [10]
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- HarvestOrchard fields (+0x48) ---

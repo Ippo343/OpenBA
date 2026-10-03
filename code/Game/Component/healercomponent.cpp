@@ -125,13 +125,13 @@ using HealerCtrlDispatch = ::ControllerLive::Dispatcher<HealerCtrlTag>;
 // Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void HealerComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = HealerCtrlDispatch::table;
+    auto& t = HealerCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&Healer_StateBuiltEnter),
+    TableRegisterState(t, 2, &Healer_StateBuiltEnter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 13, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&Healer_StateDemolishEnter),
+    TableRegisterState(t, 3, &Healer_StateDemolishEnter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

@@ -123,16 +123,13 @@ static long long g_ha_calls = 0, g_ha_auto = 0, g_ha_cap = 0, g_ha_wcap = 0,
 [[maybe_unused]] static long long g_ha_nopass = 0;
 [[maybe_unused]] static long long g_ha_nopath = 0, g_ha_ok = 0;
 
-int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
+int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // Harvest-assignment census. State 11 posts this work; whether a citizen ever
     // ACCEPTS a harvest cell is the last unmeasured link before a deposit, and an
     // Execute that finds nothing looks exactly like an Execute that is never called.
     {
         ++g_ha_calls;
     }
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
 
     CitizenComponent* citizenRef = *citizenIBP;
 
@@ -406,7 +403,7 @@ static void HarvestArea_RemoveCellNode(HarvestArea* self, int key) {
 // (harvested cells re-offered, Slot4 then found no entity and re-cleared them -- a
 // wasted scan per completion) and slot 7 LACKED the primary-node removal (see below).
 // Same Slot6/Slot7 mix-up HarvestOrchard and PlantArea each paid for once already.
-int HarvestArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
+int HarvestArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     int primaryIdx = (int)(param4 & 0xFFFF);
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
@@ -440,7 +437,7 @@ int HarvestArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
 //     the node never removed the count never drops and it re-picks the same node
 //     forever: the 100%-CPU quit hang after the [Residence] ERASE burst.
 // Both symptoms are this one missing removal (2026-09-05).
-int HarvestArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
+int HarvestArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     int primaryIdx = (int)(param4 & 0xFFFF);
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
@@ -623,11 +620,11 @@ cleanup:
 
 // ============================================================
 // HarvestArea::Slot10 -- GetWorkEntity: the entity's WorkPlaceComponent (0x140002e10),
-// its profession (+0x48) into the return slot (void* in Work.h's slot: LEFT).
+// its profession (+0x48) into the return slot.
 // ============================================================
-void* HarvestArea::GetTarget(void* outPtr) {
+Profession** HarvestArea::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *(Profession**)outPtr = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

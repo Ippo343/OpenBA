@@ -233,15 +233,15 @@ UNIT_TEST(mib_controller_own_slots_land_on_retail_indices) {
 // ===========================================================================
 void* g_mibSeenData = nullptr;
 void* g_mibSeenSm   = nullptr;
-char MibEnterHandler(void* data, void* sm) { g_mibSeenData = data; g_mibSeenSm = sm; return 7; }
+char MibEnterHandler(ResourceProduceComponent* data, void* sm) { g_mibSeenData = data; g_mibSeenSm = sm; return 7; }
 
 UNIT_TEST(mib_rp_controller_member_raw_dispatch) {
     using Ctl = ResourceProduceComponent::StateController;
     using Dispatch = ::ControllerLive::Dispatcher<RPCtrlTag>;
     auto& t = Dispatch::table;
-    const ::ControllerLive::StateTable saved = t;
+    const auto saved = t;
     t = {};
-    ::ControllerLive::TableRegisterState(t, 13, reinterpret_cast<void*>(&MibEnterHandler),
+    ::ControllerLive::TableRegisterState(t, 13, &MibEnterHandler,
                                          nullptr, nullptr, nullptr);
     ::ControllerLive::TableAddTransition(t, 14, nullptr);
 

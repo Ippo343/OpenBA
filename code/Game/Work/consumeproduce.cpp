@@ -229,7 +229,7 @@ static int FinalizeAction(ConsumeProduce* self, CitizenComponent** citizenIBP, v
     CitizenComponent* citizen = *citizenIBP;
 
     // Call vtable slot +0x50 (GetTarget): the workplace's profession
-    Profession* actionPtr = *static_cast<Profession**>(self->GetTarget(actionIBP));
+    Profession* actionPtr = *self->GetTarget(static_cast<Profession**>(actionIBP));   // LEFT: the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)
 
     citizen->statusFlags |= 4;
     citizen->field_0x30 = priority;
@@ -251,11 +251,7 @@ static int FinalizeAction(ConsumeProduce* self, CitizenComponent** citizenIBP, v
 //
 // Main production work logic. Returns 1 (retry) or 2 (action pushed).
 // ============================================================
-int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = reinterpret_cast<CitizenComponent**>(entityIBP);
-
+int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     // m_game (Map*) and m_citizenList (CitizenBehavior*) are still void* in
     // GameUpdateLoop.h: LEFT.
@@ -865,7 +861,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/) {
 // param4 encodes: bits [6:0] = slot index, bit 15 = update int array,
 //   bits [14:8] = int array index, bit 16 = increment field_4c
 // ============================================================
-int ConsumeProduce::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
+int ConsumeProduce::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Clear the citizen assignment: store null IBP into slot
     uint32_t slotIdx = param4 & 0x7F;
@@ -903,14 +899,14 @@ int ConsumeProduce::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
 // OnCancel (0x1400e7780) -- vtable slot 7
 // Delegates to OnComplete with bit 16 cleared (no produce increment).
 // ============================================================
-int ConsumeProduce::OnCancel(void* param2, void* param3, int arg3) {
+int ConsumeProduce::OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Retail (disassembly): copy *R8 and *RDX to stack slots, BTR R9D,0x10, then
     // dispatch vtable +0x30 = slot 6 OnComplete(&copy2, &copy3, R9) and return
     // its result.
     uint32_t modifiedParam4 = param4 & 0xFFFEFFFF;  // clear bit 16
-    void* copy3 = *(void**)param3;
-    void* copy2 = *(void**)param2;
+    ComponentEntity* copy3 = *param3;
+    CitizenComponent* copy2 = *param2;
     return OnComplete(&copy2, &copy3, static_cast<int>(modifiedParam4));
 }
 
@@ -1036,7 +1032,7 @@ int ConsumeProduce::Validate() {
 // Returns the target position from the entity's position component.
 // Hidden return ptr ABI: RCX=self, RDX=retbuf
 // ============================================================
-void* ConsumeProduce::GetTarget(void* retbuf) {
+Profession** ConsumeProduce::GetTarget(Profession** retbuf) {
     // CheckPtr on the entity IBP at +0x10
 
     // Find the WorkPlaceComponent (type 0x1401c80e0) on the entity
@@ -1045,7 +1041,7 @@ void* ConsumeProduce::GetTarget(void* retbuf) {
     // CheckPtr on the found component
 
     // The workplace's profession (+0x48) into the return slot
-    *reinterpret_cast<Profession**>(retbuf) = workPlace->profession;
+    *retbuf = workPlace->profession;
 
     return retbuf;
 }

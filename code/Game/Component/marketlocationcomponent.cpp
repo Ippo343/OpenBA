@@ -81,12 +81,12 @@ static char MarketLoc_State3Enter(MarketLocationComponent* self, void* /*sm*/) {
 // has no handler. Built ONCE at static-init time (B38 D6/D7).
 static void MarketLocationComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = MarketLocationCtrlDispatch::table;
+    auto& t = MarketLocationCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&MarketLoc_State2Enter),
+    TableRegisterState(t, 2, &MarketLoc_State2Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&MarketLoc_State3Enter),
+    TableRegisterState(t, 3, &MarketLoc_State3Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

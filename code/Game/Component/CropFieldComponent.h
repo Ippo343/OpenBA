@@ -38,7 +38,7 @@ class ComponentEntity;            // Entity/ComponentEntity.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 namespace IO { class Serializer; }
 
-struct CropFieldCtrlTag {};
+struct CropFieldCtrlTag { using Owner = class CropFieldComponent; };   // the handlers' receiver (controller_state_table.h)
 
 // One cell of the field's slot grid (0x20 bytes). Persist 0x14011ae70's element
 // helper 0x1400336c0 serializes int, int, InternalBasePtr (IsDerivedFrom

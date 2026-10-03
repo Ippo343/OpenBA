@@ -36,7 +36,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct AbsorbResourceCtrlTag {};
+struct AbsorbResourceCtrlTag { using Owner = class AbsorbResourceComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class AbsorbResourceComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(AbsorbResourceComponent)

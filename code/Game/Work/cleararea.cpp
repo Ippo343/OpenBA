@@ -167,11 +167,11 @@ void ClearArea::Persist(IO::Stream& stream) {
 // the cell tree (+0x58) for the given cellIndex and removes it.
 //
 // Params: self, citizen (unused), treeEntry (IBP*), cellIndex
-int ClearArea::OnComplete(void* /*citizen*/, void* treeEntry, int cellIndex) {
+int ClearArea::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** treeEntry, int cellIndex) {
 
     // If treeEntry is non-null, insert into entity BST at +0x48
-    uintptr_t entryPtr = treeEntry ? *(uintptr_t*)treeEntry : 0;
-    if (entryPtr != 0) {
+    ComponentEntity* entryPtr = treeEntry ? *treeEntry : nullptr;
+    if (entryPtr != nullptr) {
         WorkLeaf_BstRemoveByIBP_298a0(&field_48, treeEntry);
     }
 
@@ -216,9 +216,9 @@ int ClearArea::OnComplete(void* /*citizen*/, void* treeEntry, int cellIndex) {
 // vtable +0x30 = slot 6 OnComplete(&citizenCopy, &treeCopy, R9 unchanged) and
 // return its result. Slot 6 is OnComplete (3 arguments), not Cleanup (slot 8):
 // the old 2-argument typedef left OnComplete's cellIndex in whatever R9 held.
-int ClearArea::OnCancel(void* citizen, void* treeEntry, int arg3) {
-    void* treeCopy = *(void**)treeEntry;
-    void* citizenCopy = *(void**)citizen;
+int ClearArea::OnCancel(CitizenComponent** citizen, ComponentEntity** treeEntry, int arg3) {
+    ComponentEntity* treeCopy = *treeEntry;
+    CitizenComponent* citizenCopy = *citizen;
     return OnComplete(&citizenCopy, &treeCopy, arg3);
 }
 
@@ -274,8 +274,8 @@ int ClearArea::Cleanup() {
 // ============================================================
 // Returns the profession list's +0x30 profession (GameUpdateLoop::m_professionList).
 // Uses hidden return pointer ABI (member function returning non-trivial).
-void* ClearArea::GetTarget(void* retbuf) {
-    *reinterpret_cast<Profession**>(retbuf) = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+Profession** ClearArea::GetTarget(Profession** retbuf) {
+    *retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 
@@ -315,11 +315,7 @@ static_assert(sizeof(TileInfo) == 0x10, "TileInfo size mismatch");
 // ============================================================
 // ClearArea::Execute implementation
 // ============================================================
-int ClearArea::Execute(void* actionStack, void* time) {
-
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = reinterpret_cast<CitizenComponent**>(actionStack);
+int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // field_50 = tree count done, field_60 = ground count done
     int treesCleared = field_50;
@@ -537,8 +533,8 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 CitizenComponent* citizenObj = *citizenIBP;
 
                 // Call vtable[10] (+0x50) on this — Work::GetTarget(this, &workIBP)
-                uint64_t workIBP = 0;
-                Profession* workEntity2 = *(Profession**)GetTarget(&workIBP);
+                Profession* workIBP = nullptr;
+                Profession* workEntity2 = *GetTarget(&workIBP);
 
                 // Set fields on citizen: +0x30 = workId, +0x54 |= 4, +0xb0 = 0
                 citizenObj->field_0x30 = workId;
@@ -634,8 +630,8 @@ int ClearArea::Execute(void* actionStack, void* time) {
                 CitizenComponent* citizenObj = *citizenIBP;
 
                 // Call vtable[10] (+0x50) — Work::GetTarget
-                uint64_t workIBP = 0;
-                Profession* workEntity2 = *(Profession**)GetTarget(&workIBP);
+                Profession* workIBP = nullptr;
+                Profession* workEntity2 = *GetTarget(&workIBP);
 
                 citizenObj->field_0x30 = workIdSaved;
                 citizenObj->statusFlags |= 4;

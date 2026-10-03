@@ -300,8 +300,8 @@ char WellComponent::EnterDemolish() {
 
 using WellCtrlDispatch = ::ControllerLive::Dispatcher<WellCtrlTag>;
 
-static char WellComponent_EnterBuiltState(WellComponent* c)    { return c->EnterBuilt(); }      // 0x14005cf20
-static char WellComponent_EnterDemolishState(WellComponent* c) { return c->EnterDemolish(); }   // 0x14005cee0
+static char WellComponent_EnterBuiltState(WellComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }      // 0x14005cf20
+static char WellComponent_EnterDemolishState(WellComponent* c, void* /*sm*/) { return c->EnterDemolish(); }   // 0x14005cee0
 
 // The retail table, transcribed from 0x14014bc20 call for call. Retail runs it
 // ONCE from a static initializer; the tree ran it (idempotently, unsynchronised)
@@ -311,12 +311,12 @@ static char WellComponent_EnterDemolishState(WellComponent* c) { return c->Enter
 // initialisers does not matter.
 static void WellComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = WellCtrlDispatch::table;
+    auto& t = WellCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&WellComponent_EnterBuiltState),
+    TableRegisterState(t, 2, &WellComponent_EnterBuiltState,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&WellComponent_EnterDemolishState),
+    TableRegisterState(t, 3, &WellComponent_EnterDemolishState,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

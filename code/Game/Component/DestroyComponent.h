@@ -35,7 +35,7 @@
 
 class ComponentDescription;   // Component/ComponentDescription.h
 
-struct DestroyCtrlTag {};
+struct DestroyCtrlTag { using Owner = class DestroyComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class DestroyComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(DestroyComponent)

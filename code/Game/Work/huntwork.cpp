@@ -130,11 +130,7 @@ static RadiusDescription* FindRadiusDescription(ComponentDescription* subObj) {
 // 8. Validate cell: distance, pathability, terrain
 // 9. Create the hunt action at the cell, or the roaming fallback
 //
-int HuntWork::Execute(void* entityIBP, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
-
+int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // Save citizen ref
     CitizenComponent* citizenRef = *citizenIBP;
 
@@ -375,7 +371,7 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
-int HuntWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int HuntWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return false;
 }
@@ -386,7 +382,7 @@ int HuntWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
-int HuntWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+int HuntWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return 0;
 }
@@ -533,11 +529,11 @@ int HuntWork::Validate() {
 // ============================================================
 // HuntWork::Slot10 / GetWorkEntity (0x1400EF5A0)
 // The entity's (+0x10) WorkPlaceComponent (0x140002e10), its profession (+0x48) into
-// the return slot (void* in Work.h's slot: LEFT).
+// the return slot.
 // ============================================================
-void* HuntWork::GetTarget(void* outPtr) {
+Profession** HuntWork::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *(Profession**)outPtr = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

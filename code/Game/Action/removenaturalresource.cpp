@@ -168,8 +168,8 @@ void RemoveNaturalResource::CheckEntity() {
 // Returns true if param matches the resource entity at +0x28 or the citizen's (+0x20)
 // owning entity (Component +0x10).
 // ============================================================
-bool RemoveNaturalResource::GetTarget(void* param) {
-    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool RemoveNaturalResource::GetTarget(ComponentEntity** param) {
+    void* target = *param;
 
     if (target == _field28.Get()) {
         return true;

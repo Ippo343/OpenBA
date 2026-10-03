@@ -36,7 +36,7 @@ public:
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c93c0
     void Exit(void* actionStack) override;                     // [7] 0x1400c9370
     void CheckEntity() override;                               // [8] 0x1400c9320
-    bool GetTarget(void* param) override;                      // [9] 0x1400c92d0
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c92d0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<CitizenComponent> workTarget;   // +0x20 the working citizen (Persist checks CitizenComponent)

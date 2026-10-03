@@ -185,14 +185,14 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
 // GetTarget (0x1400cae80, vtable slot 9)
 // Returns true if param matches entity at +0x20 or +0x28.
 // ============================================================
-bool SendComponentMessage::GetTarget(void* param) {
+bool SendComponentMessage::GetTarget(ComponentEntity** param) {
     // CheckPtr on +0x20, then compare [param] directly (no CheckPtr on param)
-    if (*(void**)param == _field20.Get()) {   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+    if (*param == _field20.Get()) {
         return true;
     }
 
     // CheckPtr on +0x28, then compare [param]
-    return *(void**)param == _field28.Get();   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+    return *param == _field28.Get();
 }
 
 // ============================================================

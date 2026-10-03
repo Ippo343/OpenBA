@@ -1,0 +1,242 @@
+file	file_casts	blocker	casts	declared_in	note
+code/Game/Dialog/tradeui.cpp	113	FIELD:Element::_description	1	runtime/types/ui/Element.h:173	void* ExternalPtr<ElementDescription>
+code/Game/Dialog/tradeui.cpp	113	FIELD:ComponentDescription::_subDescs	7	code/Game/Component/ComponentDescription.h	Description** read as Object::Base*; add typed accessor / Description->Base relation
+code/Game/Dialog/tradeui.cpp	113	LOCAL:CitizenBehavior	8	code/Game/Entity/CitizenBehavior.h	field_0x110/0x118 resource list typed; read at +0x118/+0x110
+code/Game/Dialog/tradeui.cpp	113	LOCAL:TradeComponent	71	code/Game/Component/TradeComponent.h	header typed (TradeBuyOrder/Manifest/Node/MerchantOrder); TradeUI reads raw offsets
+code/Game/Dialog/tradeui.cpp	113	LOCAL:StateMachineComponent	12	code/Game/Component/StateMachineComponent.h	+0x50/+0x52 are StateMachine::currentInput/pendingState (declared)
+code/Game/Dialog/tradeui.cpp	113	LOCAL:StorageComponent	13	code/Game/Component/StorageComponent.h	storageSlots is typed Item*; items read by offset (+8 amount,+0xC reserve)
+code/Game/Dialog/tradeui.cpp	113	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Player/tool_base_highlight_tess.cpp	95	OTHER:file-local Math thunks take void*	12	code/Game/Player/tool_base_highlight_tess.cpp	Transform2/Vector2 thunks declared void*; retype params
+code/Game/Player/tool_base_highlight_tess.cpp	95	NOCLASS:HighlightTessSlot (0x60 stride at tool+0x1f0)	83	code/Game/Player/ (new header)	slot {vb{ptr,cnt,cap}+8, ib+0x18, rect +0x2c..0x38, yaw +0x40, mode +0x44, UV +0x48}; also 0x14-byte TessVertex
+code/Game/Dialog/professionui.cpp	93	LOCAL:StorageLocationComponent	13	code/Game/Component/StorageLocationComponent.h	+0x10/+0x18/+0x30 reads; also WorkDescription +0x24/+0x30/+0x34 and BuildComponent +0x2c/+0x2e
+code/Game/Dialog/professionui.cpp	93	LOCAL:Profession	2	code/Game/Game/Profession.h	stringName is already System::String; cast redundant
+code/Game/Dialog/professionui.cpp	93	SIG:C-door:Component/exe_bodies.h	16	code/Game/Component/exe_bodies.h	C doors take the manager as int64_t
+code/Game/Dialog/professionui.cpp	93	LOCAL:CitizenBehavior	40	code/Game/Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast redundant
+code/Game/Dialog/professionui.cpp	93	NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes)	10	code/Game/Entity/CitizenBehavior.h	field_0x100/0x160 are void* roots; node {key,list,count,..,+0x20/+0x28 children} has no class
+code/Game/Dialog/professionui.cpp	93	LOCAL:ComponentEntity	12	code/Game/Entity/ComponentEntity.h	entity component walk (+0x30/+0x38) and WorkPlaceComponent +0x10/+0x50
+code/Game/Player/tool_base_render.cpp	84	FIELD:HighlightComponent::fieldF8	36	code/Game/Component/HighlightComponent.h	void* +0xF8 (EdgeMesh*/mesh arrays) read at +0xc0/+0xc4/+0xd8
+code/Game/Player/tool_base_render.cpp	84	LOCAL:HighlightComponent	22	code/Game/Component/HighlightComponent.h	Impl_* take int64_t self / void* self; type to HighlightComponent*/EditTool*
+code/Game/Player/tool_base_render.cpp	84	LOCAL:GameUpdateLoop	8	code/Game/Game/GameUpdateLoop.h	gw = (int64_t)_singleton; use typed members m_game/m_worldGeometry
+code/Game/Player/tool_base_render.cpp	84	H5:HighlightComponent::edgeMeshInstance	18	code/Game/Component/HighlightComponent.h	embedded EdgeMeshInstance (+0x28, 0xD0 bytes) raw uint8_t[]; type as member
+code/Game/Dialog/townhallui.cpp	61	CONST:FindOrLoad	4	runtime/types/ui/StringTable / ExternalPtr	const_cast of FindOrLoad StringTable
+code/Game/Dialog/townhallui.cpp	61	FIELD:Element::_description	3	runtime/types/ui/Element.h:173	void* ExternalPtr<ElementDescription>
+code/Game/Dialog/townhallui.cpp	61	NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes)	21	code/Game/Entity/CitizenBehavior.h	trees keyed by pointer bits; node has no class; Profession* keys compared as uint64_t
+code/Game/Dialog/townhallui.cpp	61	LOCAL:Profession	2	code/Game/Game/Profession.h	stringName is already System::String; cast redundant
+code/Game/Dialog/townhallui.cpp	61	LOCAL:CitizenBehavior	19	code/Game/Entity/CitizenBehavior.h	m_citizenList typed; redundant cast / raw offsets
+code/Game/Dialog/townhallui.cpp	61	FIELD:ComponentDescription::_subDescs	1	code/Game/Component/ComponentDescription.h	Description** read as Object::Base*; add typed accessor / Description->Base relation
+code/Game/Dialog/townhallui.cpp	61	LOCAL:Calendar	5	code/Game/Game/Calendar.h	m_dayCounter already Calendar*; +8 is yearTime (System::Time)
+code/Game/Dialog/townhallui.cpp	61	FLOOR:crash_walk	2	code/Game/Dialog/townhallui.cpp	STANDALONE pointer-range / vtable-null guard
+code/Game/Dialog/townhallui.cpp	61	LOCAL:StorageComponent	3	code/Game/Component/StorageComponent.h	storageSlots typed Item*; raw item reads
+code/Game/Dialog/townhallui.cpp	61	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Dialog/debugui.cpp	46	LOCAL:Calendar	8	code/Game/Game/Calendar.h	m_dayCounter is Calendar*; weather time at +8
+code/Game/Dialog/debugui.cpp	46	LOCAL:WeatherSimulation	17	code/Game/Game/WeatherSimulation.h	m_weather typed; drawMgr/particle list read by index/offset
+code/Game/Dialog/debugui.cpp	46	FIELD:ComponentDescription::_subDescs	1	code/Game/Component/ComponentDescription.h	Description->Object::Base
+code/Game/Dialog/debugui.cpp	46	CONST:FindOrLoad	3	Entity find results	const_cast of find result
+code/Game/Dialog/debugui.cpp	46	LOCAL:CitizenBehavior	2	code/Game/Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast redundant
+code/Game/Dialog/debugui.cpp	46	LOCAL:InteractComponent	6	code/Game/Component/InteractComponent.h	+0x28/+0x30 child array read by offset
+code/Game/Dialog/debugui.cpp	46	SIG:C-door:Action/exe_bodies.h	2	code/Game/Action/exe_bodies.h	body takes int64_t receiver
+code/Game/Dialog/debugui.cpp	46	FIELD:MainLoop::_context	5	runtime/types/engine/UpdateLoop.h	void* Video::Context read at +0x2150..0x215C
+code/Game/Dialog/debugui.cpp	46	LOCAL:Disease	2	code/Game/Game/Disease.h	_stringTable void* / _name
+code/Game/Dialog/residenceui.cpp	26	LOCAL:ResidenceComponent	5	code/Game/Component/ResidenceComponent.h	residentSlots typed Family*; read by offset
+code/Game/Dialog/residenceui.cpp	26	LOCAL:CitizenComponent	10	code/Game/Component/CitizenComponent.h	header declares age/profession/school/description; raw offset reads
+code/Game/Dialog/residenceui.cpp	26	LOCAL:Profession	11	code/Game/Game/Profession.h	stringName typed System::String
+code/Game/Dialog/eventnotifydialog.cpp	25	LOCAL:EventLog	17	code/Game/Game/EventLog.h	EventLog/EventLogEntry headers exist; raw offset reads (+0x18 events, +0x20 count)
+code/Game/Dialog/eventnotifydialog.cpp	25	LOCAL:GameUpdateLoop	5	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Dialog/eventnotifydialog.cpp	25	SIG:Dialog-ctor-params	3	code/Game/Dialog/*Dialog.h ctor decls + Dialog::Create	ctor/create take void* ui, parentIBP, extRes
+code/Game/Dialog/toolbardialog.cpp	25	NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes)	1	code/Game/Entity/CitizenBehavior.h	TemplateEntityNode via void* field_0x160
+code/Game/Dialog/toolbardialog.cpp	25	SIG:PlayerToolManager-void*-receiver	7	code/Game/Dialog/toolbardialog.cpp + Player/exe_bodies.h	dialog slots hand tool manager / group id as void*/int64_t
+code/Game/Dialog/toolbardialog.cpp	25	ERASED:Collection::Set insert 0x140014890	2	code/Game/Player/exe_bodies.h	shared Set insert takes int64_t* root
+code/Game/Dialog/toolbardialog.cpp	25	OTHER:Toolbar dialog misc	1	code/Game/Dialog/toolbardialog.cpp	
+code/Game/Dialog/toolbardialog.cpp	25	H5:PlayerController::camera	6	code/Game/Game/PlayerController.h	camera is raw storage (+0x34); type as Graphics::Camera
+code/Game/Dialog/toolbardialog.cpp	25	FIELD:Toolbar::_field30/_field38	3	code/Game/Game/Toolbar.h	Strings declared void*
+code/Game/Dialog/toolbardialog.cpp	25	FIELD:SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	uint64_t ExternalPtr<MaterialInstance>
+code/Game/Dialog/toolbardialog.cpp	25	SIG:Debug_Sprite_Ctor	4	runtime/types/ui/SpriteSheet.h / Dialog exe_bodies	sheet passed as uint64_t
+code/Game/Dialog/tradeui_buyentries.cpp	24	LOCAL:ComponentEntity	3	code/Game/Entity/ComponentEntity.h	entity component array +0x28/+0x30 read by offset
+code/Game/Dialog/tradeui_buyentries.cpp	24	LOCAL:TradeDescription	17	code/Game/Component/TradeDescription.h	merchant record 0x48 stride (TradeMerchant typed) read at +0x20/+0x28
+code/Game/Dialog/tradeui_buyentries.cpp	24	H5:PtrArray out-param (void*)	1	code/Game/Dialog/tradeui_buyentries.cpp	out array typed void*
+code/Game/Dialog/tradeui_buyentries.cpp	24	CONST:FindOrLoad	3	runtime Object factory	factory / const_cast of find
+code/Game/Dialog/exe_bodies.h	21	LOCAL:ComponentEntity	4	code/Game/Entity/ComponentEntity.h	entity flags +0x40 bit 10; dialog entity ref +0x28
+code/Game/Dialog/exe_bodies.h	21	NOCLASS:Tracker item array (16-byte entries)	10	code/Game/Component/TrackerComponent.h	{ptr,count|cap} descriptor; entries 0x10
+code/Game/Dialog/exe_bodies.h	21	LOCAL:ProductionComponent	7	code/Game/Component/ (owner of +0x50/+0x58/+0x60)	component +0x50 product index, +0x58 weights, +0x60 count
+code/Game/Dialog/tradeui_leaves.cpp	20	LOCAL:TradeComponent	20	code/Game/Component/TradeComponent.h	merchantOrders typed TradeMerchantOrder*; rec+0x18 goodsCount
+code/Game/Dialog/productionui.cpp	19	LOCAL:Calendar	1	code/Game/Game/Calendar.h	m_dayCounter typed
+code/Game/Dialog/productionui.cpp	19	LOCAL:TrackerComponent	16	code/Game/Component/TrackerComponent.h	tracker +0x28/+0x30/+0x40, item array 0x10 stride; verify header fields
+code/Game/Dialog/productionui.cpp	19	LOCAL:CitizenBehavior	2	code/Game/Entity/CitizenBehavior.h	m_citizenList typed
+code/Game/Player/keystone_a_removalcalcpath.cpp	19	FWD:B4 FORWARD (WorkScheduler/DestroyComponent)	3	code/Game/Player/exe_bodies.h	forwarder void* receiver
+code/Game/Player/keystone_a_removalcalcpath.cpp	19	OTHER:Time/int shared out slot	5	code/Game/Player/keystone_a_removalcalcpath.cpp	Time and int out share a slot; split locals
+code/Game/Player/keystone_a_removalcalcpath.cpp	19	SIG:C-door:Action/exe_bodies.h	11	code/Game/Action/exe_bodies.h	C doors 0x14001a6e0/0x1400a8c90/0x14001a8c0 take int64_t/uintptr_t*
+code/Game/Dialog/newgamedialog.cpp	18	H5:MapGenerator::_field20	8	code/Game/Game/MapGenerator.h	_field20 void* ExternalPtr<StringTable>; _text char*
+code/Game/Dialog/newgamedialog.cpp	18	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Dialog/newgamedialog.cpp	18	SIG:GameUpdateLoop new-game helpers (uintptr_t loop, raw IBP)	9	code/Game/Game/exe_bodies.h	helpers take loop/IBP as uintptr_t / uint64_t
+code/Game/Dialog/tradeui_checkout.cpp	18	FIELD:ComponentDescription::_subDescs	4	code/Game/Component/ComponentDescription.h	
+code/Game/Dialog/tradeui_checkout.cpp	18	LOCAL:TradeComponent	6	code/Game/Component/TradeComponent.h	tc+0x50/+0x58 manifest/manifestCount typed
+code/Game/Dialog/tradeui_checkout.cpp	18	LOCAL:CitizenBehavior	8	code/Game/Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast redundant
+code/Game/Dialog/followdialog.cpp	17	NOCLASS:Map tile AVL node (+0x30 grid)	7	code/Game/Game/Map.h	worldGrid +0x30 tree; node has no class
+code/Game/Dialog/followdialog.cpp	17	LOCAL:Profession	6	code/Game/Game/Profession.h	typed System::String members; cast redundant
+code/Game/Dialog/followdialog.cpp	17	SIG:Work-slots	1	code/Game/Work/Work.h	Work slot GetTarget takes void*
+code/Game/Dialog/followdialog.cpp	17	LOCAL:CitizenComponent	2	code/Game/Component/CitizenComponent.h	
+code/Game/Dialog/followdialog.cpp	17	SIG:Input::KeyMap handle	1	code/Game/Dialog/followdialog.cpp	keyMap void*
+code/Game/Player/tool_base_highlight.cpp	17	ERASED:Avl38 helpers (0x140014b40/0x14001fa80 retrace)	7	code/Game/Player/exe_bodies.h	shared AVL retrace takes int64_t*/Avl38Node**
+code/Game/Player/tool_base_highlight.cpp	17	NOCLASS:HighlightDecalEntry (field_0x44/0x48 raw dwords)	10	code/Game/Player/ (decal entry header)	retail stores raw 32-bit words as floats at +0x48..+0x58
+code/Game/Dialog/eventlogui.cpp	15	H5:EventLogUI::displayTextData	3	code/Game/Dialog/EventLogUI.h	Array<Element*> held as raw data
+code/Game/Dialog/eventlogui.cpp	15	LOCAL:EventLog	9	code/Game/Game/EventLog.h	typed header; raw reads of events/seasons
+code/Game/Dialog/eventlogui.cpp	15	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	m_game already Map*
+code/Game/Dialog/citizenui.cpp	14	NOCLASS:Map tile AVL node (+0x30 grid)	5	code/Game/Game/Map.h	tile-tree node has no class
+code/Game/Dialog/citizenui.cpp	14	H5:CitizenUI icon groups	4	code/Game/Dialog/CitizenUI.h	icon groups held as raw storage
+code/Game/Dialog/citizenui.cpp	14	LOCAL:Profession	5	code/Game/Game/Profession.h	typed String member; cast redundant
+code/Game/Dialog/townhall_helpers.cpp	14	NOCLASS:TownHall row records (RatingGroup/ProfRow/ProdRow/InvEntry)	12	code/Game/Dialog/TownHallUI.h	row structs file-local; entries arrive as void*
+code/Game/Dialog/townhall_helpers.cpp	14	NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes)	2	code/Game/Entity/CitizenBehavior.h	Avl28Node view of field_0x100 tree
+code/Game/Player/edittool.cpp	13	FIELD:EditTool::entityRef	8	code/Game/Player/EditTool.h	entityRef/lastEntityRef uint64_t; should be InternalPtr<ComponentEntity>
+code/Game/Player/edittool.cpp	13	SIG:EditTool harness API (void* tool/entity)	5	standalone harnesses	harnesses hand tool/entity as void*
+code/Game/Dialog/entityui.cpp	12	ERASED:Avl38 helpers (0x140014b40/0x14001fa80 retrace)	6	code/Game/Player/exe_bodies.h	AVL retrace takes int64_t*
+code/Game/Dialog/entityui.cpp	12	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	m_game typed Map*
+code/Game/Dialog/entityui.cpp	12	SIG:PlayerToolManager-void*-receiver	3	code/Game/Dialog/toolui.cpp	receiver/key arrive as void*
+code/Game/Dialog/moddialog.cpp	12	POD:RtIO::Mod	8	runtime/types/io (RtIO::Mod/ModArray)	Mod Strings as char*, ModArray::data void*
+code/Game/Dialog/moddialog.cpp	12	CONST:FindOrLoad	1	runtime/types/object ExternalPtr / FindOrLoad	const_cast of FindOrLoad Material result
+code/Game/Dialog/moddialog.cpp	12	POD:RtSystem::String	1	runtime/types/graphics AddTexture	AddTexture takes RtSystem::String POD
+code/Game/Dialog/moddialog.cpp	12	H5:SpriteSheet::m_textureName	2	runtime/types/ui/SpriteSheet.h	Strings held as char*; type as System::String
+code/Game/Dialog/buildui.cpp	11	LOCAL:GameUpdateLoop	1	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Dialog/buildui.cpp	11	FIELD:Map::cells	2	code/Game/Game/Map.h	cells void*/uint8_t; tile record 0x30 stride has no type
+code/Game/Dialog/buildui.cpp	11	H5:Array raw storage (ArrayAt)	1	owner dialog header	embedded Array<T> held as raw triple; type member
+code/Game/Dialog/buildui.cpp	11	FIELD:ComponentDescription::_subDescs	6	code/Game/Component/ComponentDescription.h	Description** read as Object::Base*; add typed accessor / Description->Base relation
+code/Game/Dialog/buildui.cpp	11	FIELD:SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	uint64_t ExternalPtr<MaterialInstance>
+code/Game/Dialog/mainmenudialog.cpp	11	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Dialog/mainmenudialog.cpp	11	FIELD:DialogLoopT::_dialogExternal	5	runtime/types/engine/UpdateLoop.h	_dialogExternal void* External*
+code/Game/Dialog/mainmenudialog.cpp	11	FIELD:MenuDialogLoopT::_saveLoad	1	code/Game/Game/MenuDialogLoopT.h	void* -> Save::SaveLoad*
+code/Game/Dialog/mainmenudialog.cpp	11	LOCAL:GameUpdateLoop	4	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Dialog/saveloaddialog.cpp	11	CONST:FindOrLoad	1	runtime/types/object ExternalPtr / FindOrLoad	const_cast of FindOrLoad Material result
+code/Game/Dialog/saveloaddialog.cpp	11	POD:RtSystem::String	1	runtime/types/graphics AddTexture	AddTexture takes RtSystem::String POD
+code/Game/Dialog/saveloaddialog.cpp	11	FIELD:SpriteSheet::m_field30	7	runtime/types/ui/SpriteSheet.h	m_field30 uint64_t / Strings char*
+code/Game/Dialog/saveloaddialog.cpp	11	SIG:SetDialogLoaderNextLoop/SetEngineNextLoop	2	code/Game/Game/exe_bodies.h	take loops as void*
+code/Game/Dialog/tradeui_sort.cpp	11	ERASED:byte-generic introsort (retail shared body)	6	code/Game/Dialog/tradeui_sort.cpp	uint8_t/uint64_t* element swaps
+code/Game/Dialog/tradeui_sort.cpp	11	LOCAL:TradeComponent	5	code/Game/Component/TradeComponent.h	sort comparator contexts read trade tree/records by offset
+code/Game/Dialog/workplaceui.cpp	11	LOCAL:Profession	2	code/Game/Game/Profession.h	stringName is already System::String; cast redundant
+code/Game/Dialog/workplaceui.cpp	11	LOCAL:CitizenBehavior	3	code/Game/Entity/CitizenBehavior.h	m_citizenList already CitizenBehavior*; cast redundant
+code/Game/Dialog/workplaceui.cpp	11	SIG:C-door:Component/exe_bodies.h	5	code/Game/Component/exe_bodies.h	take WorkPlace/Interact/loop as int64_t
+code/Game/Dialog/workplaceui.cpp	11	FLOOR:crash_walk	1	code/Game/Dialog/workplaceui.cpp	diagnostic vptr print
+code/Game/Goal/goal_exe_helpers.cpp	10	ERASED:rtcoll::ArraySpec element callbacks	6	code/Game/Goal/goal_exe_helpers.cpp	element callbacks take raw uint8_t*
+code/Game/Goal/goal_exe_helpers.cpp	10	NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes)	3	code/Game/Entity/CitizenBehavior.h	ProfessionBucketNode/TemplateBucketNode file-local over void* roots
+code/Game/Goal/goal_exe_helpers.cpp	10	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Dialog/citizen_icon_helpers.h	8	H5:CitizenUI icon groups	6	code/Game/Dialog/CitizenUI.h	icon group raw {data,count,cap} triple; groupElemIBP address
+code/Game/Dialog/citizen_icon_helpers.h	8	H5:Array raw storage (ArrayAt)	2	owner dialog header	embedded Array<T> held as raw triple; type member
+code/Game/Dialog/edittool_select.cpp	8	FIELD:EditTool::entityRef	6	code/Game/Player/EditTool.h	entityRef/lastEntityRef uint64_t
+code/Game/Dialog/edittool_select.cpp	8	FIELD:UserInterface::dialogs list element	1	runtime/types/ui/UserInterface.h	DialogInstancePtr is void*; type the list element as DialogInstance*
+code/Game/Dialog/edittool_select.cpp	8	FIELD:ComponentDescription::_subDescs	1	code/Game/Component/ComponentDescription.h	Description** read as Object::Base*; add typed accessor / Description->Base relation
+code/Game/Dialog/mapparamsdialog.cpp	8	H5:MapGenerator::_field20	4	code/Game/Game/MapGenerator.h	void* _field20, EditElement::_text raw char*
+code/Game/Dialog/mapparamsdialog.cpp	8	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Dialog/mapparamsdialog.cpp	8	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Dialog/mapui.cpp	8	CONST:FindOrLoad	1	runtime/types/object ExternalPtr / FindOrLoad	const_cast of FindOrLoad Material result
+code/Game/Dialog/mapui.cpp	8	POD:RtSystem::String	1	runtime/types/graphics AddTexture	AddTexture takes RtSystem::String POD
+code/Game/Dialog/mapui.cpp	8	FIELD:SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	
+code/Game/Dialog/mapui.cpp	8	H5:SpriteSheet::m_textureName	2	runtime/types/ui/SpriteSheet.h	Strings held as char*; type as System::String
+code/Game/Dialog/mapui.cpp	8	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Player/tool_base_trade.cpp	8	ERASED:Avl38 helpers (0x140014b40/0x14001fa80 retrace)	8	code/Game/Player/exe_bodies.h	Avl38 forwarders; PlayerToolManager +0x60 Set root
+code/Game/Dialog/buildrequirementui.cpp	6	FIELD:ComponentDescription::_subDescs	3	code/Game/Component/ComponentDescription.h	
+code/Game/Dialog/buildrequirementui.cpp	6	H5:Array raw storage (ArrayAt)	2	owner dialog header	embedded Array<T> held as raw triple; type member
+code/Game/Dialog/buildrequirementui.cpp	6	FIELD:SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	uint64_t ExternalPtr<MaterialInstance>
+code/Game/Dialog/moddetailsdialog.cpp	6	POD:RtIO::Mod	6	runtime/types/io	Filename POD mirror, Mod strings char*
+code/Game/Dialog/resourcelimitui.cpp	6	LOCAL:CitizenBehavior	6	code/Game/Entity/CitizenBehavior.h	subObj+0x170 = professionResources (typed), 0x20 stride +8 field
+code/Game/Player/tool_base_path.cpp	6	SIG:C-door:Player/exe_bodies.h	5	code/Game/Player/exe_bodies.h	entity/map/desc passed as void*/int64_t
+code/Game/Player/tool_base_path.cpp	6	FIELD:CreateRemovalDescription::_refs	1	code/Game/Component/CreateRemovalDescription.h	void* raw Array
+code/Game/Tutorial/tutorial_wave.cpp	6	SIG:ExternalPtrSerializeGeneric(void**)	2	code/Game/Game/serialize_externals.h	takes void**
+code/Game/Tutorial/tutorial_wave.cpp	6	ERASED:Collection::Set insert 0x140014890	2	code/Game/Player/exe_bodies.h	root int64_t*
+code/Game/Tutorial/tutorial_wave.cpp	6	FIELD:UserInterface::dialogs list element	2	runtime/types/ui/UserInterface.h	DialogInstancePtr is void*; type the list element as DialogInstance*
+code/Game/Tutorial/tutorialstep.cpp	6	H5:TutorialStep Strings/Arrays	5	code/Game/Tutorial/TutorialStep.h	Strings and Array<void*> raw storage
+code/Game/Tutorial/tutorialstep.cpp	6	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Dialog/noiseui.cpp	5	CONST:FindOrLoad	1	runtime/types/object ExternalPtr / FindOrLoad	const_cast of FindOrLoad Material result
+code/Game/Dialog/noiseui.cpp	5	POD:RtSystem::String	1	runtime/types/graphics AddTexture	AddTexture takes RtSystem::String POD
+code/Game/Dialog/noiseui.cpp	5	FIELD:SpriteSheet::m_field30	1	runtime/types/ui/SpriteSheet.h	
+code/Game/Dialog/noiseui.cpp	5	H5:SpriteSheet::m_textureName	2	runtime/types/ui/SpriteSheet.h	Strings held as char*; type as System::String
+code/Game/Dialog/scenariodialog.cpp	5	POD:IO::Persistence::_savePath	1	runtime/types/io Persistence	RtSystem::String POD
+code/Game/Dialog/scenariodialog.cpp	5	SIG:Dialog-ctor-params	4	code/Game/Dialog/*Dialog.h ctor decls + Dialog::Create	ctor/create take void* ui, parentIBP, extRes
+code/Game/Player/roadtool_calcpath.cpp	5	FIELD:WorldGeometry::_arrays	2	code/Game/Game/WorldGeometry.h	nine arrays as raw Header{data,sizeCap}
+code/Game/Player/roadtool_calcpath.cpp	5	SIG:C-door:Action/exe_bodies.h	2	code/Game/Action/exe_bodies.h	BuildRoad/work C ctors take integer
+code/Game/Player/roadtool_calcpath.cpp	5	ERASED:Avl28 helpers	1	code/Game/Action/PathAvl.h	Map +0xE8 Set header
+code/Game/Player/tool_activation_standalone.cpp	5	ERASED:Avl38 helpers (0x140014b40/0x14001fa80 retrace)	5	code/Game/Player/exe_bodies.h	retrace takes int64_t*; ToolModeTree view of manager +0x10
+code/Game/Player/tool_base_createbar.cpp	5	FIELD:PlayerToolManager::field_0x08	5	code/Game/Game/PlayerToolManager.h	+0x08/+0x0C floats stored as one uint64_t; raw params
+code/Game/Tutorial/tutorial_next_scenario.cpp	5	LOCAL:Scenario	3	code/Game/Game/Scenario.h	generator ExternalPtrs already typed; cast redundant
+code/Game/Tutorial/tutorial_next_scenario.cpp	5	POD:IO::Persistence::_savePath	2	runtime/types/io	
+code/Game/Tutorial/tutorialsetupdialog.cpp	5	H5:TutorialSetupDialog Strings/Arrays	3	code/Game/Tutorial/TutorialSetupDialog.h	raw String +0x40 and String arrays
+code/Game/Tutorial/tutorialsetupdialog.cpp	5	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialsetupdialog.cpp	5	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Dialog/consumeproduceui.cpp	4	LOCAL:ConsumeProduceComponent	4	code/Game/Component/ConsumeProduceComponent.h	recipes read by offset +0x10 (0x28 stride)
+code/Game/Dialog/eventpopupdialog.cpp	4	LOCAL:EventLog	4	code/Game/Game/EventLog.h	m_eventNotifier is EventLog*; raw +0x18 read
+code/Game/Dialog/loaderdialog.cpp	4	FIELD:DialogLoaderLoopT::_dialogExternal	4	runtime/types/engine/UpdateLoop.h	void* / IBP raw writes
+code/Game/Dialog/optionsdialog.cpp	4	POD:RtVideo gfx interface	2	runtime/types/video	adapter Strings are POD
+code/Game/Dialog/optionsdialog.cpp	4	FIELD:UserInterface::dialogs list element	2	runtime/types/ui/UserInterface.h	DialogInstancePtr is void*; type the list element as DialogInstance*
+code/Game/Dialog/toolbar_utility_helpers.cpp	4	FIELD:UserInterface::dialogs list element	3	runtime/types/ui/UserInterface.h	DialogInstancePtr is void*; type the list element as DialogInstance*
+code/Game/Dialog/toolbar_utility_helpers.cpp	4	ERASED:Avl38 helpers (0x140014b40/0x14001fa80 retrace)	1	code/Game/Player/exe_bodies.h	
+code/Game/Dialog/tradeui_price.cpp	4	FIELD:ComponentDescription::_subDescs	3	code/Game/Component/ComponentDescription.h	
+code/Game/Dialog/tradeui_price.cpp	4	SIG:TradeUI price C signature (void* tradeState)	1	code/Game/Dialog/tradeui_funcs.h	takes void*
+code/Game/Dialog/upgradeui.cpp	4	FIELD:UpgradeUIConfig::_target	2	code/Game/Dialog/UpgradeUIConfig.h	void* for ExternalPtrSerializeGeneric(void**)
+code/Game/Dialog/upgradeui.cpp	4	FIELD:ComponentDescription::_subDescs	1	code/Game/Component/ComponentDescription.h	Description** read as Object::Base*; add typed accessor / Description->Base relation
+code/Game/Dialog/upgradeui.cpp	4	OTHER:diagnostic function-address print	1	code/Game/Dialog/upgradeui.cpp	
+code/Game/Player/tool_base_tile.cpp	4	FIELD:ModelComponent::_description	4	code/Game/Component/ModelComponent.h	void*
+code/Game/Tutorial/tutorial_base.cpp	4	SIG:ExternalPtrSerializeGeneric(void**)	1	code/Game/Game/serialize_externals.h	takes void**
+code/Game/Tutorial/tutorial_base.cpp	4	ERASED:Array<void*> raw data	2	code/Game/Tutorial/tutorial_base.cpp	
+code/Game/Tutorial/tutorial_base.cpp	4	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Tutorial/tutorialimagetoolbaricon.cpp	4	SIG:Serialize-stream	2	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialimagetoolbaricon.cpp	4	FIELD:Toolbar::_field30/_field38	2	code/Game/Game/Toolbar.h	+0x38 String declared void*
+code/Game/Dialog/autosavedialog.cpp	3	SIG:Dialog-ctor-params	3	code/Game/Dialog/*Dialog.h ctor decls + Dialog::Create	ctor/create take void* ui, parentIBP, extRes
+code/Game/Dialog/cemeteryui.cpp	3	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Dialog/dialog_exe_helpers.cpp	3	SIG:C-door:Dialog/dialog_exe_helpers.h/exe_bodies.h	2	code/Game/Dialog/dialog_exe_helpers.h	entity/self passed as void*
+code/Game/Dialog/dialog_exe_helpers.cpp	3	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Dialog/messagedialog.cpp	3	SIG:Dialog-ctor-params	3	code/Game/Dialog/*Dialog.h ctor decls + Dialog::Create	ctor/create take void* ui, parentIBP, extRes
+code/Game/Dialog/optioninputbinddialog.cpp	3	SIG:Dialog-ctor-params	3	code/Game/Dialog/*Dialog.h ctor decls + Dialog::Create	ctor/create take void* ui, parentIBP, extRes
+code/Game/Dialog/unreg_lane2_mapparamsdialog_ctor.cpp	3	SIG:Dialog-ctor-params	3	code/Game/Dialog/*Dialog.h ctor decls + Dialog::Create	ctor/create take void* ui, parentIBP, extRes
+code/Game/Player/bridgetool_calcpath.cpp	3	NOCLASS:Bridge path SegNode (0x18)	1	code/Game/Player/BridgeTool.h	node from MemAlloc(0x18,8)
+code/Game/Player/bridgetool_calcpath.cpp	3	H5:Array raw storage (ArrayAt)	1	owner dialog header	embedded Array<T> held as raw triple; type member
+code/Game/Player/bridgetool_calcpath.cpp	3	FIELD:CreateBridgeDescription::_refs	1	code/Game/Component/CreateBridgeDescription.h	_refs void*[5]
+code/Game/Player/pathtool.cpp	3	SIG:Tool slot 10 (uint64_t handle) / Picking user data void*	3	code/Game/Player/Tool.h	handle as uint64_t; GetUserData void*
+code/Game/Player/pathtool_setselected.cpp	3	NOCLASS:PathSegment in AvlNode28 element	3	code/Game/Action/PathAvl.h	AvlNode28 element declared as 8 byte segment
+code/Game/Player/placementtool.cpp	3	SIG:Tool-slot void* toolSelf	3	code/Game/Player/PlacementTool.h	toolSelf void*
+code/Game/Player/tool_base_screenrect.cpp	3	H5:PlayerController::camera	3	code/Game/Game/PlayerController.h	
+code/Game/Tutorial/finishtutorialinstance.cpp	3	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/finishtutorialinstance.cpp	3	SIG:Tutorial setup/goal slots take void*	2	code/Game/Tutorial/Tutorial*.h	StepExecute forwards void*
+code/Game/Dialog/mod_dialog_vtables.cpp	2	SIG:Dialog-ctor-params	2	code/Game/Dialog/ModDialog.h	(void*)-1 sentinel passed as uintptr_t
+code/Game/Dialog/radiusui.cpp	2	LOCAL:GameUpdateLoop	1	code/Game/Game/GameUpdateLoop.h	member already typed (Map*/Calendar*/EventLog*...); cast redundant
+code/Game/Dialog/radiusui.cpp	2	SIG:C-door:Player/exe_bodies.h	1	code/Game/Player/exe_bodies.h	first param integer
+code/Game/Goal/buildinggoal.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Goal/buildinggoal.cpp	2	OTHER:diagnostic stack image of BuildingGoal	1	code/Game/Goal/buildinggoal.cpp	vptr-less diagnostic
+code/Game/Player/fencedtool_calcpath.cpp	2	FIELD:CreateFencedDescription::_refs	2	code/Game/Component/CreateFencedDescription.h	_refs void*[6]
+code/Game/Player/roadtool.cpp	2	SIG:C-door:Action/exe_bodies.h	2	code/Game/Action/exe_bodies.h	0x14009ce00 takes map/path as int64_t
+code/Game/Player/tool_base_drag.cpp	2	SIG:C-door:Player/exe_bodies.h	2	code/Game/Player/exe_bodies.h	
+code/Game/Player/tool_base_ray.cpp	2	SIG:C-door:Action/exe_bodies.h	1	code/Game/Action/exe_bodies.h	
+code/Game/Player/tool_base_ray.cpp	2	H5:PlayerController::camera	1	code/Game/Game/PlayerController.h	
+code/Game/Player/tool_base_tilerender.cpp	2	SIG:C-door:Action/exe_bodies.h	2	code/Game/Action/exe_bodies.h	heightfield passed as int64_t
+code/Game/Tutorial/tutorial.cpp	2	H5:Tutorial steps Array<void*>	1	code/Game/Tutorial/Tutorial.h	
+code/Game/Tutorial/tutorial.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialgoalbutton.cpp	2	H5:Tutorial goal String member	1	code/Game/Tutorial/tutorialgoalbutton.h	raw String storage
+code/Game/Tutorial/tutorialgoalbutton.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialgoalcount.cpp	2	H5:Tutorial goal String member	1	code/Game/Tutorial/tutorialgoalcount.h	raw String storage
+code/Game/Tutorial/tutorialgoalcount.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialgoaldialog.cpp	2	H5:Tutorial goal String member	1	code/Game/Tutorial/tutorialgoaldialog.h	raw String storage
+code/Game/Tutorial/tutorialgoaldialog.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialhighlightdialog.cpp	2	SIG:C-door:Tutorial/exe_bodies.h	2	code/Game/Tutorial/exe_bodies.h	
+code/Game/Tutorial/tutorialimagehotkey.cpp	2	SIG:Serialize-stream	2	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialimageinputkey.cpp	2	SIG:Serialize-stream	2	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialsetuprestrictplayer.cpp	2	CONST:FindOrLoad	1	runtime/types/object FindOrLoad	const_cast of FindOrLoad External result
+code/Game/Tutorial/tutorialsetuprestrictplayer.cpp	2	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Dialog/achievementdialog.cpp	1	H5:Array raw storage (ArrayAt)	1	owner dialog header	embedded Array<T> held as raw triple; type member
+code/Game/Dialog/controluiconfig.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Dialog/helpui.cpp	1	H5:HelpUI::historyData	1	code/Game/Dialog/HelpUI.h	
+code/Game/Dialog/resourcelimituiconfig.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Dialog/statusiconuiconfig.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Dialog/titledesctooltipui.cpp	1	NOCLASS:tooltip user data (two Strings)	1	code/Game/Dialog/TitleDescToolTipUI.h	
+code/Game/Dialog/upgradeuiconfig.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Goal/populationgoal.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Goal/statgoal.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Goal/statvaluedispatch.cpp	1	FIELD:WorldGeometry::_arrays	1	code/Game/Game/WorldGeometry.h	+0x220 ints Header untyped
+code/Game/Goal/timegoal.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Goal/timegoalinstance.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Player/fencedtool.cpp	1	FIELD:CreateFencedDescription::_refs	1	code/Game/Component/CreateFencedDescription.h	_refs void*[6]
+code/Game/Tutorial/exe_bodies.h	1	FIELD:UserInterface::dialogs list element	1	runtime/types/ui/UserInterface.h	DialogInstancePtr is void*; type the list element as DialogInstance*
+code/Game/Tutorial/find_ui_element_by_path.cpp	1	FIELD:UserInterface::dialogs list element	1	runtime/types/ui/UserInterface.h	DialogInstancePtr is void*; type the list element as DialogInstance*
+code/Game/Tutorial/finishtutorialgoal.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialgoal.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialgoalgamespeed.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialimage.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialinstance.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialsetup.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialsetupcamera.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot
+code/Game/Tutorial/tutorialsetupgamespeed.cpp	1	SIG:Serialize-stream	1	runtime/types/object/External.h + each class Serialize decl	Serialize(void* stream) slot

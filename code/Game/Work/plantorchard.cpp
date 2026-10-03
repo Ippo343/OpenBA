@@ -103,10 +103,7 @@ static WorkCellSetNode* FindCell(WorkCellSetNode* node, int key) {
 // 6. Check pathfinding
 // 7. Create orchard planting action, assign work, insert into the set
 //
-int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
-    // LEFT: Work::Execute's citizen reference is untyped (the slot every leaf overrides).
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(entityIBP);
-
+int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) {
     // Step 1: Find components
     WorkComponent* workComp = field_10->FindComponent<WorkComponent>();          // 0x140003050
     OrchardComponent* orchard = field_10->FindComponent<OrchardComponent>();     // 0x140005440
@@ -254,7 +251,7 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/) {
 // Removes the set entry, marks cell available (sets validity to 0).
 // param4 is plain int cell index (not packed like PlantArea).
 // ============================================================
-int PlantOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
+int PlantOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the set for the cell index and remove it
     WorkCellSetNode* node = field_48;
     while (node != nullptr) {
@@ -279,7 +276,7 @@ int PlantOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
 // PlantOrchard::OnCancel [7] -- 0x1400f4a20
 // Removes the set entry and marks the cell available.
 // ============================================================
-int PlantOrchard::OnCancel(void* /*param2*/, void* /*param3*/, int param4) {
+int PlantOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the set for the cell and remove it
     WorkCellSetNode* node = field_48;
     while (node != nullptr) {
@@ -443,11 +440,10 @@ cleanup:
 // PlantOrchard::GetTarget [10] -- 0x1400f4ef0
 // Identical to PlantArea::GetTarget.
 // ============================================================
-void* PlantOrchard::GetTarget(void* outPtr) {
+Profession** PlantOrchard::GetTarget(Profession** outPtr) {
     // 0x140002e10 = FindComponent<WorkPlaceComponent>.
     WorkPlaceComponent* workplace = field_10->FindComponent<WorkPlaceComponent>();
-    // LEFT: slot 10's return slot is untyped (the slot every leaf overrides).
-    *reinterpret_cast<Profession**>(outPtr) = workplace->profession;
+    *outPtr = workplace->profession;
     return outPtr;
 }
 

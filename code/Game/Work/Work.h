@@ -48,6 +48,7 @@ class ComponentEntity;   // B4 WORK-a: field_10 typed (H4)
 class WorkComponent;     // B4 WORK-c: field_18 typed (H4)
 class CitizenComponent;
 class CompleteTask;
+class Profession;        // B4 P2 S2: slot 10's return buffer
 
 // The AVL sets the Work leaves keep their workers in are Collection::Set
 // instantiations the exe inlines (insert / erase / serialize: work_base_bst.cpp
@@ -89,10 +90,18 @@ public:
     // [4] retail passes TWO arguments: RDX = &citizen copy, R8 = scheduler
     // +0x130 (0x1400f7bdd/0x1400f7be4 and 0x1400f86c7/0x1400f86ce; R9 is never
     // set, and no body reads it -- BuildRoad 0x1400e4190 overwrites R8 unread).
-    virtual int   Execute(void* citizen, void* context) = 0;          // [4]  pure
-    virtual int   Slot5(void* citizen, void* context);                // [5]  0x1400f7540 → 0
-    virtual int   OnComplete(void* citizen, void* arg2, int arg3) = 0;// [6]  pure
-    virtual int   OnCancel(void* citizen, void* arg2, int arg3) = 0;  // [7]  pure
+    // B4 P2 S2: RDX is an InternalPtr<CitizenComponent> copy (`MOV RAX,[RSI];
+    // MOV [RSP+0x40],RAX; LEA RDX,[RSP+0x40]`), R8 the scheduler's System::Time
+    // clock (WorkScheduler::time +0x130). [5] is dispatched the same way (0x1400f871a).
+    virtual int   Execute(CitizenComponent** citizen, System::Time* context) = 0;          // [4]  pure
+    virtual int   Slot5(CitizenComponent** citizen, System::Time* context);                // [5]  0x1400f7540 → 0
+    // [6]/[7] from 0x1400f8760 / 0x1400f8800 (CompleteTask's task completion): RDX =
+    // a copy of the action's InternalPtr<CitizenComponent> (+0x20), R8 = a copy of its
+    // InternalPtr<ComponentEntity> target (+0x28), R9D = the task parameter. ClearArea
+    // 0x1400e5e30 keys its entity set on [R8]; the OnCancel bodies (0x1400e5e00) copy
+    // both and re-dispatch [6].
+    virtual int   OnComplete(CitizenComponent** citizen, ComponentEntity** arg2, int arg3) = 0;// [6]  pure
+    virtual int   OnCancel(CitizenComponent** citizen, ComponentEntity** arg2, int arg3) = 0;  // [7]  pure
     virtual int   Cleanup() = 0;                                      // [8]  pure
     // [9] retail passes `this` only: 0x1400f7bc3, 0x1400f86ad, 0x1400f86f4,
     // 0x1400f82b1, 0x1400f99a4 set RCX and nothing else. Bodies (BuildRoad
@@ -101,8 +110,10 @@ public:
     // overwrites it unread (0x1400f71a4) -- ClearArea 0x1400e5b10 never sets it.
     virtual int   Validate() = 0;                                     // [9]  pure
     // [10] the "who can do this" key (a u64 written through the hidden return
-    // buffer, returned as the buffer): retail RCX = this, RDX = retbuf.
-    virtual void* GetTarget(void* retbuf) = 0;                        // [10] pure
+    // buffer, returned as the buffer): retail RCX = this, RDX = retbuf. The key is
+    // the InternalPtr<Profession> of who can do the job: ForesterWork 0x1400eb910
+    // stores WorkPlaceComponent +0x48 into [RDX] and returns RDX.
+    virtual Profession** GetTarget(Profession** retbuf) = 0;                        // [10] pure
     virtual int   GetPriority() = 0;                                  // [11] pure
     // [12] retail passes EDX = the serializer version (Goals_Serialize
     // 0x1400f9335..0x1400f9340: `CALL GetVersion; MOV EDX,EAX; MOV RCX,RDI;

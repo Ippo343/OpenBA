@@ -87,11 +87,7 @@ static uint32_t WorldToCell(int gridSize, float x, float z) {
 // 7. Register work with citizen AI (CitizenAI_impl_1a30)
 // Returns: 0 = no fire, 1 = at capacity, 2 = work assigned.
 // ============================================================
-int FireWork::Execute(void* citizenIBPArg, void* time) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = reinterpret_cast<CitizenComponent**>(citizenIBPArg);
-
+int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // CheckPtr on the entity IBP at +0x10; its InteractComponent
     InteractComponent* posCompIBP = field_10->FindComponent<InteractComponent>();
 
@@ -228,8 +224,8 @@ int FireWork::Execute(void* citizenIBPArg, void* time) {
     CitizenComponent* citizenVal = *citizenIBP;
 
     // Get target via vtable slot 10 (+0x50): a profession
-    uintptr_t targetIBP = 0;
-    Profession* targetVal = *(Profession**)GetTarget(&targetIBP);
+    Profession* targetIBP = nullptr;
+    Profession* targetVal = *GetTarget(&targetIBP);
 
     // Set citizen flags
     citizenVal->statusFlags |= 4;
@@ -399,7 +395,7 @@ int FireWork::Validate() {
 
 // CitizenAI_impl_5520 (0x140025520) = WorkBST_BSTFindRemove_25520: BST lookup + remove by key.
 
-int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
+int FireWork::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/, int /*arg3*/) {
     // Remove citizen entry from BST at +0x50
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);
     return 0;
@@ -413,7 +409,7 @@ int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
 // jumps to the BST remove-by-key function. The effect is
 // identical to Slot6 without the SUB RSP / return false wrapper.
 // ============================================================
-int FireWork::OnCancel(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
+int FireWork::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/, int /*arg3*/) {
     // Remove citizen entry from BST at +0x50
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);
     return 0;
@@ -468,8 +464,8 @@ int FireWork::Cleanup() {
 // Uses hidden return pointer ABI (member function returning
 // non-trivial InternalBasePtr): RCX=this, RDX=retbuf.
 // ============================================================
-void* FireWork::GetTarget(void* retbuf) {
-    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+Profession** FireWork::GetTarget(Profession** retbuf) {
+    *retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 

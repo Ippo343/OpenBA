@@ -477,7 +477,7 @@ char CropFieldComponent::State10Update() {
 
 // ── event 4 on state 10 — 0x140119f00 — the panel's HARVEST command ───────────────
 // It reads no field of the component (RCX unused): it stays a free function (B1).
-static char CropField_Event4Harvest(void* /*self*/, void* sm) {
+static char CropField_Event4Harvest(CropFieldComponent* /*self*/, void* sm) {
     std::fprintf(stderr, "[CropXition] event 4 -> STATE 11 HARVEST\n");
     std::fflush(stderr);
     ::ControllerLive::RequestStateTransition(sm, 11);
@@ -545,38 +545,38 @@ char CropFieldComponent::State11PerFrame(void* sm) {
 
 // The table holds one-line adapters: the dispatcher hands the handler `[node+0x18]`
 // (the CropFieldComponent) and the state machine.
-static char CropField_State2Enter(CropFieldComponent* c)                 { return c->State2Enter(); }        // 0x14011a920
+static char CropField_State2Enter(CropFieldComponent* c, void* /*sm*/)                 { return c->State2Enter(); }        // 0x14011a920
 static char CropField_Event3Plant(CropFieldComponent* c, void* sm)       { return c->Event3Plant(sm); }     // 0x14011a7b0
-static char CropField_State2PerFrame(CropFieldComponent* c, void* sm)    { return c->State2PerFrame(sm); }  // 0x14011a860
-static char CropField_State9Enter(CropFieldComponent* c)                 { return c->State9Enter(); }       // 0x14011a310
-static char CropField_State9PerFrame(CropFieldComponent* c, void* sm)    { return c->State9PerFrame(sm); }  // 0x14011a1e0
-static char CropField_State10Enter(CropFieldComponent* c)                { return c->State10Enter(); }      // 0x14011a100
-static char CropField_State10Update(CropFieldComponent* c)               { return c->State10Update(); }     // 0x140119f70
-static char CropField_State10PerFrame(CropFieldComponent* c, void* sm)   { return c->State10PerFrame(sm); } // 0x140119fd0
-static char CropField_State11Enter(CropFieldComponent* c)                { return c->State11Enter(); }      // 0x140119e60
-static char CropField_State11PerFrame(CropFieldComponent* c, void* sm)   { return c->State11PerFrame(sm); } // 0x140119d80
+static char CropField_State2PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)    { return c->State2PerFrame(sm); }  // 0x14011a860
+static char CropField_State9Enter(CropFieldComponent* c, void* /*sm*/)                 { return c->State9Enter(); }       // 0x14011a310
+static char CropField_State9PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)    { return c->State9PerFrame(sm); }  // 0x14011a1e0
+static char CropField_State10Enter(CropFieldComponent* c, void* /*sm*/)                { return c->State10Enter(); }      // 0x14011a100
+static char CropField_State10Update(CropFieldComponent* c, void* /*sm*/)               { return c->State10Update(); }     // 0x140119f70
+static char CropField_State10PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)   { return c->State10PerFrame(sm); } // 0x140119fd0
+static char CropField_State11Enter(CropFieldComponent* c, void* /*sm*/)                { return c->State11Enter(); }      // 0x140119e60
+static char CropField_State11PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)   { return c->State11PerFrame(sm); } // 0x140119d80
 
 // Replica of the populator at 0x14011b150, in registration order. Order matters: it
 // fixes the state INDEX that StateMachine::Tick carries in its +0x09/+0x0a/+0x0b bytes.
 static void CropFieldCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = CropFieldDispatch::table;
+    auto& t = CropFieldDispatch::table;
     if (t.count != 0) return;                       // idempotent
 
     // ── state 2 — DEFAULT / idle ──────────────────────────────────────────────────
     // Slot 16 (GetDefaultState) is the shared 0x1400026c0 = `MOV EAX,2; RET`, so this
     // is where a new field starts. enter 0x14011a920 / trans38 0x14011a860; the event-3
     // body 0x14011a7b0 is the panel's plant command, mirroring the orchard's event 3.
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&CropField_State2Enter), nullptr,
-                       reinterpret_cast<void*>(&CropField_State2PerFrame), nullptr);
+    TableRegisterState(t, 2, &CropField_State2Enter, nullptr,
+                       &CropField_State2PerFrame, nullptr);
     TableAddTransition(t, 3,  nullptr);
     TableAddTransition(t, 9,  nullptr);
-    TableAddEvent(t, 3, reinterpret_cast<void*>(&CropField_Event3Plant));
+    TableAddEvent(t, 3, &CropField_Event3Plant);
 
     // ── state 9 — PLANT ───────────────────────────────────────────────────────────
     // enter 0x14011a310 / trans38 0x14011a1e0.
-    TableRegisterState(t, 9, reinterpret_cast<void*>(&CropField_State9Enter), nullptr,
-                       reinterpret_cast<void*>(&CropField_State9PerFrame), nullptr);
+    TableRegisterState(t, 9, &CropField_State9Enter, nullptr,
+                       &CropField_State9PerFrame, nullptr);
     TableAddTransition(t, 3,  nullptr);
     TableAddTransition(t, 10, nullptr);
 
@@ -584,18 +584,18 @@ static void CropFieldCtrl_PopulateTable() {
     // The only state with an UPDATE handler (0x140119f70) as well as a per-frame
     // trans38 (0x140119fd0); enter 0x14011a100. Event 4 (0x140119f00) is the harvest
     // command, and 21 is the clear/cut target.
-    TableRegisterState(t, 10, reinterpret_cast<void*>(&CropField_State10Enter), nullptr,
-                       reinterpret_cast<void*>(&CropField_State10PerFrame),
-                       reinterpret_cast<void*>(&CropField_State10Update));
+    TableRegisterState(t, 10, &CropField_State10Enter, nullptr,
+                       &CropField_State10PerFrame,
+                       &CropField_State10Update);
     TableAddTransition(t, 3,  nullptr);
     TableAddTransition(t, 21, nullptr);
     TableAddTransition(t, 11, nullptr);
-    TableAddEvent(t, 4, reinterpret_cast<void*>(&CropField_Event4Harvest));
+    TableAddEvent(t, 4, &CropField_Event4Harvest);
 
     // ── state 11 — HARVEST ────────────────────────────────────────────────────────
     // enter 0x140119e60 / trans38 0x140119d80.
-    TableRegisterState(t, 11, reinterpret_cast<void*>(&CropField_State11Enter), nullptr,
-                       reinterpret_cast<void*>(&CropField_State11PerFrame), nullptr);
+    TableRegisterState(t, 11, &CropField_State11Enter, nullptr,
+                       &CropField_State11PerFrame, nullptr);
     TableAddTransition(t, 3,  nullptr);
     TableAddTransition(t, 21, nullptr);
 }

@@ -39,6 +39,8 @@
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
+class ComponentEntity;   // B4 P2 S2: slot 9's parameter
+
 class Action : public Object::Internal {
     DECLARE_EXE_TYPE(Action)
 
@@ -51,6 +53,11 @@ public:
     // as the pilot's Component); every leaf overrides both.
     // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(IO::Stream& stream) override;                   // [3] 0x1400c4b40
+    // [4]-[7] B4 P2 S2, LEFT void*: retail's actionStack is the ActionStack at
+    // CharacterComponent +0x48 and `time` a System::Time*, but every caller holds them
+    // untyped (CitizenAI_ActionExecutor_c4c50 takes the stack as int64_t* and the time
+    // as void*; CharacterComponent declares +0x48 as separate fields, not an
+    // ActionStack; Update / Tick receive the time as void*). Typing waits on those.
     virtual int  AbstractImpl(void* actionStack) = 0;             // [4] _purecall
     virtual int  Execute(void* actionStack, void* time);          // [5] 0x1400c4a90 ret 0
     // [6] args from retail's only caller, Character_UpdateAnimation 0x1400c4f80:
@@ -60,7 +67,10 @@ public:
     virtual void Enter(void* actionStack, void* time);            // [6] 0x1400c4b90 RET
     virtual void Exit(void* actionStack);                         // [7] 0x1400c4ba0 RET
     virtual void CheckEntity();                                   // [8] 0x1400c4a30 RET
-    virtual bool GetTarget(void* param);                          // [9] 0x1400c4a40 ret false
+    // [9] "does this action reference the entity?": RDX = an InternalPtr<ComponentEntity>
+    // (CompleteTask 0x1400c5a50 CheckPtrs RDX and compares [RDX] with its +0x28 entity
+    // and its citizen's +0x10 entity; the caller 0x1400c52c0 passes &copy of the entity).
+    virtual bool GetTarget(ComponentEntity** param);                          // [9] 0x1400c4a40 ret false
 
 
     // ---- the 0x10 bytes Action adds, retail order ---------------------------

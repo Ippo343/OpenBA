@@ -41,7 +41,7 @@ public:
     void Enter(void* actionStack, void* time) override;        // [6] 0x1400c8970
     void Exit(void* actionStack) override;                     // [7] 0x1400c8520
     void CheckEntity() override;                               // [8] 0x1400c84d0
-    bool GetTarget(void* param) override;                      // [9] 0x1400c8480
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c8480
 
     // ---- fields, retail order (PUBLIC: 0x1400c8c10 / 0x1400c8d20 read them) ----
     PathTicket ticket;           // +0x20 the pathfinder ticket {slot (-1 = none), token}

@@ -49,7 +49,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct BuildCtrlTag {};
+struct BuildCtrlTag { using Owner = class BuildComponent; };   // the handlers' receiver (controller_state_table.h)
 class ModelComponent;     // Component/ModelComponent.h
 class PickingComponent;   // Component/PickingComponent.h
 

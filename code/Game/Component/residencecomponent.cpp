@@ -571,13 +571,13 @@ using ResidenceCtrlDispatch = ::ControllerLive::Dispatcher<ResidenceCtrlTag>;
 // Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void ResidenceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = ResidenceCtrlDispatch::table;
+    auto& t = ResidenceCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&ResidenceEnterBuilt),
-                       nullptr, reinterpret_cast<void*>(&ResidenceHeatTick),
+    TableRegisterState(t, 2, &ResidenceEnterBuilt,
+                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<ResidenceComponent>::Tick>(&ResidenceHeatTick),   // LEFT: its time is System::Time*; Controller::Tick / StateMachine::Tick carry it as void* (ControllerComponent.h, statemachinecomponent.cpp)
                        nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&ResidenceEnterDemolish),
+    TableRegisterState(t, 3, &ResidenceEnterDemolish,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

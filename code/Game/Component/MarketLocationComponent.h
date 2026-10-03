@@ -30,7 +30,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct MarketLocationCtrlTag {};
+struct MarketLocationCtrlTag { using Owner = class MarketLocationComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class MarketLocationComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(MarketLocationComponent)

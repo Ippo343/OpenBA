@@ -144,8 +144,8 @@ void RemoveAnimal::CheckEntity() {
 // Slot 9: GetTarget (0x1400ca720)
 // Returns true if *param matches the entity at +0x20.
 // ============================================================
-bool RemoveAnimal::GetTarget(void* param) {
-    return *(void**)param == _field20.Get();   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool RemoveAnimal::GetTarget(ComponentEntity** param) {
+    return *param == _field20.Get();
 }
 
 // ============================================================

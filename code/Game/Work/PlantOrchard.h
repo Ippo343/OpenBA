@@ -41,12 +41,12 @@ public:
     // 0x1400f5010: frees the slot array and the BST
     ~PlantOrchard() override;                                       // [0]  0x14002c540
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f4f50
-    int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400f4af0
-    int   OnComplete(void* param2, void* param3, int param4) override;  // [6]  0x1400f4a90
-    int   OnCancel(void* param2, void* param3, int param4) override;    // [7]  0x1400f4a20
+    int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400f4af0
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int param4) override;  // [6]  0x1400f4a90
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int param4) override;    // [7]  0x1400f4a20
     int   Cleanup() override;                                       // [8]  0x1400f4e70
     int   Validate() override;                          // [9]  0x1400f47f0
-    void* GetTarget(void* outPtr) override;                         // [10] 0x1400f4ef0
+    Profession** GetTarget(Profession** outPtr) override;                         // [10] 0x1400f4ef0
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- PlantOrchard fields (+0x48) ---

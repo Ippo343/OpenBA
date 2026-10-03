@@ -879,14 +879,14 @@ char OrchTickPlanting(OrchardComponent* c, void* sm, void*)   { return c ? c->Ti
 char OrchOnHarvest(OrchardComponent* c, void* sm)             { return c ? c->OnHarvestEvent(sm) : 1; }  // 0x140050900
 char OrchOnClear(OrchardComponent* c, void* sm)               { return c ? c->OnClearEvent(sm) : 1; }    // 0x1400513e0
 char OrchEnterTending(OrchardComponent* c, void* sm)          { return c ? c->EnterTending(sm) : 1; }    // 0x140050e30
-char OrchUpdateTending(OrchardComponent* c, void*, void*)     { return c ? c->UpdateTending() : 1; }     // 0x140050ba0 / 0x1400509b0
+char OrchUpdateTending(OrchardComponent* c, void*)     { return c ? c->UpdateTending() : 1; }     // 0x140050ba0 / 0x1400509b0
 char OrchTickTending(OrchardComponent* c, void* sm, void*)    { return c ? c->TickTending(sm) : 1; }     // 0x140050c00
 char OrchEnterReplanting(OrchardComponent* c, void*)          { return c ? c->EnterReplanting() : 1; }   // 0x140050ae0
 char OrchTickReplanting(OrchardComponent* c, void* sm, void*) { return c ? c->TickReplanting(sm) : 1; }  // 0x140050a10
 char OrchEnterHarvesting(OrchardComponent* c, void*)          { return c ? c->EnterHarvesting() : 1; }   // 0x140050800
 char OrchTickHarvesting(OrchardComponent* c, void* sm, void*) { return c ? c->TickHarvesting(sm) : 1; }  // 0x140050650
 char OrchEnterClearing(OrchardComponent* c, void*)            { return c ? c->EnterClearing() : 1; }     // 0x1400504e0
-char OrchUpdateClearing(OrchardComponent* c, void*, void*)    { return c ? c->UpdateClearing() : 1; }    // 0x1400503e0
+char OrchUpdateClearing(OrchardComponent* c, void*)    { return c ? c->UpdateClearing() : 1; }    // 0x1400503e0
 char OrchTickClearing(OrchardComponent* c, void* sm, void*)   { return c ? c->TickClearing(sm) : 1; }    // 0x140050430
 }  // namespace
 
@@ -894,18 +894,18 @@ char OrchTickClearing(OrchardComponent* c, void* sm, void*)   { return c ? c->Ti
 // State ids are literal; the names in comments are inferred from the bodies.
 static void OrchardCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = OrchardDispatch::table;
+    auto& t = OrchardDispatch::table;
     if (t.count != 0) return;                       // idempotent, as pasture's is
 
     // ── state 2 — DEFAULT (idle; GetDefaultState 0x1400026c0 is `MOV EAX,2; RET`) ──
     // enter    0x140051530  deactivate the workplace
     // trans38  0x1400514c0  if enabled -> request state 9   (the idle->plant trigger)
     // event 3  0x140051450  unconditional request of state 9  (the panel's plant cmd)
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&OrchEnterIdle), nullptr,
-                       reinterpret_cast<void*>(&OrchTickIdle), nullptr);
+    TableRegisterState(t, 2, &OrchEnterIdle, nullptr,
+                       &OrchTickIdle, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 9, nullptr);
-    TableAddEvent(t, 3, reinterpret_cast<void*>(&OrchOnPlant));
+    TableAddEvent(t, 3, &OrchOnPlant);
 
     // ── state 9 — PLANT GRID ──────────────────────────────────────────────────────
     // enter    0x140051070  PlantOrchard_impl_1070: activates the workplace, reads the
@@ -914,62 +914,62 @@ static void OrchardCtrl_PopulateTable() {
     //                       a PlantOrchard work carrying treeType
     // trans38  0x140050f90  when every slot reaches state 1 -> request state 10
     // event 5  0x1400513e0  -> request state 20
-    TableRegisterState(t, 9, reinterpret_cast<void*>(&OrchEnterPlanting), nullptr,
-                       reinterpret_cast<void*>(&OrchTickPlanting), nullptr);
+    TableRegisterState(t, 9, &OrchEnterPlanting, nullptr,
+                       &OrchTickPlanting, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 20, nullptr);
-    TableAddEvent(t, 5, reinterpret_cast<void*>(&OrchOnClear));
+    TableAddEvent(t, 5, &OrchOnClear);
 
     // ── state 10 — TEND / IDLE-GROWN ──────────────────────────────────────────────
     // enter    0x140050e30  hole -> state 12, else post a TendArea work
     // update   0x140050ba0  deactivate the workplace if active
     // trans38  0x140050c00  TryHarvest; hole -> 12; seasonal TendArea re-post
     // event 5  0x1400513e0 -> state 20 ; event 4  0x140050900 -> state 11
-    TableRegisterState(t, 10, reinterpret_cast<void*>(&OrchEnterTending), nullptr,
-                       reinterpret_cast<void*>(&OrchTickTending),
-                       reinterpret_cast<void*>(&OrchUpdateTending));
+    TableRegisterState(t, 10, &OrchEnterTending, nullptr,
+                       &OrchTickTending,
+                       &OrchUpdateTending);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 12, nullptr);
     TableAddTransition(t, 11, nullptr);
     TableAddTransition(t, 20, nullptr);
-    TableAddEvent(t, 5, reinterpret_cast<void*>(&OrchOnClear));
-    TableAddEvent(t, 4, reinterpret_cast<void*>(&OrchOnHarvest));
+    TableAddEvent(t, 5, &OrchOnClear);
+    TableAddEvent(t, 4, &OrchOnHarvest);
 
     // ── state 12 — REPLANT GAPS ───────────────────────────────────────────────────
     // enter    0x140050ae0  PlantOrchard_impl_0ae0: post a PlantOrchard for the holes
     // update   0x1400509b0  (state 10's update body)
     // trans38  0x140050a10  TryHarvest; no holes left -> request state 10
     // event 5  0x1400513e0 -> state 20 ; event 4  0x140050900 -> state 11
-    TableRegisterState(t, 12, reinterpret_cast<void*>(&OrchEnterReplanting), nullptr,
-                       reinterpret_cast<void*>(&OrchTickReplanting),
-                       reinterpret_cast<void*>(&OrchUpdateTending));
+    TableRegisterState(t, 12, &OrchEnterReplanting, nullptr,
+                       &OrchTickReplanting,
+                       &OrchUpdateTending);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 11, nullptr);
     TableAddTransition(t, 20, nullptr);
-    TableAddEvent(t, 5, reinterpret_cast<void*>(&OrchOnClear));
-    TableAddEvent(t, 4, reinterpret_cast<void*>(&OrchOnHarvest));
+    TableAddEvent(t, 5, &OrchOnClear);
+    TableAddEvent(t, 4, &OrchOnHarvest);
 
     // ── state 11 — HARVEST ────────────────────────────────────────────────────────
     // enter    0x140050800  HarvestOrchard_impl_0800: post a HarvestOrchard work, then
     //                       stamp the footprint cells with treeType
     // trans38  0x140050650  harvest-complete latch -> request state 10
     // event 5  0x1400513e0 -> state 20
-    TableRegisterState(t, 11, reinterpret_cast<void*>(&OrchEnterHarvesting), nullptr,
-                       reinterpret_cast<void*>(&OrchTickHarvesting), nullptr);
+    TableRegisterState(t, 11, &OrchEnterHarvesting, nullptr,
+                       &OrchTickHarvesting, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 10, nullptr);
     TableAddTransition(t, 20, nullptr);
-    TableAddEvent(t, 5, reinterpret_cast<void*>(&OrchOnClear));
+    TableAddEvent(t, 5, &OrchOnClear);
 
     // ── state 20 (0x14) — CLEAR ───────────────────────────────────────────────────
     // enter    0x1400504e0  ClearArea_impl_04e0: post a ClearArea work at prio 0x401
     // update   0x1400503e0  deactivate the workplace
     // trans38  0x140050430  when the footprint tests clear -> request state 9
-    TableRegisterState(t, 20, reinterpret_cast<void*>(&OrchEnterClearing), nullptr,
-                       reinterpret_cast<void*>(&OrchTickClearing),
-                       reinterpret_cast<void*>(&OrchUpdateClearing));
+    TableRegisterState(t, 20, &OrchEnterClearing, nullptr,
+                       &OrchTickClearing,
+                       &OrchUpdateClearing);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 9, nullptr);
 

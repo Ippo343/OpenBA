@@ -361,7 +361,7 @@ char HappinessComponent::StateDemolishEnter() {
 // The state table's handler adapters: the controller hands each one its owner
 // (node+0x18), the HappinessComponent.
 static char Happiness_StateBuiltEnter(HappinessComponent* c, void* /*sm*/) { return c->StateBuiltEnter(); }      // 0x14004a9f0
-static char Happiness_StateBuiltPerFrame(HappinessComponent* c, void* /*sm*/, void* /*time*/, int /*idx*/) {
+static char Happiness_StateBuiltPerFrame(HappinessComponent* c, void* /*sm*/, void* /*time*/) {
     return c->StateBuiltPerFrame();                                                                             // 0x14004a9a0
 }
 static char Happiness_StateDemolishEnter(HappinessComponent* c, void* /*sm*/) { return c->StateDemolishEnter(); } // 0x14004a940
@@ -388,15 +388,15 @@ using HappinessCtrlDispatch = ::ControllerLive::Dispatcher<HappinessCtrlTag>;
 // Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void HappinessComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = HappinessCtrlDispatch::table;
+    auto& t = HappinessCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&Happiness_StateBuiltEnter),
-                       nullptr, reinterpret_cast<void*>(&Happiness_StateBuiltPerFrame), nullptr);
+    TableRegisterState(t, 2, &Happiness_StateBuiltEnter,
+                       nullptr, &Happiness_StateBuiltPerFrame, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 13, reinterpret_cast<void*>(&Happiness_StateBuiltEnter),
-                       nullptr, reinterpret_cast<void*>(&Happiness_StateBuiltPerFrame), nullptr);
+    TableRegisterState(t, 13, &Happiness_StateBuiltEnter,
+                       nullptr, &Happiness_StateBuiltPerFrame, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&Happiness_StateDemolishEnter),
+    TableRegisterState(t, 3, &Happiness_StateDemolishEnter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);

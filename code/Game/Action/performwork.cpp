@@ -187,8 +187,8 @@ void PerformWork::CheckEntity() {
 // PerformWork::GetTarget (0x1400C92D0) -- slot 9
 // Returns true if param matches the citizen's owning entity (Component +0x10).
 // ============================================================
-bool PerformWork::GetTarget(void* param) {
-    return workTarget->_entity == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool PerformWork::GetTarget(ComponentEntity** param) {
+    return workTarget->_entity == *param;
 }
 
 // ============================================================

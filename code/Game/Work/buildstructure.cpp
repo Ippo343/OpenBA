@@ -112,7 +112,7 @@ BuildStructure::~BuildStructure() {
 // ============================================================
 // OnComplete (0x1400e4f80)
 // ============================================================
-int BuildStructure::OnComplete(void* citizenIBP, void* /*unused*/, int slotIndex) {
+int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
     field_50[slotIndex] = 0;
     return 0;
@@ -121,7 +121,7 @@ int BuildStructure::OnComplete(void* citizenIBP, void* /*unused*/, int slotIndex
 // ============================================================
 // OnCancel (0x1400e4f40)
 // ============================================================
-int BuildStructure::OnCancel(void* citizenIBP, void* /*unused*/, int slotIndex) {
+int BuildStructure::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
     field_50[slotIndex] = 0;
     return 0;
@@ -242,11 +242,7 @@ static int WorldToCell(int gridSize, float x, float z) {
 }
 
 
-int BuildStructure::Execute(void* citizenPtrArg, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenPtr = reinterpret_cast<CitizenComponent**>(citizenPtrArg);
-
+int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*context*/) {
     // --- Phase 1: Validate building is enabled ---
     // Find InteractComponent (the build positions) on the building entity
     InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
@@ -504,8 +500,8 @@ int BuildStructure::Execute(void* citizenPtrArg, void* /*context*/) {
                     CitizenComponent* bldgEntity = *citizenPtr;
 
                     // Get target via vtable slot 10 (GetTarget, +0x50)
-                    uintptr_t targetIBP = 0;
-                    Profession* targetVal = *(Profession**)GetTarget(&targetIBP);
+                    Profession* targetIBP = nullptr;
+                    Profession* targetVal = *GetTarget(&targetIBP);
 
                     bldgEntity->statusFlags |= 4;
                     bldgEntity->field_0x30 = priority;
@@ -537,8 +533,8 @@ int BuildStructure::Execute(void* citizenPtrArg, void* /*context*/) {
 // ============================================================
 // Returns the profession list's +0x38 profession (GameUpdateLoop::m_professionList).
 // Uses hidden return pointer ABI: RCX=self, RDX=retBuf
-void* BuildStructure::GetTarget(void* retBuf) {
-    *(Profession**)retBuf = GameUpdateLoop::_singleton->m_professionList->field_0x38;
+Profession** BuildStructure::GetTarget(Profession** retBuf) {
+    *retBuf = GameUpdateLoop::_singleton->m_professionList->field_0x38;
     return retBuf;
 }
 
@@ -837,7 +833,7 @@ extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP) {
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
 // citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(citizenIBP, nullptr);   // B.3.8 bridge
+    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: the force harness drives it through a void* function pointer
 }
 
 // Execute-readiness gate for the force harness (no retail address). B3R: BuildStructure's

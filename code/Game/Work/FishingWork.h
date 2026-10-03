@@ -42,12 +42,12 @@ public:
     // empty dtor + the compiler chain still does (the arrays leak, as before).
     ~FishingWork() override = default;                              // [0]  0x14002a2c0
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ea910
-    int   Execute(void* citizenIBP, void* time) override;  // [4]  0x1400e9f20
-    int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400e9eb0
-    int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]  0x1400e9e80
+    int   Execute(CitizenComponent** citizenIBP, System::Time* time) override;  // [4]  0x1400e9f20
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;  // [6]  0x1400e9eb0
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;    // [7]  0x1400e9e80
     int   Cleanup() override;                                       // [8]  0x1400ea830
     int   Validate() override;                          // [9]  0x1400e9c30
-    void* GetTarget(void* param2) override;                         // [10] 0x1400ea8b0
+    Profession** GetTarget(Profession** param2) override;                         // [10] 0x1400ea8b0
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- FishingWork fields (+0x48) ---

@@ -43,7 +43,7 @@
 
 // TownManager::AbortCitizenActionsFor (exe 0x140089e30) - ported in
 // code/Game/Component/destroycomponent_state6.cpp.
-extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, void** pEntityIbp);
+extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, ComponentEntity** pEntityIbp);
 
 extern "C" int  EntityCompValidate(void*, void*, void*, int);  // standalone/entity_comp_validator.cpp
 
@@ -227,7 +227,7 @@ ComponentEntity::~ComponentEntity() {
     if (GameUpdateLoop::_singleton != nullptr) {
         void* townMgr = GameUpdateLoop::_singleton->m_citizenList;
         if (townMgr) {
-            void* entityIbp = this;   // the InternalBasePtr onto the dying entity
+            ComponentEntity* entityIbp = this;   // the InternalBasePtr onto the dying entity
             TownMgr_AbortCitizenActionsFor_89e30(townMgr, &entityIbp);
         }
     }

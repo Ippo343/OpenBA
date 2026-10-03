@@ -87,10 +87,7 @@
 // 6. Create PerformWork action
 // 7. Register with CitizenAI
 //
-int TendArea::Execute(void* citizenIBP, void* /*context*/) {
-    // LEFT: Work::Execute's citizen reference is untyped (the slot every leaf overrides).
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
-
+int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) {
     // Step 1: Check max workers
     WorkComponent* workComp = field_10->FindComponent<WorkComponent>();   // 0x140003050
 
@@ -214,7 +211,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
 
     // LEFT: 0x140021a30's C signature (outside callers) takes the set as uintptr_t*.
     WorkCitizenSetNode* inserted = nullptr;
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&bstRoot), &inserted, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&bstRoot), &inserted, citizenRef);
     return 2;
 }
 
@@ -226,7 +223,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
 // ============================================================
 // TendArea::OnComplete [6] -- BSTFindRemove + return false (0x1400f5470)
 // ============================================================
-int TendArea::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int TendArea::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);
     return false;
 }
@@ -235,7 +232,7 @@ int TendArea::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // ============================================================
 // TendArea::OnCancel [7] -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
-int TendArea::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+int TendArea::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);
     return 0;
 }
@@ -376,11 +373,10 @@ int TendArea::Validate() {
 // TendArea::GetTarget [10] (0x1400f58a0)
 // The post's WorkPlaceComponent's Profession, through the hidden return slot.
 // ============================================================
-void* TendArea::GetTarget(void* outPtr) {
+Profession** TendArea::GetTarget(Profession** outPtr) {
     // 0x140002e10 = FindComponent<WorkPlaceComponent>.
     WorkPlaceComponent* workplace = field_10->FindComponent<WorkPlaceComponent>();
-    // LEFT: slot 10's return slot is untyped (the slot every leaf overrides).
-    *reinterpret_cast<Profession**>(outPtr) = workplace->profession;
+    *outPtr = workplace->profession;
     return outPtr;
 }
 

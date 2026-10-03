@@ -90,8 +90,8 @@ int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
 // GetTarget (0x1400c5560, vtable slot 9)
 // Returns true if param matches entity at +0x20.
 // ============================================================
-bool AnimateNaturalResource::GetTarget(void* param) {
-    return _field20.Get() == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool AnimateNaturalResource::GetTarget(ComponentEntity** param) {
+    return _field20.Get() == *param;
 }
 
 // ============================================================

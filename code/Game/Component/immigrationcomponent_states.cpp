@@ -659,30 +659,30 @@ char ImmOnDeny(ImmigrationComponent* c, void* sm)                   { return c->
 
 extern "C" void ImmigrationCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = ImmigrationDispatch::table;
+    auto& t = ImmigrationDispatch::table;
     if (t.count != 0) return;
     // sub_7ba0(id, ENTER, p3, p4, TICK) -> {id, enter@+0x08, trans38@+0x18}
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&ImmEnterIdle), nullptr,
-                       reinterpret_cast<void*>(&ImmTickIdle), nullptr);
+    TableRegisterState(t, 2, &ImmEnterIdle, nullptr,
+                       &ImmTickIdle, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 0xf, nullptr);
 
-    TableRegisterState(t, 0xf, reinterpret_cast<void*>(&ImmEnterWaiting), nullptr,
-                       reinterpret_cast<void*>(&ImmTickWaiting), nullptr);
+    TableRegisterState(t, 0xf, &ImmEnterWaiting, nullptr,
+                       &ImmTickWaiting, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 0x10, nullptr);
     TableAddTransition(t, 2, nullptr);
 
-    TableRegisterState(t, 0x10, reinterpret_cast<void*>(&ImmEnterArriving), nullptr,
-                       reinterpret_cast<void*>(&ImmTickArriving), nullptr);
-    TableAddTransition(t, 3, reinterpret_cast<void*>(&ImmOnLeaveGroup));
+    TableRegisterState(t, 0x10, &ImmEnterArriving, nullptr,
+                       &ImmTickArriving, nullptr);
+    TableAddTransition(t, 3, &ImmOnLeaveGroup);
     TableAddTransition(t, 0x11, nullptr);
-    TableAddEvent(t, 6, reinterpret_cast<void*>(&ImmOnArrived));
+    TableAddEvent(t, 6, &ImmOnArrived);
 
-    TableRegisterState(t, 0x11, reinterpret_cast<void*>(&ImmEnterAnswer), nullptr,
-                       reinterpret_cast<void*>(&ImmTickAnswer), nullptr);
-    TableAddTransition(t, 3, reinterpret_cast<void*>(&ImmOnLeaveGroup));
+    TableRegisterState(t, 0x11, &ImmEnterAnswer, nullptr,
+                       &ImmTickAnswer, nullptr);
+    TableAddTransition(t, 3, &ImmOnLeaveGroup);
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 7, reinterpret_cast<void*>(&ImmOnAllow));
-    TableAddEvent(t, 8, reinterpret_cast<void*>(&ImmOnDeny));
+    TableAddEvent(t, 7, &ImmOnAllow);
+    TableAddEvent(t, 8, &ImmOnDeny);
 }

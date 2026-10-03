@@ -310,8 +310,8 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
 // GetTarget (0x1400c6aa0)
 // Returns true if param matches the citizen's entity (+0x28 -> +0x10), or +0x30, or +0x38.
 // ============================================================
-bool CreateRawMaterial::GetTarget(void* param) {
-    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool CreateRawMaterial::GetTarget(ComponentEntity** param) {
+    void* target = *param;
 
     // The citizen's owning entity (Component +0x10)
     if (target == sourceBuilding->_entity) {

@@ -38,12 +38,12 @@ public:
     // 0x1400e5920: frees the tree and the array
     ~BuildStructure() override;                                     // [0]  0x140029680
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e5850
-    int   Execute(void* citizenPtr, void* context) override;  // [4]  0x1400e4fc0
-    int   OnComplete(void* citizenIBP, void* unused, int slotIndex) override;  // [6]  0x1400e4f80
-    int   OnCancel(void* citizenIBP, void* unused, int slotIndex) override;    // [7]  0x1400e4f40
+    int   Execute(CitizenComponent** citizenPtr, System::Time* context) override;  // [4]  0x1400e4fc0
+    int   OnComplete(CitizenComponent** citizenIBP, ComponentEntity** unused, int slotIndex) override;  // [6]  0x1400e4f80
+    int   OnCancel(CitizenComponent** citizenIBP, ComponentEntity** unused, int slotIndex) override;    // [7]  0x1400e4f40
     int   Cleanup() override;                                       // [8]  0x1400e57a0
     int   Validate() override;                      // [9]  0x1400e4be0
-    void* GetTarget(void* retBuf) override;                         // [10] 0x1400e5830
+    Profession** GetTarget(Profession** retBuf) override;                         // [10] 0x1400e5830
     int   GetPriority() override;                                   // [11] 0x140029670
 
     // --- BuildStructure fields (+0x48) ---

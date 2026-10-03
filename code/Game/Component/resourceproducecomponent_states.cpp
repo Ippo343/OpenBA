@@ -54,11 +54,8 @@
 // RPCtrlTag lives in ResourceProduceComponent.h (the member type needs it).
 using RPDispatch = ::ControllerLive::Dispatcher<RPCtrlTag>;
 
-// The state handlers receive the owning component as `void*` (the dispatcher's
-// `MOV RCX,[node+0x18]`); every handler in this table belongs to an RP leaf.
-static ResourceProduceComponent* RP_Self(void* self) {
-    return reinterpret_cast<ResourceProduceComponent*>(self);   // B.3.8 bridge
-}
+// The state handlers receive the owning component (the dispatcher's
+// `MOV RCX,[node+0x18]`): every handler in this table belongs to an RP leaf.
 
 // ── Engine helpers, by retail address ────────────────────────────────────────────
 // 0x140003050 FindComponent<WorkComponent> — the work-ledger component that
@@ -74,8 +71,8 @@ static ResourceProduceComponent* RP_Self(void* self) {
 // ── state 2 enter — 0x14012b1b0 ───────────────────────────────────────────────────
 // target = (self+0x48 == 0) ? 13 : 14, then request it. +0x48 is the produceFlag
 // (the panel's pause bit), zeroed by ResourceProduceComponent_Ctor.
-static char RP_State2Enter(void* self, void* sm) {
-    const bool paused = RP_Self(self)->produceFlag;
+static char RP_State2Enter(ResourceProduceComponent* self, void* sm) {
+    const bool paused = self->produceFlag;
     const int target = paused ? 14 : 13;
     ::ControllerLive::RequestStateTransition(sm, target);
     return 0;
@@ -88,8 +85,8 @@ static char RP_State2Enter(void* self, void* sm) {
 //   CitizenAI_impl_ec60(workComp, 1, 0, &work)
 //   SetAccepting(wpc, 1)
 //   return self->vtable[19](self)            OnEnterProducing
-static char RP_State13Enter(void* self, void* sm) {
-    ResourceProduceComponent* rp = RP_Self(self);
+static char RP_State13Enter(ResourceProduceComponent* self, void* sm) {
+    ResourceProduceComponent* rp = self;
 
     // Entry trace as well as the outcome trace below: without it a crash anywhere in
     // this body is indistinguishable from the state never being entered at all.
@@ -133,8 +130,8 @@ static char RP_State13Enter(void* self, void* sm) {
 
 // ── state 14 enter — 0x14012ad20 ──────────────────────────────────────────────────
 // Release the held work slot if occupied, stop accepting, then OnExitProducing.
-static char RP_State14Enter(void* self, void* /*sm*/) {
-    ComponentEntity* owner = RP_Self(self)->_entity;
+static char RP_State14Enter(ResourceProduceComponent* self, void* /*sm*/) {
+    ComponentEntity* owner = self->_entity;
 
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
     if (workComp != nullptr) {
@@ -166,26 +163,26 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     }
 
 
-    RP_Self(self)->OnExitProducing();
+    self->OnExitProducing();
     return 1;
 }
 
 // ── state 13 per-frame — 0x14012b190 ──────────────────────────────────────────────
 // A one-line forward to the component's ProduceTick (slot 21). The base leaves it a
 // no-op; FishingComponent is the only subclass in this wave that installs a real one.
-static char RP_State13PerFrame(void* self, void* /*sm*/, void* time) {
-    return RP_Self(self)->ProduceTick(time);
+static char RP_State13PerFrame(ResourceProduceComponent* self, void* /*sm*/, void* time) {
+    return self->ProduceTick(time);
 }
 
 // ── transition 13 -> 3 action — 0x14012af70 ───────────────────────────────────────
 // Teardown path: run OnExitProducing so the class drops whatever the produce tick
 // was holding. Dispatched through OnState, so the signature is void(data).
-static void RP_Trans13to3(void* self) {
-    RP_Self(self)->OnExitProducing();
+static void RP_Trans13to3(ResourceProduceComponent* self) {
+    self->OnExitProducing();
 }
 
 // ── event 3 on state 13 — 0x14012adf0 — panel PAUSE ───────────────────────────────
-static char RP_Event3Pause(void* /*self*/, void* sm) {
+static char RP_Event3Pause(ResourceProduceComponent* /*self*/, void* sm) {
     // Event 0 TOGGLES (13 -> pause, 14 -> resume), so a single stray post closes a
     // producing workplace: state 14 calls SetAccepting(false), which raises the
     // "work is disabled at this location" sign AND evicts the roster. Trace the
@@ -197,8 +194,8 @@ static char RP_Event3Pause(void* /*self*/, void* sm) {
 // ── event 3 on state 14 — 0x14012acb0 — panel RESUME ──────────────────────────────
 // Retail gates the resume on +0x48 == 0: a component whose produceFlag is set stays
 // paused, so the event is a no-op rather than a toggle. Faithful, not a guard.
-static char RP_Event3Resume(void* self, void* sm) {
-    const bool paused = RP_Self(self)->produceFlag;
+static char RP_Event3Resume(ResourceProduceComponent* self, void* sm) {
+    const bool paused = self->produceFlag;
     if (!paused) {
         ::ControllerLive::RequestStateTransition(sm, 13);
     }
@@ -282,11 +279,11 @@ void ResourceProduceComponent::Command(int /*command*/) {
 // in its +0x09/+0x0a/+0x0b bytes, so it mirrors retail's call order exactly.
 static void RPCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = RPDispatch::table;
+    auto& t = RPDispatch::table;
     if (t.count != 0) return;                       // idempotent
 
     // ── state 2 — DEFAULT / idle ──────────────────────────────────────────────────
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&RP_State2Enter), nullptr,
+    TableRegisterState(t, 2, &RP_State2Enter, nullptr,
                        nullptr, nullptr);
     // ->13 carries retail's 0x14012af90, which stamps the building's work positions
     // into the map (terrain byte +0x29 = 2) for as many slots as the workplace wants.
@@ -299,24 +296,24 @@ static void RPCtrl_PopulateTable() {
     TableAddTransition(t, 3,  nullptr);
 
     // ── state 13 — PRODUCING ──────────────────────────────────────────────────────
-    TableRegisterState(t, 13, reinterpret_cast<void*>(&RP_State13Enter), nullptr,
-                       reinterpret_cast<void*>(&RP_State13PerFrame), nullptr);
+    TableRegisterState(t, 13, &RP_State13Enter, nullptr,
+                       &RP_State13PerFrame, nullptr);
     TableAddTransition(t, 14, nullptr);
-    TableAddTransition(t, 3,  reinterpret_cast<void*>(&RP_Trans13to3));
+    TableAddTransition(t, 3,  &RP_Trans13to3);
     // Event id 0, NOT 3 — retail's registrar 0x140037f90 hardcodes 0 and discards the id
     // argument (see the byte listing on ResourceProduceComponent_Command above). Slot 14
     // posts 0, so registering 3 here meant PostEvent's linear scan never matched and the
     // work pause button did nothing.
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&RP_Event3Pause));
+    TableAddEvent(t, 0, &RP_Event3Pause);
 
     // ── state 14 — PAUSED / not accepting ─────────────────────────────────────────
-    TableRegisterState(t, 14, reinterpret_cast<void*>(&RP_State14Enter), nullptr,
+    TableRegisterState(t, 14, &RP_State14Enter, nullptr,
                        nullptr, nullptr);
     TableAddTransition(t, 13, nullptr);
     TableAddTransition(t, 3,  nullptr);
     // Event id 0 for the same reason as the pause handler above. State 13 maps 0 -> Pause
     // and state 14 maps 0 -> Resume, so the single posted event toggles.
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&RP_Event3Resume));
+    TableAddEvent(t, 0, &RP_Event3Resume);
 }
 
 // Built ONCE at static-init time, as retail's ResourceProduceDescription setup does

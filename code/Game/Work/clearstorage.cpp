@@ -65,11 +65,7 @@ static inline uint32_t WorldToCell(float x, float z, int gridSize) {
 // sets up citizen pathfinding to carry items.
 //
 // Returns: 0 = failed validation, 1 = no work available (retry), 2 = work assigned
-int ClearStorage::Execute(void* citizenAIArg, void* time) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenAI = reinterpret_cast<CitizenComponent**>(citizenAIArg);
-
+int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     // Find components on the entity (+0x10) through the guarded finders (typed locals)
     BuildComponent* positionComp = nullptr;          // fn_FindComponent_Position: BuildComponent's cell
     fn_FindComponent_Position(field_10, &positionComp);
@@ -234,8 +230,8 @@ int ClearStorage::Execute(void* citizenAIArg, void* time) {
         // Get the Slot10 result (vtable +0x50)
         CitizenComponent* citizenPtr = *citizenAI;
 
-        uint64_t entityRefOut = 0;
-        Profession* resultVal = *(Profession**)GetTarget(&entityRefOut);
+        Profession* entityRefOut = nullptr;
+        Profession* resultVal = *GetTarget(&entityRefOut);
 
         // Update citizen state
         citizenPtr->statusFlags |= 4;
@@ -409,7 +405,7 @@ ClearStorage::~ClearStorage() {
 // BST find-and-remove by key on the citizen BST at self+0x58,
 // then returns false (0). This removes a specific citizen's
 // entry from the work tracking tree.
-int ClearStorage::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);
     return 0;
@@ -426,7 +422,7 @@ int ClearStorage::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // exact stale-entry family HarvestArea::Slot7 had (harvestarea.cpp): CancelAll below
 // spins on the leftmost node until the count drops, and Validate hands the stale
 // citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
-int ClearStorage::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+int ClearStorage::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);
     return 0;
@@ -483,8 +479,8 @@ int ClearStorage::Cleanup() {
 // ============================================================
 // Returns the profession list's +0x30 profession (GameUpdateLoop::m_professionList).
 // Uses hidden return pointer ABI (member function returning non-trivial).
-void* ClearStorage::GetTarget(void* retbuf) {
-    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+Profession** ClearStorage::GetTarget(Profession** retbuf) {
+    *retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 

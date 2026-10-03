@@ -33,7 +33,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct MultiObjectCtrlTag {};
+struct MultiObjectCtrlTag { using Owner = class MultiObjectComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class MultiObjectComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(MultiObjectComponent)

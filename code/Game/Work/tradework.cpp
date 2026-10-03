@@ -168,9 +168,7 @@ int TradeWork::CommitAssignment(CitizenComponent* const* citizenRef, ComponentDe
     return 2;
 }
 
-int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
-    // LEFT: Work::Execute's citizen reference is untyped (the slot every leaf overrides).
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
     int ret = 1;
@@ -435,7 +433,7 @@ cleanup:
 // TradeWork::OnComplete [6] -- BSTFindRemove + return false (0x1400f5d20)
 // ============================================================
 // LEFT (both slots): 0x14002c690's C signature (PLAYER) takes the set as int64_t*.
-int TradeWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int TradeWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);
     return false;
 }
@@ -444,7 +442,7 @@ int TradeWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // ============================================================
 // TradeWork::OnCancel [7] -- BSTFindRemove thunk (0x1400f5d10)
 // ============================================================
-int TradeWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+int TradeWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);
     return 0;
 }
@@ -586,11 +584,10 @@ int TradeWork::Validate() {
 // TradeWork::GetTarget [10] (0x1400f6c50)
 // The post's WorkPlaceComponent's Profession, through the hidden return slot.
 // ============================================================
-void* TradeWork::GetTarget(void* outPtr) {
+Profession** TradeWork::GetTarget(Profession** outPtr) {
     // 0x140002e10 = FindComponent<WorkPlaceComponent>.
     WorkPlaceComponent* workplace = field_10->FindComponent<WorkPlaceComponent>();
-    // LEFT: slot 10's return slot is untyped (the slot every leaf overrides).
-    *reinterpret_cast<Profession**>(outPtr) = workplace->profession;
+    *outPtr = workplace->profession;
     return outPtr;
 }
 

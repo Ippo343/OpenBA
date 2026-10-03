@@ -136,8 +136,8 @@ int  PickupRawMaterial::AbstractImpl(void* actionStack) {
 // Returns true if param matches the pile at +0x28, or the citizen's (+0x20) owning
 // entity (Component +0x10).
 // ============================================================
-bool PickupRawMaterial::GetTarget(void* param) {
-    void* paramVal = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool PickupRawMaterial::GetTarget(ComponentEntity** param) {
+    void* paramVal = *param;
 
     if (_field28.Get() == paramVal) {
         return true;

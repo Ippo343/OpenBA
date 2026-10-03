@@ -42,12 +42,12 @@ public:
     // 0x1400ec650: frees the BST and both arrays
     ~GatherRawMaterials() override;                                 // [0]  0x14002a410
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ec560
-    int   Execute(void* entityIBP, void* context) override;  // [4]
-    int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]
-    int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]
+    int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;  // [6]
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;    // [7]
     int   Cleanup() override;                                       // [8]
     int   Validate() override;                          // [9]
-    void* GetTarget(void* retbuf) override;                         // [10] 0x1400ec510
+    Profession** GetTarget(Profession** retbuf) override;                         // [10] 0x1400ec510
     int   GetPriority() override;                                   // [11] 0x14002a400
 
     // --- GatherRawMaterials fields (+0x48) ---

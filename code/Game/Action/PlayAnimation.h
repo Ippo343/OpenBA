@@ -31,7 +31,7 @@ public:
     int  AbstractImpl(void* actionStack) override;             // [4] 0x140042420
     int  Execute(void* actionStack, void* time) override;      // [5] 0x140042400
     void CheckEntity() override;                               // [8] 0x1400423f0 own `RET 0` (same bytes as the base body)
-    bool GetTarget(void* param) override;                      // [9] 0x1400423b0
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400423b0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<ComponentEntity> _field20;   // +0x20 the animated entity (Persist checks ComponentEntity)

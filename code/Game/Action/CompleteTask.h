@@ -31,7 +31,7 @@ public:
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c5be0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5b40
     void CheckEntity() override;                               // [8] 0x1400c5ac0
-    bool GetTarget(void* param) override;                      // [9] 0x1400c5a50
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c5a50
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<CitizenComponent> workEntity;   // +0x20 the working citizen (Persist checks CitizenComponent)

@@ -185,18 +185,18 @@ UNIT_TEST(exe_vtable_handle_is_the_objects_vptr) {
 // ===========================================================================
 // PART D — D6: raw retail-shaped dispatch through the controller member
 // ===========================================================================
-struct B38TestCtrlTag {};
+struct B38TestCtrlTag { using Owner = Component; };
 using TestCtl = ::ControllerLive::TableController<B38TestCtrlTag>;
 using TestDispatch = ::ControllerLive::Dispatcher<B38TestCtrlTag>;
 
 void* g_seenData = nullptr;
 void* g_seenSm   = nullptr;
-char  EnterHandler(void* data, void* sm) { g_seenData = data; g_seenSm = sm; return 7; }
+char  EnterHandler(Component* data, void* sm) { g_seenData = data; g_seenSm = sm; return 7; }
 
 UNIT_TEST(exe_controller_member_raw_dispatch) {
     auto& t = TestDispatch::table;
     t = {};
-    ::ControllerLive::TableRegisterState(t, 2, reinterpret_cast<void*>(&EnterHandler),
+    ::ControllerLive::TableRegisterState(t, 2, &EnterHandler,
                                          nullptr, nullptr, nullptr);
     ::ControllerLive::TableAddTransition(t, 3, nullptr);
 

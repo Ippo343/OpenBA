@@ -42,12 +42,12 @@ public:
     // frees the +0x48 demand tree
     ~MarketWork() override;                                         // [0]  0x14002a910
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f1d70
-    int   Execute(void* citizenHolder, void* ctx) override;  // [4]  0x1400eff80
-    int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eff60
-    int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400eff50
+    int   Execute(CitizenComponent** citizenHolder, System::Time* ctx) override;  // [4]  0x1400eff80
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** arg2, int arg3) override;  // [6]  0x1400eff60
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** arg2, int arg3) override;    // [7]  0x1400eff50
     int   Cleanup() override;                                       // [8]  0x1400f1ca0
     int   Validate() override;                          // [9]  0x1400efd20
-    void* GetTarget(void* outPtr) override;                         // [10] 0x1400f1d10
+    Profession** GetTarget(Profession** outPtr) override;                         // [10] 0x1400f1d10
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // One entry of a claim's carry list (0x10): the material and how many units the

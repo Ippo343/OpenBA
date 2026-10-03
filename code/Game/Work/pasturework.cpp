@@ -120,11 +120,7 @@
 //
 // Decompiled from Ghidra at 0x1400F2370, all control flow matched to original.
 //
-int PastureWork::Execute(void* entityIBP, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
-
+int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // local_res20 = *(longlong*)param_2;  local_res10 = param_2
     CitizenComponent* local_res20 = *citizenIBP;
 
@@ -450,7 +446,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/) {
 // Thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520; xor al,al; add rsp,0x28; ret
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
-int PastureWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int PastureWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return false;
 }
@@ -466,12 +462,12 @@ int PastureWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 //    c. Clear "flagged for removal" bit (0x100000) in entity flags at +0x20
 //    d. If flag changed and entity has parent (+0x10), call UpdateParentEntity
 // ============================================================
-int PastureWork::OnCancel(void* param2, void* param3, int /*arg3*/) {
+int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, int /*arg3*/) {
     // Insert citizen into BST (the tree helper takes the container as uintptr_t*: LEFT)
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
 
-    // Check if param3 entity is valid (the slot's parameter is void* in Work.h: LEFT)
-    ComponentEntity* entity = *(ComponentEntity**)param3;
+    // Check if param3 entity is valid
+    ComponentEntity* entity = *param3;
     if (entity == nullptr) {
         return 0;
     }
@@ -637,11 +633,11 @@ int PastureWork::Validate() {
 // ============================================================
 // PastureWork::Slot10 / GetWorkEntity (0x1400F2C00)
 // Identical to HuntWork::Slot10: the entity's WorkPlaceComponent (0x140002e10), its
-// profession (+0x48) into the return slot (void* in Work.h's slot: LEFT).
+// profession (+0x48) into the return slot.
 // ============================================================
-void* PastureWork::GetTarget(void* outPtr) {
+Profession** PastureWork::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *(Profession**)outPtr = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

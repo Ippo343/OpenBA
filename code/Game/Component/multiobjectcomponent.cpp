@@ -95,7 +95,7 @@ char MultiObjectComponent::EnterState2() {
 // The table (controller_state_table.h) holds plain handler addresses called as
 // handler([node+0x18], sm): [node+0x18] is the controller's back-pointer, this
 // component, so the entry is a one-line adapter that calls the member.
-static char MultiObjectEnterState2(MultiObjectComponent* c) { return c->EnterState2(); }   // 0x140125560
+static char MultiObjectEnterState2(MultiObjectComponent* c, void* /*sm*/) { return c->EnterState2(); }   // 0x140125560
 
 // Retail's table, transcribed from MultiObjectDescription_Setup (0x14014f530): its
 // RegisterState (0x1400360f0) registers state 2 with enter 0x140125560 and every other
@@ -103,9 +103,9 @@ static char MultiObjectEnterState2(MultiObjectComponent* c) { return c->EnterSta
 // is a transition target only. Built ONCE at static-init time (B38 D6/D7).
 static void MultiObjectComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = MultiObjectCtrlDispatch::table;
+    auto& t = MultiObjectCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&MultiObjectEnterState2),
+    TableRegisterState(t, 2, &MultiObjectEnterState2,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }

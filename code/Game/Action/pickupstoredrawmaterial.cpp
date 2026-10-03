@@ -273,8 +273,8 @@ void PickupStoredRawMaterial::CheckEntity() {
 // Returns true if param matches the storage entity at +0x28, or the citizen's (+0x20)
 // owning entity (Component +0x10).
 // ============================================================
-bool PickupStoredRawMaterial::GetTarget(void* param) {
-    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool PickupStoredRawMaterial::GetTarget(ComponentEntity** param) {
+    void* target = *param;
 
     if (target == _field28.Get()) {
         return true;

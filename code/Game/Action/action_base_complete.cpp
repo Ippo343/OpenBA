@@ -88,7 +88,7 @@ static_assert(offsetof(WorkIdNode, right) == 0x20, "WorkIdNode::right @ +0x20");
 // A node of the +0x120 bucket tree: a 64-bit key (the Work's slot-10 target), the
 // bucket's own id tree, children at +0x20 / +0x28.
 struct WorkBucketNode {
-    uint64_t        key;       // +0x00
+    Profession*     key;       // +0x00 the profession slot 10 returns (Work::GetTarget)
     WorkSchedulerTree entries; // +0x08 {root, count}
     WorkBucketNode* parent;    // +0x18
     WorkBucketNode* left;      // +0x20
@@ -129,28 +129,28 @@ static uintptr_t* TreeHeader(WorkSchedulerTree* tree) {
 // Reimpl of CompleteTask_helper_8760 — try-complete a task: walk to the matching node,
 // CheckPtr the Work, invoke slot 6 with (entityCopy, targetCopy, param). Returns the low
 // byte of the result.
-bool TryCompleteTask(const WorkScheduler* sched, void* const* entityRef, int taskIdx,
-                     void* const* targetRef, uint32_t taskParam) {
+bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx,
+                     ComponentEntity* const* targetRef, uint32_t taskParam) {
     WorkIdNode* node = FindTaskNode(sched, taskIdx);
     if (node == nullptr) return false;
 
-    void* targetCopy = *targetRef;
+    ComponentEntity* targetCopy = *targetRef;
     Work* owner = node->work;
-    void* entityCopy = *entityRef;
+    CitizenComponent* entityCopy = *entityRef;
 
     int r = owner->OnComplete(&entityCopy, &targetCopy, static_cast<int>(taskParam));   // slot 6
     return (r & 0xff) != 0;
 }
 
 // Reimpl of CompleteTask_helper_8800 — task reassign: same walk, slot 7 (void).
-void TaskReassign(const WorkScheduler* sched, void* const* entityRef, int taskIdx,
-                  void* const* targetRef, uint32_t taskParam) {
+void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx,
+                  ComponentEntity* const* targetRef, uint32_t taskParam) {
     WorkIdNode* node = FindTaskNode(sched, taskIdx);
     if (node == nullptr) return;
 
-    void* targetCopy = *targetRef;
+    ComponentEntity* targetCopy = *targetRef;
     Work* owner = node->work;
-    void* entityCopy = *entityRef;
+    CitizenComponent* entityCopy = *entityRef;
 
     owner->OnCancel(&entityCopy, &targetCopy, static_cast<int>(taskParam));   // slot 7
 }
@@ -231,14 +231,14 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     // 4. Work slot 10 -> key; look it up in the field_0x120 bucket tree and remove the entry.
     {
         Work* owner = task->work;
-        uint64_t keyTmp = 0;
-        uint64_t* keyPtr = static_cast<uint64_t*>(owner->GetTarget(&keyTmp));   // slot 10, retslot
+        Profession* keyTmp = nullptr;
+        Profession** keyPtr = owner->GetTarget(&keyTmp);   // slot 10, retslot
 
         // LEFT: WorkScheduler::field_0x120 is declared void*.
         WorkBucketNode* node = reinterpret_cast<WorkBucketNode*>(sched->field_0x120);
         if (node != nullptr) {
             while (true) {
-                uint64_t v = node->key;
+                Profession* v = node->key;
                 if (*keyPtr < v) {
                     node = node->left;    // +0x20
                 } else if (v < *keyPtr) {
@@ -441,20 +441,6 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 // ===========================================================================
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
-
-// B4 FORWARD: outside callers (Action/completetask.cpp; Component, Work files)
-bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
-                                void* targetRef, uint32_t taskParam) {
-    return TryCompleteTask(reinterpret_cast<const WorkScheduler*>(taskMgr), reinterpret_cast<void* const*>(entityRef),
-                           taskIdx, reinterpret_cast<void* const*>(targetRef), taskParam);
-}
-
-// B4 FORWARD: outside callers (Action/completetask.cpp; Component, Work files)
-void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
-                             void* targetRef, uint32_t taskParam) {
-    TaskReassign(reinterpret_cast<const WorkScheduler*>(taskMgr), reinterpret_cast<void* const*>(entityRef),
-                 taskIdx, reinterpret_cast<void* const*>(targetRef), taskParam);
-}
 
 // B4 FORWARD: outside callers (Component, Work files)
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
