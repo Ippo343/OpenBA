@@ -62,13 +62,45 @@ At the tip (after `-j2 standalone-debug`, `-j2 standalone-perf`, `-j2 unit`, all
 python docs/runtime_port/endgame_b/b4_session/b11cmp.py <scratch>/base_perf_obj  standalone/build-perf/obj --out <scratch>/b11_perf.txt
 python docs/runtime_port/endgame_b/b4_session/b11cmp.py <scratch>/base_debug_obj standalone/build/obj      --out <scratch>/b11_debug.txt
 ```
-Every `DIFF`, `ONLY-BASE` and `ONLY-TIP` function of the PERF report is read (the call list, the
+The tool pairs a function whose signature changed (`RENAMED-SAME` / `RENAMED-DIFF`).
+Every `DIFF`, `RENAMED-DIFF`, `ONLY-BASE` and `ONLY-TIP` function of the PERF report is read (the call list, the
 store widths, the compares it prints; `objdump -d` the two functions when the summary is not
 enough) and explained in the hand-in in one line each, or fixed. Legitimate reasons: a C call
 became a member call of the same body; a forwarder inlined; a header-only change with no code
 difference. NOT legitimate without retail's address: a call that appeared, vanished or moved; a
 store whose width or displacement changed; a compare that vanished. A hand-in that says "not run"
 or "judged from the source" is not merged.
+
+## Waves L and R: your block (added after wave S merged, main `8196d1cf`)
+Wave S is on main: `Serialize` / `Persist` take `IO::Stream&`; `Work` slots [4]-[7], [10] and
+`Action` [9] are typed; the controller state table's handlers are typed templates on the owner.
+- **Your files**: `grep -P '	<BLOCK>	' docs/runtime_port/endgame_b/b4_session/data/pass2/filemap.tsv`.
+  You own exactly those, plus the headers `PASS2_FILEMAP.md` §2 gives your block as owner.
+- **What blocks each cast** (a map, not the authority; the first-pass `// LEFT` reasons are often
+  STALE: e.g. `GameUpdateLoop::m_game`, `m_citizenList`, `m_entityList` are typed now):
+  `grep -h '<your file>' docs/runtime_port/endgame_b/b4_session/data/pass2/[A-G]_*.tsv`.
+- **`LOCAL:` rows are the bulk of the work**: raw offset reads of an object whose header already
+  declares the fields, and file-local helpers taking `int64_t` / `void*`. Type the local from a
+  typed source, read by name, type the file-local helper's parameters. For every offset replaced by
+  a name, CHECK the header's `static_assert` for that offset and the field's width / signedness
+  against the read you replace. A read that matches no declared field: add the field ONLY in a
+  header you own (layout from retail), else LEAVE.
+- **`NOCLASS:` rows**: the record gets a struct in a header you own (new header beside its user if
+  none), every field asserted, layout from retail's code that builds / walks it (address quoted in
+  the header).
+- **A header you do not own is READ-ONLY**, even for a one-line typing: LEAVE the read with
+  `// LEFT: <header> (<owner block>)`. Exception: none. (The owner may be running right now.)
+- **Cross-file C signatures** (`exe_bodies.h`, `*_funcs.h` declarations whose callers are in other
+  blocks' files) belong to wave X, not to you: do not change such a declaration. Inside your files
+  you may type a function that is `static` / file-local, or declared in a header you own AND
+  called only from your files (Grep the whole tree first). A call from your typed code into an
+  untyped outside signature keeps ONE cast in its original spelling + `// LEFT: SIG <function>`.
+- **Type-erased container cores (runtime)**: the policy is typed template WRAPPERS at the call
+  sites over the ONE ported erased core (retail shares those bodies). The core's own stride /
+  element-byte casts are floor: `// CAST-OK: elem_stride`. Do not duplicate a core per type, do not
+  swap a hand-written container for another one (first allocation, growth and order must not move).
+- `// B4 FORWARD` forwarders defined in your files: delete those with NO caller left anywhere
+  (Grep `code runtime standalone dx11 engine tests`); leave the rest for wave X.
 
 ## Working discipline
 - Worktree; branch `b4p2-<BLOCK>`; `git log --oneline -1` must show the hash in your prompt, else
@@ -88,8 +120,8 @@ or "judged from the source" is not merged.
   `program=` on EVERY call (`Application-x64.exe` or `Runtime-x64.dll`), never `switch_program`;
   read-only (rename nothing, save nothing). Ghidra's C drops arguments on indirect calls and on
   register-passthrough forwarders: read the disassembly for a signature.
-- Commits `B4 P2 <BLOCK>: …` ending with
-  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Before each: `git diff --stat`, revert
+- Commits `B4 P2 <BLOCK>: …` ending with the attribution lines your session gives you (else
+  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`). Before each: `git diff --stat`, revert
   anything outside your file set.
 - Before the final build: `git merge main` if main moved (keep both sides of append-only conflicts).
 

@@ -223,3 +223,14 @@ Metric at `6a3ccdca`: **8,950** to remove (tests row 796). **B.4 FIRST PASS DONE
 here by the user's decision (2026-10-02): no agent is running, no merge is in progress, every block
 is merged and gated.** `sa-stress` during the pass, recorded only (base 1.92 / 2.40): mean 1.64 - 2.15,
 p95 2.03 - 3.31 with agents building; the quiet run above is the comparable one.
+
+## Second pass (2026-10-03) — blocks cut by blocker (`PASS2_FILEMAP.md`, `PASS2_BRIEF.md`)
+
+The `runs/` baseline was re-cut from a clean rebuild of `0ba19d11` (0 problems; warning sets 50 debug / 120 perf; now tracked in git). Columns as above.
+
+| 45 | P2-S2 | `02071596` | Work slots [4]-[7], [10] and Action [9] `GetTarget` typed from retail (dispatchers 0x1400f7b60 / 0x1400f8620 / 0x1400f8760, 0x1400eb910, 0x1400c5a50); 88 overrides; two dead forwarders deleted: 8950 -> 8867 | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 46 | P2-S3 | `527de776` | the controller state table's handlers are typed function pointers, table and entries templates on the owning component; 151 casts; `FindOrLoad` const LEFT (retail drops it in inlined template code) | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 47 | P2-T1 | `54bec6a8` | `tool_harness.cpp` by name, `EditTool_Harness*` typed: 484 -> 64 in four files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok (placement, road placed; same cell and candidate count as the pre-block harness, run twice each) | 0 |
+| 48 | P2-S1 | `8196d1cf` | `External::Serialize`, `Internal::Persist`, `OnSerializeSettings` and every override take `IO::Stream&`; 325 body casts; seventeen null-stream guards retail lacks dropped (`known_port_issues` 125-126) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `8196d1cf`: **7,986** to remove (wave S done).
