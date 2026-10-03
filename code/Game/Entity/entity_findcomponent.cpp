@@ -57,12 +57,12 @@
 void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr) {
     // The out slot is an InternalPtr<Component> (retval is void* for the callers of
     // other blocks: LEFT). Zero it (InternalBasePtr = nullptr).
-    Component** out = (Component**)retval;
+    Component** out = (Component**)retval;   // LEFT: SIG fn_FindComponent_* (void* out; callers in other blocks, wave X)
     *out = nullptr;
     if (!entity || !typeIdPtr) return;
 
     uint32_t targetTypeId = *typeIdPtr;
-    ComponentEntity* e = (ComponentEntity*)entity;
+    ComponentEntity* e = (ComponentEntity*)entity;   // LEFT: SIG fn_FindComponent_* (void* entity; wave X)
 
     // Component array ComponentEntity::_components (+0x30), count _componentCount (+0x38)
     Object::InternalPtr<Component>* compArray = e->_components;
@@ -215,5 +215,5 @@ void fn_FindComponent_Unknown7ee8(void* entity, void* retval) {
 // ============================================================
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
     return new (param_2) ::Object::InternalPtr<ConsumeProduceComponent>(
-        reinterpret_cast<ComponentEntity*>(param_1)->FindComponent<ConsumeProduceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(param_1)->FindComponent<ConsumeProduceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks  LEFT: SIG (int64_t receiver, wave X)
 }
