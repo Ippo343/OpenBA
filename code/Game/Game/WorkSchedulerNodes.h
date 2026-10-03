@@ -96,3 +96,54 @@ static_assert(offsetof(WorkSchedulerBucketNode, left) == 0x20, "WorkSchedulerBuc
 static_assert(offsetof(WorkSchedulerBucketNode, right) == 0x28, "WorkSchedulerBucketNode::right @ +0x28");
 static_assert(offsetof(WorkSchedulerBucketNode, balance) == 0x30, "WorkSchedulerBucketNode::balance @ +0x30");
 static_assert(offsetof(WorkSchedulerBucketNode, height) == 0x32, "WorkSchedulerBucketNode::height @ +0x32");
+
+// The transient cost-ordered candidate tree the citizen's work walk builds
+// (0x1400f79b0) from one scheduler id tree: its two builders 0x1400f8000 /
+// 0x1400f7c90 allocate the node (MemAlloc(0x30, 8): 0x1400f807e / 0x1400f8163 /
+// 0x1400f81aa), its walk 0x1400f7b60 visits it in order, 0x14000e320 frees the
+// children and MemFree the root (0x1400f7b12..0x1400f7b2f). NOT a
+// WorkSchedulerIdNode: the key is the int path cost at +0x08 (ties broken on
+// Work +0x20), not a work id at +0x00.
+//
+// The node, from the builders' stores (0x1400f809d..0x1400f80bb):
+//   qword +0x00 = 0, then the Work (the InternalPtr copy: zero, assign; the
+//   CheckPtr on the source element, 0x1400f8037, is a bare RET), dword +0x08 =
+//   the cost, qwords +0x10 / +0x18 / +0x20 = parent / 0 / 0, ONE dword store of
+//   0 at +0x28 over balance and height. +0x0C and +0x2C are never written.
+// Balance / height are signed int16 (0x14000e360: MOVZX word +0x2a, INC,
+// CMOVG; word +0x28 compared with JLE 1 / JGE -1). The rebalance 0x14000e360 is
+// shared with every other 0x30 node whose links are at +0x10 / +0x18 / +0x20.
+struct WorkCandidateNode {
+    Object::InternalPtr<Work> work;      // +0x00 the candidate Work
+    int32_t                   cost;      // +0x08 the sort key (path cost / Work +0x24)
+    uint8_t                   _pad0C[4]; // +0x0C never written
+    WorkCandidateNode*        parent;    // +0x10
+    WorkCandidateNode*        left;      // +0x18
+    WorkCandidateNode*        right;     // +0x20
+    int16_t                   balance;   // +0x28 right height - left height
+    int16_t                   height;    // +0x2A
+    uint8_t                   _pad2C[4]; // +0x2C never written
+};
+static_assert(sizeof(WorkCandidateNode) == 0x30, "MemAlloc(0x30, 8) in 0x1400f8000 / 0x1400f7c90");
+static_assert(offsetof(WorkCandidateNode, work) == 0x00, "WorkCandidateNode::work @ +0x00");
+static_assert(offsetof(WorkCandidateNode, cost) == 0x08, "WorkCandidateNode::cost @ +0x08");
+static_assert(offsetof(WorkCandidateNode, _pad0C) == 0x0C, "WorkCandidateNode +0x0C");
+static_assert(offsetof(WorkCandidateNode, parent) == 0x10, "WorkCandidateNode::parent @ +0x10");
+static_assert(offsetof(WorkCandidateNode, left) == 0x18, "WorkCandidateNode::left @ +0x18");
+static_assert(offsetof(WorkCandidateNode, right) == 0x20, "WorkCandidateNode::right @ +0x20");
+static_assert(offsetof(WorkCandidateNode, balance) == 0x28, "WorkCandidateNode::balance @ +0x28");
+static_assert(offsetof(WorkCandidateNode, height) == 0x2A, "WorkCandidateNode::height @ +0x2A");
+static_assert(offsetof(WorkCandidateNode, _pad2C) == 0x2C, "WorkCandidateNode +0x2C");
+
+// The candidate tree's {root, count} header: the stack local of 0x1400f79b0
+// (qword [RBP-0x18] = 0, dword [RBP-0x10] = 0 at 0x1400f7a07 / 0x1400f7a0b);
+// the builders INC dword +0x08 per insert (0x1400f81f8).
+struct WorkCandidateTree {
+    WorkCandidateNode* root;      // +0x00
+    int32_t            count;     // +0x08
+    uint8_t            _pad0C[4]; // +0x0C
+};
+static_assert(sizeof(WorkCandidateTree) == 0x10, "the {root, count} local of 0x1400f79b0");
+static_assert(offsetof(WorkCandidateTree, root) == 0x00, "WorkCandidateTree::root @ +0x00");
+static_assert(offsetof(WorkCandidateTree, count) == 0x08, "WorkCandidateTree::count @ +0x08");
+static_assert(offsetof(WorkCandidateTree, _pad0C) == 0x0C, "WorkCandidateTree +0x0C");
