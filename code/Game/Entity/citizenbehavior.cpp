@@ -517,7 +517,8 @@ void PathGraph::BuildPathGraph() {
                             newCap = newPairCount * 3;
                         }
                         pg->m_pairCapacity = newCap;
-                        void* newArr = System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 4);
+                        PathCellPair* newArr = static_cast<PathCellPair*>(
+                            System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 4));
                         pg->m_pairs = newArr;
                     }
 
