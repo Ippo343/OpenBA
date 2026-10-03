@@ -37,6 +37,13 @@
 #include "Component/CharacterComponent.h"
 #include "Component/StorageComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Action/SendComponentMessage.h"   // B4 P2 WORK-3: the action ctors by name
+#include "Action/CompleteTask.h"
+#include "Action/ShowTool.h"
+#include "Action/MoveTo.h"
+#include "Action/PerformWork.h"
+#include "Action/CreateRawMaterial.h"
+#include "Action/ConsumeRawMaterial.h"
 
 // ============================================================
 // Sub-callees, called by name (B3R)
@@ -73,9 +80,11 @@ static inline void* WCP_Alloc(uint64_t size) {
     // disasm: MOV EDX,8 (align); ECX=size; CALL [0x140152b60].
     return System::MemoryAllocator::MemAlloc(size, 8);
 }
-static inline void WCP_IbpCtor(void* ibp, void* o)  { new (ibp) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(o)); }   // B.3.3 bridge
-static inline void WCP_Append(void* list, void* ibp){ Pf_ActStackPush_54e0(static_cast<int64_t*>(list), ibp); }
+// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
+// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
+static inline void WCP_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+}
 
 // Search a ComponentDescription's sub-descriptions for the one whose Type() (slot 2)
 // is ConsumeProduceDescription's, then IsDerivedFrom; returns it or null. Mirrors the
@@ -159,8 +168,9 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
                                       uint64_t param_7, uint32_t param_8, int* param_9,
                                       uint32_t param_10, uint32_t param_11, float param_12,
                                       uint32_t param_13) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);
-    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(param_3);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
+    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(param_3);   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
+    ComponentDescription* rawMatDesc = reinterpret_cast<ComponentDescription*>(param_7);   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70 (param_7 is the produced material)
 
     // the action stack = character + 0x48  (0x1400befaf..0x1400befd1)
     CharacterComponent* character = (*citizenRef)->character;
@@ -171,31 +181,29 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
 
     // --- SendComponentMessage #1 -> stored at character+0x58 (DeletePtr old first) (0x1400befd6..) ---
     obj = WCP_Alloc(0x40);                    // MOV EDX,8; LEA ECX,[RDX+0x38] => 0x40
-    void* sm1 = nullptr;
+    Action* sm1 = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WCP_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        sm1 = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        sm1 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
-    Action* ibpSm1 = nullptr;
-    WCP_IbpCtor(&ibpSm1, sm1);                // ctor(&local_60, sm1)
+    ::Object::InternalPtr<Action> ibpSm1;
+    ibpSm1 = sm1;                // ctor(&local_60, sm1)
     if (character->field_0x58 != nullptr)     // [lVar2+0x58]
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+        character->field_0x58.DeletePtr();
     character->field_0x58 = ibpSm1;
 
     // --- CompleteTask action (0x1400bf06b..) ---
     obj = WCP_Alloc(0x38);                    // LEA ECX,[RDX+0x30] => 0x38
-    void* ct = nullptr;
+    Action* ct = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WCP_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         CitizenComponent* entityInner = *citizenRef;     // *param_1
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, param_2, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, param_13);
+        ct = new (obj) CompleteTask(param_2, &entityInner, &innerIbp, param_13);
     }
-    Action* ibpCt = nullptr;
-    WCP_IbpCtor(&ibpCt, ct);
+    ::Object::InternalPtr<Action> ibpCt;
+    ibpCt = ct;
     WCP_Append(list, &ibpCt);                 // FUN_1400c54e0(plVar15, &local_70)
 
     // cVar4 = (char)param_8  (0x1400bf0d2)
@@ -207,50 +215,47 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
         uint32_t uVar1 = static_cast<uint32_t>(storage->capacity);   // *(*pIVar11+0x38) -> EDI
 
         obj = WCP_Alloc(0x58);                // LEA ECX,[RDX+0x50] => 0x58
-        void* crm = nullptr;
+        Action* crm = nullptr;
         if (obj) {
-            uint64_t local60 = 0;
-            WCP_IbpCtor(&local60, nullptr);   // ctor(&local_60, 0)  (p10)
+            ComponentEntity* local60 = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot   // ctor(&local_60, 0)  (p10)
             CitizenComponent* local70 = *citizenRef;           // *param_1  -> p4
             ComponentEntity* local68 = local70->workplace;     // *(*param_1+0x248) -> p5
             float xmm2 = kRdata_14017214c;                    // [0x14017214c]==1.0f (g_fUVScale)
             // p6 = leftover 0 in [RSP+0x28]; p7=uVar1; p8=param_11; p9=0; p10=&local60; p11=4.
-            crm = Pf_CreateRawMaterialCopyCtor_71a0(obj, param_7, xmm2, reinterpret_cast<uint64_t*>(&local70),
-                                                    reinterpret_cast<uint64_t*>(&local68),
-                                                    0, uVar1, param_11, 0, &local60, 4);
+            crm = new (obj) CreateRawMaterial(rawMatDesc, xmm2, &local70, &local68,
+                                              0, uVar1, param_11, 0, &local60, 4);   // 0x1400c71a0
         }
-        Action* ibpCrm = nullptr;
-        WCP_IbpCtor(&ibpCrm, crm);
+        ::Object::InternalPtr<Action> ibpCrm;
+        ibpCrm = crm;
         WCP_Append(list, &ibpCrm);
 
         // --- optional SendComponentMessage #2 when *param_9 != 0 (0x1400bf1c5..) ---
         // (the param_9 null arm is the tree's guard)
         if (param_9 && static_cast<uint32_t>(*param_9) != 0) {  // CMP [RDI],0; JBE (unsigned)
             obj = WCP_Alloc(0x40);            // LEA ECX,[RDX+0x38] => 0x40
-            void* sm2 = nullptr;
+            Action* sm2 = nullptr;
             if (obj) {
-                uint64_t innerIbp = 0;
-                WCP_IbpCtor(&innerIbp, nullptr);
+                ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
                 uint32_t msgId = static_cast<uint32_t>(*param_9);                       // *param_9
                 ComponentEntity* e2 = *entityRef;                                       // *param_3 (R13)
-                sm2 = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&e2), &msgId, param_10, &innerIbp, 0);
+                sm2 = new (obj) SendComponentMessage(&e2, &msgId, param_10, &innerIbp, 0);
             }
-            Action* ibpSm2 = nullptr;
-            WCP_IbpCtor(&ibpSm2, sm2);
+            ::Object::InternalPtr<Action> ibpSm2;
+            ibpSm2 = sm2;
             WCP_Append(list, &ibpSm2);
         }
     }
 
     // --- ShowTool (~Hoe = -1) action (0x1400bf247..) ---
     obj = WCP_Alloc(0x30);                    // LEA ECX,[RDX+0x28] => 0x30
-    void* st1 = nullptr;
+    Action* st1 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;  // *param_1
         // disasm: OR R8D,0xffffffff => toolType = -1 (~Hoe, Hoe==0).
-        st1 = ActChild_ShowToolCtor_42890(obj, &entityInner, -1);
+        st1 = new (obj) ShowTool(&entityInner, -1);
     }
-    Action* ibpSt1 = nullptr;
-    WCP_IbpCtor(&ibpSt1, st1);
+    ::Object::InternalPtr<Action> ibpSt1;
+    ibpSt1 = st1;
     WCP_Append(list, &ibpSt1);
 
     // --- 1st search over the entity's description; derive toolType (0x1400bf293..) ---
@@ -266,16 +271,16 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
 
     // --- PerformWork_Ctor7 (0x1400bf316..) ---
     obj = WCP_Alloc(0x48);                    // LEA ECX,[RDX+0x40] => 0x48
-    void* pw7 = nullptr;
+    Action* pw7 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;  // *param_1
         System::Time timeRes = {0};
         RtSystem_Time_Ctor(&timeRes, param_12);        // Time::Time(&local_70, param_12)
         // heading=param_5 (XMM2), actionType=EDI (R9D), p6=1, p7=-1.
-        pw7 = Pf_PerformWorkCtor7_9720(obj, &entityInner, param_5, actionType, timeRes._ticks, 1, -1);
+        pw7 = new (obj) PerformWork(&entityInner, param_5, actionType, timeRes._ticks, 1, -1);
     }
-    Action* ibpPw7 = nullptr;
-    WCP_IbpCtor(&ibpPw7, pw7);
+    ::Object::InternalPtr<Action> ibpPw7;
+    ibpPw7 = pw7;
     WCP_Append(list, &ibpPw7);
 
     // --- consume-list build (0x1400bf394..) gated on cVar4 (R12B) ---
@@ -286,7 +291,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
 
         // the ConsumeProduceComponent + weighted random recipe index.
         ConsumeProduceComponent* cp = (*entityRef)->FindComponent<ConsumeProduceComponent>();   // 0x14000b6f0
-        uint64_t widx = WeightedRandomIndex_119470(reinterpret_cast<int64_t>(cp));   // LEFT: C signature (ACT)
+        uint64_t widx = PickConsumeRecipe(cp);   // 0x140119470
         int64_t idx = static_cast<int64_t>(static_cast<int>(widx));   // LEA R13,[RDX+RDX*4]: idx*0x28
 
         // the recipe array (*(foundComp2+0x28)); when none is found retail reads [0 + 0x28]:
@@ -297,14 +302,13 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
         if (recBase[idx].inputCount > 0) {
             // ConsumeRawMaterial_Action_Ctor3(self, &(*param_3)) (0x1400bf446..)
             obj = WCP_Alloc(0x38);            // LEA ECX,[RDX+0x30] => 0x38
-            void* crmAct = nullptr;
+            ConsumeRawMaterial* crmAct = nullptr;
             if (obj) {
                 ComponentEntity* inner = *entityRef;   // *param_3
-                crmAct = ActChild_ConsumeRawCtor3_c6440(obj, reinterpret_cast<uint64_t*>(&inner));
+                crmAct = new (obj) ConsumeRawMaterial(&inner);   // 0x1400c6440
             }
-            Action* consumeIbp = nullptr;     // stored at [RBP+0x57]
-            WCP_IbpCtor(&consumeIbp, crmAct);
-            Action* appendCopy = consumeIbp;  // local_60 = local_res18
+            ConsumeRawMaterial* consumeIbp = crmAct;   // stored at [RBP+0x57]
+            ::Object::InternalPtr<Action> appendCopy = consumeIbp;  // local_60 = local_res18
             WCP_Append(list, &appendCopy);
 
             // inner loop: append each (resType,count) pair to the consume list (0x1400bf496..)
@@ -312,9 +316,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
             if (count > 0) {
                 ConsumeProduceInput* subArr = recBase[idx].inputs;   // *(recBase + idx*0x28)
                 for (int j = 0; j < count; ++j) {
-                    // LEFT: 0x1400c64b0's C signature (ACT) takes the action and the material as integers.
-                    Entity_ConsumeListAppend_64b0(reinterpret_cast<int64_t>(consumeIbp),
-                                                  reinterpret_cast<int64_t>(subArr[j].material), subArr[j].count);
+                    consumeIbp->AddMaterial(subArr[j].material, subArr[j].count);   // 0x1400c64b0
                     // re-read count each iter (CMP [RSI+R13*8+8]); recBase==RSI here.
                     count = recBase[idx].inputCount;
                 }
@@ -325,7 +327,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
 
     // --- MoveTo action with path-type switch on (toolType+1) (0x1400bf4ed..) ---
     obj = WCP_Alloc(0x480);                   // MOV ECX,0x480 => 0x480
-    void* mv = nullptr;
+    Action* mv = nullptr;
     if (obj) {
         // Jump table @0x1400bf758 (read_memory verified), index = toolType+1,
         // default(>8 unsigned)=Slow(1). Each entry (base 0x140000000):
@@ -344,24 +346,22 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
             }
         }
         ComponentEntity* entityInner = (*citizenRef)->_entity;  // *(*param_1+0x10)
-        uint64_t famRet = 0;
-        void* familyIbp = nullptr;
-        familyIbp = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
+        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;          // [0x140172280]==-1.0f
-        mv = Pf_MoveToCtor_9170(obj, familyIbp, pathType, 0, param_4, 0xe1f, 0, speed);
+        mv = new (obj) MoveTo(&family, pathType, 0, param_4, 0xe1f, 0, speed);   // 0x1400c9170
     }
-    Action* ibpMv = nullptr;
-    WCP_IbpCtor(&ibpMv, mv);                   // ctor(&local_58, mv)
-    WCP_AppendInline(character, ibpMv);        // inlined append (0x1400bf5be..)
+    ::Object::InternalPtr<Action> ibpMv;
+    ibpMv = mv;                   // ctor(&local_58, mv)
+    WCP_AppendInline(character, ibpMv.Get());        // inlined append (0x1400bf5be..)
 
     // --- final ShowTool (toolType) action (0x1400bf65c..) ---
     obj = WCP_Alloc(0x30);                     // LEA ECX,[RDX+0x28] => 0x30
-    void* st2 = nullptr;
+    Action* st2 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;  // *param_1 (R12)
-        st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, static_cast<int>(toolType));
+        st2 = new (obj) ShowTool(&entityInner, static_cast<int>(toolType));
     }
-    Action* ibpSt2 = nullptr;
-    WCP_IbpCtor(&ibpSt2, st2);                 // ctor(&local_res18, st2)
-    WCP_AppendInline(character, ibpSt2);       // inlined append (0x1400bf69c..)
+    ::Object::InternalPtr<Action> ibpSt2;
+    ibpSt2 = st2;                 // ctor(&local_res18, st2)
+    WCP_AppendInline(character, ibpSt2.Get());       // inlined append (0x1400bf69c..)
 }
