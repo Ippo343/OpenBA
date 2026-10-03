@@ -171,11 +171,8 @@ inline void Apply(Video::Context* ctx, const T*& slot, const T* value, uint32_t 
 // ============================================================================
 namespace Video {
 
-void VideoProgram::SetupShaders(void* ctxv) const {
-    // LEFT (B.4 R-VIDEO): the parameter is retail's `Context&`
-    // (`AEAVContext@2@`), but graphics/wave21_lane_gfxbody.cpp (R-GFX) hands it a
-    // `void*`, so it stays untyped until that caller converts.
-    Context* ctx = static_cast<Context*>(ctxv);
+void VideoProgram::SetupShaders(Context& context) const {
+    Context* ctx = &context;
 
     // Context+0x200 is `_videoProgram`, a POINTER that lives in the first eight
     // bytes of the `_pixelConstantStaging` array — see the WAVE 9 LANE CTX note
@@ -183,11 +180,11 @@ void VideoProgram::SetupShaders(void* ctxv) const {
     // than a reinterpret_cast so this file does not depend on the array staying
     // suitably aligned for a void* if the header is ever re-divided.
     void* videoProgramSlot = nullptr;
-    std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));
+    std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));  // LEFT: Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)
     if (videoProgramSlot != static_cast<const void*>(this)) {
         ctx->_dirty |= kDirtyVideoProgram;
         const VideoProgram* me = this;
-        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));
+        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));  // LEFT: as above
     }
 
     Apply(ctx, ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);

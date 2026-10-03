@@ -94,9 +94,7 @@ constexpr uint32_t kDirtyMaterialStagingBit = 0x00008000u;
 // shape.
 constexpr size_t kMaterialStagingOffset = 0x208 - 0x200;   // into _pixelConstantStaging
 
-template <typename T> inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
+
 
 // ---------------------------------------------------------------------------
 // ATTENDANCE, not a diff oracle. Three bodies, three counters.
@@ -134,9 +132,10 @@ unsigned long long g_matNewCalls  = 0;
 // function-local cache and its readiness test are GONE and this is a member
 // call. The sentence about growing the cutover surface was true when written and
 // is answered: the surface it named is ours now.
-void SetupShaders(void* program, Context* ctx) {
-    reinterpret_cast<::Video::VideoProgram*>(program)
-        ->SetupShaders(static_cast<void*>(ctx));   // B.3.5 bridge
+// B.4 (R-GFX): typed; `Video::VideoProgram::SetupShaders` takes retail's
+// `Context&`. The program is read unguarded, as retail does.
+void SetupShaders(const ::Video::VideoProgram* program, Context& ctx) {
+    program->SetupShaders(ctx);
 }
 
 }  // namespace
@@ -301,8 +300,7 @@ void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
     // prog = _material->_passes._data[shader]   (MOV RAX,[RCX+0x28] ;
     //                                            MOV RAX,[RAX+0x28] ;
     //                                            MOV RCX,[RAX+RDI*8])
-    SetupShaders(_material.Get()->_passes._data[shader].Get(),
-                 reinterpret_cast<RtVideo::Context*>(&context));   // B.3.5 bridge
+    SetupShaders(_material.Get()->_passes._data[shader].Get(), context);
 
     // set = _parameters._data + shader*0x20  (SHL RDI,5 ; ADD RDI,[RSI+0x30])
     const RtGraphics::MaterialParameterSet* set = _parameters._data + shader;
@@ -323,7 +321,7 @@ void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
     for (int32_t i = 0; i < set->constants._size; ++i) {
         const RtGraphics::MaterialBinding& b = set->constants._data[i];
         const float* src = _constants._data[b.sourceIndex].value;
-        float* dst = reinterpret_cast<float*>(
+        float* dst = reinterpret_cast<float*>(  // LEFT: Context::_pixelConstantStaging stays bytes (outside indexers, Context.h)
             &context._pixelConstantStaging[kMaterialStagingOffset + b.shaderSlot * 0x10]);
 
         // (c) unordered counts as different, and all four are compared before

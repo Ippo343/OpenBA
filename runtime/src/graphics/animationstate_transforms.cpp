@@ -961,7 +961,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
         // `Array<AnimationState>`'s trait-derived element ops, which the tree
         // ports as the registered spec rows (array_graphics_anim.cpp) instead.
         alignas(Instance) uint8_t tmpStorage[sizeof(Instance)];
-        Instance* const tmp = reinterpret_cast<Instance*>(tmpStorage);
+        Instance* const tmp = reinterpret_cast<Instance*>(tmpStorage);  // LEFT: H5 AnimationState::tmpStorage, raw stack storage never constructed
         tmp->_group     = group;
         tmp->_animIndex = animIndex;
         tmp->_refCount  = 0;

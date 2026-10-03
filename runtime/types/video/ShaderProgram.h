@@ -325,7 +325,42 @@ public:
 
 public:
     VertexProgramData* _data;   // +0x50  from DeviceData slot 15 (+0x78); B.4 R-VIDEO, H4
+
+    // ---- the version-0 vertex-stream records (B.4 R-GFX) --------------------
+    // Moved here from runtime/src/video/vertexprogram.cpp so the collection
+    // bodies that build and destroy them (array.cpp `kSpec_VtxElement18` /
+    // `kSpec_VtxStream18`, array_destroy.cpp 0x180056960 / 0x180056cb0) can
+    // name them. Layouts from retail's two SetSize instances 0x1800567d0
+    // (stride 0x18 {String, String, uint, int}) and 0x180056af0 (stride 0x18
+    // {Array<Element>, String}), and from the destroy 0x180056cb0 (the String
+    // at +0x10 released first, then the nested array's elements, then its
+    // buffer). The nested arrays are unrolled `Collection::Array<T>` triples
+    // handed by address to their unexported template instances (H5: an `Array`
+    // member would run its own destructor on top of the explicit teardown).
+    // Field names are vertexprogram.cpp's (the v0 Serialize reads them in this
+    // order); none is a retail symbol.
+    struct Element {                 // stride 0x18
+        System::String name;           // +0x00
+        System::String semantic;       // +0x08
+        uint32_t       format;         // +0x10
+        int32_t        index;          // +0x14
+    };
+    struct ElementArray { Element* data; int32_t size; int32_t capacity; };
+    struct Stream {                  // stride 0x18
+        ElementArray   elements;       // +0x00
+        System::String name;           // +0x10
+    };
 };
+
+static_assert(sizeof(VertexProgram::Element) == 0x18, "v0 vertex element is 0x18 bytes (0x1800567d0)");
+static_assert(offsetof(VertexProgram::Element, name)     == 0x00, "Element::name @ +0x00");
+static_assert(offsetof(VertexProgram::Element, semantic) == 0x08, "Element::semantic @ +0x08");
+static_assert(offsetof(VertexProgram::Element, format)   == 0x10, "Element::format @ +0x10");
+static_assert(offsetof(VertexProgram::Element, index)    == 0x14, "Element::index @ +0x14");
+static_assert(sizeof(VertexProgram::ElementArray) == 0x10, "unrolled Array header");
+static_assert(sizeof(VertexProgram::Stream) == 0x18, "v0 vertex stream is 0x18 bytes (0x180056af0)");
+static_assert(offsetof(VertexProgram::Stream, elements) == 0x00, "Stream::elements @ +0x00");
+static_assert(offsetof(VertexProgram::Stream, name)     == 0x10, "Stream::name @ +0x10 (0x180056cb0 releases it first)");
 
 static_assert(sizeof(VertexProgram) == 0x58,
               "Video::VertexProgram is 0x58 (MOV EDX,0x58 at 0x18004e82f)");

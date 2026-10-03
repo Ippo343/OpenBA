@@ -48,19 +48,30 @@
 #include "Component/StorageLocationComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Action/CompleteTask.h"
+#include "Action/PathSearch.h"   // RawArray (PickBestDropTarget)
 
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
 // ============================================================
 //   slot 0x1401516b0 Object::Type::Serialize     RtObject_Type_Serialize (object/Type.h)
-//   0x1400f7100 Work::ValidateTask                 WorkBase_ValidateTask_f7100
+//   0x1400f7100 Work::ValidateTask                 Work::ValidateTask (member)
 //   0x1400c5400 task list cleanup                  WorkBase_TaskListCleanup_c5400
 //   0x140002e10 FindComponent (DWORD_1401c80e0)    AttendanceComponent_GetJobHostComponent
-//   0x14012c3f0 ModelComponent::SetActiveState     CitizenComp_FUN_14012c3f0
+//   0x14012c3f0 StatusIconComponent::SetFlag       (member)
+//   0x140119470 the weighted recipe pick           PickConsumeRecipe
+//   0x140122e20 InteractComponent node position    InteractNodePosition
+//   0x14008d590 / 0x14012d5d0                      PickBestDropTarget / FindBestAdjacentCell
+//   0x140115e60 CitizenComponent::LongTermPlan     (member)
+//   0x14012cf10 StorageComponent::QueryCount       (member)
 //   0x1401193a0 ConsumeProduceAction_helper_93a0   WorkLeaf_ConsumeProduce_93a0
 //               (the caller reads the low byte, as retail's AL)
 //   0x14012b310 ConsumeProduceAction_helper_b310   WorkLeaf_ConsumeProduce_b310
-//   0x14009c480 Map_RecalcZones (4 args)           Pf_ZoneRefresh_9c480
+//   0x14009c480 Map::FillZones                     (member)
 //   0x1400bef70 SetupConsumeProduceWorkChain       WorkAct_ConsumeProduceCtor_bef70
 // Object::Internal ctor/dtor (IAT 0x140152768 / 0x140152770) and Work::Serialize
 // (0x1400f7400) are the real base classes. 0x1400032e0 / 0x1400021d0 are
@@ -136,7 +147,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     }
 #endif
     for (int i = 0; i < ibpCount; i++) {
-        reinterpret_cast<Object::InternalBasePtr*>(&ibpArray[i])->Serialize(serializer);   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(&ibpArray[i])->Serialize(serializer);   // B.3.4 bridge  // LEFT: H5 field_58 holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (a typed Array would run its dtor)
 
         // After deserialize, validate the entity type.
         //
@@ -181,7 +192,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     serializer.Serialize(intCount, field_68, nullptr);
 
     // --- Serialize ConsumeProduce fields ---
-    serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // bool at +0x48 (the field is uint8_t storage)
+    serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // bool at +0x48 (the field is uint8_t storage)  // LEFT: H8 (the byte stays uint8_t; Persist's bool& overload)
     serializer.Serialize(field_4c, nullptr);    // int at +0x4C
     RtObject::RtObject_Type_Serialize(&field_50, &serializer);            // Type at +0x50
     serializer.Serialize(field_54, nullptr);    // int at +0x54
@@ -208,12 +219,12 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
 // matEntity+0x38 and the array from +0x30 landed inside the slot's (capacity, stored)
 // int pair, so the "component pointer" came back as 0x0000000500000005 -- two adjacent
 // int32 5s -- and the vtable read off it was the access violation.
-static void* FindDescriptionOnObject(uintptr_t obj, uint32_t typeId) {
-    int count = *(int*)(obj + 0x30);
-    uintptr_t arr = *(uintptr_t*)(obj + 0x28);
+static Description* FindDescriptionOnObject(const ComponentDescription* obj, uint32_t typeId) {
+    int count = obj->_subDescCount;
+    Description** arr = obj->_subDescs;
     for (int i = 0; i < count; i++) {
-        void* c = *(void**)(arr + (uintptr_t)i * 8);
-        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
+        Description* c = arr[i];
+        uint32_t t = c->Type();   // slot 2
         if (t == typeId) {
             return Object::IsDerivedFromNullSafe(c, typeId) ? c : nullptr;
         }
@@ -253,10 +264,8 @@ static int FinalizeAction(ConsumeProduce* self, CitizenComponent** citizenIBP, v
 // ============================================================
 int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    // m_game (Map*) and m_citizenList (CitizenBehavior*) are still void* in
-    // GameUpdateLoop.h: LEFT.
-    int* mapGrid = (int*)gameWorld->m_game;
-    void** worldEntityList = (void**)gameWorld->m_citizenList;
+    Map* map = gameWorld->m_game;
+    CitizenBehavior* worldEntityList = gameWorld->m_citizenList;
 
     // --- Find InteractComponent on work entity ---
     InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
@@ -266,10 +275,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     fn_FindComponent_ConsumeProduce(field_10, &smComp);
 
     // --- Get ConsumeProduceDescription from the component's description (+0x18) ---
-    void* descBase = smComp->_description;
+    Description* descBase = smComp->_description;
     bool isDerived = Object::IsDerivedFromNullSafe(descBase, ConsumeProduceDescription::TypeId());
-    // Component::_description is void*: LEFT for Component.h's owner.
-    ConsumeProduceDescription* cpDesc = isDerived ? reinterpret_cast<ConsumeProduceDescription*>(descBase) : nullptr;
+    ConsumeProduceDescription* cpDesc = isDerived ? static_cast<ConsumeProduceDescription*>(descBase) : nullptr;
 
     // --- Find StorageLocationComponent (for storage slot lookup) ---
     StorageLocationComponent* storageLoc = nullptr;
@@ -278,24 +286,23 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // --- Check resource depletion (bVar6) ---
     // Get active product index from ConsumeProduce component
     bool resourcesDepleted = false;
-    int activeProductIdx = WeightedRandomIndex_119470(reinterpret_cast<int64_t>(smComp));
+    int activeProductIdx = PickConsumeRecipe(smComp);   // 0x140119470
 
-    // The recipe array (+0x28, 0x28 stride) is raw storage in
-    // ConsumeProduceDescription.h: its reads are LEFT.
-    uintptr_t recipes = reinterpret_cast<uintptr_t>(cpDesc->_recipes);
+    // The recipe array (+0x28, 0x28 stride)
+    ConsumeProduceRecipe* recipes = cpDesc->_recipes;
 
     if (smComp->consumeResourceId < 0) {
         // Multi-product mode: check ALL products for depletion
         int productCount = cpDesc->_recipeCount;
         if (productCount > 0) {
-            int* productPtr = (int*)(recipes + 0x18);
+            ConsumeProduceRecipe* productPtr = recipes;
             for (int i = 0; i < productCount; i++) {
-                int materialType = *productPtr;
-                productPtr += 10;  // stride = 0x28 bytes = 10 ints
-                // Check world material supply vs demand
-                uintptr_t* matArray = (uintptr_t*)worldEntityList[0x2e];
-                int supply = (int)matArray[(int64_t)materialType * 4];
-                int demand = (int)matArray[(int64_t)materialType * 4 + 1];
+                int materialType = productPtr->materialType;   // +0x18
+                productPtr++;  // stride = 0x28 bytes
+                // Check world material supply vs demand (the town's material table, +0x170)
+                ProfessionResourceEntry* matArray = worldEntityList->professionResources;
+                int supply = matArray[materialType].currentCount;   // +0x00
+                int demand = matArray[materialType].maxCount;       // +0x08
                 if (demand <= supply) {
                     resourcesDepleted = true;
                 }
@@ -303,10 +310,10 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         }
     } else {
         // Single product mode: check specific active product
-        int materialType = *(int*)(recipes + 0x18 + (int64_t)activeProductIdx * 0x28);
-        uintptr_t* matArray = (uintptr_t*)worldEntityList[0x2e];
-        int supply = (int)matArray[materialType * 4];
-        int demand = (int)matArray[materialType * 4 + 1];
+        int materialType = recipes[activeProductIdx].materialType;   // +0x18
+        ProfessionResourceEntry* matArray = worldEntityList->professionResources;
+        int supply = matArray[materialType].currentCount;   // +0x00
+        int demand = matArray[materialType].maxCount;       // +0x08
         resourcesDepleted = (demand <= supply);
     }
 
@@ -314,13 +321,13 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     StatusIconComponent* statusIcon = field_10->FindComponent<StatusIconComponent>();
 
     // Set active state = 2, enabled = resourcesDepleted
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 2, resourcesDepleted ? '\x01' : '\0');
+    statusIcon->SetFlag(2, resourcesDepleted ? '\x01' : '\0');   // 0x14012c3f0
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) for produce check ---
     ConsumeProduceComponent* smComp2 = field_10->FindComponent<ConsumeProduceComponent>();
 
     // Check produce threshold
-    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(reinterpret_cast<uintptr_t>(smComp2));
+    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(reinterpret_cast<uintptr_t>(smComp2));   // LEFT: SIG WorkLeaf_ConsumeProduce_93a0
     // [CPWork] the gate that decides whether the tavern is allowed to make more at
     // all (retail 0x1401193a0 -- a stock-vs-limit test against the "Alcohol Limit 500"
     // the panel shows). Printed on CHANGE only; a permanent 0 here means the work runs
@@ -374,18 +381,17 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         StorageComponent* storage = field_10->FindComponent<StorageComponent>();
 
         // --- Setup loop vars for product iteration ---
-        int64_t productStride = (int64_t)activeProductIdx * 5;
-        uintptr_t productData = recipes;
+        ConsumeProduceRecipe* recipe = &recipes[activeProductIdx];   // the active recipe (0x28 stride)
 
-        // Get citizen position data for cell index calculation. ModelComponent keeps
-        // its transform as raw storage (H5): the position reads are LEFT.
-        uintptr_t citizenPos = reinterpret_cast<uintptr_t>((*citizenIBP)->character->modelComponent);
+        // Get citizen position data for cell index calculation: CharacterComponent
+        // (+0x278) -> ModelComponent (+0x68) -> transform translation (+0x158)
+        const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
-        (void)*(float*)(citizenPos + 0x160);  // posHeight -- read but not used in reimpl
-        int mapSize = *mapGrid;
+        (void)citizenPos.z;  // posHeight (+0x160) -- read but not used in reimpl
+        int mapSize = map->size;
         int halfMap = mapSize >> 1;
-        int cellX = (int)(*(float*)(citizenPos + 0x158) + (float)halfMap);
-        int cellY = (int)(*(float*)(citizenPos + 0x15c) + (float)halfMap);
+        int cellX = (int)(citizenPos.x + (float)halfMap);
+        int cellY = (int)(citizenPos.y + (float)halfMap);
         if (cellX < 0) cellX = 0;
         if (cellX >= mapSize) cellX = mapSize - 1;
         if (cellY < 0) cellY = 0;
@@ -403,35 +409,35 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         {
             static int n = 0;
             if (n < 6) { ++n;
-                void* const sd = storage ? storage->storageSlots : nullptr;
+                StorageComponent::Item* const items = storage ? storage->storageSlots : nullptr;
+                void* const sd = items;
+                void* const slot0 = items ? items->_resource : nullptr;
                 fprintf(stderr, "[CPWork] Execute storageComp=%p ibp=%p data=%p count=%d "
                         "slot0=%p tid_storage=%u activeProduct=%d cpSel(+0x50)=%d\n",
                         static_cast<void*>(storage), static_cast<void*>(storage), sd,
                         storage ? storage->slotCount : -1,
-                        sd ? *(void**)sd : nullptr,
+                        slot0,
                         StorageComponent::TypeId(),
                         activeProductIdx, smComp->consumeResourceId);
                 fflush(stderr);
             }
         }
-        // The storage item array (+0x28) is raw storage in StorageComponent.h (H5):
-        // its reads are LEFT.
+        // The storage item array (+0x28, StorageComponent::Item, 0x10 stride)
         int inputCount = storage->slotCount;
         if (inputCount > 0) {
-            uintptr_t inputOffset = 0;
             for (int inputIdx = 0; inputIdx < inputCount; inputIdx++) {
                 // Get material entity from storage component
-                uintptr_t storageData = reinterpret_cast<uintptr_t>(storage->storageSlots);
-                uintptr_t matEntity = *(uintptr_t*)(inputOffset + storageData);
+                StorageComponent::Item& storageItem = storage->storageSlots[inputIdx];
+                ComponentDescription* matEntity = storageItem._resource;
 
                 // Check if this material entity matches the required material for active product
-                bool matMatches = (*(uintptr_t*)(productData + 0x10 + productStride * 8) == matEntity);
+                bool matMatches = (recipe->product == matEntity);
                 if (!matMatches) {
-                    int64_t matCheckCount = (int64_t)*(int*)(productData + 8 + productStride * 8);
+                    int64_t matCheckCount = (int64_t)recipe->inputCount;
                     if (matCheckCount > 0) {
-                        uintptr_t* matCheckPtr = *(uintptr_t**)(productData + productStride * 8);
+                        ConsumeProduceInput* matCheckPtr = recipe->inputs;
                         for (int64_t j = 0; j < matCheckCount; j++) {
-                            if (matCheckPtr[j * 2] == matEntity) {
+                            if (matCheckPtr[j].material == matEntity) {
                                 matMatches = true;
                                 break;
                             }
@@ -440,16 +446,16 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 }
 
                 if (matMatches) {
-                    inputOffset += 0x10;
                     continue;
                 }
 
                 // Material doesn't match -- need to find and haul it
                 // Get available amount from storage
-                void* rawMatComp = FindDescriptionOnObject(matEntity, RawMaterialDescription::TypeId());
+                RawMaterialDescription* rawMatComp = static_cast<RawMaterialDescription*>(
+                    FindDescriptionOnObject(matEntity, RawMaterialDescription::TypeId()));
 
-                // Check remaining amount in storage: capacity - currently stored
-                int available = *(int*)(inputOffset + 8 + storageData) - *(int*)(inputOffset + 0xc + storageData);
+                // Check remaining amount in storage: stored - reserved
+                int available = storageItem._count - storageItem._reserve;
 
                 // Find StorageComponent on the citizen's entity
                 StorageComponent* homeStorage =
@@ -457,21 +463,21 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 // Check if home storage has capacity for the material
                 int homeCapacity = homeStorage->capacity;
-                int homeStored = fn_StorageComponent_QueryCount(homeStorage);
+                int homeStored = homeStorage->QueryCount();   // 0x14012cf10
 
-                if (homeCapacity - homeStored < available * *(int*)((uintptr_t)rawMatComp + 0x48)) {
+                if (homeCapacity - homeStored < available * rawMatComp->_weight) {
                     // Not enough capacity -- check citizen's own storage
                     StorageComponent* citizenStorage =
                         (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
                     int cap2 = citizenStorage->capacity;
-                    int stored2 = fn_StorageComponent_QueryCount(citizenStorage);
-                    available = (cap2 - stored2) / *(int*)((uintptr_t)rawMatComp + 0x48);
+                    int stored2 = citizenStorage->QueryCount();   // 0x14012cf10
+                    available = (cap2 - stored2) / rawMatComp->_weight;
                 }
 
                 if (available == 0) {
                     // No resources available -- replan citizen
-                    CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*citizenIBP));
+                    (*citizenIBP)->LongTermPlan();   // 0x140115e60
                     return 2;
                 }
 
@@ -482,14 +488,15 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 ComponentEntity* entityRef = field_10;
 
                 uintptr_t foundEntity = 0;
-                Pf_PickBestDropTarget_8d590(
-                    reinterpret_cast<int64_t**>(worldEntityList), reinterpret_cast<int64_t*>(&foundEntity),
+                PickBestDropTarget(
+                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                    reinterpret_cast<ComponentEntity**>(&foundEntity),   // LEFT: the slot doubles as the position out below (8 bytes, 12 written: known_port_issues row 260)
                     (uint32_t)field_28, matEntity,
-                    available, '\x01', reinterpret_cast<uint32_t*>(searchPos), &field_10);
+                    available, '\x01', searchPos, &field_10);   // 0x14008d590
 
                 if (foundEntity != 0) {
                     // Check passability
-                    uint64_t passable = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)citizenCell,
+                    uint64_t passable = WorkBase_ValidateCell_a00f0((int*)map, 0xe1f, (uint32_t)citizenCell,   // LEFT: SIG WorkBase_ValidateCell_a00f0
                                                              (uint32_t)field_28);
                     if ((char)passable == '\0') {
                         return 1;
@@ -499,14 +506,14 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     float terrainPos[4] = {};
                     if (storageLoc == nullptr) {
                         if (posComp != nullptr) {
-                            Pf_EntityResolvePos_2e20(posComp, reinterpret_cast<float*>(&foundEntity), 0, 0, nullptr);
-                            terrainPos[0] = *(float*)&foundEntity;
-                            terrainPos[1] = ((float*)&foundEntity)[1];
-                            terrainPos[2] = ((float*)&foundEntity)[2];
+                            InteractNodePosition(posComp, reinterpret_cast<float*>(&foundEntity), 0, 0, nullptr);   // 0x140122e20  // LEFT: the 8-byte slot reused as a float[3] out (row 260)
+                            terrainPos[0] = *(float*)&foundEntity;      // LEFT: row 260
+                            terrainPos[1] = ((float*)&foundEntity)[1];  // LEFT: row 260
+                            terrainPos[2] = ((float*)&foundEntity)[2];  // LEFT: row 260
                         }
                     } else {
                         // Use storage slot lookup
-                        int slotMapSize = *mapGrid;
+                        int slotMapSize = map->size;
                         int slotCellX = (int)(searchPos[0] + (float)(slotMapSize >> 1));
                         int slotCellY = (int)(searchPos[1] + (float)(slotMapSize >> 1));
                         if (slotCellX < 0) slotCellX = 0;
@@ -514,9 +521,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                         if (slotCellY < 0) slotCellY = 0;
                         if (slotCellY >= slotMapSize) slotCellY = slotMapSize - 1;
 
-                        int slotResult = Pf_FindBestAdjacentCell_d5d0(
-                            reinterpret_cast<int64_t>(storageLoc), slotMapSize * slotCellY + slotCellX,
-                            (float*)&terrainPos, (uint32_t)field_28);
+                        int slotResult = FindBestAdjacentCell(
+                            storageLoc, slotMapSize * slotCellY + slotCellX,
+                            terrainPos);   // 0x14012d5d0 (the forwarder dropped field_28)
                         if (slotResult >= 0) {
                             // Set up pathfinding and create work action
                             uintptr_t destEntity = foundEntity;
@@ -525,64 +532,62 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                             WorkAct_GatherRawMatCtor_bf790(
                                 &worldEntityList, &destEntityRef,
                                 field_20, &destEntity,
-                                searchPos, reinterpret_cast<void**>(&entityRef), (float*)&terrainPos,
-                                (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);
+                                searchPos, reinterpret_cast<void**>(&entityRef), terrainPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
 
                             int priority = field_20;
                             return FinalizeAction(this, citizenIBP, &destEntityRef, priority, slot);
                         }
                     }
                 }
-
-                inputOffset += 0x10;
             }
         }
 
         // --- Second pass: check each input material for nearby storage ---
         bool allInputsAvailable = true;
-        int inputMatCount = *(int*)(productData + 8 + productStride * 8);
+        int inputMatCount = recipe->inputCount;
         for (int matIdx = 0; matIdx < inputMatCount; matIdx++) {
-            uintptr_t matEntity2 = *(uintptr_t*)(*(uintptr_t*)(productData + productStride * 8) + (uintptr_t)matIdx * 0x10);
+            ComponentDescription* matEntity2 = recipe->inputs[matIdx].material;
 
             // Check if this material is already in our storage
             int existingAmount = 0;
             int storageSlotCount = storage->slotCount;
             if (storageSlotCount > 0) {
-                uintptr_t* storageSlots = (uintptr_t*)storage->storageSlots;
+                StorageComponent::Item* storageSlots = storage->storageSlots;
                 for (int si = 0; si < storageSlotCount; si++) {
-                    if (storageSlots[si * 2] == matEntity2) {
+                    if (storageSlots[si]._resource == matEntity2) {
                         if (si >= 0) {
-                            existingAmount = (int)storageSlots[si * 2 + 1] - *(int*)((uintptr_t)storageSlots + si * 0x10 + 0xc);
+                            existingAmount = storageSlots[si]._count - storageSlots[si]._reserve;
                         }
                         break;
                     }
                 }
             }
 
-            int required = *(int*)(*(uintptr_t*)(productData + productStride * 8) + 8 + (uintptr_t)matIdx * 0x10);
+            int required = recipe->inputs[matIdx].count;
             if (existingAmount < required) {
                 allInputsAvailable = false;
 
                 // Search for this material in nearby entities
                 float searchPos2[3] = { 0.0f, 0.0f, 0.0f };
 
-                // Get building position for search (ModelComponent transform: LEFT)
-                uintptr_t bldgPos = reinterpret_cast<uintptr_t>((*citizenIBP)->character->modelComponent);
+                // Get building position for search: the transform translation (+0x158)
+                const Math::Vector3& bldgPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
-                mapSize = *mapGrid;
+                mapSize = map->size;
                 halfMap = mapSize >> 1;
-                int bx = (int)(*(float*)(bldgPos + 0x158) + (float)halfMap);
-                int by = (int)(*(float*)(bldgPos + 0x15c) + (float)halfMap);
+                int bx = (int)(bldgPos.x + (float)halfMap);
+                int by = (int)(bldgPos.y + (float)halfMap);
                 if (bx < 0) bx = 0;
                 if (bx >= mapSize) bx = mapSize - 1;
                 if (by < 0) by = 0;
                 if (by >= mapSize) by = mapSize - 1;
 
                 ComponentEntity* foundStorage = nullptr;
-                Pf_PickBestDropTarget_8d590(
-                    reinterpret_cast<int64_t**>(worldEntityList), reinterpret_cast<int64_t*>(&foundStorage),
-                    mapSize * by + bx, matEntity2, 1, '\0', reinterpret_cast<uint32_t*>(searchPos2),
-                    &field_10);
+                PickBestDropTarget(
+                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList), &foundStorage,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                    mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
+                    &field_10);   // 0x14008d590
 
                 if (foundStorage != nullptr) {
                     // Found storage -- check if it has the material available
@@ -591,20 +596,20 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     // Check if storage has the material
                     int fSlotCount = fStorage->slotCount;
                     if (fSlotCount > 0) {
-                        uintptr_t* fSlots = (uintptr_t*)fStorage->storageSlots;
+                        StorageComponent::Item* fSlots = fStorage->storageSlots;
                         for (int fi = 0; fi < fSlotCount; fi++) {
-                            if (fSlots[fi * 2] == matEntity2) {
-                                if (fi >= 0 && (int)fSlots[fi * 2 + 1] != *(int*)((uintptr_t)fSlots + fi * 0x10 + 0xc)) {
+                            if (fSlots[fi]._resource == matEntity2) {
+                                if (fi >= 0 && fSlots[fi]._count != fSlots[fi]._reserve) {
                                     // Material available -- find storage on the citizen's entity
                                     StorageComponent* homeStorage2 =
                                         (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-                                    int hs2Count = fn_StorageComponent_QueryCount(homeStorage2);
+                                    int hs2Count = homeStorage2->QueryCount();   // 0x14012cf10
                                     if (hs2Count < 1) {
                                         // Storage empty -- set up path to fetch material
                                         ComponentEntity* fetchDest = foundStorage;
                                         float fetchPos[4] = {};
-                                        Pf_EntityResolvePos_2e20(posComp, fetchPos, 0, slot, nullptr);
+                                        InteractNodePosition(posComp, fetchPos, 0, slot, nullptr);   // 0x140122e20
 
                                         ComponentEntity* pathSrc = field_10;
 
@@ -620,9 +625,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                                         WorkAct_GatherRawMatCtor_bf790(
                                             &foundStorage, &pathCitizen,
-                                            field_20, reinterpret_cast<uint64_t*>(&pathSrc),
-                                            (float*)&fetchPos, reinterpret_cast<void**>(&fetchDest), searchPos2,
-                                            (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);
+                                            field_20, reinterpret_cast<uint64_t*>(&pathSrc),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                            fetchPos, reinterpret_cast<void**>(&fetchDest), searchPos2,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                            (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
 
                                         int priority2 = field_20;
                                         return FinalizeAction(this, citizenIBP, &fetchDest, priority2, slot);
@@ -651,9 +656,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
         for (int posIdx = 0; posIdx < totalPositions; posIdx++) {
             float posVec[3];
-            Pf_EntityResolvePos_2e20(posComp, posVec, 2, posIdx, nullptr);
+            InteractNodePosition(posComp, posVec, 2, posIdx, nullptr);   // 0x140122e20
 
-            mapSize = *mapGrid;
+            mapSize = map->size;
             halfMap = mapSize >> 1;
             int px = (int)(posVec[0] + (float)halfMap);
             int py = (int)(posVec[1] + (float)halfMap);
@@ -663,11 +668,11 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             if (py >= mapSize) py = mapSize - 1;
             int posCell = py * mapSize + px;
 
-            // Check if position has status 2 but no structure (Map cells: LEFT)
+            // Check if position has status 2 but no structure (the cell's occupant, +0x08)
             int* statusArray = field_68;
-            uintptr_t structBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+            MapCell* structBase = map->cells;
             if (statusArray[posIdx] == 2 &&
-                *(uintptr_t*)(structBase + 8 + (int64_t)posCell * 0x30) == 0) {
+                structBase[posCell].occupant == nullptr) {
                 statusArray[posIdx] = 0;
             }
 
@@ -695,9 +700,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         // --- Check each position for workplace assignment ---
         for (int posIdx2 = 0; posIdx2 < totalPositions; posIdx2++) {
             float checkPos[3];
-            Pf_EntityResolvePos_2e20(posComp, checkPos, 2, posIdx2, nullptr);
+            InteractNodePosition(posComp, checkPos, 2, posIdx2, nullptr);   // 0x140122e20
 
-            mapSize = *mapGrid;
+            mapSize = map->size;
             halfMap = mapSize >> 1;
             int cx = (int)(checkPos[0] + (float)halfMap);
             int cy = (int)(checkPos[1] + (float)halfMap);
@@ -707,8 +712,8 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             if (cy >= mapSize) cy = mapSize - 1;
             int checkCell = cy * mapSize + cx;
 
-            uintptr_t structBase2 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-            ComponentEntity* structEntity = *(ComponentEntity**)(structBase2 + 8 + (int64_t)checkCell * 0x30);
+            MapCell* structBase2 = map->cells;
+            ComponentEntity* structEntity = structBase2[checkCell].occupant;   // +0x08
 
             if (structEntity != nullptr) {
                 if (structEntity != field_10) {
@@ -716,8 +721,8 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     WorkComponent* locComp = structEntity->FindComponent<WorkComponent>();
 
                     CitizenComponent* citizenRef3 = *citizenIBP;
-                    // GameUpdateLoop +0x118 (still void*): LEFT
-                    uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;
+                    // GameUpdateLoop +0x118, the WorkScheduler
+                    uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
                     uint64_t assigned = WorkGrid_TryAssignWorkplace_f8620(
                         assignMgr, &citizenRef3, locComp->workId, '\x01');
                     if ((char)assigned != '\0') {
@@ -735,15 +740,15 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         // --- Set up produce action ---
         // Find StatusIconComponent again and toggle state 3
         StatusIconComponent* statusIcon2 = field_10->FindComponent<StatusIconComponent>();
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon2), 3, !allInputsAvailable ? '\x01' : '\0');
+        statusIcon2->SetFlag(3, !allInputsAvailable ? '\x01' : '\0');   // 0x14012c3f0
 
         if (allInputsAvailable) {
             // Get position for the output slot
             float producePos[3];
             float produceHeading[2] = {};
-            Pf_EntityResolvePos_2e20(posComp, producePos, 0, slot, produceHeading);
+            InteractNodePosition(posComp, producePos, 0, slot, produceHeading);   // 0x140122e20
 
-            mapSize = *mapGrid;
+            mapSize = map->size;
             halfMap = mapSize >> 1;
             int prodCellX = (int)(producePos[1] + (float)halfMap);
             int prodCellY = (int)(producePos[0] + (float)halfMap);
@@ -753,23 +758,23 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             if (prodCellX >= mapSize) prodCellX = mapSize - 1;
 
             // Recalculate map zones
-            Pf_ZoneRefresh_9c480(mapGrid);
+            map->FillZones();   // 0x14009c480
 
-            // Get cell structs for passability check (Map cells: LEFT)
-            uintptr_t structBase3 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-            uintptr_t srcCellStruct = structBase3 + (int64_t)citizenCell * 0x30;
-            uintptr_t dstCellStruct = structBase3 + (int64_t)(prodCellX * mapSize + prodCellY) * 0x30;
+            // Get cell structs for passability check
+            MapCell* structBase3 = map->cells;
+            MapCell* srcCellStruct = &structBase3[citizenCell];
+            MapCell* dstCellStruct = &structBase3[prodCellX * mapSize + prodCellY];
 
-            uint32_t srcMask = 1 << (*(uint8_t*)(dstCellStruct + 0x29) & 0x1f);
-            uint32_t dstMask = 1 << (*(uint8_t*)(srcCellStruct + 0x29) & 0x1f);
+            uint32_t srcMask = 1 << (dstCellStruct->terrainType & 0x1f);   // +0x29
+            uint32_t dstMask = 1 << (srcCellStruct->terrainType & 0x1f);
             uint32_t combined = srcMask | dstMask;
             uint32_t passFlags = combined | 0xe1f;
 
             if ((passFlags & dstMask) != 0 && (passFlags & srcMask) != 0 &&
                 ((combined & 0x1e0) != 0 ||
-                 (*(int16_t*)(srcCellStruct + 0x26) != 0 &&
-                  *(int16_t*)(dstCellStruct + 0x26) != 0 &&
-                  *(int16_t*)(srcCellStruct + 0x26) == *(int16_t*)(dstCellStruct + 0x26)))) {
+                 (srcCellStruct->zone != 0 &&   // +0x26
+                  dstCellStruct->zone != 0 &&
+                  srcCellStruct->zone == dstCellStruct->zone))) {
 
                 // Check if enough consume cycles have passed
                 char canFinish = '\0';
@@ -794,10 +799,10 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     &workEntityRef,
                     producePos,
                     produceHeading[0],
-                    reinterpret_cast<int64_t>(field_10->_description),
-                    *(uint64_t*)(productData + 0x10 + productStride * 8),
+                    reinterpret_cast<int64_t>(field_10->_description),   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
+                    (uint64_t)recipe->product,   // +0x10  // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
                     (uint32_t)canFinish,
-                    (int*)&actionPriority,
+                    &actionPriority,
                     (uint32_t)field_54,
                     firstFreeIndex,
                     cpDesc->_f44,
@@ -846,11 +851,11 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // The !depleted && !canProduce path (the goto above) still reaches b310, since
     // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
     if ((char)canProduce == '\0') {
-        WorkLeaf_ConsumeProduce_b310(reinterpret_cast<uintptr_t>(smComp));
+        WorkLeaf_ConsumeProduce_b310(reinterpret_cast<uintptr_t>(smComp));   // LEFT: SIG WorkLeaf_ConsumeProduce_b310
     }
 
     // Set active state = 3, disabled
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 3, '\0');
+    statusIcon->SetFlag(3, '\0');   // 0x14012c3f0
 
     return 1;
 }
@@ -955,9 +960,9 @@ int ConsumeProduce::Validate() {
         if (entityIBP == nullptr) continue;
 
         // Validate task for this citizen
-        uintptr_t taskResult = 0;
+        CompleteTask* taskResult = nullptr;
         CitizenComponent* ibpBuf = entityIBP;
-        uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &ibpBuf, (void**)&taskResult);
+        uint8_t valid = ValidateTask(nullptr, &ibpBuf, &taskResult);   // 0x1400f7100
 
         if (valid == 0) {
             // Task invalid -- clear citizen from slot (the InternalBasePtr ctor with null)
@@ -965,7 +970,7 @@ int ConsumeProduce::Validate() {
             allValid = false;
         } else {
             // Task valid -- track the type for cross-referencing
-            int typeTag = *(int*)(taskResult + 0x34);
+            int typeTag = taskResult->taskParam;   // +0x34
 
             int newCount = validCount + 1;
             if (newCount != validCount) {

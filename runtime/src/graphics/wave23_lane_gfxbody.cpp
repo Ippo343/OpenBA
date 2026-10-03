@@ -614,7 +614,7 @@ void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
     // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
     // `RenderBufferData::Resolve` (slot 3). LEFT: `RenderBuffer::platformData`
     // is `void*` (Device.h), viewed once as the companion it is.
-    static_cast<Video::RenderBufferData*>(_destTarget->platformData)   // faithful: unguarded
+    _destTarget->platformData   // faithful: unguarded
         ->Resolve(context, _sourceTarget, true);
 
     const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]

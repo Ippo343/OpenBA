@@ -431,7 +431,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
 
     // The ExternalPtr<Material> at +0x28 (0x180061100).
     RtObject_ExternalPtrSerialize_Material(
-        reinterpret_cast<RtObject::External**>(&_material), PodSerializer(ser));
+        reinterpret_cast<RtObject::External**>(&_material), PodSerializer(ser));  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
 
     // --- textures, stride 0x10 --------------------------------------------
     int32_t n = _textures._size;
@@ -444,7 +444,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
         for (int32_t i = 0; i < n; ++i) {
             SerString(&p->name, ser);                       // 0x1800c9930
             RtObject_ExternalPtrSerialize_ImageBuffer(      // 0x18005d0f0
-                reinterpret_cast<RtObject::External**>(&p->image), PodSerializer(ser));
+                reinterpret_cast<RtObject::External**>(&p->image), PodSerializer(ser));  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
             ++p;
             ++g_matSerTextures;
         }
@@ -458,7 +458,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
     {
         RtGraphics::MaterialConstant* p = _constants._data;
         for (int32_t i = n; i > 0; --i) {
-            SerString(p->_head, ser);
+            SerString(&p->name, ser);
             rw->SerializeFloatArray(4, p->value, nullptr);  // +0x28, (enc, 4, p+8, 0)
             ++p;
             ++g_matSerConstants;

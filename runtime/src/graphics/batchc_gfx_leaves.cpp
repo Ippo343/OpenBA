@@ -480,13 +480,12 @@ namespace {
 // The four buffer calls: `MOV RCX,[level+X] ; MOV RAX,[RCX] ; CALL [RAX+0x30]`
 // -- slot 6 `Serialize` of the buffer's companion (`_deviceData`, what
 // PlatformConstruct wrote). The dereference is unguarded, which is faithful.
-// LEFT: `DetailLevel::Buffer::_deviceData` is a `void*` (the unit test pins
-// the `Buffer` struct), so the one view of it as its companion is here.
-void SerializeIndexBuffer(void* deviceData, IO::Serializer& sub) {
-    static_cast<Video::IndexBufferData*>(deviceData)->Serialize(&sub);
+// B.4: the buffers are the real `Video` classes; their `platformData` is typed.
+void SerializeIndexBuffer(Video::IndexBufferData* deviceData, IO::Serializer& sub) {
+    deviceData->Serialize(&sub);
 }
-void SerializeVertexBuffer(void* deviceData, IO::Serializer& sub) {
-    static_cast<Video::VertexBufferData*>(deviceData)->Serialize(&sub);
+void SerializeVertexBuffer(Video::VertexBufferData* deviceData, IO::Serializer& sub) {
+    deviceData->Serialize(&sub);
 }
 
 }  // namespace
@@ -583,7 +582,7 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             // 0x1800a4b30), so a slot-0x30 handler that reallocates the level
             // array is seen. Not hoisted.
             DetailLevel* const level =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+                _detailLevels._data + i;
 
             int32_t n = level->_triangleLists._size;                  // +0xa0
             rw->SerializeInt(n, nullptr);
@@ -612,14 +611,14 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             // The four buffers, INDEX BEFORE VERTEX in each pair, retail's
             // order (+0x40, +0x20, +0x80, +0x60 = each header's +0x08).
             DetailLevel* const lvl2 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
-            SerializeIndexBuffer (lvl2->_indexBuffer._deviceData,      sub);
-            SerializeVertexBuffer(lvl2->_vertexBuffer._deviceData,     sub);
-            SerializeIndexBuffer (lvl2->_skinIndexBuffer._deviceData,  sub);
-            SerializeVertexBuffer(lvl2->_skinVertexBuffer._deviceData, sub);
+                _detailLevels._data + i;
+            SerializeIndexBuffer (lvl2->_indexBuffer.platformData,      sub);
+            SerializeVertexBuffer(lvl2->_vertexBuffer.platformData,     sub);
+            SerializeIndexBuffer (lvl2->_skinIndexBuffer.platformData,  sub);
+            SerializeVertexBuffer(lvl2->_skinVertexBuffer.platformData, sub);
 
             DetailLevel* const lvl3 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+                _detailLevels._data + i;
             rw->SerializeInt(lvl3->_maxInstances, nullptr);            // +0xa8
         }
     }

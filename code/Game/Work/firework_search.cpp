@@ -108,9 +108,8 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
                 uVar7 = static_cast<uint32_t>(field_0x130[static_cast<int64_t>(id) * 2]);
                 // Cell-type gate: bit (cellType & 0x1f) of mask 0xe07 must be set.
                 // cellType = byte +0x29 of the 0x30-byte map cell (disasm:
-                // MOV RAX,[R14 + 0x80]). The cell is raw storage (H5): LEFT.
-                uint8_t cellType = reinterpret_cast<uint8_t*>(map->cells)
-                    [0x29 + static_cast<int64_t>(static_cast<int>(uVar7)) * 0x30];
+                // MOV RAX,[R14 + 0x80]).
+                uint8_t cellType = map->cells[static_cast<int>(uVar7)].terrainType;
                 if (((1u << (cellType & 0x1f)) & 0xe07u) == 0)
                     goto next;
             }
@@ -151,8 +150,8 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
 // ===========================================================================
 int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA, float* outB) {
 
-    // The world Map at GameUpdateLoop+0xF8 (m_game is still void*: LEFT).
-    Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+    // The world Map at GameUpdateLoop+0xF8.
+    Map* map = GameUpdateLoop::_singleton->m_game;
 
     WellComponent* found = nullptr;   // found well (null = none)
     int W      = map->size;
@@ -261,10 +260,9 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
     ComponentEntity* wellEntity = found->_entity;
     InteractComponent* chosen = wellEntity->FindComponent<InteractComponent>();
 
-    // Random-index a sub-entity of it, resolve its position. (The child-sum helper's
-    // parameter is an integer in Action/exe_bodies.h, not this block's header: LEFT.)
+    // Random-index a sub-entity of it, resolve its position.
     uint32_t count = static_cast<uint32_t>(
-        Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(chosen), 0));
+        InteractNodeCount(chosen, 0));   // 0x140123070
     uint32_t randIdx = GameUpdateLoop::_singleton->m_random->Rand(count);
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};

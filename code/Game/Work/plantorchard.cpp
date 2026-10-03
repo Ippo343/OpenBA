@@ -229,7 +229,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
             insertKey.cell = i;
             insertKey._pad04 = 0;
             insertKey.citizen = *citizenRef;
-            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);
+            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);   // LEFT: SIG WorkCellBST_Insert_9a40
 
             // Mark cell as planted (not available)
             validityArray[i] = 1;
@@ -260,7 +260,7 @@ int PlantOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*
         } else if (param4 > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             break;
         }
     }
@@ -285,7 +285,7 @@ int PlantOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*pa
         } else if (param4 > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             break;
         }
     }
@@ -424,7 +424,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.cell) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
                     break;
                 }
             }
@@ -465,7 +465,7 @@ void PlantOrchard::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);   // LEFT: SIG WorkCellBST_Serialize_9de0
 
     int cellCountBuf[2] = { field_60, 0 };
     ser.Serialize(cellCountBuf[0], nullptr);

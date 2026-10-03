@@ -49,6 +49,9 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
+#include "Action/CompleteTask.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
@@ -72,15 +75,14 @@
 // Helper: Find a description on a ComponentDescription's sub-description list
 // (+0x28 array / +0x30 count) — different from an entity's component list.
 // ============================================================
-static Object::Base* FindComponentOnSubObject(ComponentDescription* subObj, uint32_t typeId) {
+static Description* FindComponentOnSubObject(ComponentDescription* subObj, uint32_t typeId) {
     int count = subObj->_subDescCount;
 
     for (int i = 0; i < count; i++) {
-        // ComponentDescription.h keeps the sub-descriptions as void* (LEFT)
-        Object::Base* comp = reinterpret_cast<Object::Base*>(subObj->_subDescs[i]);
+        Description* comp = subObj->_subDescs[i];
         uint32_t compTypeId = comp->Type();
         if (compTypeId == typeId) {
-            Object::Base* c = reinterpret_cast<Object::Base*>(subObj->_subDescs[i]);
+            Description* c = subObj->_subDescs[i];
             if (Object::IsDerivedFromNullSafe(c, typeId)) {
                 return c;
             }
@@ -115,25 +117,23 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     FishingComponent* fishing = field_10->FindComponent<FishingComponent>();
 
     // Get fishing description via IsDerivedFrom check on component+0x18
-    void* compBase = fishing->_description;
+    Description* compBase = fishing->_description;
     FishingDescription* fishingDesc = nullptr;
     if (Object::IsDerivedFromNullSafe(compBase, FishingDescription::TypeId())) {
-        // Component::_description is void*: LEFT for Component.h's owner
-        fishingDesc = reinterpret_cast<FishingDescription*>(compBase);
+        fishingDesc = static_cast<FishingDescription*>(compBase);
     }
 
     // Check if fishing season is valid
-    // The town's resource entry for fishingDesc+0x28 (CitizenBehavior +0x170 through
-    // GameUpdateLoop::m_citizenList, still void*: LEFT)
+    // The town's resource entry for fishingDesc+0x28 (CitizenBehavior +0x170, 0x20 stride)
     int spotMapIdx = (int)fishingDesc->_u28;
-    uintptr_t mapEntries = *(uintptr_t*)((uintptr_t)gameWorld->m_citizenList + 0x170);
-    int64_t offset = (int64_t)spotMapIdx * 0x20;
+    ProfessionResourceEntry* mapEntries = gameWorld->m_citizenList->professionResources;
+    ProfessionResourceEntry& entry = mapEntries[spotMapIdx];
     // atCapacity = (limit <= current) — true when resource count is at/above limit
-    bool atCapacity = *(int*)(mapEntries + offset + 8) <= *(int*)(mapEntries + offset);
+    bool atCapacity = entry.maxCount <= entry.currentCount;   // +0x08 / +0x00
 
     // Toggle status icon visibility based on capacity (visGroup 2)
     StatusIconComponent* statusIcon = field_10->FindComponent<StatusIconComponent>();
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 2, atCapacity ? 1 : 0);
+    statusIcon->SetFlag(2, atCapacity ? 1 : 0);   // 0x14012c3f0
 
     if (atCapacity) {
         return 1;
@@ -165,9 +165,9 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     // Also reset spots that were marked as state 2 if the map cell is now empty
     int spotCount = this->spotCount;    // +0x60
     int32_t* spotStates = this->spotStates;  // +0x58
-    // The world map (GameUpdateLoop::m_game is still void*: LEFT)
-    int* mapGridPtr = (int*)gameWorld->m_game;
-    int mapSize = *mapGridPtr;
+    // The world map
+    Map* map = gameWorld->m_game;
+    int mapSize = map->size;
     int freeSpot = -1;
     int freeSpotMapCell = -1;
 
@@ -175,7 +175,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
             float spotPos[3];
-            Pf_EntityResolvePos_2e20(posComp, spotPos, 2, i, nullptr);
+            InteractNodePosition(posComp, spotPos, 2, i, nullptr);   // 0x140122e20
 
             int half = mapSize >> 1;
             int cx = ClampToMap((int)(spotPos[0] + (float)half), mapSize);
@@ -185,10 +185,9 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // If spot state is 2 (waiting for reset) and map cell is empty, reset to 0
             int* spotState = &spotStates[i];
             if (*spotState == 2) {
-                uintptr_t mapEntryBase = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
-                const uintptr_t occupant =
-                    *(uintptr_t*)(mapEntryBase + 8 + (uintptr_t)cellIdx * 0x30);
-                if (occupant == 0) {
+                MapCell* mapEntryBase = map->cells;
+                const ComponentEntity* occupant = mapEntryBase[cellIdx].occupant;   // +0x08
+                if (occupant == nullptr) {
                     *spotState = 0;
                 }
             }
@@ -206,16 +205,16 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // Get citizen position (mode=0) for pathfinding
             float citizenPos[3];
             float citizenHeading;
-            Pf_EntityResolvePos_2e20(posComp, citizenPos, 0, emptySlot, &citizenHeading);
+            InteractNodePosition(posComp, citizenPos, 0, emptySlot, &citizenHeading);   // 0x140122e20
 
-            // The citizen's position (CharacterComponent -> ModelComponent; its
-            // transform is raw storage, H5: LEFT)
-            uintptr_t citizenPosData =
-                reinterpret_cast<uintptr_t>((*citizenIBP)->character->modelComponent);
+            // The citizen's position (CharacterComponent -> ModelComponent -> the
+            // transform translation, +0x158)
+            const Math::Vector3& citizenPosData =
+                (*citizenIBP)->character->modelComponent->transform.translation;
 
-            int cMapSize = *mapGridPtr;
-            float cPosX = *(float*)(citizenPosData + 0x158);
-            float cPosY = *(float*)(citizenPosData + 0x15c);
+            int cMapSize = map->size;
+            float cPosX = citizenPosData.x;
+            float cPosY = citizenPosData.y;
             int cHalf = cMapSize >> 1;
             int ccx = ClampToMap((int)(cPosX + (float)cHalf), cMapSize);
             int ccy = ClampToMap((int)(cPosY + (float)cHalf), cMapSize);
@@ -223,7 +222,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
             // Get spot cell
             float spotPos[3];
-            Pf_EntityResolvePos_2e20(posComp, spotPos, 0, emptySlot, &citizenHeading);
+            InteractNodePosition(posComp, spotPos, 0, emptySlot, &citizenHeading);   // 0x140122e20
 
             int spHalf = cMapSize >> 1;
             int scx = ClampToMap((int)(spotPos[0] + (float)spHalf), cMapSize);
@@ -236,7 +235,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // fishable-tile score, and this branch used to return silently — a working
             // dock and a stranded one logged exactly the same nothing. Count it and print
             // the two region ids, which name the cause outright.
-            uint64_t passResult = WorkBase_ValidateCell_a00f0(mapGridPtr, 0xe1f, (uint32_t)citizenCell, spotCell);
+            uint64_t passResult = WorkBase_ValidateCell_a00f0((int*)map, 0xe1f, (uint32_t)citizenCell, spotCell);   // LEFT: SIG WorkBase_ValidateCell_a00f0
             if ((char)passResult == '\0') {
                 return 1;
             }
@@ -281,11 +280,11 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 }
 
 
-                // Check map cell for valid water terrain (Map cells: LEFT)
+                // Check map cell for valid water terrain
                 int64_t mapCellIdx = (int64_t)(cMapSize * targetY + targetX);
-                uintptr_t mapData = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
-                uint8_t terrainType = *(uint8_t*)(mapData + 0x24 + mapCellIdx * 0x30);
-                uint8_t terrainBit = *(uint8_t*)(mapData + 0x29 + mapCellIdx * 0x30);
+                MapCell* mapData = map->cells;
+                uint8_t terrainType = mapData[mapCellIdx].field_0x1C[8];   // +0x24 (field_0x1C[8])
+                uint8_t terrainBit = mapData[mapCellIdx].terrainType;      // +0x29
 
                 // Check fishing description allows this terrain and terrain is nonzero
                 uint32_t fishingTerrainMask = fishingDesc->_terrainMask;   // COMP-c named FishingDescription +0x2c
@@ -307,9 +306,9 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 uint32_t spotInfo = ((freeSpot | 0x800) << 4) | emptySlot;
 
                 WorkAct_FishWorkCtor_beae0(
-                    &citizenRef, field_20, reinterpret_cast<int64_t*>(&entityRef),
+                    &citizenRef, field_20, reinterpret_cast<int64_t*>(&entityRef),   // LEFT: SIG WorkAct_FishWorkCtor_beae0
                     citizenPos, citizenHeading,
-                    reinterpret_cast<uint64_t>(fishingDesc->_fish),
+                    reinterpret_cast<uint64_t>(fishingDesc->_fish),   // LEFT: SIG WorkAct_FishWorkCtor_beae0
                     uvScale, freeSpotMapCell, spotInfo);
 
                 // Mark spot as in-use (state = 1)
@@ -363,13 +362,13 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // Retries exhausted — check if the citizen's storage has items, go to long-term plan
             StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-            int storageCount = fn_StorageComponent_QueryCount(storage);
+            int storageCount = storage->QueryCount();   // 0x14012cf10
             if (storageCount < 1) {
                 return 1;
             }
 
             // Has storage items — replan citizen
-            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*citizenIBP));
+            (*citizenIBP)->LongTermPlan();   // 0x140115e60
             return 2;
         }
     }
@@ -379,16 +378,16 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             float spotPos[3];
-            Pf_EntityResolvePos_2e20(posComp, spotPos, 2, i, nullptr);
+            InteractNodePosition(posComp, spotPos, 2, i, nullptr);   // 0x140122e20
 
-            int half = *mapGridPtr >> 1;
-            int cx = ClampToMap((int)(spotPos[0] + (float)half), *mapGridPtr);
-            int cy = ClampToMap((int)(spotPos[1] + (float)half), *mapGridPtr);
-            int cellIdx = *mapGridPtr * cy + cx;
+            int half = map->size >> 1;
+            int cx = ClampToMap((int)(spotPos[0] + (float)half), map->size);
+            int cy = ClampToMap((int)(spotPos[1] + (float)half), map->size);
+            int cellIdx = map->size * cy + cx;
 
-            // Check if there's a structure at this cell (Map cells: LEFT)
-            uintptr_t mapData = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
-            ComponentEntity* cellEntity = *(ComponentEntity**)(mapData + 8 + (uintptr_t)cellIdx * 0x30);
+            // Check if there's a structure at this cell (the cell's occupant, +0x08)
+            MapCell* mapData = map->cells;
+            ComponentEntity* cellEntity = mapData[cellIdx].occupant;
             if (cellEntity == nullptr) continue;
 
             // ⚠ KNOWN DIVERGENCE FROM RETAIL — self-assignment guard.
@@ -493,8 +492,8 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 continue;   // skip this spot — see the block above; remove with the '_' claim
             }
 
-            // Try assignment via FUN_1400f8620 (GameUpdateLoop +0x118, still void*: LEFT)
-            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;
+            // Try assignment via FUN_1400f8620 (GameUpdateLoop +0x118, the WorkScheduler)
+            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
             CitizenComponent* citizenRef = *citizenIBP;
             int spotRadius = workplaceComp->workId;
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, spotRadius, '\x01');
@@ -534,8 +533,8 @@ int FishingWork::Validate() {
 
         // Validate this citizen's task
         CitizenComponent* citizenIBP = citizenRef;
-        uintptr_t outTask = 0;
-        char valid = (char)WorkBase_ValidateTask_f7100(this, nullptr, &citizenIBP, reinterpret_cast<void**>(&outTask));
+        CompleteTask* outTask = nullptr;
+        char valid = (char)ValidateTask(nullptr, &citizenIBP, &outTask);   // 0x1400f7100
 
         if (valid == '\0') {
             // Invalid — clear citizen slot (the InternalBasePtr ctor with null)
@@ -543,7 +542,7 @@ int FishingWork::Validate() {
             allValid = false;
         } else {
             // Valid — record the spot index from task data
-            int taskSpotInfo = *(int*)(outTask + 0x34);
+            int taskSpotInfo = outTask->taskParam;   // +0x34
 
             int newCount = mappingCount + 1;
             if (newCount != mappingCount) {
@@ -653,7 +652,7 @@ void FishingWork::Persist(IO::Stream& stream) {
     if (remaining > 0) {
         do {
             // Serialize the InternalBasePtr
-            reinterpret_cast<Object::InternalBasePtr*>(ibpPtr)->Serialize(serializer);   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(ibpPtr)->Serialize(serializer);   // B.3.4 bridge  // LEFT: H5 citizenRefs holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (FishingWork.h; a typed Array would run its dtor)
 
             // Validate: if the ptr is non-null and not derived from expected type, null it
             CitizenComponent* ptrVal = *ibpPtr;

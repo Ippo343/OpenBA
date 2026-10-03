@@ -504,7 +504,7 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 namespace Graphics {
 
 void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
-    Particle* const p = static_cast<Particle*>(particle.p);
+    Particle* const p = static_cast<Particle*>(particle.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
     ++g_piSetParticle;
 
     // ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ (retail 0x1801040b0), the
@@ -629,7 +629,7 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
     // retail tolerates a null result (it stores null).
     // The raw block viewed once as the record the stores below build.
     RtGraphics::ParticleEmitter* const m =
-        static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());
+        static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());  // LEFT: class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)
     if (m) {
         m->_extra._data     = nullptr;                  // two zeroed qwords
         m->_extra._size     = 0;
@@ -831,7 +831,7 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
         for (int k = 0; k < 6; ++k) {
             *ip = idx[k];
             ++ip;
-            context._unknown20f0 = reinterpret_cast<uint64_t>(ip);
+            context._unknown20f0 = reinterpret_cast<uint64_t>(ip);  // LEFT: Context::_unknown20f0 stays uint64_t (outside readers step it as bytes and as uint16)
         }
         base = static_cast<uint16_t>(base + 4);   // retail: ADD R14W,4 — wraps
 
