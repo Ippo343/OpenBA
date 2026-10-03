@@ -152,7 +152,7 @@ void BuildRoad::Persist(void* stream) {
 // OnComplete (0x1400e4150) — slot 6
 // Clears target entity ref, returns (param4 == 1).
 // ============================================================
-int BuildRoad::OnComplete(void* /*citizen*/, void* /*arg2*/, int param4) {
+int BuildRoad::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** /*arg2*/, int param4) {
     // Clear the citizen ref (the InternalBasePtr ctor with null)
     field_48 = nullptr;
 
@@ -163,7 +163,7 @@ int BuildRoad::OnComplete(void* /*citizen*/, void* /*arg2*/, int param4) {
 // OnCancel (0x1400e4120) — slot 7
 // Clears target entity ref.
 // ============================================================
-int BuildRoad::OnCancel(void*, void*, int) {
+int BuildRoad::OnCancel(CitizenComponent**, ComponentEntity**, int) {
     field_48 = nullptr;   // the InternalBasePtr ctor with null
     return 0;
 }
@@ -208,9 +208,9 @@ int BuildRoad::Validate() {
 // Uses hidden return pointer (member function ABI: RCX=this, RDX=retbuf).
 // NOT HOOKED — RIP-relative prologue (bug class 2).
 // ============================================================
-void* BuildRoad::GetTarget(void* retbuf) {
+Profession** BuildRoad::GetTarget(Profession** retbuf) {
     // The profession list's +0x38 profession (GameUpdateLoop::m_professionList)
-    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x38;
+    *retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x38;
     return retbuf;
 }
 
@@ -265,7 +265,7 @@ static Math::Vector3 CellToWorldVec3(int* mapGrid, int cellIndex) {
 static int FinalizeAction(BuildRoad* self, CitizenComponent** entityIBP, void* actionIBP, int priority) {
     CitizenComponent* citizenEntity = *entityIBP;
 
-    Profession* actionPtr = *static_cast<Profession**>(self->GetTarget(actionIBP));
+    Profession* actionPtr = *self->GetTarget(static_cast<Profession**>(actionIBP));   // LEFT: the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)
 
     citizenEntity->field_0x30 = priority;
     citizenEntity->statusFlags |= 4;
@@ -287,11 +287,7 @@ long long g_brExecNatResWait   = 0;   // blocked by a natural resource (tree/sto
 long long g_brExecClearPath    = 0;   // the plain "walk there and build it" branch
 }
 
-int BuildRoad::Execute(void* entityIBPArg, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** entityIBP = reinterpret_cast<CitizenComponent**>(entityIBPArg);
-
+int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) {
     if (field_48 != nullptr) {
         return 1;
     }

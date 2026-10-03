@@ -173,10 +173,7 @@ void GatherRawMaterials::Persist(void* stream) {
 //
 // Returns: 0=fail, 1=retry/done, 2=action pushed.
 // ============================================================
-int GatherRawMaterials::Execute(void* entityIBPArg, void* context) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** entityIBP = (CitizenComponent**)entityIBPArg;
+int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* context) {
     // retail's param3 (R8) is a by-value scratch slot whose address the body takes:
     // it becomes the out slot of the WorkPlaceComponent find below, and that value
     // is what 0x1400f6ef0 receives as its fifth argument.
@@ -429,7 +426,7 @@ int GatherRawMaterials::Execute(void* entityIBPArg, void* context) {
 // updates build counts (decrement field_58, increment field_48).
 // Returns: value from field_48 masking.
 // ============================================================
-int GatherRawMaterials::OnComplete(void* param2, void* /*param3*/, int arg3) {
+int GatherRawMaterials::OnComplete(CitizenComponent** param2, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
@@ -457,7 +454,7 @@ int GatherRawMaterials::OnComplete(void* param2, void* /*param3*/, int arg3) {
 // Cancel handler. Removes from tree, decrements build count only
 // (does NOT increment assigned count).
 // ============================================================
-int GatherRawMaterials::OnCancel(void* param2, void* /*param3*/, int arg3) {
+int GatherRawMaterials::OnCancel(CitizenComponent** param2, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
@@ -641,11 +638,10 @@ int GatherRawMaterials::Validate() {
 // GetTarget (0x1400ec510) -- vtable slot 10
 //
 // The ProfessionList's +0x30 profession from the game world singleton.
-// Hidden return ptr: RCX=self, RDX=retbuf. (The slot's return buffer is void* in
-// Work.h: LEFT.)
+// Hidden return ptr: RCX=self, RDX=retbuf.
 // ============================================================
-void* GatherRawMaterials::GetTarget(void* retbuf) {
-    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+Profession** GatherRawMaterials::GetTarget(Profession** retbuf) {
+    *retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 
@@ -743,7 +739,7 @@ extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
 // scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
 extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr);   // B.3.8 bridge
+    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute((CitizenComponent**)citizenIBP, nullptr);   // B.3.8 bridge; LEFT: the force harness drives it through a void* function pointer
 }
 
 // Execute-readiness gate for the force harness. B3R: every helper Execute and its pushed

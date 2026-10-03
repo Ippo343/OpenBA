@@ -40,12 +40,12 @@ public:
     // frees the +0x48 citizen BST
     ~HerbalistWork() override;                                      // [0]  0x14002a640
     void  Persist(void* stream) override;                           // [3]  0x1400eebb0
-    int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400ee3b0
-    int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400ee390
-    int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400ee380
+    int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400ee3b0
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** arg2, int arg3) override;  // [6]  0x1400ee390
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** arg2, int arg3) override;    // [7]  0x1400ee380
     int   Cleanup() override;                                       // [8]  0x1400eeae0
     int   Validate() override;                          // [9]  0x1400ee150
-    void* GetTarget(void* outPtr) override;                         // [10] 0x1400eeb50
+    Profession** GetTarget(Profession** outPtr) override;                         // [10] 0x1400eeb50
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- HerbalistWork fields (+0x48) ---

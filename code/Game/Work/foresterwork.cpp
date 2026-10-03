@@ -116,7 +116,7 @@ bool ForesterWork_ExecuteReady() {
 // extern "C" wrapper so the force harness can drive ForesterWork::Execute directly (the Work
 // driver ABI: self + the worker citizen's IBP) without needing the ForesterWork type/mangling.
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(citizenIBP, nullptr);   // B.3.8 bridge
+    return reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(static_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: the force harness drives it through a void* function pointer
 }
 
 
@@ -189,11 +189,7 @@ static void AssignWorkToEntity(ForesterWork* self, CitizenComponent** citizenIBP
 //    a. If enough failures, check storage and replan
 //    b. Otherwise play idle animation and increment fail counter
 //
-int ForesterWork::Execute(void* entityIBP, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = static_cast<CitizenComponent**>(entityIBP);
-
+int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // Bring-up trace (first few ticks): confirms ForesterWork::Execute is actually being
     // ticked by the executor and reports the work-area entity + workplace cell it operates on.
     { static int s_tc = 0;
@@ -691,7 +687,7 @@ void ForesterWork::Persist(void* stream) {
 // Removes entity from BST at self+0x48, returns false.
 // Standalone exe only. (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
-int ForesterWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int ForesterWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return 0;
 }
@@ -703,7 +699,7 @@ int ForesterWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Calls BSTFindRemove on the BST at self+0x48.
 // Standalone exe only.
 // ============================================================
-int ForesterWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+int ForesterWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return 0;
 }
@@ -853,12 +849,11 @@ int ForesterWork::Validate() {
 // ForesterWork::Slot10 / GetWorkEntity (0x1400EB910)
 // The entity's (+0x10) WorkPlaceComponent (FUN_140002e10), its profession (+0x48)
 // through the output pointer.
-// Hidden return ptr ABI: RCX=self, RDX=retbuf. (The return buffer is void* in Work.h's
-// slot: LEFT.)
+// Hidden return ptr ABI: RCX=self, RDX=retbuf.
 // ============================================================
-void* ForesterWork::GetTarget(void* outPtr) {
+Profession** ForesterWork::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *static_cast<Profession**>(outPtr) = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

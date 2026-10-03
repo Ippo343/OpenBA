@@ -470,7 +470,7 @@ void CitizenUI::OnUpdateLayout() {
         }
         if (homeWork != nullptr) {
             // The work's target against the citizen's profession
-            void* target = nullptr;
+            Profession* target = nullptr;
             homeWork->GetTarget(&target);   // slot 10
             if (target != ai->profession) {
                 actionIndex = 0x10;  // "looking for work" or similar
