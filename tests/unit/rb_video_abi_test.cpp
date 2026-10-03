@@ -45,7 +45,7 @@ const void* g_relVptr = nullptr;
 
 namespace Video {
 int32_t           ImageBuffer::GetFileVersion() const { return 7; }
-bool              ImageBuffer::Serialize(void*) { return true; }
+bool              ImageBuffer::Serialize(IO::Stream&) { return true; }
 Object::External* ImageBuffer::Reconstruct() { return this; }
 void              ImageBuffer::Destruct() {}
 Object::External* ImageBuffer::Construct() { return this; }
@@ -63,7 +63,7 @@ void ImageBuffer::ReleaseFields() { ++g_rel; g_relVptr = VptrOf(this); }
 
 namespace Graphics {
 int32_t     GeneratedImageBuffer::GetFileVersion() const { return 7; }
-bool        GeneratedImageBuffer::Serialize(void*) { return true; }
+bool        GeneratedImageBuffer::Serialize(IO::Stream&) { return true; }
 }  // namespace Graphics
 
 namespace {

@@ -263,7 +263,7 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
 // ===========================================================================
 #define C5_DESCRIPTION_MARKERS(C, K)                                                         \
     int32_t UI::C::GetFileVersion() const { Hit(this, K, 3); return 0; }                     \
-    bool UI::C::Serialize(void*) { Hit(this, K, 5); return true; }                           \
+    bool UI::C::Serialize(IO::Stream&) { Hit(this, K, 5); return true; }                           \
     Object::External* UI::C::Reconstruct() { Hit(this, K, 6); return this; }                 \
     void UI::C::Destruct() { Hit(this, K, 7); }                                              \
     Object::InternalPtr<UI::Element>* UI::C::CreateInstance(                                 \

@@ -1782,7 +1782,7 @@ struct PkgOrderProbe : Object::External {
     uint32_t      Type() const override             { PkgNote(2); return 0x50u; }
     int32_t       GetFileVersion() const override   { PkgNote(3); return 5; }
     CompileResult Compile(const System::Filename&) override { PkgNote(4); return 1; }
-    bool          Serialize(void*) override         { PkgNote(5); return true; }
+    bool          Serialize(IO::Stream&) override         { PkgNote(5); return true; }
     Object::External* Reconstruct() override        { PkgNote(6); return this; }
     void          Destruct() override               { PkgNote(7); }
     virtual Object::External* Construct()           { PkgNote(8); return this; }

@@ -254,9 +254,10 @@ CollisionMesh::~CollisionMesh() {
 }
 
 // ?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x180108cd0)
-bool CollisionMesh::Serialize(void* streamv) {
+bool CollisionMesh::Serialize(IO::Stream& streamv) {
     CollisionMesh* self = this;
-    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
+    void* const streamvRaw = &streamv;
+    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
     Serializer ser = { stream, nullptr };
     void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)

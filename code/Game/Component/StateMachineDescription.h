@@ -30,7 +30,7 @@ public:
 
     ~StateMachineDescription() override = default;                         // [0] 0x140038440
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14012bb40
-    bool              Serialize(void* stream) override;                    // [5] 0x14012bb00
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14012bb00
     Object::External* Reconstruct() override;                              // [6] 0x1400383e0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140038430

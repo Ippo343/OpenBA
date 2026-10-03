@@ -49,8 +49,8 @@ FireDescription::FireDescription()
       _i4c(0) {}
 
 // [5] 0x140049c00: stream order as retail.
-bool FireDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool FireDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(burnBase, nullptr);
     ser.Serialize(burnScale, nullptr);
     ser.Serialize(particleEmitter, nullptr);

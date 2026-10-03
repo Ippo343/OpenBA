@@ -47,7 +47,7 @@ public:
 
     ~AnimAudioEvent() override = default;                                // [0] 0x140017000
     int32_t           GetFileVersion() const override { return 2; }      // [3] 0x140087f30
-    bool              Serialize(void* stream) override;                  // [5] 0x140087ed0
+    bool              Serialize(IO::Stream& stream) override;                  // [5] 0x140087ed0
     Object::External* Reconstruct() override;                            // [6] 0x140016fb0
     void              Destruct() override;                               // [7] 0x140001640
     void              Construct(const Math::Transform& transform) override; // [8] 0x140087e40 PORT GAP (the trigger)

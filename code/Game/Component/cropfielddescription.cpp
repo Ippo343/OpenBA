@@ -31,8 +31,8 @@ CropFieldDescription::CropFieldDescription()
       _f24(0.0f) {}
 
 // [5] 0x14011b270: stream order as retail.
-bool CropFieldDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+bool CropFieldDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 1);
     ser.Serialize(_f24, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;

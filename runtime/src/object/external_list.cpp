@@ -86,8 +86,9 @@ namespace Object {
 // ---- slot 5 — ?Serialize@ExternalList@Object@@UEAA_NAEAVStream@IO@@@Z  0x1800bfa20
 // The body the retired `RtObject_ExternalList_Serialize` door carried, moved
 // here unchanged (ENDGAME B.3.9 OBJ).
-bool ExternalList::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+bool ExternalList::Serialize(IO::Stream& streamv) {
+    void* const streamvRaw = &streamv;
+    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
     Serializer ser = { stream, nullptr };
 

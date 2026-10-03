@@ -74,7 +74,7 @@ public:
     DECLARE_TYPE(BorderDescription)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x18010fe10
-    bool        Serialize(void* stream) override;                 // [5] 0x18010fe20
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x18010fe20
     Object::External* Reconstruct() override;                     // [6] 0x180040b60
     void        Destruct() override;                              // [7] 0x180040b90
     Object::InternalPtr<Element>* CreateInstance(

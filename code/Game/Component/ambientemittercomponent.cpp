@@ -263,9 +263,9 @@ AmbientEmitterComponent::AmbientEmitterComponent()
 //      - per slot: the sound ExternalPtr (+0x08), the handle uint (+0x00), the volume (+0x04)
 //      - If version==0: resize from building data +0x30
 //   3. ~Serializer
-void AmbientEmitterComponent::Persist(void* stream) {
+void AmbientEmitterComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // Persist's stream is void*
+    IO::Serializer serializer(stream, 1);
 
     position.Serialize(&serializer);
 

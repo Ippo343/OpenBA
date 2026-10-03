@@ -160,7 +160,7 @@ int32_t      PackageFile::GetFileVersion() const       { StubReached("PackageFil
 Object::External::CompileResult PackageFile::Compile(const System::Filename&) {
     StubReached("PackageFile::Compile");
 }
-bool          PackageFile::Serialize(void*)             { StubReached("PackageFile::Serialize"); }
+bool          PackageFile::Serialize(IO::Stream&)             { StubReached("PackageFile::Serialize"); }
 Object::External* PackageFile::Reconstruct()            { StubReached("PackageFile::Reconstruct"); }
 void          PackageFile::Destruct()                   { StubReached("PackageFile::Destruct"); }
 Object::External* PackageFile::Construct()              { StubReached("PackageFile::Construct"); }

@@ -175,7 +175,7 @@ public:
     DECLARE_TYPE(GeneratedImageBuffer)
 public:
     int32_t       GetFileVersion() const override;            // [ 3] 0x1800a3eb0 — `MOV EAX,0x7`
-    bool          Serialize(void* stream) override;           // [ 5] 0x1800a3ec0
+    bool          Serialize(IO::Stream& stream) override;           // [ 5] 0x1800a3ec0
 
     // [10] and [11], `_purecall` in retail. `virtual`, not `override`: this
     // branch INTRODUCES both (RULE B5-16's shape one level down from
@@ -284,7 +284,7 @@ public:
     DECLARE_TYPE(ReflectionImageBuffer)
 public:
     int32_t           GetFileVersion() const override;             // [ 3] 0x1800a70a0 — 0x1007
-    bool              Serialize(void* stream) override;            // [ 5] 0x1800a6f00
+    bool              Serialize(IO::Stream& stream) override;            // [ 5] 0x1800a6f00
     Object::External* Reconstruct() override;                       // [ 6] 0x1800223e0
     void              Destruct() override;                          // [ 7] 0x1800224c0
     Object::External* Construct() override;                         // [ 8] 0x180022450

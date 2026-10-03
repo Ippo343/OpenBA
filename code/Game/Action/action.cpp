@@ -12,8 +12,8 @@ DEFINE_EXE_ABSTRACT_TYPE(Action, "Object::Internal")
 
 // [3] 0x1400c4b40: one Serializer(stream, 0) scope holding the status bool.
 // Retail does NOT call Internal::Persist here.
-void Action::Persist(void* stream) {
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+void Action::Persist(IO::Stream& stream) {
+    IO::Serializer scope(stream, 0);
     scope.Serialize(_status, nullptr);
 }
 

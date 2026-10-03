@@ -91,7 +91,7 @@ void ParticleInstance::SetParticle(ExternalPtrHandle) {}
 void ParticleInstance::RemoveState() { Log(kPiRemoveState, this); }
 
 int32_t     Particle::GetFileVersion() const { return 0x1000; }
-bool        Particle::Serialize(void*) { return true; }
+bool        Particle::Serialize(IO::Stream&) { return true; }
 void        Particle::ReleaseFields() { Log(kPaRel, this); }
 
 // ENDGAME B.3.9 block GFX: ParticleSystem is concrete; its out-of-line members
@@ -100,7 +100,7 @@ void        Particle::ReleaseFields() { Log(kPaRel, this); }
 ParticleSystem::ParticleSystem() : Particle() { _f48 = 5.0f; }
 ParticleSystem::~ParticleSystem() { Log(kPsRel, this); }
 int32_t     ParticleSystem::GetFileVersion() const { return 0x1001; }
-bool        ParticleSystem::Serialize(void*) { return true; }
+bool        ParticleSystem::Serialize(IO::Stream&) { return true; }
 Object::External* ParticleSystem::Reconstruct() { return this; }
 void        ParticleSystem::Destruct() {}
 ParticleInstance* ParticleSystem::CreateSystem() const { return nullptr; }
@@ -162,7 +162,7 @@ struct RbTornado final : Graphics::Particle {
 };
 struct RbAnimAudioEvent final : Graphics::AnimationEvent {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     void Construct(const Math::Transform&) override {}   // retail slot 8: the transform (B3R owed 2)
@@ -591,7 +591,7 @@ const void* RiVptrOf(const void* p) { return *static_cast<const void* const*>(p)
 }  // namespace
 namespace Graphics {
 int32_t           ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
-bool              ReflectionImageBuffer::Serialize(void*) { return true; }
+bool              ReflectionImageBuffer::Serialize(IO::Stream&) { return true; }
 Object::External* ReflectionImageBuffer::Reconstruct() { return this; }
 void              ReflectionImageBuffer::Destruct() {}
 Object::External* ReflectionImageBuffer::Construct() { return this; }
@@ -660,7 +660,7 @@ const void* FcVptrOf(const void* p) { return *static_cast<const void* const*>(p)
 }  // namespace
 namespace Graphics {
 int32_t           FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
-bool              FrameCopyImageBuffer::Serialize(void*) { return true; }
+bool              FrameCopyImageBuffer::Serialize(IO::Stream&) { return true; }
 Object::External* FrameCopyImageBuffer::Reconstruct() { return this; }
 void              FrameCopyImageBuffer::Destruct() {}
 Object::External* FrameCopyImageBuffer::Construct() { return this; }

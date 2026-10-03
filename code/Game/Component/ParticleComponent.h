@@ -58,7 +58,7 @@ public:
     // PORT GAP (retail 0x140053310) — B38 D2: retail destroys the geometry
     // objects and frees both arrays; the tree never did (Inert_ScalarDtor).
     ~ParticleComponent() override = default;                      // [0]  0x14000a560
-    void Persist(void* stream) override;                          // [3]  0x140053270
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140053270
     void Startup() override;                                      // [4]  0x140053230
     void OnAdded() override;                                      // [6]  0x140052f70
     void OnRemove() override;                                     // [7]  0x140052e80

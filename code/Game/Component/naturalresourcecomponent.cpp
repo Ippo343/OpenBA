@@ -103,11 +103,10 @@ NaturalResourceComponent::NaturalResourceComponent()
 // NaturalResourceComponent::Persist (vtable slot [3], 0x140125cf0)
 // ============================================================
 
-void NaturalResourceComponent::Persist(void* stream) {
+void NaturalResourceComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser(stream, 0);
 
     ser.Serialize(resourceScale, nullptr);
     ser.Serialize(mature, nullptr);

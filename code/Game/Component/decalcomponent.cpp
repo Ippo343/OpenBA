@@ -208,9 +208,9 @@ static void DecalComponent_SetDrawFlag(DecalComponent* c, bool on) {
 //   1. Component_Serialize base
 //   2. Serializer(version=1): serialize decalScale (float at +0x30)
 //   3. If version > 0: serialize decalState (int at +0x28)
-void DecalComponent::Persist(void* stream) {
+void DecalComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 1);
 
     // Serialize decalScale (float at +0x30)
     ser.Serialize(decalScale, nullptr);

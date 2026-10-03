@@ -156,7 +156,7 @@ struct DescriptionProbe final : UI::ElementDescription {
 // Compile`, and ElementDescription must carry the SAME pointer (inherited).
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -169,7 +169,7 @@ struct BareExternalProbe final : Object::External {
 // serialize.cpp} and dialog.cpp, none of which links here.
 // ===========================================================================
 namespace UI {
-void Element::Persist(void* stream) { Note(this, kE3_Persist / 8, reinterpret_cast<intptr_t>(stream)); }
+void Element::Persist(IO::Stream& stream) { Note(this, kE3_Persist / 8, reinterpret_cast<intptr_t>(&stream)); }
 void Element::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kE5_ComputeLayout / 8, (long long)x * 1000 + h);
 }
@@ -194,8 +194,8 @@ Object::InternalPtr<Element>* Element::GetBorder(Object::InternalPtr<Element>* r
 // (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 
 int32_t ElementDescription::GetFileVersion() const { Note(this, kD3_GetFileVersion / 8); return 4; }
-bool ElementDescription::Serialize(void* stream) {
-    Note(this, kD5_Serialize / 8, reinterpret_cast<intptr_t>(stream)); return true;
+bool ElementDescription::Serialize(IO::Stream& stream) {
+    Note(this, kD5_Serialize / 8, reinterpret_cast<intptr_t>(&stream)); return true;
 }
 // (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 }  // namespace UI

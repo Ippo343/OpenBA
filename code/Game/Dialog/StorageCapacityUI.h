@@ -30,7 +30,7 @@ public:
     // 0x140014450 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~StorageCapacityUI() override = default;                      // [0] 0x140014450
-    void Persist(void* /*stream*/) override {}   // [3] 0x14007b6b0  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14007b6b0  RET 0 in retail
     void OnCreated() override;   // [4] 0x14007b600
     void OnUpdateLayout() override;   // [7] 0x14007b4d0
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.

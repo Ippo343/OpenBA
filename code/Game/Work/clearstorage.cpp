@@ -515,13 +515,12 @@ void* ClearStorage::GetTarget(void* retbuf) {
 // ENDGAME B.3.8: the two function-local lazy pointer caches are gone — the base call
 // is the qualified Work::Persist, the BST body is called by name (B38 D7).
 extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer);
-void ClearStorage::Persist(void* stream) {
-    if (!stream) return;
+void ClearStorage::Persist(IO::Stream& stream) {
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)
 }
 

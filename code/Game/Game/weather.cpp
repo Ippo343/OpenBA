@@ -86,8 +86,8 @@ Object::External* Weather::Construct() {
 //
 // Original: 0x1400d3c90
 
-bool Weather::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool Weather::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     Reimpl_ExternalPtr_Serialize_Typed_7140(&material, &ser);   // ExternalPtr material (+0x20)
     ser.Serialize(particleCount, nullptr);        // +0x28

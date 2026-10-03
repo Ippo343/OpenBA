@@ -28,8 +28,8 @@ AttendanceDescription::AttendanceDescription()
       _i20(0xf) {}
 
 // [5] 0x1400446b0: stream order as retail.
-bool AttendanceDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool AttendanceDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_i20, nullptr);
     return true;
 }

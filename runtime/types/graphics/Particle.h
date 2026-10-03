@@ -459,7 +459,7 @@ public:
 public:
     int32_t     GetFileVersion() const override;           // [3] 0x1000 == 4096
     // [4] Compile is Object::External's own body (0x1800066e0), inherited.
-    bool        Serialize(void* stream) override;           // [5] 0x180103f00
+    bool        Serialize(IO::Stream& stream) override;           // [5] 0x180103f00
 
     // [6] / [7] — retail leaves both `_purecall` here; they re-declare the two
     //   slots `Object::External` introduced as pure, at the same indices.
@@ -655,7 +655,7 @@ public:
 public:
     int32_t     GetFileVersion() const override;            // [3] 0x1800a4d10 -> 0x1001
     // [4] Compile stays Object::External's body, inherited through Particle.
-    bool        Serialize(void* stream) override;           // [5] 0x1800a4d20
+    bool        Serialize(IO::Stream& stream) override;           // [5] 0x1800a4d20
     Object::External* Reconstruct() override;               // [6] 0x180020560
     void        Destruct() override;                        // [7] 0x180020590
     // [8] THE TRAP. `override`, because `Particle` introduced it pure at 8.

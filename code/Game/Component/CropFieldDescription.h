@@ -29,7 +29,7 @@ public:
 
     ~CropFieldDescription() override = default;                            // [0] 0x140033040
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14011b2f0
-    bool              Serialize(void* stream) override;                    // [5] 0x14011b270
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14011b270
     Object::External* Reconstruct() override;                              // [6] 0x140032fe0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140033030

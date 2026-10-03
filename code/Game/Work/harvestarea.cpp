@@ -636,17 +636,17 @@ void* HarvestArea::GetTarget(void* outPtr) {
 // HarvestArea::Serialize
 // ============================================================
 // Work::Serialize + version block + BST serialize + array + int
-void HarvestArea::Persist(void* stream) {
+void HarvestArea::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Version block with no extra data (Persist's stream is void* in Work.h: LEFT)
+    // Version block with no extra data
     {
-        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer serializer(stream, 0);
     }
 
     // Serializer (version=0) for our data
-    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer serializer2(stream, 0);
 
     // Serialize the claim tree at +0x48 (the helper takes the container as uintptr_t*:
     // LEFT)

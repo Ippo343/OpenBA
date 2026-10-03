@@ -88,7 +88,7 @@ constexpr int kConstruct      = 0x40;
 // `?Compile@External@Object@@` (0x1800066e0).
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -100,7 +100,7 @@ struct BareExternalProbe final : Object::External {
 // ===========================================================================
 namespace Audio {
 int32_t SoundBuffer::GetFileVersion() const { Note(this, 3); return 0xa; }
-bool SoundBuffer::Serialize(void*) { Note(this, 5); return true; }
+bool SoundBuffer::Serialize(IO::Stream&) { Note(this, 5); return true; }
 Object::External* SoundBuffer::Reconstruct() { Note(this, 6); return this; }
 void SoundBuffer::Destruct() { Note(this, 7); }
 Object::External* SoundBuffer::Construct() { Note(this, 8); return this; }
@@ -108,7 +108,7 @@ SoundBuffer::~SoundBuffer() { NoteDtor(this); }
 
 int32_t SoundEffect::GetFileVersion() const { Note(this, 3); return 3; }
 Object::External::CompileResult SoundEffect::Compile(const System::Filename&) { Note(this, 4); return 1; }
-bool SoundEffect::Serialize(void*) { Note(this, 5); return true; }
+bool SoundEffect::Serialize(IO::Stream&) { Note(this, 5); return true; }
 Object::External* SoundEffect::Reconstruct() { Note(this, 6); return this; }
 void SoundEffect::Destruct() { Note(this, 7); }
 Object::External* SoundEffect::Construct() { Note(this, 8); return this; }

@@ -156,7 +156,7 @@ struct CheckDescriptionProbe final : UI::CheckDescription {};
 // Plain `Object::External` leaf: its slot 4 is `External::Compile`.
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -211,8 +211,8 @@ CheckElement::~CheckElement() { B39NoteDtor(this); }
 
 // ---- ButtonDescription ----
 int32_t ButtonDescription::GetFileVersion() const { Note(this, kButtonD, 3); return 0x104; }
-bool ButtonDescription::Serialize(void* stream) {
-    Note(this, kButtonD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+bool ButtonDescription::Serialize(IO::Stream& stream) {
+    Note(this, kButtonD, 5, reinterpret_cast<intptr_t>(&stream)); return true;
 }
 Object::External* ButtonDescription::Reconstruct() { Note(this, kButtonD, 6); return this; }
 void ButtonDescription::Destruct() { Note(this, kButtonD, 7); }
@@ -228,7 +228,7 @@ ButtonDescription::~ButtonDescription() { B39NoteDtor(this); }
 
 // ---- CheckDescription — Serialize calls ButtonDescription's QUALIFIED.
 int32_t CheckDescription::GetFileVersion() const { Note(this, kCheckD, 3); return 0x1104; }
-bool CheckDescription::Serialize(void* stream) {
+bool CheckDescription::Serialize(IO::Stream& stream) {
     Note(this, kCheckD, 5);
     return ButtonDescription::Serialize(stream);
 }
@@ -255,7 +255,7 @@ ComboElement::~ComboElement() { B39NoteDtor(this); }
 
 // ---- ComboDescription — Serialize calls ButtonDescription's QUALIFIED.
 int32_t ComboDescription::GetFileVersion() const { Note(this, kComboD, 3); return 0x2104; }
-bool ComboDescription::Serialize(void* stream) {
+bool ComboDescription::Serialize(IO::Stream& stream) {
     Note(this, kComboD, 5);
     return ButtonDescription::Serialize(stream);
 }
@@ -298,8 +298,8 @@ ClipRegionElement::~ClipRegionElement() { B39NoteDtor(this); }
 
 // ---- BorderDescription / ClipRegionDescription: direct ElementDescription leaves.
 int32_t BorderDescription::GetFileVersion() const { Note(this, kBorderD, 3); return 0x104; }
-bool BorderDescription::Serialize(void* stream) {
-    Note(this, kBorderD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+bool BorderDescription::Serialize(IO::Stream& stream) {
+    Note(this, kBorderD, 5, reinterpret_cast<intptr_t>(&stream)); return true;
 }
 Object::External* BorderDescription::Reconstruct() { Note(this, kBorderD, 6); return this; }
 void BorderDescription::Destruct() { Note(this, kBorderD, 7); }
@@ -314,8 +314,8 @@ Object::External* BorderDescription::Construct() { Note(this, kBorderD, 9); retu
 BorderDescription::~BorderDescription() { B39NoteDtor(this); }
 
 int32_t ClipRegionDescription::GetFileVersion() const { Note(this, kClipD, 3); return 0x104; }
-bool ClipRegionDescription::Serialize(void* stream) {
-    Note(this, kClipD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+bool ClipRegionDescription::Serialize(IO::Stream& stream) {
+    Note(this, kClipD, 5, reinterpret_cast<intptr_t>(&stream)); return true;
 }
 Object::External* ClipRegionDescription::Reconstruct() { Note(this, kClipD, 6); return this; }
 void ClipRegionDescription::Destruct() { Note(this, kClipD, 7); }

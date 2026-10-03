@@ -173,11 +173,11 @@ StorageComponent::StorageComponent()
 //   if version==0 && loading: field3c = StorageDescription+0x28
 //   Serializer_Dtor(local)
 
-void StorageComponent::Persist(void* stream) {
+void StorageComponent::Persist(IO::Stream& stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 1);
 
     // Serialize the slot count through a local
     int serSlotCount = slotCount;

@@ -32,8 +32,8 @@ HuntDescription::HuntDescription()
       _type(5) {}
 
 // [5] 0x140122960: stream order as retail.
-bool HuntDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+bool HuntDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 1);
     ser.Serialize(_f20, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;

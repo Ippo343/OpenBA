@@ -68,7 +68,7 @@ public:
     DECLARE_TYPE(Surface)
 public:
     int32_t           GetFileVersion() const override;         // [3] 0x18010ca30
-    bool              Serialize(void* stream) override;        // [5] 0x18010ca40
+    bool              Serialize(IO::Stream& stream) override;        // [5] 0x18010ca40
     Object::External* Reconstruct() override;                  // [6] 0x180064c70
     void              Destruct() override;                     // [7] 0x180064d40
     virtual Object::External* Construct();                     // [8] 0x180064ce0

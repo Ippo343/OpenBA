@@ -31,7 +31,7 @@ public:
     PerformWork(void* entity, float facingYaw, uint32_t animationId, int64_t time, uint8_t useTool,
                 int field44);
     ~PerformWork() override = default;                         // [0] 0x140022bd0
-    void Persist(void* stream) override;                       // [3] 0x1400c9550
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c9550
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c9420
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c93c0
     void Exit(void* actionStack) override;                     // [7] 0x1400c9370

@@ -56,7 +56,7 @@ public:
 
     ~EnvironmentDescription() override;                                    // [0] 0x140019190
     int32_t           GetFileVersion() const override { return 7; }        // [3] 0x1400941b0
-    bool              Serialize(void* stream) override;                    // [5] 0x140094040
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140094040
     Object::External* Reconstruct() override;                              // [6] 0x140019170
     void              Destruct() override;                                 // [7] 0x140001640
     virtual Object::External* Construct();                                 // [8] 0x140019160

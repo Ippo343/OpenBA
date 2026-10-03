@@ -30,7 +30,7 @@ public:
 
     ~TornadoDescription() override = default;                              // [0] 0x14000d5e0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140058e30
-    bool              Serialize(void* stream) override;                    // [5] 0x140058d90
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140058d90
     Object::External* Reconstruct() override;                              // [6] 0x14000d5b0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14000d5d0

@@ -32,7 +32,7 @@ public:
     // (MemFree, then +0x28 = +0x30 = 0); the tree never did (Inert_ScalarDtor).
     // Kept as the tree's.
     ~UIComponent() override = default;                            // [0] 0x140039760
-    void Persist(void* stream) override;                          // [3] 0x14012dd00
+    void Persist(IO::Stream& stream) override;                          // [3] 0x14012dd00
     void Startup() override;                                      // [4] 0x14012dca0 PORT GAP
 
     // +0x28..+0x37: a growable uint8_t array header (verified against retail

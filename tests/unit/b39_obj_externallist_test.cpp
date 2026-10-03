@@ -46,7 +46,7 @@ namespace Object {
 Base*             ExternalList::CreateNewObject()        { return nullptr; }
 Base*             ExternalList::CreateInPlaceObject(void*) { return nullptr; }
 int32_t           ExternalList::GetFileVersion() const { g_elLastSlot = 3; return 3; }
-bool              ExternalList::Serialize(void*)   { g_elLastSlot = 5; return true; }
+bool              ExternalList::Serialize(IO::Stream&)   { g_elLastSlot = 5; return true; }
 External*         ExternalList::Reconstruct()      { g_elLastSlot = 6; return this; }
 void              ExternalList::Destruct()         { g_elLastSlot = 7; }
 External*         ExternalList::Construct()        { g_elLastSlot = 8; return this; }

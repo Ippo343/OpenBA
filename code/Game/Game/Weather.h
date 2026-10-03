@@ -36,7 +36,7 @@ public:
     ~Weather() override = default;                                // [0] 0x140025020
     int32_t GetFileVersion() const override { return 5; }         // [3] 0x1400d3e40
     // [4] Compile: inherited (retail's slot is the import; the old table's was null)
-    bool Serialize(void* stream) override;                        // [5] 0x1400d3c90
+    bool Serialize(IO::Stream& stream) override;                        // [5] 0x1400d3c90
     Object::External* Reconstruct() override;                     // [6] 0x140025000
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x140024ff0

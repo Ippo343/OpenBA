@@ -55,7 +55,7 @@ public:
 
     // 0x14012f270
     ~WorkPlaceComponent() override;                                     // [0]  0x14003a220
-    void          Persist(void* stream) override;                       // [3]  0x14012f120
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x14012f120
     void          OnRemove() override;                                  // [7]  0x14012f090
     int         GetDefaultState() const override { return 0; }          // [16] 0x140003730
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080

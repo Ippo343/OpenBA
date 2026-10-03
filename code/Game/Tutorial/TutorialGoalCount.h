@@ -35,7 +35,7 @@ public:
 
     ~TutorialGoalCount() override;                                 // [0] 0x140027820
     int32_t           GetFileVersion() const override { return 5; }// [3] 0x1400df9f0
-    bool              Serialize(void* stream) override;            // [5] 0x1400df900
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400df900
     Object::External* Reconstruct() override;                      // [6] 0x140027800
     void              Destruct() override;                         // [7] 0x140001640
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400df290

@@ -29,7 +29,7 @@ public:
 
     ~FireDescription() override = default;                                 // [0] 0x1400056c0
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x140049d10
-    bool              Serialize(void* stream) override;                    // [5] 0x140049c00
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140049c00
     Object::External* Reconstruct() override;                              // [6] 0x140005690
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400056b0

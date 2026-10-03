@@ -115,11 +115,11 @@ Object::External* SliderDescription::Reconstruct() {
 void SliderDescription::Destruct() { this->~SliderDescription(); }
 
 // [5] ?Serialize@SliderDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d7890
-bool SliderDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
+bool SliderDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                              // 1800d78aa
+    ElementDescription::Serialize(*stream);                              // 1800d78aa
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

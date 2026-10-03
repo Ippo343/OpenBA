@@ -106,7 +106,7 @@ public:
 public:
     int32_t       GetFileVersion() const override;             // [3] 0x1800e0470
     // [4] Compile — inherited from Object::External (0x1800066e0), NOT declared.
-    bool          Serialize(void* stream) override;            // [5] 0x1800e0480
+    bool          Serialize(IO::Stream& stream) override;            // [5] 0x1800e0480
     Object::External* Reconstruct() override;                  // [6] 0x18000bb30
     void          Destruct() override;                         // [7] 0x18000bc70
     virtual Object::External* Construct();                     // [8] 0x18000bbd0 — B7-1.6

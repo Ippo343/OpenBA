@@ -98,7 +98,7 @@ public:
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cb6a0
     // [4] Compile — Object::External's, inherited.
-    bool        Serialize(void* stream) override;                 // [5] 0x1800cb5c0  (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x1800cb5c0  (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x180036850
     void        Destruct() override;                              // [7] 0x180036880
     Object::InternalPtr<Element>* CreateInstance(

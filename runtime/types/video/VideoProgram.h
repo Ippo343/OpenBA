@@ -146,7 +146,7 @@ public:
     DECLARE_TYPE(VideoProgram)
 public:
     int32_t           GetFileVersion() const override;            // [3] 0x1800f46a0 — `MOV EAX,1`
-    bool              Serialize(void* stream) override;           // [5] 0x1800f46b0
+    bool              Serialize(IO::Stream& stream) override;           // [5] 0x1800f46b0
     Object::External* Reconstruct() override;                     // [6] 0x18004edd0
     void              Destruct() override;                        // [7] 0x18004ee00
     // [8] 0x18004edf0. `virtual`, NOT `override`: `Object::External`'s retail

@@ -93,11 +93,11 @@ WildAnimalComponent::WildAnimalComponent() : herd(nullptr) {
 //       self->data28 = 0
 //   IO::Serializer::~Serializer(local)
 
-void WildAnimalComponent::Persist(void* stream) {
+void WildAnimalComponent::Persist(IO::Stream& stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(stream, 0);
 
     // The InternalBasePtr at +0x28, nulled when it is not a HerdComponent
     // (import slot 0x140152a98).

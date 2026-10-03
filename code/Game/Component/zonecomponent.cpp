@@ -144,10 +144,10 @@ ZoneComponent::ZoneComponent() {
 // If serializer version==0 and stream is reading (mode==0),
 // registers the owning entity into the zone map at GameState+0xF0.
 
-void ZoneComponent::Persist(void* stream) {
+void ZoneComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Stream& str = *reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Stream& str = stream;
     IO::Serializer ser(str, 1);
 
     int version = ser.GetVersion();

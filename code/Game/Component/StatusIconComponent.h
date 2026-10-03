@@ -80,7 +80,7 @@ public:
 
     // 0x14012c070
     ~StatusIconComponent() override = default;                    // [0]  0x140038ac0
-    void Persist(void* stream) override;                          // [3]  0x14012bff0
+    void Persist(IO::Stream& stream) override;                          // [3]  0x14012bff0
     void Startup() override;                                      // [4]  0x14012bed0
     void OnRemove() override;                                     // [7]  0x14012beb0 TREE DIVERGENCE
     void Tick(void* time) override;                               // [8]  0x14012bbd0

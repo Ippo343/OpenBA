@@ -42,7 +42,7 @@ public:
     // ~String(+0x70), ~ElementDescription
     ~CaptureBoxDescription() override = default;                         // [0] 0x140014010
     int32_t           GetFileVersion() const override;                   // [3] 0x140079210
-    bool              Serialize(void* stream) override;                  // [5] 0x1400791a0
+    bool              Serialize(IO::Stream& stream) override;                  // [5] 0x1400791a0
     Object::External* Reconstruct() override;                            // [6] 0x140013e40
     void              Destruct() override;                               // [7] 0x140001640
     Object::InternalPtr<UI::Element>* CreateInstance(

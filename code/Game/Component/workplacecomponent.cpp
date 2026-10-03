@@ -780,15 +780,15 @@ void* WorkPlaceComponent::CreateInPlaceObject(void* storage) {
 //   - version < 1: read +0x48 from description component
 //   - version >= 1: serialize +0x48 via FUN_140018020
 
-void WorkPlaceComponent::Persist(void* stream) {
+void WorkPlaceComponent::Persist(IO::Stream& stream) {
     // Base Component serialization
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // Empty serializer block (version 0, immediately destroyed)
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    { IO::Serializer scope(stream, 0); }
 
     // Main serializer block (version 1)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge
+    IO::Serializer ser(stream, 1);
 
     // Serialize the worker count from +0x60
     int countBuf = workerCount;

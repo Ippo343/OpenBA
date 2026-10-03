@@ -232,10 +232,10 @@ void VertexLayout::PlatformDestruct() {
 }
 
 // slot 5 — ?Serialize@VertexLayout@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f5e70)
-bool VertexLayout::Serialize(void* streamv) {
+bool VertexLayout::Serialize(IO::Stream& streamv) {
     // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
     // keeps `External`'s `void*` parameter (R-OBJ's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);
     IO::ReaderWriter* rw = ser._readerWriter;
 

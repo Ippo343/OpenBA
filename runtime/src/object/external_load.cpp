@@ -385,7 +385,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // The object reads (or writes) ITSELF, through the same slot
                 // ExternalFactory::Add and External::SaveText drive.
                 ++g_lc.serialized;
-                reinterpret_cast<::Object::External*>(obj)->Serialize(&cfs);   // slot 5 +0x28 (B.3.x bridge)
+                reinterpret_cast<::Object::External*>(obj)->Serialize(*reinterpret_cast<IO::Stream*>(&cfs));   // slot 5 +0x28 (B.3.x bridge)   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
             }
         }
 

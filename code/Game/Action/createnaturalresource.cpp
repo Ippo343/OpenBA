@@ -51,11 +51,11 @@
 // Serialize (0x1400c6890)
 // Serializes: status(+0x18), typeRef(+0x20), int(+0x30), versioned entity(+0x28)
 // ============================================================
-void CreateNaturalResource::Persist(void* stream) {
+void CreateNaturalResource::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize resource data (version 1)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 1);
     Reimpl_ExternalPtr_Serialize_StringTable(&descEntity, &ser);   // 0x140002340
     ser.Serialize(cellIndex, nullptr);
 

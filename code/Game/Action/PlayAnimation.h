@@ -27,7 +27,7 @@ public:
     PlayAnimation();                                                   // create 0x1400011f0
 
     ~PlayAnimation() override = default;                       // [0] 0x140001260
-    void Persist(void* stream) override;                       // [3] 0x140042480
+    void Persist(IO::Stream& stream) override;                       // [3] 0x140042480
     int  AbstractImpl(void* actionStack) override;             // [4] 0x140042420
     int  Execute(void* actionStack, void* time) override;      // [5] 0x140042400
     void CheckEntity() override;                               // [8] 0x1400423f0 own `RET 0` (same bytes as the base body)

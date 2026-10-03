@@ -40,7 +40,7 @@ public:
 
     // no own work
     ~GrowthComponent() override = default;                        // [0]  0x140034c50
-    void Persist(void* stream) override;                          // [3]  0x1401207c0
+    void Persist(IO::Stream& stream) override;                          // [3]  0x1401207c0
     void Startup() override;                                      // [4]  0x1401206f0
     void OnAdded() override;                                      // [6]  0x140120690 (RET)
     void OnRemove() override;                                     // [7]  0x140120560 PORT GAP

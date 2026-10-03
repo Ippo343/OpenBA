@@ -42,8 +42,8 @@ DiseaseDescription::DiseaseDescription()
       _i44(0) {}
 
 // [5] 0x140048e40: stream order as retail.
-bool DiseaseDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool DiseaseDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(firstMonth, nullptr);
     ser.Serialize(lastMonth, nullptr);
     ser.Serialize(yearsIfChanged, nullptr);

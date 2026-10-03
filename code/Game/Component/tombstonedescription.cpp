@@ -31,8 +31,8 @@ TombstoneDescription::TombstoneDescription()
       _lifetimeRange(24.0f) {}
 
 // [5] 0x140057a20: stream order as retail.
-bool TombstoneDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool TombstoneDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_minLifetime, nullptr);
     ser.Serialize(_lifetimeRange, nullptr);
     return true;

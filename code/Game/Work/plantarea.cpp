@@ -590,12 +590,12 @@ int PlantArea::GetPriority() {
 // PlantArea::Persist [3] -- 0x1400f4540
 // Work::Persist + the set + count + bool array + ExternalRef.
 // ============================================================
-void PlantArea::Persist(void* stream) {
+void PlantArea::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // Create Serializer with version=0
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // Serialize the set at +0x48
     WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);

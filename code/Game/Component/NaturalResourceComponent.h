@@ -34,7 +34,7 @@ public:
 
     // 0x140125d80, no own work
     ~NaturalResourceComponent() override = default;               // [0] 0x1400366b0
-    void Persist(void* stream) override;                          // [3] 0x140125cf0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140125cf0
     void Tick(void* time) override;                               // [8] 0x140125c40 PORT GAP
     // Set the dead bit 0x200000, refresh the entity, animation index 2 (defined in
     // growthcomponent.cpp, B4 COMP-c).

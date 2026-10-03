@@ -43,7 +43,7 @@ public:
 
     // 0x14004ab00
     ~HappinessComponent() override;                               // [0]  0x140005db0
-    void          Persist(void* stream) override;                 // [3]  0x14004aa80
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14004aa80
     void          OnRemove() override;                            // [7]  0x14004aa20
     // PORT GAP (retail 0x14004a780, 437 B) — B38 D3.2: the tree's table left this
     // slot inert; the tree's body (nothing) is kept until the retail body is ported.

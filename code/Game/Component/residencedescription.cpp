@@ -49,8 +49,8 @@ ResidenceDescription::ResidenceDescription()
       _heatInterval(0.0f) {}
 
 // [5] 0x14012a3d0: stream order as retail.
-bool ResidenceDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ResidenceDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_maxFamilies, nullptr);
     ser.Serialize(_maxResidentsPerFamily, nullptr);
     ser.Serialize(_coldThreshold, nullptr);

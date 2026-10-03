@@ -117,12 +117,12 @@ static RawMaterialDescription* FindRawMaterialInList(ComponentDescription* entit
 // Serialize (0x1400ec560)
 // Work::Serialize + 2 int arrays + tree serialization
 // ============================================================
-void GatherRawMaterials::Persist(void* stream) {
+void GatherRawMaterials::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create IO::Serializer with version 0 (Persist's stream is void* in Work.h: LEFT)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // Create IO::Serializer with version 0
+    IO::Serializer serializer(stream, 0);
 
     // Check if loading (stream+8 == 0 means loading)
     bool isLoading = (static_cast<int>(serializer.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210

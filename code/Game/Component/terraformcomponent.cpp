@@ -336,10 +336,10 @@ TerraformComponent::TerraformComponent()
 // ============================================================
 // TerraformComponent::Persist (0x140057500)
 // ============================================================
-void TerraformComponent::Persist(void* stream) {
+void TerraformComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // The undo record's count
     int localCount = heightCount;
@@ -347,7 +347,7 @@ void TerraformComponent::Persist(void* stream) {
 
     // If loading, resize the Vector3 array
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+    if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         GameColl::AsArray<GameColl::Vec3>(&heightRecord).SetSize(localCount);
     }
 

@@ -33,7 +33,7 @@ public:
 
     // 0x140124490
     ~MapComponent() override = default;                           // [0]  0x140035850
-    void Persist(void* stream) override;                          // [3]  0x1401243e0
+    void Persist(IO::Stream& stream) override;                          // [3]  0x1401243e0
     void OnAdded() override;                                      // [6]  0x140124370
     void OnRemove() override;                                     // [7]  0x1401242f0
     void OnEvent(int eventId) override;                           // [12] 0x1401243c0

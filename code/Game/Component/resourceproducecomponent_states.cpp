@@ -342,9 +342,9 @@ DEFINE_EXE_ABSTRACT_TYPE(ResourceProduceComponent, "ControllerComponent")
 // [3] 0x14012b4a0: `CALL 0x1401189b0` (Component::Persist), an EMPTY Serializer(0)
 // scope (that pair is ControllerComponent::Persist, 0x1401195a0), then a v0 scope
 // holding the +0x48 bool (the serializer's bool slot, dispatch 0x140152a58).
-void ResourceProduceComponent::Persist(void* stream) {
+void ResourceProduceComponent::Persist(IO::Stream& stream) {
     ControllerComponent::Persist(stream);
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(stream, 0);
     scope.Serialize(produceFlag, nullptr);
 }
 

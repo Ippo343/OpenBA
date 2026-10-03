@@ -42,6 +42,7 @@
 #include "dtor_check.h"
 
 #include "video/ShaderProgram.h"
+#include "io/Stream.h"   // IO::MemoryStream: Serialize takes IO::Stream&
 #include "video/VertexLayout.h"
 #include "video/VideoProgram.h"
 
@@ -223,7 +224,7 @@ public:
     virtual uint32_t    Type() const             { Note(2); return 0; }              // [2] +0x10
     virtual int32_t     GetFileVersion() const   { Note(3); return 0; }              // [3] +0x18
     virtual uint32_t    Compile(const void*)     { Note(4); return 1; }              // [4] +0x20
-    virtual bool        Serialize(void*)         { Note(5); return true; }           // [5] +0x28
+    virtual bool        Serialize(IO::Stream&)         { Note(5); return true; }           // [5] +0x28
     virtual void*       Reconstruct()            { Note(6); return this; }           // [6] +0x30
     virtual void        Destruct()               { Note(7); }                        // [7] +0x38
 };
@@ -234,7 +235,7 @@ public:
     const char* TypeName() const override       { Note(101); return nullptr; }
     uint32_t    Type() const override           { Note(102); return 0; }
     int32_t     GetFileVersion() const override { Note(103); return 5; }
-    bool        Serialize(void*) override       { Note(105); return true; }
+    bool        Serialize(IO::Stream&) override       { Note(105); return true; }
     void*       Reconstruct() override          { Note(106); return this; }
     void        Destruct() override             { Note(107); }
     virtual void* Construct()                   { Note(108); return this; }          // [8] +0x40
@@ -301,14 +302,14 @@ int g_leafSerializeCalls = 0;
 
 class MirrorQualBase {
 public:
-    virtual bool Serialize(void*) { ++g_baseSerializeCalls; return true; }
+    virtual bool Serialize(IO::Stream&) { ++g_baseSerializeCalls; return true; }
 protected:
     ~MirrorQualBase() = default;
 };
 
 class MirrorQualLeaf final : public MirrorQualBase {
 public:
-    bool Serialize(void* s) override {
+    bool Serialize(IO::Stream& s) override {
         ++g_leafSerializeCalls;
         // Retail's CALL to the base body, spelled as the qualified call.
         return this->MirrorQualBase::Serialize(s);
@@ -323,7 +324,8 @@ UNIT_TEST(video_program_qualified_call) {
     MirrorQualBase* p = &leaf;
 
     g_baseSerializeCalls = g_leafSerializeCalls = 0;
-    CHECK(p->Serialize(nullptr));
+    IO::MemoryStream stream;
+    CHECK(p->Serialize(stream));
     CHECK_EQ(g_leafSerializeCalls, 1);
     CHECK_EQ(g_baseSerializeCalls, 1);   // exactly once, not recursion
 
@@ -334,7 +336,7 @@ UNIT_TEST(video_program_qualified_call) {
     g_baseSerializeCalls = g_leafSerializeCalls = 0;
     void* saved = *reinterpret_cast<void**>(p);
     *reinterpret_cast<void**>(p) = nullptr;
-    CHECK(p->MirrorQualBase::Serialize(nullptr));
+    CHECK(p->MirrorQualBase::Serialize(stream));
     CHECK_EQ(g_baseSerializeCalls, 1);
     CHECK_EQ(g_leafSerializeCalls, 0);
     *reinterpret_cast<void**>(p) = saved;

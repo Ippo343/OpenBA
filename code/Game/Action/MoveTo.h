@@ -35,7 +35,7 @@ public:
            const float* destination, uint32_t passFlags, int movementProfile,
            float speed);   // 0x1400c9170
     ~MoveTo() override = default;                              // [0] 0x140022900
-    void Persist(void* stream) override;                       // [3] 0x1400c8ec0
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c8ec0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c8ab0
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c8570
     void Enter(void* actionStack, void* time) override;        // [6] 0x1400c8970

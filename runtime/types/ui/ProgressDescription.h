@@ -79,7 +79,7 @@ public:
     DECLARE_TYPE(ProgressDescription)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x18011a070
-    bool        Serialize(void* stream) override;                 // [5] 0x180119f60 (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x180119f60 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x1800778f0
     void        Destruct() override;                              // [7] 0x180077920
     Object::InternalPtr<Element>* CreateInstance(

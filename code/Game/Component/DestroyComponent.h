@@ -47,7 +47,7 @@ public:
 
     // 0x14011dc20
     ~DestroyComponent() override;                                 // [0]  0x140033dd0
-    void          Persist(void* stream) override;                 // [3]  0x14011db50
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14011db50
     void          Startup() override;                             // [4]  0x14011db00
     void          OnMessage(int message, void* data,
                             uint32_t arg0, uint32_t arg1) override;  // [15] 0x14011daf0

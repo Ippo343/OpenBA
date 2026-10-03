@@ -167,10 +167,10 @@ WorkComponent::WorkComponent()
 //   - Version >= 1: serialize workState (+0x30)
 //   - Version >= 2: serialize workFlags (+0x2c)
 
-void WorkComponent::Persist(void* stream) {
+void WorkComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(stream, 3);
 
     // Always serialize workId
     ser.Serialize(workId, nullptr);

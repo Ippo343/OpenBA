@@ -515,14 +515,14 @@ StateMachineComponent::StateMachineComponent()
 // ============================================================
 // Persist (vtable slot [3], 0x14012b940)
 // ============================================================
-void StateMachineComponent::Persist(void* stream) {
+void StateMachineComponent::Persist(IO::Stream& stream) {
     // Component::Persist first (0x1401189b0, a direct call in retail too). It
     // used to go through a lazily resolved pointer whose null state desynced the
     // stream on the load path (save/load wave 2026-08-28); the qualified member
     // call has no such state.
     Component::Persist(stream);
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 0);
 
     // The four state bytes +0x50..+0x53. Retail calls Serialize(signed char&)
     // (import 0x140152418); the tree's unsigned char overload is kept here: the

@@ -48,9 +48,9 @@ AutoPickupComponent::AutoPickupComponent()
 // [3] 0x1400449d0 — Component::Persist (a direct CALL 0x1401189b0), then ONE
 // Serializer scope: isEnabled (+0x28), the int array's count (+0x38; on a load the
 // +0x30 array is resized to it) and the array elements in bulk.
-void AutoPickupComponent::Persist(void* stream) {
+void AutoPickupComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(stream, 0);
     ser.Serialize(isEnabled, nullptr);
     int count = field30Count;
     ser.Serialize(count, nullptr);

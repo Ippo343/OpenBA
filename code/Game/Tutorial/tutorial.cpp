@@ -74,10 +74,9 @@ Object::External* Tutorial::Construct() {
 //   3. ExternalPtr<TutorialStep> array via helper (0x140026fb0)
 //   4. the ExternalPtr at +0x20 via helper (0x140002340)
 //   5. int currentStep at +0x38
-bool Tutorial::Serialize(void* stream) {
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool Tutorial::Serialize(IO::Stream& stream) {
+    // The serializer.
+    IO::Serializer serializer(stream, 0);
 
     // 1. Serialize step count (+0x30)
     int32_t localCount = stepCount;

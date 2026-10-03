@@ -65,12 +65,12 @@ int32_t Scenario::GetFileVersion() const {
 //   int +0x60, int +0x64, String +0x58, ExtPtr<MapGen> +0x70,
 //   ExtPtr<TerrainGen> +0x78, ExtPtr<ClimateGen> +0x80,
 //   String +0x88, bool +0x68, bool +0x69
-bool Scenario::Serialize(void* stream) {
+bool Scenario::Serialize(IO::Stream& stream) {
     // Achievement::Achievement::Serialize (slot 5, 0x18009e070) — QUALIFIED (B7-3).
     ::Achievement::Achievement::Serialize(stream);
 
     // The serializer, version 0
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    IO::Serializer serializer(stream, 0);
 
     // Serialize Scenario-specific fields
     serializer.Serialize(_field60, nullptr);   // B.3.4 bridge

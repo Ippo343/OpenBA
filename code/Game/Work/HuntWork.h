@@ -38,7 +38,7 @@ public:
 
     // frees the +0x48 citizen BST
     ~HuntWork() override;                                           // [0]  0x14002a700
-    void  Persist(void* stream) override;                           // [3]  0x1400ef600
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ef600
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eeff0
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eefd0
     int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400eefc0

@@ -53,7 +53,7 @@ public:
 
     // 0x14005d000
     ~WellComponent() override = default;                          // [0]  0x14000fe50
-    void          Persist(void* stream) override;                 // [3]  0x14005cfa0
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14005cfa0
     void          OnRemove() override;                            // [7]  0x14005cf60
     int           GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller*   GetController() override { return &_controller; }  // [17] 0x140004080

@@ -47,7 +47,7 @@ public:
     // +0xf8 object and destroys the embedded EdgeMeshInstance; the tree never
     // did (Inert_ScalarDtor) and never constructs it here. Kept as the tree's.
     ~HighlightComponent() override = default;                     // [0]  0x140007040
-    void Persist(void* stream) override;                          // [3]  0x14004c880
+    void Persist(IO::Stream& stream) override;                          // [3]  0x14004c880
     void OnRemove() override;                                     // [7]  = Component's in retail; TREE DIVERGENCE
     void Tick(void* time) override;                               // [8]  0x14004c850 PORT GAP
     void OnEvent(int eventId) override;                           // [12] 0x14004c870 PORT GAP

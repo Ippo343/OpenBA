@@ -91,7 +91,7 @@ public:
 public:
     int32_t     GetFileVersion() const override;              // [3] 0x18009e170
     //          Compile                                       // [4] External's, inherited
-    bool        Serialize(void* stream) override;             // [5] 0x18009e070 (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;             // [5] 0x18009e070 (IO::Stream&)
     Object::External* Reconstruct() override;                 // [6] 0x180001270
     void        Destruct() override;                          // [7] 0x180001370
     virtual Object::External* Construct();                    // [8] 0x1800012f0
@@ -179,7 +179,7 @@ public:
     // (0x1800070c0); the macro's CreateInPlaceObject forwards to it there.
     DECLARE_TYPE(AchievementInstance)
 public:
-    void        Persist(void* stream) override;               // [3] 0x18009e4a0 (IO::Stream&)
+    void        Persist(IO::Stream& stream) override;               // [3] 0x18009e4a0 (IO::Stream&)
 
     // ?GetAchievement@AchievementInstance…QEBA?AV?$ExternalPtr@VAchievement@1@… 0x180001950
     Object::ExternalPtr<Achievement> GetAchievement() const { return _achievement; }

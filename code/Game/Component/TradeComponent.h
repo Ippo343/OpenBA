@@ -114,7 +114,7 @@ public:
 
     // 0x14005c340
     ~TradeComponent() override;                                         // [0]  0x14000dc80
-    void          Persist(void* stream) override;                       // [3]  0x14005bd50
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x14005bd50
     void          OnAdded() override;                                   // [6]  0x14005c1d0
     void          OnRemove() override;                                  // [7]  0x14005c190
     uint32_t      CommandMask(int command) override;                    // [13] 0x14005c140

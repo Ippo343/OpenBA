@@ -62,8 +62,8 @@ GrowthDescription::GrowthDescription()
       _b64(false) {}
 
 // [5] 0x140120980: stream order as retail.
-bool GrowthDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool GrowthDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_f20, nullptr);
     ser.Serialize(_f24, nullptr);
     ser.Serialize(_f28, nullptr);

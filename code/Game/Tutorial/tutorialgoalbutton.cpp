@@ -56,12 +56,11 @@ TutorialGoalButton::~TutorialGoalButton() {
 // ============================================================
 // 1. TutorialGoal::Serialize (its empty Serializer scope)
 // 2. a Serializer over the stream: String +0x20, bool +0x28
-bool TutorialGoalButton::Serialize(void* stream) {
+bool TutorialGoalButton::Serialize(IO::Stream& stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-    // The serializer for our fields. LEFT: External::Serialize hands the
-    // stream in as void* (the runtime base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer for our fields.
+    IO::Serializer ser(stream, 0);
 
     // elementPath (+0x20)
     ElementPath().Serialize(&ser);

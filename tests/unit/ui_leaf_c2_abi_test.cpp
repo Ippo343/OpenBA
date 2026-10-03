@@ -185,7 +185,7 @@ struct AnimatedImageDescriptionProbe final : UI::AnimatedImageDescription {
 
 struct BareExternalProbe final : Object::External {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -237,8 +237,8 @@ RadioElement::~RadioElement() { B39NoteDtor(this); }
 
 // ---- GroupDescription ----
 int32_t GroupDescription::GetFileVersion() const { Note(this, kGroupD, 3); return 0x104; }
-bool GroupDescription::Serialize(void* stream) {
-    Note(this, kGroupD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+bool GroupDescription::Serialize(IO::Stream& stream) {
+    Note(this, kGroupD, 5, reinterpret_cast<intptr_t>(&stream)); return true;
 }
 Object::External* GroupDescription::Reconstruct() { Note(this, kGroupD, 6); return this; }
 void GroupDescription::Destruct() { Note(this, kGroupD, 7); }
@@ -252,8 +252,8 @@ GroupDescription::~GroupDescription() { B39NoteDtor(this); }
 
 // ---- PageDescription — Serialize calls the PARENT's body QUALIFIED, as the real one does.
 int32_t PageDescription::GetFileVersion() const { Note(this, kPageD, 3); return 0x1104; }
-bool PageDescription::Serialize(void* stream) {
-    Note(this, kPageD, 5, reinterpret_cast<intptr_t>(stream));
+bool PageDescription::Serialize(IO::Stream& stream) {
+    Note(this, kPageD, 5, reinterpret_cast<intptr_t>(&stream));
     return GroupDescription::Serialize(stream);
 }
 Object::External* PageDescription::Reconstruct() { Note(this, kPageD, 6); return this; }
@@ -268,8 +268,8 @@ PageDescription::~PageDescription() { B39NoteDtor(this); }
 
 // ---- RadioDescription ----
 int32_t RadioDescription::GetFileVersion() const { Note(this, kRadioD, 3); return 0x1104; }
-bool RadioDescription::Serialize(void* stream) {
-    Note(this, kRadioD, 5, reinterpret_cast<intptr_t>(stream));
+bool RadioDescription::Serialize(IO::Stream& stream) {
+    Note(this, kRadioD, 5, reinterpret_cast<intptr_t>(&stream));
     return GroupDescription::Serialize(stream);
 }
 Object::External* RadioDescription::Reconstruct() { Note(this, kRadioD, 6); return this; }
@@ -301,8 +301,8 @@ AnimatedImageElement::~AnimatedImageElement() { B39NoteDtor(this); }
 
 // ---- ImageDescription (+ the non-virtual applier, marker slot 80) ----
 int32_t ImageDescription::GetFileVersion() const { Note(this, kImageD, 3); return 0x204; }
-bool ImageDescription::Serialize(void* stream) {
-    Note(this, kImageD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+bool ImageDescription::Serialize(IO::Stream& stream) {
+    Note(this, kImageD, 5, reinterpret_cast<intptr_t>(&stream)); return true;
 }
 Object::External* ImageDescription::Reconstruct() { Note(this, kImageD, 6); return this; }
 void ImageDescription::Destruct() { Note(this, kImageD, 7); }
@@ -319,8 +319,8 @@ ImageDescription::~ImageDescription() { B39NoteDtor(this); }
 
 // ---- AnimatedImageDescription — Serialize and slot 8 call the parent QUALIFIED.
 int32_t AnimatedImageDescription::GetFileVersion() const { Note(this, kAnimD, 3); return 0x10204; }
-bool AnimatedImageDescription::Serialize(void* stream) {
-    Note(this, kAnimD, 5, reinterpret_cast<intptr_t>(stream));
+bool AnimatedImageDescription::Serialize(IO::Stream& stream) {
+    Note(this, kAnimD, 5, reinterpret_cast<intptr_t>(&stream));
     return ImageDescription::Serialize(stream);
 }
 Object::External* AnimatedImageDescription::Reconstruct() { Note(this, kAnimD, 6); return this; }
@@ -560,7 +560,7 @@ UNIT_TEST(ui_leaf_c2_group_slot8_createinstance_retslot) {
 // ===========================================================================
 namespace {
 int g_doorEntries = 0;
-bool MintedPageSerializeDoor(void* self, void* stream) {
+bool MintedPageSerializeDoor(void* self, IO::Stream& stream) {
     ++g_doorEntries;
     return reinterpret_cast<UI::PageDescription*>(self)                    // B.3.6 bridge
         ->UI::PageDescription::Serialize(stream);

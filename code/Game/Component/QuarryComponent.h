@@ -34,7 +34,7 @@ public:
 
     // 0x140055270
     ~QuarryComponent() override = default;                        // [0]  0x14000b5d0
-    void Persist(void* stream) override;                          // [3]  0x140055230
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140055230
     void OnAdded() override;                                      // [6]  0x140055220 own RET
     void OnRemove() override;                                     // [7]  0x140055210 own RET
     void OnEvent(int eventId) override;                           // [12] 0x1400550f0

@@ -252,8 +252,9 @@ Object::Base* PickingMesh::CreateInPlaceObject(void* place) {
 // ============================================================================
 // Order: _string20, _string28, _flag30 (kScalarBool), then the SubMesh array
 // (count @ +0x40, resize 0x18007aa40, walk 0x18007ac20).
-bool PickingMesh::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
+bool PickingMesh::Serialize(IO::Stream& streamv) {
+    void* const streamvRaw = &streamv;
+    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
     Serializer ser = { stream, nullptr };
     void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)

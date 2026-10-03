@@ -31,7 +31,7 @@ public:
 
     ~MapDescription() override = default;                                  // [0] 0x1400357e0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140124610
-    bool              Serialize(void* stream) override;                    // [5] 0x140124560
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140124560
     Object::External* Reconstruct() override;                              // [6] 0x1400357b0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400357d0

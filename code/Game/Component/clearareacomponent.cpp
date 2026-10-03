@@ -142,10 +142,10 @@ void* ClearAreaComponent::CreateInPlaceObject(void* storage) {
 // [3] 0x140117ec0 — clearState round-trips (save/load wave 2026-08-28):
 // Component::Persist (a direct CALL 0x1401189b0), an empty
 // Serializer scope (format stub), then a scope carrying clearState (+0x48).
-void ClearAreaComponent::Persist(void* stream) {
+void ClearAreaComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);       // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    IO::Serializer scope(stream, 0);
     scope.Serialize(clearState, nullptr);
 }
 

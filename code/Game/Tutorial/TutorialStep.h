@@ -40,7 +40,7 @@ public:
     // 0x1400e33f0
     ~TutorialStep() override;                                      // [0] 0x140028cc0
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400e33e0
-    bool              Serialize(void* stream) override;            // [5] 0x1400e32a0
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e32a0
     Object::External* Reconstruct() override;                      // [6] 0x140028ca0
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x140028c90

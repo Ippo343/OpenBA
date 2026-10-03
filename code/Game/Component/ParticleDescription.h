@@ -59,7 +59,7 @@ public:
 
     ~ParticleDescription() override;                                       // [0] 0x14000a500
     int32_t           GetFileVersion() const override { return 7; }    // [3] 0x1400535b0
-    bool              Serialize(void* stream) override;                    // [5] 0x140053460
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140053460
     Object::External* Reconstruct() override;                              // [6] 0x14000a490
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14000a4f0

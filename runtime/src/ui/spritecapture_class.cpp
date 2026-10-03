@@ -144,8 +144,8 @@ SpriteCapture::~SpriteCapture() {
 // exactly as in AnimatedImageDescription::CreateInstance.
 namespace UI {
 
-bool SpriteCapture::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool SpriteCapture::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
     // The inlined ??0Serializer (1800d9567..1800d9582): CreateReader /
     // CreateWriter of the stream's encoding, version 0.

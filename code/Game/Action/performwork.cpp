@@ -74,11 +74,11 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // Serializes: status(+0x18), entity(+0x20) with CitizenAI type check,
 //   float(+0x28), int(+0x2C), Time(+0x30), Time(+0x38), bool(+0x40), int(+0x44)
 // ============================================================
-void PerformWork::Persist(void* stream) {
+void PerformWork::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Second serializer: serialize all PerformWork-specific fields
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // The working citizen (+0x20)
     workTarget.InternalBasePtr::Serialize(ser);

@@ -625,7 +625,7 @@ public:
     // [1] TypeName 0x1800066c0 / [2] Type 0x1800066d0: DECLARE_TYPE.
     virtual int32_t       GetFileVersion() const = 0;           // [3] pure
     virtual CompileResult Compile(const System::Filename& path);// [4] 0x1800066e0
-    virtual bool          Serialize(void* stream) = 0;          // [5] pure
+    virtual bool          Serialize(IO::Stream& stream) = 0;          // [5] pure
     virtual External*     Reconstruct() = 0;                    // [6] pure
     virtual void          Destruct() = 0;                       // [7] pure
 
@@ -750,7 +750,7 @@ public:
     // ??1ExternalList 0x1800076c0; the compiler chains ~External.
     ~ExternalList() override;  // 0x1800076c0
     int32_t         GetFileVersion() const override;         // [3] 0x1800bfa10
-    bool            Serialize(void* stream) override;        // [5] 0x1800bfa20
+    bool            Serialize(IO::Stream& stream) override;        // [5] 0x1800bfa20
     External*       Reconstruct() override;                  // [6] 0x180007570
     void            Destruct() override;                     // [7] 0x180007640
     virtual External* Construct();                           // [8] 0x1800075e0

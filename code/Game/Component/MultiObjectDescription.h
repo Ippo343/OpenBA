@@ -28,7 +28,7 @@ public:
 
     ~MultiObjectDescription() override = default;                          // [0] 0x140036060
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140125b90
-    bool              Serialize(void* stream) override;                    // [5] 0x140125b50
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140125b50
     Object::External* Reconstruct() override;                              // [6] 0x140036000
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140036050

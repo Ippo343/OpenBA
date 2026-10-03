@@ -31,7 +31,7 @@ public:
 
     ~ImmigrationDescription() override;                                    // [0] 0x140007b00
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14004e930
-    bool              Serialize(void* stream) override;                    // [5] 0x14004e7f0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14004e7f0
     Object::External* Reconstruct() override;                              // [6] 0x140007ad0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140007af0

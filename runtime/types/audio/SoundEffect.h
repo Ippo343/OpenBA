@@ -107,7 +107,7 @@ public:
 public:
     int32_t       GetFileVersion() const override;             // [3] 0x1800e0990
     CompileResult Compile(const System::Filename& path) override; // [4] 0x1800e09a0
-    bool          Serialize(void* stream) override;            // [5] 0x1800e0aa0
+    bool          Serialize(IO::Stream& stream) override;            // [5] 0x1800e0aa0
     Object::External* Reconstruct() override;                  // [6] 0x180050560
     void          Destruct() override;                         // [7] 0x180050640
     virtual Object::External* Construct();                     // [8] 0x1800505d0 — B7-1.6

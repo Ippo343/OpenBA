@@ -1826,8 +1826,8 @@ void TownHallUI::OnCreated() {
 // TownHallUI::OnSerializeSettings (vtable +0x50, 0x140080db0)
 // ============================================================
 // [10] 0x140080db0
-void TownHallUI::OnSerializeSettings(void* stream) {
-    if (!stream || !townhallui_sa::Built(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
+void TownHallUI::OnSerializeSettings(IO::Stream& stream) {
+    if (!townhallui_sa::Built(this) || !townhallui_sa::Ready() || !townhallui_sa::TownReady()) return;
 
     int tabIndex = tabElement->_activeTab;
     int combo1 = productionCombo->_currentItem;
@@ -1836,7 +1836,7 @@ void TownHallUI::OnSerializeSettings(void* stream) {
     int combo4 = timeCombo->_currentItem;
     int combo5 = graphCombo->_currentItem;
 
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // LEFT: the slot's IO::Stream& is spelled void* (DialogController.h)
+    IO::Serializer serializer(stream, 1);
 
     serializer.Serialize(tabIndex, nullptr);
     serializer.Serialize(combo1, nullptr);

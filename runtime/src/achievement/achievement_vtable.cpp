@@ -234,9 +234,8 @@ Object::External* Achievement::Construct() {
 // TWO CODECS, NESTED, WITH DIFFERENT VERSIONS (outer 1, inner 0), and a real
 // early return when the outer reports version 0 — see the banner.
 // ============================================================================
-void AchievementInstance::Persist(void* streamv) {
-    // Internal's slot 3 takes the stream as `void*` (object/Internal.h).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+void AchievementInstance::Persist(IO::Stream& streamv) {
+    IO::Stream& stream = streamv;
 
     // The OUTER codec, version 1 (MOV R8D,1 at 0x18009e4c9).
     IO::Serializer outer(stream, 1);

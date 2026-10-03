@@ -75,19 +75,17 @@ static const Toolbar* ResolvedToolbar(const NamedExternalRef& ref) {
 // ============================================================
 // Slot5: Serialize (0x1400e0af0)
 // ============================================================
-// LEFT (both blocks): External::Serialize hands the stream in as void* (the
-// runtime base's signature).
-bool TutorialImageToolbarIcon::Serialize(void* stream) {
+bool TutorialImageToolbarIcon::Serialize(IO::Stream& stream) {
     // First serializer block: serialize +0x28, +0x2C as ints, then ExternalPtr at +0x20
     {
-        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer serializer(stream, 0);
         serializer.Serialize(imageWidth, nullptr);
         serializer.Serialize(imageHeight, nullptr);
         TutBase_SerializeImageRef(&imageRef, &serializer);
     }
 
     // Second serializer block: Filename ctor, String::Serialize, conditional toolbar resolve
-    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer serializer2(stream, 0);
 
     // Filename temp retail's compiler emitted for this scope.
     System::Filename filenameBuf;

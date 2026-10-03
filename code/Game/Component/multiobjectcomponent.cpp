@@ -150,11 +150,10 @@ void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
 //   with IsDerivedFrom validation, serialize multiCount at +0x58.
 //   After loading, remove null entries from array (compact).
 
-void MultiObjectComponent::Persist(void* stream) {
+void MultiObjectComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
 
     // First empty serializer block (controller section)
     { IO::Serializer scope(*st, 0); }

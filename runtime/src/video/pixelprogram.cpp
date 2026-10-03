@@ -238,13 +238,13 @@ void PixelProgram::PlatformDestruct() {
 }
 
 // slot 5 — ?Serialize@PixelProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f3a90)
-bool PixelProgram::Serialize(void* streamv) {
+bool PixelProgram::Serialize(IO::Stream& streamv) {
     // Retail CALLs 0x1800f5110 here; the QUALIFIED spelling is that call.
     this->ShaderProgram::Serialize(streamv);
 
     // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
     // keeps `External`'s `void*` parameter (R-OBJ's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 1);
 
     if (ser._readerWriter->GetVersion() == 0)

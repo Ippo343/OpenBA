@@ -92,11 +92,11 @@ Object::External* ProgressDescription::Reconstruct() {
 void ProgressDescription::Destruct() { this->~ProgressDescription(); }
 
 // [5] ?Serialize@ProgressDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x180119f60
-bool ProgressDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
+bool ProgressDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                              // 180119f7a
+    ElementDescription::Serialize(*stream);                              // 180119f7a
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

@@ -30,7 +30,7 @@ public:
 
     // 0x140034a70: no body
     ~ForesterComponent() override = default;                            // [0]  0x140034a70
-    void        Persist(void* stream) override;                         // [3]  0x14011f960
+    void        Persist(IO::Stream& stream) override;                         // [3]  0x14011f960
     uint32_t    CommandMask(int command) override;                      // [13] 0x14011f920
     void        Command(int command) override;                          // [14] 0x14011f890
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14011f780

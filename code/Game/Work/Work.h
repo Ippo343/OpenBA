@@ -85,7 +85,7 @@ public:
     // [1]/[2]: the abstract base answers its own record (ENDGAME B.3.9 RF:
     // DEFINE_EXE_TYPE with retail's abstract factory); every leaf overrides both.
     // [1] TypeName 0x14002ca50 and [2] Type 0x14002ca40: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void        Persist(void* stream) override;                       // [3]  0x1400f7400
+    void        Persist(IO::Stream& stream) override;                       // [3]  0x1400f7400
     // [4] retail passes TWO arguments: RDX = &citizen copy, R8 = scheduler
     // +0x130 (0x1400f7bdd/0x1400f7be4 and 0x1400f86c7/0x1400f86ce; R9 is never
     // set, and no body reads it -- BuildRoad 0x1400e4190 overwrites R8 unread).

@@ -330,8 +330,7 @@ extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, in
 // ============================================================
 // TradeComponent::Persist (vtable slot [3], 0x14005bd50)
 // ============================================================
-void TradeComponent::Persist(void* stream) {
-    if (!stream) return;
+void TradeComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // Retail 0x14005bd50 opens TWO Serializer scopes: an EMPTY one that is
@@ -349,9 +348,9 @@ void TradeComponent::Persist(void* stream) {
     // and nameCount decoded as poison, and the merchant-order resize walked a
     // garbage array. Same trap as the two empty scopes in AbsorbResourceComponent
     // and HealerComponent.
-    { IO::Serializer stub(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    { IO::Serializer stub(stream, 0); }
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);        // B.3.8 bridge
+    IO::Serializer ser(stream, 0);
 
     // +0x50/+0x58: the manifest, stride 0x10 {ComponentRef, int, int}.
     int32_t refCount = manifestCount;

@@ -36,7 +36,7 @@ public:
 
     // no own work
     ~AnimalComponent() override = default;                        // [0]  0x14002f170
-    void Persist(void* stream) override;                          // [3]  0x140106e40
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140106e40
     void Startup() override;                                      // [4]  0x140106d50
     void OnAdded() override;                                      // [6]  0x140106c20
     void Update(void* time) override;                             // [9]  0x140106420

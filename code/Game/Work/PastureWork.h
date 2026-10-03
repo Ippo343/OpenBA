@@ -42,7 +42,7 @@ public:
 
     // 0x1400f2ce0: frees the +0x48 citizen BST
     ~PastureWork() override;                                        // [0]  0x14002bf70
-    void  Persist(void* stream) override;                           // [3]  0x1400f2c60
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f2c60
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400f2370
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400f2350
     int   OnCancel(void* param2, void* param3, int arg3) override;  // [7]  0x1400f22c0

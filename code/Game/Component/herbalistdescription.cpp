@@ -56,8 +56,8 @@ HerbalistDescription::~HerbalistDescription() {
 }
 
 // [5] 0x14004b2e0: stream order as retail.
-bool HerbalistDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool HerbalistDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // External*-array @ +0x20 (count @ +0x28, stride 8)
     ser.Serialize(_herbCount, nullptr);
     int n = _herbCount;

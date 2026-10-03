@@ -48,7 +48,7 @@ public:
 
     // 0x14004fd50
     ~NomadComponent() override;                                   // [0]  0x140009230
-    void          Persist(void* stream) override;                 // [3]  0x14004fc40
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14004fc40
     void          OnRemove() override;                            // [7]  0x14004fd20
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
     Controller* GetController() override { return &_controller; }  // [17] 0x140009060

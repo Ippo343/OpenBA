@@ -29,7 +29,7 @@ public:
 
     // 0x14004f2a0
     ~MineComponent() override = default;                          // [0] 0x140008fa0
-    void Persist(void* stream) override;                          // [3] 0x14004f260
+    void Persist(IO::Stream& stream) override;                          // [3] 0x14004f260
     void OnAdded() override;                                      // [6] 0x14004f250 own RET
     void OnRemove() override;                                     // [7] 0x14004f240 own RET
 };

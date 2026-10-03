@@ -29,7 +29,7 @@ public:
 
     ~ForesterDescription() override = default;                             // [0] 0x140034a10
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14011fb00
-    bool              Serialize(void* stream) override;                    // [5] 0x14011fa80
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14011fa80
     Object::External* Reconstruct() override;                              // [6] 0x1400349b0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140034a00

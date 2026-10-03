@@ -95,7 +95,7 @@ public:
                                 int32_t d, int32_t e, void* userData);
     // [10] 0x1800cd250  RET. `IO::Stream&` in retail; spelled as the pointer
     // every C caller passes, the `Object::Internal::Persist` precedent.
-    virtual void OnSerializeSettings(void* stream);
+    virtual void OnSerializeSettings(IO::Stream& stream);
 
     // ---- non-virtual exported surface ------------------------------------
     // RETSLOT in retail (`MOV RAX,[RCX+0x20]; MOV [RDX],RAX; MOV RAX,RDX`);

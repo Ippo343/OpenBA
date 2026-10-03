@@ -135,11 +135,11 @@ void TabDescription::Destruct() { this->~TabDescription(); }
 // `MOV [RSP+0x50],EAX`) and the local is what gets serialized and what the
 // read-path SetSize and the element loop then use — not `_tabs._size`, which
 // SetSize is in the middle of changing.
-bool TabDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
+bool TabDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                              // 1800da77a
+    ElementDescription::Serialize(*stream);                              // 1800da77a
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

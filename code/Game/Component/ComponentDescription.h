@@ -36,7 +36,7 @@ public:
 
     ~ComponentDescription() override;                                      // [0] 0x140032030
     int32_t           GetFileVersion() const override { return 2; }        // [3] 0x140118b90
-    bool              Serialize(void* stream) override;                    // [5] 0x140118af0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140118af0
     Object::External* Reconstruct() override;                              // [6] 0x140031fe0
     void              Destruct() override;                                 // [7] 0x140001640
     virtual Object::External* Construct();                                 // [8] 0x140031f90

@@ -31,7 +31,7 @@ public:
                       uint32_t cellIdx, bool naturalRes, ComponentEntity* const* tertiary,
                       uint32_t placementFlags);   // 0x1400c71a0
     ~CreateRawMaterial() override = default;                   // [0] 0x140022350
-    void Persist(void* stream) override;                       // [3] 0x1400c6f30
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c6f30
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6b40
     bool GetTarget(void* param) override;                      // [9] 0x1400c6aa0
 

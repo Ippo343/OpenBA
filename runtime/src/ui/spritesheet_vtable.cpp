@@ -396,10 +396,10 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(IO::Serializer* ser,
 
 namespace UI {
 
-bool SpriteSheet::Serialize(void* streamv) {
+bool SpriteSheet::Serialize(IO::Stream& streamv) {
     // The inlined ??0Serializer (0x18011d747..0x18011d772): the stream, then
     // CreateReader / CreateWriter of its encoding, version 0.
-    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 0);
+    IO::Serializer ser(streamv, 0);
 
     StringSerialize(&m_groupName,   &ser);   // +0x40 FIRST — see banner
     StringSerialize(&m_textureName, &ser);   // +0x38 second

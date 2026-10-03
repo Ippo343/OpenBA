@@ -38,7 +38,7 @@ public:
 
     // frees the slot array and the BST
     ~HarvestOrchard() override;                                     // [0]
-    void  Persist(void* stream) override;                           // [3]  0x1400edea0
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400edea0
     int   Execute(void* entityIBP, void* context) override;  // [4]
     int   OnComplete(void* param2, void* param3, int param4) override;  // [6]
     int   OnCancel(void* param2, void* param3, int param4) override;    // [7]

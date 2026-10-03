@@ -108,10 +108,10 @@ void TableDescription::Destruct() { this->~TableDescription(); }
 // Three ints, then the cell count into a LOCAL, the read-path SetSize, and a
 // per-cell loop that emits {int, int, ExternalPtr}. The String at +0x90 is NOT
 // serialized — the destructor is the only body in the class that touches it.
-bool TableDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool TableDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 18011e5aa (qualified)
+    UI::ElementDescription::Serialize(*stream);                 // 18011e5aa (qualified)
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

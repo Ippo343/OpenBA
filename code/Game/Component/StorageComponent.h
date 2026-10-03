@@ -60,7 +60,7 @@ public:
     // PORT GAP (retail 0x14012c870) — B38 D2: retail frees the +0x28 slot array;
     // the tree never did (Inert_ScalarDtor). Kept as the tree's.
     ~StorageComponent() override = default;                       // [0] 0x140038d60
-    void Persist(void* stream) override;                          // [3] 0x14012c730
+    void Persist(IO::Stream& stream) override;                          // [3] 0x14012c730
     void Startup() override;                                      // [4] 0x14012c720 own RET
     void OnAdded() override;                                      // [6] 0x14012c640
 

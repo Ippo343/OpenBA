@@ -37,7 +37,7 @@ public:
 
     // frees the validity array and the cell BST
     ~HarvestArea() override;                                        // [0]  0x14002a4d0
-    void  Persist(void* stream) override;                           // [3]  0x1400ed350
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ed350
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eccd0
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400ecc20
     int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]  0x1400ecb60

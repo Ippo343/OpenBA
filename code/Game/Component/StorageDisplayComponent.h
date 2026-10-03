@@ -40,7 +40,7 @@ public:
     // array down (FUN_14000c9a0); the tree never did (Inert_ScalarDtor). Kept as
     // the tree's (OnRemove already removes the meshes from the scene).
     ~StorageDisplayComponent() override = default;                // [0]  0x14000c940
-    void Persist(void* stream) override;                          // [3]  0x140056970
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140056970
     void Startup() override;                                      // [4]  0x140056930 own RET
     void OnAdded() override;                                      // [6]  0x140056730
     void OnRemove() override;                                     // [7]  0x1400566b0

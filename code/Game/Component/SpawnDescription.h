@@ -31,7 +31,7 @@ public:
 
     ~SpawnDescription() override;                                          // [0] 0x14000c2e0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140056180
-    bool              Serialize(void* stream) override;                    // [5] 0x1400560b0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x1400560b0
     Object::External* Reconstruct() override;                              // [6] 0x14000c280
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14000c2d0

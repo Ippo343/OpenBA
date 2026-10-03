@@ -81,10 +81,8 @@ Object::External* TutorialSetupDialog::Construct() {
 // the highlight Dialog ExternalPtr, the arrow rotation, the toolbar
 // ExternalRef (resolved on load) and the toolbar index. Retail does NOT call
 // the base TutorialSetup::Serialize here. Returns true (MOV AL,1).
-bool TutorialSetupDialog::Serialize(void* stream) {
-    // LEFT: External::Serialize hands the stream in as void* (the runtime
-    // base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // 1st String array (+0x20)
     int count1 = static_cast<int>(shownPathCount);

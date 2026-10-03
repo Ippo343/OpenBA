@@ -178,7 +178,7 @@ public:
     DECLARE_TYPE(VertexLayout)
 public:
     int32_t           GetFileVersion() const override;        // [3] 0x1800f5e60 — `MOV EAX,3`
-    bool              Serialize(void* stream) override;       // [5] 0x1800f5e70
+    bool              Serialize(IO::Stream& stream) override;       // [5] 0x1800f5e70
     Object::External* Reconstruct() override;                 // [6] 0x18004de50
     void              Destruct() override;                    // [7] 0x18004de80
     // [8] 0x18004de70. `virtual`, NOT `override`: `Object::External`'s and

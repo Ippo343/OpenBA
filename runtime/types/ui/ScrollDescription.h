@@ -82,7 +82,7 @@ public:
     DECLARE_TYPE(ScrollDescription)
 public:
     int32_t       GetFileVersion() const override;                // [3] 0x18011a930
-    bool          Serialize(void* stream) override;               // [5] 0x18011a940
+    bool          Serialize(IO::Stream& stream) override;               // [5] 0x18011a940
     Object::External* Reconstruct() override;                     // [6] 0x18003a2a0
     void          Destruct() override;                            // [7] 0x18003a2d0
     Object::InternalPtr<Element>* CreateInstance(

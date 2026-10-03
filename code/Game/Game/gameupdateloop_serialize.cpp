@@ -699,7 +699,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
             }
         }
     }
-    intFactory->ResetPersistState(&stream);
+    intFactory->ResetPersistState(stream);
 
     if (IsSaving(&stream)) {
         m_userInterface->SaveAllSettings();

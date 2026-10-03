@@ -78,7 +78,7 @@ public:
 
     ~ControllerComponent() override = default;                   // [0]  0x140032800
     // [1] TypeName 0x1400327f0 and [2] Type 0x1400327e0: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void          Persist(void* stream) override;                // [3]  0x1401195a0
+    void          Persist(IO::Stream& stream) override;                // [3]  0x1401195a0
     virtual int         GetDefaultState() const = 0;             // [16] pure
     virtual Controller* GetController() = 0;                     // [17] pure
 

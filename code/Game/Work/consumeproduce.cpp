@@ -103,12 +103,12 @@ ConsumeProduce::~ConsumeProduce() {
 // Serialize (0x1400e9020)
 // Work::Serialize + Serializer(version=0) + IBP array + int array + fields
 // ============================================================
-void ConsumeProduce::Persist(void* stream) {
+void ConsumeProduce::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // Create IO::Serializer with version 0 (destroyed at the end, as retail)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer serializer(stream, 0);
 
     // Check if loading (direction 0 means loading)
     bool isLoading = (static_cast<int>(serializer.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210

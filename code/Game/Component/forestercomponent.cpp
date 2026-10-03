@@ -111,12 +111,12 @@ void* ForesterComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ForesterComponent());
 }
 
-void       ForesterComponent::Persist(void* stream) {
+void       ForesterComponent::Persist(IO::Stream& stream) {
     // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
     ResourceProduceComponent::Persist(stream);
 
     // Serialize ForesterComponent's own fields
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 0);
     ser.Serialize(plantTrees, nullptr);
     ser.Serialize(cutTrees, nullptr);
 }

@@ -34,7 +34,7 @@ public:
 
     ~StatGoal() override;                                          // [0] 0x140026540
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400daa10
-    bool              Serialize(void* stream) override;            // [5] 0x1400da8b0
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400da8b0
     Object::External* Reconstruct() override;                      // [6] 0x140026520
     void              Destruct() override;                         // [7] 0x140001640
     GoalState         CheckGoalState() const override;             // [8] 0x1400da720

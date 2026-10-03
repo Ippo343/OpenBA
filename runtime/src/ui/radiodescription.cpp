@@ -87,10 +87,11 @@ void RadioDescription::Destruct() { this->~RadioDescription(); }         // 0x18
 // grandparent here would silently drop every child. It ALSO opens a SECOND
 // ReaderWriter over the same stream, after GroupDescription::Serialize has
 // already opened and closed its own. That is retail.
-bool RadioDescription::Serialize(void* streamv) {
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
+bool RadioDescription::Serialize(IO::Stream& streamv) {
+    void* const streamvRaw = &streamv;
+    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
-    GroupDescription::Serialize(stream);                       // 1800d5a9a
+    GroupDescription::Serialize(streamv);                       // 1800d5a9a
 
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800d5aca

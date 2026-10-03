@@ -29,7 +29,7 @@ public:
 
     ~UpgradeUIConfig() override = default;                         // [0] 0x140016d00
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x140087000
-    bool              Serialize(void* stream) override;            // [5] 0x140086fb0
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x140086fb0
     Object::External* Reconstruct() override;                      // [6] 0x140016cb0
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x140016c60

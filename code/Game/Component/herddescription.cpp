@@ -42,8 +42,8 @@ HerdDescription::HerdDescription()
       _growMinutes(0.0f) {}
 
 // [5] 0x1401221e0: stream order as retail.
-bool HerdDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool HerdDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_animal, &ser);
     ser.Serialize(_maxSize, nullptr);
     ser.Serialize(_minSize, nullptr);

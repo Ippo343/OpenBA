@@ -147,12 +147,11 @@ TutorialGoalCount::~TutorialGoalCount() {
 // ============================================================
 // Serializes all fields. After loading (version == 0) resolves the external
 // ref at +0x30.
-bool TutorialGoalCount::Serialize(void* stream) {
+bool TutorialGoalCount::Serialize(IO::Stream& stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body (an empty Serializer scope)
 
-    // The serializer for our fields. LEFT: External::Serialize hands the
-    // stream in as void* (the runtime base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer for our fields.
+    IO::Serializer ser(stream, 0);
 
     // +0x20 through the UINT door (rw_vtbl::kScalarUInt, readerWriter +0x98).
     ser.Serialize(countMode, nullptr);

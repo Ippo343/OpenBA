@@ -46,7 +46,7 @@ public:
     // PORT GAP (retail 0x140034ea0) — B38 D2: retail frees the member array at
     // +0x38; the tree never did (Inert_ScalarDtor).
     ~HerdComponent() override = default;                          // [0] 0x140034ea0
-    void Persist(void* stream) override;                          // [3] 0x140121f90
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140121f90
     // [4] inherited: Component's `RET` 0x140118a50 (the ctor writes +0x4c = -1).
     void OnAdded() override;                                      // [6] 0x140121f40
     void OnRemove() override;                                     // [7] 0x140121e20

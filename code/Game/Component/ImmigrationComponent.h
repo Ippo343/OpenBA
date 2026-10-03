@@ -45,7 +45,7 @@ public:
 
     // 0x14004e5d0
     ~ImmigrationComponent() override;                             // [0]  0x140007b70
-    void          Persist(void* stream) override;                 // [3]  0x14004e4b0
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14004e4b0
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
 

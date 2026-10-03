@@ -45,7 +45,7 @@ public:
 
     // 0x1400e73b0: frees the tree and +0x48
     ~ClearStorage() override;                                       // [0]  0x14002a100
-    void  Persist(void* stream) override;                           // [3]  0x1400e7350
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e7350
     int   Execute(void* citizenAI, void* time) override;  // [4]  0x1400e6c50
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400e6c30
     int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400e6c20

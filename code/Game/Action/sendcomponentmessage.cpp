@@ -35,11 +35,11 @@
 // Serializes status, two entity refs with type checks, component type,
 // message ID, and two uint params.
 // ============================================================
-void SendComponentMessage::Persist(void* stream) {
+void SendComponentMessage::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs + message fields (version 0)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // Target entity ref (+0x20) with type validation
     _field20.InternalBasePtr::Serialize(ser);

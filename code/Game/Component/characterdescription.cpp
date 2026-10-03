@@ -57,8 +57,8 @@ CharacterDescription::CharacterDescription()
       _f44(-10.0f) {}
 
 // [5] 0x140109dd0: stream order as retail.
-bool CharacterDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CharacterDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_speedScale, nullptr);
     ser.Serialize(_f24, nullptr);
     ser.Serialize(_slowSpeed, nullptr);

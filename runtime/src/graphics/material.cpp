@@ -117,9 +117,8 @@ void Material::Destruct() { this->~Material(); }
 // B.4: the `{ stream, nullptr }` pair, the encoding's CreateReader /
 // CreateWriter (version 0) and the closing `if (rw) delete rw` are
 // `IO::Serializer`'s ctor and dtor, inlined by retail.
-bool Material::Serialize(void* streamv) {
-    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+bool Material::Serialize(IO::Stream& streamv) {
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);                       // [RSP+0x20], [RSP+0x28]
     IO::ReaderWriter* const rw = ser._readerWriter;
 

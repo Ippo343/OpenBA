@@ -121,7 +121,7 @@ struct BareInternalProbe final : Object::Internal {
 struct BareExternalProbe final : Object::External {
     const char* TypeName() const override { return "bare"; }
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -149,7 +149,7 @@ struct DialogProbe final : UI::Dialog {
 struct ConfigProbe final : UI::DialogControllerConfig {
     ~ConfigProbe() override { Note(this, 0); }
     int32_t GetFileVersion() const override { Note(this, 3); return 0; }
-    bool Serialize(void*) override { Note(this, 5); return true; }
+    bool Serialize(IO::Stream&) override { Note(this, 5); return true; }
     Object::External* Reconstruct() override { Note(this, 6); return this; }
     void Destruct() override { Note(this, 7); }
 };
@@ -474,7 +474,7 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 struct B39DcLeaf : UI::DialogController {};
 struct B39CfgLeaf : UI::DialogControllerConfig {
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
 };
@@ -575,7 +575,7 @@ UNIT_TEST(b39_uid_dialogcontrollerconfig_deleting_dtor_both_arms) {
 // ============================================================================
 namespace UI {
 
-void DialogInstance::Persist(void*) { Note(this, 103); }
+void DialogInstance::Persist(IO::Stream&) { Note(this, 103); }
 void DialogInstance::OnOpened() { Note(this, 104); }
 void DialogInstance::OnClosed() { Note(this, 105); }
 void DialogInstance::OnUpdateLayout() { Note(this, 106); }
@@ -584,7 +584,7 @@ void DialogInstance::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, in
                                     int32_t, int32_t, int32_t, void*) {
     Note(this, 108); g_lastArg = e;
 }
-void DialogInstance::OnSerializeSettings(void*) { Note(this, 109); }
+void DialogInstance::OnSerializeSettings(IO::Stream&) { Note(this, 109); }
 // ~DialogInstance is inline since ENDGAME B.3.8 block RB (its InitFields /
 // ReleaseFields markers are in rb_ui_abi_test.cpp).
 
@@ -597,7 +597,7 @@ void DialogController::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, 
                                       int32_t, int32_t, int32_t, void*) {
     Note(this, 209); g_lastArg = e;
 }
-void DialogController::OnSerializeSettings(void*) { Note(this, 210); }
+void DialogController::OnSerializeSettings(IO::Stream&) { Note(this, 210); }
 DialogController::~DialogController() { B39UidDlgNoteDtor(this); }
 
 void ComboDialog::OnUpdateLayout() { Note(this, 306); }
@@ -611,7 +611,7 @@ ComboDialog::~ComboDialog() { B39UidDlgNoteDtor(this); }
 ToolTipDialog::~ToolTipDialog() { B39UidDlgNoteDtor(this); }
 
 int32_t     Dialog::GetFileVersion() const { Note(this, 503); return 6; }
-bool        Dialog::Serialize(void*) { Note(this, 505); return true; }
+bool        Dialog::Serialize(IO::Stream&) { Note(this, 505); return true; }
 Object::External* Dialog::Reconstruct() { Note(this, 506); return this; }
 void        Dialog::Destruct() { Note(this, 507); }
 Object::External* Dialog::Construct() { Note(this, 508); return this; }

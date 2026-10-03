@@ -52,8 +52,8 @@
 
 // [5] 0x140086fb0 — deserialize the target-template reference
 // (ExternalPtr<ComponentEntity>, the canonical ExternalPtrSerializeGeneric body).
-bool UpgradeUIConfig::Serialize(void* stream) {
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+bool UpgradeUIConfig::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 0);
     // ENDGAME B.3.9 CG2: TypeId_ComponentEntity (0x1401c5d70) -> ComponentEntity::TypeId().
     uint32_t componentEntityTypeId = ComponentEntity::TypeId();
     ExternalPtrSerializeGeneric(&_target, &serializer, &componentEntityTypeId,

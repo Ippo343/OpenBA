@@ -59,10 +59,10 @@ TombstoneComponent::TombstoneComponent() : lifetime{0} {
 // ============================================================
 // TombstoneComponent::Persist (0x1400578E0)
 // ============================================================
-void TombstoneComponent::Persist(void* stream) {
+void TombstoneComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 2);   // Persist's stream is void*
+    IO::Serializer ser(stream, 2);
 
     lifetime.Serialize(ser);
 

@@ -42,7 +42,7 @@ public:
 
     // 0x14004af10
     ~HealerComponent() override;                                  // [0]  0x140006660
-    void          Persist(void* stream) override;                 // [3]  0x14004aeb0
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x14004aeb0
     void          OnRemove() override;                            // [7]  0x14004ae70
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080

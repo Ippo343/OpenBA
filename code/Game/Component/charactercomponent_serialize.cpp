@@ -88,11 +88,10 @@ void SerializeValidatedIBP(T*& field, IO::Serializer& ser, uint32_t tid) {
 } // namespace
 
 // [3] 0x140109ab0.
-void CharacterComponent::Persist(void* stream) {
-    if (!stream) return;
+void CharacterComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
     field_0x2C.Serialize(&ser);

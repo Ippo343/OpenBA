@@ -97,11 +97,11 @@ void DocumentTextDescription::Destruct() { this->~DocumentTextDescription(); }
 //
 // The FOURTH array has no Array::Serialize at all: its ints are pushed one at a
 // time through the kScalarUInt slot in a hand-rolled loop (0x1800cfac2).
-bool DocumentTextDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                  // 1800cf8c6
+    ElementDescription::Serialize(*stream);                  // 1800cf8c6
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined                   // [RBP-0x18], [RBP-0x10]
     IO::ReaderWriter* rw = ser._readerWriter;

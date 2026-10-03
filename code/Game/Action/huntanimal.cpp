@@ -86,11 +86,11 @@
 // Serializes: status(+0x18), animal entity(+0x20) with type check,
 //             herd entity(+0x28) with type check, huntStarted flag(+0x38).
 // ============================================================
-void HuntAnimal::Persist(void* stream) {
+void HuntAnimal::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs and hunt flag
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // The HuntComponent (+0x20)
     _field20.InternalBasePtr::Serialize(ser);

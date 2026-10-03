@@ -336,10 +336,10 @@ StorageDisplayComponent::StorageDisplayComponent()
 // ============================================================
 // Simple: Component_Serialize + one empty Serializer block (version 0).
 
-void StorageDisplayComponent::Persist(void* stream) {
+void StorageDisplayComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 }
 // [4] 0x140056930 — the class's own `RET` body.
 void StorageDisplayComponent::Startup() {}

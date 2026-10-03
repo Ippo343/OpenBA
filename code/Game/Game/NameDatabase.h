@@ -45,7 +45,7 @@ public:
     ~NameDatabase() override;                                     // [0] 0x14001c790
     int32_t GetFileVersion() const override { return 0x401; }     // [3] 0x1400a4780
     CompileResult Compile(const System::Filename&) override { return 1; }   // [4] own `return 1`
-    bool Serialize(void* stream) override;                        // [5] 0x1400a45e0
+    bool Serialize(IO::Stream& stream) override;                        // [5] 0x1400a45e0
     Object::External* Reconstruct() override;                     // [6] 0x14001c730
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001c6d0

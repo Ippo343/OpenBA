@@ -30,7 +30,7 @@ public:
 
     ~TutorialImageInputKey() override = default;                   // [0] 0x140027fa0
     int32_t           GetFileVersion() const override { return 0x1001; }  // [3] 0x1400e08a0
-    bool              Serialize(void* stream) override;            // [5] 0x1400e07f0
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e07f0
     Object::External* Reconstruct() override;                      // [6] 0x140027f50
     // [7] Destruct: TutorialImage's (the shared 0x140001640 body)
     Object::External* Construct() override;                        // [8] 0x140027f00

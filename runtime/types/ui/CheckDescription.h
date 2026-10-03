@@ -79,7 +79,7 @@ public:
     DECLARE_TYPE(CheckDescription)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x180111920
-    bool        Serialize(void* stream) override;                 // [5] 0x180111930
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x180111930
     Object::External* Reconstruct() override;                     // [6] 0x180048850
     void        Destruct() override;                              // [7] 0x1800488f0
     // HIDES ButtonDescription's non-virtual CreateInstance(InternalPtr<ButtonElement>*,

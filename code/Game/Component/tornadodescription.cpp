@@ -42,8 +42,8 @@ TornadoDescription::TornadoDescription()
 }
 
 // [5] 0x140058d90: stream order as retail.
-bool TornadoDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool TornadoDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_speed, nullptr);
     ser.Serialize(_minSeparation, nullptr);
     ser.Serialize(_damageRadius, nullptr);

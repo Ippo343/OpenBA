@@ -29,8 +29,8 @@ AutoPickupDescription::AutoPickupDescription()
       _enabled(true) {}
 
 // [5] 0x140044b60: stream order as retail.
-bool AutoPickupDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool AutoPickupDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_enabled, nullptr);
     return true;
 }

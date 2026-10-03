@@ -41,7 +41,7 @@ public:
     // slot 0 was Work_GenericScalarDtor (stamp Work, ~Internal), which is what this
     // empty dtor + the compiler chain still does (the arrays leak, as before).
     ~FishingWork() override = default;                              // [0]  0x14002a2c0
-    void  Persist(void* stream) override;                           // [3]  0x1400ea910
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ea910
     int   Execute(void* citizenIBP, void* time) override;  // [4]  0x1400e9f20
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400e9eb0
     int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]  0x1400e9e80

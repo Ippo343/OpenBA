@@ -63,7 +63,7 @@ int g_dtorCount      = 0;
 class TestExternal : public Object::External {
 public:
     int32_t           GetFileVersion() const override { return 7; }
-    bool              Serialize(void*) override { ++g_serializeCount; return true; }
+    bool              Serialize(IO::Stream&) override { ++g_serializeCount; return true; }
     Object::External* Reconstruct() override { return this; }
     void              Destruct() override { ++g_destructCount; }
 

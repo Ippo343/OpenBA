@@ -164,10 +164,10 @@ void VideoProgram::PlatformDestruct() {
 // object/external_ptr_serialize.cpp. The ORDER is the field order and the four
 // are NOT interchangeable: each one loads its own `_typeInfo`, so swapping two
 // would look up a VertexProgram resource under VertexLayout's type id.
-bool VideoProgram::Serialize(void* streamv) {
+bool VideoProgram::Serialize(IO::Stream& streamv) {
     // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
     // keeps `External`'s `void*` parameter (R-OBJ's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);
 
     // LEFT (B.4 R-VIDEO): the four thunks (R-OBJ, External.h) still take the

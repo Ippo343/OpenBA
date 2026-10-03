@@ -377,7 +377,7 @@ public:
     DECLARE_TYPE(GraphicsMesh)
 public:
     int32_t     GetFileVersion() const override;           // [3] 0x1800ff3a0
-    bool        Serialize(void* stream) override;           // [5] 0x1800ff3b0
+    bool        Serialize(IO::Stream& stream) override;           // [5] 0x1800ff3b0
     Object::External* Reconstruct() override;               // [6] 0x180012510
     void        Destruct() override;                        // [7] 0x180012540
     virtual Object::External* Construct();                  // [8] 0x180012530 — B5-16

@@ -32,7 +32,7 @@ public:
 
     ~RawMaterialDescription() override = default;                          // [0] 0x140037350
     int32_t           GetFileVersion() const override { return 8; }    // [3] 0x140129630
-    bool              Serialize(void* stream) override;                    // [5] 0x140129520
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140129520
     Object::External* Reconstruct() override;                              // [6] 0x140037320
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140037340

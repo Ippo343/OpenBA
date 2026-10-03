@@ -29,7 +29,7 @@ public:
 
     ~GrowthDescription() override = default;                               // [0] 0x140034bf0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x140120b00
-    bool              Serialize(void* stream) override;                    // [5] 0x140120980
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140120980
     Object::External* Reconstruct() override;                              // [6] 0x140034bc0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140034be0

@@ -89,10 +89,10 @@ void EditDescription::Destruct() { this->~EditDescription(); }
 // +0x68 goes through 0x18003f1e0, a DIFFERENT ExternalPtr serializer from the
 // two this batch otherwise uses — which is how its pointee type (UI::Font) is
 // distinguished.
-bool EditDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool EditDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);               // 1800d112a
+    UI::ElementDescription::Serialize(*stream);               // 1800d112a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;

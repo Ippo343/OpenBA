@@ -72,9 +72,9 @@ Toolbar::~Toolbar() {
 // Toolbar::Serialize (vtable +0x28, Slot5) -- Serialize fields
 // ============================================================
 // Original: 0x1400d2010
-bool Toolbar::Serialize(void* stream) {
+bool Toolbar::Serialize(IO::Stream& stream) {
     // The serializer on the stack, version 0; destroyed at the return (retail's order).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge  // LEFT: slot 5's void* stream
+    IO::Serializer ser(stream, 0);
     IO::Serializer* serializer = &ser;
 
     // ExternalPtr fields

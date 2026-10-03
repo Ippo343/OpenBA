@@ -31,7 +31,7 @@ public:
     // PORT GAP (B38 D2): retail frees the Array/String members at +0x50 and +0x40 before
     // ~DialogController; the tree never did (leak kept).
     ~BuildRequirementUI() override = default;                     // [0] 0x140010860
-    void Persist(void* /*stream*/) override {}   // [3] 0x14005ee80  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14005ee80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14005e7c0
     // The CreateBar setters the tools' UpdateCreateBar (0x1400ffc60) runs (B4 PLAYER;
     // bodies in Player/tool_base_createbar.cpp).

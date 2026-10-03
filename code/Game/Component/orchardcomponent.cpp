@@ -456,11 +456,10 @@ void* OrchardComponent::CreateInPlaceObject(void* storage) {
 // ============================================================
 // Component_Serialize + empty controller serializer + second serializer:
 //   validate refs, serialize enabled, lastHarvestYear, the slot array, the tree type
-void OrchardComponent::Persist(void* stream) {
+void OrchardComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Stream* st = &stream;
 
     // Empty controller serializer block
     { IO::Serializer scope(*st, 0); }

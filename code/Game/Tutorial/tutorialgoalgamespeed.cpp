@@ -56,12 +56,11 @@ bool TutorialGoalGameSpeed::IsComplete(void* /*time*/, void* /*instance*/) {
 // ============================================================
 // 1. TutorialGoal::Serialize (its empty Serializer scope)
 // 2. a Serializer over the stream: int +0x20 (targetSpeed)
-bool TutorialGoalGameSpeed::Serialize(void* stream) {
+bool TutorialGoalGameSpeed::Serialize(IO::Stream& stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-    // The serializer. LEFT: External::Serialize hands the stream in as void*
-    // (the runtime base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // The serializer.
+    IO::Serializer ser(stream, 0);
 
     // Serialize targetSpeed (+0x20) — int
     ser.Serialize(targetSpeed, nullptr);

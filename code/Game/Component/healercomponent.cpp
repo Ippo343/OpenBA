@@ -164,10 +164,10 @@ void* HealerComponent::CreateInPlaceObject(void* storage) {
 // [3] 0x14004aeb0 — EMPTY: Component::Persist (a direct CALL 0x1401189b0) plus two
 // empty Serializer scopes (component section + controller section), the same
 // pattern as WellComponent.
-void HealerComponent::Persist(void* stream) {
+void HealerComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    { IO::Serializer scope(stream, 0); }
 }
 
 // [7] 0x14004ae70 — leave the town healer registry: wrap THIS component in an

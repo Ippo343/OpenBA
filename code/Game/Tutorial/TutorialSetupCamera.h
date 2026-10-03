@@ -32,7 +32,7 @@ public:
 
     ~TutorialSetupCamera() override = default;                     // [0] 0x140028530
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400e21b0
-    bool              Serialize(void* stream) override;            // [5] 0x1400e2120
+    bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400e2120
     Object::External* Reconstruct() override;                      // [6] 0x1400284d0
     void              Destruct() override;                         // [7] 0x140001640
     void              Begin() override;                            // [8] 0x1400e20d0

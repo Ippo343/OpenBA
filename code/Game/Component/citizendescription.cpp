@@ -137,8 +137,8 @@ CitizenDescription::~CitizenDescription() {
 }
 
 // [5] 0x140114900: stream order as retail.
-bool CitizenDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CitizenDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(adultAge, nullptr);
     ser.Serialize(_f6c, nullptr);
     ser.Serialize(maxHealth, nullptr);

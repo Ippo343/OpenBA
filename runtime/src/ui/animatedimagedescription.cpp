@@ -101,11 +101,10 @@ void AnimatedImageDescription::Destruct() { this->~AnimatedImageDescription(); }
 // The int at +0x90 is serialized AFTER the array, not before. 0x180029a80 is
 // array.cpp's kSpec_StringRefZ and 0x180029bb0 the text-codec string-array
 // walker (runtime/src/io/text_codec.cpp).
-bool AnimatedImageDescription::Serialize(void* streamv) {
-    // LEFT: the External Serialize slot's parameter is void* (External.h, R-IO).
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+bool AnimatedImageDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ImageDescription::Serialize(stream);                       // 1800cb5da
+    ImageDescription::Serialize(*stream);                       // 1800cb5da
 
     IO::Serializer ser(*stream, 0);                            // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = ser._readerWriter;                  // 1800cb60a

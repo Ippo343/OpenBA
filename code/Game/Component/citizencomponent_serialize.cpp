@@ -160,12 +160,11 @@ void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
 // The System::Time fields are held as their int64 ticks and the System::String /
 // Collection::Array members are H5 raw storage (CitizenComponent.h): each is handed
 // to its serializer as the class it holds.
-void CitizenComponent::Persist(void* stream) {
-    if (!stream) return;
+void CitizenComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
-    IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+    IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(stream, 3);
 
     reinterpret_cast<System::String*>(&name)->Serialize(ser);   // B.3.1 bridge
     s->Serialize(gender, nullptr);
@@ -195,7 +194,7 @@ void CitizenComponent::Persist(void* stream) {
 
     int arrCount = consumedTypeCount;
     s->Serialize(arrCount, nullptr);
-    if (Loading(stream))
+    if (Loading(&stream))
         ResizeCitizenExternalArray(reinterpret_cast<int64_t*>(&consumedTypes), arrCount);
     Reimpl_ExternalPtrArray_Serialize(ser, arrCount,
         reinterpret_cast<int64_t>(consumedTypes), nullptr);

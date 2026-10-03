@@ -287,7 +287,7 @@ public:
     DECLARE_TYPE(Material)
 public:
     int32_t     GetFileVersion() const override;           // [3] 0x180102a40
-    bool        Serialize(void* stream) override;           // [5] 0x180102a50
+    bool        Serialize(IO::Stream& stream) override;           // [5] 0x180102a50
     Object::External* Reconstruct() override;               // [6] 0x180011ae0
     void        Destruct() override;                        // [7] 0x180011bc0
     virtual Object::External* Construct();                  // [8] 0x180011b50 — B5-16
@@ -396,7 +396,7 @@ public:
     DECLARE_TYPE(MaterialInstance)
 public:
     int32_t     GetFileVersion() const override;           // [3] 0x180103a60
-    bool        Serialize(void* stream) override;           // [5] 0x180103a70
+    bool        Serialize(IO::Stream& stream) override;           // [5] 0x180103a70
     Object::External* Reconstruct() override;               // [6] 0x180002a50
     void        Destruct() override;                        // [7] 0x180002b50
     virtual Object::External* Construct();                  // [8] 0x180002ad0 — B5-16

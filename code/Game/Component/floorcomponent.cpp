@@ -275,10 +275,10 @@ FloorComponent::FloorComponent() : floorFlag(false), _pad29{}, floorId(-1) {
 }
 
 // [3] 0x14011f560 — floorFlag round-trips a save.
-void FloorComponent::Persist(void* stream) {
+void FloorComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 0);
     ser.Serialize(floorFlag, nullptr);
 }
 // [6] 0x14011f340

@@ -69,7 +69,7 @@ public:
     ~MapGenerator() override;                                     // [0] 0x14001ae70
     int32_t GetFileVersion() const override { return 8; }         // [3] 0x1400a3020
     // [4] Compile: inherited (retail's slot is the Object::External import)
-    bool Serialize(void* stream) override;                        // [5] 0x1400a2980
+    bool Serialize(IO::Stream& stream) override;                        // [5] 0x1400a2980
     Object::External* Reconstruct() override;                     // [6] 0x14001ae30
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001ae20

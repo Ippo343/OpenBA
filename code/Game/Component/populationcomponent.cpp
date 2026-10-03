@@ -274,7 +274,7 @@ void PopulationComponent::SetCellCount(int newCount) {
 #include "Component/PopulationComponent.h"
 
 // Retail 0x1400544a0 (animalwave_serialize.cpp; Ghidra calls it "Shutdown").
-extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream);
+extern "C" void PopulationComponent_Serialize_Real(void* self, IO::Stream& stream);
 
 // 0x1400546d0. Component() is the CALL 0x1401188b0; the 0x14015a360 stamp is
 // the compiler's; every field = 0; flags |= 0xcb.
@@ -285,7 +285,7 @@ PopulationComponent::PopulationComponent()
     OrFlagsInCtor(0xcb);
 }
 
-void PopulationComponent::Persist(void* stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
+void PopulationComponent::Persist(IO::Stream& stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
 void PopulationComponent::Startup() {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;

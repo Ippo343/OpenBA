@@ -42,10 +42,10 @@ DEFINE_EXE_ABSTRACT_TYPE(Component, "Object::Internal")
 // a ComponentEntity (IsDerivedFrom IAT 0x140152a98 against the ti cell
 // 0x1401c5d70); the capability word (+0x20) through the uint door; the
 // description ExternalPtr (+0x18) through 0x140031d10.
-void Component::Persist(void* stream) {
+void Component::Persist(IO::Stream& stream) {
     Object::Internal::Persist(stream);
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(stream, 0);
 
     reinterpret_cast<Object::InternalBasePtr*>(&_entity)->Serialize(ser);   // B.3.8 bridge (_entity is the retail InternalPtr)
     if (_entity && !::Object::IsDerivedFromNullSafe(_entity, ComponentEntity::TypeId())) {
@@ -60,7 +60,7 @@ void Component::Persist(void* stream) {
 // component factories, the *_serialize.cpp bodies), registered in
 // standalone/reg_component_economy.cpp. A qualified (non-virtual) call, so a
 // hand-built receiver runs the same body.
-void Component_SerializeReimpl(void* self, void* stream) {
+void Component_SerializeReimpl(void* self, IO::Stream& stream) {
     reinterpret_cast<Component*>(self)->Component::Persist(stream);   // B.3.8 bridge
 }
 
@@ -101,7 +101,7 @@ DEFINE_EXE_ABSTRACT_TYPE(ControllerComponent, "Component")
 // [3] 0x1401195a0: `CALL 0x1401189b0` (Component::Persist, a direct call — a
 // qualified base call), then one EMPTY Serializer(stream, 0) scope. An empty
 // scope still occupies bytes in the save encoding, so it is not optional.
-void ControllerComponent::Persist(void* stream) {
+void ControllerComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(stream, 0);
 }

@@ -31,7 +31,7 @@ public:
 
     ~ValueDescription() override = default;                                // [0] 0x14000fbf0
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14005ce10
-    bool              Serialize(void* stream) override;                    // [5] 0x14005cd60
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14005cd60
     Object::External* Reconstruct() override;                              // [6] 0x14000fb80
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140004950

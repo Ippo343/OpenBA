@@ -354,9 +354,8 @@ void AnimationGroup::Destruct() { this->~AnimationGroup(); }
 // *** THE EMISSION ORDER IS RETAIL'S AND IT IS NOT THE DECLARATION ORDER. ***
 // The +0x30 float goes out AFTER the tag array (see the comment at that call).
 // Getting it wrong presents as a HANG, not a crash.
-bool AnimationGroup::Serialize(void* streamv) {
-    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+bool AnimationGroup::Serialize(IO::Stream& streamv) {
+    IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);
 
     // +0x20 Array<Graphics::Animation>
@@ -671,9 +670,8 @@ Object::Base* ParticleSystem::CreateInPlaceObject(void* place) {
 // *** THE EMISSION ORDER IS RETAIL'S AND IT IS NOT THE DECLARATION ORDER. ***
 // `_spreadScale` (+0x78) goes out BEFORE `_spreadX/Y/Z` (+0x6c), which is why the
 // header declares the fields in ascending memory order and the order lives here.
-bool ParticleSystem::Serialize(void* streamv) {
-    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
-    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+bool ParticleSystem::Serialize(IO::Stream& streamv) {
+    IO::Stream& stream = streamv;
 
     // `Particle::Serialize` (0x180103f00) — the base slot. Retail's `CALL` is a
     // direct call of the base body; until ENDGAME B.3.9 this reached it BY

@@ -66,10 +66,10 @@ void LabelDescription::Destruct() { this->~LabelDescription(); }
 // Base is TextDescription::Serialize (0x18011ee30), QUALIFIED. THE SPRITE PAIR
 // COMES FIRST, BEFORE THE SIX DWORDS — offset order would put +0x90..+0xa4
 // first, and the byte stream a .rsc parses is this order, not that one.
-bool LabelDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool LabelDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::TextDescription::Serialize(stream);                  // 1800d283a
+    UI::TextDescription::Serialize(*stream);                  // 1800d283a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;

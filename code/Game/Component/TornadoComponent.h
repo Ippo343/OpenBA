@@ -39,7 +39,7 @@ public:
     // PORT GAP (retail 0x14000d640) — B38 D2: retail frees the waypoint array
     // at +0x40; the tree never did (Inert_ScalarDtor).
     ~TornadoComponent() override = default;                       // [0] 0x14000d640
-    void Persist(void* stream) override;                          // [3] 0x140058b80
+    void Persist(IO::Stream& stream) override;                          // [3] 0x140058b80
     void Startup() override;                                      // [4] 0x1400585a0
     void Tick(void* time) override;                               // [8] 0x140057cd0
 

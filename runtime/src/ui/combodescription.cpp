@@ -85,10 +85,10 @@ void ComboDescription::Destruct() { this->~ComboDescription(); }
 // Base is ButtonDescription::Serialize (QUALIFIED). Two ExternalPtr<Element-
 // Description> then ONE ExternalPtr<StringTable> — a DIFFERENT serializer
 // (0x1800042a0, not 0x180038f90), which is how the +0xb0 field's type is known.
-bool ComboDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool ComboDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ButtonDescription::Serialize(stream);                   // 1801129da
+    ButtonDescription::Serialize(*stream);                   // 1801129da
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 

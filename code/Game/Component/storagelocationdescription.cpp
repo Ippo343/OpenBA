@@ -30,8 +30,8 @@ StorageLocationDescription::StorageLocationDescription()
       _locationType(0) {}
 
 // [5] 0x14012d470: stream order as retail.
-bool StorageLocationDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool StorageLocationDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_locationType, nullptr);
     return true;
 }

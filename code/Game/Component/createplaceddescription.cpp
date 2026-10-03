@@ -78,9 +78,9 @@ CreatePlacedDescription::~CreatePlacedDescription() {
 }
 
 // [5] 0x1401198d0: stream order as retail.
-bool CreatePlacedDescription::Serialize(void* stream) {
+bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
     if (!::System::MemoryAllocator::_singleton) return true;   // standalone: the allocator is unwired
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_category, nullptr);
     // int[] count @ +0x38, base @ +0x30 (stride 4).
     //

@@ -28,7 +28,7 @@ public:
     CreateNaturalResource(ComponentDescription* desc, ComponentEntity* const* parent,
                           uint32_t cellIndex);                                 // 0x1400c6a20
     ~CreateNaturalResource() override = default;               // [0] 0x140022240
-    void Persist(void* stream) override;                       // [3] 0x1400c6890
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c6890
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6650
     bool GetTarget(void* param) override;                      // [9] 0x1400c6610
 

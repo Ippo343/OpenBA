@@ -38,7 +38,7 @@ public:
 
     ~HighlightDescription() override;                                      // [0] 0x140006fe0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14004cad0
-    bool              Serialize(void* stream) override;                    // [5] 0x14004c9d0
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14004c9d0
     Object::External* Reconstruct() override;                              // [6] 0x140006f70
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140006fd0

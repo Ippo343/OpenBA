@@ -116,10 +116,10 @@ Object::Base* BorderDescription::CreateInPlaceObject(void* place) {
 // NO `if (reading)` arm and no array: every field is fixed. The nine field
 // serializers take the PAIR, not the reader (`LEA RDX,[RSP+0x28]`), which is
 // why it has to live on this frame.
-bool BorderDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool BorderDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ElementDescription::Serialize(stream);                  // 18010fe3a
+    ElementDescription::Serialize(*stream);                  // 18010fe3a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined: [RSP+0x28], [RSP+0x30]  18010fe62 / 18010fe67
 

@@ -51,12 +51,10 @@ TutorialGoalDialog::~TutorialGoalDialog() {
 // 1. TutorialGoal::Serialize (its empty Serializer scope, inlined in retail)
 // 2. a Serializer over the stream: String +0x20, String +0x28; on load the
 //    ExternalRef at +0x28 is resolved by name.
-bool TutorialGoalDialog::Serialize(void* stream) {
+bool TutorialGoalDialog::Serialize(IO::Stream& stream) {
     TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-    // LEFT: External::Serialize hands the stream in as void* (the runtime
-    // base's signature).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser(stream, 0);
 
     DialogName().Serialize(&ser);
 

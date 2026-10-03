@@ -313,12 +313,11 @@ MapComponent::MapComponent()
 //   CALL Serialize_Int(&extraField, nullptr)
 //   CALL Serializer_Dtor(local)
 
-void MapComponent::Persist(void* stream) {
+void MapComponent::Persist(IO::Stream& stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // LEFT: Component::Persist takes void* (COMP-c's header).
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer ser(stream, 0);
 
     // The 4 tile coords, Serialize(short&) as retail.
     ser.Serialize(tileX0, nullptr);

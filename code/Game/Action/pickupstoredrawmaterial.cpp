@@ -80,11 +80,11 @@ static RawMaterialDescription* FindRawMaterialDescription(const ComponentDescrip
 // Serializes: status(+0x18), citizen(+0x20), storage entity(+0x28),
 //             material count(+0x38), material list(+0x30), partial flag(+0x40)
 // ============================================================
-void PickupStoredRawMaterial::Persist(void* stream) {
+void PickupStoredRawMaterial::Persist(IO::Stream& stream) {
     Action::Persist(stream);   // inlined in retail: Serializer(stream, 0), status +0x18
 
     // Serialize entity refs, material list, and flags
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer ser(stream, 0);
 
     // The carrying citizen (+0x20)
     _field20.InternalBasePtr::Serialize(ser);

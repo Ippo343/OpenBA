@@ -26,7 +26,7 @@ public:
     // 0x140011e70 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~HotKeyToolTipUI() override = default;                        // [0] 0x140011e70
-    void Persist(void* /*stream*/) override {}   // [3] 0x14006ab80  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x14006ab80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14006a980
 
 };

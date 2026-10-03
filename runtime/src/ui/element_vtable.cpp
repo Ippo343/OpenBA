@@ -306,13 +306,13 @@ bool Element::Contains(int32_t x, int32_t y, UserInterface* ui) const {
 // The two encoding slots are read from the OBJECT by byte displacement; retail's
 // IO::Encoding vtable has DIFFERENT offsets from the profile build's
 // (reference_encoding_vtable_offsets_differ_between_builds.md).
-void Element::Persist(void* stream) {
+void Element::Persist(IO::Stream& stream) {
     ++g_elemCounts.persist;
     // The scope above IS an IO::Serializer: {stream, readerWriter}, built by
     // ??0Serializer (0x1800b9960: the encoding's CreateReader / CreateWriter
     // chosen by _direction, version 0) and closed by ??1Serializer
     // (0x1800b99b0: `if (rw) rw->vt[0](rw, 1)`), both of which retail inlines.
-    IO::Serializer scope(*static_cast<IO::Stream*>(stream), 0);   // 180116889
+    IO::Serializer scope(stream, 0);   // 180116889
 }
 
 // ---- slot 7  ?Update@Element@UI@@UEAA…  0x180116270 ------------------------

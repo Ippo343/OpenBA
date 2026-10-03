@@ -179,10 +179,10 @@ void LayoutDescription::Destruct() { this->~LayoutDescription(); }
 // ============================================================================
 // ?Serialize@LayoutDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d3940
 // ============================================================================
-bool LayoutDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool LayoutDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 1800d395a (qualified)
+    UI::ElementDescription::Serialize(*stream);                 // 1800d395a (qualified)
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 

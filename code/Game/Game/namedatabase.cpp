@@ -60,8 +60,8 @@ NameDatabase::NameDatabase() {}
 // ============================================================
 // NameDatabase::Serialize (vtable +0x28) — faithful port of 0x1400a45e0
 // ============================================================
-bool NameDatabase::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool NameDatabase::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // Loading when the serializer's stream direction is 0 (IO::Serializer::
     // GetDirection, retail 0x180006210). (The old test of the serializer's

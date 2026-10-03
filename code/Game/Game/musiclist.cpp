@@ -132,8 +132,8 @@ MusicList::MusicList() {}
 // ============================================================
 // MusicList::Serialize (vtable +0x28) — faithful port of 0x1400a3e90
 // ============================================================
-bool MusicList::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool MusicList::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     int count = _entries.GetSize();
     ser.Serialize(count, nullptr);

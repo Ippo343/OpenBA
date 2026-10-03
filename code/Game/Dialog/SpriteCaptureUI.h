@@ -32,7 +32,7 @@ public:
     // 0x140013fc0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~SpriteCaptureUI() override = default;                        // [0] 0x140013fc0
-    void Persist(void* /*stream*/) override {}   // [3] 0x140079850  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x140079850  RET 0 in retail
     void OnCreated() override;   // [4] 0x140079640 (spritecaptureui.cpp)
     void OnUpdate(const System::Time& time) override;   // [8] 0x1400793a0 (spritecaptureui.cpp)
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,

@@ -84,8 +84,9 @@ Object::Base* Surface::CreateInPlaceObject(void* place) {
 Surface::~Surface() {}
 
 // ?Serialize@Surface@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x18010ca40)
-bool Surface::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
+bool Surface::Serialize(IO::Stream& streamv) {
+    void* const streamvRaw = &streamv;
+    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
 
     Serializer ser = { stream, nullptr };
     void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)

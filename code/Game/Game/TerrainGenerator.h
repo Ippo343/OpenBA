@@ -32,7 +32,7 @@ public:
     ~TerrainGenerator() override;                                 // [0] 0x140020600
     int32_t GetFileVersion() const override { return 4; }         // [3] 0x1400b1800
     // [4] Compile: inherited (retail's slot is the Object::External import)
-    bool Serialize(void* stream) override;                        // [5] 0x1400b1690
+    bool Serialize(IO::Stream& stream) override;                        // [5] 0x1400b1690
     Object::External* Reconstruct() override;                     // [6] 0x1400205e0
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x1400205d0

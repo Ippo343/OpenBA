@@ -32,7 +32,7 @@ public:
 
     // 0x140118fd0
     ~ConsumeProduceComponent() override;                                // [0]  0x140032460
-    void        Persist(void* stream) override;                         // [3]  0x140118e00
+    void        Persist(IO::Stream& stream) override;                         // [3]  0x140118e00
     void        Startup() override;                                     // [4]  0x140118ef0
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x140118d00
 

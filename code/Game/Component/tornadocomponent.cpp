@@ -656,12 +656,12 @@ TornadoComponent::TornadoComponent()
 // ============================================================
 // Stream order: Vector3 target(+0x30), int index(+0x50), int count(+0x48),
 // [on load: resize the Vector3 array], each waypoint, Time(+0x28), Vector3 position(+0x58).
-void TornadoComponent::Persist(void* stream) {
+void TornadoComponent::Persist(IO::Stream& stream) {
     Tornado_ReportArmsOnce();
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (Persist takes void*)
+    IO::Stream* st = &stream;
     IO::Serializer ser(*st, 0);
 
     path.target.Serialize(&ser);

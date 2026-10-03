@@ -27,9 +27,9 @@ MineComponent::MineComponent() {}
 
 // [3] 0x14004f260 — Component::Persist + one empty Serializer scope.
 // Retail calls the base body directly (a qualified call).
-void MineComponent::Persist(void* stream) {
+void MineComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(stream, 0);
 }
 // [6] 0x14004f250 / [7] 0x14004f240 — the class's own `RET` bodies.
 void MineComponent::OnAdded() {}

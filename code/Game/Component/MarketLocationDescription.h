@@ -28,7 +28,7 @@ public:
 
     ~MarketLocationDescription() override = default;                       // [0] 0x1400088a0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14004f1b0
-    bool              Serialize(void* stream) override;                    // [5] 0x14004f170
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14004f170
     Object::External* Reconstruct() override;                              // [6] 0x1400087d0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140008820

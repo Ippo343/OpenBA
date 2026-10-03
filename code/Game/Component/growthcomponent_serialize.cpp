@@ -58,13 +58,12 @@
 // GrowthComponent::Serialize (vtable slot [3], 0x1401207c0)
 // ============================================================
 
-void GrowthComponent::Persist(void* stream) {
-    if (!stream) return;
+void GrowthComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     bool loading;
     {
-        IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+        IO::Serializer ser(stream, 0);
 
         resource.Serialize(ser, NaturalResourceComponent::TypeId());
         model.Serialize(ser, ModelComponent::TypeId());

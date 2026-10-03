@@ -63,8 +63,8 @@ DestroyDescription::DestroyDescription()
       _minDamageLevel(0) {}
 
 // [5] 0x14011de70: stream order as retail.
-bool DestroyDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool DestroyDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // 1. _replaceEntity (+0x20). Retail calls FUN_140002340, the
     //    ExternalPtr<ComponentDescription> variant, which gates the resolved object on
     //    IsDerivedFrom(_, DWORD_1401c7318) = ComponentDescription. This used to call

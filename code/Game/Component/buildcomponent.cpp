@@ -375,11 +375,11 @@ void* BuildComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x140108d80 — laborProgress/costMultiplier/buildFlag (+0x48/+0x4c/+0x50) and
 // both component lists round-trip (save/load wave 2026-08-27).
-void BuildComponent::Persist(void* stream) {
+void BuildComponent::Persist(IO::Stream& stream) {
     // Base class serialize (retail's direct CALL 0x1401189b0)
     Component::Persist(stream);
 
-    IO::Stream& io = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream parameter is void* (Object::Base)
+    IO::Stream& io = stream;
 
     // Version 0 block (empty — just opens and closes)
     { IO::Serializer ser0(io, 0); }

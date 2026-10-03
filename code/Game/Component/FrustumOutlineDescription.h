@@ -42,7 +42,7 @@ public:
     // ~String(+0x70), ~ElementDescription
     ~FrustumOutlineDescription() override = default;                     // [0] 0x140012500
     int32_t           GetFileVersion() const override;                   // [3] 0x14006c500
-    bool              Serialize(void* stream) override;                  // [5] 0x14006c460
+    bool              Serialize(IO::Stream& stream) override;                  // [5] 0x14006c460
     Object::External* Reconstruct() override;                            // [6] 0x140012390
     void              Destruct() override;                               // [7] 0x140001640
     Object::InternalPtr<UI::Element>* CreateInstance(

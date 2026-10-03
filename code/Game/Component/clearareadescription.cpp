@@ -51,8 +51,8 @@ ClearAreaDescription::ClearAreaDescription()
       _value(-1) {}
 
 // [5] 0x1401180f0: stream order as retail.
-bool ClearAreaDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ClearAreaDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // 1. ExternalPtr (+0x20). Same stream layout as the StringTable ExternalPtr
     //    helper (FUN_14000bf40); only the validated typeId differs (trusted in
     //    standalone via IsDerivedFromOrTrust).

@@ -165,7 +165,7 @@ public:
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x18009ee10 — 0x10000
     //          Compile                                           // [4] External's, inherited
-    bool        Serialize(void* stream) override;                 // [5] 0x18009ee20 (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x18009ee20 (IO::Stream&)
     //          Reconstruct / Destruct                            // [6] [7] pure, inherited
     virtual GoalState CheckGoalState() const = 0;                 // [8] pure — name NOT attested
     // [9] 0x18009eeb0 — RULE B7-4, the one retslot VIRTUAL of the batch.
@@ -259,7 +259,7 @@ public:
     // (0x1800070c0); the macro's CreateInPlaceObject forwards to it there.
     DECLARE_TYPE(GoalInstance)
 public:
-    void        Persist(void* stream) override;                   // [3] 0x18009ef70 (IO::Stream&)
+    void        Persist(IO::Stream& stream) override;                   // [3] 0x18009ef70 (IO::Stream&)
     virtual void Startup();                                       // [4] 0x18009f000
     virtual void Update(const System::Time& time, const GoalList& list);  // [5] 0x18009f010
     virtual Goal::GoalState CheckGoalState() const;               // [6] 0x18009f060

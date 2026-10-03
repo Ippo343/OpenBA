@@ -51,8 +51,8 @@ PopulationDescription::PopulationDescription()
       _herdTemplate(nullptr) {}
 
 // [5] 0x1400547e0: stream order as retail.
-bool PopulationDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool PopulationDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_habitatBlock, nullptr);
     ser.Serialize(_herdBlock, nullptr);
     ser.Serialize(_habitatTerrain, nullptr);

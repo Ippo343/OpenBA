@@ -39,7 +39,7 @@ public:
     // 0x14005d1c0
     ~WellDescription() override = default;                         // [0] 0x14000fdf0
     int32_t        GetFileVersion() const override { return 1; }   // [3] 0x14005d1b0
-    bool           Serialize(void* stream) override;               // [5] 0x14005d170
+    bool           Serialize(IO::Stream& stream) override;               // [5] 0x14005d170
     Object::External* Reconstruct() override;                      // [6] 0x14000fd90
     void           Destruct() override;                            // [7] 0x140001640
     Object::Type*  GetComponentType(Object::Type* ret) const override;   // [8] 0x14000fde0

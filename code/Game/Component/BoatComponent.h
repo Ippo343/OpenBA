@@ -48,7 +48,7 @@ public:
 
     // 0x140046770
     ~BoatComponent() override;                                    // [0]  0x140003970
-    void          Persist(void* stream) override;                 // [3]  0x1400465d0
+    void          Persist(IO::Stream& stream) override;                 // [3]  0x1400465d0
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
     Controller* GetController() override { return &_controller; }  // [17] 0x140003720
 

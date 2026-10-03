@@ -795,8 +795,8 @@ namespace {
 namespace UI {
 
 // ---- Object::Internal slots ------------------------------------------------
-void DialogInstance::Persist(void* /*stream*/) {}              // [3] 0x180114fa0  RET
-void DialogInstance::OnSerializeSettings(void* /*stream*/) {}  // [9] 0x180115470  RET
+void DialogInstance::Persist(IO::Stream&/*stream*/) {}              // [3] 0x180114fa0  RET
+void DialogInstance::OnSerializeSettings(IO::Stream&/*stream*/) {}  // [9] 0x180115470  RET
 
 
 

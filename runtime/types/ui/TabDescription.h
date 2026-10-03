@@ -84,7 +84,7 @@ public:
     DECLARE_TYPE(TabDescription)
 public:
     int32_t     GetFileVersion() const override;                  // [3] 0x1800da8d0
-    bool        Serialize(void* stream) override;                 // [5] 0x1800da760 (IO::Stream&)
+    bool        Serialize(IO::Stream& stream) override;                 // [5] 0x1800da760 (IO::Stream&)
     Object::External* Reconstruct() override;                     // [6] 0x18004c370
     void        Destruct() override;                              // [7] 0x18004c3a0
     Object::InternalPtr<Element>* CreateInstance(

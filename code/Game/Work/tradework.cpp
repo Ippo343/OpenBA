@@ -610,11 +610,11 @@ int TradeWork::GetPriority() {
 // Work::Persist + Serializer(v0) + the set.
 // No extra int field (unlike TendArea).
 // ============================================================
-void TradeWork::Persist(void* stream) {
+void TradeWork::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
     SerializeAssignments(ser);
 }   // ~Serializer
 

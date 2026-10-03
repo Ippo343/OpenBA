@@ -101,11 +101,11 @@ Object::External* SpinnerDescription::Reconstruct() {
 void SpinnerDescription::Destruct() { this->~SpinnerDescription(); }
 
 // [5] ?Serialize@SpinnerDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d8880
-bool SpinnerDescription::Serialize(void* streamArg) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
+bool SpinnerDescription::Serialize(IO::Stream& streamArg) {
+    IO::Stream* stream = &streamArg;
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
-    ElementDescription::Serialize(stream);                              // 1800d889a
+    ElementDescription::Serialize(*stream);                              // 1800d889a
 
     // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
     // of the stream's encoding, version 0.

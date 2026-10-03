@@ -41,7 +41,7 @@ public:
 
     // frees the +0x48 demand tree
     ~MarketWork() override;                                         // [0]  0x14002a910
-    void  Persist(void* stream) override;                           // [3]  0x1400f1d70
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f1d70
     int   Execute(void* citizenHolder, void* ctx) override;  // [4]  0x1400eff80
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eff60
     int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400eff50

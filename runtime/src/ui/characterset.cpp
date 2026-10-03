@@ -98,8 +98,8 @@ Object::Base* CharacterSet::CreateInPlaceObject(void* place) {
 // The read/write side is chosen by `stream->mode == 0` exactly as everywhere
 // else in this family: factory vtable +0x18 for the reader, +0x20 for the
 // writer (0x1800cb7e5 / 0x1800cb7ea).
-bool CharacterSet::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);  // LEFT: the External slot takes void* (External.h, R-IO)
+bool CharacterSet::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
     // [RSP+0x28], [RSP+0x30]; 1800cb7d0..1800cb7ed the factory by _direction.
     IO::Serializer ser(*stream, 0);

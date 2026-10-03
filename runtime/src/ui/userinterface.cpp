@@ -1235,7 +1235,7 @@ void UI::UserInterface::SaveAllSettings() {
 
             // ---- 5. the dialog's own OnSerializeSettings ------------------
             // DialogInstance vtable slot 9 (+0x48) — VIRTUAL.
-            dlg->OnSerializeSettings(st);
+            dlg->OnSerializeSettings(*st);
 
             // ---- 6. the controller loop -----------------------------------
             int32_t count = dlg->_controllers._size;
@@ -1263,7 +1263,7 @@ void UI::UserInterface::SaveAllSettings() {
                 ctl = dlg->_controllers._data[i];
                 // DialogController vtable slot 10 (+0x50) `OnSerializeSettings`
                 // (B6-1.2: one slot LATER than DialogInstance's) — VIRTUAL.
-                ctl->OnSerializeSettings(st);
+                ctl->OnSerializeSettings(*st);
 
                 if (rw2) {
                     delete rw2;

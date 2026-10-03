@@ -55,8 +55,8 @@ CreateBridgeDescription::CreateBridgeDescription()
 }
 
 // [5] 0x1401195d0: stream order as retail.
-bool CreateBridgeDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CreateBridgeDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_u20, nullptr);
     ser.Serialize(_u28, nullptr);
     ser.Serialize(_u2c, nullptr);

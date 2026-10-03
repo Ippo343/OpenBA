@@ -156,7 +156,7 @@ int32_t Tornado::GetFileVersion() const {
 //   2 floats : +0x54 +0x70          <- LAST, not with the other nine
 //
 // Returns true (retail sets al=1).
-bool Tornado::Serialize(void* stream) {
+bool Tornado::Serialize(IO::Stream& stream) {
     // ENDGAME B.3.5 batch K1 — same shape as GetFileVersion above: a QUALIFIED
     // non-virtual call to the base body, because this function IS slot 5 of the Tornado
     // table. `?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z` returns bool and
@@ -165,7 +165,7 @@ bool Tornado::Serialize(void* stream) {
 
     // Caller batch CB6: the fields are read by name (was `s + off` over `this`).
     {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (slot 5's stream is void*)  // LEFT: the virtual's void* stream
+    IO::Serializer ser(stream, 0);
 
     // +0x48 .. +0x6c in retail's stream order (+0x54 comes later).
     for (float* f : {&_tornadoWidth, &_tornadoHeight, &_funnelWidth, &_particleSpinSpeed,

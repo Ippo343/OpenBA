@@ -60,12 +60,12 @@
 // Pattern: Work_Serialize + Serializer(v0) + InternalBasePtr::Serialize(+0x48)
 //   + validate IsDerivedFrom, clear if invalid
 // ============================================================
-void LocationWork::Persist(void* stream) {
+void LocationWork::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create serializer (version=0) (Persist's stream is void* in Work.h: LEFT)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    // Create serializer (version=0)
+    IO::Serializer serializer(stream, 0);
 
     // Serialize InternalBasePtr at +0x48 (the member is raw storage, H5: LEFT)
     reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(serializer);   // B.3.4 bridge

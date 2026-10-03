@@ -58,8 +58,8 @@ CreateFencedDescription::CreateFencedDescription()
 }
 
 // [5] 0x1400478f0: stream order as retail.
-bool CreateFencedDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool CreateFencedDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     ser.Serialize(_u20, nullptr);
     Reimpl_ExternalPtrArray_Serialize(&ser, 6, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[6] +0x28 (0x1400049c0)
     ser.Serialize(_i58, nullptr);

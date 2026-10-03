@@ -128,13 +128,13 @@ ClearArea::~ClearArea() {
 // Pattern: Work_Serialize + Serializer(v1) + BST_Serialize(+0x48) +
 //          IBP_Serialize(+0x68) + Bool(+0x70) + [v1: BST_Cell(+0x58) +
 //          Bool(+0x71) + Bool(+0x72)]
-void ClearArea::Persist(void* stream) {
+void ClearArea::Persist(IO::Stream& stream) {
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // Create Serializer with version=1 (destroyed at the end, as retail)
-    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
+    IO::Serializer serializer(stream, 1);
 
     // Serialize entity BST at +0x48
     WorkLeaf_BstSerializeIBPpair_29c10(&field_48, &serializer);

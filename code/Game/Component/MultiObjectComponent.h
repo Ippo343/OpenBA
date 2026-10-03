@@ -45,7 +45,7 @@ public:
 
     // 0x140125a00
     ~MultiObjectComponent() override;                                   // [0]  0x1400360c0
-    void          Persist(void* stream) override;                       // [3]  0x140125880
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x140125880
     void          OnRemove() override;                                  // [7]  0x1401257c0 mark every child for removal
     void          OnEvent(int eventId) override;                        // [12] 0x140125490
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0

@@ -30,7 +30,7 @@ public:
 
     // 0x140057960
     ~TombstoneComponent() override = default;                     // [0] 0x14000d480
-    void Persist(void* stream) override;                          // [3] 0x1400578e0
+    void Persist(IO::Stream& stream) override;                          // [3] 0x1400578e0
     void Startup() override;                                      // [4] 0x140057860
     void Update(void* time) override;                             // [9] 0x1400577d0
 

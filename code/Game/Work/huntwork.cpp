@@ -558,18 +558,17 @@ int HuntWork::GetPriority() {
 // Work::Serialize + Serializer(version=0) + BST serialize.
 // Note: No extra int field (unlike HerbalistWork/ForesterWork).
 // ============================================================
-void HuntWork::Persist(void* stream) {
+void HuntWork::Persist(IO::Stream& stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create first serializer (version block, version=0) (Persist's stream is void* in
-    // Work.h: LEFT)
+    // Create first serializer (version block, version=0)
     {
-        IO::Serializer serializer1(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer serializer1(stream, 0);
     }
 
     // Create second serializer (version=0) for BST
-    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);

@@ -39,7 +39,7 @@ public:
 
     // frees the +0x48 citizen BST
     ~ForesterWork() override;                                       // [0]  0x14002a370
-    void  Persist(void* stream) override;                           // [3]  0x1400eb970
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400eb970
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eaec0
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eaea0
     int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400eae90

@@ -40,7 +40,7 @@ public:
 
     // frees the +0x48 citizen BST
     ~TendArea() override;                                           // [0]  0x14002c5d0
-    void  Persist(void* stream) override;                           // [3]  0x1400f5900
+    void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f5900
     int   Execute(void* citizenIBP, void* context) override;  // [4]  0x1400f5490
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400f5470
     int   OnCancel(void* param2, void* arg2, int arg3) override;    // [7]  0x1400f5460

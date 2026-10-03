@@ -663,15 +663,14 @@ int PastureWork::GetPriority() {
 // Work::Serialize + Serializer(version=0) + BST serialize.
 // Identical to HuntWork::Serialize (no extra int field).
 // ============================================================
-void PastureWork::Persist(void* stream) {
+void PastureWork::Persist(IO::Stream& stream) {
     Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
-    // (Persist's stream is void* in Work.h: LEFT)
     {
-        IO::Serializer serializer1(*reinterpret_cast<IO::Stream*>(stream), 0);
+        IO::Serializer serializer1(stream, 0);
     }
 
-    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
+    IO::Serializer serializer2(stream, 0);
 
     // (the tree helper takes the container as uintptr_t*: LEFT)
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);

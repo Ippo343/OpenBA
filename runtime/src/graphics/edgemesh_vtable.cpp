@@ -311,10 +311,8 @@ EdgeMesh::CompileResult EdgeMesh::Compile(const System::Filename& /*path*/) {
 // both use the value that came off the stream, not the value the array had.
 // Reading `_size` again after the resize would be the same number by accident
 // on the write arm and a silent truncation on the read arm.
-bool EdgeMesh::Serialize(void* stream) {
-    // LEFT: the slot's parameter is `void*` in Mesh.h because the base
-    // `Object::External::Serialize` declares it so (object's header).
-    IO::Serializer ser(*static_cast<IO::Stream*>(stream), 0);
+bool EdgeMesh::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // The +0x20 qword no getter names, then the four materials IN FIELD ORDER
     // (mask, skinMask, edge, skinEdge — see Mesh.h's note; the FIELD order and

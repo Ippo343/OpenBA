@@ -42,7 +42,7 @@ public:
 
     // 0x140008900: no body
     ~MarketLocationComponent() override = default;                      // [0]  0x140008900
-    void          Persist(void* stream) override;                       // [3]  0x14004efa0
+    void          Persist(IO::Stream& stream) override;                       // [3]  0x14004efa0
     void          OnRemove() override;                                  // [7]  0x14004ef60
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080

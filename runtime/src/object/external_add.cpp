@@ -107,7 +107,7 @@ namespace {
 // External vtable slot +0x28 — `Serialize(IO::Stream&)`. The same slot
 // `External::Load` drives and the one External.h names. B3X W0: called by
 // name; the bool result is discarded, as retail does here.
-void ExternalSerialize(External* self, void* stream) {
+void ExternalSerialize(External* self, IO::Stream& stream) {
     reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge
 }
 
@@ -253,7 +253,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
             alignas(8) unsigned char vsMem[sizeof(IO::VisitorStream)];
             IO::VisitorStream* vs = ::new (vsMem) IO::VisitorStream();
 
-            ExternalSerialize(external, vs);                    // 1800be6a9
+            ExternalSerialize(external, *vs);                   // 1800be6a9
 
             // ---- the INLINED ~VisitorStream (1800be673..) ----------------
             // Retail's two table stores and the encoding free are

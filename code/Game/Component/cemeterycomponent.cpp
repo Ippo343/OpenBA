@@ -335,10 +335,10 @@ void* CemeteryComponent::CreateInPlaceObject(void* storage) {
 // PersistObject creates the object and dispatches vt[0x18] before Startup or any
 // tick. Body: Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
 // then the plot tile-index array (count +0x50, resized on a read, bulk ints).
-void CemeteryComponent::Persist(void* stream) {
+void CemeteryComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    IO::Serializer ser(stream, 0);
     int count = plotCount;
     ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210

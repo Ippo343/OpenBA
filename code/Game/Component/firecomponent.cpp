@@ -71,12 +71,11 @@ FireComponent::FireComponent()
 //   Time  +0x30, Time +0x38, int +0x28,
 //   and, only when the stream version > 0, int +0x2c.
 // This is the third independent body proving +0x28 / +0x2c are two int32s.
-void FireComponent::Persist(void* stream) {
-    if (!stream) return;
+void FireComponent::Persist(IO::Stream& stream) {
 
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0 (was the engine_funcs door)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(stream, 1);
     fireTimer.Serialize(ser);
     spreadTimer.Serialize(ser);
     ser.Serialize(bucketsApplied, nullptr);

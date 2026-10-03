@@ -47,7 +47,7 @@ public:
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     // Retail frees the row array at +0x30: `rows`' own dtor does.
     ~ResidenceUI() override = default;                            // [0] 0x140020fc0
-    void Persist(void* /*stream*/) override {}   // [3] 0x1400b5db0  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x1400b5db0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400b5850
     void OnUpdateLayout() override;   // [7] 0x1400b51f0
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.

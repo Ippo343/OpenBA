@@ -39,8 +39,8 @@ TerraformDescription::TerraformDescription()
       _ceilingModifyBits(0) {}
 
 // [5] 0x1400576a0: stream order as retail.
-bool TerraformDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool TerraformDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_floorMesh, &ser);     // 0x14000b7b0
     ser.Serialize(_floorModifyBits, nullptr);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ceilingMesh, &ser);   // 0x14000b7b0

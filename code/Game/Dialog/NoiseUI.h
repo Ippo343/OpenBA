@@ -33,7 +33,7 @@ public:
     // PORT GAP (B38 D2): retail (0x140071bc0) destroys the three owned objects at +0x40,
     // +0x38, +0x30 through their slot 0 with flags 1; not transcribed.
     ~NoiseUI() override = default;                                // [0] 0x140012da0
-    void Persist(void* /*stream*/) override {}   // [3] 0x140071bb0  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x140071bb0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400714c0  PORT GAP
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400714a0  PORT GAP

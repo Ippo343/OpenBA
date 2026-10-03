@@ -33,7 +33,7 @@ public:
     // 0x1400112d0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
     ~EntityUI() override = default;                               // [0] 0x1400112d0
-    void Persist(void* /*stream*/) override {}   // [3] 0x1400672a0  RET 0 in retail
+    void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x1400672a0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400670d0
     void OnClosed() override;   // [6] 0x140067090
     void OnUpdateLayout() override;   // [7] 0x140066d80

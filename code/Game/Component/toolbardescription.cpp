@@ -133,8 +133,8 @@ ToolbarDescription::~ToolbarDescription() {
 }
 
 // [5] 0x14012da30: stream order as retail.
-bool ToolbarDescription::Serialize(void* stream) {
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+bool ToolbarDescription::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // +0x20 in the exe uses FUN_14000bd30 (ExternalPtr<UI::SpriteSheet>); +0x30 uses
     // FUN_14000bf40 (ExternalPtr<UI::StringTable>). Both have a byte-identical stream
     // layout (only the validated typeId differs, trusted in standalone). Use the

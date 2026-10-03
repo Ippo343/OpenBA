@@ -35,7 +35,7 @@ public:
 
     // no own work
     ~FireComponent() override = default;                          // [0]  0x140005720
-    void Persist(void* stream) override;                          // [3]  0x140049a90
+    void Persist(IO::Stream& stream) override;                          // [3]  0x140049a90
     void Update(void* time) override;                             // [9]  0x140048fb0
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x140049090

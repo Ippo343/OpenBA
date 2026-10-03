@@ -50,7 +50,7 @@ public:
     // [1]/[2]: the abstract base answers its own registration by name (B38 D4,
     // as the pilot's Component); every leaf overrides both.
     // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
-    void        Persist(void* stream) override;                   // [3] 0x1400c4b40
+    void        Persist(IO::Stream& stream) override;                   // [3] 0x1400c4b40
     virtual int  AbstractImpl(void* actionStack) = 0;             // [4] _purecall
     virtual int  Execute(void* actionStack, void* time);          // [5] 0x1400c4a90 ret 0
     // [6] args from retail's only caller, Character_UpdateAnimation 0x1400c4f80:

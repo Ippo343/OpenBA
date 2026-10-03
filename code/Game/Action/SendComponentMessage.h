@@ -27,7 +27,7 @@ public:
     SendComponentMessage(ComponentEntity* const* target, const uint32_t* compTypeId, uint32_t message,
                          ComponentEntity* const* second, uint32_t arg);   // 0x1400cb1d0
     ~SendComponentMessage() override = default;                // [0] 0x1400230f0
-    void Persist(void* stream) override;                       // [3] 0x1400cb000
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400cb000
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400caef0
     bool GetTarget(void* param) override;                      // [9] 0x1400cae80
 

@@ -518,9 +518,9 @@ public:
     // ---- vtable slot 3 — 0x1800bfda0, `RET` in retail AND in the profile
     // build. It exists so a subclass has something to override, and
     // `InternalFactory::PersistObject` calls it on every object it creates from
-    // a stream. `IO::Stream` is not a type in this tree yet (Wave 4 owns it), so
-    // the parameter is the `void*` every C caller already passes.
-    virtual void Persist(void* stream);
+    // a stream. `?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z`: retail's
+    // `IO::Stream&` (B.4 P2 S1; it was spelled `void*` until then).
+    virtual void Persist(IO::Stream& stream);
 
     // ?Clone@Internal@Object@@QEAAPEAV12@XZ   retail 0x1800bfb10, ord 1716
     //
@@ -632,11 +632,11 @@ public:
 
 #if !defined(BANISHED_UNIT_TEST)
     // ?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z 0x1800bfe40
-    void ResetPersistState(void* stream);
+    void ResetPersistState(IO::Stream& stream);
 
     // ?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z
     //                                                      0x1800bff10
-    Internal* PersistObject(void* stream, uint32_t generation, int index,
+    Internal* PersistObject(IO::Stream& stream, uint32_t generation, int index,
                             uint32_t typeId);
 #endif
 

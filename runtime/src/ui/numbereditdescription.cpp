@@ -124,10 +124,10 @@ void NumberEditDescription::Destruct() { this->~NumberEditDescription(); }
 //   kScalarBool +0x80
 //
 // THE FOUR INTS ARE EMITTED 0x70, 0x78, 0x7c, 0x74. The order is the format.
-bool NumberEditDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool NumberEditDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    UI::ElementDescription::Serialize(stream);                 // 1800d4efa
+    UI::ElementDescription::Serialize(*stream);                 // 1800d4efa
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 

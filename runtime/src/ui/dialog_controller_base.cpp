@@ -173,7 +173,7 @@ void DialogController::OnElementEvent(Object::InternalPtr<Element>* /*element*/,
 // dialog_settings.cpp dispatches per controller on the write path and OnOpened
 // on the read path; that both call sites exist and this default does nothing
 // is exactly why each controller's settings record can be EMPTY and still framed.
-void DialogController::OnSerializeSettings(void* /*stream*/) {}
+void DialogController::OnSerializeSettings(IO::Stream&/*stream*/) {}
 
 // ?CreateNewObject@ / ?CreateInPlaceObject@DialogController@UI@@
 // 0x18003b6e0 / 0x18003b6f0: each is `XOR EAX,EAX ; RET` — the base is never

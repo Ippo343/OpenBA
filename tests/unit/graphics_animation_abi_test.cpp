@@ -107,7 +107,7 @@ struct AnimationEventProbe final : Graphics::AnimationEvent {
     CompileResult Compile(const System::Filename&) override {
         Note(this, kCompile / 8); return 1u;
     }
-    bool Serialize(void*) override { Note(this, kSerialize / 8); return true; }
+    bool Serialize(IO::Stream&) override { Note(this, kSerialize / 8); return true; }
     Object::External* Reconstruct() override { Note(this, kReconstruct / 8); return this; }
     void Destruct() override { Note(this, kDestruct / 8); }
     // Retail slot 8 takes the event transform (0x1800faa58 MOV RDX,R13) and
@@ -302,7 +302,7 @@ const void* g_aeDtorOrder[4] = {};
 struct AnimationEventLeaf final : Graphics::AnimationEvent {
     DTOR_CHECK_RECORDING_DELETE   // B3X W1: the flags-1 free, recorded
     int32_t GetFileVersion() const override { return 0; }
-    bool Serialize(void*) override { return true; }
+    bool Serialize(IO::Stream&) override { return true; }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     void Construct(const Math::Transform&) override {}
@@ -577,7 +577,7 @@ int32_t     AnimationGroup::GetFileVersion() const { Note(this, kGetFileVersion 
 Object::External::CompileResult AnimationGroup::Compile(const System::Filename&) {
     Note(this, kCompile / 8); return 1u;
 }
-bool AnimationGroup::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+bool AnimationGroup::Serialize(IO::Stream&) { Note(this, kSerialize / 8); return true; }
 Object::External* AnimationGroup::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void AnimationGroup::Destruct() { Note(this, kDestruct / 8); }
 Object::External* AnimationGroup::Construct() { Note(this, kConstruct / 8); return this; }

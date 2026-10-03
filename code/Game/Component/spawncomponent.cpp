@@ -342,11 +342,10 @@ SpawnComponent::SpawnComponent() : timers(nullptr), timerCount(0), timerCapacity
 //   SpawnDescription's entry count (desc->_entryCount, desc validated by
 //   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918): if they
 //   differ, resize again to match the description currently in effect.
-void SpawnComponent::Persist(void* stream) {
-    if (!stream) return;
+void SpawnComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    IO::Serializer ser(stream, 0);
 
     int count = timerCount;
     ser.Serialize(count, nullptr);
@@ -361,7 +360,7 @@ void SpawnComponent::Persist(void* stream) {
     // LEFT (a tree defect, listed): this test reads the STREAM as a Serializer, so it
     // answers from the stream's vtable word and is never "loading"; retail tests the
     // stream's direction here (0x140055ee0) and reconciles on every load.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(stream)->GetDirection()) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(&stream)->GetDirection()) == 0) {
         Description* desc = _description;
         SpawnDescription* validated = nullptr;
         if (desc && desc->IsDerivedFrom(SpawnDescription::TypeId()))

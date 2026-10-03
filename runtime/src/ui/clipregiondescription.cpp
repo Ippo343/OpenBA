@@ -69,10 +69,10 @@ void ClipRegionDescription::Destruct() { this->~ClipRegionDescription(); }
 // ============================================================================
 // The base half is QUALIFIED; then the two extents through the INT slot and
 // the one child description. No array arm (unlike its siblings).
-bool ClipRegionDescription::Serialize(void* streamv) {
-    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
+bool ClipRegionDescription::Serialize(IO::Stream& streamv) {
+    IO::Stream* stream = &streamv;
 
-    ElementDescription::Serialize(stream);                  // 1800cc02a
+    ElementDescription::Serialize(*stream);                  // 1800cc02a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;

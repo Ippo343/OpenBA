@@ -32,7 +32,7 @@ public:
 
     ~SelectDescription() override = default;                               // [0] 0x14000bcc0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x1400556c0
-    bool              Serialize(void* stream) override;                    // [5] 0x140055630
+    bool              Serialize(IO::Stream& stream) override;                    // [5] 0x140055630
     Object::External* Reconstruct() override;                              // [6] 0x14000bc60
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140004950

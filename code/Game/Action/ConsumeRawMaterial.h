@@ -40,7 +40,7 @@ public:
     void AddMaterial(ComponentDescription* material, int count);
     // Retail 0x140022130: frees the +0x28 consume list, then Action's dtor.
     ~ConsumeRawMaterial() override;                            // [0] 0x140022130 (frees the +0x28 list)
-    void Persist(void* stream) override;                       // [3] 0x1400c6120
+    void Persist(IO::Stream& stream) override;                       // [3] 0x1400c6120
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5f50
     void CheckEntity() override;                               // [8] 0x1400c5e30
     bool GetTarget(void* param) override;                      // [9] 0x1400c5f10

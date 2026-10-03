@@ -66,10 +66,10 @@ void* ClearResourceComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x1401185e0: Component::Persist (a direct CALL 0x1401189b0) and two empty
 // Serializer scopes (each still occupies bytes in the save encoding).
-void ClearResourceComponent::Persist(void* stream) {
+void ClearResourceComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+    { IO::Serializer scope(stream, 0); }
+    { IO::Serializer scope(stream, 0); }
 }
 
 DEFINE_EXE_TYPE(ClearResourceComponent, "ControllerComponent")
