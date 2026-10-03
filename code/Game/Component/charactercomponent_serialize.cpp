@@ -85,6 +85,15 @@ void SerializeValidatedIBP(T*& field, IO::Serializer& ser, uint32_t tid) {
         field = nullptr;
 }
 
+// The same for a member declared as retail's InternalPtr<T> (CharacterComponent +0x58,
+// B4 P2 WORK-3): the InternalBasePtr is the member itself.
+template <class T>
+void SerializeValidatedIBP(Object::InternalPtr<T>& field, IO::Serializer& ser, uint32_t tid) {
+    field.InternalBasePtr::Serialize(ser);
+    if (field && tid && !::Object::IsDerivedFromNullSafe(field.Get(), tid))
+        field = nullptr;
+}
+
 } // namespace
 
 // [3] 0x140109ab0.

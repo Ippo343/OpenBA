@@ -47,12 +47,12 @@
 // ============================================================
 // FindComponent family
 // ============================================================
-// FUN_140002ed0 / 2f90 / 3050 / 52c0 / 6270 / 15140 are instances of
-// ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h). These names stay as
-// B4 FORWARD forwarders, returning the out-IBP they were handed, until their callers
-// hold a typed entity.
+// FUN_140002ed0 / 6270 are instances of ComponentEntity::FindComponent<T>()
+// (Entity/ComponentEntity.h). These names stay as B4 FORWARD forwarders, returning the
+// out-IBP they were handed, until their callers hold a typed entity. (2f90 / 3050 / 52c0
+// had no caller left: deleted, B4 P2 WORK-3.)
 namespace {
-// The one receiver cast of this file's six B4 FORWARD finders; it takes the place of
+// The one receiver cast of this file's B4 FORWARD finders; it takes the place of
 // the shared loop body (FindComponentByTypeId) the six names called before.
 template <class T>
 void* ForwardFindComponent(uintptr_t entity, void* retIBP) {
@@ -64,21 +64,6 @@ void* ForwardFindComponent(uintptr_t entity, void* retIBP) {
 // Reimpl of Entity_FindComponent_Position (FUN_140002ed0, type 0x1401c7900 = InteractComponent)
 void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
     return ForwardFindComponent<InteractComponent>(entity, retIBP);
-}
-
-// Reimpl of Entity_FindComponent_MeshInstance (FUN_140002f90, type 0x1401c7e08 = StatusIconComponent)
-void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<StatusIconComponent>(entity, retIBP);
-}
-
-// Reimpl of FUN_140003050 (type 0x1401c8070 = WorkComponent)
-void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<WorkComponent>(entity, retIBP);
-}
-
-// Reimpl of FUN_1400052c0 (type 0x1401c7b30 = NaturalResourceComponent)
-void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<NaturalResourceComponent>(entity, retIBP);
 }
 
 // Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78 = StorageComponent)
@@ -139,12 +124,32 @@ void Work::InitFromEntity(void* pEntityIBP) {
 // the byte offsets of the two child pointers within a node. The first arg (tree
 // root / allocator owner) is unused by the original beyond being forwarded.
 // Caller signature: void fn(void* root, void* node)
+// LEFT: SIG WorkBase_TreeNodeFree_14c30 / _e320: one retail body per child-offset pair
+// serves every node type of the trees that use it (42 / 37 call sites in other blocks,
+// handing the node as void*); each body views the node once through the two links it
+// reads (retail 0x140014c30 reads [node+0x10] / [node+0x18], 0x14000e320 [node+0x18] /
+// [node+0x20]) until wave X types the trees.
+namespace {
+struct FreeNodeLinks10 {          // 0x140014c30's view of a node
+    uint8_t _payload[0x10];       // +0x00 the element (never read here)
+    void*   left;                 // +0x10
+    void*   right;                // +0x18
+};
+static_assert(offsetof(FreeNodeLinks10, left) == 0x10 && offsetof(FreeNodeLinks10, right) == 0x18, "");
+struct FreeNodeLinks18 {          // 0x14000e320's view of a node
+    uint8_t _payload[0x18];       // +0x00 the element (never read here)
+    void*   left;                 // +0x18
+    void*   right;                // +0x20
+};
+static_assert(offsetof(FreeNodeLinks18, left) == 0x18 && offsetof(FreeNodeLinks18, right) == 0x20, "");
+}  // namespace
 
 // Reimpl of FUN_140014c30 (TreeNodeCleanup) — children at +0x10 and +0x18.
 void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
     if (node) {
-        WorkBase_TreeNodeFree_14c30(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10));
-        WorkBase_TreeNodeFree_14c30(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x18));
+        const FreeNodeLinks10* links = reinterpret_cast<const FreeNodeLinks10*>(node);   // LEFT: SIG WorkBase_TreeNodeFree_14c30
+        WorkBase_TreeNodeFree_14c30(root, links->left);
+        WorkBase_TreeNodeFree_14c30(root, links->right);
         System::MemoryAllocator::MemFree(node);
     }
 }
@@ -152,8 +157,9 @@ void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
 // Reimpl of FUN_14000e320 (TreeNodeFree) — children at +0x18 and +0x20.
 void WorkBase_TreeNodeFree_e320(void* root, void* node) {
     if (node) {
-        WorkBase_TreeNodeFree_e320(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x18));
-        WorkBase_TreeNodeFree_e320(root, *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x20));
+        const FreeNodeLinks18* links = reinterpret_cast<const FreeNodeLinks18*>(node);   // LEFT: SIG WorkBase_TreeNodeFree_e320
+        WorkBase_TreeNodeFree_e320(root, links->left);
+        WorkBase_TreeNodeFree_e320(root, links->right);
         System::MemoryAllocator::MemFree(node);
     }
 }
@@ -169,23 +175,12 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
 // re-init it to null. Finally reset the +0x18 sentinel to -1 and clear the +0x10 IBP.
 // Caller signature: void fn(void* self)
 // The receiver is the action stack embedded in CharacterComponent at +0x48 (its
-// actions / actionCount / actionCapacity / field_0x58 / currentAction). The body is a
-// member of that retail sub-object; CharacterComponent's header is COMP-a's, so this
-// stays free and views the stack through the struct below.
-namespace {
-struct CharacterActionStack {
-    Action** actions;          // +0x00 (character +0x48) InternalPtr<Action> array
-    int32_t  count;            // +0x08 (+0x50) the array's size
-    int32_t  capacity;         // +0x0c (+0x54)
-    Action*  message;          // +0x10 (+0x58) the pending SendComponentMessage
-    int32_t  top;              // +0x18 (+0x60) the running action
-};
-static_assert(offsetof(CharacterActionStack, top) == 0x18, "CharacterComponent +0x60 - +0x48");
-}  // namespace
-
+// actions / actionCount / actionCapacity / field_0x58 / currentAction): Action.h's
+// ActionStack. CharacterComponent declares +0x48 as separate fields, so the callers
+// hand the stack as void*.
 void WorkBase_TaskListCleanup_c5400(void* self) {
-    // LEFT: the callers hand the stack as void*.
-    CharacterActionStack* stack = reinterpret_cast<CharacterActionStack*>(self);
+    // LEFT: SIG WorkBase_TaskListCleanup_c5400 (the callers hand the stack as void*).
+    ActionStack* stack = reinterpret_cast<ActionStack*>(self);
     // ⚠ Retail re-reads BOTH the array pointer (*param_1) and the capacity
     // ((int)param_1[1]) on EVERY iteration — the +0x40 Cancel vcalls below can
     // push onto this same list (FUN_1400c54e0) and grow/realloc it mid-loop.
@@ -194,7 +189,7 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
     // (crash: organic herder's first PastureWork claim, GrazingWorkCtor →
     // cleanup → MoveTo cancel → push → walk of the stale array).
     for (int i = 0; i < stack->count; i++) {
-        Action* node = stack->actions[i];
+        Action* node = stack->actions[i].Get();
         if (!node) continue;
         Action* cur = node;
         do {
@@ -203,18 +198,17 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
             cur = cur->_next.Get();   // node[2] = next (Action::_next, +0x10)
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
-        Action** slot = &stack->actions[i];
-        reinterpret_cast< ::Object::InternalBasePtr*>(slot)->DeletePtr();   // B.3.3 bridge
-        Action* nul = nullptr;
-        new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *slot = nul;
+        ::Object::InternalPtr<Action>* slot = &stack->actions[i];
+        slot->DeletePtr();
+        *slot = ::Object::InternalPtr<Action>(nullptr);
     }
-    stack->top = -1;
-    if (stack->message != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&stack->message)->DeletePtr();   // B.3.3 bridge
+    stack->current = -1;
+    if (stack->field_0x10 != nullptr) {
+        // LEFT: Action.h (ACT) declares ActionStack +0x10 as Action*, not InternalPtr<Action>.
+        reinterpret_cast< ::Object::InternalBasePtr*>(&stack->field_0x10)->DeletePtr();   // B.3.3 bridge
         Action* nul = nullptr;
         new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        stack->message = nul;
+        stack->field_0x10 = nul;
     }
 }
 
@@ -282,13 +276,6 @@ bool Work::ValidateTask(void* /*unusedRdx*/, CitizenComponent** citizen, Complet
         }
     }
     return false;
-}
-
-// B4 FORWARD: 20 outside callers (the Work leaves' Validate slots in WORK-a / WORK-b
-// files) still hand the receiver, the citizen reference and the out slot untyped.
-uint8_t WorkBase_ValidateTask_f7100(void* self, void* unusedRdx, void* taskIBP, void** out) {
-    return reinterpret_cast<Work*>(self)->ValidateTask(unusedRdx, reinterpret_cast<CitizenComponent**>(taskIBP),
-                                                      reinterpret_cast<CompleteTask**>(out));
 }
 
 // ============================================================

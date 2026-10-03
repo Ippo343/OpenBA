@@ -182,9 +182,3 @@ int Work::TryAutoPickup(void* citizenRef) {
 
     return 0;
 }
-
-// B4 FORWARD: 6 outside callers (the Work leaves' Execute in WORK-a / WORK-b files)
-// hand the receiver as an integer.
-int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
-    return reinterpret_cast<Work*>(self)->TryAutoPickup(citizenRef);
-}
