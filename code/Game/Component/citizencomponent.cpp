@@ -45,6 +45,12 @@
 #include "Tutorial/exe_bodies.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/WeatherSimulation.h"            // B4 P2 CIT-4: GameUpdateLoop::m_weather
+#include "Game/Map.h"                          // B4 P2 CIT-4: GameUpdateLoop::m_game cells
+#include "Game/WorkScheduler.h"                // B4 P2 CIT-4: GameUpdateLoop::m_tutorial trees
+#include "Game/WorkSchedulerNodes.h"           // B4 P2 CIT-4: WorkSchedulerIdNode
+#include "Entity/CitizenBehavior.h"            // B4 P2 CIT-4: GameUpdateLoop::m_citizenList
+#include "Work/Work.h"                         // B4 P2 CIT-4: Work::field_24
 #include "system/String.h"
 #include <cstdint>
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
@@ -211,9 +217,8 @@ void CitizenComponent::Update(void* timeArg) {
 
     const System::Time* deltaTime = static_cast<const System::Time*>(timeArg);
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    // +0x130 is not the Weather resource (B4_RULES correction 5): a void* member, its
-    // pointee read stays raw.
-    uint8_t* weatherData = reinterpret_cast<uint8_t*>(gameWorld->m_weather);
+    // +0x130 is not the Weather resource (B4_RULES correction 5): the WeatherSimulation.
+    WeatherSimulation* weather = gameWorld->m_weather;
     CitizenDescription* desc = description;
 
     // Convert Time to seconds
@@ -299,7 +304,7 @@ void CitizenComponent::Update(void* timeArg) {
     // --- Thirst accumulation ---
     float fVar14 = kRdata_140172234;
     float thirstThreshTemp = desc->warmTemperature;
-    float weatherTemp = *reinterpret_cast<float*>(weatherData + 0x18);
+    float weatherTemp = weather->temperature;
     if ((gameFlags >> 2 & 1) != 0 || thirstThreshTemp < weatherTemp || thirstThreshTemp == weatherTemp) {
         coldness = 0.0f;
     } else {
@@ -313,9 +318,9 @@ void CitizenComponent::Update(void* timeArg) {
     if (profRef != nullptr) {
         // Build UI::String from profession name, convert to System::String
         uint8_t localStr[16] = {};
-        ::new (localStr) UI::String(
+        UI::String* uiName = ::new (localStr) UI::String(
             Object::ExternalPtr<UI::StringTable>(profRef->stringTable),
-            *reinterpret_cast<const System::String*>(&profRef->stringTool));
+            profRef->stringTool);
         // UI::String -> System::String, then HandleLifeEvent(7, str). The original
         // converts via dispatch slot [0x140151308] (UI::String::operator System::String,
         // CALL @1401130ab). [WRONG-SLOT FIX] the previous port read slot 0x140152878,
@@ -324,7 +329,7 @@ void CitizenComponent::Update(void* timeArg) {
         // empty. Use the resolved engine export directly (retval into localRes8).
         System::String localRes8;
         ::new (&localRes8) System::String(
-            reinterpret_cast<const UI::String*>(localStr)->operator System::String());  // B.3.6 bridge
+            uiName->operator System::String());
 
         // Copy construct System::String from localStr result
         System::String localRes18(localRes8);
@@ -373,7 +378,7 @@ void CitizenComponent::Update(void* timeArg) {
                 // GetText(self, retval, textIndex) — Ghidra drops R8 (textIndex)
                 // textIndex is likely 0 for single-entry profession name tables
                 ::new (&localRes8) System::String(
-                    reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
+                    reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge  // LEFT: Game/Disease.h _stringTable void* (GAME-1)
                 char* deathStr = localRes8._data;
                 char r = HandleLifeEvent(3, deathStr);
                 if (r != 0) return;
@@ -513,14 +518,13 @@ void CitizenComponent::Update(void* timeArg) {
             // wrong footprint cell and a citizen standing off-map stop looking alike.
             static int s_hiN = 0;
             if (s_hiN < 80) { ++s_hiN;
-                int* mapInfo = reinterpret_cast<int*>(gameWorld->m_game);
-                const uint8_t* tiles = mapInfo ? *reinterpret_cast<uint8_t* const*>(
-                    reinterpret_cast<const uint8_t*>(mapInfo) + 0x80) : nullptr;
-                int mapW = mapInfo ? *mapInfo : 0, half = mapW >> 1;
+                Map* mapInfo = gameWorld->m_game;
+                const MapCell* tiles = mapInfo ? mapInfo->cells : nullptr;
+                int mapW = mapInfo ? mapInfo->size : 0, half = mapW >> 1;
                 CharacterComponent* ch = character;
-                int64_t model = ch ? reinterpret_cast<int64_t>(ch->modelComponent) : 0;
-                float cx = model ? *reinterpret_cast<float*>(model + 0x158) : -9999.f;
-                float cy = model ? *reinterpret_cast<float*>(model + 0x15c) : -9999.f;
+                ModelComponent* model = ch ? ch->modelComponent : nullptr;
+                float cx = model ? model->transform.translation.x : -9999.f;
+                float cy = model ? model->transform.translation.y : -9999.f;
                 int tx = (int)(cx + (float)half), ty = (int)(cy + (float)half);
                 if (tx < 0) tx = 0; if (tx >= mapW) tx = mapW - 1;
                 if (ty < 0) ty = 0; if (ty >= mapW) ty = mapW - 1;
@@ -529,14 +533,14 @@ void CitizenComponent::Update(void* timeArg) {
                 int homeCell = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
                 unsigned sk = 0, sr = 0, dk = 0, dr = 0;
                 if (tiles && mapW > 0) {
-                    const uint8_t* ts = tiles + (size_t)czCell * 0x30;
-                    sk = ts[0x29]; sr = *reinterpret_cast<const uint16_t*>(ts + 0x26);
+                    const MapCell* ts = tiles + (size_t)czCell;
+                    sk = ts->terrainType; sr = ts->zone;
                     if (homeCell >= 0 && homeCell < mapW * mapW) {
-                        const uint8_t* td = tiles + (size_t)homeCell * 0x30;
-                        dk = td[0x29]; dr = *reinterpret_cast<const uint16_t*>(td + 0x26);
+                        const MapCell* td = tiles + (size_t)homeCell;
+                        dk = td->terrainType; dr = td->zone;
                     }
                 }
-                const char* nm = *reinterpret_cast<const char**>(&name);
+                const char* nm = *reinterpret_cast<const char**>(&name);   // LEFT: H5 CitizenComponent::name (System::String raw storage)
                 fprintf(stderr, "[HomeInvalid] citizen=%p name=%s pos=(%.2f,%.2f) cell=%u(%d,%d) kind=%u region=%u"
                                 " | home=%p cell=%d(%d,%d) kind=%u region=%u | age=%.2f hunger=%.1f\n",
                         (void*)this, nm ? nm : "?", cx, cy, czCell, tx, ty, sk, sr,
@@ -556,8 +560,8 @@ void CitizenComponent::Update(void* timeArg) {
                         for (int xx = tx - R; xx <= tx + R; ++xx) {
                             char c = ' ';
                             if (xx >= 0 && xx < mapW && yy >= 0 && yy < mapW) {
-                                const uint8_t* t = tiles + (size_t)(yy * mapW + xx) * 0x30;
-                                unsigned k = t[0x29], r = *reinterpret_cast<const uint16_t*>(t + 0x26);
+                                const MapCell* t = tiles + (size_t)(yy * mapW + xx);
+                                unsigned k = t->terrainType, r = t->zone;
                                 if (xx == tx && yy == ty) c = 'C';
                                 else if (homeCell >= 0 && xx == homeCell % mapW && yy == homeCell / mapW) c = 'H';
                                 else if (((1u << (k & 0x1f)) & 0xe1fu) == 0) c = (k >= 5 && k <= 8) ? '#' : '~';
@@ -575,8 +579,8 @@ void CitizenComponent::Update(void* timeArg) {
                         for (int xx = tx - R; xx <= tx + R; ++xx) {
                             char c = ' ';
                             if (xx >= 0 && xx < mapW && yy >= 0 && yy < mapW) {
-                                const uint8_t* t = tiles + (size_t)(yy * mapW + xx) * 0x30;
-                                unsigned k = t[0x29];
+                                const MapCell* t = tiles + (size_t)(yy * mapW + xx);
+                                unsigned k = t->terrainType;
                                 c = k < 10 ? (char)('0' + k) : (char)('a' + k - 10);
                                 if (xx == tx && yy == ty) c = 'C';
                             }
@@ -879,14 +883,14 @@ LAB_140113873:
 // BST lookup: profession registry (uint64 key)
 // Returns count of jobs, or 0 if not found.
 // ============================================================
-static int LookupProfessionJobCount(uintptr_t registryBase, uint64_t key) {
-    uintptr_t* node = *(uintptr_t**)(registryBase + 0x100);
+static int LookupProfessionJobCount(const CitizenBehavior* registry, uint64_t key) {
+    uintptr_t* node = (uintptr_t*)registry->field_0x100;   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
     while (node) {
         uint64_t nodeKey = node[0];
         if (key < nodeKey) {
-            node = (uintptr_t*)node[4]; // left
+            node = (uintptr_t*)node[4]; // left   LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
         } else if (key > nodeKey) {
-            node = (uintptr_t*)node[5]; // right
+            node = (uintptr_t*)node[5]; // right   LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
         } else {
             // Found
             return (int)node[2];
@@ -896,42 +900,42 @@ static int LookupProfessionJobCount(uintptr_t registryBase, uint64_t key) {
 }
 
 // Get job array entry from profession registry
-static uintptr_t GetJobEntity(uintptr_t registryBase, uint64_t key, int64_t index) {
-    uintptr_t* node = *(uintptr_t**)(registryBase + 0x100);
+static ComponentEntity* GetJobEntity(const CitizenBehavior* registry, uint64_t key, int64_t index) {
+    uintptr_t* node = (uintptr_t*)registry->field_0x100;   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
     while (node) {
         uint64_t nodeKey = node[0];
         if (key < nodeKey) {
-            node = (uintptr_t*)node[4];
+            node = (uintptr_t*)node[4];   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
         } else if (key > nodeKey) {
-            node = (uintptr_t*)node[5];
+            node = (uintptr_t*)node[5];   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
         } else {
             // Found — read array[index]
-            uintptr_t* arr = (uintptr_t*)node[1];
+            ComponentEntity** arr = (ComponentEntity**)node[1];   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
             return arr[index];
         }
     }
-    return 0;
+    return nullptr;
 }
 
 // ============================================================
-// BST lookup: region map (int32 key)
-// Returns pointer to region descriptor, or 0 if not found.
-// Tree nodes: int key at +0, value ptr at +8, left at +0x18, right at +0x20
+// BST lookup: the work scheduler's by-id tree (GameUpdateLoop+0x118 -> trees[0]
+// at +0x30; int32 key = the work id). Returns the posted Work, or null.
+// Nodes are WorkSchedulerIdNode: int key at +0, InternalPtr<Work> at +8,
+// left at +0x18, right at +0x20.
 // ============================================================
-static uintptr_t LookupRegionByID(uintptr_t areaMap, int32_t regionId) {
-    int* node = *(int**)(areaMap + 0x30);
+static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
+    const WorkSchedulerIdNode* node = areaMap->trees[0].root;
     while (node) {
-        int nodeKey = node[0];
+        int nodeKey = node->key;
         if (regionId < nodeKey) {
-            node = *(int**)(node + 6); // left (+0x18)
+            node = node->left;
         } else if (regionId > nodeKey) {
-            node = *(int**)(node + 8); // right (+0x20)
+            node = node->right;
         } else {
-            // Found — value at node+8 (qword)
-            return *(uintptr_t*)(node + 2);
+            return node->work.Get();
         }
     }
-    return 0; // not found
+    return nullptr; // not found
 }
 
 // ============================================================
@@ -939,8 +943,7 @@ static uintptr_t LookupRegionByID(uintptr_t areaMap, int32_t regionId) {
 // Original: 0x1401109E0 (CitizenComponent_helper_09e0)
 // ============================================================
 bool CitizenComponent::ShouldSwitchWorkplace() {
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t gwAddr = (uintptr_t)gameWorld;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     // Read citizen's profession (the profession registry's key)
     uint64_t profKey = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int
@@ -948,7 +951,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
     if (profKey == 0) return false;
 
     // Lookup job count from profession registry
-    uintptr_t registry = *(uintptr_t*)(gwAddr + 0xF0);
+    const CitizenBehavior* registry = gameWorld->m_citizenList;
     int jobCount = LookupProfessionJobCount(registry, profKey);
 
     // Read workplace entity flag at +0x4C
@@ -958,24 +961,24 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
         // ====== ASSIGNED PATH ======
         // Citizen has a specific workplace assignment.
         // Check if another workplace in a lower-priority region has vacancy.
-        uintptr_t areaMap = *(uintptr_t*)(gwAddr + 0x118);
+        const WorkScheduler* areaMap = gameWorld->m_tutorial;
 
         // Get current workplace IBP and find StorageLocationComponent
         WorkComponent* storageLocComp = workplace->FindComponent<WorkComponent>();
         int32_t regionId = storageLocComp->workId;
 
         // Look up current region in region map BST
-        uintptr_t regionDesc = LookupRegionByID(areaMap, regionId);
+        Work* regionDesc = LookupRegionByID(areaMap, regionId);
 
         // *** FIX: null check for region lookup failure ***
         int currentPriority;
-        if (regionDesc == 0) {
+        if (regionDesc == nullptr) {
             // Region not in tree — don't switch, stay at current workplace.
             // Original game crashes here (null deref). Returning false keeps
             // citizens working instead of endlessly reshuffling.
             return false;
         } else {
-            currentPriority = *(int32_t*)(regionDesc + 0x24);
+            currentPriority = regionDesc->field_24;
         }
 
         // Check if current workplace is valid (reachable)
@@ -986,42 +989,39 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
 
         // Iterate all available jobs looking for a better workplace
         for (int64_t i = 0; i < (int64_t)jobCount; i++) {
-            uintptr_t entityIBP = GetJobEntity(registry, profKey, i);
+            ComponentEntity* entity = GetJobEntity(registry, profKey, i);
 
-            // CheckPtr + FindWorkplaceComponent
-            uintptr_t workplaceCompIBP = 0;
-            AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityIBP), &workplaceCompIBP);
+            // CheckPtr + FindComponent<WorkPlaceComponent> (0x140002e10)
+            WorkPlaceComponent* workplaceComp = entity->FindComponent<WorkPlaceComponent>();
 
-            // CheckPtr + FindStorageLocationComponent
-            uintptr_t otherStorageLocIBP = 0;
-            WorkBase_FindComponent_3050(entityIBP, &otherStorageLocIBP);
+            // CheckPtr + FindComponent<WorkComponent> (0x140003050)
+            WorkComponent* otherWork = entity->FindComponent<WorkComponent>();
 
             // Skip if this is the current workplace
-            if (entityIBP == reinterpret_cast<uintptr_t>(workplace))
+            if (entity == workplace)
                 continue;
 
             // Check workplace is active (+0x50 flag)
-            uintptr_t wpComp = workplaceCompIBP;
-            if (*(uint8_t*)(wpComp + 0x50) == 0)
+            if (workplaceComp->isAccepting == 0)
                 continue;
 
             // Check has vacancy
-            if (!fn_CitizenComponent_HasVacancy(workplaceCompIBP))
+            if (!fn_CitizenComponent_HasVacancy(reinterpret_cast<uintptr_t>(workplaceComp)))   // LEFT: SIG fn_CitizenComponent_HasVacancy (Component/exe_bodies.h, wave X)
                 continue;
 
             // Look up this workplace's region (re-read areaMap fresh, matches original asm)
-            int32_t otherRegionId = *(int32_t*)(otherStorageLocIBP + 0x28);
-            uintptr_t freshAreaMap = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x118);
-            uintptr_t otherRegionDesc = LookupRegionByID(freshAreaMap, otherRegionId);
+            int32_t otherRegionId = otherWork->workId;
+            const WorkScheduler* freshAreaMap = GameUpdateLoop::_singleton->m_tutorial;
+            Work* otherRegionDesc = LookupRegionByID(freshAreaMap, otherRegionId);
 
             // Null check on region lookup (original would crash)
-            if (otherRegionDesc == 0)
+            if (otherRegionDesc == nullptr)
                 continue;
 
             // If other region has lower priority value, switch
-            if (*(int32_t*)(otherRegionDesc + 0x24) < currentPriority) {
+            if (otherRegionDesc->field_24 < currentPriority) {
                 // Double-check vacancy
-                if (fn_CitizenComponent_HasVacancy(workplaceCompIBP))
+                if (fn_CitizenComponent_HasVacancy(reinterpret_cast<uintptr_t>(workplaceComp)))   // LEFT: SIG fn_CitizenComponent_HasVacancy (Component/exe_bodies.h, wave X)
                     return true;
             }
         }
@@ -1034,61 +1034,50 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
         uint32_t minGap = 0xFFFF;
 
         for (int64_t i = 0; i < (int64_t)jobCount; i++) {
-            uintptr_t entityIBP = GetJobEntity(registry, profKey, i);
+            ComponentEntity* entity = GetJobEntity(registry, profKey, i);
 
             // Find WorkplaceComponent on this entity
-            uintptr_t entity = entityIBP;
-            int compCount = *(int32_t*)(entity + 0x38);
-            uintptr_t compArray = *(uintptr_t*)(entity + 0x30);
+            int compCount = entity->_componentCount;
+            Object::InternalPtr<Component>* compArray = entity->_components;
 
             // Scan for WorkplaceComponent by type ID
-            uintptr_t wpComp = 0;
+            WorkPlaceComponent* wpComp = nullptr;
             uint32_t wpTypeId = WorkPlaceComponent::TypeId();
             for (int ci = 0; ci < compCount; ci++) {
-                uintptr_t* compSlot = (uintptr_t*)(compArray + ci * 8);
-                uintptr_t comp = *compSlot;
-                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+                Component* comp = compArray[ci].Get();
+                uint32_t typeId = comp->Type();   // slot 2
                 if (typeId == wpTypeId) {
                     // Verify with IsDerivedFrom
-                    compSlot = (uintptr_t*)(compArray + ci * 8);
-                    uintptr_t finalComp = *compSlot;
-                    if (Object::IsDerivedFromNullSafe((void*)finalComp, wpTypeId)) {
-                        wpComp = finalComp;
+                    Component* finalComp = compArray[ci].Get();
+                    if (Object::IsDerivedFromNullSafe(finalComp, wpTypeId)) {
+                        wpComp = static_cast<WorkPlaceComponent*>(finalComp);
                     }
                     break;
                 }
             }
 
-            // Construct IBP for found component
-            uintptr_t wpIBP = 0;
-            new (&wpIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)wpComp));   // B.3.3 bridge
+            // The InternalPtr retail builds for the found component holds this pointer.
+            WorkPlaceComponent* wpIBP = wpComp;
 
-            uintptr_t wpCompVal = wpIBP;
-            if (*(uint8_t*)(wpCompVal + 0x50) == 0)
+            if (wpIBP->isAccepting == 0)
                 continue; // not active
 
             // Check workplace validity
-            char isValid = CanReach(reinterpret_cast<ComponentEntity*>(entityIBP));
+            char isValid = CanReach(entity);
             if (!isValid)
                 continue;
 
-            // Get worker slot count via StorageLocationComponent
-            uintptr_t wpBase = wpIBP;
-            uintptr_t parentEntity = *(uintptr_t*)(wpBase + 0x10);
-
-            uintptr_t slcIBP = 0;
-            void* slcResult = WorkBase_FindComponent_3050(parentEntity, &slcIBP);
-            uintptr_t slc = *(uintptr_t*)slcResult;
+            // Get worker slot count via the WorkComponent (0x140003050)
+            WorkComponent* slc = wpIBP->_entity->FindComponent<WorkComponent>();
 
             // Calculate worker slots (lazy-compute cached at +0x30)
-            if (*(int32_t*)(slc + 0x30) == 0) {
-                *(int32_t*)(slc + 0x30) = fn_CalcWorkerSlots((void*)slc);
+            if (slc->workState == 0) {
+                slc->workState = fn_CalcWorkerSlots(slc);
             }
-            int workerSlots = *(int32_t*)(slc + 0x30);
+            int workerSlots = slc->workState;
 
             // Get current worker count from WorkplaceComponent
-            int currentWorkers = *(int32_t*)(wpIBP + 0x60);
+            int currentWorkers = wpIBP->workerCount;
 
             int gap = workerSlots - currentWorkers;
             if (gap > maxGap) maxGap = gap;
@@ -1133,28 +1122,27 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
 // find a citizen of the other gender (+0x38) with no spouse (+0x250), older than the
 // description's marriage age (+0x48) and within its age window (+0x4c) of this one.
 // Retail returns the InternalPtr through the RDX slot; the member returns what it holds.
-// The citizen list is GameUpdateLoop::m_citizenList, still a void* member (LEFT: its
-// entries are read raw).
+// The citizen list is GameUpdateLoop::m_citizenList (CitizenBehavior::citizens).
 CitizenComponent* CitizenComponent::FindSpouse() {
-    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     // The old door read the registered 8-byte cell 0x1401722b0 as a uint32_t: its low
     // dword (little-endian) of 0x7fffffffffffffff.
     uint32_t mask = static_cast<uint32_t>(kRdata_1401722b0);
-    int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
-    int64_t n = *reinterpret_cast<int*>(list + 0xa8);
+    CitizenBehavior* list = gw->m_citizenList;
+    int64_t n = list->citizenCount;
     for (int64_t i = 0; i < n; i++) {
-        int64_t cand = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(list + 0xa0) + i * 8);
-        if (*reinterpret_cast<int*>(cand + 0x38) != gender) {
-            if (*reinterpret_cast<int64_t*>(cand + 0x250) == 0) {
+        CitizenComponent* cand = list->citizens[i];
+        if (cand->gender != gender) {
+            if (cand->spouse == nullptr) {
                 float* minAge = &description->marriageAge;
-                float candAge = *reinterpret_cast<float*>(cand + 0x3c);
+                float candAge = cand->age;
                 if (*minAge <= candAge && candAge != *minAge) {
                     float diff = candAge - age;
                     // abs(diff) via mask, then compare to window max (+0x4c)
                     uint32_t bits = *reinterpret_cast<uint32_t*>(&diff) & mask;   // CAST-OK: float_bits
                     float adiff = *reinterpret_cast<float*>(&bits);   // CAST-OK: float_bits
                     if (adiff <= description->_f4c) {
-                        return reinterpret_cast<CitizenComponent*>(cand);
+                        return cand;
                     }
                 }
             }
