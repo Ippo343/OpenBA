@@ -82,10 +82,10 @@ using rtsetavl24::Set;
 // safe by construction: `Node::element` is `uint8_t[0x18]` at +0x00 and
 // `sizeof(ResourceEntry) == 0x18` is asserted in External.h.
 inline RtObject::ResourceEntry* Elem(Node* n) {
-    return reinterpret_cast<RtObject::ResourceEntry*>(n);
+    return reinterpret_cast<RtObject::ResourceEntry*>(n->element);  // CAST-OK: elem_stride
 }
 inline const RtObject::ResourceEntry* Elem(const Node* n) {
-    return reinterpret_cast<const RtObject::ResourceEntry*>(n);
+    return reinterpret_cast<const RtObject::ResourceEntry*>(n->element);  // CAST-OK: elem_stride
 }
 
 // The 16-byte tail `0x18002ca00` copies out of its FOURTH argument: everything

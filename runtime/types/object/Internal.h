@@ -359,7 +359,7 @@ template <class T>
 class InternalPtr : public InternalBasePtr {
 public:
     InternalPtr() : InternalBasePtr() {}
-    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<RtObject::Internal*>(p)) {}
+    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<RtObject::Internal*>(p)) {}   // LEFT: H10 InternalBasePtr::_ptr is the RtObject::Internal POD; `T` is not yet an Object::Internal subclass tree-wide
 
     InternalPtr(const InternalPtr&) = default;
     InternalPtr& operator=(const InternalPtr&) = default;
@@ -368,7 +368,7 @@ public:
     // TRANSITIONAL CAST, same reason as ExternalPtr<T>::Serialize: `T` is not a
     // class deriving from `Object::Internal` in this tree yet, so the downcast
     // cannot be spelled `static_cast` here. It becomes one in B.3 step 3.
-    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }
+    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }   // LEFT: as the ctor above
     T* operator->() const { return Get(); }
     T& operator*()  const { return *Get(); }
 
@@ -563,7 +563,7 @@ static_assert(sizeof(Internal) == sizeof(RtObject::Internal),
 inline void InternalBasePtr::DeletePtr() {
     RtObject::Internal* p = _ptr;
     if (p != nullptr) {
-        delete reinterpret_cast<Internal*>(p);   // B.3.x bridge
+        delete reinterpret_cast<Internal*>(p);   // B.3.x bridge  // LEFT: H10 InternalBasePtr::_ptr is the RtObject::Internal POD
         _ptr = nullptr;
     }
 }

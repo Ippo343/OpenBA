@@ -41,6 +41,8 @@
 #include <cstdint>
 #include <cstddef>
 
+namespace Object { class Base; }   // the factory pair's return type (below)
+
 namespace RtObject {
 
 // ============================================================
@@ -108,12 +110,15 @@ struct BaseTypeInfo {
     const char* fileExtension;
 
     // +0x20 `Base* (*)()` — allocates and constructs an instance.
-    //       Factory::CreateObject(id) tail-jumps here.
-    void* factoryFn;
+    //       Factory::CreateObject(id) tail-jumps here (0x1800c0b07 JMP [RCX+0x20]).
+    //       Typed by B.4 P2 R-OBJ: the signature is the BaseTypeInfo ctor's
+    //       mangled parameter `P6APEAVBase@1@XZ`.
+    ::Object::Base* (*factoryFn)();
 
     // +0x28 `Base* (*)(void* storage)` — placement-constructs into `storage`.
-    //       Factory::CreateObject(id, void*) tail-jumps here.
-    void* inPlaceFactoryFn;
+    //       Factory::CreateObject(id, void*) tail-jumps here. Mangled
+    //       `P6APEAV21@PEAX@Z` in the same ctor.
+    ::Object::Base* (*inPlaceFactoryFn)(void* storage);
 
     // +0x30 Intrusive singly-linked list. The ctor head-inserts:
     //       this->next = _firstTypeInfo; _firstTypeInfo = this;
@@ -191,12 +196,15 @@ static_assert(sizeof(TypeRecord)                  == 0x28, "sizeof(TypeRecord)")
 //                        one dword store, which is why an int32 view of +0x48
 //                        looked right for as long as nobody rebalanced.
 //
-// The declaration below keeps `int32_t balance` so every existing reader still
-// compiles; runtime/src/collection/avl_trees.cpp reads the two words through
-// Balance50()/Height50() at the raw offsets. The old spelling is left visible
-// here rather than silently replaced, so a reader who meets it elsewhere
-// recognises it. It is now safe to allocate one of these from this declaration
-// (sizeof is asserted against 0x50 in avl_trees.cpp).
+// B.4 P2 R-OBJ (2026-10-03) re-read 0x180030540 and typed the two words:
+//   0x1800305a9 `MOV word ptr [RDX+0x48],CX`   balance = r - l   (int16)
+//   0x1800305a5 `MOV word ptr [RDX+0x4a],AX`   height  = max     (16-bit)
+//   0x180030595 `CMP R8W,CX / CMOVG AX,R8W`    the max is a SIGNED compare,
+//                                              so height is int16 as well
+//   0x1800305e0 `CMP word ptr [RDX+0x48],-1 / JGE`  balance is signed
+// No reader of the old `int32_t balance` existed (avl_trees.cpp read both words
+// through Balance50()/Height50() at the raw offsets). `_pad4c` is the node's
+// tail padding: the allocation is 0x50 (0x180008440) and nothing reads it.
 // ============================================================
 struct TypeNode {
     uint32_t    key;      // +0x00  duplicate of value.typeId; asserted equal
@@ -206,14 +214,19 @@ struct TypeNode {
     TypeNode*   parent;   // +0x30
     TypeNode*   left;     // +0x38
     TypeNode*   right;    // +0x40
-    int32_t     balance;  // +0x48  GUESS — see above
-    int32_t     _pad4c;
+    int16_t     balance;  // +0x48  0x1800305a9 MOV word [RDX+0x48]
+    int16_t     height;   // +0x4a  0x1800305a5 MOV word [RDX+0x4a]
+    int32_t     _pad4c;   // +0x4c  tail padding of the 0x50 allocation
 };
-static_assert(offsetof(TypeNode, key)    == 0x00, "TypeNode::key");
-static_assert(offsetof(TypeNode, value)  == 0x08, "TypeNode::value");
-static_assert(offsetof(TypeNode, parent) == 0x30, "TypeNode::parent");
-static_assert(offsetof(TypeNode, left)   == 0x38, "TypeNode::left");
-static_assert(offsetof(TypeNode, right)  == 0x40, "TypeNode::right");
+static_assert(offsetof(TypeNode, key)     == 0x00, "TypeNode::key");
+static_assert(offsetof(TypeNode, value)   == 0x08, "TypeNode::value");
+static_assert(offsetof(TypeNode, parent)  == 0x30, "TypeNode::parent");
+static_assert(offsetof(TypeNode, left)    == 0x38, "TypeNode::left");
+static_assert(offsetof(TypeNode, right)   == 0x40, "TypeNode::right");
+static_assert(offsetof(TypeNode, balance) == 0x48, "TypeNode::balance (0x1800305a9)");
+static_assert(offsetof(TypeNode, height)  == 0x4a, "TypeNode::height (0x1800305a5)");
+static_assert(offsetof(TypeNode, _pad4c)  == 0x4c, "TypeNode tail");
+static_assert(sizeof(TypeNode)            == 0x50, "TypeNode is 0x50 (0x180008440)");
 
 // ============================================================
 // Object::Factory — only the tree root is pinned.
@@ -389,7 +402,7 @@ inline void Destroy(Base* p) { delete p; }
 // behaviour; removing the deviation is not this step. ENDGAME B.3R, W0-P0c.
 inline bool IsDerivedFromNullSafe(const void* p, uint32_t typeId) {
     if (!p) return false;
-    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);
+    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: SIG `const void* p` (callers tree-wide hand in untyped refs: wave X)
 }
 
 using TypeRecord = RtObject::TypeRecord;
