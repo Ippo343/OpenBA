@@ -20,6 +20,7 @@
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
+#include "Action/PathSearch.h"   // RawArray (PickBestDropTarget)
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_bodies.h"        // B3R: 0x14009f3e0
 #include "Game/exe_constants.h"     // B3R: kRdata_*
@@ -73,7 +74,7 @@ void Pickup::Persist(IO::Stream& stream) {
 
     // Serialize InternalBasePtr at +0x50 (the typed slot serialized through its base:
     // LEFT)
-    reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(serializer);
+    reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(serializer);   // LEFT: H5 the slot is InternalPtr<CitizenComponent> declared CitizenComponent*
 
     // Validate the deserialized ptr against Pickup type
     if (citizenIBP != nullptr) {
@@ -217,7 +218,7 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
 // (the descent retail inlines twice). (WorkSchedulerTree::root is void* in
 // WorkScheduler.h: LEFT.)
 static Work* Pickup_FindTypeWork(WorkScheduler* scheduler, int typeId) {
-    PickupWorkNode* node = (PickupWorkNode*)scheduler->trees[0].root;
+    PickupWorkNode* node = (PickupWorkNode*)scheduler->trees[0].root;   // LEFT: Game/WorkScheduler.h (COMP-8) WorkSchedulerTree::root is untyped
     while (node != nullptr) {
         if (typeId < node->element.typeId) {
             node = node->left;
@@ -260,15 +261,15 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     CitizenBehavior* townMgr = gw->m_citizenList;
     Map* map = gw->m_game;
-    // The map helpers (0x14009ccf0, 0x1400a00f0, 0x140008830) take the map as int*: LEFT.
-    int* grid = reinterpret_cast<int*>(map);
+    // The map helpers (0x14009ccf0, 0x1400a00f0, 0x140008830) take the map as int*.
+    int* grid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkGrid_FindCell_9ccf0 / WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830
 
     // --- citizen's free carry capacity -----------------------------------------
     CitizenComponent* citizen = *citizenRef;
     StorageComponent* storageIBP = citizen->_entity->FindComponent<StorageComponent>();
     int cap = storageIBP->capacity;
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storageIBP)));
+    int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storageIBP)));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
 
     // desc+0x48 = per-unit size, rawMat+0x28 = amount in the pile. (The original
     // dereferences desc unguarded here; kept faithful -- desc is non-null whenever
@@ -314,21 +315,19 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
                           static_cast<uint32_t>(citizenCell)))
         return 1;
 
-    // (0x1400f6ef0 takes the work as an integer: LEFT)
     CitizenComponent* assignIBP = *citizenRef;
-    if (!static_cast<char>(WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &assignIBP, static_cast<uint32_t>(selfAccess),
-                         static_cast<uint32_t>(citizenCell), time)))   // the door read AL
+    if (!static_cast<char>(StepProgress(&assignIBP, static_cast<uint32_t>(selfAccess),
+                         static_cast<uint32_t>(citizenCell), time)))   // 0x1400f6ef0; the door read AL
         return 0;
 
     // --- is there anywhere to drop it off? --------------------------------------
-    // (0x14008d590 takes the town, the out slot, the resource and the position as
-    // integers: LEFT)
     ComponentEntity* dropIBP = nullptr;
     ComponentEntity* storeOut = nullptr;
     amount = rawMatIBP->quantity;
-    Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(townMgr), reinterpret_cast<int64_t*>(&storeOut), static_cast<uint32_t>(selfAccess),
-                     reinterpret_cast<uint64_t>(field_10->_description),
-                     amount, 1, reinterpret_cast<uint32_t*>(&scratch.x), &dropIBP);
+    PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(townMgr),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                       &storeOut, static_cast<uint32_t>(selfAccess),
+                       field_10->_description,
+                       amount, 1, &scratch.x, &dropIBP);   // 0x14008d590
     if (storeOut == nullptr) return 1;
 
     // Storage we will haul into -- used to test each candidate for acceptance.
@@ -382,10 +381,8 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             RawMaterialComponent* nRawMatIBP = occIBP->FindComponent<RawMaterialComponent>();
             if (nRawMatIBP == nullptr) continue;
 
-            // (0x14012cd80 takes the storage and the description as integers: LEFT)
             ComponentDescription* nDesc = occIBP->_description;
-            if (!static_cast<char>(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(dstStorageIBP),
-                                                            reinterpret_cast<int64_t>(nDesc), 1))) continue;   // the door read AL
+            if (!static_cast<char>(StorageCanAdd(dstStorageIBP, nDesc, 1))) continue;   // 0x14012cd80; the door read AL
 
             const int nAccess = WorkGrid_FindCell_9ccf0(grid, nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;
@@ -523,7 +520,7 @@ int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
         // Call Slot4 via vtable (guard against freed self after CancelAllWork)
         // (port guard, not retail: a zeroed vptr means self was freed during
         // CancelAllWork; the object's first word read as its vptr: LEFT)
-        if (*reinterpret_cast<uintptr_t*>(this) == 0) {
+        if (*reinterpret_cast<uintptr_t*>(this) == 0) {   // LEFT: the port's freed-self probe reads the vptr word (a port guard retail lacks)
             return 0;
         }
         // retail 0x1400f3991: CALL [RAX+0x20] with RCX/RDX/R8 only (slot 4
