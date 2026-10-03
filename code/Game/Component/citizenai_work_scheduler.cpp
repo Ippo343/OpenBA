@@ -380,17 +380,16 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     //     its callers pass wpc+0x48 / *(*(gw+0xb0)+0x38) (Builder) / desc+0x20. Each bucket
     //     node holds its own id-keyed inner tree at +0x08 with a count at +0x10.
     //     If the bucket is absent, cb50 inserts a fresh one. ---
-    uint8_t* wobj = *reinterpret_cast<uint8_t**>(pWorkIBP);
-    uint64_t slot50Buf[2] = {0, 0};
-    uint64_t* targetKey = static_cast<uint64_t*>(
-        reinterpret_cast<Work*>(wobj)->GetTarget(slot50Buf));   // B.3.8 bridge (Work slot 10, retslot)
+    Work* wobj = *reinterpret_cast<Work**>(pWorkIBP);
+    Profession* slot50Buf[2] = {nullptr, nullptr};
+    Profession** targetKey = wobj->GetTarget(slot50Buf);   // Work slot 10, retslot
 
     uint8_t* froot = *reinterpret_cast<uint8_t**>(schedB + 0x120);
     uint8_t* found = nullptr;
     if (froot != nullptr) {
         uint8_t* p = froot;
         while (p != nullptr) {
-            uint64_t nk = *reinterpret_cast<uint64_t*>(p + 0x00);
+            Profession* nk = *reinterpret_cast<Profession**>(p + 0x00);
             if (*targetKey < nk)       p = *reinterpret_cast<uint8_t**>(p + 0x20);   // left([4])
             else if (*targetKey == nk) { found = p; break; }
             else                       p = *reinterpret_cast<uint8_t**>(p + 0x28);   // right([5])
@@ -398,13 +397,13 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     }
     if (found == nullptr) {
         // cb50 builds+inserts a fresh bucket node whose key = the work's profession.
-        void* wobj2 = *reinterpret_cast<void**>(pWorkIBP);
-        uint64_t keyBuf[2] = {0, 0};
-        uint64_t* freshKey = static_cast<uint64_t*>(
-            reinterpret_cast<Work*>(wobj2)->GetTarget(keyBuf));   // B.3.8 bridge (Work slot 10, retslot)
+        Work* wobj2 = *reinterpret_cast<Work**>(pWorkIBP);
+        Profession* keyBuf[2] = {nullptr, nullptr};
+        Profession** freshKey = wobj2->GetTarget(keyBuf);   // Work slot 10, retslot
         void* outNode = nullptr;
         void* nullSrc[2] = { nullptr, nullptr };   // {ptr=0, int=0}: no subtree to copy
-        WS_cb50(reinterpret_cast<uint64_t*>(schedB + 0x120), &outNode, freshKey, nullSrc);
+        WS_cb50(reinterpret_cast<uint64_t*>(schedB + 0x120), &outNode,
+                reinterpret_cast<uint64_t*>(freshKey), nullSrc);   // LEFT: WS_cb50 takes the bucket key as u64 (its other callers pass integer keys)
         found = reinterpret_cast<uint8_t*>(outNode);
     }
 

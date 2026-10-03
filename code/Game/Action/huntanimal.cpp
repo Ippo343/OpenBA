@@ -298,8 +298,8 @@ void HuntAnimal::Enter(void*, void*) {
 // Returns true if param matches the hunter's entity (+0x28 -> +0x10)
 // or the hunt component's entity (+0x20 -> +0x10).
 // ============================================================
-bool HuntAnimal::GetTarget(void* param) {
-    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool HuntAnimal::GetTarget(ComponentEntity** param) {
+    void* target = *param;
 
     if (_field28->_entity == target) {
         return true;

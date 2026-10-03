@@ -38,12 +38,12 @@ public:
     // frees the validity array and the cell BST
     ~HarvestArea() override;                                        // [0]  0x14002a4d0
     void  Persist(void* stream) override;                           // [3]  0x1400ed350
-    int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eccd0
-    int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400ecc20
-    int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]  0x1400ecb60
+    int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400eccd0
+    int   OnComplete(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;  // [6]  0x1400ecc20
+    int   OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) override;    // [7]  0x1400ecb60
     int   Cleanup() override;                                       // [8]  0x1400ed270
     int   Validate() override;                          // [9]  0x1400ec930
-    void* GetTarget(void* outPtr) override;                         // [10] 0x1400ed2f0
+    Profession** GetTarget(Profession** outPtr) override;                         // [10] 0x1400ed2f0
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- HarvestArea fields (+0x48) ---

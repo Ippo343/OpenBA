@@ -99,7 +99,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
     // [9] Validate, RCX only (0x1400f86ad); [4] Execute(&citizen, scheduler+0x130) (0x1400f86d3).
     work->Validate();
 
-    void* citizenCopy = *reinterpret_cast<void**>(citizenRef);
+    CitizenComponent* citizenCopy = *reinterpret_cast<CitizenComponent**>(citizenRef);
     uint64_t uVar2 = static_cast<uint32_t>(work->Execute(&citizenCopy, &scheduler->time));
 
     if (static_cast<int>(uVar2) == 2)
@@ -108,7 +108,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
     if (static_cast<int>(uVar2) == 1) {
         if (flag != '\0') {
             work->Validate();   // [9] (0x1400f86f4)
-            citizenCopy = *reinterpret_cast<void**>(citizenRef);
+            citizenCopy = *reinterpret_cast<CitizenComponent**>(citizenRef);
             // [5] Slot5(&citizen, scheduler+0x130) (0x1400f871a); the caller reads AL.
             uint64_t assignR = static_cast<uint32_t>(work->Slot5(&citizenCopy, &scheduler->time));
             if (static_cast<char>(assignR) != '\0')

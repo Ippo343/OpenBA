@@ -39,12 +39,12 @@ public:
     // retail's dtor only re-stamps the tables
     ~BuildRoad() override = default;                                    // [0]  0x1400295b0
     void  Persist(void* stream) override;                               // [3]  0x1400e4980
-    int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400e4190
-    int   OnComplete(void* citizen, void* arg2, int param4) override;   // [6]  0x1400e4150
-    int   OnCancel(void* citizen, void* arg2, int arg3) override;       // [7]  0x1400e4120
+    int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400e4190
+    int   OnComplete(CitizenComponent** citizen, ComponentEntity** arg2, int param4) override;   // [6]  0x1400e4150
+    int   OnCancel(CitizenComponent** citizen, ComponentEntity** arg2, int arg3) override;       // [7]  0x1400e4120
     int   Cleanup() override;                                           // [8]  0x1400e4910
     int   Validate() override;                              // [9]  0x1400e40c0
-    void* GetTarget(void* retbuf) override;                             // [10] 0x1400e4960
+    Profession** GetTarget(Profession** retbuf) override;                             // [10] 0x1400e4960
     int   GetPriority() override;                                       // [11] 0x1400295a0
 
     // --- BuildRoad fields (+0x48) ---

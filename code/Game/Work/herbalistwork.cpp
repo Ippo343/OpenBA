@@ -163,11 +163,7 @@ static void AssignWorkToEntity(HerbalistWork* self, CitizenComponent** citizenIB
 //       - Create PerformWork action to harvest
 // 7. If no work found, handle failure (idle animation or replan)
 //
-int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = static_cast<CitizenComponent**>(entityIBP);
-
+int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // Save citizen ref for later use
     CitizenComponent* citizenRef = *citizenIBP;
 
@@ -452,7 +448,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
-int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+int HerbalistWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return false;
 }
@@ -463,7 +459,7 @@ int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
-int HerbalistWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+int HerbalistWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return 0;
 }
@@ -614,11 +610,11 @@ int HerbalistWork::Validate() {
 // ============================================================
 // HerbalistWork::Slot10 / GetWorkEntity
 // The entity's (+0x10) WorkPlaceComponent (FUN_140002e10), its profession (+0x48)
-// into the return slot (void* in Work.h's slot: LEFT).
+// into the return slot.
 // ============================================================
-void* HerbalistWork::GetTarget(void* outPtr) {
+Profession** HerbalistWork::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *static_cast<Profession**>(outPtr) = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

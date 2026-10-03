@@ -98,8 +98,8 @@ int  CompleteTask::AbstractImpl(void* actionStack) {
     // 2026-07-22 against the live BUILD_TRACE (taskIdx=-1, taskMgr live) — do not "fix".
     int32_t taskIdx = this->taskIndex;
     if (taskIdx >= 0) {
-        void* entityRef28 = this->targetEntity.Get();
-        void* entityRef20 = this->workEntity.Get();
+        ComponentEntity* entityRef28 = this->targetEntity.Get();
+        CitizenComponent* entityRef20 = this->workEntity.Get();
         WorkScheduler* taskMgr = GameUpdateLoop::_singleton->m_tutorial;
 
         bool completed = TryCompleteTask(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8760
@@ -122,8 +122,8 @@ void CompleteTask::CheckEntity() {
         this->taskIndex = workEntity->field_0x30;
     }
 
-    void* entityRef28 = this->targetEntity.Get();
-    void* entityRef20 = this->workEntity.Get();
+    ComponentEntity* entityRef28 = this->targetEntity.Get();
+    CitizenComponent* entityRef20 = this->workEntity.Get();
     WorkScheduler* taskMgr = GameUpdateLoop::_singleton->m_tutorial;
 
     TaskReassign(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);   // 0x1400f8800
@@ -133,8 +133,8 @@ void CompleteTask::CheckEntity() {
 // GetTarget (0x1400c5a50, vtable slot 9)
 // Returns true if param matches entity at +0x28 or parent entity at +0x20.
 // ============================================================
-bool CompleteTask::GetTarget(void* param) {
-    void* paramVal = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool CompleteTask::GetTarget(ComponentEntity** param) {
+    void* paramVal = *param;
 
     // Check direct match with target entity
     if (this->targetEntity.Get() == paramVal) {

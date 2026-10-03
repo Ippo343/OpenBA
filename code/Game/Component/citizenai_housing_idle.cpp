@@ -491,9 +491,9 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
             // vtable +0x48 refresh
             reinterpret_cast<Work*>(payload)->Validate();   // B.3.x bridge (slot 9; 0x1400f7bc3 RCX only)
             payload = *reinterpret_cast<int64_t*>(cur);
-            int64_t citizen = reinterpret_cast<int64_t>(*param_2);  // local_res18[0] = *param_2 (citizen)
+            CitizenComponent* citizen = reinterpret_cast<CitizenComponent*>(*param_2);  // local_res18[0] = *param_2 (citizen)
             uint32_t r = static_cast<uint32_t>(reinterpret_cast<Work*>(payload)->Execute(
-                &citizen, reinterpret_cast<void*>(param_1 + 0x130)));   // B.3.x bridge (slot 4; 0x1400f7be9)
+                &citizen, reinterpret_cast<System::Time*>(param_1 + 0x130)));   // B.3.x bridge (slot 4; 0x1400f7be9); LEFT: param_1 is the scheduler as int64_t (WorkScheduler::time +0x130)
             if (static_cast<int>(r) == 2) return 1;
             if (static_cast<int>(r) == 1) {
                 *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cur) + 0x2c) = *reinterpret_cast<int*>(param_1 + 8);

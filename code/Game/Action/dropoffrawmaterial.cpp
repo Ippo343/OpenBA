@@ -224,8 +224,8 @@ void DropOffRawMaterial::CheckEntity() {
 // Returns true if param matches the destination at +0x38, or the carrying citizen's
 // (+0x30) owning entity (Component +0x10).
 // ============================================================
-bool DropOffRawMaterial::GetTarget(void* param) {
-    void* target = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool DropOffRawMaterial::GetTarget(ComponentEntity** param) {
+    void* target = *param;
 
     if (target == _field38.Get()) {
         return true;

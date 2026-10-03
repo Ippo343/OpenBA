@@ -140,8 +140,8 @@ int  PlayAnimation::Execute(void* actionStack, void* time) {
 // PlayAnimation::GetTarget (0x1400423b0)
 // Returns true if param matches entity at +0x20.
 // ============================================================
-bool PlayAnimation::GetTarget(void* param) {
-    return _field20.Get() == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool PlayAnimation::GetTarget(ComponentEntity** param) {
+    return _field20.Get() == *param;
 }
 
 // ============================================================

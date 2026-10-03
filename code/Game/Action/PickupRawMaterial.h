@@ -29,7 +29,7 @@ public:
     ~PickupRawMaterial() override = default;                   // [0] 0x140022cd0
     void Persist(void* stream) override;                       // [3] 0x1400c99e0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c98d0
-    bool GetTarget(void* param) override;                      // [9] 0x1400c9860
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c9860
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<CitizenComponent> _field20;   // +0x20 the carrying citizen (Persist checks CitizenComponent)

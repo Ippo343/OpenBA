@@ -97,10 +97,7 @@ static WorkCellSetNode* FindCell(WorkCellSetNode* node, int key) {
 // 7. Create planting action, assign work, insert into the set
 // 8. If no cells remaining and count==0, mark the field's slots done
 //
-int PlantArea::Execute(void* entityIBP, void* /*context*/) {
-    // LEFT: Work::Execute's citizen reference is untyped (the slot every leaf overrides).
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(entityIBP);
-
+int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) {
     // Step 1: Find components on the field entity
     WorkComponent* workComp = field_10->FindComponent<WorkComponent>();         // 0x140003050
     CropFieldComponent* crop = field_10->FindComponent<CropFieldComponent>();   // 0x140005380
@@ -311,7 +308,7 @@ namespace { void PA_SlotHit(const char* which) {
         std::fflush(stderr);
     }
 } }
-int PlantArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
+int PlantArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     PA_SlotHit("C");
 
@@ -371,7 +368,7 @@ int PlantArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
 // Marks cells valid, removes the set entries.
 // param4 packed: low 16 = primary cell, high 16 = paired cell.
 // ============================================================
-int PlantArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
+int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     PA_SlotHit("X");
 
@@ -567,11 +564,10 @@ cleanup:
 // PlantArea::GetTarget [10] -- 0x1400f44e0
 // The field's WorkPlaceComponent's Profession, through the hidden return slot.
 // ============================================================
-void* PlantArea::GetTarget(void* outPtr) {
+Profession** PlantArea::GetTarget(Profession** outPtr) {
     // 0x140002e10 = FindComponent<WorkPlaceComponent>.
     WorkPlaceComponent* workplace = field_10->FindComponent<WorkPlaceComponent>();
-    // LEFT: slot 10's return slot is untyped (the slot every leaf overrides).
-    *reinterpret_cast<Profession**>(outPtr) = workplace->profession;
+    *outPtr = workplace->profession;
     return outPtr;
 }
 

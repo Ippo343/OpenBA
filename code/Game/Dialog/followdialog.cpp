@@ -202,9 +202,9 @@ void FollowDialog::OnUpdateLayout() {
         if (homeRef != 0) {
             // The work's target (slot 10) against the citizen's profession
             // The gw+0x118 work tree's node payload is a Work (0x1400f88a0 fills it).
-            uint64_t descRef = 0;
+            Profession* descRef = nullptr;
             reinterpret_cast<Work*>(homeRef)->GetTarget(&descRef);   // B.3.x bridge (slot 10)
-            if (descRef != (uint64_t)(uintptr_t)ai->profession) {
+            if (descRef != ai->profession) {
                 actionIndex = 0x10;  // profession mismatch — show "looking for work" string
             }
         }

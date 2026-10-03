@@ -29,7 +29,7 @@ public:
     ~SendComponentMessage() override = default;                // [0] 0x1400230f0
     void Persist(void* stream) override;                       // [3] 0x1400cb000
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400caef0
-    bool GetTarget(void* param) override;                      // [9] 0x1400cae80
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400cae80
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<ComponentEntity> _field20;   // +0x20 target entity (Persist checks ComponentEntity)

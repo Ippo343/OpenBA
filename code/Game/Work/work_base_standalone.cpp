@@ -35,7 +35,7 @@ Work::Work(void* pEntityIBP) : Object::Internal() {
 DEFINE_EXE_ABSTRACT_TYPE(Work, "Object::Internal")
 
 // [5] 0x1400f7540 `XOR AL,AL; RET` (shared by 22 tables).
-int  Work::Slot5(void*, void*) { return 0; }
+int  Work::Slot5(CitizenComponent**, System::Time*) { return 0; }
 // [12] 0x140006b10 `RET 0` (shared by 25 tables).
 void Work::Slot12(int /*version*/) {}
 
