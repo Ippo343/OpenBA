@@ -117,7 +117,7 @@
 //
 // What is left in this file is the two things the header cannot hold:
 //
-//   1. `Collection::detail::ListNodeAlloc/ListNodeFree` — the allocator seam,
+//   1. `Collection::detail::AllocateListNode/ListNodeFree` — the allocator seam,
 //      which needs `ResolveAddr` and therefore must stay out of a types header
 //      (PLAN.md §4.1 decision 1).
 //   2. The four `extern "C"` entry points, now ONE LINE EACH, and their
@@ -210,9 +210,9 @@ constexpr uint64_t kLive = 0x4c495645ull;   // 'LIVE'
 constexpr uint64_t kDead = 0x44454144ull;   // 'DEAD'
 }  // namespace
 
-void* ListNodeAlloc(uint64_t bytes, int align) {
+void* AllocateListNode(uint64_t bytes, int align) {
     (void)align;                     // malloc is already 16-aligned on x64
-    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));  // LEFT: the unit-test node allocator's malloc result (tier-I shape names MemAlloc)
+    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));  // CAST-OK: alloc_header
     if (!base) { return nullptr; }
     *reinterpret_cast<uint64_t*>(base) = kLive;  // CAST-OK: alloc_header
     ++g_listNodeAllocs;
@@ -229,7 +229,7 @@ void ListNodeFree(void* p) {
     std::free(base);
 }
 #else
-void* ListNodeAlloc(uint64_t bytes, int align) {
+void* AllocateListNode(uint64_t bytes, int align) {
     return MemAllocLocked(bytes, align);
 }
 

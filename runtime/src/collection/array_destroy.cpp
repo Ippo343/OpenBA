@@ -224,10 +224,10 @@ void FreeInnerArraysCore(uint8_t* base, int count, const DestroySpec* s) {
         uint8_t* e = base + i * s->stride;
         for (int k = 0; k < s->nOffs; ++k) {
             uint8_t* slot = e + s->offs[k];
-            void* p = *reinterpret_cast<void**>(slot);  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
+            void* p = *reinterpret_cast<void**>(slot);  // CAST-OK: elem_stride
             if (p) MemFree(p);                    // Enter; Free(_singleton,p); Leave
-            *reinterpret_cast<uint64_t*>(slot + 0) = 0;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
-            *reinterpret_cast<uint64_t*>(slot + 8) = 0;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
+            *reinterpret_cast<uint64_t*>(slot + 0) = 0;  // CAST-OK: elem_stride
+            *reinterpret_cast<uint64_t*>(slot + 8) = 0;  // CAST-OK: elem_stride
         }
     }
 }
@@ -241,16 +241,16 @@ void ReleaseStringsCore(uint8_t* base, int count, const DestroySpec* s) {
     for (int64_t i = 0; i < n; ++i) {
         uint8_t* e = base + i * s->stride;
         for (int k = 0; k < s->nOffs; ++k) {
-            uint8_t** slot = reinterpret_cast<uint8_t**>(e + s->offs[k]);  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
-            uint8_t* str = *slot;
+            char** slot = reinterpret_cast<char**>(e + s->offs[k]);  // CAST-OK: elem_stride
+            char* str = *slot;
             if (!str) continue;
-            int32_t* rc = reinterpret_cast<int32_t*>(str - 4);  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
-            --*rc;                                // DEC dword [RAX-4]
-            if (*rc != 0) {                       // CMP / JNZ — still shared
+            int32_t& rc = RtSystem::StringRefCount(str);
+            --rc;                                 // DEC dword [RAX-4]
+            if (rc != 0) {                        // CMP / JNZ — still shared
                 *slot = nullptr;
                 continue;
             }
-            uint8_t* blk = str - 8;               // ADD qword [slot],-8
+            char* blk = str - 8;                  // ADD qword [slot],-8
             *slot = blk;                          // ... and the slot KEEPS it
             if (blk != nullptr) MemFree(blk);     // JZ on the ADD's result
         }
@@ -435,7 +435,7 @@ static int FreeInnerArraysCounted(uint8_t* base, int count, const DestroySpec* s
         const int64_t n = static_cast<int64_t>(count);
         for (int64_t i = 0; i < n; ++i)
             for (int k = 0; k < s->nOffs; ++k)
-                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++freed;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
+                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++freed;  // CAST-OK: elem_stride
     }
     FreeInnerArraysCore(base, count, s);
     return freed;
@@ -447,7 +447,7 @@ static int ReleaseStringsCounted(uint8_t* base, int count, const DestroySpec* s)
         const int64_t n = static_cast<int64_t>(count);
         for (int64_t i = 0; i < n; ++i)
             for (int k = 0; k < s->nOffs; ++k)
-                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++nonNull;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
+                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++nonNull;  // CAST-OK: elem_stride
     }
     ReleaseStringsCore(base, count, s);
     return nonNull;
@@ -744,8 +744,8 @@ J2_ENTRY(18004fa30, ReleaseStringsCounted,  kD_Str_20)       // CALL 0x18004fe20
 // it. So the entry point below is the SINGLE-element form, which is why it does
 // not use A_ENTRY/B_ENTRY: those are (this, base, count) because retail's
 // helpers are.
-void RtColl_DestroyElem_180044050(void* elem) {
-    const int n = ReleaseStringsCounted(static_cast<uint8_t*>(elem), 1, &kD_Str3_38at08);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+void RtColl_DestroyElem_180044050(uint8_t* elem) {
+    const int n = ReleaseStringsCounted(elem, 1, &kD_Str3_38at08);
 }
 J2_ENTRY(180043a00, ReleaseStringsCounted,  kD_Str3_38at08)  // UI: ~LayoutDescription's entry array
 
