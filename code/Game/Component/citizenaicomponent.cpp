@@ -624,7 +624,7 @@ void CitizenAIComponent::Update(void* timeArg) {
         if (s_force == 1 && g_pForceWorkBuilding) {
             if (citizen->home == nullptr) {
                 new (&citizen->home) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(g_pForceWorkBuilding));   // LEFT: g_pForceWorkBuilding is void* (starttown.cpp, GAME-4)
+                        reinterpret_cast<RtObject::Internal*>(g_pForceWorkBuilding));   // B.3.3 bridge; LEFT: g_pForceWorkBuilding is void* (starttown.cpp, GAME-4)
                 // the harness plants a non-disease pointer in the Disease* slot
                 *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: the harness plants a non-Disease pointer (g_pForceWorkBuilding void*, GAME-4)
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
