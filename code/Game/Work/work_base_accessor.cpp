@@ -26,32 +26,9 @@
 #include "Component/ComponentDescription.h"
 #include "Component/Description.h"
 
-// ============================================================
-// FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
-// These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
-// ============================================================
-// Reimpl of FUN_140005380 — FindComponent (type-ID DAT_1401c7510, CropFieldComponent)
-void* WorkAcc_FindComponent_5380(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<CropFieldComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<CropFieldComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// Reimpl of FUN_140005440 — FindComponent (type-ID DWORD_1401c46b0, OrchardComponent)
-void* WorkAcc_FindComponent_5440(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<OrchardComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<OrchardComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// Reimpl of FUN_140022520 — FindComponent<AutoPickupComponent>: retail compares against
-// [0x1401c3fb0] at 0x140022563 and IsDerivedFrom-checks with it at 0x1400225bc.
-// ENDGAME B.3.9 CB: that cell is unregistered, so the old pointer-based scan was
-// skipped outright and this finder answered null for every entity. It now finds the
-// component (AutoPickupWork::Cleanup, WorkGrid_AutoPickup_e3db0, CreateNaturalResource
-// and CreateRawMaterial reach it through the registered 0x140022520).
-void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<AutoPickupComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<AutoPickupComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
+// (FindComponent instances 0x140005380 / 0x140005440 / 0x140022520, the B4 FORWARD
+// forwarders to ComponentEntity::FindComponent<CropFieldComponent / OrchardComponent /
+// AutoPickupComponent>, had no caller left: deleted, B4 P2 WORK-3.)
 
 // ============================================================
 // FindComponent (RawMaterial) — variant with a different container layout

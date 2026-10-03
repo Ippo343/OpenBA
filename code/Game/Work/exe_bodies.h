@@ -76,9 +76,6 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
 void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* workEntity, float* position, float param5_heading, uint64_t rawMatP2, float rawMatP3, uint32_t param8, uint32_t param9);  // 0x1400beae0
 
 // ---- work_base_accessor.cpp
-void* WorkAcc_FindComponent_5380(uintptr_t entity, void* retIBP);  // 0x140005380
-void* WorkAcc_FindComponent_5440(uintptr_t entity, void* retIBP);  // 0x140005440
-void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP);  // 0x140022520
 void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut);  // 0x140006330
 
 // ---- work_base_actionctor.cpp
@@ -103,7 +100,6 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer);  // 0x140029
 // ---- work_base_grid.cpp
 int WorkGrid_FindCell_9ccf0(int* mapGrid, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag);  // 0x1400f8620
-int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef);  // 0x1400e3db0 B4 FORWARD: 6 outside callers (Work::TryAutoPickup)
 
 // ---- work_base_impl2.cpp
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
@@ -137,9 +133,6 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut);  // 0x
 long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row);  // 0x140120c30
 
 // ---- work_leaf_hunt.cpp
-void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP);  // 0x14002a730
-void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP);  // 0x14000a0b0
-void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP);  // 0x140004fe0
 void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval);  // 0x1400063d0
 bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self);  // 0x1401193a0
 int WorkLeaf_Pasture_8350(uintptr_t self);  // 0x140128350
