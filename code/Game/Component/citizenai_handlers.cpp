@@ -32,6 +32,9 @@
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include "Component/CitizenComponent.h"
 #include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"   // the model translation
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"                   // Map::size (m_game)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -71,7 +74,7 @@ namespace {
 static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1, float* dest, float animTime) {
     CitizenComponent* citizen = *param_1;
     CharacterComponent* character = citizen->character;
-    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);
+    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: SIG Pf_ActStackPush_54e0 (int64_t* stack; Action/exe_bodies.h)
 
     WorkBase_TaskListCleanup_c5400(stack);
 
@@ -79,41 +82,38 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     void* msgAction = nullptr;
     void* mem = System::MemoryAllocator::MemAlloc(0x40, 8);
     if (mem) {
-        int64_t destIBP = 0;
+        uint64_t destIBP = 0;
         new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        uint64_t entityIBP = reinterpret_cast<uint64_t>(citizen->_entity);
-        msgAction = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
+        uint64_t entityIBP = reinterpret_cast<uint64_t>(citizen->_entity);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0 (uint64_t* IBP; Action/exe_bodies.h)
+        msgAction = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, msgId, 0, &destIBP, 0);
     }
     Action* msgIBP = nullptr;
     new (&msgIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(msgAction));   // B.3.3 bridge
+        reinterpret_cast<RtObject::Internal*>(msgAction));   // B.3.3 bridge; LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0 returns void*
     if (character->field_0x58 != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(
-            );   // B.3.3 bridge
+        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();   // B.3.3 bridge; LEFT: CharacterComponent::field_0x58 is Action*, not an InternalPtr (CharacterComponent.h, WORK-3)
     }
     character->field_0x58 = msgIBP;
 
     // (3) PlayAnimation action (only when animTime > 0)
     if (0.0f < animTime) {
         void* pmem = System::MemoryAllocator::MemAlloc(0x40, 8);
-        void* animAction = nullptr;
+        PlayAnimation* animAction = nullptr;
         if (pmem) {
-            int64_t timeStore = 0;
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStore), animTime);
-            uint64_t entityIBP = reinterpret_cast<uint64_t>(citizen->_entity);
+            System::Time timeStore{};
+            RtSystem_Time_Ctor(&timeStore, animTime);
+            ComponentEntity* entityIBP = citizen->_entity;
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (pmem) PlayAnimation();
-            *reinterpret_cast<uint64_t*>(&a->_field20) = entityIBP;   // raw IBP copy, as retail
-            a->animation                                = 0;
-            *reinterpret_cast<int64_t*>(&a->_field30)  = timeStore;
-            a->_field38._ticks                          = 0;
-            animAction = pmem;
+            a->_field20        = entityIBP;   // raw IBP copy, as retail
+            a->animation       = 0;
+            a->_field30        = timeStore;
+            a->_field38._ticks = 0;
+            animAction = a;
         }
-        int64_t animIBP = 0;
-        new (&animIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(animAction));   // B.3.3 bridge
+        Action* animIBP = animAction;   // the InternalPtr<Action> the push copies
         Pf_ActStackPush_54e0(stack, &animIBP);
     }
 
@@ -121,23 +121,21 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     void* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
-        int64_t entityVal = reinterpret_cast<int64_t>(citizen->_entity);
-        int64_t familyOut = 0;
-        ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entityVal), &familyOut);
-        if (familyOut == 0) {
+        CharacterComponent* familyOut = nullptr;   // the InternalPtr the finder writes
+        ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(citizen->_entity), &familyOut);   // LEFT: SIG ActMv_FindComponentFamily_12d0 (uintptr_t entity; Action/exe_bodies.h)
+        if (familyOut == nullptr) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
             // "family" component IS the citizen's own CharacterComponent,
             // populated by Brick 2/4a — use it directly (Brick self-contained pattern).
-            new (&familyOut) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(character));   // B.3.3 bridge
+            familyOut = character;
         }
         float speed = kRdata_140172280;
         moveAction = Pf_MoveToCtor_9170(mmem, &familyOut, 1 /*Slow*/, 0, dest, 0xe1f, 0, speed);
     }
     int64_t moveIBP = 0;
     new (&moveIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge
+        reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge; LEFT: SIG Pf_MoveToCtor_9170 returns void*
     Pf_ActStackPush_54e0(stack, &moveIBP);
 }
 
@@ -176,32 +174,32 @@ bool CitizenAIComponent::State_Wander() {
         target = target->spouse;
     }
 
-    int* grid = (GameUpdateLoop::_singleton != nullptr)
-                ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8)
+    Map* grid = (GameUpdateLoop::_singleton != nullptr)
+                ? GameUpdateLoop::_singleton->m_game
                 : nullptr;
     if (!grid) return false;
 
     // --- cell coords from `target` model position ---
-    int64_t tModel = reinterpret_cast<int64_t>(target->character->modelComponent);
-    int mapSize = *grid;
+    const ModelComponent* tModel = target->character->modelComponent;
+    int mapSize = grid->size;
     int half = mapSize >> 1;
-    int tx = static_cast<int>(*reinterpret_cast<float*>(tModel + 0x158) + static_cast<float>(half));
-    int ty = static_cast<int>(*reinterpret_cast<float*>(tModel + 0x15c) + static_cast<float>(half));
+    int tx = static_cast<int>(tModel->transform.translation.x + static_cast<float>(half));
+    int ty = static_cast<int>(tModel->transform.translation.y + static_cast<float>(half));
     if (tx < 0) tx = 0;
     if (mapSize <= tx) tx = mapSize - 1;
     if (ty < 0) ty = 0;
     if (mapSize <= ty) ty = mapSize - 1;
 
     // --- cell coords from the citizen's model position ---
-    int64_t sModel = reinterpret_cast<int64_t>(citizen->character->modelComponent);
-    int sx = static_cast<int>(*reinterpret_cast<float*>(sModel + 0x158) + static_cast<float>(half));
-    int sy = static_cast<int>(*reinterpret_cast<float*>(sModel + 0x15c) + static_cast<float>(half));
+    const ModelComponent* sModel = citizen->character->modelComponent;
+    int sx = static_cast<int>(sModel->transform.translation.x + static_cast<float>(half));
+    int sy = static_cast<int>(sModel->transform.translation.y + static_cast<float>(half));
     if (sx < 0) sx = 0;
     if (mapSize <= sx) sx = mapSize - 1;
     if (sy < 0) sy = 0;
     if (mapSize <= sy) sy = mapSize - 1;
 
-    int cell = WorkGrid_FindCell_9ccf0(grid, mapSize * ty + tx, mapSize * sy + sx, 0xe1f);
+    int cell = WorkGrid_FindCell_9ccf0(reinterpret_cast<int*>(grid), mapSize * ty + tx, mapSize * sy + sx, 0xe1f);   // LEFT: SIG WorkGrid_FindCell_9ccf0 (int* map; Work/exe_bodies.h)
     if (cell < 0) return false;
 
     float kBias = kRdata_140172114;
