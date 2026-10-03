@@ -28,10 +28,12 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/Internal.h"
+#include "system/Value.h"      // System::Time (+0x20; trivial, 8 bytes)
 #include "Object/exe_type.h"
 #include "Component/Component.h"   // FindComponent<T>: Array<InternalPtr<Component>>
 
 class ComponentDescription;
+struct EntityList;   // Entity/EntityList.h
 
 class ComponentEntity final : public Object::Internal {
     DECLARE_EXE_TYPE(ComponentEntity)
@@ -99,11 +101,16 @@ public:
 
     // ---- fields (PUBLIC: EntityList and many unconverted readers use the raw
     // offsets) ----
-    void*                 _entityList;      // +0x10 owning EntityList (set by RegisterEntity)
+    EntityList*           _entityList;      // +0x10 owning EntityList (set by RegisterEntity)
     int32_t               _entityId;        // +0x18 -1 sentinel
     uint32_t              _handle;          // +0x1C low 24 bits: category-bucket index
                                             //       (0xFFFFFF = none); +0x1F: category byte
-    void*                 _externals;       // +0x20 = entityList[0]
+    System::Time          _lastUpdateTime;  // +0x20 the EntityList's accumulated time at the
+                                            //       entity's last bucket tick: RegisterEntity
+                                            //       stamps it with EntityList +0x00, Update
+                                            //       ticks by (now - it) and restamps it,
+                                            //       Serialize 0x1400c44a0 writes it through
+                                            //       System::Time::Serialize (was `void* _externals`)
     ComponentDescription* _description;     // +0x28 ExternalPtr<ComponentDescription>
     Object::InternalPtr<Component>* _components;  // +0x30 Array<InternalPtr<Component>> data (stride 8;
                                             //       every FindComponent instance CheckPtr's &_components[i])
@@ -120,7 +127,8 @@ static_assert(alignof(ComponentEntity) == 8, "ComponentEntity alignment");
 static_assert(offsetof(ComponentEntity, _entityList)     == 0x10, "ComponentEntity::_entityList @ +0x10");
 static_assert(offsetof(ComponentEntity, _entityId)       == 0x18, "ComponentEntity::_entityId @ +0x18");
 static_assert(offsetof(ComponentEntity, _handle)         == 0x1C, "ComponentEntity::_handle @ +0x1C");
-static_assert(offsetof(ComponentEntity, _externals)      == 0x20, "ComponentEntity::_externals @ +0x20");
+static_assert(offsetof(ComponentEntity, _lastUpdateTime) == 0x20, "ComponentEntity::_lastUpdateTime @ +0x20");
+static_assert(sizeof(System::Time) == 8, "+0x20 is one 8-byte System::Time");
 static_assert(offsetof(ComponentEntity, _description)    == 0x28, "ComponentEntity::_description @ +0x28");
 static_assert(offsetof(ComponentEntity, _components)     == 0x30, "ComponentEntity::_components @ +0x30");
 static_assert(offsetof(ComponentEntity, _componentCount) == 0x38, "ComponentEntity::_componentCount @ +0x38");

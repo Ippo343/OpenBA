@@ -58,9 +58,9 @@ bool     s_traceHavePrev = false;
 bool     s_traceDumped   = false;
 
 // Each component template's GetComponentType (Description slot 8, a retslot).
-uint32_t TemplateComponentType(void* compTemplate) {
+uint32_t TemplateComponentType(const Description* compTemplate) {
     Object::Type typeId(0);
-    reinterpret_cast<const Description*>(compTemplate)->GetComponentType(&typeId);  // B.3.8 bridge
+    compTemplate->GetComponentType(&typeId);
     return typeId;
 }
 }  // namespace
@@ -77,7 +77,7 @@ ComponentEntity::ComponentEntity()
       _entityList(nullptr),
       _entityId(-1),
       _handle(0x00FFFFFF),
-      _externals(nullptr),
+      _lastUpdateTime(),
       _description(nullptr),
       _components(nullptr),
       // Retail zeroes the FULL qword at +0x38 — count AND capacity. Zeroing only
@@ -95,7 +95,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
       _entityList(nullptr),
       _entityId(-1),
       _handle(0x00FFFFFF),
-      _externals(nullptr),
+      _lastUpdateTime(),
       _description(description),       // +0x28
       // The entity block comes from MemAlloc(0x48), which does NOT zero memory. The
       // original CopyCtor zeroes the full component-array header (data/count/cap);
@@ -135,8 +135,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
     // Second pass: create components
     int insertIdx = 0;
     for (int64_t i = 0; i < (int64_t)descCompCount; i++) {
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header, running).
-        Description* compTemplate = static_cast<Description*>(description->_subDescs[i]);
+        Description* compTemplate = description->_subDescs[i];
         uint32_t typeId = TemplateComponentType(compTemplate);
         if (typeId == 0) continue;
 
@@ -326,28 +325,29 @@ void ComponentEntity::RefreshEntityFlags() {
 
     // If entityList is set (+0x10), check for flag changes that need registration
     if (_entityList != nullptr) {
-        uintptr_t entityListPtr = (uintptr_t)_entityList;
+        EntityList* entityList = _entityList;
 
         // If update bit (bit 2) changed, register in update bucket
         if (((oldFlags ^ _entityFlags) & 4) != 0) {
             // EntityList +0x88 = update entity array, +0x90 = update count
-            int updateCount = *(int*)(entityListPtr + 0x90) + 1;
+            int updateCount = entityList->stagingUpdate.count + 1;
             GameColl::Ptr8 ibp;
             ibp.v = this;   // the InternalBasePtr onto this entity
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
-            // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x88).SetSize(updateCount, ibp);
+            // stride 8 align 8. Element is the 8-byte entity InternalBasePtr
+            // (IBPArray is the raw triple, H5: the AsArray bridge as RegisterEntity's).
+            GameColl::AsArray<GameColl::Ptr8>(&entityList->stagingUpdate).SetSize(updateCount, ibp);
         }
 
         // If draw bit (bit 4) changed, register in draw bucket
         if (((oldFlags ^ _entityFlags) & 0x10) != 0) {
             // EntityList +0x98 = draw entity array, +0xa0 = draw count
-            int drawCount = *(int*)(entityListPtr + 0xa0) + 1;
+            int drawCount = entityList->stagingPostUpdate.count + 1;
             GameColl::Ptr8 ibp;
             ibp.v = this;   // the InternalBasePtr onto this entity
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
             // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x98).SetSize(drawCount, ibp);
+            GameColl::AsArray<GameColl::Ptr8>(&entityList->stagingPostUpdate).SetSize(drawCount, ibp);
         }
     }
 }
@@ -439,10 +439,10 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                 // reading an unrelated dword, not that the stream stalled.
                 uint32_t pos = 0, pos24 = 0;
                 {
-                    void* strm = *(void**)&ser;
+                    void* strm = *(void**)&ser;   // LEFT: IO::Serializer internals (runtime/types/io/Serializer.h, R-IO)
                     if (strm) {
-                        pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);
-                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);
+                        pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
+                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
                         // Neither documented cursor moves for THIS stream type, so
                         // find the real one instead of guessing a third offset:
                         // snapshot the first 0x100 bytes and report which dwords
@@ -450,7 +450,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                         // one that advances monotonically by each component's size.
                         uint32_t cur[64];
                         for (int k = 0; k < 64; ++k)
-                            cur[k] = *(uint32_t*)((uint8_t*)strm + k * 4);
+                            cur[k] = *(uint32_t*)((uint8_t*)strm + k * 4);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
                         if (s_traceHavePrev) {
                             char buf[512]; int n = 0;
                             for (int k = 0; k < 64 && n < 400; ++k)
@@ -485,18 +485,18 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                         // bytes at a desync be read directly instead of inferred.
                         {
                             const int cand[5] = { 0x10, 0x28, 0x30, 0x40, 0x80 };
-                            uint8_t* sb = (uint8_t*)strm;
+                            uint8_t* sb = (uint8_t*)strm;   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
                             uint32_t cursor = cur[0x1C / 4];
                             fprintf(stderr, "[CompEnt::Ser]   cur=%u", cursor);
                             for (int c2 = 0; c2 < 5; ++c2) {
-                                uint8_t* base = *(uint8_t**)(sb + cand[c2]);
+                                uint8_t* base = *(uint8_t**)(sb + cand[c2]);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
                                 uint32_t v = 0; bool ok = false;
                                 if (base) {
                                     MEMORY_BASIC_INFORMATION mbi;
                                     if (VirtualQuery(base + cursor, &mbi, sizeof(mbi)) &&
                                         mbi.State == MEM_COMMIT &&
                                         !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
-                                        v = *(uint32_t*)(base + cursor); ok = true;
+                                        v = *(uint32_t*)(base + cursor); ok = true;   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
                                     }
                                 }
                                 fprintf(stderr, "  +0x%02X:%s%08X", cand[c2], ok ? "" : "!", v);
@@ -527,7 +527,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     }
 
     // Serialize entityFlags at +0x40
-    ser.Serialize(*reinterpret_cast<int*>(&_entityFlags), nullptr);
+    ser.Serialize(*reinterpret_cast<int*>(&_entityFlags), nullptr);   // LEFT: the int& overload on a uint32_t field (retyping changes the readers' shifts)
 
     // On load: create missing components from description
     if (encodingMode == 0) {
@@ -539,7 +539,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
             int64_t insertPos = 0;
 
             for (int64_t descIdx = 0; descIdx < (int64_t)descCompCount; descIdx++) {
-                void* compTemplate = desc->_subDescs[descIdx];
+                Description* compTemplate = desc->_subDescs[descIdx];
 
                 // Call vtable+0x40 on component template to get type ID
                 uint32_t typeId = TemplateComponentType(compTemplate);
@@ -620,7 +620,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
 // (standalone/address_registry.cpp). Placement-constructs on the caller's block.
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
     return new (static_cast<void*>(self))
-        ComponentEntity(static_cast<ComponentDescription*>(descriptionPtr));   // B.3.8 bridge
+        ComponentEntity(static_cast<ComponentDescription*>(descriptionPtr));   // B.3.8 bridge  LEFT: SIG ComponentEntity_CtorFromDescription (void*; callers in other blocks, wave X)
 }
 
 // ============================================================
@@ -637,23 +637,23 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
 //   EntityList +0x88 = update array (count +0x90), +0x98 = draw array (count +0xa0)
 void ComponentEntity::RegisterUpdateDraw(uint32_t oldFlags) {
     if (_entityList == nullptr) return;
-    uintptr_t el = (uintptr_t)_entityList;
+    EntityList* el = _entityList;
     uint32_t changed = oldFlags ^ _entityFlags;
     if ((changed & 4) != 0) {
-        int updateCount = *(int*)(el + 0x90) + 1;
+        int updateCount = el->stagingUpdate.count + 1;
         GameColl::Ptr8 ibp;
         ibp.v = this;   // the InternalBasePtr onto this entity
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x88).SetSize(updateCount, ibp);
+        GameColl::AsArray<GameColl::Ptr8>(&el->stagingUpdate).SetSize(updateCount, ibp);
     }
     if ((changed & 0x10) != 0) {
-        int drawCount = *(int*)(el + 0xa0) + 1;
+        int drawCount = el->stagingPostUpdate.count + 1;
         GameColl::Ptr8 ibp;
         ibp.v = this;   // the InternalBasePtr onto this entity
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x98).SetSize(drawCount, ibp);
+        GameColl::AsArray<GameColl::Ptr8>(&el->stagingPostUpdate).SetSize(drawCount, ibp);
     }
 }
 
@@ -702,9 +702,8 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
     int32_t id = masterArray.count;                     // id = current main-array count
     (*entityIBP)->_entityId = id;
     // entity+0x20 = entityList+0x00: the last-update System::Time takes the list's
-    // accumulated time. ComponentEntity.h still declares +0x20 `void* _externals`:
-    // LEFT for the header's owner.
-    *(int64_t*)&(*entityIBP)->_externals = accumulatedTime._ticks;
+    // accumulated time.
+    (*entityIBP)->_lastUpdateTime._ticks = accumulatedTime._ticks;
     (*entityIBP)->RegisterUpdateDraw(0);
 
     // Append to the main entity array (count -> id+1).
@@ -716,7 +715,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 
     // The category byte +0x1F (the handle's high byte): retail stores the BYTE.
     // ComponentEntity.h declares +0x1C..+0x1F as one uint32 `_handle`: LEFT.
-    reinterpret_cast<int8_t*>(&(*entityIBP)->_handle)[3] = (int8_t)category;
+    reinterpret_cast<int8_t*>(&(*entityIBP)->_handle)[3] = (int8_t)category;   // LEFT: _handle's byte store vs its 32-bit sites
     if (category == 6) {
         (*entityIBP)->_handle |= 0xFFFFFF;               // no category bucket
     } else {
@@ -741,7 +740,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 // 0x1400c48a0 has none); kept here, not extended into the member.
 void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
     if (!entityListV || !entityIBP) return;
-    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);
+    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: SIG EntityList_RegisterEntity_Impl (38 outside callers, wave X)
 }
 
 // ============================================================

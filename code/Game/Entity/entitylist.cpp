@@ -36,6 +36,7 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Dialog/EntityUI.h"             // caller batch CB6: TypeId()
 #include "Player/EditTool.h"
+#include "Game/PlayerToolManager.h"   // m_toolManager->currentTool
 #include "Component/ModelComponent.h"
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include <cstdint>
@@ -489,7 +490,7 @@ void EntityList::Update(void* time) {
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfDrainTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 1: Accumulate time
-    accumulatedTime._ticks += *(int64_t*)time;
+    accumulatedTime._ticks += *(int64_t*)time;   // LEFT: SIG EntityList::Update(void* time) (caller gameupdateloop.cpp, GAME-2)
 
     // Step 2: PreUpdate — process staging arrays into update tree
     PreUpdate();
@@ -579,9 +580,8 @@ void EntityList::Update(void* time) {
                 // Check not deleted (bit 10)
                 if (!((entIBP->_entityFlags >> 10) & 1)) {
                     // +0x20 is the entity's last-update System::Time (Serialize below
-                    // writes it through Time::Serialize); ComponentEntity.h still names
-                    // it `_externals` (void*): LEFT for the header's owner.
-                    int64_t delta = currentTime - *(int64_t*)&entIBP->_externals;
+                    // writes it through Time::Serialize)
+                    int64_t delta = currentTime - entIBP->_lastUpdateTime._ticks;
 
                     if (delta > 0) {
                         if (prof) ++g_elProfBucketTicked;
@@ -628,7 +628,7 @@ void EntityList::Update(void* time) {
                         }
 
                         // Update entity timestamp
-                        *(int64_t*)&entIBP->_externals = currentTime;
+                        entIBP->_lastUpdateTime._ticks = currentTime;
                     }
                 }
 
@@ -683,7 +683,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
     if (s_tidEntityUI == 0 || s_tidEntityUI == 0xFFFFFFFFu) return;
 
     // Collect first, close after — fn_UI_CloseDialog mutates the list we're walking.
-    void* toClose[16];
+    UI::DialogInstance* toClose[16];
     int nClose = 0;
 
     // B.3.2: UI::UserInterface::_dialogs IS a Collection::LinkedList<DialogInstancePtr>
@@ -693,28 +693,27 @@ static void EntityList_CloseDialogsForDyingEntities() {
     // (element +0x00, prev +0x08, next +0x10) is exactly LinkedList<T>::Node.
     auto& dialogs = ui->_dialogs;
     for (auto it = dialogs.GetFirst(); it && nClose < 16; ++it) {
-        void* dialog = *it;                                        // node[0] = DialogInstance*
+        // node[0] = DialogInstance*
+        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(*it);   // LEFT: UserInterface.h DialogInstancePtr is void* (R-UI-4)
         if (dialog) {
-            uintptr_t ctrlBuf[2] = {};
-            ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(
-                reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(s_tidEntityUI));  // B.3.6 bridge
-            if (ctrlBuf[0] != 0) {
-                void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
-                void* ds = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x28);
-                if (ds && ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ds) + 0x40) >> 10) & 1))
+            Object::InternalPtr<UI::DialogController> ctrlRef = dialog->GetController(s_tidEntityUI);
+            UI::DialogController* ctrl = ctrlRef.Get();
+            if (ctrl != nullptr) {
+                Object::Base* ds = ctrl->_dataSource;   // +0x28
+                // The data source's +0x40 entity flags, read with no type check (standalone-only code)
+                if (ds && ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ds) + 0x40) >> 10) & 1))   // LEFT: unchecked Object::Base -> ComponentEntity read
                     toClose[nClose++] = dialog;
             }
         }
     }
 
     for (int i = 0; i < nClose; i++) {
-        void* dlgUI = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(toClose[i]) + 0x10);
+        UI::UserInterface* dlgUI = toClose[i]->_ui;   // +0x10
         if (!dlgUI) dlgUI = ui;
-        uint64_t dialogRef = reinterpret_cast<uint64_t>(toClose[i]);
-        reinterpret_cast<UI::UserInterface*>(dlgUI)->CloseDialog(  // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));
+        Object::InternalPtr<UI::DialogInstance> dialogRef(toClose[i]);
+        dlgUI->CloseDialog(&dialogRef);
         printf("[EntityList] closed info dialog %p on dying (marked-for-removal) entity\n",
-               toClose[i]);
+               static_cast<void*>(toClose[i]));
     }
 }
 
@@ -732,28 +731,27 @@ static void EntityList_CloseDialogsForDyingEntities() {
 static void EntityList_ClearToolSelectionForDyingEntities() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    void* entityUI = gw->m_toolManager;
-    if (!entityUI) return;
-    void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
-    if (*reinterpret_cast<void**>(toolSlot) == nullptr) return;
-    void* tool = *reinterpret_cast<void**>(toolSlot);
-    if (!tool) return;
+    PlayerToolManager* toolManager = gw->m_toolManager;
+    if (!toolManager) return;
+    if (toolManager->currentTool == nullptr) return;   // +0x28
+    Tool* currentTool = toolManager->currentTool;
+    if (!currentTool) return;
 
     const uint32_t s_tidEditTool = EditTool::TypeId();   // caller batch CB6: was a lazy by-name cache
     if (s_tidEditTool == 0 || s_tidEditTool == 0xFFFFFFFFu) return;
-    if (!::Object::IsDerivedFromNullSafe(tool, s_tidEditTool)) return;
+    if (!::Object::IsDerivedFromNullSafe(currentTool, s_tidEditTool)) return;
+    EditTool* tool = static_cast<EditTool*>(currentTool);   // after the type check (B10)
 
     // Selected-entity IBP at EditTool+0x30 (the outline-follow target).
-    void* entSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(tool) + 0x30);
-    if (*reinterpret_cast<void**>(entSlot) == nullptr) return;
-    uintptr_t ent = *reinterpret_cast<uintptr_t*>(entSlot);
+    if (tool->lastEntityRef == 0) return;
+    uintptr_t ent = tool->lastEntityRef;
     if (ent < 0x10000 || ent > 0x00007FFFFFFFFFFFULL) return;
-    if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;
+    if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;   // LEFT: EditTool.h lastEntityRef is uint64_t (SA)
 
     // Drop both the dialog ref (+0x28) and the selected-entity ref (+0x30), exactly as
     // EditTool_CloseInfoDialog does — leaving +0x30 set would keep the follow chasing it.
-    *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(tool) + 0x28) = 0;
-    *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(tool) + 0x30) = 0;
+    tool->entityRef = 0;
+    tool->lastEntityRef = 0;
     printf("[EntityList] cleared EditTool selection on dying (marked-for-removal) "
            "entity %p\n", reinterpret_cast<void*>(ent));
 }
@@ -877,7 +875,7 @@ void EntityList::PreUpdate() {
         if (hasUpdateFlag && !isDeleted) {
             // Insert into update tree
             uint64_t outBuf = 0;
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&updateTreeRoot), &outBuf, ibpPtr);
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&updateTreeRoot), &outBuf, ibpPtr);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
             EntityList_MarkUpdateTreeDirty();
         } else {
             // Search for entity in update tree, remove if found
@@ -897,7 +895,7 @@ void EntityList::PreUpdate() {
                             ReportStagingCorrupt("PreUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), node);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), node);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
                         EntityList_MarkUpdateTreeDirty();
                         break;
                     }
@@ -938,7 +936,7 @@ void EntityList::PostUpdateStaging() {
         if (hasPostUpdateFlag && !isDeleted) {
             // Insert into post-update tree
             uint64_t outBuf = 0;
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), &outBuf, ibpPtr);
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), &outBuf, ibpPtr);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
         } else {
             // Search for entity in post-update tree, remove if found
             EntityTreeNode* node = postUpdateTreeRoot;
@@ -957,7 +955,7 @@ void EntityList::PostUpdateStaging() {
                             ReportStagingCorrupt("PostUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), node);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), node);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
                         break;
                     }
                     node = node->right;
@@ -1114,11 +1112,11 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
     // Remove found nodes from trees
     if (updateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), updateNode);
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), updateNode);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
         EntityList_MarkUpdateTreeDirty();
     }
     if (postUpdateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), postUpdateNode);
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), postUpdateNode);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
     }
 
     // Step 5: Delete the entity IBP reference. Object::InternalBasePtr::DeletePtr
@@ -1188,7 +1186,7 @@ void EntityList::Serialize(IO::Stream& stream) {
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
             ComponentEntity** currentIBP = &ibpIter[j];
-            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: IBPArray holds bare ComponentEntity* (H5 raw triple)
 
             // After loading, verify it's a ComponentEntity
             if (*currentIBP != nullptr) {
@@ -1233,8 +1231,7 @@ void EntityList::Serialize(IO::Stream& stream) {
             serializer.Serialize(bucketId, nullptr);
 
             // Serialize entity's timestamp at +0x20 (System::Time)
-            // (+0x20 is a System::Time the header still declares `void* _externals`: LEFT)
-            reinterpret_cast<System::Time*>(&masterArray.data[entityIdx]->_externals)->Serialize(serializer);
+            masterArray.data[entityIdx]->_lastUpdateTime.Serialize(serializer);
 
             // Write back deserialized metadata to entity
             masterArray.data[entityIdx]->_entityId = masterIdxField;
@@ -1244,7 +1241,7 @@ void EntityList::Serialize(IO::Stream& stream) {
 
             // The category byte +0x1F: retail stores the BYTE. ComponentEntity.h declares
             // +0x1C..+0x1F as one uint32 `_handle`: LEFT for the header's owner.
-            reinterpret_cast<int8_t*>(&masterArray.data[entityIdx]->_handle)[3] = (int8_t)bucketId;
+            reinterpret_cast<int8_t*>(&masterArray.data[entityIdx]->_handle)[3] = (int8_t)bucketId;   // LEFT: _handle's byte store vs its 32-bit sites
 
             entityIdx++;
         } while (entityIdx < masterArray.count);
@@ -1254,15 +1251,10 @@ void EntityList::Serialize(IO::Stream& stream) {
 }
 
 // ============================================================
-// B4 FORWARD: the C entry points of the four members with callers outside this
-// block's files (entitylist_funcs.h lists them). One line each; the closing wave
-// rewires the callers and deletes these.
+// B4 FORWARD: the C entry point of the one member with callers outside this
+// block's files (entitylist_funcs.h). The closing wave rewires the callers and
+// deletes it.
 // ============================================================
-void EntityList_Update(EntityList* self, void* time) { self->Update(time); }
-void EntityList_PostUpdate(EntityList* self) { self->PostUpdate(); }
 void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
-    self->RemoveEntity(reinterpret_cast<ComponentEntity**>(entityIBP));
-}
-void EntityList_Serialize(EntityList* self, void* stream) {
-    self->Serialize(*reinterpret_cast<IO::Stream*>(stream));
+    self->RemoveEntity(reinterpret_cast<ComponentEntity**>(entityIBP));   // LEFT: forwarder for gameupdateloop_teardown.cpp (wave X)
 }
