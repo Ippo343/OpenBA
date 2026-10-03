@@ -162,8 +162,10 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
     ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2);    // LEFT: SIG CitizenAI_FindBestTarget_dd30 (the out entity)
     EnsureInit();
 
-    Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
-    int* local_80 = reinterpret_cast<int*>(map);     // LEFT: SIG Pf_IsDstReachable_f810 / CitizenComp_Entity_impl_ef40 take int* / void* (wave X)
+    // (B4 P2 CAI-2: Map::PathDistance 0x14009f810, PickReachableCell 0x14004edb0,
+    //  FindBestAdjacentCell 0x14012d5d0 and ComponentEntity::FindComponent<StorageComponent>
+    //  0x140006270 are called in place of their Pf_* / WorkBase_* forwarders.)
+    Map* local_80 = GameUpdateLoop::_singleton->m_game;   // +0xF8
     *found = nullptr;
     uint32_t local_98_flag = 0;       // low byte = "early-return" gate (set when a "B"-qualified hit found)
     int local_a8_best = 0x7fffffff;   // best cost so far
@@ -198,9 +200,9 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
             // -- compute whether candidate is within the "B" (param_4) distance band --
             bool bVar5 = false;
             if (-1 < static_cast<int>(param_4)) {
-                int iVar8 = Pf_IsDstReachable_f810(local_80, cell, param_4, '\x01');
+                int iVar8 = local_80->PathDistance(cell, param_4, '\x01');
                 if (iVar8 < 0) {
-                    int w = map->size;
+                    int w = local_80->size;
                     int dRow = static_cast<int>(cell) / w - static_cast<int>(param_4) / w;
                     int dCol = static_cast<int>(cell) % w - static_cast<int>(param_4) % w;
                     float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
@@ -210,9 +212,9 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
             }
 
             // -- compute path cost from candidate to the "A" (param_3) goal cell --
-            int iVar15cost = Pf_IsDstReachable_f810(local_80, cell, param_3, '\x01');
+            int iVar15cost = local_80->PathDistance(cell, param_3, '\x01');
             if (iVar15cost < 0) {
-                int w = map->size;
+                int w = local_80->size;
                 int dRow = static_cast<int>(cell) / w - static_cast<int>(param_3) / w;
                 int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
                 float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
@@ -232,8 +234,8 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                     ::Object::InternalPtr<MarketLocationComponent> local_50_ibp[2];
                     ::Object::InternalPtr<MarketLocationComponent>* pIVar10 =
                         CitizenAI_sub_78c0(local_a0, local_50_ibp);              // find MarketLocationComponent
-                    int64_t marketComp = reinterpret_cast<int64_t>(pIVar10->Get());   // LEFT: SIG Pf_PickReachableCell_edb0 takes int64_t (wave X)
-                    int cost = (marketComp) ? Pf_PickReachableCell_edb0(marketComp, param_3, local_78) : -1;
+                    MarketLocationComponent* marketComp = pIVar10->Get();
+                    int cost = (marketComp) ? PickReachableCell(marketComp, param_3, local_78) : -1;
                     if ((-1 < cost) && (cost < local_a8_best)) {
                         *found = local_a0;
                         param_6[0] = local_78[0];
@@ -263,9 +265,9 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
             uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
 
             // path cost candidate -> param_3
-            int iVar8 = Pf_IsDstReachable_f810(local_80, cell, param_3, '\x01');
+            int iVar8 = local_80->PathDistance(cell, param_3, '\x01');
             if (iVar8 < 0) {
-                int w = map->size;
+                int w = local_80->size;
                 int dRow = static_cast<int>(cell) / w - static_cast<int>(param_3) / w;
                 int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
                 float r = WorkImpl_Sqrtf_132010(static_cast<float>(dRow * dRow + dCol * dCol));
@@ -273,7 +275,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
             }
 
             if (iVar8 < iVar15loop) {
-                uint64_t uVar19 = static_cast<uint64_t>(param_7);  // ctx forwarded to d5d0
                 local_58 = local_a0;
                 int64_t local_50[2] = {0, 0};
                 CitizenComp_Entity_impl_ef40(local_80, local_50, &local_58, param_7);  // pick free slot
@@ -324,9 +325,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                         uint32_t mask = derived ? derived->_locationType : 0;
                         if (mask == 0) {
                             // fall back to Entity_FindComponent_Storage(found+0x10)->+0x3c
-                            float local_78s[4] = {0,0,0,0};
-                            void* pIVar10 = WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(lVarComp->_entity), local_78s);   // LEFT: SIG WorkBase_FindComponent_6270 takes uintptr_t (wave X)
-                            StorageComponent* stor = pIVar10 ? *reinterpret_cast<StorageComponent**>(pIVar10) : nullptr;   // LEFT: SIG WorkBase_FindComponent_6270 (void* retslot)
+                            StorageComponent* stor = lVarComp->_entity->FindComponent<StorageComponent>();
                             // [M-D SCOPED FALLBACK] the registered 6270-family finder reads
                             // dead .rdata typeid 0x1401c7e78 (unregistered in standalone) ->
                             // never matches; self-contained scan of the owning entity's comp
@@ -371,8 +370,8 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                                 }
                             }
 
-                            int64_t costSrc = reinterpret_cast<int64_t>(pvVar12b);   // LEFT: SIG Pf_FindBestAdjacentCell_d5d0 takes int64_t (wave X)
-                            int cost = (costSrc) ? Pf_FindBestAdjacentCell_d5d0(costSrc, param_3, local_68, uVar19) : -1;
+                            // (Pf_FindBestAdjacentCell_d5d0 ignored its fourth argument, uVar19, which is gone)
+                            int cost = (pvVar12b) ? FindBestAdjacentCell(pvVar12b, param_3, local_68) : -1;
                             if ((-1 < cost) && (cost < local_a8_best)) {
                                 *found = local_a0;
                                 param_6[0] = local_68[0];
