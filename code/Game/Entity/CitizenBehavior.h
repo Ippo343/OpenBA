@@ -53,6 +53,7 @@ class BuildComponent;
 class WellComponent;
 class DiseaseComponent;
 class ComponentDescription;
+class Profession;
 class Map;
 namespace IO { class Stream; }
 namespace Object { template <class T> class InternalPtr; }
@@ -116,17 +117,99 @@ static_assert(offsetof(PopulationSummary, deadCount)        == 0x10, "");
 static_assert(offsetof(PopulationSummary, educatedCount)    == 0x14, "");
 
 // ============================================================
+// PathCellPair — one element of PathGraph::m_pairs (stride 8, align 4)
+// ============================================================
+// BuildPathGraph 0x1400d70c0 appends {entity cell, building cell} with
+// MemAlloc(cap * 8, 4); ProcessPaths 0x1400d6f00 reads the two ints as grid cells.
+struct PathCellPair {
+    int32_t  cellA;           // +0x00: the profession entity's anchor cell
+    int32_t  cellB;           // +0x04: the residence's anchor cell
+};
+static_assert(sizeof(PathCellPair) == 0x08, "PathCellPair size");
+static_assert(alignof(PathCellPair) == 4, "PathCellPair align (MemAlloc(.., 4))");
+static_assert(offsetof(PathCellPair, cellA) == 0x00, "");
+static_assert(offsetof(PathCellPair, cellB) == 0x04, "");
+
+// ============================================================
+// PathCostNode — a node of the PathGraph distance cache (m_bstRoot)
+// ============================================================
+// Insert 0x140025a10: the root is MemAlloc(0x30, 8) with dwords [0..2] = the key
+// and value, [4..10] = 0; a child is built by 0x14001cc40: MemAlloc(0x30, 8),
+// dwords [0..2], qword +0x10 = the parent, qwords +0x18 / +0x20 = 0, dword +0x28 = 0.
+// The key compares signed ints, high first (`regionHigh`, then `regionLow`); the
+// rebalance is 0x14000e360. The +0x0C dword is never written.
+struct PathCostNode {
+    int32_t       regionHigh; // +0x00: max(region A, region B)
+    int32_t       regionLow;  // +0x04: min(region A, region B)
+    int32_t       cost;       // +0x08: the path cost (ProcessPaths' store)
+    int32_t       _pad0C;     // +0x0C: not written by either allocator
+    PathCostNode* parent;     // +0x10
+    PathCostNode* left;       // +0x18
+    PathCostNode* right;      // +0x20
+    int32_t       balance;    // +0x28: the dword store of both allocators
+    int32_t       _pad2C;     // +0x2C
+};
+static_assert(sizeof(PathCostNode) == 0x30, "PathCostNode is MemAlloc(0x30, 8) (0x140025a10, 0x14001cc40)");
+static_assert(offsetof(PathCostNode, regionHigh) == 0x00, "");
+static_assert(offsetof(PathCostNode, regionLow)  == 0x04, "");
+static_assert(offsetof(PathCostNode, cost)       == 0x08, "");
+static_assert(offsetof(PathCostNode, _pad0C)     == 0x0C, "");
+static_assert(offsetof(PathCostNode, parent)     == 0x10, "");
+static_assert(offsetof(PathCostNode, left)       == 0x18, "");
+static_assert(offsetof(PathCostNode, right)      == 0x20, "");
+static_assert(offsetof(PathCostNode, balance)    == 0x28, "");
+static_assert(offsetof(PathCostNode, _pad2C)     == 0x2C, "");
+
+// ============================================================
+// CitizenBucketNode<Key> — a node of the +0x100 (Profession) / +0x160
+// (ComponentDescription template) entity-bucket trees
+// ============================================================
+// Node ctor 0x140017460: MemAlloc(0x38, 8); +0x00 = the key (qword), +0x08 /
+// +0x10 = 0 then the element Array copied in by 0x140015ec0, +0x18 = the parent,
+// +0x20 / +0x28 = 0, dword +0x30 = 0. Find / insert 0x1400172f0 compares the key
+// as an UNSIGNED qword (the key is the object's address), +0x20 left, +0x28
+// right. The element is an Array<InternalPtr<ComponentEntity>>, held as its
+// three trivial fields (H5, as CitizenBehavior's own arrays). Nodes are built
+// only by retail-shaped raw allocation, never by a C++ constructor.
+template <class Key>
+struct CitizenBucketNode {
+    Key*               key;        // +0x00 compared by address
+    ComponentEntity**  entities;   // +0x08 Array<InternalPtr<ComponentEntity>> data
+    int32_t            count;      // +0x10 Array count
+    int32_t            capacity;   // +0x14 Array capacity
+    CitizenBucketNode* parent;     // +0x18
+    CitizenBucketNode* left;       // +0x20
+    CitizenBucketNode* right;      // +0x28
+    int32_t            balance;    // +0x30 the ctor's dword store
+    uint8_t            _pad34[4];  // +0x34
+};
+static_assert(sizeof(CitizenBucketNode<Profession>) == 0x38, "bucket node is MemAlloc(0x38, 8) (0x140017460)");
+static_assert(offsetof(CitizenBucketNode<Profession>, key)      == 0x00, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, entities) == 0x08, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, count)    == 0x10, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, capacity) == 0x14, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, parent)   == 0x18, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, left)     == 0x20, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, right)    == 0x28, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, balance)  == 0x30, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, _pad34)   == 0x34, "");
+static_assert(sizeof(CitizenBucketNode<ComponentDescription>) == 0x38, "");
+
+using ProfessionBucket = CitizenBucketNode<Profession>;            // +0x100
+using TemplateBucket   = CitizenBucketNode<ComponentDescription>;  // +0x160
+
+// ============================================================
 // PathGraph — the path-distance sub-object at +0x1B8 (MemAlloc(0x28, 4) in the ctor)
 // ============================================================
 // ctor 0x140090ce9: +0x00 = 0, +0x08 = 0 (qword: count and capacity), +0x10 = -1,
 // +0x18 = 0 (qword), +0x20 = 0 (dword). Update 0x14008c2b0 reads +0x10 as int.
 struct PathGraph {
-    void*    m_pairs;         // +0x00: Array data: {int32, int32} grid coordinate pairs
+    PathCellPair* m_pairs;    // +0x00: Array data: {int32, int32} grid cell pairs
     int32_t  m_pairCount;     // +0x08: Array count
     int32_t  m_pairCapacity;  // +0x0C: Array capacity
     int32_t  m_pendingIdx;    // +0x10: current processing index (-1 = done, >= 0 = in progress)
     int32_t  _pad14;          // +0x14
-    void*    m_bstRoot;       // +0x18: tree root: the distance cache {(high,low) -> distance}
+    PathCostNode* m_bstRoot;  // +0x18: tree root: the distance cache {(high,low) -> distance}
     int32_t  m_bstCount;      // +0x20: tree count
     int32_t  _pad24;          // +0x24
 
@@ -201,7 +284,7 @@ public:
     int32_t  diseaseCount;                 // +0xF8
     int32_t  diseaseCapacity;              // +0xFC
 
-    void*    field_0x100;                  // +0x100 tree root (0x38-byte nodes; the key is an
+    ProfessionBucket* field_0x100;         // +0x100 tree root (0x38-byte nodes; the key is an
                                            //        ExternalPtr<Profession>, serialized by 0x140018020)
     int32_t  field_0x108;                  // +0x108 tree count (the ctor's dword store)
     uint8_t  _pad10C[4];                   // +0x10C
@@ -224,7 +307,8 @@ public:
                                            //        the ctor sizes it to 71 (0x140017640)
     int32_t  field_0x158;                  // +0x158 count
     int32_t  field_0x15C;                  // +0x15C capacity
-    void*    field_0x160;                  // +0x160 tree root (serialized by 0x140017cd0)
+    TemplateBucket* field_0x160;           // +0x160 tree root (serialized by 0x140017cd0; key a
+                                           //        ComponentDescription template)
     int32_t  field_0x168;                  // +0x168 tree count (the ctor's dword store)
     uint8_t  _pad16C[4];                   // +0x16C
     ProfessionResourceEntry* professionResources; // +0x170 Array data; the ctor sizes it to 21
