@@ -480,6 +480,7 @@ TUT (rows 80-84, 88-89):
 | 210 | `Helper_e360` (`citizenai_housing_idle.cpp`, 0x14000e360, also `CitizenAI_Reg_helper_e360` for the trees of citizenlist_serialize / action_pf_avl / tradeui_leaves) | `ValidNode` fences every link (rejects null, < 0x10000 and >= 2^47, the -1 IBP sentinel included) and stops the walk on a bad slot | 0x14000e36a / 0x14000e38e / 0x14000e3a5 / 0x14000e3d7 / 0x14000e40b test each link for null only; a -1 link is dereferenced | CONFIRMED (P2 CAI-4; kept, typed only) |
 | 211 | `Helper_sub_79b0` (`citizenai_housing_idle.cpp`, 0x1400f79b0) | `local_res20 != nullptr &&` before the Profession +0x4C byte (the citizen's profession, null in the standalone for a citizen not yet assigned) | 0x1400f7a89 / 0x1400f7a8d read `[param_4 + 0x4c]` unguarded | CONFIRMED (P2 CAI-4; kept, typed only) |
 | 200 | `CitizenAI_WorkScheduler_Post` / `_Rekey` (`citizenai_work_scheduler.cpp`) | Post returns on a null `GameUpdateLoop::_singleton` or null `m_tutorial` (the scheduler), and on an id-map miss (or a null `work`) writes `workFlags` (+0x2c) = 0; Rekey returns on a null `sched` and, when the new bucket cannot be created, prints and drops the item | Post 0x14012ec60 reads `[0x1401c3dd8]+0x118` with no test (0x14012ecb7..0x14012ecbe) and on a miss builds a NULL InternalPtr (0x14012ed09..0x14012ed1b) and reads `[RAX+0x24]` through it (0x14012ed2b): a null dereference, not a 0; Rekey 0x1400f8400 reads `[RCX+0x30]` with no test (0x1400f842a); the bucket guard is not re-read | CONFIRMED (CAI-6; the bucket guard SUSPECTED; kept, typed only) |
+| 240 | `CitizenAIComponent::State_Leisure` and its helpers (`citizenai_leisure.cpp`) | `VGetTypeId` answers 0xffffffff for a null component / sub-description; `ScanArr` / `ScanType5` return null for a null entity or a null entity description; `CitizenAI_helper_a720` and the inline happiness test treat a non-HappinessDescription as "type != 5" (no read); `pvVar26 ? _ibc : 0` for a non-CitizenDescription; `if (pp)` before the position resolve | retail's inline scans read `[RBX+0x38]` / `[RBX+0x30]` of the entity and call `[[slot]+0x10]` with no test (0x14010ac53, 0x14010ac70); the inline happiness test does `CMOVNZ RCX,RBX` over RCX = 0 and reads `[RCX+0x20]` (0x14010ad9b..0x14010ada4): a null+0x20 read when the description is not a HappinessDescription; 0x14004a720 / 0x14002fd50 / 0x1400899d0 not re-read | CONFIRMED (CAI-5, State_Leisure's inline copies; the helpers SUSPECTED; kept, typed only) |
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -514,6 +515,13 @@ TUT (rows 80-84, 88-89):
   `useAnimal` / `param_14` 0 / 1, `WorkAct_PerformWorkCtor_c1eb0`'s 0 / 1), so no stored value
   differs from the old tree's. The array appends of ConsumeRawMaterial /
   PickupStoredRawMaterial keep retail's `&array[i] != nullptr` test, which an -O2 compiler may fold.
+- (CAI-5, row 241) `CitizenAIComponent::State_Leisure` (`citizenai_leisure.cpp`) now reads
+  `HappinessComponent::registered` (+0x28, `bool` in the header) by name; at -O2 GCC turns
+  `if (!(... || !registered)) happinessMode = true;` into a COPY of the byte into `happinessMode`,
+  which later becomes PlayAnimation's fifth argument. Retail tests the byte and stores a literal 1
+  (0x14010adaa `CMP byte ptr [RDI+0x28],0` / 0x14010adb0 `MOV byte ptr [RBP+0x6f],0x1`); the old
+  tree read the qword and tested its low byte. Identical while `registered` holds 0 / 1 (every
+  writer in the tree stores a C++ bool). CONFIRMED.
 
 ### 14f. Names that mislead (naming only)
 
