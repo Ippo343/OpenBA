@@ -162,6 +162,35 @@ def parse(path):
     return funcs
 
 
+def demangle(names):
+    try:
+        out = subprocess.run(['c++filt'], input='\n'.join(names), capture_output=True, text=True).stdout
+        res = out.split('\n')[:len(names)]
+        return res if len(res) == len(names) else list(names)
+    except OSError:
+        return list(names)
+
+
+def bare(dem):
+    """A demangled name without its parameter list (and without a clone suffix)."""
+    depth, out = 0, ''
+    for ch in dem:
+        if ch == '<':
+            depth += 1
+        elif ch == '>':
+            depth -= 1
+        elif ch == '(' and depth == 0:
+            break
+        out += ch
+    return out.strip()
+
+
+def bare_calls(calls):
+    syms = [c for c in calls if not c.startswith(('call ', 'jmp '))]
+    dm = dict(zip(syms, [bare(d) for d in demangle(syms)])) if syms else {}
+    return [dm.get(c, c) for c in calls]
+
+
 def cdiff(a, b):
     return ' '.join(f'{k}:{a.get(k, 0)}->{b.get(k, 0)}' for k in sorted(set(a) | set(b), key=str)
                     if a.get(k, 0) != b.get(k, 0))
@@ -191,7 +220,35 @@ def main():
             continue
         fb, ft = parse(bp), parse(tp)
         rows = []
+        # A function whose SIGNATURE changed has a new mangled name: pair an ONLY-BASE with the
+        # ONLY-TIP of the same qualified name (parameters stripped) when that name is unique on
+        # both sides, and compare the pair with every callee name reduced the same way.
+        ob, ot = sorted(set(fb) - set(ft)), sorted(set(ft) - set(fb))
+        pairs = {}
+        if ob and ot:
+            dm = dict(zip(ob + ot, demangle(ob + ot)))
+            kb, kt = collections.defaultdict(list), collections.defaultdict(list)
+            for x in ob:
+                kb[bare(dm[x])].append(x)
+            for x in ot:
+                kt[bare(dm[x])].append(x)
+            for k in kb:
+                if len(kb[k]) == 1 and len(kt.get(k, [])) == 1:
+                    pairs[kb[k][0]] = kt[k][0]
+        for b, t in sorted(pairs.items()):
+            cb, ct = bare_calls(fb[b]['calls']), bare_calls(ft[t]['calls'])
+            why = []
+            if cb != ct:
+                why.append('calls: ' + ' | '.join(cb[:40]) + '  ==>  ' + ' | '.join(ct[:40]))
+            if fb[b]['stores'] != ft[t]['stores']:
+                why.append('stores(width,disp): ' + cdiff(fb[b]['stores'], ft[t]['stores']))
+            if fb[b]['cmps'] != ft[t]['cmps']:
+                why.append('compares(width,disp,imm): ' + cdiff(fb[b]['cmps'], ft[t]['cmps']))
+            rows.append(('RENAMED-DIFF' if why else 'RENAMED-SAME', f'{b} -> {t}', '\n      '.join(why)))
+        paired_t = set(pairs.values())
         for fn in sorted(set(fb) | set(ft)):
+            if fn in pairs or fn in paired_t:
+                continue
             if fn not in ft:
                 rows.append(('ONLY-BASE', fn, ''))
             elif fn not in fb:
@@ -211,7 +268,7 @@ def main():
         tot.update(c)
         print(f'## {n}: ' + ' '.join(f'{k} {v}' for k, v in sorted(c.items())), file=out)
         for v, fn, why in rows:
-            if v in ('DIFF', 'ONLY-BASE', 'ONLY-TIP') or (detail and v == 'SAME'):
+            if v in ('DIFF', 'ONLY-BASE', 'ONLY-TIP', 'RENAMED-DIFF') or (detail and v in ('SAME', 'RENAMED-SAME')):
                 print(f'  {v} {fn}' + (f'\n      {why}' if why else ''), file=out)
     print('# TOTAL ' + ' '.join(f'{k} {v}' for k, v in sorted(tot.items())), file=out)
 
