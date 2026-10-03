@@ -62,49 +62,89 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4);
 
 namespace ControllerLive {
 
+// ── The handler types. `Owner` is the class that embeds the controller (its
+//    `Tag::Owner`): every dispatcher tail-calls with `MOV RCX,[node+0x18]`, and the
+//    node's +0x18 is the owning component (ControllerComponent.h). What else
+//    survives the tail-JMP is read from BuildComponent's dispatchers:
+//      enter   0x140002b60  R8 <- handler, JMP R8          -> (owner, sm)        char
+//      update  0x140002b90  R8 <- handler, JMP R8          -> (owner, sm)        char
+//      trans30 0x140002bf0  R9 <- handler, JMP R9          -> (owner, sm, time)  char
+//      trans38 0x140002c20  R9 <- handler, JMP R9          -> (owner, sm, time)  char
+//      event   0x140009da0  JMP [RAX+8]                    -> (owner, sm)        char
+//      transition 0x140002bc0: the null arm is a bare RET (no XOR AL), the slot is
+//        `void OnTransition` -> void; the tree calls it with the owner alone.
+//    `time` stays `void*`: Controller::Tick / StateMachine::Tick carry it untyped.
+template <class Owner>
+struct StateHandlers {
+    using Enter      = char (*)(Owner* owner, void* sm);
+    using Update     = char (*)(Owner* owner, void* sm);
+    using Tick       = char (*)(Owner* owner, void* sm, void* time);
+    using Transition = void (*)(Owner* owner);
+    using Event      = char (*)(Owner* owner, void* sm);
+};
+
 #pragma pack(push, 1)
+template <class Owner>
 struct TransEntry {        // 0x10 bytes
     int   targetId;        // +0x00
     int   _pad04;          // +0x04
-    void* handler;         // +0x08
+    typename StateHandlers<Owner>::Transition handler;   // +0x08
 };
+template <class Owner>
 struct EventEntry {        // 0x10 bytes — same shape as TransEntry
     int   eventId;         // +0x00
     int   _pad04;          // +0x04
-    void* handler;         // +0x08
+    typename StateHandlers<Owner>::Event handler;        // +0x08
 };
+template <class Owner>
 struct StateEntry {        // 0xf8 bytes
     int        id;             // +0x00
     int        _pad04;         // +0x04
-    void*      enterHandler;   // +0x08
-    void*      trans30Handler; // +0x10
-    void*      trans38Handler; // +0x18
-    void*      updateHandler;  // +0x20
-    TransEntry transitions[8]; // +0x28 .. +0xa8
+    typename StateHandlers<Owner>::Enter  enterHandler;   // +0x08
+    typename StateHandlers<Owner>::Tick   trans30Handler; // +0x10
+    typename StateHandlers<Owner>::Tick   trans38Handler; // +0x18
+    typename StateHandlers<Owner>::Update updateHandler;  // +0x20
+    TransEntry<Owner> transitions[8]; // +0x28 .. +0xa8
     int        transitionCount;// +0xa8
     uint8_t    _pad_ac[4];     // +0xac
-    EventEntry events[4];      // +0xb0 .. +0xf0   (see the PostEvent note below)
+    EventEntry<Owner> events[4];      // +0xb0 .. +0xf0   (see the PostEvent note below)
     int        eventCount;     // +0xf0
     uint8_t    _tail[0xf8 - 0xf4];
 };
 #pragma pack(pop)
-static_assert(sizeof(TransEntry) == 0x10, "TransEntry must be 0x10");
-static_assert(sizeof(EventEntry) == 0x10, "EventEntry must be 0x10");
-static_assert(sizeof(StateEntry) == 0xf8, "StateEntry must be 0xf8");
-static_assert(offsetof(StateEntry, events) == 0xb0, "events must sit at +0xb0");
-static_assert(offsetof(StateEntry, eventCount) == 0xf0, "eventCount must sit at +0xf0");
+// The layout does not depend on Owner (every handler is one pointer); asserted on
+// the base class.
+static_assert(sizeof(TransEntry<::Component>) == 0x10, "TransEntry must be 0x10");
+static_assert(offsetof(TransEntry<::Component>, handler) == 0x08, "transition handler at +0x08");
+static_assert(sizeof(EventEntry<::Component>) == 0x10, "EventEntry must be 0x10");
+static_assert(offsetof(EventEntry<::Component>, handler) == 0x08, "event handler at +0x08");
+static_assert(sizeof(StateEntry<::Component>) == 0xf8, "StateEntry must be 0xf8");
+static_assert(offsetof(StateEntry<::Component>, id) == 0x00, "id must sit at +0x00");
+static_assert(offsetof(StateEntry<::Component>, enterHandler) == 0x08, "enter at +0x08");
+static_assert(offsetof(StateEntry<::Component>, trans30Handler) == 0x10, "trans30 at +0x10");
+static_assert(offsetof(StateEntry<::Component>, trans38Handler) == 0x18, "trans38 at +0x18");
+static_assert(offsetof(StateEntry<::Component>, updateHandler) == 0x20, "update at +0x20");
+static_assert(offsetof(StateEntry<::Component>, transitions) == 0x28, "transitions must sit at +0x28");
+static_assert(offsetof(StateEntry<::Component>, transitionCount) == 0xa8, "transitionCount must sit at +0xa8");
+static_assert(offsetof(StateEntry<::Component>, events) == 0xb0, "events must sit at +0xb0");
+static_assert(offsetof(StateEntry<::Component>, eventCount) == 0xf0, "eventCount must sit at +0xf0");
 
+template <class Owner>
 struct StateTable {
-    StateEntry entries[16];
+    StateEntry<Owner> entries[16];
     int        count;
 };
 
 // ── Populate API — replicates sub_f500 (register state) / sub_f620 (add a
 //    transition to the most-recently-registered state). ──────────────────────────
-inline void TableRegisterState(StateTable& t, int id, void* enterH,
-                               void* trans30H, void* trans38H, void* updateH) {
+template <class Owner>
+inline void TableRegisterState(StateTable<Owner>& t, int id,
+                               typename StateHandlers<Owner>::Enter enterH,
+                               typename StateHandlers<Owner>::Tick trans30H,
+                               typename StateHandlers<Owner>::Tick trans38H,
+                               typename StateHandlers<Owner>::Update updateH) {
     if (t.count >= 16) return;
-    StateEntry& e = t.entries[t.count];
+    StateEntry<Owner>& e = t.entries[t.count];
     e.id = id;
     e.enterHandler = enterH;
     e.trans30Handler = trans30H;
@@ -113,11 +153,13 @@ inline void TableRegisterState(StateTable& t, int id, void* enterH,
     e.transitionCount = 0;
     ++t.count;
 }
-inline void TableAddTransition(StateTable& t, int targetId, void* handler) {
+template <class Owner>
+inline void TableAddTransition(StateTable<Owner>& t, int targetId,
+                               typename StateHandlers<Owner>::Transition handler) {
     if (t.count <= 0) return;
-    StateEntry& e = t.entries[t.count - 1];
+    StateEntry<Owner>& e = t.entries[t.count - 1];
     if (e.transitionCount >= 8) return;
-    TransEntry& tr = e.transitions[e.transitionCount];
+    TransEntry<Owner>& tr = e.transitions[e.transitionCount];
     tr.targetId = targetId;
     tr.handler = handler;
     ++e.transitionCount;
@@ -126,17 +168,20 @@ inline void TableAddTransition(StateTable& t, int targetId, void* handler) {
 // most-recently-registered state's event list. The panel's Command (component vtable
 // idx14) posts node events 3/4/5 through node slot 2, and without this the post finds
 // an empty list and the button click dies silently.
-inline void TableAddEvent(StateTable& t, int eventId, void* handler) {
+template <class Owner>
+inline void TableAddEvent(StateTable<Owner>& t, int eventId,
+                          typename StateHandlers<Owner>::Event handler) {
     if (t.count <= 0) return;
-    StateEntry& e = t.entries[t.count - 1];
+    StateEntry<Owner>& e = t.entries[t.count - 1];
     if (e.eventCount >= 4) return;   // retail's capacity too: (0xf0-0xb0)/0x10 == 4
-    EventEntry& ev = e.events[e.eventCount];
+    EventEntry<Owner>& ev = e.events[e.eventCount];
     ev.eventId = eventId;
     ev.handler = handler;
     ++e.eventCount;
 }
 // The real Step search: first entry whose id == input, else -1 (orig 0x14002f6d0).
-inline int TableFindIndex(const StateTable& t, int input) {
+template <class Owner>
+inline int TableFindIndex(const StateTable<Owner>& t, int input) {
     for (int i = 0; i < t.count; ++i)
         if (t.entries[i].id == input) return i;
     return -1;
@@ -146,7 +191,9 @@ inline int TableFindIndex(const StateTable& t, int input) {
 //    exe's per-controller dispatcher functions (each hard-codes its own table). ───
 template <class Tag>
 struct Dispatcher {
-    static StateTable table;
+    // The class that embeds this controller (the node's +0x18 points at it).
+    using Owner = typename Tag::Owner;
+    static StateTable<Owner> table;
     // (The hand-built 16-slot `vtbl` + `Vtable()` + `Stub` went at ENDGAME B.3.9
     // EXA: no reader — every controller member is a TableController<Tag> with a
     // compiler table whose slots call the static handlers below.)
@@ -156,9 +203,12 @@ struct Dispatcher {
         int idx = TableFindIndex(table, input);
         return idx;
     }
-    // node+0x18 (Controller::_owner) holds the component the handler expects.
-    static void* NodeData(::ControllerComponent::Controller* node) {
-        return node->_owner;
+    // node+0x18 (Controller::_owner) holds the component the handler expects: the
+    // Owner whose ctor built this controller with `this` (a downcast in the
+    // Component hierarchy, at offset 0).
+    static Owner* NodeData(::ControllerComponent::Controller* node) {
+        ::Component* const owningComponent = node->_owner;
+        return static_cast<Owner*>(owningComponent);
     }
     // slot 3 (+0x18): Enter — dispatch table[idx].enterHandler(node+0x18, sm)
     // The exe enter dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`, so a real
@@ -166,9 +216,9 @@ struct Dispatcher {
     // bug-class #6). Forward sm as the 2nd arg; 1-arg handlers ignore the extra RDX.
     static char Enter(::ControllerComponent::Controller* node, void* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
-        void* h = table.entries[idx].enterHandler;
+        typename StateHandlers<Owner>::Enter h = table.entries[idx].enterHandler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
+        return h(NodeData(node), sm);
     }
     // slot 1 (+0x08): RequestTransition(node, curIdx, int* pDesiredStateId) -> transIdx / -1
     // The state handlers call this to request a transition: it searches the CURRENT
@@ -181,7 +231,7 @@ struct Dispatcher {
     // none); it returns -1 without touching *pDesired, as before.
     static int RequestTransition(void* /*node*/, int curIdx, int* pDesired) {
         if (!pDesired || curIdx < 0 || curIdx >= table.count) return -1;
-        const StateEntry& e = table.entries[curIdx];
+        const StateEntry<Owner>& e = table.entries[curIdx];
         int desired = *pDesired;
         for (int i = 0; i < e.transitionCount; ++i)
             if (e.transitions[i].targetId == desired) return i;
@@ -197,17 +247,17 @@ struct Dispatcher {
     // receive (controller-data, sm) and use sm to request state transitions.
     static char Update(::ControllerComponent::Controller* node, void* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
-        void* h = table.entries[idx].updateHandler;
+        typename StateHandlers<Owner>::Update h = table.entries[idx].updateHandler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
+        return h(NodeData(node), sm);
     }
     // slot 5 (+0x28): OnState — table[actIdx].transitions[trIdx].handler(node+0x18)
     static void OnState(::ControllerComponent::Controller* node, void* /*sm*/, int actIdx, int trIdx) {
         if (actIdx < 0 || actIdx >= table.count) return;
         if (trIdx < 0 || trIdx >= 8) return;
-        void* h = table.entries[actIdx].transitions[trIdx].handler;
+        typename StateHandlers<Owner>::Transition h = table.entries[actIdx].transitions[trIdx].handler;
         if (!h) return;
-        reinterpret_cast<void (*)(void*)>(h)(NodeData(node));
+        h(NodeData(node));
     }
     // slot 6 (+0x30): Transition — dispatch table[idx].trans30Handler(node+0x18, sm, time)
     // ⚠ THIS IS ALSO A PER-FRAME HANDLER, and it is the ONLY per-frame column some
@@ -226,9 +276,9 @@ struct Dispatcher {
     // ignore the extra registers.
     static char Trans30(::ControllerComponent::Controller* node, void* sm, void* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
-        void* h = table.entries[idx].trans30Handler;
+        typename StateHandlers<Owner>::Tick h = table.entries[idx].trans30Handler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*, void*, void*)>(h)(NodeData(node), sm, time);
+        return h(NodeData(node), sm, time);
     }
     // slot 7 (+0x38): DrawAlt — dispatch table[idx].trans38Handler(node+0x18, sm, time)
     // ⚠ This is the PER-FRAME handler. StateMachineComponent::Update calls
@@ -244,9 +294,9 @@ struct Dispatcher {
     // tick (0x140129970) dereferences it for its heat countdown.
     static char Trans38(::ControllerComponent::Controller* node, void* sm, void* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
-        void* h = table.entries[idx].trans38Handler;
+        typename StateHandlers<Owner>::Tick h = table.entries[idx].trans38Handler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*, void*, void*)>(h)(NodeData(node), sm, time);
+        return h(NodeData(node), sm, time);
     }
     // slot 2 (+0x10): PostEvent(node, sm, int curIdx, int eventId) -> char
     // Ported 1:1 from the retail dispatcher at 0x140009da0 (orchard node vtable
@@ -262,17 +312,17 @@ struct Dispatcher {
     // same shape as Enter/Update. A miss is a graceful 0, exactly as retail.
     static char PostEvent(::ControllerComponent::Controller* node, void* sm, int curIdx, int eventId) {
         if (curIdx < 0 || curIdx >= table.count) return 0;
-        const StateEntry& e = table.entries[curIdx];
+        const StateEntry<Owner>& e = table.entries[curIdx];
         for (int i = 0; i < e.eventCount; ++i) {
             if (e.events[i].eventId != eventId) continue;
-            void* h = e.events[i].handler;
+            typename StateHandlers<Owner>::Event h = e.events[i].handler;
             if (!h) return 0;
-            return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
+            return h(NodeData(node), sm);
         }
         return 0;
     }
 };
-template <class Tag> StateTable Dispatcher<Tag>::table = {};
+template <class Tag> StateTable<typename Dispatcher<Tag>::Owner> Dispatcher<Tag>::table = {};
 
 // Request a state transition from a ported state handler, replicating the exe idiom:
 //   int d=desiredStateId; int i = node->slot08(node, sm->index, &d);

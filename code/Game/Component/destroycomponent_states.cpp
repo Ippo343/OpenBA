@@ -863,7 +863,7 @@ char DestroyComponent::State7Remove(void* sm) {
 // event 2 today (the Remove/Rebuild buttons are state 7 / events 0-1), but the
 // registration exists in dd00, so the handler does too. It reads no field of the
 // component (RCX unused): it stays a free function (B1).
-extern "C" char Destroy_State6Event2_ToRubble_d390(void* /*data*/, void* sm) {
+extern "C" char Destroy_State6Event2_ToRubble_d390(DestroyComponent* /*data*/, void* sm) {
     ::ControllerLive::RequestStateTransition(sm, 7);
     return 1;
 }
@@ -956,11 +956,11 @@ using DestroyDispatch = ::ControllerLive::Dispatcher<DestroyCtrlTag>;
 // column, the elapsed Time.
 static char DestroyState3Enter(DestroyComponent* c, void* sm)  { return c->State3Enter(sm); }   // 0x14011d7b0
 static char DestroyState4Enter(DestroyComponent* c, void* sm)  { return c->State4Enter(sm); }   // 0x14011cfd0
-static char DestroyState4Tick(DestroyComponent* c, void* sm)   { return c->State4Tick(sm); }    // 0x14011cec0
-static char DestroyState5Enter(DestroyComponent* c)            { return c->State5Enter(); }     // 0x14011cc70
-static char DestroyState5Tick(DestroyComponent* c)             { return c->State5Tick(); }      // 0x14011c120
-static char DestroyState6Enter(DestroyComponent* c)            { return c->State6Enter(); }     // 0x14011d4d0
-static char DestroyState6Update(DestroyComponent* c)           { return c->State6Update(); }    // 0x14011d400
+static char DestroyState4Tick(DestroyComponent* c, void* sm, void* /*time*/)   { return c->State4Tick(sm); }    // 0x14011cec0
+static char DestroyState5Enter(DestroyComponent* c, void* /*sm*/)            { return c->State5Enter(); }     // 0x14011cc70
+static char DestroyState5Tick(DestroyComponent* c, void* /*sm*/, void* /*time*/)             { return c->State5Tick(); }      // 0x14011c120
+static char DestroyState6Enter(DestroyComponent* c, void* /*sm*/)            { return c->State6Enter(); }     // 0x14011d4d0
+static char DestroyState6Update(DestroyComponent* c, void* /*sm*/)           { return c->State6Update(); }    // 0x14011d400
 static char DestroyState6Tick(DestroyComponent* c, void*, System::Time* t) { return c->State6Tick(t); }   // 0x14011d490
 static char DestroyState7Rebuild(DestroyComponent* c, void* sm) { return c->State7Rebuild(sm); }  // 0x14011d2a0
 static char DestroyState7Remove(DestroyComponent* c, void* sm)  { return c->State7Remove(sm); }   // 0x14011d1a0
@@ -968,21 +968,21 @@ static char DestroyCancel(DestroyComponent* c, void* sm)        { return c->Canc
 
 extern "C" void DestroyCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = DestroyDispatch::table;
+    auto& t = DestroyDispatch::table;
     if (t.count != 0) return;   // idempotent
 
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&DestroyState3Enter),
+    TableRegisterState(t, 3, &DestroyState3Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 6, nullptr);
 
     // sub_3e50(6, A=d4d0, B=d400, D=d490): A -> enter, B -> update, D -> trans38.
-    TableRegisterState(t, 6, reinterpret_cast<void*>(&DestroyState6Enter),
-                       nullptr, reinterpret_cast<void*>(&DestroyState6Tick),
-                       reinterpret_cast<void*>(&DestroyState6Update));
+    TableRegisterState(t, 6, &DestroyState6Enter,
+                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<DestroyComponent>::Tick>(&DestroyState6Tick),   // LEFT: its time is System::Time*; Controller::Tick / StateMachine::Tick carry it as void* (ControllerComponent.h, statemachinecomponent.cpp)
+                       &DestroyState6Update);
     TableAddTransition(t, 7, nullptr);
     // sub_4020(2, d390) — state 6's only event.
-    TableAddEvent(t, 2, reinterpret_cast<void*>(&Destroy_State6Event2_ToRubble_d390));
+    TableAddEvent(t, 2, &Destroy_State6Event2_ToRubble_d390);
 
     TableRegisterState(t, 7, nullptr, nullptr, nullptr, nullptr);
     TableAddTransition(t, 0, nullptr);
@@ -990,23 +990,23 @@ extern "C" void DestroyCtrl_PopulateTable() {
     TableAddTransition(t, 5, nullptr);
     // sub_4020(0, d2a0) / sub_4020(1, d1a0) — the destroyed-building panel's
     // Rebuild/Reclaim and Remove buttons. Registration order matches dd00.
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&DestroyState7Rebuild));
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&DestroyState7Remove));
+    TableAddEvent(t, 0, &DestroyState7Rebuild);
+    TableAddEvent(t, 1, &DestroyState7Remove);
 
-    TableRegisterState(t, 4, reinterpret_cast<void*>(&DestroyState4Enter),
-                       nullptr, reinterpret_cast<void*>(&DestroyState4Tick),
+    TableRegisterState(t, 4, &DestroyState4Enter,
+                       nullptr, &DestroyState4Tick,
                        nullptr);
     TableAddTransition(t, 5, nullptr);
     TableAddTransition(t, 2, nullptr);
     // sub_4020(0, bcc0) — cancel, registered on state 4 AND state 5.
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&DestroyCancel));
+    TableAddEvent(t, 0, &DestroyCancel);
 
-    TableRegisterState(t, 5, reinterpret_cast<void*>(&DestroyState5Enter),
-                       nullptr, reinterpret_cast<void*>(&DestroyState5Tick),
+    TableRegisterState(t, 5, &DestroyState5Enter,
+                       nullptr, &DestroyState5Tick,
                        nullptr);
     TableAddTransition(t, 0, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 7, nullptr);
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&DestroyCancel));
+    TableAddEvent(t, 0, &DestroyCancel);
 }

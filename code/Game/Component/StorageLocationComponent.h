@@ -26,7 +26,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct StorageCtrlTag {};
+struct StorageCtrlTag { using Owner = class StorageLocationComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class StorageLocationComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(StorageLocationComponent)

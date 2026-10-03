@@ -37,7 +37,7 @@
 class CitizenComponent;
 namespace IO { class Serializer; }
 
-struct ResidenceCtrlTag {};
+struct ResidenceCtrlTag { using Owner = class ResidenceComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class ResidenceComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(ResidenceComponent)

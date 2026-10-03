@@ -339,7 +339,7 @@ char TradeComponent::OnMerchantLost(void* sm) {
 // only thing this handler adds over its 0xb sibling is the immediate tick — which
 // is the point: dismissing a merchant has to take effect on the click, not on the
 // next simulation frame. Retail ignores param_1 entirely, so the handler stays free.
-static char TradeCtrl_Event0A_Dismissed(void* /*self*/, void* smV) {
+static char TradeCtrl_Event0A_Dismissed(TradeComponent* /*self*/, void* smV) {
     if (!smV) return 1;
     ::ControllerLive::RequestStateTransition(smV, 2);
     ::StateMachine_TickReimpl(smV, /*time*/ 0, /*param3*/ 0, /*param4*/ 1);
@@ -462,54 +462,54 @@ char TradeComponent::Teardown() {
 // Table build — replicates 0x14005c650
 // ============================================================
 // The handlers the dispatcher calls with (owner, sm[, delta]); RCX is the component.
-static char TradeCtrl_State2_Enter(TradeComponent* c)       { return c->EnterIdle(); }         // 0x14005abd0
+static char TradeCtrl_State2_Enter(TradeComponent* c, void* /*sm*/)       { return c->EnterIdle(); }         // 0x14005abd0
 static char TradeCtrl_State2_Tick(TradeComponent* c, void* sm, void* dt) {                    // 0x14005aa60
     return c->TickIdle(sm, static_cast<const System::Time*>(dt));
 }
-static char TradeCtrl_State12_Enter(TradeComponent* c)      { return c->EnterInbound(); }      // 0x14005aa50
+static char TradeCtrl_State12_Enter(TradeComponent* c, void* /*sm*/)      { return c->EnterInbound(); }      // 0x14005aa50
 static char TradeCtrl_Event09_MerchantDocked(TradeComponent* c, void* sm) { return c->OnMerchantDocked(sm); }   // 0x14005a850
 static char TradeCtrl_Event0B_MerchantLost(TradeComponent* c, void* sm)   { return c->OnMerchantLost(sm); }     // 0x14005a9c0
-static char TradeCtrl_State13_Enter(TradeComponent* c)      { return c->EnterDocked(); }       // 0x14005a800
+static char TradeCtrl_State13_Enter(TradeComponent* c, void* /*sm*/)      { return c->EnterDocked(); }       // 0x14005a800
 static char TradeCtrl_State13_Tick(TradeComponent* c, void* sm, void* dt) {                   // 0x14005a780
     return c->TickDocked(sm, static_cast<const System::Time*>(dt));
 }
-static char TradeCtrl_State13_Update(TradeComponent* c)     { return c->LeaveDocked(); }       // 0x14005a6d0
-static char TradeCtrl_Teardown(TradeComponent* c)           { return c->Teardown(); }          // 0x14005b160
+static char TradeCtrl_State13_Update(TradeComponent* c, void* /*sm*/)     { return c->LeaveDocked(); }       // 0x14005a6d0
+static void TradeCtrl_Teardown(TradeComponent* c)           { c->Teardown(); }          // 0x14005b160
 
 // Built ONCE at static-init time, as retail's 0x14005c650 does (B38 D6/D7).
 static void TradeCtrl_PopulateTable() {
-    ::ControllerLive::StateTable& t = TradeDispatch::table;
+    auto& t = TradeDispatch::table;
     if (t.count != 0) return;
     using namespace ::ControllerLive;
 
     // state 2 — idle / waiting for the next merchant
     TableRegisterState(t, 2,
-        reinterpret_cast<void*>(&TradeCtrl_State2_Enter),   // +0x08 enter  (abd0)
+        &TradeCtrl_State2_Enter,   // +0x08 enter  (abd0)
         nullptr,                                            // +0x10 trans30 (retail: 0)
-        reinterpret_cast<void*>(&TradeCtrl_State2_Tick),    // +0x18 trans38 (aa60)
+        &TradeCtrl_State2_Tick,    // +0x18 trans38 (aa60)
         nullptr);                                           // +0x20 update  (retail: 0)
-    TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
+    TableAddTransition(t, 3, &TradeCtrl_Teardown);   // b160
     TableAddTransition(t, 0x12, nullptr);
 
     // state 0x12 — merchant inbound
     TableRegisterState(t, 0x12,
-        reinterpret_cast<void*>(&TradeCtrl_State12_Enter),  // aa50
+        &TradeCtrl_State12_Enter,  // aa50
         nullptr, nullptr, nullptr);
-    TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
+    TableAddTransition(t, 3, &TradeCtrl_Teardown);   // b160
     TableAddTransition(t, 0x13, nullptr);
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 9, reinterpret_cast<void*>(&TradeCtrl_Event09_MerchantDocked));  // a850
-    TableAddEvent(t, 0xb, reinterpret_cast<void*>(&TradeCtrl_Event0B_MerchantLost));
+    TableAddEvent(t, 9, &TradeCtrl_Event09_MerchantDocked);  // a850
+    TableAddEvent(t, 0xb, &TradeCtrl_Event0B_MerchantLost);
 
     // state 0x13 — merchant docked
     TableRegisterState(t, 0x13,
-        reinterpret_cast<void*>(&TradeCtrl_State13_Enter),  // a800  (layer 3)
+        &TradeCtrl_State13_Enter,  // a800  (layer 3)
         nullptr,                                            // retail: 0
-        reinterpret_cast<void*>(&TradeCtrl_State13_Tick),   // a780
-        reinterpret_cast<void*>(&TradeCtrl_State13_Update));// a6d0  (layer 3)
-    TableAddTransition(t, 3, reinterpret_cast<void*>(&TradeCtrl_Teardown));   // b160
+        &TradeCtrl_State13_Tick,   // a780
+        &TradeCtrl_State13_Update);// a6d0  (layer 3)
+    TableAddTransition(t, 3, &TradeCtrl_Teardown);   // b160
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 0xa, reinterpret_cast<void*>(&TradeCtrl_Event0A_Dismissed));  // 0x14005b240
+    TableAddEvent(t, 0xa, &TradeCtrl_Event0A_Dismissed);  // 0x14005b240
 
     std::fprintf(stderr, "[TradeCtrl] table built: %d states (2, 0x12, 0x13)\n", t.count);
     std::fflush(stderr);

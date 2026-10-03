@@ -31,7 +31,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct HappinessCtrlTag {};
+struct HappinessCtrlTag { using Owner = class HappinessComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class HappinessComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(HappinessComponent)

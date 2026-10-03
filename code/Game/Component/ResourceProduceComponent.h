@@ -42,7 +42,7 @@
 
 // The ONE tag of the shared ResourceProduce state table (was in an anonymous
 // namespace in resourceproducecomponent_states.cpp; the member type needs it).
-struct RPCtrlTag {};
+struct RPCtrlTag { using Owner = class ResourceProduceComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class ResourceProduceComponent : public ControllerComponent {
     DECLARE_EXE_TYPE(ResourceProduceComponent)

@@ -36,7 +36,7 @@ class ComponentEntity;      // Entity/ComponentEntity.h
 class ModelComponent;       // Component/ModelComponent.h
 class CharacterComponent;   // Component/CharacterComponent.h
 
-struct BoatCtrlTag {};
+struct BoatCtrlTag { using Owner = class BoatComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class BoatComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(BoatComponent)

@@ -41,7 +41,7 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
-struct WellCtrlTag {};
+struct WellCtrlTag { using Owner = class WellComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class WellComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(WellComponent)

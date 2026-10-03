@@ -217,22 +217,22 @@ char AttendanceComponent::State3Enter() {
 // The table (controller_state_table.h) holds plain handler addresses called as
 // handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer,
 // this component, so each entry is a one-line adapter that calls the member.
-static char Attendance_State2Enter(AttendanceComponent* a) { return a->State2Enter(); }   // 0x140043c90
-static char Attendance_State2Frame(AttendanceComponent* a) { return a->State2Frame(); }   // 0x140043c30
-static char Attendance_State3Enter(AttendanceComponent* a) { return a->State3Enter(); }   // 0x140043bd0
+static char Attendance_State2Enter(AttendanceComponent* a, void* /*sm*/) { return a->State2Enter(); }   // 0x140043c90
+static char Attendance_State2Frame(AttendanceComponent* a, void* /*sm*/, void* /*time*/) { return a->State2Frame(); }   // 0x140043c30
+static char Attendance_State3Enter(AttendanceComponent* a, void* /*sm*/) { return a->State3Enter(); }   // 0x140043bd0
 
 extern "C" void AttendanceCtrl_PopulateTable() {
     using namespace ::ControllerLive;
-    StateTable& t = AttendanceDispatch::table;
+    auto& t = AttendanceDispatch::table;
     if (t.count != 0) return;   // idempotent, like the retail Setup guard
 
     // sub_28b0(2, LocationWork_Ctor, .., .., sub_3c30) — enter + per-frame, no update.
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&Attendance_State2Enter),
-                       nullptr, reinterpret_cast<void*>(&Attendance_State2Frame), nullptr);
+    TableRegisterState(t, 2, &Attendance_State2Enter,
+                       nullptr, &Attendance_State2Frame, nullptr);
     TableAddTransition(t, 3, nullptr);          // sub_29d0(3)
 
     // sub_28b0(3, helper_3bd0, .., .., 0) — enter only.
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&Attendance_State3Enter),
+    TableRegisterState(t, 3, &Attendance_State3Enter,
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);          // sub_29d0(6)
     TableAddTransition(t, 4, nullptr);          // sub_29d0(4)

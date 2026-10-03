@@ -36,7 +36,7 @@
 class ComponentEntity;
 class CitizenComponent;
 
-struct NomadCtrlTag {};
+struct NomadCtrlTag { using Owner = class NomadComponent; };   // the handlers' receiver (controller_state_table.h)
 
 class NomadComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(NomadComponent)
