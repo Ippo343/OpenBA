@@ -150,19 +150,16 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
         return;
     }
 
-    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    // The singleton is still read through the EXISTING door, so the guard
-    // above still gates the same cell and the same registered body still runs.
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname("Game/Profession/Profession.rsc");
     ::Object::External* profList = const_cast<::Object::External*>(
         efactory->FindOrLoad(fname));                                       // B.3.3 bridge
     self->m_professionList = static_cast<ProfessionList*>(profList);   // unchecked, as before
 
-    void* defProf  = profList ? *(void**)((uint8_t*)profList + 0x30) : nullptr;
-    void* profRef2 = profList ? *(void**)((uint8_t*)profList + 0x38) : nullptr;
+    ProfessionList* profs = self->m_professionList;
+    Profession* defProf  = profs ? profs->field_0x30 : nullptr;
+    Profession* profRef2 = profs ? profs->field_0x38 : nullptr;
     fprintf(stderr, "[GUL::ProfList] gw+0xb0=%p defaultProf(+0x30)=%p profRef2(+0x38)=%p\n",
             profList, defProf, profRef2);
     fflush(stderr);
@@ -346,7 +343,7 @@ namespace {
 // new tail is left UNINITIALISED (retail's empty else arm) — init is null on
 // purpose; trivially destructible.
 void AssignPtr8(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 1>>(d, s);
 }
 const rtcoll::ArraySpec kSpec_Ptr8NoInit = {             // exe 0x1400191f0
     "Array<void*> (no tail init)", 8, 8,
@@ -361,13 +358,32 @@ using Ptr8NoInitArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // bool used}, stride 0x1c, align 4. Copy writes +0x00..+0x18 (the 4x-unrolled
 // dword loop plus the bool) and leaves +0x19..+0x1b; init writes the same
 // bytes with zero. Partial copy, so byteCopy=false; trivially destructible.
+// The element is PlayerCameraView (Game/PlayerToolManager.h), reached through
+// Collection.h's element adapters.
+void CopyCamView(PlayerCameraView* d, const PlayerCameraView* s) {
+    d->position.x = s->position.x;   // +0x00
+    d->position.y = s->position.y;   // +0x04
+    d->position.z = s->position.z;   // +0x08
+    d->field_0x0C = s->field_0x0C;
+    d->field_0x10 = s->field_0x10;
+    d->field_0x14 = s->field_0x14;
+    d->used = s->used;               // +0x18, the raw byte
+}
+void ZeroCamView(PlayerCameraView* d) {
+    // retail: three qword zero stores over +0x00..+0x17 (H7: six named stores)
+    d->position.x = 0.0f;
+    d->position.y = 0.0f;
+    d->position.z = 0.0f;
+    d->field_0x0C = 0.0f;
+    d->field_0x10 = 0.0f;
+    d->field_0x14 = 0.0f;
+    d->used = false;
+}
 void AssignCamView(uint8_t* d, const uint8_t* s) {
-    for (int b = 0; b < 0x18; b += 4) *reinterpret_cast<uint32_t*>(d + b) = *reinterpret_cast<const uint32_t*>(s + b);
-    d[0x18] = s[0x18];
+    rtcoll::AssignAs<PlayerCameraView, &CopyCamView>(d, s);
 }
 void InitCamView(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0; *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0; d[0x18] = 0;
+    rtcoll::InitAs<PlayerCameraView, &ZeroCamView>(d);
 }
 const rtcoll::ArraySpec kSpec_CamViewLoad = {            // exe 0x14002e000
     "Array<CameraView>", 0x1c, 4,
@@ -383,14 +399,14 @@ using CamViewLoadArray = Collection::Array<uint8_t, Collection::DefaultAllocator
 // FUN_1400191f0 — stride-8 pointer-array resize; copies existing, does NOT zero new slots.
 static void* Reimpl_FUN_1400191f0(void* hdr, int n) {
     // B.3.2 bridge: the +0x50 header is still raw bytes in an unconverted struct.
-    reinterpret_cast<Ptr8NoInitArray*>(hdr)->SetSize(n);
+    reinterpret_cast<Ptr8NoInitArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
     return hdr;
 }
 
 // FUN_14002e000 — stride-0x1c (28-byte) struct-array resize; copies existing, zero-fills new.
 static void* Reimpl_FUN_14002e000(void* hdr, int n) {
     // B.3.2 bridge: EntityUI+0x70 is still a raw header.
-    reinterpret_cast<CamViewLoadArray*>(hdr)->SetSize(n);
+    reinterpret_cast<CamViewLoadArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
     return hdr;
 }
 
@@ -426,21 +442,18 @@ namespace {
 // zeroed on BOTH the truncation and the realloc arm, so the row is exact.
 // The spec row's element is raw bytes; each element is one inner Array<int32>
 // (LEFT: the ArraySpec hooks take uint8_t*).
-void AssignIntAssocOuterL(uint8_t* d, const uint8_t* s) {
-    Collection::Array<int32_t>* dst = reinterpret_cast<Collection::Array<int32_t>*>(d);
+void CopyIntAssocOuterL(Collection::Array<int32_t>* dst, const Collection::Array<int32_t>* s) {
     dst->_data = nullptr;                     // +0x00
     dst->_size = 0;                           // +0x08 / +0x0c: one qword store (H7: two stores)
     dst->_capacity = 0;
-    Reimpl_TradeComponent_helper_f9e0(dst, reinterpret_cast<const Collection::Array<int32_t>*>(s));
+    Reimpl_TradeComponent_helper_f9e0(dst, s);
 }
-void InitIntAssocOuterL(uint8_t* d) {
-    Collection::Array<int32_t>* dst = reinterpret_cast<Collection::Array<int32_t>*>(d);
+void ZeroIntAssocOuterL(Collection::Array<int32_t>* dst) {
     dst->_data = nullptr;
     dst->_size = 0;                           // one qword store (H7)
     dst->_capacity = 0;
 }
-void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
-    Collection::Array<int32_t>* elems = reinterpret_cast<Collection::Array<int32_t>*>(base);
+void DestroyIntAssocOuterRange(Collection::Array<int32_t>* elems, int count) {
     for (int i = 0; i < count; ++i) {
         Collection::Array<int32_t>* e = &elems[i];
         System::MemoryAllocator::MemFree(e->_data);
@@ -448,6 +461,15 @@ void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
         e->_size = 0;                         // one qword store (H7)
         e->_capacity = 0;
     }
+}
+void AssignIntAssocOuterL(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<Collection::Array<int32_t>, &CopyIntAssocOuterL>(d, s);
+}
+void InitIntAssocOuterL(uint8_t* d) {
+    rtcoll::InitAs<Collection::Array<int32_t>, &ZeroIntAssocOuterL>(d);
+}
+void DestroyIntAssocOuterL(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuterRange>(ignoredThis, base, count);
 }
 const rtcoll::ArraySpec kSpec_IntAssocOuterL = {         // exe 0x140017640
     "Array<Array<int32>>", 0x10, 8,
@@ -462,17 +484,20 @@ using IntAssocOuterLArray = Collection::Array<uint8_t, Collection::DefaultAlloca
 // four qwords (the whole stride); init = {0, 100, 0, 0} written as u64@0,
 // u64@8, u32@0x10, u64@0x18 so +0x14..+0x17 is left untouched; trivially
 // destructible.
+// The element is ProfessionResourceEntry (Entity/CitizenBehavior.h).
+void ZeroProfResEntry(ProfessionResourceEntry* e) {
+    e->currentCount  = 0;       // +0x00 / +0x04: retail's u64 0 (H7: two stores)
+    e->previousCount = 0;
+    e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
+    e->field_0x0C    = 0;
+    e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
+    e->timer         = 0;       // +0x18 u64
+}
 void AssignProfResEntryL(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
-    *reinterpret_cast<uint64_t*>(d + 0x18) = *reinterpret_cast<const uint64_t*>(s + 0x18);
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 4>>(d, s);   // the whole stride, four qwords
 }
 void InitProfResEntryL(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 100;   // +0x08 default = 100
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    rtcoll::InitAs<ProfessionResourceEntry, &ZeroProfResEntry>(d);
 }
 const rtcoll::ArraySpec kSpec_ProfResEntryL = {          // exe 0x1400177c0
     "Array<ProfessionResourceEntry>", 0x20, 8,
@@ -485,12 +510,15 @@ using ProfResEntryLArray = Collection::Array<uint8_t, Collection::DefaultAllocat
 
 // 0x14000f090 element: two qwords, stride 0x10, align 8. Copy = whole
 // stride; init = zero; trivially destructible.
+void ZeroPod16(uint64_t* w) {
+    w[0] = 0;
+    w[1] = 0;
+}
 void AssignPod16(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 2>>(d, s);
 }
 void InitPod16(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0; *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    rtcoll::InitAs<uint64_t, &ZeroPod16>(d);
 }
 const rtcoll::ArraySpec kSpec_Pod16 = {                  // exe 0x14000f090
     "Array<{u64,u64}>", 0x10, 8,
@@ -506,21 +534,21 @@ using Pod16Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // FUN_140017640 (TradeComponent_impl_f760_sub_7640) — stride-0x10 array of inner-array headers.
 static void* Reimpl_FUN_140017640(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x150 / TownManager+0x140 are still raw headers.
-    reinterpret_cast<IntAssocOuterLArray*>(hdr)->SetSize(n);
+    reinterpret_cast<IntAssocOuterLArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
     return hdr;
 }
 
 // TradeComponent_impl_f760_sub_77c0 @ 0x1400177c0 — stride-0x20 resize; new slots {0,100,0,0}.
 static void* Reimpl_TradeComponent_sub_77c0(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
-    reinterpret_cast<ProfResEntryLArray*>(hdr)->SetSize(n);
+    reinterpret_cast<ProfResEntryLArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
     return hdr;
 }
 
 // FUN_14000f090 — stride-0x10 POD resize; copies 2x u64, zero-fills new.
 static void* Reimpl_FUN_14000f090(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x180 is still a raw header.
-    reinterpret_cast<Pod16Array*>(hdr)->SetSize(n);
+    reinterpret_cast<Pod16Array*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
     return hdr;
 }
 
@@ -653,10 +681,10 @@ static void WeatherSimulation_Construct(WeatherSimulation* w) {
     uint8_t rng1[2520];
     uint8_t rng2[2520];
     uint32_t seed1 = 0, seed2 = 0;
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng1));
-    seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // B.3.4b bridge
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));
-    seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // B.3.4b bridge
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng1));   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
+    seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
+    seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
     RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
     w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
     w->field_0x48 = 0.0f;
@@ -742,10 +770,10 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
         float halfW = (float)(width / 2);
         fovX = atanf(halfW / den) * kTwo * kRad2Deg;
     }
+    const Math::Scalar nearS(nearZ), farS(farZ), fovXS(fovX), fovYS(fovY);
     uint8_t frustum[0xC0];
-    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
-        reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
-        reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
+    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
+        &nearS, &farS, &fovXS, &fovYS);
     // LEFT: +0x34 is raw storage (H5).
     reinterpret_cast<Graphics::Camera*>(camera)->SetFrustum(
         *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
@@ -787,9 +815,12 @@ PlayerToolManager::PlayerToolManager() {
 // ============================================================
 // Small allocation helper
 // ============================================================
-static inline void* AllocSub(uint64_t size, int align) {
+// The block is returned as the class the caller builds in it (`void` for the
+// ones built through a POD-mirror ctor or a placement new).
+template <class T>
+static inline T* AllocSub(uint64_t size, int align) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
-    return System::MemoryAllocator::MemAlloc(size, align);
+    return static_cast<T*>(System::MemoryAllocator::MemAlloc(size, align));
 }
 
 // ============================================================
@@ -819,7 +850,7 @@ static inline void* AllocSub(uint64_t size, int align) {
 // class's, and Time(float) is engine_funcs' boot-resolved fn_Time_Ctor_Float
 // (the same export, `??0Time@System@@QEAA@M@Z`).
 static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
-    void* mem = AllocSub(0x120, 8);
+    void* mem = AllocSub<void>(0x120, 8);
     if (!mem) {
         self->m_skyMesh = nullptr;
         fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p\n", mem);
@@ -835,10 +866,8 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
     if (::Object::ExternalFactory::_singleton) {
-        void* factory = ::Object::ExternalFactory::_singleton;
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-        ::Object::ExternalFactory* efactory =
-            reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+        ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         System::Filename fname("Models/Sky/SkyMesh.rsc");
         meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge
     }
@@ -853,13 +882,14 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
     {
-        uint64_t timeObj = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeObj), 0.0f);
-        // B.3.5 bridge — vtable+0x08 is slot 1 of `Graphics::Geometry`, i.e.
+        System::Time timeObj;
+        timeObj._ticks = 0;
+        RtSystem_Time_Ctor(&timeObj, 0.0f);
+        // vtable+0x08 is slot 1 of `Graphics::Geometry`, i.e.
         // `Update(const System::Time&)`. The receiver is a PROVED MeshInstance:
         // 0x120 bytes from AllocSub, run through `??0MeshInstance@Graphics@@` above.
-        reinterpret_cast<Graphics::Geometry*>(mem)->Update(
-            *reinterpret_cast<const System::Time*>(&timeObj));   // B.3.5 bridge
+        Graphics::Geometry* skyGeometry = sky;
+        skyGeometry->Update(timeObj);
     }
     sky->_detailId = 0;   // +0x28
 
@@ -957,7 +987,7 @@ void GameUpdateLoop::Load() {
     // source — NOT in seeding. Leading suspect: iteration over a container keyed by heap
     // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
-        System::Random* mem = static_cast<System::Random*>(AllocSub(0x9c4, 4));
+        System::Random* mem = AllocSub<System::Random>(0x9c4, 4);
         if (mem) RtSystem_Random_CtorSeed(mem, static_cast<uint32_t>(m_seed));
         m_random = mem;
     }
@@ -970,15 +1000,13 @@ void GameUpdateLoop::Load() {
             if (vp) { width = vp->backBufferHeight; height = vp->backBufferWidth; }  // step6 reads +8/+4
         }
         float aspect = (height != 0) ? (float)width / (float)height : 1.7777778f;
-        void* mem = AllocSub(0x10c, 4);
+        void* mem = AllocSub<void>(0x10c, 4);
         PlayerController* pc = nullptr;
         if (mem) {
-            float nearZ = 2.0f, farZ = 70.0f, fovX = 60.0f, fovY = aspect * 60.0f;
+            const Math::Scalar nearZ(2.0f), farZ(70.0f), fovX(60.0f), fovY(aspect * 60.0f);
             uint8_t frustum[0xC0] = {};
-            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);
-            RtVolume_Frustum_Ctor_Perspective(fr,
-                reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
-                reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
+            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
+            RtVolume_Frustum_Ctor_Perspective(fr, &nearZ, &farZ, &fovX, &fovY);
             pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
         m_playerController = pc;
@@ -986,14 +1014,14 @@ void GameUpdateLoop::Load() {
 
     // Step 7 — Renderer (+0x90, 0x50).
     {
-        void* mem = AllocSub(0x50, 4);
-        if (mem) RtGraphics_Renderer_Ctor(static_cast<RtGraphics::Renderer*>(mem));   // the ctor door takes the POD mirror
-        m_renderer = static_cast<Graphics::Renderer*>(mem);
+        Graphics::Renderer* mem = AllocSub<Graphics::Renderer>(0x50, 4);
+        if (mem) RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(mem));   // LEFT: the ctor door takes the POD mirror RtGraphics::Renderer (runtime/types/graphics)
+        m_renderer = mem;
     }
 
     // Step 8 — EntityList (+0xE8, 0xe8).
     {
-        void* mem = AllocSub(0xe8, 4);
+        void* mem = AllocSub<void>(0xe8, 4);
         EntityList* list = mem ? new (mem) EntityList : nullptr;
         if (list) EntityList_Construct(list);
         m_entityList = list;
@@ -1001,14 +1029,14 @@ void GameUpdateLoop::Load() {
 
     // Step 9 — UserInterface (+0x98, 0x128).
     {
-        UI::UserInterface* mem = static_cast<UI::UserInterface*>(AllocSub(0x128, 4));
+        UI::UserInterface* mem = AllocSub<UI::UserInterface>(0x128, 4);
         if (mem) RtUi_UserInterface_Ctor(mem);
         m_userInterface = mem;
     }
 
     // Step 10 — town/trade manager (+0xF0, 0x1c0) — exe ctor 0x140090a30.
     {
-        void* mem = AllocSub(0x1c0, 4);
+        void* mem = AllocSub<void>(0x1c0, 4);
         CitizenBehavior* cb = mem ? new (mem) CitizenBehavior : nullptr;
         if (cb) CitizenBehavior_Construct(cb);
         m_citizenList = cb;
@@ -1016,14 +1044,14 @@ void GameUpdateLoop::Load() {
 
     // Step 11 — Game (+0xF8, 0xf8) — CRITICAL: clears the m_game==null Stage-C guards.
     {
-        void* mem = AllocSub(0xf8, 8);
+        void* mem = AllocSub<void>(0xf8, 8);
         Map* map = mem ? new (mem) Map : nullptr;
         m_game = map;
     }
 
     // Step 12 — Tutorial-ish (+0x118, 0x138).
     {
-        void* mem = AllocSub(0x138, 4);
+        void* mem = AllocSub<void>(0x138, 4);
         WorkScheduler* scheduler = mem ? new (mem) WorkScheduler : nullptr;
         if (scheduler) WorkScheduler_Construct(scheduler);
         m_tutorial = scheduler;
@@ -1031,14 +1059,14 @@ void GameUpdateLoop::Load() {
 
     // Step 13 — EntityUI (+0x120, 0xb0).
     {
-        void* mem = AllocSub(0xb0, 4);
+        void* mem = AllocSub<void>(0xb0, 4);
         PlayerToolManager* tm = mem ? ::new (mem) PlayerToolManager() : nullptr;   // 0x1401025c0
         m_toolManager = tm;
     }
 
     // Step 14 — DayCounter Time struct (+0x128, 0x18): flag=1, Time(+8,0.0), Time(+0x10,3600.0).
     {
-        void* mem = AllocSub(0x18, 8);
+        void* mem = AllocSub<void>(0x18, 8);
         Calendar* calendar = mem ? new (mem) Calendar : nullptr;
         if (calendar) {
             calendar->year = 1;
@@ -1050,7 +1078,7 @@ void GameUpdateLoop::Load() {
 
     // Step 15 — Weather sim (+0x130, 0x78).
     {
-        void* mem = AllocSub(0x78, 8);
+        void* mem = AllocSub<void>(0x78, 8);
         WeatherSimulation* weather = mem ? new (mem) WeatherSimulation : nullptr;
         if (weather) WeatherSimulation_Construct(weather);
         m_weather = weather;
@@ -1083,7 +1111,7 @@ void GameUpdateLoop::Load() {
 
     // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
     {
-        void* mem = AllocSub(0x28, 4);
+        void* mem = AllocSub<void>(0x28, 4);
         EventLog* eventLog = mem ? new (mem) EventLog : nullptr;
         if (eventLog) {
             memset(eventLog, 0, sizeof(EventLog));
@@ -1101,28 +1129,28 @@ void GameUpdateLoop::Load() {
 
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
-        void* mem = AllocSub(0x78, 8);
-        if (mem) RtGraphics_Scene_Ctor(static_cast<RtGraphics::Scene*>(mem));
-        m_graphicsScene = static_cast<Graphics::Scene*>(mem);
+        Graphics::Scene* mem = AllocSub<Graphics::Scene>(0x78, 8);
+        if (mem) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(mem));   // LEFT: the ctor door takes the POD mirror RtGraphics::Scene (runtime/types/graphics)
+        m_graphicsScene = mem;
     }
 
     // Step 19 — Audio::Scene (+0x78, 0x38).
     {
-        void* mem = AllocSub(0x38, 8);
+        Audio::Scene* mem = AllocSub<Audio::Scene>(0x38, 8);
         if (mem) RtAudio_Scene_Ctor(mem);
-        m_audioScene = static_cast<Audio::Scene*>(mem);
+        m_audioScene = mem;
     }
 
     // Step 20 — Picking::Scene (+0x70, 0x60).
     {
-        void* mem = AllocSub(0x60, 8);
+        void* mem = AllocSub<void>(0x60, 8);
         // Retail stores the ctor's return (this), as here (0x140096b00).
         m_pickingScene = mem ? RtPicking_Scene_Ctor(mem) : nullptr;
     }
 
     // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
     {
-        void* mem = AllocSub(0x60, 8);
+        void* mem = AllocSub<void>(0x60, 8);
         CharacterGrid* grid = mem ? new (mem) CharacterGrid : nullptr;
         if (grid) CharacterGrid_Construct(grid, 2048.0f);
         m_characterGrid = grid;
@@ -1130,23 +1158,23 @@ void GameUpdateLoop::Load() {
 
     // Step 22 — AnimationManager (+0x68, 0x9d8).
     {
-        void* mem = AllocSub(0x9d8, 8);
-        if (mem) RtGraphics_AnimationManager_Ctor(static_cast<RtGraphics::AnimationManager*>(mem));
-        m_animationManager = static_cast<Graphics::AnimationManager*>(mem);
+        Graphics::AnimationManager* mem = AllocSub<Graphics::AnimationManager>(0x9d8, 8);
+        if (mem) RtGraphics_AnimationManager_Ctor(reinterpret_cast<RtGraphics::AnimationManager*>(mem));   // LEFT: the ctor door takes the POD mirror RtGraphics::AnimationManager (runtime/types/graphics)
+        m_animationManager = mem;
     }
 
     // Step 23 — WorldGeometry (+0x110, 0x230): the real ctor (0x1400b00e0).
     // Caller batch CB6: was the Reimpl_Geometry_Init door (kept for its
     // address-registry row), which placement-news the same class.
     {
-        void* mem = AllocSub(0x230, 8);
+        void* mem = AllocSub<void>(0x230, 8);
         m_worldGeometry = mem ? ::new (mem) WorldGeometry() : nullptr;
     }
 
     // Step 24 — SunLight (+0x100, 0x108): ctor + Set(dir,col1,col2). No exe vtable override
     // (matches the proven menu path, which uses the Runtime default SunLight vtable).
     {
-        void* mem = AllocSub(0x108, 8);
+        void* mem = AllocSub<void>(0x108, 8);
         if (mem) {
             // ENDGAME B.3.8 LOOP (B38_RULES D8): the REAL Runtime class. Retail
             // runs the imported ctor and stamps the exe's 11-slot copy of its
@@ -1161,13 +1189,11 @@ void GameUpdateLoop::Load() {
             float dir[3] = { 0.5f, 0.33f, 1.33f };
             float len = sqrtf(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
             if (len > 0.0f) { dir[0] = -dir[0]/len; dir[1] = -dir[1]/len; dir[2] = -dir[2]/len; }
-            float col1[4] = { 0.8f, 0.8f, 0.8f, 0.85f };
-            float col2[4] = { 0.37f, 0.37f, 0.4f, 1.0f };
-            // B.3.5 bridge — ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
-            sun->Set(
-                *reinterpret_cast<const Math::Vector3*>(dir),
-                *reinterpret_cast<const Math::Vector4*>(col1),
-                *reinterpret_cast<const Math::Vector4*>(col2));   // B.3.5 bridge
+            const Math::Vector3 sunDir(dir[0], dir[1], dir[2]);
+            const Math::Vector4 col1(0.8f, 0.8f, 0.8f, 0.85f);
+            const Math::Vector4 col2(0.37f, 0.37f, 0.4f, 1.0f);
+            // ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
+            sun->Set(sunDir, col1, col2);
             sun->_detailId = 0;   // +0x28
             m_sunLight = sun;
         } else {
@@ -1179,14 +1205,14 @@ void GameUpdateLoop::Load() {
 
     // Step 25 — SaveLoad (+0x140, 0x90).
     {
-        Save::SaveLoad* mem = static_cast<Save::SaveLoad*>(AllocSub(0x90, 4));
+        Save::SaveLoad* mem = AllocSub<Save::SaveLoad>(0x90, 4);
         if (mem) RtSave_SaveLoad_Ctor(mem);
         m_saveLoad = mem;
     }
 
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
-        void* mem = AllocSub(0x38, 4);
+        void* mem = AllocSub<void>(0x38, 4);
         Minimap* minimap = mem ? new (mem) Minimap : nullptr;
         if (minimap) memset(minimap, 0, sizeof(Minimap));
         m_imageCapture = minimap;
@@ -1194,7 +1220,7 @@ void GameUpdateLoop::Load() {
 
     // Step 27 — MusicTracks struct (+0x80, 0x18): {idx=-1, res=null (Find deferred), 0}.
     {
-        void* mem = AllocSub(0x18, 4);
+        void* mem = AllocSub<void>(0x18, 4);
         MusicPlayer* player = mem ? new (mem) MusicPlayer : nullptr;
         if (player) {
             player->effect = 0xFFFFFFFFu;         // -1
@@ -1222,10 +1248,8 @@ void GameUpdateLoop::Load() {
     {
         EventLog* evStruct = m_eventNotifier;
         if (evStruct && ::Object::ExternalFactory::_singleton) {
-            void* factory = ::Object::ExternalFactory::_singleton;
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            ::Object::ExternalFactory* efactory =
-                reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+            ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
 
             // StringTable type-id, read directly (D5): the IsDerivedFrom validation is
             // what makes FindOrLoad return the actual :events/:seasons sub-table
@@ -1337,8 +1361,8 @@ void GameUpdateLoop::Load() {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
             // Map dimension from the terrain size-table row (sizeRow[0]).
-            int32_t* sizeTable = *(int32_t**)((uint8_t*)terrainGen + 0x80);
-            uint32_t dim = sizeTable ? *(uint32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : 0;
+            int32_t* sizeTable = *(int32_t**)((uint8_t*)terrainGen + 0x80);   // LEFT: TerrainGenerator.h (GAME-4) H5 _field80
+            uint32_t dim = sizeTable ? *(uint32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : 0;   // LEFT: TerrainGenerator.h (GAME-4) H5 _field80 (0x44-byte rows)
 
             // Retail call site 0x1400975c7, immediately after the map dimension is
             // read and BEFORE the +0x148 tile arrays: size the TownManager's coarse
