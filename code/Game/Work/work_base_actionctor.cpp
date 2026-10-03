@@ -31,6 +31,13 @@
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "Action/PickupRawMaterial.h"   // ENDGAME B.3.8 CB3
 #include "Action/PlayAnimation.h"   // ENDGAME B.3.8 CB3
+#include "Action/SendComponentMessage.h"     // B4 P2 WORK-3: the action ctors by name
+#include "Action/CompleteTask.h"
+#include "Action/ShowTool.h"
+#include "Action/RemoveNaturalResource.h"
+#include "Action/AnimateNaturalResource.h"
+#include "Action/CreateNaturalResource.h"
+#include "Action/MoveTo.h"
 #include "math/Math.h"
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
 #include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
@@ -85,10 +92,10 @@
 
 static inline float WA_RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
-static inline void WA_IbpCtor(void* ibp, void* obj) { new (ibp) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
-static inline void WA_Append(void* list, void* ibp) {
-    Pf_ActStackPush_54e0(static_cast<int64_t*>(list), ibp);
+// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
+// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
+static inline void WA_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);
 }
 
 static inline float WA_C_172124() { return kRdata_140172124; }
@@ -120,8 +127,8 @@ static int WA_CitizenCarryCount(CitizenComponent* const* citizenRef) {
 //   param_6 = byte (RemoveNaturalResource flag)
 void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targetIBP,
                                    float* worldPos, int /*zero*/, uint8_t zeroByte) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
-    Component* const* targetRef = reinterpret_cast<Component* const*>(targetIBP);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_c1eb0
+    Component* const* targetRef = reinterpret_cast<Component* const*>(targetIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_c1eb0
 
     // --- derive the NaturalResourceDescription off the target (param_3) ---
     Description* targetComp = (*targetRef)->_description;
@@ -142,44 +149,43 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     WorkBase_TaskListCleanup_c5400(list);
 
     void* obj;
-    Action* ibpA = nullptr;
-    Action* ibpB = nullptr;
+    ::Object::InternalPtr<Action> ibpA;
+    ::Object::InternalPtr<Action> ibpB;
 
     // --- SendComponentMessage action → stored at character+0x58 (replaces prior, DeletePtr) ---
     obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* sm = nullptr;
+    Action* sm = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
-    WA_IbpCtor(&ibpA, sm);
+    ibpA = sm;
     if (character->field_0x58 != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+        character->field_0x58.DeletePtr();
     character->field_0x58 = ibpA;
 
     // --- CompleteTask action ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* ct = nullptr;
+    Action* ct = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         ComponentEntity* targetInnerSlot = targetInner;
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, reinterpret_cast<uint64_t*>(&entityInner),
-                                          reinterpret_cast<uint64_t*>(&targetInnerSlot), 0);
+        ct = new (obj) CompleteTask(workId, &entityInner,
+                                          &targetInnerSlot, 0);
     }
-    WA_IbpCtor(&ibpB, ct);
+    ibpB = ct;
     WA_Append(list, &ibpB);
 
     // --- ShowTool (~Hoe = -2) action ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st = nullptr;
+    Action* st = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
-        st = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* ~Hoe = -1 (Hoe==0); disasm OR R8D,0xFFFFFFFF */);
+        st = new (obj) ShowTool(&entityInner, ~0 /* ~Hoe = -1 (Hoe==0); disasm OR R8D,0xFFFFFFFF */);
     }
-    WA_IbpCtor(&ibpA, st);
+    ibpA = st;
     WA_Append(list, &ibpA);
 
     // --- RemoveNaturalResource action ---
@@ -191,14 +197,13 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     // as param_2 → +0x28), which made RemoveNaturalResource::Main FindNRComp(citizen) return
     // null (citizen has no NR component) and the organic produce got skipped. Pass tree first.
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* rnr = nullptr;
+    Action* rnr = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         ComponentEntity* targetInnerSlot = targetInner;
-        rnr = ActChild_RemoveNRCopyCtor_cadf0(obj, reinterpret_cast<uint64_t*>(&targetInnerSlot),
-                                              reinterpret_cast<uint64_t*>(&entityInner), zeroByte);
+        rnr = new (obj) RemoveNaturalResource(&targetInnerSlot, &entityInner, zeroByte);   // 0x1400cadf0
     }
-    WA_IbpCtor(&ibpB, rnr);
+    ibpB = rnr;
     WA_Append(list, &ibpB);
 
     // --- compute performWork param_5 from the description's +0x80 ---
@@ -209,36 +214,35 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     // --- if the description's +0x64 (byte) is set: inline PerformWork + two AnimateNaturalResource ---
     if (derivedTarget && derivedTarget->_b64) {
         void* inlineObj = System::MemoryAllocator::MemAlloc(0x48, 8);
-        void* pw = nullptr;
+        Action* pw = nullptr;
         if (inlineObj) {
             uint32_t resKind = derivedTarget->_u80;
             int64_t res70   = derivedTarget->_time70._ticks;
             // the inlined PerformWork ctor 0x1400c9720 (useTool = 0, +0x44 = resKind): the real ctor.
-            new (inlineObj) PerformWork(citizenIBP, heading, static_cast<uint32_t>(pwParam),
-                                        res70, 0, static_cast<int>(resKind));
-            pw = inlineObj;
+            pw = new (inlineObj) PerformWork(citizenRef, heading, static_cast<uint32_t>(pwParam),
+                                             res70, 0, static_cast<int>(resKind));
         }
-        WA_IbpCtor(&ibpA, pw);
+        ibpA = pw;
         WA_Append(list, &ibpA);
 
         // AnimateNaturalResource(targetInner, 1, 0)
         obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-        void* anr1 = nullptr;
+        Action* anr1 = nullptr;
         if (obj) {
             ComponentEntity* targetInnerSlot = targetInner;
-            anr1 = ActChild_AnimateNRCopyCtor_c57d0(obj, reinterpret_cast<uint64_t*>(&targetInnerSlot), 1, 0);
+            anr1 = new (obj) AnimateNaturalResource(&targetInnerSlot, 1, 0);   // 0x1400c57d0
         }
-        WA_IbpCtor(&ibpA, anr1);
+        ibpA = anr1;
         WA_Append(list, &ibpA);
 
         // AnimateNaturalResource(targetInner, 0, 1)
         obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-        void* anr2 = nullptr;
+        Action* anr2 = nullptr;
         if (obj) {
             ComponentEntity* targetInnerSlot = targetInner;
-            anr2 = ActChild_AnimateNRCopyCtor_c57d0(obj, reinterpret_cast<uint64_t*>(&targetInnerSlot), 0, 1);
+            anr2 = new (obj) AnimateNaturalResource(&targetInnerSlot, 0, 1);   // 0x1400c57d0
         }
-        WA_IbpCtor(&ibpA, anr2);
+        ibpA = anr2;
         WA_Append(list, &ibpA);
     }
 
@@ -246,19 +250,19 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     //     time=description+0x68, p6=1, p7=description+0x80 (resKind) ---
     // (the derivedTarget arms here and below are the tree's guards)
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* pw7 = nullptr;
+    Action* pw7 = nullptr;
     if (obj && derivedTarget) {
         CitizenComponent* entityInner = *citizenRef;
         int resKind  = static_cast<int>(derivedTarget->_u80);
         int64_t time = derivedTarget->_time68._ticks;
-        pw7 = Pf_PerformWorkCtor7_9720(obj, &entityInner, heading, pwParam, time, 1, resKind);
+        pw7 = new (obj) PerformWork(&entityInner, heading, pwParam, time, 1, resKind);
     }
-    WA_IbpCtor(&ibpA, pw7);
+    ibpA = pw7;
     WA_Append(list, &ibpA);
 
     // --- MoveTo (path type from the description's +0x80 switch) ---
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
-    void* mv = nullptr;
+    Action* mv = nullptr;
     if (obj && derivedTarget) {
         int pathType = 1; // Slow default (disasm: EBX=1 at 0x1400c2123)
         switch (derivedTarget->_u80) {
@@ -268,24 +272,22 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
             default: pwParam = 1; break;                                          // resKind>=8: pathType stays 1
         }
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        void* familyIBP = nullptr;
-        uint64_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
+        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;
-        mv = Pf_MoveToCtor_9170(obj, familyIBP, pathType, 0, worldPos, 0xe1f, 0, speed);
+        mv = new (obj) MoveTo(&family, pathType, 0, worldPos, 0xe1f, 0, speed);
     }
-    WA_IbpCtor(&ibpA, mv);
+    ibpA = mv;
     WA_Append(list, &ibpA);
 
     // --- ShowTool (the description's +0x80 tool type) action ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st2 = nullptr;
+    Action* st2 = nullptr;
     if (obj && derivedTarget) {
         CitizenComponent* entityInner = *citizenRef;
         int toolType = static_cast<int>(derivedTarget->_u80);
-        st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, toolType);
+        st2 = new (obj) ShowTool(&entityInner, toolType);
     }
-    WA_IbpCtor(&ibpA, st2);
+    ibpA = st2;
     WA_Append(list, &ibpA);
 
     // --- tail: set bit 0x14 (0x100000) on the target's flags; on newly-set bit
@@ -313,15 +315,18 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
 //   self+0x20 = 0 then *p2   (citizen inner)
 //   self+0x28 = 0 then *p3   (target/pile inner)
 // Returns self (RAX).
-void* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, void* p2, void* p3) {
+// B4 P2 WORK-3: typed (its one caller is c0ad0 below); retail's is PickupRawMaterial's
+// ctor (Action/PickupRawMaterial.h, ACT's header).
+PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenComponent* const* p2,
+                                                           ComponentEntity* const* p3) {
     if (!self) return nullptr;
 
     // The real ctor (Action(): Internal, +0x10/+0x18 = 0; +0x20/+0x28 zeroed), then
     // the two field copies.
     PickupRawMaterial* a = new (self) PickupRawMaterial();
-    a->_field20 = p2 ? *reinterpret_cast<CitizenComponent**>(p2) : nullptr;
-    a->_field28 = p3 ? *reinterpret_cast<ComponentEntity**>(p3) : nullptr;
-    return static_cast<Object::Base*>(a);
+    a->_field20 = p2 ? *p2 : nullptr;
+    a->_field28 = p3 ? *p3 : nullptr;
+    return a;
 }
 
 // ============================================================
@@ -348,7 +353,7 @@ void* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, void* p2, void* p3) {
 // pathType = QueryCount>0 ? 4 : 1 (MOV EAX,4 / MOV EBX,1 / CMOVNZ @0x1400c0f61).
 void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* targetIBP,
                                     float* worldPos, int cellIdx, uint8_t cancelFirst) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PerformWorkCtor9_c0ad0
 
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character;
@@ -357,41 +362,41 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
 
     // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
     // (the targetIBP null arm is the tree's guard)
-    void* targetInner = targetIBP ? *reinterpret_cast<void**>(targetIBP) : nullptr;
+    // LEFT: SIG WorkAct_PerformWorkCtor9_c0ad0 (the caller hands the pile reference as void*).
+    ComponentEntity* targetInner = targetIBP ? *reinterpret_cast<ComponentEntity* const*>(targetIBP) : nullptr;
     float heading = 0.0f;
     {
-        void* headingArg = targetInner;
+        ComponentEntity* headingArg = targetInner;
         heading = ActChild_Entity29a0_c29a0(worldPos, &headingArg);
     }
 
     void* obj;
-    Action* ibpA = nullptr;
-    Action* ibpB = nullptr;
+    ::Object::InternalPtr<Action> ibpA;
+    ::Object::InternalPtr<Action> ibpB;
 
     // --- ShowTool (~Hoe = -1) ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st = nullptr;
+    Action* st = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
-        st = ActChild_ShowToolCtor_42890(obj, &entityInner, -1 /* ~Hoe */);
+        st = new (obj) ShowTool(&entityInner, -1 /* ~Hoe */);
     }
-    WA_IbpCtor(&ibpA, st);
+    ibpA = st;
     WA_Append(list, &ibpA);
 
     // --- SendComponentMessage → character+0x58 (replaces prior, DeletePtr; NOT pushed) ---
     obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* sm = nullptr;
+    Action* sm = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
-    Action* ibpSm = nullptr;
-    WA_IbpCtor(&ibpSm, sm);
+    ::Object::InternalPtr<Action> ibpSm;
+    ibpSm = sm;
     if (character->field_0x58 != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+        character->field_0x58.DeletePtr();
     character->field_0x58 = ibpSm;
 
     // --- path-mask byte from the pile's map cell (terrain type +0x29) ---
@@ -404,92 +409,88 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
 
     // --- inline PerformWork action, kind 7 ---
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* pw7 = nullptr;
+    Action* pw7 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         RtSystem_Time_Ctor(&timeVal, WA_C_172124());
         // the inlined PerformWork ctor 0x1400c9720 (useTool = 0, +0x44 = -1): the real ctor.
-        new (obj) PerformWork(&entityInner, heading, 7, timeVal._ticks, 0, -1);
-        pw7 = obj;
+        pw7 = new (obj) PerformWork(&entityInner, heading, 7, timeVal._ticks, 0, -1);
     }
-    WA_IbpCtor(&ibpA, pw7);
+    ibpA = pw7;
     WA_Append(list, &ibpA);
 
     // --- ShowTool (~Axe = -2) when the citizen is currently carrying nothing ---
     if (WA_CitizenCarryCount(citizenRef) < 1) {
         obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-        void* stAxe = nullptr;
+        Action* stAxe = nullptr;
         if (obj) {
             CitizenComponent* entityInner = *citizenRef;
-            stAxe = ActChild_ShowToolCtor_42890(obj, &entityInner, -2 /* ~Axe */);
+            stAxe = new (obj) ShowTool(&entityInner, -2 /* ~Axe */);
         }
-        WA_IbpCtor(&ibpA, stAxe);
+        ibpA = stAxe;
         WA_Append(list, &ibpA);
     }
 
     // --- PickupRawMaterial action (self+0x20 = citizen, self+0x28 = pile) ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* prm = nullptr;
+    Action* prm = nullptr;
     if (obj) {
-        void* targetSlot  = targetInner;
+        ComponentEntity* targetSlot = targetInner;
         CitizenComponent* citizenSlot = *citizenRef;
         prm = WorkAct_PickupRawMaterialCopyCtor_c9b70(obj, &citizenSlot, &targetSlot);
     }
-    WA_IbpCtor(&ibpB, prm);
+    ibpB = prm;
     WA_Append(list, &ibpB);
 
     // --- CompleteTask action ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* ct = nullptr;
+    Action* ct = nullptr;
     if (obj) {
-        void* targetSlot  = targetInner;
+        ComponentEntity* targetSlot = targetInner;
         CitizenComponent* citizenSlot = *citizenRef;
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, reinterpret_cast<uint64_t*>(&citizenSlot),
-                                          reinterpret_cast<uint64_t*>(&targetSlot), 0);
+        ct = new (obj) CompleteTask(workId, &citizenSlot,
+                                          &targetSlot, 0);
     }
-    WA_IbpCtor(&ibpB, ct);
+    ibpB = ct;
     WA_Append(list, &ibpB);
 
     // --- inline PerformWork action, kind 6 ---
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* pw6 = nullptr;
+    Action* pw6 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         RtSystem_Time_Ctor(&timeVal, WA_C_172124());
         // the inlined PerformWork ctor 0x1400c9720 (useTool = 0, +0x44 = -1): the real ctor.
-        new (obj) PerformWork(&entityInner, heading, 6, timeVal._ticks, 0, -1);
-        pw6 = obj;
+        pw6 = new (obj) PerformWork(&entityInner, heading, 6, timeVal._ticks, 0, -1);
     }
-    WA_IbpCtor(&ibpA, pw6);
+    ibpA = pw6;
     WA_Append(list, &ibpA);
 
     // --- MoveTo: walk to the pile. pathType = carrying>0 ? 4 : 1; mask = (1<<(cellFlag&0x1f)) | 0xe1f ---
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
-    void* mv = nullptr;
+    Action* mv = nullptr;
     if (obj) {
         int carried = WA_CitizenCarryCount(citizenRef);
         ComponentEntity* entityInner = (*citizenRef)->_entity;
         int pathType = (carried > 0) ? 4 : 1;
-        void* familyIBP = nullptr;
-        uint64_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
+        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         int mask = static_cast<int>((1u << (cellFlag & 0x1f)) | 0xe1fu);
-        mv = Pf_MoveToCtor_9170(obj, familyIBP, pathType, 0, worldPos, mask, 0, WA_MoveSpeed());
+        mv = new (obj) MoveTo(&family, pathType, 0, worldPos, mask, 0, WA_MoveSpeed());
     }
-    WA_IbpCtor(&ibpB, mv);
+    ibpB = mv;
     WA_Append(list, &ibpB);
 
     // --- ShowTool (~Axe = -2) when the citizen IS carrying something ---
     if (WA_CitizenCarryCount(citizenRef) > 0) {
         obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-        void* stAxe2 = nullptr;
+        Action* stAxe2 = nullptr;
         if (obj) {
             CitizenComponent* entityInner = *citizenRef;
-            stAxe2 = ActChild_ShowToolCtor_42890(obj, &entityInner, -2 /* ~Axe */);
+            stAxe2 = new (obj) ShowTool(&entityInner, -2 /* ~Axe */);
         }
-        WA_IbpCtor(&ibpA, stAxe2);
+        ibpA = stAxe2;
         WA_Append(list, &ibpA);
     }
 }
@@ -503,45 +504,43 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
 // Builds SendComponentMessage (→ character+0x58), CompleteTask, and an inline
 // PlayAnimation action, appending the latter two to the action stack.
 void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32_t citizenIndex) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PlayAnimationCtor_c2490
 
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
 
-    Action* ibp30 = nullptr;
-    Action* ibpRes20 = nullptr;
+    ::Object::InternalPtr<Action> ibp30;
+    ::Object::InternalPtr<Action> ibpRes20;
 
     // --- SendComponentMessage → character+0x58 ---
     void* obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* sm = nullptr;
+    Action* sm = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
-    WA_IbpCtor(&ibp30, sm);
+    ibp30 = sm;
     if (character->field_0x58 != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+        character->field_0x58.DeletePtr();
     character->field_0x58 = ibp30;
 
     // --- CompleteTask action (param_3 forwarded as param_5) ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* ct = nullptr;
+    Action* ct = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         CitizenComponent* entityInner = *citizenRef;
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, priority, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, citizenIndex);
+        ct = new (obj) CompleteTask(priority, &entityInner, &innerIbp, citizenIndex);
     }
-    WA_IbpCtor(&ibp30, ct);
+    ibp30 = ct;
     WA_Append(list, &ibp30);
 
     // --- inline PlayAnimation action ---
     void* inlineObj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* pa = nullptr;
+    Action* pa = nullptr;
     if (inlineObj) {
         // System::Time::Time(&t, DAT_140172100)
         System::Time timeVal = {0};
@@ -551,9 +550,9 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
         PlayAnimation* a = new (inlineObj) PlayAnimation();
         a->_field20 = entityInner;
         a->_field30 = timeVal;   // PlayAnimation +0x30 is the System::Time (B.4 ACT-b)
-        pa = inlineObj;
+        pa = a;
     }
-    WA_IbpCtor(&ibpRes20, pa);
+    ibpRes20 = pa;
     WA_Append(list, &ibpRes20);
 }
 
@@ -573,41 +572,39 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
 void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* workEntityIBP,
                                    uint32_t /*unused4*/, float* targetPos, float* srcPos,
                                    uint32_t typeId, uint32_t flag8, uint32_t cellIdx9) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_GrazingWorkCtor_bb0a0
 
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
 
-    Action* ibp30 = nullptr;
-    Action* ibpResA = nullptr;
-    Action* ibpResB = nullptr;
+    ::Object::InternalPtr<Action> ibp30;
+    ::Object::InternalPtr<Action> ibpResA;
+    ::Object::InternalPtr<Action> ibpResB;
 
     // --- SendComponentMessage #1 → character+0x58 ---
     void* obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* sm = nullptr;
+    Action* sm = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
-    WA_IbpCtor(&ibp30, sm);
+    ibp30 = sm;
     if (character->field_0x58 != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+        character->field_0x58.DeletePtr();
     character->field_0x58 = ibp30;
 
     // --- CompleteTask action ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* ct = nullptr;
+    Action* ct = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         CitizenComponent* entityInner = *citizenRef;
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, priority, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, 0);
+        ct = new (obj) CompleteTask(priority, &entityInner, &innerIbp, 0);
     }
-    WA_IbpCtor(&ibp30, ct);
+    ibp30 = ct;
     WA_Append(list, &ibp30);
 
     // --- heading: Vector3(srcPos-targetPos) → Normalize → Heading (XMM0 → used by Ctor7) ---
@@ -621,62 +618,59 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
 
     // --- ShowTool (~Hoe = -2) ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st = nullptr;
+    Action* st = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
-        st = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* ~Hoe = -1 (Hoe==0); disasm OR R8D,0xFFFFFFFF */);
+        st = new (obj) ShowTool(&entityInner, ~0 /* ~Hoe = -1 (Hoe==0); disasm OR R8D,0xFFFFFFFF */);
     }
-    WA_IbpCtor(&ibpResA, st);
+    ibpResA = st;
     WA_Append(list, &ibpResA);
 
     // --- SendComponentMessage #2 (msg id = param_7, params 8/9) ---
     obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* sm2 = nullptr;
+    Action* sm2 = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = typeId;
-        uint64_t entityInner = *reinterpret_cast<uint64_t*>(workEntityIBP);   // LEFT: the outside callers hand the entity reference as void*
-        sm2 = Pf_SendComponentMessageCopyCtor_b1d0(obj, &entityInner, &msgId, flag8, &innerIbp, cellIdx9);
+        ComponentEntity* entityInner = *reinterpret_cast<ComponentEntity* const*>(workEntityIBP);   // LEFT: SIG WorkAct_GrazingWorkCtor_bb0a0 (the outside callers hand the entity reference as void*)
+        sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, flag8, &innerIbp, cellIdx9);   // 0x1400cb1d0
     }
-    WA_IbpCtor(&ibpResB, sm2);
+    ibpResB = sm2;
     WA_Append(list, &ibpResB);
 
     // --- PerformWork_Ctor7: heading(XMM2)=computed heading, actionType(R9)=0xC,
     //     time=DAT_1401721b0, p6=1, p7=3 (disasm: R9D=0xc, not the decompile's Cancel|Normal) ---
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* pw7 = nullptr;
+    Action* pw7 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         RtSystem_Time_Ctor(&timeVal, kRdata_1401721b0);
-        pw7 = Pf_PerformWorkCtor7_9720(obj, &entityInner, heading, 0xC, timeVal._ticks, 1, 3);
+        pw7 = new (obj) PerformWork(&entityInner, heading, 0xC, timeVal._ticks, 1, 3);
     }
-    WA_IbpCtor(&ibpResA, pw7);
+    ibpResA = pw7;
     WA_Append(list, &ibpResA);
 
     // --- MoveTo (Fastest=3, destination=targetPos) ---
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
-    void* mv = nullptr;
+    Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        void* familyIBP = nullptr;
-        uint64_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
+        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;
-        mv = Pf_MoveToCtor_9170(obj, familyIBP, 3 /*Fastest*/, 0, targetPos, 0xe1f, 0, speed);
+        mv = new (obj) MoveTo(&family, 3 /*Fastest*/, 0, targetPos, 0xe1f, 0, speed);
     }
-    WA_IbpCtor(&ibpResA, mv);
+    ibpResA = mv;
     WA_Append(list, &ibpResA);
 
     // --- ShowTool (Shovel) ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st2 = nullptr;
+    Action* st2 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
-        st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, 3 /*Shovel; disasm MOV R8D,3*/);
+        st2 = new (obj) ShowTool(&entityInner, 3 /*Shovel; disasm MOV R8D,3*/);
     }
-    WA_IbpCtor(&ibpResA, st2);
+    ibpResA = st2;
     WA_Append(list, &ibpResA);
 }
 
@@ -698,114 +692,112 @@ void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* work
                                  uint32_t /*unused4*/, float* position, uint32_t createParam6,
                                  uint32_t completeParam7, int64_t* condPtr8, uint32_t* msgIdPtr9,
                                  uint64_t /*unused10*/, uint32_t smParam11) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PlantWorkCtor_be6e0
+    // LEFT: SIG WorkAct_PlantWorkCtor_be6e0: param_3 is the description CreateNaturalResource
+    // takes (+0x20), param_8 the parent entity reference (*param_8 tested, then copied).
+    ComponentDescription* plantDesc = reinterpret_cast<ComponentDescription*>(workEntityInner);   // LEFT: SIG WorkAct_PlantWorkCtor_be6e0
+    ComponentEntity* const* parentRef = reinterpret_cast<ComponentEntity* const*>(condPtr8);   // LEFT: SIG WorkAct_PlantWorkCtor_be6e0
 
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
 
-    Action* ibp40 = nullptr;
-    Action* ibpRes8 = nullptr;
+    ::Object::InternalPtr<Action> ibp40;
+    ::Object::InternalPtr<Action> ibpRes8;
 
     // --- SendComponentMessage #1 → character+0x58 ---
     void* obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-    void* sm = nullptr;
+    Action* sm = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
-    WA_IbpCtor(&ibp40, sm);
+    ibp40 = sm;
     if (character->field_0x58 != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+        character->field_0x58.DeletePtr();
     character->field_0x58 = ibp40;
 
     // --- CompleteTask action (param_5 = param_7) ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* ct = nullptr;
+    Action* ct = nullptr;
     if (obj) {
-        uint64_t innerIbp = 0;
-        WA_IbpCtor(&innerIbp, nullptr);
+        ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         CitizenComponent* entityInner = *citizenRef;
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, priority, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, completeParam7);
+        ct = new (obj) CompleteTask(priority, &entityInner, &innerIbp, completeParam7);
     }
-    WA_IbpCtor(&ibp40, ct);
+    ibp40 = ct;
     WA_Append(list, &ibp40);
 
     // --- optional SendComponentMessage #2 when *param_8 != 0 ---
     // (the condPtr8 / msgIdPtr9 null arms are the tree's guards)
-    if (condPtr8 && *condPtr8 != 0) {
+    if (parentRef && *parentRef != nullptr) {
         obj = System::MemoryAllocator::MemAlloc(0x40, 8);
-        void* sm2 = nullptr;
+        Action* sm2 = nullptr;
         if (obj) {
-            uint64_t innerIbp = 0;
-            WA_IbpCtor(&innerIbp, nullptr);
+            ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = msgIdPtr9 ? *msgIdPtr9 : 0;
-            uint64_t entityInner = static_cast<uint64_t>(*condPtr8);
-            sm2 = Pf_SendComponentMessageCopyCtor_b1d0(obj, &entityInner, &msgId, 0, &innerIbp, smParam11);
+            ComponentEntity* entityInner = *parentRef;
+            sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, smParam11);   // 0x1400cb1d0
         }
-        WA_IbpCtor(&ibp40, sm2);
+        ibp40 = sm2;
         WA_Append(list, &ibp40);
     }
 
     // --- ShowTool (~Hoe = -2) ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st = nullptr;
+    Action* st = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
-        st = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* ~Hoe = -1 (Hoe==0); disasm OR R8D,0xFFFFFFFF */);
+        st = new (obj) ShowTool(&entityInner, ~0 /* ~Hoe = -1 (Hoe==0); disasm OR R8D,0xFFFFFFFF */);
     }
-    WA_IbpCtor(&ibpRes8, st);
+    ibpRes8 = st;
     WA_Append(list, &ibpRes8);
 
     // --- CreateNaturalResource action (param_2 = workEntity inner = *param_8, param_4 = param_6) ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
-    void* cnr = nullptr;
+    Action* cnr = nullptr;
     if (obj) {
-        uint64_t srcInner = condPtr8 ? static_cast<uint64_t>(*condPtr8) : 0;
-        // LEFT: 0x1400c6a20's C signature (ACT-b) takes the description as an integer.
-        cnr = ActChild_CreateNRCopyCtor_c6a20(obj, reinterpret_cast<uint64_t>(workEntityInner), &srcInner, createParam6);
+        ComponentEntity* srcInner = parentRef ? *parentRef : nullptr;
+        cnr = new (obj) CreateNaturalResource(plantDesc, &srcInner, createParam6);   // 0x1400c6a20
     }
-    WA_IbpCtor(&ibpRes8, cnr);
+    ibpRes8 = cnr;
     WA_Append(list, &ibpRes8);
 
     // --- PerformWork_Ctor7: heading(XMM2)=const DAT_1401722a8, actionType(R9)=0xC,
     //     time=DAT_140172178, p6=1, p7=-1 (disasm: R9D=0xc, XMM2=[0x1401722a8]) ---
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* pw7 = nullptr;
+    Action* pw7 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         RtSystem_Time_Ctor(&timeVal, kRdata_140172178);
         float headingC = WA_RdataF(kRdata_1401722a8);
-        pw7 = Pf_PerformWorkCtor7_9720(obj, &entityInner, headingC, 0xC, timeVal._ticks, 1, -1);
+        pw7 = new (obj) PerformWork(&entityInner, headingC, 0xC, timeVal._ticks, 1, -1);
     }
-    WA_IbpCtor(&ibpRes8, pw7);
+    ibpRes8 = pw7;
     WA_Append(list, &ibpRes8);
 
     // --- MoveTo (Fastest=3, destination=position) ---
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
-    void* mv = nullptr;
+    Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entityInner = (*citizenRef)->_entity;
-        void* familyIBP = nullptr;
-        uint64_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
+        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;
-        mv = Pf_MoveToCtor_9170(obj, familyIBP, 3 /*Fastest*/, 0, position, 0xe1f, 0, speed);
+        mv = new (obj) MoveTo(&family, 3 /*Fastest*/, 0, position, 0xe1f, 0, speed);
     }
-    WA_IbpCtor(&ibpRes8, mv);
+    ibpRes8 = mv;
     WA_Append(list, &ibpRes8);
 
     // --- ShowTool (Shovel) ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
-    void* st2 = nullptr;
+    Action* st2 = nullptr;
     if (obj) {
         CitizenComponent* entityInner = *citizenRef;
-        st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, 3 /*Shovel; disasm MOV R8D,3*/);
+        st2 = new (obj) ShowTool(&entityInner, 3 /*Shovel; disasm MOV R8D,3*/);
     }
-    WA_IbpCtor(&ibpRes8, st2);
+    ibpRes8 = st2;
     WA_Append(list, &ibpRes8);
 }
