@@ -1,0 +1,413 @@
+file	file_casts	blocker	casts	declared_in	note
+code/Game/Work/cleararea.cpp	112	FIELD:ClearArea::field_48+field_58	82	Work/ClearArea.h	void* roots; type WorkEntitySetNode* / WorkCellSetNode* (nodes exist in Work.h): dtor, Validate, OnComplete walk nodes r
+code/Game/Work/cleararea.cpp	112	LOCAL:WorkComponent	7	Component/WorkComponent.h; Work/Work.h	Work::field_18 already WorkComponent*; workState +0x30 declared (LEFT is stale)
+code/Game/Work/cleararea.cpp	112	SIG:Work-slots	6	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/cleararea.cpp	112	SIG:Work-set-bodies	4	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/cleararea.cpp	112	SIG:Work-exe_bodies-C-calls	4	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/cleararea.cpp	112	FIELD:ClearArea::field_70	3	Work/ClearArea.h	uint8_t flags passed to Serialize(bool&); declare bool
+code/Game/Work/cleararea.cpp	112	LOCAL:ModelComponent	3	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/cleararea.cpp	112	SIG:ClearArea-ctor-descRef	1	Work/ClearArea.h	ctor takes uint64_t descRef; type ComponentDescription*
+code/Game/Work/cleararea.cpp	112	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/cleararea.cpp	112	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/consumeproduce.cpp	94	LOCAL:ConsumeProduceDescription	13	Component/ConsumeProduceDescription.h	_recipes/ConsumeProduceRecipe (0x28 stride) declared; product sub-fields may need names
+code/Game/Work/consumeproduce.cpp	94	SIG:Action-exe_bodies-C-calls	11	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/consumeproduce.cpp	94	LOCAL:StorageComponent	10	Component/StorageComponent.h	storageSlots Item* (+0x28) and Item{_resource,_count,_reserve} already declared
+code/Game/Work/consumeproduce.cpp	94	LOCAL:MapCell	8	Game/Map.h	MapCell declares +0x00 blocker/+0x08 occupant/+0x18 regionId/+0x26 zone/+0x29 terrainType already
+code/Game/Work/consumeproduce.cpp	94	SIG:Work-exe_bodies-C-calls	7	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/consumeproduce.cpp	94	LOCAL:ModelComponent	7	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/consumeproduce.cpp	94	SIG:Pf_PickBestDropTarget_8d590	6	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/consumeproduce.cpp	94	LOCAL:Map	6	Game/Map.h	fields cells/regionGraph/regionPairCache already declared; locals are int*/uintptr_t
+code/Game/Work/consumeproduce.cpp	94	SIG:Work-slots	5	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/consumeproduce.cpp	94	LOCAL:ComponentDescription	4	Component/ComponentDescription.h	_subDescs (+0x28) / _subDescCount (+0x30) already declared
+code/Game/Work/consumeproduce.cpp	94	LOCAL:RawMaterialDescription	4	Component/RawMaterialDescription.h	_weight +0x48 already declared
+code/Game/Work/consumeproduce.cpp	94	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	3	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/consumeproduce.cpp	94	LOCAL:CitizenBehavior	2	Entity/CitizenBehavior.h	professionResources (+0x170, ProfessionResourceEntry) already declared
+code/Game/Work/consumeproduce.cpp	94	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/consumeproduce.cpp	94	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/consumeproduce.cpp	94	FIELD:ConsumeProduce::field_48	1	Work/ConsumeProduce.h	uint8_t flag streamed as bool&
+code/Game/Work/consumeproduce.cpp	94	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/consumeproduce.cpp	94	OTHER:Description-downcast	1	Component/*Description.h	Description* downcast; typed accessor / static_cast to the derived Description
+code/Game/Work/consumeproduce.cpp	94	SIG:Work-TryAssign-mgr	1	Work/exe_bodies.h WorkGrid_TryAssignWorkplace_f8620	scheduler passed as uintptr_t mgr / int64_t; type WorkScheduler*
+code/Game/Work/consumeproduce.cpp	94	SIG:ValidateTask-out	1	Work/exe_bodies.h WorkBase_ValidateTask_f7100 (B4 FORWARD, 20 callers)	taskIBP void*, out void**; retype CitizenComponent**, CompleteTask**
+code/Game/Work/consumeproduce.cpp	94	LOCAL:CompleteTask	1	Action/CompleteTask.h	taskIndex +0x30 / taskParam +0x34 already declared
+code/Game/Work/buildstructure.cpp	70	ERASED:hand-rolled-dynarray	13	Collection/Collection.h (use Collection::Array<T>)	hand-grown uint64/int arrays; replace with Array push
+code/Game/Work/buildstructure.cpp	70	LOCAL:Map	10	Game/Map.h	fields cells/regionGraph/regionPairCache already declared; locals are int*/uintptr_t
+code/Game/Work/buildstructure.cpp	70	SIG:ValidateTask-out	8	Work/exe_bodies.h WorkBase_ValidateTask_f7100 (B4 FORWARD, 20 callers)	taskIBP void*, out void**; retype CitizenComponent**, CompleteTask**
+code/Game/Work/buildstructure.cpp	70	FIELD:Map::regionPairCache	7	Game/Map.h	int64_t* regionPairCache; retail tick 0x1400a5d10 takes int64_t*; type RegionPairCache*
+code/Game/Work/buildstructure.cpp	70	LOCAL:MapCell	6	Game/Map.h	MapCell declares +0x00 blocker/+0x08 occupant/+0x18 regionId/+0x26 zone/+0x29 terrainType already
+code/Game/Work/buildstructure.cpp	70	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/buildstructure.cpp	70	LOCAL:ModelComponent	4	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/buildstructure.cpp	70	SIG:Work-slots	3	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/buildstructure.cpp	70	LOCAL:CharacterComponent	3	Component/CharacterComponent.h	+0x48 action array / +0x60 index raw reads
+code/Game/Work/buildstructure.cpp	70	SIG:Action-exe_bodies-C-calls	2	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/buildstructure.cpp	70	LOCAL:CompleteTask	2	Action/CompleteTask.h	taskIndex +0x30 / taskParam +0x34 already declared
+code/Game/Work/buildstructure.cpp	70	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/buildstructure.cpp	70	FIELD:BuildStructure::field_48	1	Work/BuildStructure.h	uint8_t flag streamed as bool&
+code/Game/Work/buildstructure.cpp	70	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/buildstructure.cpp	70	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/buildstructure.cpp	70	LOCAL:CitizenComponent	1	Component/CitizenComponent.h	+0x278 member read raw
+code/Game/Work/buildstructure.cpp	70	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/buildstructure.cpp	70	SIG:Work-exe_bodies-harness	1	Work/exe_bodies.h *_ForceDrive (no retail addr)	standalone harness entry takes void* self; cast to the leaf
+code/Game/Action/action_base_move.cpp	66	NOCLASS:ActMv-path-state-object	21	Action/ (MoveTo/PathSetup self)	self with +0x20 ticket, +0x28 citizen, +0x38/0x3c pos, +0x5c, +0x60/0x64/0x68 path, +0x470 profile; unnamed
+code/Game/Action/action_base_move.cpp	66	FWD:ActMv_ExternalPtrSerialize_22970	19	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_move.cpp	66	FWD:action_base_move	12	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_move.cpp	66	LOCAL:GameUpdateLoop	4	Game/GameUpdateLoop.h	m_game already Map*; GameWorld() accessor returns integer
+code/Game/Action/action_base_move.cpp	66	FWD:ActMv_PathSetup_c8c10	4	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_move.cpp	66	CONST:FindOrLoad	2	Action/action_base_move.cpp	const_cast of FindOrLoad result
+code/Game/Action/action_base_move.cpp	66	H5:ModelComponent::meshInstance	2	Component/ModelComponent.h (+ Graphics::MeshInstance)	+0x13c lies inside the embedded MeshInstance
+code/Game/Action/action_base_move.cpp	66	FIELD:WorkSchedulerTree::root	1	Game/WorkScheduler.h	root is void*; type the Work/WorkId/ScheduledWork node per tree
+code/Game/Action/action_base_move.cpp	66	FIELD:CitizenComponent::field_0x200	1	Component/CitizenComponent.h	declared int64_t; used as System::Time
+code/Game/Action/action_pf_pools.cpp	66	NOCLASS:Pf-element-0x14(tessellation/decal)	41	Action/action_pf_pools.cpp (+ Player tessellation / DecalComponent)	0x14-byte element Array resize has no struct; settle layout
+code/Game/Action/action_pf_pools.cpp	66	NOCLASS:HighlightTool-tile-entry-0x60	18	Action/action_pf_pools.cpp (+ Player highlight tool)	0x60-byte tile entry Array resize, copy/free have no struct
+code/Game/Action/action_pf_pools.cpp	66	FWD:action_pf_pools	7	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/work_base_actionctor.cpp	39	SIG:Action-exe_bodies-ibp-uint64	16	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_base_actionctor.cpp	39	SIG:Work-act-ctors	9	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Work/work_base_actionctor.cpp	39	FIELD:CharacterComponent::field_0x58	5	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_base_actionctor.cpp	39	SIG:Work-FindComponent-uintptr	4	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_base_actionctor.cpp	39	SIG:Action-exe_bodies-C-calls	2	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_base_actionctor.cpp	39	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_base_actionctor.cpp	39	ERASED:Array-int64-push	1	Action/exe_bodies.h / Collection::Array	static_cast<int64_t*>(list) push of IBP into raw array
+code/Game/Work/work_base_actionctor.cpp	39	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/clearstorage.cpp	37	LOCAL:ComponentDescription	7	Component/ComponentDescription.h	_subDescs (+0x28) / _subDescCount (+0x30) already declared
+code/Game/Work/clearstorage.cpp	37	SIG:Pf_PickBestDropTarget_8d590	5	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/clearstorage.cpp	37	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/clearstorage.cpp	37	LOCAL:ModelComponent	4	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/clearstorage.cpp	37	LOCAL:StorageComponent	4	Component/StorageComponent.h	storageSlots Item* (+0x28) and Item{_resource,_count,_reserve} already declared
+code/Game/Work/clearstorage.cpp	37	SIG:Work-slots	3	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/clearstorage.cpp	37	SIG:Work-exe_bodies-C-calls	3	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/clearstorage.cpp	37	LOCAL:RawMaterialDescription	2	Component/RawMaterialDescription.h	_weight +0x48 already declared
+code/Game/Work/clearstorage.cpp	37	SIG:Action-exe_bodies-C-calls	2	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/clearstorage.cpp	37	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/clearstorage.cpp	37	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/buildroad.cpp	36	LOCAL:ModelComponent	6	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/buildroad.cpp	36	FIELD:BuildRoad::field_50	5	Work/BuildRoad.h	pointer/qword member passed as int64_t
+code/Game/Work/buildroad.cpp	36	SIG:Work-exe_bodies-C-calls	4	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/buildroad.cpp	36	SIG:Pf_PickBestDropTarget_8d590	4	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/buildroad.cpp	36	SIG:Work-slots	3	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/buildroad.cpp	36	SIG:Action-exe_bodies-C-calls	3	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/buildroad.cpp	36	SIG:Work-grid-int-map	2	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/buildroad.cpp	36	LOCAL:Map	2	Game/Map.h	fields cells/regionGraph/regionPairCache already declared; locals are int*/uintptr_t
+code/Game/Work/buildroad.cpp	36	SIG:BuildRoad-ctor	1	Work/BuildRoad.h	ctor takes the road desc extra as an integer
+code/Game/Work/buildroad.cpp	36	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/buildroad.cpp	36	FIELD:BuildRoad::field_5c	1	Work/BuildRoad.h	int member streamed as unsigned int&
+code/Game/Work/buildroad.cpp	36	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/buildroad.cpp	36	LOCAL:MapCell	1	Game/Map.h	MapCell declares +0x00 blocker/+0x08 occupant/+0x18 regionId/+0x26 zone/+0x29 terrainType already
+code/Game/Work/buildroad.cpp	36	SIG:Work-TryAssign-mgr	1	Work/exe_bodies.h WorkGrid_TryAssignWorkplace_f8620	scheduler passed as uintptr_t mgr / int64_t; type WorkScheduler*
+code/Game/Work/buildroad.cpp	36	LOCAL:RawMaterialDescription	1	Component/RawMaterialDescription.h	_weight +0x48 already declared
+code/Game/Work/fishingwork.cpp	36	SIG:Work-slots	6	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/fishingwork.cpp	36	LOCAL:Map	6	Game/Map.h	fields cells/regionGraph/regionPairCache already declared; locals are int*/uintptr_t
+code/Game/Work/fishingwork.cpp	36	LOCAL:CitizenBehavior	4	Entity/CitizenBehavior.h	professionResources (+0x170, ProfessionResourceEntry) already declared
+code/Game/Work/fishingwork.cpp	36	LOCAL:MapCell	4	Game/Map.h	MapCell declares +0x00 blocker/+0x08 occupant/+0x18 regionId/+0x26 zone/+0x29 terrainType already
+code/Game/Work/fishingwork.cpp	36	OTHER:Description-downcast	3	Component/*Description.h	Description* downcast; typed accessor / static_cast to the derived Description
+code/Game/Work/fishingwork.cpp	36	LOCAL:ModelComponent	3	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/fishingwork.cpp	36	SIG:Work-exe_bodies-C-calls	3	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/fishingwork.cpp	36	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/fishingwork.cpp	36	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/fishingwork.cpp	36	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/fishingwork.cpp	36	SIG:Work-TryAssign-mgr	1	Work/exe_bodies.h WorkGrid_TryAssignWorkplace_f8620	scheduler passed as uintptr_t mgr / int64_t; type WorkScheduler*
+code/Game/Work/fishingwork.cpp	36	LOCAL:CompleteTask	1	Action/CompleteTask.h	taskIndex +0x30 / taskParam +0x34 already declared
+code/Game/Work/fishingwork.cpp	36	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/fishingwork.cpp	36	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Action/action_pf_avl.cpp	27	FWD:action_pf_avl	25	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_avl.cpp	27	ERASED:AVL-tree-C	2	Action/PathAvl.h	int64_t* tree root retrace
+code/Game/Work/firework.cpp	26	SIG:Work-set-bodies	7	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/firework.cpp	26	LOCAL:ComponentDescription	5	Component/ComponentDescription.h	_subDescs (+0x28) / _subDescCount (+0x30) already declared
+code/Game/Work/firework.cpp	26	SIG:Work-slots	3	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/firework.cpp	26	LOCAL:ModelComponent	3	Component/ModelComponent.h	Math::Transform at +0x148 already a member; +0x158/0x15c/0x160 reads need Transform position accessors
+code/Game/Work/firework.cpp	26	SIG:Work-exe_bodies-C-calls	3	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/firework.cpp	26	OTHER:redundant-cast	1	(self-contained)	operand already the target type; remove cast
+code/Game/Work/firework.cpp	26	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/firework.cpp	26	OTHER:Description-downcast	1	Component/*Description.h	Description* downcast; typed accessor / static_cast to the derived Description
+code/Game/Work/firework.cpp	26	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/firework.cpp	26	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/marketwork.cpp	26	SIG:MarketWork-bst-C	5	Work/exe_bodies.h + Work/marketwork_bst_*.cpp	market demand tree rooted at int64_t* tree (count at tree+1); a Set<MarketDemand> member would remove them
+code/Game/Work/marketwork.cpp	26	SIG:Work-slots	4	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/marketwork.cpp	26	SIG:Work-exe_bodies-C-calls	4	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/marketwork.cpp	26	SIG:Action-exe_bodies-C-calls	4	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/marketwork.cpp	26	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	3	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/marketwork.cpp	26	SIG:Pf_PickBestDropTarget_8d590	3	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/marketwork.cpp	26	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/marketwork.cpp	26	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/marketwork.cpp	26	SIG:Action-exe_bodies-ibp-uint64	1	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/tradework.cpp	26	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	6	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/tradework.cpp	26	SIG:Pf_PickBestDropTarget_8d590	6	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/tradework.cpp	26	SIG:Player-trade-set-C	5	Player/exe_bodies.h (0x14002c690, 0x140025740, 0x140014b00)	trade set root taken as int64_t* / integer by PLAYER callers
+code/Game/Work/tradework.cpp	26	SIG:Action-exe_bodies-C-calls	4	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/tradework.cpp	26	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/tradework.cpp	26	SIG:Work-exe_bodies-C-calls	2	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/tradework.cpp	26	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/action_base_complete.cpp	24	FWD:action_base_complete	9	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_complete.cpp	24	H5:CitizenComponent::meshInstance	3	Component/CitizenComponent.h	raw storage for Graphics::MeshInstance (vptr probes, casts)
+code/Game/Action/action_base_complete.cpp	24	LOCAL:Work	2	Work/Work.h	field_24 already named (LEFT stale)
+code/Game/Action/action_base_complete.cpp	24	FIELD:WorkScheduler::field_0x10	2	Game/WorkScheduler.h	void* member read as AvlNode28*
+code/Game/Action/action_base_complete.cpp	24	FIELD:WorkSchedulerTree::root	1	Game/WorkScheduler.h	root is void*; type the Work/WorkId/ScheduledWork node per tree
+code/Game/Action/action_base_complete.cpp	24	SIG:Work-set-bodies	1	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Action/action_base_complete.cpp	24	SIG:Work-slots	1	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Action/action_base_complete.cpp	24	FIELD:WorkScheduler::field_0x120	1	Game/WorkScheduler.h	void* member read as WorkBucketNode*
+code/Game/Action/action_base_complete.cpp	24	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Action/action_base_complete.cpp	24	FIELD:ModelDescription::_meshGroupCount	1	Component/ModelDescription.h	qword at +0x28 read as pointer array
+code/Game/Action/action_base_complete.cpp	24	FIELD:CitizenDescription::_refs	1	Component/CitizenDescription.h	void* _refs array
+code/Game/Action/action_base_complete.cpp	24	FIELD:MeshInstance::_mesh	1	runtime Graphics::MeshInstance (Runtime)	untyped ExternalPtr handle
+code/Game/Action/action_pf_road.cpp	22	FWD:action_pf_road	14	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_road.cpp	22	H5:WorldGeometry::_arrays	3	Game/WorldGeometry.h	arrays kept as raw {data,sizeCap}
+code/Game/Action/action_pf_road.cpp	22	ERASED:pf_pools-RoadBatch-push	2	Action/action_pf_pools.cpp 0x14001fa80	meshBatches int64_t*
+code/Game/Action/action_pf_road.cpp	22	FIELD:WorldGeometry::_dirtyTreeRoot	1	Game/WorldGeometry.h	dirty-chunk tree is two raw members
+code/Game/Action/action_pf_road.cpp	22	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Action/action_pf_road.cpp	22	FLOOR:ptr_int	1	-	diagnostic prints pointer as integer; mark CAST-OK ptr_int
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Work-exe_bodies-C-calls	5	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Pf_PickBestDropTarget_8d590	4	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Action-exe_bodies-C-calls	2	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Action-exe_bodies-ibp-uint64	1	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/gatherrawmaterials.cpp	22	SIG:Work-exe_bodies-harness	1	Work/exe_bodies.h *_ForceDrive (no retail addr)	standalone harness entry takes void* self; cast to the leaf
+code/Game/Work/work_base_reimpl.cpp	20	SIG:Work-exe_bodies-C-calls	8	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/work_base_reimpl.cpp	20	FWD:work_base_reimpl	4	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/work_base_reimpl.cpp	20	FIELD:InternalPtr-members-declared-as-T*	3	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/work_base_reimpl.cpp	20	SIG:Work-ctor-InitFromEntity	2	Work/Work.h (Work(void*), InitFromEntity(void*)), work_base_reimpl.cpp	entity ref and action stack passed as void*
+code/Game/Work/work_base_reimpl.cpp	20	FIELD:CharacterActionStack::message	1	Component/CharacterComponent.h	stack message slot is raw
+code/Game/Work/work_base_reimpl.cpp	20	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/work_base_reimpl.cpp	20	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Action/action_base_rawmat.cpp	19	FWD:action_base_rawmat	17	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_rawmat.cpp	19	FIELD:TrackerComponent::displayed+produced	2	Component/TrackerComponent.h	two lists kept as raw arrays
+code/Game/Work/pasturework.cpp	19	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/pasturework.cpp	19	SIG:Work-slots	4	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/pasturework.cpp	19	SIG:Action-exe_bodies-C-calls	3	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/pasturework.cpp	19	SIG:Work-exe_bodies-C-calls	2	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/pasturework.cpp	19	SIG:Serialize-stream	2	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/pasturework.cpp	19	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/pasturework.cpp	19	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/pasturework.cpp	19	SIG:Work-FindComponent-uintptr	1	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_act_consume.cpp	18	SIG:Action-exe_bodies-ibp-uint64	6	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_act_consume.cpp	18	SIG:Work-act-ctors	3	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Work/work_act_consume.cpp	18	SIG:Action-exe_bodies-C-calls	3	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_act_consume.cpp	18	OTHER:null-receiver-read-spelled-as-address	2	(faithful crash)	null-receiver read spelled as the faulting address; keep, mark CAST-OK crash_walk
+code/Game/Work/work_act_consume.cpp	18	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_act_consume.cpp	18	ERASED:Array-int64-push	1	Action/exe_bodies.h / Collection::Array	static_cast<int64_t*>(list) push of IBP into raw array
+code/Game/Work/work_act_consume.cpp	18	FIELD:CharacterComponent::field_0x58	1	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_act_consume.cpp	18	SIG:Work-FindComponent-uintptr	1	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_act_perform.cpp	18	SIG:Action-exe_bodies-ibp-uint64	6	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_act_perform.cpp	18	SIG:Work-FindComponent-uintptr	4	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_act_perform.cpp	18	SIG:Work-act-ctors	2	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Work/work_act_perform.cpp	18	FIELD:CharacterComponent::field_0x58	2	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_act_perform.cpp	18	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_act_perform.cpp	18	ERASED:Array-int64-push	1	Action/exe_bodies.h / Collection::Array	static_cast<int64_t*>(list) push of IBP into raw array
+code/Game/Work/work_act_perform.cpp	18	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_act_perform.cpp	18	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/work_leaf_clear.cpp	18	SIG:Work-set-bodies	10	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/work_leaf_clear.cpp	18	FIELD:InternalPtr-members-declared-as-T*	4	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/work_leaf_clear.cpp	18	SIG:Work-grid-int-map	2	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/work_leaf_clear.cpp	18	SIG:Work-exe_bodies-C-calls	1	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/work_leaf_clear.cpp	18	FIELD:Map::field_0xE8	1	Game/Map.h	raw member read as Collection::Set<int32_t>::Node*
+code/Game/Work/foresterwork.cpp	17	SIG:Work-set-bodies	6	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/foresterwork.cpp	17	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/foresterwork.cpp	17	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	2	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/foresterwork.cpp	17	SIG:Work-exe_bodies-C-calls	2	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/foresterwork.cpp	17	SIG:Serialize-stream	2	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/foresterwork.cpp	17	SIG:Work-exe_bodies-harness	1	Work/exe_bodies.h *_ForceDrive (no retail addr)	standalone harness entry takes void* self; cast to the leaf
+code/Game/Work/foresterwork.cpp	17	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/foresterwork.cpp	17	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_act_rawmat.cpp	17	SIG:Action-exe_bodies-ibp-uint64	9	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_act_rawmat.cpp	17	SIG:Work-act-ctors	2	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Work/work_act_rawmat.cpp	17	FIELD:CharacterComponent::field_0x58	2	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_act_rawmat.cpp	17	SIG:Work-FindComponent-uintptr	2	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_act_rawmat.cpp	17	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_act_rawmat.cpp	17	ERASED:Array-int64-push	1	Action/exe_bodies.h / Collection::Array	static_cast<int64_t*>(list) push of IBP into raw array
+code/Game/Action/action_base_cnr.cpp	16	FWD:action_base_cnr	11	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_cnr.cpp	16	SIG:Work-TryAssign-mgr	2	Work/exe_bodies.h WorkGrid_TryAssignWorkplace_f8620	scheduler passed as uintptr_t mgr / int64_t; type WorkScheduler*
+code/Game/Action/action_base_cnr.cpp	16	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Action/action_base_cnr.cpp	16	SIG:Work-exe_bodies-C-calls	1	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Action/action_base_cnr.cpp	16	NOCLASS:surface-entity(+0x24 read)	1	Action/action_base_cnr.cpp	surface entity read at +0x24
+code/Game/Work/pickup.cpp	16	SIG:Pf_PickBestDropTarget_8d590	4	Action/exe_bodies.h	0x14008d590 takes town manager int64_t**, out entity int64_t*, res type uint64_t, pos uint32_t*; returns entity as integ
+code/Game/Work/pickup.cpp	16	SIG:Work-slots	3	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/pickup.cpp	16	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	3	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/pickup.cpp	16	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/pickup.cpp	16	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/pickup.cpp	16	FIELD:WorkSchedulerTree::root	1	Game/WorkScheduler.h	root is void*; type the Work/WorkId/ScheduledWork node per tree
+code/Game/Work/pickup.cpp	16	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/pickup.cpp	16	SIG:Work-exe_bodies-C-calls	1	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/pickup.cpp	16	OTHER:null-this-read-spelled-as-cast	1	Work/pickup.cpp	null-this probe; keep, mark CAST-OK crash_walk
+code/Game/Work/work_act_path.cpp	15	SIG:Action-exe_bodies-ibp-uint64	6	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_act_path.cpp	15	SIG:Work-act-ctors	2	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Work/work_act_path.cpp	15	SIG:Work-FindComponent-uintptr	2	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_act_path.cpp	15	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_act_path.cpp	15	ERASED:Array-int64-push	1	Action/exe_bodies.h / Collection::Array	static_cast<int64_t*>(list) push of IBP into raw array
+code/Game/Work/work_act_path.cpp	15	FIELD:CharacterComponent::field_0x58	1	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_act_path.cpp	15	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_act_path.cpp	15	SIG:Work-exe_bodies-C-calls	1	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/harvestorchard.cpp	14	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/harvestorchard.cpp	14	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/harvestorchard.cpp	14	SIG:Work-exe_bodies-C-calls	2	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/harvestorchard.cpp	14	SIG:Serialize-stream	2	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/harvestorchard.cpp	14	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/harvestorchard.cpp	14	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/harvestorchard.cpp	14	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/huntwork.cpp	14	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/huntwork.cpp	14	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/huntwork.cpp	14	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	2	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/huntwork.cpp	14	SIG:Work-exe_bodies-C-calls	2	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/huntwork.cpp	14	SIG:Serialize-stream	2	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/huntwork.cpp	14	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Action/action_pf_roots_drop.cpp	13	FWD:action_pf_roots_drop	9	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_roots_drop.cpp	13	FIELD:CitizenBehavior::field_0x00	1	Entity/CitizenBehavior.h	two entity lists kept as raw RawArray storage
+code/Game/Action/action_pf_roots_drop.cpp	13	FIELD:CharacterComponent::actions	1	Component/CharacterComponent.h	actions stack kept as raw fields; cast to ActionStack*
+code/Game/Action/action_pf_roots_drop.cpp	13	FIELD:CharacterComponent::field_0x58	1	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Action/action_pf_roots_drop.cpp	13	FIELD:AnimalDescription::_refs	1	Component/AnimalDescription.h	void* _refs array
+code/Game/Work/herbalistwork.cpp	13	SIG:Work-set-bodies	6	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/herbalistwork.cpp	13	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/herbalistwork.cpp	13	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	2	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/herbalistwork.cpp	13	SIG:Serialize-stream	2	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/herbalistwork.cpp	13	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/plantarea.cpp	13	SIG:Work-set-bodies	8	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/plantarea.cpp	13	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/plantarea.cpp	13	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/plantarea.cpp	13	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/plantarea.cpp	13	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/work_act_hunt.cpp	13	SIG:Action-exe_bodies-ibp-uint64	6	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_act_hunt.cpp	13	FIELD:CharacterComponent::field_0x58	2	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_act_hunt.cpp	13	SIG:Work-FindComponent-uintptr	2	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_act_hunt.cpp	13	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_act_hunt.cpp	13	ERASED:Array-int64-push	1	Action/exe_bodies.h / Collection::Array	static_cast<int64_t*>(list) push of IBP into raw array
+code/Game/Work/work_act_hunt.cpp	13	SIG:Work-act-ctors	1	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Action/action_pf_astar.cpp	12	FWD:action_pf_astar	12	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_ctors.cpp	12	FWD:action_pf_ctors	12	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/harvestarea.cpp	12	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/harvestarea.cpp	12	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/harvestarea.cpp	12	SIG:Serialize-stream	2	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/harvestarea.cpp	12	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/harvestarea.cpp	12	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/harvestarea.cpp	12	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_base_bst.cpp	12	SIG:Work-set-bodies	11	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/work_base_bst.cpp	12	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/plantorchard.cpp	11	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/plantorchard.cpp	11	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/plantorchard.cpp	11	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/plantorchard.cpp	11	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/plantorchard.cpp	11	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/plantorchard.cpp	11	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/work_base_walkpos.cpp	11	SIG:Work-WalkablePos-C	3	Work/exe_bodies.h WorkImpl_WalkablePos_122be0 / 122b00	component and node array passed as uintptr_t
+code/Game/Work/work_base_walkpos.cpp	11	FWD:work_base_walkpos	3	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/work_base_walkpos.cpp	11	SIG:Work-grid-int-map	2	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/work_base_walkpos.cpp	11	SIG:Work-exe_bodies-C-calls	2	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/work_base_walkpos.cpp	11	OTHER:return-carries-weather-pointer-bits	1	Work/work_base_walkpos.cpp	fall-through return carries upper pointer bytes; keep faithful
+code/Game/Work/tendarea.cpp	10	SIG:Work-set-bodies	5	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/tendarea.cpp	10	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/tendarea.cpp	10	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/tendarea.cpp	10	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/tendarea.cpp	10	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/pickupstoredrawmaterial.cpp	9	FWD:pickupstoredrawmaterial	5	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/pickupstoredrawmaterial.cpp	9	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/pickupstoredrawmaterial.cpp	9	FWD:ActRm-MaterialCountArray	1	Action/exe_bodies.h ActRm_ArrayResize16_da70 / VectorClone	MaterialCount Array SetSize/Assign via int64_t*
+code/Game/Action/pickupstoredrawmaterial.cpp	9	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/pickupstoredrawmaterial.cpp	9	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/locationwork.cpp	9	SIG:Work-exe_bodies-C-calls	3	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/locationwork.cpp	9	SIG:Work-slots	2	Work/Work.h	Work::Execute/OnComplete/OnCancel/GetTarget/Slot5 take void* citizen / retbuf; type CitizenComponent**, Profession*
+code/Game/Work/locationwork.cpp	9	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/locationwork.cpp	9	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/locationwork.cpp	9	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Work/locationwork.cpp	9	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/marketwork_bst_b290.cpp	9	SIG:MarketWork-bst-C	5	Work/exe_bodies.h + Work/marketwork_bst_*.cpp	market demand tree rooted at int64_t* tree (count at tree+1); a Set<MarketDemand> member would remove them
+code/Game/Work/marketwork_bst_b290.cpp	9	FWD:ActRm-MaterialCountArray	2	Action/exe_bodies.h ActRm_ArrayResize16_da70 / VectorClone	MaterialCount Array SetSize/Assign via int64_t*
+code/Game/Work/marketwork_bst_b290.cpp	9	FIELD:InternalPtr-members-declared-as-T*	2	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/work_act_clear.cpp	9	SIG:Work-act-ctors	2	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Work/work_act_clear.cpp	9	SIG:Action-exe_bodies-ibp-uint64	2	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/work_act_clear.cpp	9	SIG:Action-exe_bodies-C-calls	2	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_act_clear.cpp	9	POD:RtObject::Internal	1	Work/work_act_*.cpp helper	bridge reinterpret_cast<RtObject::Internal*>(o) to real class in ctor helper
+code/Game/Work/work_act_clear.cpp	9	FIELD:CharacterComponent::field_0x58	1	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/work_act_clear.cpp	9	SIG:Work-FindComponent-uintptr	1	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_base_cellbst.cpp	9	SIG:Work-set-bodies	8	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Work/work_base_cellbst.cpp	9	FIELD:InternalPtr-members-declared-as-T*	1	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Work/work_base_grid.cpp	9	SIG:Action-exe_bodies-C-calls	3	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/work_base_grid.cpp	9	SIG:Work-TryAssign-mgr	2	Work/exe_bodies.h WorkGrid_TryAssignWorkplace_f8620	scheduler passed as uintptr_t mgr / int64_t; type WorkScheduler*
+code/Game/Work/work_base_grid.cpp	9	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/work_base_grid.cpp	9	FIELD:WorkSchedulerTree::root	1	Game/WorkScheduler.h	root is void*; type the Work/WorkId/ScheduledWork node per tree
+code/Game/Work/work_base_grid.cpp	9	SIG:Work-exe_bodies-C-calls	1	Work/exe_bodies.h	WorkAct_*/WorkImpl_*/WorkLeaf_* C signatures take integers/void* for entities, positions, descs
+code/Game/Work/work_base_grid.cpp	9	FWD:work_base_grid	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/work_leaf_hunt.cpp	9	SIG:Work-FindComponent-uintptr	4	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_leaf_hunt.cpp	9	FWD:work_leaf_hunt	3	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/work_leaf_hunt.cpp	9	LOCAL:RawMaterialDescription	2	Component/RawMaterialDescription.h	_weight +0x48 already declared
+code/Game/Action/action_base_hunt.cpp	8	FWD:action_base_hunt	7	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_base_hunt.cpp	8	FIELD:ComponentEntity::_entityList	1	Entity/ComponentEntity.h	_entityList void*; type EntityList*
+code/Game/Action/action_pf_roots_misc.cpp	8	FWD:action_pf_roots_misc	8	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/consumerawmaterial.cpp	8	FWD:consumerawmaterial	5	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/consumerawmaterial.cpp	8	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/consumerawmaterial.cpp	8	FWD:ActRm-MaterialCountArray	1	Action/exe_bodies.h ActRm_ArrayResize16_da70 / VectorClone	MaterialCount Array SetSize/Assign via int64_t*
+code/Game/Action/consumerawmaterial.cpp	8	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/keystone_a_zone.cpp	8	FWD:keystone_a_zone	8	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/marketwork_bst_a9f0.cpp	8	SIG:MarketWork-bst-C	5	Work/exe_bodies.h + Work/marketwork_bst_*.cpp	market demand tree rooted at int64_t* tree (count at tree+1); a Set<MarketDemand> member would remove them
+code/Game/Work/marketwork_bst_a9f0.cpp	8	FWD:ActRm-MaterialCountArray	3	Action/exe_bodies.h ActRm_ArrayResize16_da70 / VectorClone	MaterialCount Array SetSize/Assign via int64_t*
+code/Game/Action/action_pf_roots_road.cpp	6	FWD:action_pf_roots_road	4	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_roots_road.cpp	6	OTHER:PerfX-terrain-bytes	1	standalone/perf_terrain.h	PerfX takes cell array as bytes
+code/Game/Action/action_pf_roots_road.cpp	6	FIELD:Map::field_0xE8	1	Game/Map.h	raw member read as Collection::Set<int32_t>::Node*
+code/Game/Action/createrawmaterial.cpp	6	FWD:createrawmaterial	4	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/createrawmaterial.cpp	6	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/createrawmaterial.cpp	6	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/dropoffrawmaterial.cpp	6	FWD:dropoffrawmaterial	3	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/dropoffrawmaterial.cpp	6	SIG:Action-slots	2	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/dropoffrawmaterial.cpp	6	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/performwork.cpp	6	FWD:performwork	3	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/performwork.cpp	6	SIG:Action-slots	2	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/performwork.cpp	6	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/showtool.cpp	6	H5:CitizenComponent::meshInstance	3	Component/CitizenComponent.h	raw storage for Graphics::MeshInstance (vptr probes, casts)
+code/Game/Action/showtool.cpp	6	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/showtool.cpp	6	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/showtool.cpp	6	FWD:showtool	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/build_actions.cpp	6	SIG:Action-exe_bodies-ibp-uint64	3	Action/exe_bodies.h (Pf_SendMessage / ActStackPush family)	entity refs passed as uint64_t* InternalBasePtr; type InternalPtr<ComponentEntity>*
+code/Game/Work/build_actions.cpp	6	FIELD:CharacterComponent::actions	1	Component/CharacterComponent.h	actions stack kept as raw fields; cast to ActionStack*
+code/Game/Work/build_actions.cpp	6	FIELD:CharacterComponent::field_0x58	1	Component/CharacterComponent.h	declared Action*, not InternalPtr<Action>; DeletePtr needs the InternalBasePtr view
+code/Game/Work/build_actions.cpp	6	SIG:Work-act-ctors	1	Work/exe_bodies.h (WorkAct_*Ctor*) + work_act_*.cpp	action-ctor C bodies take citizen / target / entity refs as void*; type as CitizenComponent* const*
+code/Game/Action/huntanimal.cpp	5	FWD:huntanimal	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/huntanimal.cpp	5	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/huntanimal.cpp	5	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Action/huntanimal.cpp	5	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/sendcomponentmessage.cpp	5	SIG:Action-slots	2	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/sendcomponentmessage.cpp	5	FWD:sendcomponentmessage	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/sendcomponentmessage.cpp	5	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/work_base_accessor.cpp	5	FWD:work_base_accessor	3	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/work_base_accessor.cpp	5	SIG:Work-FindComponent-uintptr	2	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_leaf_gather.cpp	5	SIG:Work-FindComponent-uintptr	4	Work/exe_bodies.h (WorkBase_/WorkAcc_/WorkLeaf_FindComp*)	entity passed as uintptr_t, retIBP void*; type ComponentEntity*, out T**
+code/Game/Work/work_leaf_gather.cpp	5	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	1	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Action/action_pf_geom.cpp	4	FWD:action_pf_geom	4	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_roots_route.cpp	4	SIG:Work-grid-int-map	3	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Action/action_pf_roots_route.cpp	4	FIELD:Map::regionPairCache	1	Game/Map.h	int64_t* regionPairCache; retail tick 0x1400a5d10 takes int64_t*; type RegionPairCache*
+code/Game/Action/completetask.cpp	4	FWD:completetask	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/completetask.cpp	4	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/completetask.cpp	4	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/createnaturalresource.cpp	4	FWD:createnaturalresource	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/createnaturalresource.cpp	4	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/createnaturalresource.cpp	4	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/moveto.cpp	4	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/moveto.cpp	4	OTHER:PerfX-terrain-bytes	1	standalone/perf_terrain.h	PerfX takes cell array as bytes
+code/Game/Action/moveto.cpp	4	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/moveto.cpp	4	FWD:moveto	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/removenaturalresource.cpp	4	FWD:removenaturalresource	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/removenaturalresource.cpp	4	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/removenaturalresource.cpp	4	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Work/tradework_serialize.cpp	4	SIG:Player-trade-set-C	2	Player/exe_bodies.h (0x14002c690, 0x140025740, 0x140014b00)	trade set root taken as int64_t* / integer by PLAYER callers
+code/Game/Work/tradework_serialize.cpp	4	FIELD:InternalPtr-members-declared-as-T*	2	Work leaf headers / Work.h	InternalPtr members typed T* but streamed through InternalBasePtr::Serialize (retail layout)
+code/Game/Action/action_base_movedeps.cpp	3	FWD:action_base_movedeps	3	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/animatenaturalresource.cpp	3	FWD:animatenaturalresource	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/animatenaturalresource.cpp	3	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/playanimation.cpp	3	SIG:Action-slots	2	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/playanimation.cpp	3	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/firework_search.cpp	3	LOCAL:MapCell	1	Game/Map.h	MapCell declares +0x00 blocker/+0x08 occupant/+0x18 regionId/+0x26 zone/+0x29 terrainType already
+code/Game/Work/firework_search.cpp	3	SIG:Work-grid-int-map	1	Work/exe_bodies.h (WorkGrid_FindCell, CalcDistance, ValidateCell, SortTiles, GetTilesInArea)	grid callees take the Map as its leading int*; retype param Map*
+code/Game/Work/firework_search.cpp	3	SIG:Action-exe_bodies-C-calls	1	Action/exe_bodies.h	Pf_*/CitizenAI_*/ActCNR C signatures take integers/void*
+code/Game/Work/marketwork_bst_aaa0.cpp	3	SIG:MarketWork-bst-C	3	Work/exe_bodies.h + Work/marketwork_bst_*.cpp	market demand tree rooted at int64_t* tree (count at tree+1); a Set<MarketDemand> member would remove them
+code/Game/Action/pickuprawmaterial.cpp	2	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/pickuprawmaterial.cpp	2	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Action/region_graph_build.cpp	2	FWD:region_graph_build	2	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/region_paircache.cpp	2	SIG:Work-set-bodies	1	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Action/region_paircache.cpp	2	FWD:region_paircache	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/removeanimal.cpp	2	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/removeanimal.cpp	2	SIG:Action-slots	1	Action/Action.h	Action::Execute(void* time)/GetTarget(void* param)/AbstractImpl(void*): type System::Time*, InternalPtr<Entity>*, Action
+code/Game/Work/pickup_gate.cpp	2	SIG:Component-C-int(QueryCount,CalcMaxWorkers,StorageCanAccept)	2	Component/exe_bodies.h, Component/*_funcs.h, Action/exe_bodies.h	StorageComponent / WorkComponent / PositionComponent passed as int64_t/uintptr_t
+code/Game/Action/action.cpp	1	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Action/action_child_ctors.cpp	1	FWD:action_child_ctors	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_child_ctors2.cpp	1	FWD:action_child_ctors2	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Action/action_pf_region.cpp	1	SIG:Work-set-bodies	1	Work/exe_bodies.h (WorkBST_*, WorkCellBST_*, WorkLeaf_Bst*)	set bodies take uintptr_t* root / void* node; Node typed already in Work.h; retype params and the leaf root members
+code/Game/Action/completeroad.cpp	1	FWD:completeroad	1	the file's own B4 FORWARD forwarders	the C spelling (int64_t/void* params) other blocks still call; retype when callers are converted
+code/Game/Work/autopickupwork.cpp	1	SIG:Serialize-stream	1	Work/Work.h + Action/Action.h (Persist(void*)), object/Internal.h	Persist(void* stream) -> IO::Stream&; each override casts once to IO::Serializer
+code/Game/Work/work_leaf_market.cpp	1	SIG:MarketWork-bst-C	1	Work/exe_bodies.h + Work/marketwork_bst_*.cpp	market demand tree rooted at int64_t* tree (count at tree+1); a Set<MarketDemand> member would remove them
