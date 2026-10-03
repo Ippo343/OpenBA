@@ -534,6 +534,12 @@ UNIT_TEST(graphics_graphicsmesh_layout) {
     // reads — the `_size` halves of the arrays based at +0x50 and +0x70.
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x58), 3);
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x78), 5);
+    // B.4 (R-GFX): the two arrays carry their element types now, and this
+    // test's stub ~GraphicsMesh does not run retail's explicit ~Array calls,
+    // so the sizes written over null buffers are put back before the
+    // implicit member dtors see them.
+    probe._detailLevels._size = 0;
+    probe._skinMaterials._size = 0;
 }
 
 // ---------------------------------------------------------------------------

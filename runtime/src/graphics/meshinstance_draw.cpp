@@ -237,7 +237,7 @@ namespace Graphics {
 
 namespace {
 const GraphicsMesh::DetailLevel* DetailLevels(const GraphicsMesh* mesh) {
-    return reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data);
+    return mesh->_detailLevels._data;
 }
 }  // namespace
 

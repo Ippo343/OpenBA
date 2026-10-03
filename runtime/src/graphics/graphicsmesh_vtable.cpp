@@ -509,7 +509,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005d840(&_detailLevels, n);
 
-        DetailLevel* e = reinterpret_cast<DetailLevel*>(_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        DetailLevel* e = _detailLevels._data;
         for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
             rw->SerializeFloat(e->_distance, nullptr);
             StringSerialize(&e->_name, ser);
@@ -527,10 +527,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005cda0(&_skinMaterials, n);
 
-        // LEFT: `_skinMaterials` stays a raw header (GraphicsMesh.h).
-        Collection::Array<Object::ExternalPtr<MaterialInstance> >* e =
-            reinterpret_cast<Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
-                _skinMaterials._data);
+        Collection::Array<Object::ExternalPtr<MaterialInstance> >* e = _skinMaterials._data;
         for (int64_t i = 0; i < static_cast<int64_t>(n); ++i, ++e) {
             int32_t m = e->_size;
             rw->SerializeInt(m, nullptr);

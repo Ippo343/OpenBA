@@ -511,16 +511,35 @@ public:
     // The three arrays, all RAW 16-byte headers for `AnimationGroup.h`'s reason
     // (see `DetailLevel::_triangleLists`). The true element types and the
     // registered `SetSize` addresses are named beside each.
-    // B.4: they STAY raw (LEFT). `Node` has no default ctor (the unit test pins
-    // it), and the unit test writes a size into `_detailLevels` /
-    // `_skinMaterials` over a null buffer and lets the implicit member dtors run:
-    // a typed member would then destroy elements that do not exist.
-    Collection::Array<uint8_t> _detailLevels;   // +0x50  Array<DetailLevel>, stride 0xb0,
-                                                //        SetSize 0x18005d840, ~Array 0x180013fb0
+    //
+    // B.4 (R-GFX, H5 `behaviour:` commit): `_detailLevels` and `_skinMaterials`
+    // carry their element types. What that makes run, against retail:
+    //  * ctor 0x1800ff170 zeroes the three headers with six qword stores
+    //    (0x1800ff202..0x1800ff216); `Collection::Array()`'s three zero stores
+    //    are the same bytes, for the typed and the raw member alike.
+    //  * dtor 0x1800ff270 CALLs the three out-of-line ~Arrays itself, in reverse
+    //    order: 0x180014160 (+0x70), 0x180014090 (+0x60), 0x180013fb0 (+0x50),
+    //    then releases `_name`, then restamps and JMPs ~CompiledExternal. The
+    //    tree's ~GraphicsMesh makes the same three calls (the registered
+    //    element rows), and each frees AND zeroes its header (ArrayDtorImpl), so
+    //    the implicit member ~Array the compiler adds after the body sees
+    //    `_size == 0` and destroys no element: MemFree(nullptr), as the raw
+    //    member's did. Nothing else ever constructs, copies or destroys a
+    //    GraphicsMesh's arrays (the copy ctor / operator= are declared and
+    //    undefined).
+    //  * SIZING STAYS ON THE REGISTERED ROWS: `Rt_SetSize_18005d840` /
+    //    `Rt_SetSize_18005cda0` (array_graphics_mesh.cpp, retail's element ctor
+    //    0x1800fefc0 and copy 0x180013c50). Never call the members' own
+    //    `SetSize` / `operator=`: those take the trait-derived row, which is not
+    //    retail's element lifecycle.
+    // `_nodes` STAYS raw (LEFT): `Node` has no default ctor (the unit test pins
+    // it), so the trait-derived row cannot be instantiated.
+    Collection::Array<DetailLevel> _detailLevels;   // +0x50  stride 0xb0,
+                                                    //        SetSize 0x18005d840, ~Array 0x180013fb0
     Collection::Array<uint8_t> _nodes;          // +0x60  Array<Node>, stride 0x48,
                                                 //        SetSize 0x18005aa30, ~Array 0x180014090
-    Collection::Array<uint8_t> _skinMaterials;  // +0x70  Array<Array<ExternalPtr<
-                                                //        MaterialInstance>>>, stride 0x10,
+    Collection::Array<Collection::Array<Object::ExternalPtr<MaterialInstance> > >
+        _skinMaterials;                         // +0x70  stride 0x10,
                                                 //        SetSize 0x18005cda0, ~Array 0x180014160
     ::Box _aabb;                      // +0x80 .. +0x97  ctor (+1e8 x3, -1e8 x3); ?GetAABB@
 };

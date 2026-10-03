@@ -582,7 +582,7 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             // 0x1800a4b30), so a slot-0x30 handler that reallocates the level
             // array is seen. Not hoisted.
             DetailLevel* const level =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+                _detailLevels._data + i;
 
             int32_t n = level->_triangleLists._size;                  // +0xa0
             rw->SerializeInt(n, nullptr);
@@ -611,14 +611,14 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             // The four buffers, INDEX BEFORE VERTEX in each pair, retail's
             // order (+0x40, +0x20, +0x80, +0x60 = each header's +0x08).
             DetailLevel* const lvl2 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+                _detailLevels._data + i;
             SerializeIndexBuffer (lvl2->_indexBuffer.platformData,      sub);
             SerializeVertexBuffer(lvl2->_vertexBuffer.platformData,     sub);
             SerializeIndexBuffer (lvl2->_skinIndexBuffer.platformData,  sub);
             SerializeVertexBuffer(lvl2->_skinVertexBuffer.platformData, sub);
 
             DetailLevel* const lvl3 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+                _detailLevels._data + i;
             rw->SerializeInt(lvl3->_maxInstances, nullptr);            // +0xa8
         }
     }

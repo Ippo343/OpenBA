@@ -413,7 +413,7 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
     // `_triangleLists._data`, and +0x14 of the 24-byte record is
     // `TriangleList::_f14`.
     const GraphicsMesh::DetailLevel* const levels =
-        reinterpret_cast<const GraphicsMesh::DetailLevel*>(GetMesh()->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        GetMesh()->_detailLevels._data;
     const GraphicsMesh::TriangleList* const rec = levels[hi]._triangleLists._data;
     // UNGUARDED, and deliberately: retail dereferences `levels` and `rec`
     // without a test. If either is null here, something upstream handed us a
