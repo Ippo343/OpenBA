@@ -133,8 +133,8 @@ void CompleteTask::CheckEntity() {
 // GetTarget (0x1400c5a50, vtable slot 9)
 // Returns true if param matches entity at +0x28 or parent entity at +0x20.
 // ============================================================
-bool CompleteTask::GetTarget(void* param) {
-    void* paramVal = *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool CompleteTask::GetTarget(ComponentEntity** param) {
+    void* paramVal = *param;
 
     // Check direct match with target entity
     if (this->targetEntity.Get() == paramVal) {

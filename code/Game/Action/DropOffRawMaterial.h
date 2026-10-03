@@ -32,7 +32,7 @@ public:
     void Persist(void* stream) override;                       // [3] 0x1400c7b10
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c7300
     void CheckEntity() override;                               // [8] 0x1400c72f0 (JMP 0x1400c7570)
-    bool GetTarget(void* param) override;                      // [9] 0x1400c7270
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c7270
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     bool      _field20;          // +0x20 search for another storage when full (Persist: the bool overload)

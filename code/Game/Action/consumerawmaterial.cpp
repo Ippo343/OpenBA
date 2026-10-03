@@ -245,8 +245,8 @@ void ConsumeRawMaterial::CheckEntity() {
 // ConsumeRawMaterial::GetTarget (0x1400c5f10) -- slot 9
 // Simple compare: returns true if param matches entity at +0x20.
 // ============================================================
-bool ConsumeRawMaterial::GetTarget(void* param) {
-    return *(void**)param == _field20.Get();   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool ConsumeRawMaterial::GetTarget(ComponentEntity** param) {
+    return *param == _field20.Get();
 }
 
 // ============================================================

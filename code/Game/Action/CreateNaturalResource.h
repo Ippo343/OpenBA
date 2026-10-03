@@ -30,7 +30,7 @@ public:
     ~CreateNaturalResource() override = default;               // [0] 0x140022240
     void Persist(void* stream) override;                       // [3] 0x1400c6890
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6650
-    bool GetTarget(void* param) override;                      // [9] 0x1400c6610
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c6610
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     ComponentDescription* descEntity;   // +0x20 ExternalPtr<ComponentDescription>: the resource template

@@ -550,8 +550,8 @@ void MoveTo::CheckEntity() {
 // Returns true if the given param (InternalBasePtr) matches the character's owning
 // entity (Component +0x10).
 // ============================================================
-bool MoveTo::GetTarget(void* param) {
-    return character->_entity == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool MoveTo::GetTarget(ComponentEntity** param) {
+    return character->_entity == *param;
 }
 
 // ============================================================

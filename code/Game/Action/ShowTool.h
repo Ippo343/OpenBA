@@ -30,7 +30,7 @@ public:
     int  AbstractImpl(void* actionStack) override;             // [4] 0x140042710
     void Exit(void* actionStack) override;                     // [7] 0x140042700 own `RET 0` (same bytes as the base body)
     void CheckEntity() override;                               // [8] 0x1400426d0
-    bool GetTarget(void* param) override;                      // [9] 0x140042680
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x140042680
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<CitizenComponent> _field20;   // +0x20 the citizen (Persist checks CitizenComponent)
