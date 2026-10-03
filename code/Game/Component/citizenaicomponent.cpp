@@ -41,6 +41,9 @@
 #include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Component/ModelComponent.h"    // ModelComponent::meshInstance (the age-mesh colour)
+#include "Component/ComponentDescription.h"   // StorageComponent::Item::_resource sub-descriptions
+#include "system/Value.h"                // System::Time
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
@@ -78,8 +81,8 @@ static void EnsureCallees();
 // ============================================================
 // Main citizen AI tick. RDX = pointer to the elapsed System::Time (int64 ticks).
 // timers[14] / timers[15] (+0xB0 / +0xB8) are the cooldowns of states 0xe / 0xf.
-void CitizenAIComponent::Decide(const int64_t* time) {
-    int64_t dt = *time;
+void CitizenAIComponent::Decide(const System::Time* time) {
+    int64_t dt = time->_ticks;
 
     // --- Phase 1: count the 16 per-state timers down, clamped at 0 ---
     for (int i = 0; i < 16; i++) {
@@ -141,7 +144,7 @@ void CitizenAIComponent::Decide(const int64_t* time) {
         // Hungry: eat at home first when the home has food
         if (citizen->home != nullptr) {
             ResidenceComponent* homeStorage = citizen->home->FindComponent<ResidenceComponent>();
-            int resourceCount = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(homeStorage));
+            int resourceCount = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(homeStorage));   // LEFT: SIG CitizenComp_Storage_GetResourceCount (wave X)
 
             if (resourceCount > 0) {
                 citizen->EatFrom(citizen->home);
@@ -271,14 +274,13 @@ static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
     int idx = citizen->field_0x34;
     CharacterComponent* meshIBP = citizen->character;
     if (meshIBP == nullptr) return;                            // no CharacterComponent
-    // The ModelComponent's MeshInstance is raw storage (its owner's H5 member): the
-    // colour-tint fields inside it are written raw.
-    uint8_t* mesh = reinterpret_cast<uint8_t*>(meshIBP->modelComponent);
-    if (mesh == nullptr) return;                               // ModelComponent not live yet
-    *reinterpret_cast<float*>(mesh + 0x134) = scale;
-    *reinterpret_cast<float*>(mesh + 0x138) = scale;
-    *reinterpret_cast<float*>(mesh + 0x13c) = scale;
-    *reinterpret_cast<float*>(mesh + 0x140) = (float)idx;
+    // The ModelComponent's MeshInstance colour (+0x28 + 0x10c = +0x134..+0x140).
+    ModelComponent* model = meshIBP->modelComponent;
+    if (model == nullptr) return;                              // ModelComponent not live yet
+    model->meshInstance._color[0] = scale;
+    model->meshInstance._color[1] = scale;
+    model->meshInstance._color[2] = scale;
+    model->meshInstance._color[3] = (float)idx;
 #if defined(_DEBUG)
     static int s_setupLog = 0;
     if (s_setupLog < 24) {
@@ -316,35 +318,33 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
 // Reimpl of StorageComponent_QueryCount (0x14012cf10):
 // O(n*m) inventory scan — sums (RawMaterialDescription.unitVolume * slotCount)
 // across all inventory rows. Reads type via vtable+0x10, filters by DAT_1401c7cb8.
-int CitizenComp_StorageComponent_QueryCount(int64_t self) {
+int CitizenComp_StorageComponent_QueryCount(int64_t selfArg) {
     EnsureCallees();
-    if (!self) return 0;   // defensive: callers may pass a null/unfound storage
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (!selfArg) return 0;   // defensive: callers may pass a null/unfound storage
+    const StorageComponent* self = reinterpret_cast<const StorageComponent*>(selfArg);   // LEFT: SIG CitizenComp_StorageComponent_QueryCount (wave X)
     int total = 0;
-    int rowCount = *reinterpret_cast<int*>(s + 0x30);
+    int rowCount = self->slotCount;
     if (0 < rowCount) {
-        int64_t off = 0;
         int row = 0;
         do {
-            int64_t arr = *reinterpret_cast<int64_t*>(s + 0x28);
-            int64_t inv = *reinterpret_cast<int64_t*>(arr + off);
-            void* mat = nullptr;
-            int n = *reinterpret_cast<int*>(inv + 0x30);
+            const StorageComponent::Item* arr = self->storageSlots;
+            const ComponentDescription* inv = arr[row]._resource;
+            const RawMaterialDescription* mat = nullptr;
+            int n = inv->_subDescCount;
             for (int j = 0; j < n; j++) {
-                int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(inv + 0x28) + (int64_t)j * 8);
-                uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
+                Description* sub = inv->_subDescs[j];
+                uint32_t tid = sub->Type();   // slot 2
                 if (tid == *s_TypeId_RawMaterial) {
-                    void* obj = reinterpret_cast<void*>(*slot);
-                    mat = Object::IsDerivedFromNullSafe(obj, *s_TypeId_RawMaterial) ? obj : nullptr;
+                    mat = Object::IsDerivedFromNullSafe(sub, *s_TypeId_RawMaterial)
+                              ? static_cast<const RawMaterialDescription*>(sub) : nullptr;
                     break;
                 }
             }
+            int slotCount = arr[row]._count;
             row++;
-            off += 0x10;
-            int unitVol = mat ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(mat) + 0x48) : 0;
-            int slotCount = *reinterpret_cast<int*>(arr + (off - 8));
+            int unitVol = mat ? mat->_weight : 0;
             total += unitVol * slotCount;
-        } while (row < *reinterpret_cast<int*>(s + 0x30));
+        } while (row < self->slotCount);
     }
     return total;
 }
@@ -359,37 +359,35 @@ int CitizenComp_StorageComponent_QueryCount(int64_t self) {
 // start-town food seed hacked rows into it. With the real residence state node
 // wired (heat tick bring-up), +0x28 is the node vtable; the exe-faithful path
 // reads the sibling StorageComponent.
-int CitizenComp_Storage_GetResourceCount(int64_t self) {
+int CitizenComp_Storage_GetResourceCount(int64_t selfArg) {
     EnsureCallees();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    int64_t outIBP = 0;
-    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(s + 0x10), &outIBP);
+    const Component* self = reinterpret_cast<const Component*>(selfArg);   // LEFT: SIG CitizenComp_Storage_GetResourceCount (wave X)
+    StorageComponent* storage = nullptr;   // the InternalPtr the finder writes
+    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(self->_entity), &storage);   // LEFT: SIG WorkBase_FindComponent_6270 (Work/exe_bodies.h)
     int total = 0;
-    if (outIBP == 0) return 0;   // guard: entity without a StorageComponent
-    int rowCount = *reinterpret_cast<int*>(outIBP + 0x30);
+    if (storage == nullptr) return 0;   // guard: entity without a StorageComponent
+    int rowCount = storage->slotCount;
     if (0 < rowCount) {
-        int64_t off = 0;
         int row = 0;
         do {
-            int64_t arr = *reinterpret_cast<int64_t*>(outIBP + 0x28);
-            int64_t inv = *reinterpret_cast<int64_t*>(arr + off);
-            void* mat = nullptr;
-            int n = *reinterpret_cast<int*>(inv + 0x30);
+            const StorageComponent::Item* arr = storage->storageSlots;
+            const ComponentDescription* inv = arr[row]._resource;
+            const RawMaterialDescription* mat = nullptr;
+            int n = inv->_subDescCount;
             for (int j = 0; j < n; j++) {
-                int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(inv + 0x28) + (int64_t)j * 8);
-                uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
+                Description* sub = inv->_subDescs[j];
+                uint32_t tid = sub->Type();   // slot 2
                 if (tid == *s_TypeId_RawMaterial) {
-                    void* obj = reinterpret_cast<void*>(*slot);
-                    mat = Object::IsDerivedFromNullSafe(obj, *s_TypeId_RawMaterial) ? obj : nullptr;
+                    mat = Object::IsDerivedFromNullSafe(sub, *s_TypeId_RawMaterial)
+                              ? static_cast<const RawMaterialDescription*>(sub) : nullptr;
                     break;
                 }
             }
-            if (mat && (*reinterpret_cast<unsigned int*>(reinterpret_cast<uint8_t*>(mat) + 0x5c) >> 5 & 1) != 0) {
-                total += (*reinterpret_cast<int*>(arr + 8 + off) - *reinterpret_cast<int*>(arr + 0xc + off));
+            if (mat && (mat->_flags >> 5 & 1) != 0) {
+                total += (arr[row]._count - arr[row]._reserve);
             }
             row++;
-            off += 0x10;
-        } while (row < *reinterpret_cast<int*>(outIBP + 0x30));
+        } while (row < storage->slotCount);
     }
     return total;
 }
@@ -408,7 +406,7 @@ void CitizenAIComponent::TransitionState(char param) {
         int idx = 0;
         int64_t list[2] = {0, 0};  // {ptr, count(low32)}
         BuildCandidateStateList(list, param);
-        int* arr = reinterpret_cast<int*>(list[0]);
+        int* arr = reinterpret_cast<int*>(list[0]);   // LEFT: SIG CitizenAIComponent::BuildCandidateStateList (int64_t* list; citizenai_candidatelist.cpp, CAI-1)
         int n = static_cast<int>(list[1]);
         int* p = arr;
         if (0 < n) {
@@ -444,10 +442,10 @@ void CitizenAIComponent::CheckEducation() {
     if (profList == nullptr || res8 == nullptr) return;
     int cap = profList->priority;
     // +0x38 lies inside ResidenceComponent's embedded controller: raw.
-    int* res8Cap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res8) + 0x38);
+    int* res8Cap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res8) + 0x38);   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent, +0x38 capacity)
     if (*res8Cap != cap) {
         ResidenceComponent* res10b = citizen->_entity->FindComponent<ResidenceComponent>();
-        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(res10b));
+        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(res10b));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount (wave X)
         if (cnt < cap) {
             *res8Cap = cap;
         }
@@ -584,7 +582,7 @@ void CitizenAIComponent::OnAdded() {}
 // Recipe step 1 (Update), routed to slot +0x48. Signature matches the macro's
 // UpdateVSlot adapter: (self, int64_t* time).
 void CitizenAIComponent::Update(void* timeArg) {
-    const int64_t* time = static_cast<const int64_t*>(timeArg);
+    const System::Time* time = static_cast<const System::Time*>(timeArg);   // LEFT: SIG Component::Update(void* time) (Component.h, wave X)
 
     EnsureCallees();
 
@@ -626,9 +624,9 @@ void CitizenAIComponent::Update(void* timeArg) {
         if (s_force == 1 && g_pForceWorkBuilding) {
             if (citizen->home == nullptr) {
                 new (&citizen->home) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(g_pForceWorkBuilding));   // B.3.3 bridge
+                        reinterpret_cast<RtObject::Internal*>(g_pForceWorkBuilding));   // LEFT: g_pForceWorkBuilding is void* (starttown.cpp, GAME-4)
                 // the harness plants a non-disease pointer in the Disease* slot
-                *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;
+                *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: the harness plants a non-Disease pointer (g_pForceWorkBuilding void*, GAME-4)
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
                     fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
                             (void*)citizen, g_pForceWorkBuilding, g_pForceWorkBuilding);
