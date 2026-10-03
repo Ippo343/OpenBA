@@ -33,6 +33,11 @@
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/ProfessionList.h"
+#include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Action/PathSearch.h"   // RawArray (PickBestDropTarget)
 
 // Sub-functions, called by name (B3R): 0x140025520 WorkBST_BSTFindRemove_25520,
 // 0x1400c5400 WorkBase_TaskListCleanup_c5400, 0x140014c30 WorkBase_TreeNodeFree_14c30.
@@ -76,20 +81,21 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     StorageComponent* storage = nullptr;
     fn_FindComponent_Storage(field_10, &storage);
 
-    // Get game world grid data (m_game / m_citizenList are still void*: LEFT)
+    // Get game world grid data
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    int* gridDataPtr = (int*)gameWorld->m_game;
-    void* worldArray = gameWorld->m_citizenList;
+    Map* map = gameWorld->m_game;
+    int* gridDataPtr = (int*)map;   // LEFT: SIG WorkBase_ValidateCell_a00f0 (Map passed as int*)
+    CitizenBehavior* worldArray = gameWorld->m_citizenList;
 
-    // Citizen position: CharacterComponent (+0x278) -> ModelComponent (+0x68); the
-    // transform is raw storage (H5): the float reads are LEFT.
-    uintptr_t posData = reinterpret_cast<uintptr_t>((*citizenAI)->character->modelComponent);
+    // Citizen position: CharacterComponent (+0x278) -> ModelComponent (+0x68)
+    // -> transform translation (+0x158)
+    const Math::Vector3& posData = (*citizenAI)->character->modelComponent->transform.translation;
 
-    int gridSize = *gridDataPtr;
+    int gridSize = map->size;
     // citizenY at +0x160 is stored but only used for searchPos[2] init
-    (void)*(float*)(posData + 0x160);  // citizenY — unused in grid calc
-    float citizenX = *(float*)(posData + 0x158);
-    float citizenZ = *(float*)(posData + 0x15c);
+    (void)posData.z;  // citizenY — unused in grid calc
+    float citizenX = posData.x;
+    float citizenZ = posData.y;
 
     uint32_t srcCell = WorldToCell(citizenX, citizenZ, gridSize);
 
@@ -102,32 +108,30 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
 
     // Iterate over storage items
     for (int i = 0; i < itemCount; i++) {
-        // (StorageComponent's items are raw storage, H5: LEFT)
-        uintptr_t itemArray = (uintptr_t)storage->storageSlots;
-        uintptr_t itemEntry = itemArray + (uintptr_t)i * 0x10;
+        StorageComponent::Item& itemEntry = storage->storageSlots[i];
 
         // Check available count: stored - reserved > 0
-        int stored = *(int*)(itemEntry + 0x8);
-        int reserved = *(int*)(itemEntry + 0xc);
+        int stored = itemEntry._count;
+        int reserved = itemEntry._reserve;
         int availCount = stored - reserved;
         if (availCount <= 0) continue;
 
-        // Get the entity pointer from item entry
-        uintptr_t itemEntity = *(uintptr_t*)itemEntry;
+        // The stored material's template (+0x00)
+        ComponentDescription* itemEntity = itemEntry._resource;
 
-        // Find RawMaterialDescription component on item entity
-        void* rawMatDesc = nullptr;
-        if (*(int*)(itemEntity + 0x30) > 0) {
-            for (int j = 0; j < *(int*)(itemEntity + 0x30); j++) {
-                uintptr_t compArray = *(uintptr_t*)(itemEntity + 0x28);
-                void* comp = *(void**)(compArray + (uintptr_t)j * 8);
-                // slot 2 Type() of the description's component description
-                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+        // Find the RawMaterialDescription among the template's sub-descriptions
+        RawMaterialDescription* rawMatDesc = nullptr;
+        if (itemEntity->_subDescCount > 0) {
+            for (int j = 0; j < itemEntity->_subDescCount; j++) {
+                Description** compArray = itemEntity->_subDescs;
+                Description* comp = compArray[j];
+                // slot 2 Type() of the sub-description
+                uint32_t typeId = comp->Type();
                 if (typeId == RawMaterialDescription::TypeId()) {
                     // Verify via IsDerivedFrom
-                    comp = *(void**)(*(uintptr_t*)(itemEntity + 0x28) + (uintptr_t)j * 8);
+                    comp = itemEntity->_subDescs[j];
                     if (Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
-                        rawMatDesc = comp;
+                        rawMatDesc = static_cast<RawMaterialDescription*>(comp);
                     }
                     break;
                 }
@@ -140,10 +144,10 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         // Check capacity: destStorage capacity - count vs rawMat resourceSize * availCount
         int maxCapacity = destStorage->capacity;
 
-        int currentCount = fn_StorageComponent_QueryCount(destStorage);
+        int currentCount = destStorage->QueryCount();   // 0x14012cf10
 
         int freeSpace = maxCapacity - currentCount;
-        int resourceSize = rawMatDesc ? *(int*)((uintptr_t)rawMatDesc + 0x48) : 1;
+        int resourceSize = rawMatDesc ? rawMatDesc->_weight : 1;
 
         if (freeSpace < resourceSize * availCount) {
             // Not enough room in dest, check citizen's building storage
@@ -152,14 +156,14 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
 
             int altMax = altStorage->capacity;
 
-            int altCurrent = fn_StorageComponent_QueryCount(altStorage);
+            int altCurrent = altStorage->QueryCount();   // 0x14012cf10
 
             availCount = (altMax - altCurrent) / resourceSize;
         }
 
         if (availCount == 0) {
             // No capacity available, transition to long-term plan
-            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*citizenAI));
+            (*citizenAI)->LongTermPlan();   // 0x140115e60
             return 2;
         }
 
@@ -168,11 +172,11 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
 
         float searchPos[3] = {0.0f, 0.0f, 0.0f};
         uint32_t resourceTypeId = (uint32_t)field_28;
-        void* destEntity = nullptr;
+        ComponentEntity* destEntity = nullptr;
 
-        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(worldArray), reinterpret_cast<int64_t*>(&destEntity), resourceTypeId,
-                                  reinterpret_cast<uint64_t>((void*)itemEntity), availCount, 1,
-                                  reinterpret_cast<uint32_t*>(searchPos), &entityIBP);
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(worldArray),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                           &destEntity, resourceTypeId, itemEntity, availCount, 1,
+                           searchPos, &entityIBP);   // 0x14008d590
 
         if (destEntity == nullptr) {
             continue;
@@ -195,14 +199,14 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
                 return 1;
             }
             dbgBranch = 0;
-            Pf_EntityResolvePos_2e20(positionComp, destPos, 0, 0, nullptr);
+            Pf_EntityResolvePos_2e20(positionComp, destPos, 0, 0, nullptr);   // (the forwarder takes the BuildComponent as void*)
             destCell = WorldToCell(destPos[0], destPos[1], gridSize);
         } else {
             // Use search position
             dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
-            int slotIdx = Pf_FindBestAdjacentCell_d5d0(reinterpret_cast<int64_t>(unknownComp), destCell, destPos, workTypeId);
+            int slotIdx = FindBestAdjacentCell(unknownComp, destCell, destPos);   // 0x14012d5d0 (the forwarder dropped workTypeId)
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
                 return 1;
@@ -212,20 +216,20 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         // Validate the work assignment
         CitizenComponent* citizenVal = *citizenAI;
 
-        if (!WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), citizenAI, destCell, srcCell, time)) {
+        if (!StepProgress(citizenAI, destCell, srcCell, time)) {
             return 0;
         }
 
         // Set up pathfinding
         ComponentEntity* workEntity = field_10;
         int pathType = field_20;
-        void* destEntityCopy = destEntity;
+        ComponentEntity* destEntityCopy = destEntity;
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
 
         uint32_t pathResult = 0;
-        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, reinterpret_cast<uint64_t*>(&destEntityCopy),
-                                searchPos, reinterpret_cast<void**>(&workEntity), destPos,
-                                (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);
+        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, reinterpret_cast<uint64_t*>(&destEntityCopy),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                searchPos, reinterpret_cast<void**>(&workEntity), destPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
 
         // Get the Slot10 result (vtable +0x50)
         CitizenComponent* citizenPtr = *citizenAI;
@@ -242,8 +246,8 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
             citizenPtr->happinessFlags |= 0x20000;
         }
 
-        // Register work with citizen AI (the tree helpers take the root as uintptr_t*: LEFT)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);
+        // Register work with citizen AI (the tree helpers take the root as uintptr_t*)
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);   // LEFT: SIG WorkBST_RegisterWork_1a30
         return 2;
     }
 
@@ -284,7 +288,7 @@ int ClearStorage::Validate() {
         CitizenComponent* taskIBP = node->element;
 
         // Check if task is still valid
-        bool canStart = WorkBase_ValidateTask_f7100(this, nullptr, &taskIBP, nullptr);
+        bool canStart = ValidateTask(nullptr, &taskIBP, nullptr);   // 0x1400f7100
 
         if (!canStart) {
             // Need to add this node to remove list
@@ -296,7 +300,7 @@ int ClearStorage::Validate() {
                     newCap = newCount * 3;
                 }
                 removeCapacity = newCap;
-                AssignmentNode** newList = (AssignmentNode**)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
+                AssignmentNode** newList = static_cast<AssignmentNode**>(System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8));
 
                 // Copy existing entries
                 int copyStart = 0;
@@ -365,7 +369,7 @@ phase2:
                 } else {
                     if (key <= nodeKey) {
                         // Found it, remove (the tree helpers take the root as uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field58), searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field58), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
                         break;
                     }
                     searchNode = searchNode->right;
@@ -407,7 +411,7 @@ ClearStorage::~ClearStorage() {
 // entry from the work tracking tree.
 int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return 0;
 }
 
@@ -424,7 +428,7 @@ int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2
 // citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
 int ClearStorage::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return 0;
 }
 
@@ -517,7 +521,7 @@ void ClearStorage::Persist(IO::Stream& stream) {
     Work::Persist(stream);
 
     IO::Serializer ser(stream, 0);
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)  // LEFT: SIG WorkBST_BST_Serialize_296b0
 }
 
 // ============================================================

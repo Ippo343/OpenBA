@@ -51,10 +51,10 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- ClearArea fields (+0x48) ---
-    void*    field_48;           // +0x48: BST root — entities to clear (InternalBasePtr tree nodes)
+    WorkEntitySetNode* field_48; // +0x48: set root — entity -> citizen (0x30 nodes, 0x140029b40; B4 P2 WORK-1: H4)
     int32_t  field_50;           // +0x50: entity tree count
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: BST root — cell indices to clear (int tree nodes)
+    WorkCellSetNode* field_58;   // +0x58: set root — cell -> citizen (0x30 nodes, 0x140029a40; B4 P2 WORK-1: H4)
     int32_t  field_60;           // +0x60: cell tree count
     uint8_t  _pad64[4];          // +0x64: padding
     ComponentDescription* field_68; // +0x68: ExternalPtr<ComponentDescription> filter (Persist 0x1400e6740

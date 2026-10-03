@@ -6,9 +6,9 @@
 // Ctor: 0x1400e68d0, Vtable: 0x140161110
 //
 // Fields:
-//   +0x48: void* treeRoot   -- BST of InternalBasePtrs (entities to clear)
+//   +0x48: WorkEntitySetNode* -- set of entity -> citizen (entities to clear)
 //   +0x50: int treeCount    -- number of entries in +0x48 tree
-//   +0x58: void* cellRoot   -- BST of cell indices (ground cells to clear)
+//   +0x58: WorkCellSetNode*   -- set of cell -> citizen (ground cells to clear)
 //   +0x60: int cellCount    -- number of entries in +0x58 tree
 //   +0x68: void* mapEntity  -- InternalBasePtr to map component entity
 //   +0x70: bool clearTrees  -- whether to clear trees/resources
@@ -48,6 +48,7 @@
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/ProfessionList.h"
+#include "Game/Map.h"
 
 // Diagnostic trace for the harvest-completion investigation. Gated by
 // BANISHED_CLEAR_TRACE (shared with clearareacomponent_states.cpp); default off.
@@ -87,7 +88,7 @@ ClearArea::ClearArea(void* pEntityIBP, uint64_t descRef, uint8_t clearTrees,
       field_50(0),
       field_58(nullptr),
       field_60(0),
-      field_68(reinterpret_cast<ComponentDescription*>(descRef)),
+      field_68(reinterpret_cast<ComponentDescription*>(descRef)),   // LEFT: SIG ClearArea ctor (descRef uint64_t; callers in clearareacomponent_states.cpp, COMP-2)
       field_70(clearTrees),
       field_71(clearGround),
       field_72(clearBuildings) {}
@@ -101,21 +102,21 @@ ClearArea::ClearArea(void* pEntityIBP, uint64_t descRef, uint8_t clearTrees,
 ClearArea::~ClearArea() {
 
     // Free cell tree (+0x58)
-    void* cellRoot = field_58;
+    WorkCellSetNode* cellRoot = field_58;
     if (cellRoot) {
         // Recursively free left subtree, then right subtree, then root
-        WorkBase_TreeNodeFree_e320(&field_58, *(void**)((uintptr_t)cellRoot + 0x18));
-        WorkBase_TreeNodeFree_e320(&field_58, *(void**)((uintptr_t)cellRoot + 0x20));
+        WorkBase_TreeNodeFree_e320(&field_58, cellRoot->left);
+        WorkBase_TreeNodeFree_e320(&field_58, cellRoot->right);
         System::MemoryAllocator::MemFree(cellRoot);
     }
     field_58 = nullptr;
     field_60 = 0;
 
     // Free entity tree (+0x48)
-    void* treeRoot = field_48;
+    WorkEntitySetNode* treeRoot = field_48;
     if (treeRoot) {
-        WorkBase_TreeNodeFree_e320(&field_48, *(void**)((uintptr_t)treeRoot + 0x18));
-        WorkBase_TreeNodeFree_e320(&field_48, *(void**)((uintptr_t)treeRoot + 0x20));
+        WorkBase_TreeNodeFree_e320(&field_48, treeRoot->left);
+        WorkBase_TreeNodeFree_e320(&field_48, treeRoot->right);
         System::MemoryAllocator::MemFree(treeRoot);
     }
     field_48 = nullptr;
@@ -143,19 +144,19 @@ void ClearArea::Persist(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &serializer);
 
     // Serialize clearTrees bool at +0x70 (the field is uint8_t storage)
-    serializer.Serialize(*reinterpret_cast<bool*>(&field_70), nullptr);
+    serializer.Serialize(*reinterpret_cast<bool*>(&field_70), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
 
     // Version >= 1: serialize additional fields
     int version = serializer.GetVersion();
     if (version > 0) {
         // Serialize cell BST at +0x58
-        WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_58), &serializer);
+        WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_58), &serializer);   // LEFT: SIG WorkCellBST_Serialize_9de0
 
         // Serialize clearGround bool at +0x71
-        serializer.Serialize(*reinterpret_cast<bool*>(&field_71), nullptr);
+        serializer.Serialize(*reinterpret_cast<bool*>(&field_71), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
 
         // Serialize clearBuildings bool at +0x72
-        serializer.Serialize(*reinterpret_cast<bool*>(&field_72), nullptr);
+        serializer.Serialize(*reinterpret_cast<bool*>(&field_72), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
     }
 }
 
@@ -176,30 +177,30 @@ int ClearArea::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** tree
     }
 
     // Search cell BST (+0x58) for cellIndex and remove if found
-    void* node = field_58;
-    void* root = node;
+    WorkCellSetNode* node = field_58;
+    WorkCellSetNode* root = node;
     if (node == nullptr) return 0;
 
     // BST search for cellIndex
     while (node != nullptr) {
-        int nodeVal = *(int*)node;
+        int nodeVal = node->element.cell;
         if (cellIndex < nodeVal) {
-            node = *(void**)((uintptr_t)node + 0x18);  // left child
+            node = node->left;
         } else if (cellIndex > nodeVal) {
-            node = *(void**)((uintptr_t)node + 0x20);  // right child
+            node = node->right;
         } else {
             // Found — now search again from root and remove
             if (root == nullptr) return 0;
-            void* searchNode = root;
+            WorkCellSetNode* searchNode = root;
             while (searchNode != nullptr) {
-                int searchVal = *(int*)searchNode;
+                int searchVal = searchNode->element.cell;
                 if (cellIndex < searchVal) {
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x18);
+                    searchNode = searchNode->left;
                 } else if (cellIndex > searchVal) {
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x20);
+                    searchNode = searchNode->right;
                 } else {
                     // Remove this node from cell tree
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_58), searchNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_58), searchNode);   // LEFT: SIG WorkCellBST_Remove_ca60
                     return 0;
                 }
             }
@@ -234,16 +235,16 @@ int ClearArea::Cleanup() {
     // Clean up entity tree (+0x48)
     while (field_50 > 0) {
         // Find rightmost (last) node in BST
-        void* node = field_48;
-        void* prev = node;
+        WorkEntitySetNode* node = field_48;
+        WorkEntitySetNode* prev = node;
         while (node != nullptr) {
             prev = node;
-            node = *(void**)((uintptr_t)node + 0x18);  // traverse left to find min
+            node = node->left;  // traverse left to find min
         }
 
         // prev is the leftmost node; its value (+0x08) is the citizen's
-        // InternalPtr<CitizenComponent> (the tree nodes stay raw: LEFT)
-        CitizenComponent* citizen = *(CitizenComponent**)((uintptr_t)prev + 8);
+        // InternalPtr<CitizenComponent>
+        CitizenComponent* citizen = prev->element.citizen;
 
         // Remove the pending action from the citizen's CharacterComponent action list (+0x48)
         WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
@@ -255,15 +256,15 @@ int ClearArea::Cleanup() {
     // Clean up cell tree (+0x58)
     while (field_60 > 0) {
         // Find leftmost node in cell BST
-        void* node = field_58;
-        void* prev = node;
+        WorkCellSetNode* node = field_58;
+        WorkCellSetNode* prev = node;
         while (node != nullptr) {
             prev = node;
-            node = *(void**)((uintptr_t)node + 0x18);
+            node = node->left;
         }
 
         // The node's citizen (+0x08); remove its pending action
-        CitizenComponent* citizen = *(CitizenComponent**)((uintptr_t)prev + 8);
+        CitizenComponent* citizen = prev->element.citizen;
         WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
     }
     return 0;
@@ -323,18 +324,17 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
 
     // --- Check if work entity is valid ---
-    // CheckPtr on field_18 (the WorkComponent InternalPtr at +0x18; Work.h keeps
-    // it void*: its +0x30 reads are LEFT)
-    void* workEntity = field_18;
+    // CheckPtr on field_18 (the WorkComponent InternalPtr at +0x18)
+    WorkComponent* workEntity = field_18;
 
     // Get total slot count for the entity
-    if (*(int*)((uintptr_t)workEntity + 0x30) == 0) {
-        int count = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workEntity));
-        *(int*)((uintptr_t)workEntity + 0x30) = count;
+    if (workEntity->workState == 0) {
+        int count = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workEntity));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        workEntity->workState = count;
     }
 
     // If treesCleared + groundCleared >= totalSlots, all work done
-    int totalSlots = *(int*)((uintptr_t)workEntity + 0x30);
+    int totalSlots = workEntity->workState;
     if (treesCleared + groundCleared >= totalSlots) {
         return 1;
     }
@@ -367,8 +367,9 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     tileArray.count = 0;
     tileArray._pad = 0;
 
-    // The world map (GameUpdateLoop::m_game is still void*: LEFT)
-    int* worldGrid = (int*)GameUpdateLoop::_singleton->m_game;
+    // The world map; the grid callees take it as a leading int*
+    Map* map = GameUpdateLoop::_singleton->m_game;
+    int* worldGrid = (int*)map;   // LEFT: SIG WorkGrid_* / WorkLeaf_* (Map passed as int*)
 
     // Read the tile-query filter flag.
     //
@@ -406,15 +407,14 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         // CheckPtr on the citizen slot; CharacterComponent (+0x278) -> ModelComponent (+0x68)
         CharacterComponent* charComp = (*citizenIBP)->character;
 
-        // ModelComponent keeps its transform as raw storage (H5): the position reads
-        // (floats at +0x158, +0x15c, +0x160) are LEFT.
-        uintptr_t posComp = reinterpret_cast<uintptr_t>(charComp->modelComponent);
+        // ModelComponent's transform translation (+0x148 + 0x10)
+        const Math::Vector3& pos = charComp->modelComponent->transform.translation;
 
-        float posX = *(float*)(posComp + 0x158);
-        float posY = *(float*)(posComp + 0x15c);
-        // posZ = *(float*)(posComp + 0x160);  // stored but unused for ref calc
+        float posX = pos.x;
+        float posY = pos.y;
+        // posZ (+0x160) is stored but unused for ref calc
 
-        int gridSize = *worldGrid;
+        int gridSize = map->size;
         int halfGrid = gridSize >> 1;
 
         // Convert world position to tile coordinates
@@ -447,18 +447,18 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
                 // Check if tree entity is already in our tracking BST at +0x48
                 // (the tree nodes stay raw: LEFT)
-                void* bstNode = field_48;
+                WorkEntitySetNode* bstNode = field_48;
                 bool alreadyTracked = false;
                 while (bstNode != nullptr) {
-                    ComponentEntity* nodeKey = *(ComponentEntity**)bstNode;
+                    ComponentEntity* nodeKey = bstNode->element.entity;
                     if (treeEntity < nodeKey) {
-                        bstNode = *(void**)((uintptr_t)bstNode + 0x18);  // left child
+                        bstNode = bstNode->left;
                     } else {
                         if (treeEntity <= nodeKey) {
                             alreadyTracked = true;
                             break;  // found match
                         }
-                        bstNode = *(void**)((uintptr_t)bstNode + 0x20);  // right child
+                        bstNode = bstNode->right;
                     }
                 }
                 if (alreadyTracked) {
@@ -493,7 +493,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
                 // Try to set up the build structure work
                 CitizenComponent* actionStackPtr = *citizenIBP;
-                int buildResult = static_cast<int>(WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &actionStackPtr,
+                int buildResult = static_cast<int>(StepProgress(&actionStackPtr,
                                                           (uint32_t)cellIdx, refTileIdx, time));   // the door read EAX
                 if (!(buildResult & 0xFF)) {
                     // BuildStructure_impl returned false → result = 0 (no work assigned)
@@ -510,7 +510,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Compute world position from cell index
-                int gridSz = *worldGrid;
+                int gridSz = map->size;
                 float halfOffset = (float)(gridSz >> 1) - kRdata_140172114;
                 float worldX = (float)(cellIdx % gridSz) - halfOffset;
                 float worldY = (float)(cellIdx / gridSz) - halfOffset;
@@ -519,7 +519,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
                 // Get nearby walkable position
                 float walkPos[4];
-                Reimpl_MapGetTerrainPos(worldGrid, walkPos, &posVec.x, 0, nullptr);
+                Reimpl_MapGetTerrainPos(map, walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for tree removal
                 NaturalResourceComponent* targetIBP = natRes;
@@ -547,9 +547,9 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Insert tree entity into tracking BST
-                struct { ComponentEntity* key; CitizenComponent* value; } insertPair;
-                insertPair.key = treeEntity;
-                insertPair.value = *citizenIBP;
+                WorkEntityAssignment insertPair;
+                insertPair.entity = treeEntity;
+                insertPair.citizen = *citizenIBP;
                 WorkLeaf_BstInsertByIBP_29920(&field_48, &workIBP, &insertPair);
 
                 result = 2;
@@ -572,17 +572,17 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 if (tile->entityPtr != nullptr) continue;
 
                 // Check if tile is already in ground tracking BST at +0x58
-                void* bstNode = field_58;
+                WorkCellSetNode* bstNode = field_58;
                 bool alreadyTracked = false;
                 while (bstNode != nullptr) {
-                    int nodeKey = *(int*)bstNode;
+                    int nodeKey = bstNode->element.cell;
                     if ((int)tileIdx < nodeKey) {
-                        bstNode = *(void**)((uintptr_t)bstNode + 0x18);
+                        bstNode = bstNode->left;
                     } else if ((int)tileIdx <= nodeKey) {
                         alreadyTracked = true;
                         break;
                     } else {
-                        bstNode = *(void**)((uintptr_t)bstNode + 0x20);
+                        bstNode = bstNode->right;
                     }
                 }
                 if (alreadyTracked) {
@@ -606,7 +606,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 clearInfo.b = 0;
 
                 // Compute world position
-                int gridSz = *worldGrid;
+                int gridSz = map->size;
                 float halfOffset = (float)(gridSz >> 1) - kRdata_140172114;
                 float worldX = (float)((int)tileIdx % gridSz) - halfOffset;
                 float worldY = (float)((int)tileIdx / gridSz) - halfOffset;
@@ -614,16 +614,16 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 Math::Vector3 posVec(worldX, worldY, 0.0f);
 
                 float walkPos[4];
-                Reimpl_MapGetTerrainPos(worldGrid, walkPos, &posVec.x, 0, nullptr);
+                Reimpl_MapGetTerrainPos(map, walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for ground clearing
                 CitizenComponent* citizenRef = *citizenIBP;
                 int workId = field_20;
 
-                WorkAct_PerformWorkCtor_bffd0(&citizenRef, workId, reinterpret_cast<uint32_t*>(walkPos),
+                WorkAct_PerformWorkCtor_bffd0(&citizenRef, workId, reinterpret_cast<uint32_t*>(walkPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
                                      static_cast<int>(tileIdx),   // the door passed (uint64_t)tileIdx; the body reads R9D
                                      2, 0, tileIdx, 0, 0,
-                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);
+                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
 
                 // Post-work setup on citizen
                 int workIdSaved = field_20;
@@ -642,11 +642,11 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Insert tile into ground tracking BST
-                struct { uint32_t tileKey; uint32_t pad; CitizenComponent* citizenRef; } groundPair;
-                groundPair.tileKey = tileIdx;
-                groundPair.pad = 0;
-                groundPair.citizenRef = *citizenIBP;
-                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_58), &workIBP, &groundPair);
+                WorkCellAssignment groundPair;
+                groundPair.cell = static_cast<int32_t>(tileIdx);
+                groundPair._pad04 = 0;
+                groundPair.citizen = *citizenIBP;
+                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_58), &workIBP, &groundPair);   // LEFT: SIG WorkCellBST_Insert_9a40
 
                 result = 0;
                 goto cleanup;
@@ -673,13 +673,13 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 // Get the posted work id from the WorkComponent
                 int resourceTypeId = storageLocComp->workId;
 
-                // GameUpdateLoop +0x118 (still void* in GameUpdateLoop.h: LEFT)
-                void* gatherSys = GameUpdateLoop::_singleton->m_tutorial;
+                // GameUpdateLoop +0x118, the work scheduler
+                WorkScheduler* gatherSys = GameUpdateLoop::_singleton->m_tutorial;
 
                 // Create citizen IBP for gather work
                 CitizenComponent* citizenRef = *citizenIBP;
 
-                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,
+                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
                                                           resourceTypeId, 0));   // the door read EAX
                 if (gatherResult & 0xFF) {
                     result = 2;
@@ -727,21 +727,24 @@ int ClearArea::Validate() {
     uint32_t removeCap = 0;
 
     // ---- Phase 1: Validate entity tree at +0x48 ----
-    void* root48 = field_48;
+    WorkEntitySetNode* root48 = field_48;
     if (root48 != nullptr) {
         // Find leftmost node
-        void* node = root48;
-        while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
-            node = *(void**)((uintptr_t)node + 0x18);
+        WorkEntitySetNode* node = root48;
+        while (node->left != nullptr) {
+            node = node->left;
         }
 
         // In-order traversal
         while (node != nullptr) {
-            // Read entity IBP from node+0x08
-            uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
+            // The node's citizen (+0x08)
+            CitizenComponent* citizen = node->element.citizen;
+            // The tree collects the citizen; retail 0x1400e5c25..0x1400e5c34 collects the node's
+            // key (the entity, +0x00): known_port_issues row 220.
+            uintptr_t entityIBP = reinterpret_cast<uintptr_t>(citizen);   // LEFT: known_port_issues row 220 (the removal list holds the citizen)
 
             // Validate this entry
-            uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
+            uint8_t valid = ValidateTask(nullptr, &citizen, nullptr);
 
             if (valid == 0) {
                 // Invalid — add to removal list
@@ -753,7 +756,7 @@ int ClearArea::Validate() {
                             newCap = newCount * 3;
                         }
                         removeCap = newCap;
-                        uintptr_t* newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
+                        uintptr_t* newArr = static_cast<uintptr_t*>(System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8));
 
                         // Copy existing entries
                         uint32_t copyStart = 0;
@@ -784,19 +787,19 @@ int ClearArea::Validate() {
             }
 
             // Move to in-order successor
-            void* right = *(void**)((uintptr_t)node + 0x20);
+            WorkEntitySetNode* right = node->right;
             if (right != nullptr) {
                 node = right;
-                while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
-                    node = *(void**)((uintptr_t)node + 0x18);
+                while (node->left != nullptr) {
+                    node = node->left;
                 }
             } else {
-                void* parent = *(void**)((uintptr_t)node + 0x10);
-                if (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) != node) {
+                WorkEntitySetNode* parent = node->parent;
+                if (parent != nullptr && parent->left != node) {
                     while (parent != nullptr &&
-                           *(void**)((uintptr_t)parent + 0x20) == node) {
+                           parent->right == node) {
                         node = parent;
-                        parent = *(void**)((uintptr_t)node + 0x10);
+                        parent = node->parent;
                     }
                     node = parent;
                 } else {
@@ -807,19 +810,19 @@ int ClearArea::Validate() {
     }
 
     // ---- Phase 2: Validate cell tree at +0x58 ----
-    void* root58 = field_58;
+    WorkCellSetNode* root58 = field_58;
     if (root58 != nullptr) {
         // Find leftmost node
-        void* node = root58;
-        while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
-            node = *(void**)((uintptr_t)node + 0x18);
+        WorkCellSetNode* node = root58;
+        while (node->left != nullptr) {
+            node = node->left;
         }
 
         // In-order traversal
         while (node != nullptr) {
-            uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
+            CitizenComponent* citizen = node->element.citizen;
 
-            uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
+            uint8_t valid = ValidateTask(nullptr, &citizen, nullptr);
             if (valid == 0) {
                 // Cell tree has invalid entry — early return 0
                 System::MemoryAllocator::MemFree(nullptr);
@@ -828,19 +831,19 @@ int ClearArea::Validate() {
             }
 
             // Move to in-order successor
-            void* right = *(void**)((uintptr_t)node + 0x20);
+            WorkCellSetNode* right = node->right;
             if (right != nullptr) {
                 node = right;
-                while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
-                    node = *(void**)((uintptr_t)node + 0x18);
+                while (node->left != nullptr) {
+                    node = node->left;
                 }
             } else {
-                void* parent = *(void**)((uintptr_t)node + 0x10);
-                if (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) != node) {
+                WorkCellSetNode* parent = node->parent;
+                if (parent != nullptr && parent->left != node) {
                     while (parent != nullptr &&
-                           *(void**)((uintptr_t)parent + 0x20) == node) {
+                           parent->right == node) {
                         node = parent;
-                        parent = *(void**)((uintptr_t)node + 0x10);
+                        parent = node->parent;
                     }
                     node = parent;
                 } else {
@@ -853,18 +856,18 @@ int ClearArea::Validate() {
     // ---- Phase 3: Remove invalid entries from entity tree ----
     if ((int)removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            void* bstNode = field_48;
+            WorkEntitySetNode* bstNode = field_48;
             while (bstNode != nullptr) {
-                uintptr_t nodeKey = *(uintptr_t*)bstNode;
+                uintptr_t nodeKey = reinterpret_cast<uintptr_t>(bstNode->element.entity);   // LEFT: known_port_issues row 220 (compared with the collected citizens)
                 if (removeArr[i] < nodeKey) {
-                    bstNode = *(void**)((uintptr_t)bstNode + 0x18); // left
+                    bstNode = bstNode->left;
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found — remove it
-                        WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);
+                        WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
                         break;
                     }
-                    bstNode = *(void**)((uintptr_t)bstNode + 0x20); // right
+                    bstNode = bstNode->right;
                 }
             }
         }

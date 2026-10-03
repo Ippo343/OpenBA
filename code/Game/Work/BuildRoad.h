@@ -25,6 +25,7 @@
 #include "Object/exe_type.h"
 
 class CitizenComponent;
+class ComponentDescription;
 
 
 class BuildRoad final : public Work {
@@ -50,9 +51,11 @@ public:
     // --- BuildRoad fields (+0x48) ---
     CitizenComponent* field_48;  // +0x48: InternalPtr<CitizenComponent> — the assigned citizen (zeroed;
                                  //        Persist 0x1400e4980 validates it against CitizenComponent)
-    void*    field_50;           // +0x50: ExternalPtr — building description (zeroed)
+    ComponentDescription* field_50; // +0x50: ExternalPtr<ComponentDescription> — the road's material (zeroed; Persist
+                                 //        0x1400e4980 streams it by the ExternalPtr body; Execute hands it to
+                                 //        StorageComponent::QueryAvailable 0x14012ce70 and PickBestDropTarget 0x14008d590)
     int32_t  field_58;           // +0x58: map cell index (-1 sentinel)
-    int32_t  field_5c;           // +0x5C: road type (2 = default)
+    uint32_t field_5c;           // +0x5C: road type (2 = default; Persist 0x1400e4980 streams it through the uint overload)
     int32_t  field_60;           // +0x60: material type (0xff default if version < 1)
     int32_t  field_64;           // +0x64: field (serialized, version >= 1)
     int32_t  field_68;           // +0x68: material count (2 default if version < 1)
