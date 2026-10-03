@@ -55,6 +55,24 @@
 #include "Dialog/dialog_exe_helpers.h"    // Dialog_FindComponent_d6c0 (0x14000d6c0)
 #include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
+// B4 P2 T1: the classes the harness reaches by name.
+#include "Game/PlayerToolManager.h"
+#include "Game/Map.h"
+#include "Game/Minimap.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/WorkScheduler.h"
+#include "Player/PlacementTool.h"
+#include "Player/RoadTool.h"
+#include "Player/FencedTool.h"
+#include "Player/EditTool.h"
+#include "Player/BridgeTool.h"
+#include "graphics/Mesh.h"
+#include "ui/ButtonElement.h"
+#include "Component/BuildComponent.h"
+#include "Component/BuildDescription.h"
+#include "Component/CreateBridgeDescription.h"
 
 // Standalone factory from code/Game/Player/removaltool.cpp (extern "C").
 // Returns a freshly MemAlloc'd RemovalTool (0x40 bytes) with its standalone
@@ -97,12 +115,12 @@ extern "C" void MapParamsDialog_HarnessOpen();
 
 // GUI: entity-selection (EditTool) harness. Scans the region map near centre and drives
 // the EditTool select path on the first dialog-capable entity (edittool.cpp).
-extern "C" int EditTool_HarnessSelectNearby(void* editTool);
+extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool);
 // Drive the select path on a specific entity (edittool.cpp) — returns 1 if a dialog opened.
-extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
-extern "C" void* EditTool_HarnessAcquire(void* entityUI);
+extern "C" int EditTool_HarnessSelectEntity(EditTool* editTool, ComponentEntity* entity);
+extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);
 // Select a citizen recovered from the Picking::Scene (edittool.cpp) — tests CitizenUI.
-extern "C" int EditTool_HarnessSelectCitizen(void* editTool);
+extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool);
 // A captured founding-house building entity (starttown.cpp) — a definitive UIDescription-
 // bearing entity, independent of the region-map/cursor pick.
 extern "C" void* StartTown_GetFoundingHouseEntity(int index);
@@ -124,10 +142,7 @@ namespace {
 //   +0x2c  startCell (int)
 //   +0x30  endCell   (int)
 //   +0x38  removalDesc (set by Startup)
-constexpr int kOff_EntityUI  = 0x10;
-constexpr int kOff_DragState = 0x28;
-constexpr int kOff_StartCell = 0x2c;
-constexpr int kOff_EndCell   = 0x30;
+// (B4 P2 T1: the fields are reached by name, Tool.h / dragtool.h / RemovalTool.h.)
 
 bool        s_initialized = false;
 bool        s_enabled     = false;
@@ -158,27 +173,25 @@ void Init() {
 // the start-town valley + scattered resources (trees/stone) live.
 inline int Cell(int row, int col) { return 256 * row + col; }
 
-void FireRemovalTool(void* entityUI) {
+void FireRemovalTool(PlayerToolManager* entityUI) {
     fprintf(stderr, "[ToolHarness] constructing RemovalTool (entityUI=%p)...\n", entityUI);
-    void* tool = RemovalTool_Factory_SA();
-    if (!tool) {
+    // RemovalTool_Factory_SA is RemovalTool::CreateNewObject: the receiver is proved.
+    RemovalTool* rt = static_cast<RemovalTool*>(RemovalTool_Factory_SA());   // LEFT: removaltool.cpp's void* return (owner: Player)
+    if (!rt) {
         fprintf(stderr, "[ToolHarness] ERROR: RemovalTool_Factory_SA returned null\n");
         return;
     }
-    uint8_t* t = static_cast<uint8_t*>(tool);
 
     // Wire fields: entityUI, dragging state, a cell rectangle around centre.
-    *reinterpret_cast<void**>(t + kOff_EntityUI) = entityUI;
-    *reinterpret_cast<uint16_t*>(t + kOff_DragState) = 1;   // dragState=1, singleClick=0
+    rt->dialogPtr = entityUI;
+    rt->dragState   = 1;   // the one word store 1 is dragState=1, singleClick=0 (H7: two stores)
+    rt->singleClick = 0;
     const int startCell = Cell(124, 124);
     const int endCell   = Cell(131, 131);                  // 8x8 selection
-    *reinterpret_cast<int*>(t + kOff_StartCell) = startCell;
-    *reinterpret_cast<int*>(t + kOff_EndCell)   = endCell;
+    rt->startCell = startCell;
+    rt->endCell   = endCell;
     fprintf(stderr, "[ToolHarness] RemovalTool=%p startCell=%d endCell=%d (8x8 @ ~centre)\n",
-           tool, startCell, endCell);
-
-    // RemovalTool_Factory_SA is RemovalTool::CreateNewObject: the receiver is proved.
-    RemovalTool* rt = reinterpret_cast<RemovalTool*>(tool);   // B.3.8 bridge
+           rt, startCell, endCell);
 
     // Startup (+0x20): finds RemovalDescription on description entity (+0x20,
     // null here) -> removalDesc=null. Safe, guarded downstream.
@@ -189,10 +202,10 @@ void FireRemovalTool(void* entityUI) {
     // Validates the harness pipeline live (breakpoint here in the debugger).
     uint32_t outValid = 0xdead;
     int outB = -1, outA = -1;
-    uint32_t outLen = 0xbeef;
+    int outLen = 0xbeef;   // CalcCost's int* out3 (printed %u as before)
     fprintf(stderr, "[ToolHarness] calling CalcCost (retail slot 14, +0x70)...\n");
     uint64_t cc = static_cast<uint64_t>(rt->CalcCost(startCell, endCell, &outValid, &outB, &outA,
-                                                     reinterpret_cast<int*>(&outLen)));
+                                                     &outLen));
     fprintf(stderr, "[ToolHarness] CalcCost -> ret=%llu valid=%u widthB=%d heightA=%d len=%u "
            "(expect width=8 height=8 valid=0 ret=0)\n",
            (unsigned long long)cc, outValid, outB, outA, outLen);
@@ -203,7 +216,7 @@ void FireRemovalTool(void* entityUI) {
     // removalDesc=null), so we SKIP the call here to avoid a null-deref fault. Drive
     // CalcPath via the real toolbar Remove button instead (BANISHED_LIVE_TOOLBAR=1
     // BANISHED_GAME_PRELOAD=1 BANISHED_LIVE_TOOLS=1), which supplies a live descriptor.
-    void* removalDesc = *reinterpret_cast<void**>(t + 0x38);
+    void* removalDesc = rt->removalDesc;
     if (removalDesc) {
         fprintf(stderr, "[ToolHarness] calling CalcPath (retail slot 13, +0x68) = RemovalCalc_Slot13...\n");
         int cp = rt->CalcPath(startCell, endCell) ? 1 : 0;
@@ -250,15 +263,15 @@ void FirePlacementTool() {
         return;
     }
 
-    void* tool = PlacementTool_Factory_SA();
+    // PlacementTool_Factory_SA is PlacementTool::CreateNewObject.
+    PlacementTool* tool = static_cast<PlacementTool*>(PlacementTool_Factory_SA());   // LEFT: placementtool.cpp's void* return (owner: Player)
     if (!tool) {
         fprintf(stderr, "[ToolHarness] ERROR: PlacementTool_Factory_SA returned null\n");
         return;
     }
-    uint8_t* t = static_cast<uint8_t*>(tool);
 
     // descriptionPtr (+0x20) = the building description entity Startup searches.
-    *reinterpret_cast<void**>(t + 0x20) = tmpl;
+    tool->descriptionPtr = static_cast<ComponentDescription*>(tmpl);   // LEFT: starttown.cpp's void* return (owner: Game)
     fprintf(stderr, "[ToolHarness] PlacementTool=%p descriptionPtr(+0x20)=%p — running Startup probe...\n",
            tool, tmpl);
 
@@ -325,7 +338,7 @@ void FirePlacementTool() {
 // the CreateBar dialog opens and the ghost preview follows the mouse; a left-click
 // (KeyMap action 5) then places the building. This proves the click->activate->preview
 // path without hand-wiring the tool.
-void FireActivatePlacement(void* entityUI) {
+void FireActivatePlacement(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
     // BANISHED_PLACEMENT_TEMPLATE overrides the building this drives, so the harness can
     // reproduce a specific toolbar button. Needed for Template\FishermansDock.rsc: it is
@@ -340,20 +353,20 @@ void FireActivatePlacement(void* entityUI) {
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness] ERROR: template resolve returned null\n"); return; }
 
-    void* before = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    Tool* before = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness] SetEditMode(entityUI=%p, descriptor=%p) — activating PlacementTool "
            "via the tool-mode tree (activeTool before=%p)...\n", entityUI, tmpl, before);
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
     if (tool) {
-        uint8_t* t = static_cast<uint8_t*>(tool);
+        // The tool the tree installs for a CreatePlacedDescription is the PlacementTool.
+        PlacementTool* pt = static_cast<PlacementTool*>(tool);
         fprintf(stderr, "[ToolHarness]   tool vtable=%p back-ptr(+0x10)=%p descriptionPtr(+0x20)=%p "
                "descComp(+0x28)=%p meshInstance(+0x68)=%p\n",
-               *reinterpret_cast<void**>(t), *reinterpret_cast<void**>(t + 0x10),
-               *reinterpret_cast<void**>(t + 0x20), *reinterpret_cast<void**>(t + 0x28),
-               *reinterpret_cast<void**>(t + 0x68));
+               *reinterpret_cast<void**>(tool),   // LEFT: the vtable word, logged only
+               pt->dialogPtr, pt->descriptionPtr, pt->descComponent, pt->meshInstance);
         fprintf(stderr, "[ToolHarness] PlacementTool ACTIVE — per-frame tick (LIVE_TOOLS) now drives "
                "OnKey/Serialize; move the mouse over the map + left-click to place.\n");
     } else {
@@ -370,7 +383,7 @@ void FireActivatePlacement(void* entityUI) {
 //
 // CalcCost proves the road A* (RoadTool_sub_ce00) resolves a path and prices it;
 // CalcPath is what actually commits the road. Env: BANISHED_TOOL_HARNESS=road.
-void FireRoadTool(void* entityUI) {
+void FireRoadTool(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
 
     // Both road templates carry a CreateRoadDescription; DirtRoad is the basic one the
@@ -397,22 +410,23 @@ void FireRoadTool(void* entityUI) {
 
     fprintf(stderr, "[ToolHarness][road] SetEditMode(entityUI=%p, descriptor=%p from %s) — "
            "activating RoadTool via the tool-mode tree...\n", entityUI, tmpl, used);
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness][road] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
     if (!tool) {
         fprintf(stderr, "[ToolHarness][road] activation FAILED — tree miss or CreateObject null. "
                "Expect a node{CreateRoad -> RoadTool} in the [Tools] BuildToolModeTree line.\n");
         return;
     }
-    uint8_t* t = static_cast<uint8_t*>(tool);
+    // The tool the tree installs for a CreateRoadDescription is the RoadTool.
+    RoadTool* road = static_cast<RoadTool*>(tool);
     // RoadTool::Startup (slot 4) caches the CreateRoadDescription at +0x38; a null there
     // means the descriptor carried no road component and CalcPath/CalcCost will bail.
     fprintf(stderr, "[ToolHarness][road]   vtable=%p controller(+0x10)=%p descriptionPtr(+0x20)=%p "
            "roadDesc(+0x38)=%p\n",
-           *reinterpret_cast<void**>(t), *reinterpret_cast<void**>(t + 0x10),
-           *reinterpret_cast<void**>(t + 0x20), *reinterpret_cast<void**>(t + 0x38));
+           *reinterpret_cast<void**>(tool),   // LEFT: the vtable word, logged only
+           road->dialogPtr, road->descriptionPtr, road->roadDesc);
 
     // Pick a span the road rules can actually accept. CalcCost/CalcPath require BOTH
     // endpoints to be unoccupied (cell+0x00 entity ptr == 0) and on road-legal terrain
@@ -420,20 +434,19 @@ void FireRoadTool(void* entityUI) {
     // Hardcoding a span just hits the start-town buildings and trees, so scan outward
     // from the valley centre for a clear horizontal run instead (same idea as the
     // PlacementTool harness's ring scan).
-    void* gw = GameUpdateLoop::_singleton;
-    int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
-    uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
-                                      reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    Map* mapGrid = gw ? gw->m_game : nullptr;
+    MapCell* terrain = mapGrid ? mapGrid->cells : nullptr;
     if (!terrain) {
         fprintf(stderr, "[ToolHarness][road] ERROR: no terrain array (gw=%p mapGrid=%p)\n", gw, mapGrid);
         return;
     }
-    const int gridSize = *mapGrid;
+    const int gridSize = mapGrid->size;
     auto cellClear = [&](int row, int col) -> bool {
         if (row < 0 || col < 0 || row >= gridSize || col >= gridSize) return false;
-        uintptr_t c = terrain + (uintptr_t)(gridSize * row + col) * 0x30;
-        if (*reinterpret_cast<uint64_t*>(c) != 0) return false;              // occupied
-        uint32_t flag = 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
+        const MapCell& c = terrain[(uintptr_t)(gridSize * row + col)];
+        if (c.blocker != nullptr) return false;                              // occupied
+        uint32_t flag = 1u << (c.terrainType & 0x1f);
         return (flag & 0x5e0) == 0;                                          // legal terrain
     };
 
@@ -461,18 +474,17 @@ void FireRoadTool(void* entityUI) {
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            uint8_t* e = static_cast<uint8_t*>(StartTown_GetFoundingHouseEntity(i));
+            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
             if (!e) continue;
-            const int cc = *reinterpret_cast<int32_t*>(e + 0x38);
-            uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
+            const int cc = e->_componentCount;
+            Object::InternalPtr<Component>* ca = e->_components;
             for (int k = 0; k < cc && ca; ++k) {
-                void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
-                void* comp = *slot;
+                Component* comp = ca[k].Get();
                 if (!comp) continue;
-                if (reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */
-                        != tidMap) continue;
-                sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
-                sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
+                if (comp->Type() != tidMap) continue;
+                const MapComponent* mc = static_cast<const MapComponent*>(comp);   // Type() == MapComponent's id
+                sumCol += mc->tileX0;
+                sumRow += mc->tileY0;
                 ++n;
                 break;
             }
@@ -515,25 +527,24 @@ void FireRoadTool(void* entityUI) {
             fprintf(stderr, "[ToolHarness][road] ERROR: found no clear %d-tile run to test\n", kRun + 1);
             break;
         }
-        *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
-        *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+        road->startCell = startCell;
+        road->endCell   = endCell;
         if (run < 3) fprintf(stderr, "[ToolHarness][road] drag span: row=%d col=%d..%d startCell=%d endCell=%d\n",
                foundRow, foundCol, foundCol + kRun, startCell, endCell);
 
         // The tool at EntityUI+0x28 is the RoadTool: a DragTool (code/Game/Player).
-        DragTool* drag = static_cast<DragTool*>(tool);   // B.3.x bridge
+        // Dispatched through DragTool (not the final RoadTool): the slots stay virtual.
+        DragTool* drag = static_cast<DragTool*>(tool);
 
         // DragTool::CalcCost (retail [14], +0x70) — the per-frame preview call
         // DragTool_OnKey makes while dragging: (start, end, &pathType, &tileH,
         // &tileW, &extra) -> int. The harness's local out-types are its own; the
         // pointers are the same bytes.
         {
-            int pathType = 0; uint32_t tileH = 0, tileW = 0; uint64_t extra = 0;
+            uint32_t pathType = 0; int tileH = 0, tileW = 0; uint64_t extra = 0;   // printed %d / %u as before
             int rc = drag->CalcCost(startCell, endCell,
-                                    reinterpret_cast<uint32_t*>(&pathType),
-                                    reinterpret_cast<int*>(&tileH),
-                                    reinterpret_cast<int*>(&tileW),
-                                    reinterpret_cast<int*>(&extra));
+                                    &pathType, &tileH, &tileW,
+                                    reinterpret_cast<int*>(&extra));   // LEFT: an 8-byte local behind CalcCost's int* (resizing it is not B.4's)
             // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
             // that differs from RemovalTool). The path length comes back in the out-params,
             // and param_4 is the validity: 1 = valid, 2 = invalid.
@@ -565,7 +576,7 @@ void FireRoadTool(void* entityUI) {
 // slot 13 (CalcPath, the ported commit that creates master + shelter + fence).
 // Env: BANISHED_TOOL_HARNESS=pasture. Pasture.rsc _minWidth/_minHeight = 7.
 // ---------------------------------------------------------------------------
-void FirePastureTool(void* entityUI) {
+void FirePastureTool(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
 
     // BANISHED_PLACEMENT_TEMPLATE also overrides the FENCED tool, so this path can
@@ -583,33 +594,33 @@ void FirePastureTool(void* entityUI) {
     if (!tmpl) { fprintf(stderr, "[ToolHarness][pasture] ERROR: template resolve failed\n"); return; }
 
     fprintf(stderr, "[ToolHarness][pasture] SetEditMode — activating FencedTool via the tree...\n");
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
 
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness][pasture] after SetEditMode: activeTool=%p\n", tool);
     if (!tool) {
         fprintf(stderr, "[ToolHarness][pasture] activation FAILED — check the [Tools] fenced node line.\n");
         return;
     }
-    uint8_t* t = static_cast<uint8_t*>(tool);
+    // The tool the tree installs for a CreateFencedDescription is the FencedTool.
+    FencedTool* fenced = static_cast<FencedTool*>(tool);
     fprintf(stderr, "[ToolHarness][pasture]   vtable=%p fencedDesc(+0x38)=%p areaDesc(+0x40)=%p "
            "fenceDesc(+0x48)=%p\n",
-           *reinterpret_cast<void**>(t), *reinterpret_cast<void**>(t + 0x38),
-           *reinterpret_cast<void**>(t + 0x40), *reinterpret_cast<void**>(t + 0x48));
+           *reinterpret_cast<void**>(tool),   // LEFT: the vtable word, logged only
+           fenced->fencedDesc, fenced->areaDesc, fenced->fenceDesc);
 
     // Scan outward from the valley centre for a clear 8x8 block (min size is 7).
-    void* gw = GameUpdateLoop::_singleton;
-    int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
-    uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
-                                      reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    Map* mapGrid = gw ? gw->m_game : nullptr;
+    MapCell* terrain = mapGrid ? mapGrid->cells : nullptr;
     if (!terrain) { fprintf(stderr, "[ToolHarness][pasture] ERROR: no terrain array\n"); return; }
-    const int gridSize = *mapGrid;
+    const int gridSize = mapGrid->size;
     auto cellClear = [&](int row, int col) -> bool {
         if (row < 0 || col < 0 || row >= gridSize || col >= gridSize) return false;
-        uintptr_t c = terrain + (uintptr_t)(gridSize * row + col) * 0x30;
-        if (*reinterpret_cast<uint64_t*>(c) != 0) return false;              // entity in cell
-        if (*reinterpret_cast<uint8_t*>(c + 0x28) != 0) return false;        // occupied flag
-        uint32_t flag = 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
+        const MapCell& c = terrain[(uintptr_t)(gridSize * row + col)];
+        if (c.blocker != nullptr) return false;                              // entity in cell
+        if (c.footprintCount != 0) return false;                             // occupied flag
+        uint32_t flag = 1u << (c.terrainType & 0x1f);
         return (flag & 0x5e0) == 0;                                          // buildable terrain
     };
 
@@ -623,8 +634,7 @@ void FirePastureTool(void* entityUI) {
     }();
     auto cellHasNatural = [&](int row, int col) -> bool {
         if (row < 0 || col < 0 || row >= gridSize || col >= gridSize) return false;
-        uintptr_t c = terrain + (uintptr_t)(gridSize * row + col) * 0x30;
-        return *reinterpret_cast<uint64_t*>(c + 8) != 0;
+        return terrain[(uintptr_t)(gridSize * row + col)].occupant != nullptr;
     };
 
     // BANISHED_FENCED_RUNS=<n> / BANISHED_FENCED_SIDE=<tiles> — lay n fenced areas.
@@ -654,18 +664,17 @@ void FirePastureTool(void* entityUI) {
         long sumCol = 0, sumRow = 0; int nh = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            uint8_t* e = static_cast<uint8_t*>(StartTown_GetFoundingHouseEntity(i));
+            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
             if (!e) continue;
-            const int cc = *reinterpret_cast<int32_t*>(e + 0x38);
-            uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
+            const int cc = e->_componentCount;
+            Object::InternalPtr<Component>* ca = e->_components;
             for (int k = 0; k < cc && ca; ++k) {
-                void** hs = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
-                void* comp = *hs;
+                Component* comp = ca[k].Get();
                 if (!comp) continue;
-                if (reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */
-                        != tidMap) continue;
-                sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
-                sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
+                if (comp->Type() != tidMap) continue;
+                const MapComponent* mc = static_cast<const MapComponent*>(comp);   // Type() == MapComponent's id
+                sumCol += mc->tileX0;
+                sumRow += mc->tileY0;
                 ++nh;
                 break;
             }
@@ -714,11 +723,12 @@ void FirePastureTool(void* entityUI) {
             if (frun < 3) fprintf(stderr, "[ToolHarness][pasture] ERROR: no clear %dx%d block found\n", kSide, kSide);
             continue;   // this run found no room; the next starts further out
         }
-        *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
-        *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
+        fenced->startCell = startCell;
+        fenced->endCell   = endCell;
 
         // The FencedTool: a DragTool. CalcCost is retail [14] (+0x70), CalcPath [13] (+0x68).
-        DragTool* drag = static_cast<DragTool*>(tool);   // B.3.x bridge
+        // Dispatched through DragTool (not the final FencedTool): the slots stay virtual.
+        DragTool* drag = static_cast<DragTool*>(tool);
         {
             uint32_t outW = 0; int rectW = 0, rectH = 0, segs = 0;
             int rc = drag->CalcCost(startCell, endCell, &outW, &rectW, &rectH, &segs);
@@ -742,9 +752,9 @@ void FirePastureTool(void* entityUI) {
 // which the headless harness lacks; this proves the preview transform + scene
 // submission work by planting a visible ghost mesh at a known cell. Confirms the
 // Phase-3B TransformFromYaw fix (was null in standalone → invisible ghost).
-void FirePreviewPlacement(void* entityUI) {
+void FirePreviewPlacement(PlayerToolManager* entityUI) {
     FireActivatePlacement(entityUI);
-    void* tool = entityUI ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) : nullptr;
+    Tool* tool = entityUI ? entityUI->currentTool : nullptr;
     if (!tool) {
         fprintf(stderr, "[ToolHarness] preview: no active tool — cannot drive ghost preview\n");
         return;
@@ -755,11 +765,11 @@ void FirePreviewPlacement(void* entityUI) {
     // the controller's +0x00. tool+0x10 = the EntityUI/controller (SetEditMode sets it).
     // Log the controller's +0x00 before/after so we can confirm the CreateBar opens.
     {
-        uint8_t* t = static_cast<uint8_t*>(tool);
-        void* controller = *reinterpret_cast<void**>(t + 0x10);   // = EntityUI (dialog controller)
+        PlayerToolManager* controller = tool->dialogPtr;   // = EntityUI (dialog controller)
+        // LEFT (both reads): field_0x00, the dialog IBP, is logged as an integer (%llx).
         uint64_t before = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
         // EntityUI+0x28 is the active Tool; slot 6 (+0x30) is Tool::OnKey; param 1 -> open CreateBar.
-        reinterpret_cast<Tool*>(tool)->OnKey(1);   // B.3.8 bridge
+        tool->OnKey(1);
         uint64_t after = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
         fprintf(stderr, "[ToolHarness] CreateBar open probe: controller(tool+0x10)=%p dialogIBP(+0x00) "
                "before=%llx after=%llx -> %s\n", controller,
@@ -778,17 +788,16 @@ void FirePreviewPlacement(void* entityUI) {
     // the tick's Serialize never reaches this call on its own). box = meshInstance+0x34
     // (the built bbox), transform via Geometry::GetTransform(mesh); cost = empty string.
     {
-        uint8_t* t2 = static_cast<uint8_t*>(tool);
-        void* controller = *reinterpret_cast<void**>(t2 + 0x10);   // EntityUI / dialog controller
-        void* mesh = *reinterpret_cast<void**>(t2 + 0x68);          // meshInstance
+        PlayerToolManager* controller = tool->dialogPtr;   // EntityUI / dialog controller
+        // The tool FireActivatePlacement installed is the PlacementTool.
+        Graphics::MeshInstance* mesh = static_cast<PlacementTool*>(tool)->meshInstance;
         if (controller && mesh &&
-            *reinterpret_cast<void**>(controller) != nullptr /*dialog open*/) {
-            void* box = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mesh) + 0x34);
+            controller->field_0x00 != nullptr /*dialog open*/) {
+            void* box = &mesh->_localBounds;   // Geometry +0x34
             // Geometry::GetTransform(mesh) -> Transform by value (member; import slot
             // 0x140151460 ?GetTransform@Geometry@Graphics@@, 0x180015800).
             uint8_t xf[96] = {};
-            ::new (static_cast<void*>(xf)) Math::Transform(
-                reinterpret_cast<const Graphics::Geometry*>(mesh)->GetTransform());   // B.3.x bridge
+            ::new (static_cast<void*>(xf)) Math::Transform(mesh->GetTransform());
             System::String costStr("");   // empty System::String
             fprintf(stderr, "[ToolHarness] driving operator_fc60 (CreateBar populate+position) "
                    "controller=%p mesh=%p...\n", controller, mesh);
@@ -798,7 +807,7 @@ void FirePreviewPlacement(void* entityUI) {
         } else {
             fprintf(stderr, "[ToolHarness] operator_fc60 probe skipped (fc60=%p controller=%p mesh=%p "
                    "dialogOpen=%d)\n", reinterpret_cast<void*>(&UpdateToolUI_fc60), controller, mesh,
-                   controller ? (*reinterpret_cast<void**>(controller) != nullptr) : 0);
+                   controller ? (controller->field_0x00 != nullptr) : 0);
         }
     }
 }
@@ -821,9 +830,9 @@ void FireUtilityDialog() {
         return;
     }
 
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) { fprintf(stderr, "[ToolHarness] ERROR: gameWorld null\n"); return; }
-    void* gameSys = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
+    PlayerToolManager* gameSys = gameWorld->m_toolManager;
 
     // --- Minimap GPU-buffer bring-up (BEFORE opening the dialog) --------------
     // The minimap subsystem (gameWorld+0x148) has its CPU pixel arrays allocated
@@ -831,16 +840,14 @@ void FireUtilityDialog() {
     // (default ON for the map harness so there's visible content), then create +
     // upload the GPU ImageBuffers so MapUI::SetupImage has valid textures to bind.
     {
-        uintptr_t gw = reinterpret_cast<uintptr_t>(gameWorld);
-        void* mapObj = *reinterpret_cast<void**>(gw + 0x148);
+        Minimap* mapObj = gameWorld->m_imageCapture;
         bool isMap = std::strstr(tmplName, "Map") != nullptr;
         const char* tp = Opt().mapTestPattern;
         bool testPattern = isMap && !(tp && (tp[0] == '0'));  // default ON for map
         if (mapObj && isMap) {
-            uintptr_t m = reinterpret_cast<uintptr_t>(mapObj);
-            int width = *reinterpret_cast<int*>(m + 0x04);
-            uint32_t* terr = *reinterpret_cast<uint32_t**>(m + 0x18);
-            uint32_t* over = *reinterpret_cast<uint32_t**>(m + 0x28);
+            int width = mapObj->size;
+            uint32_t* terr = mapObj->terrainPixels;
+            uint32_t* over = mapObj->overlayPixels;
             if (testPattern && terr && width > 0) {
                 // Terrain: 16-cell checkerboard of two greens + blue diagonal.
                 for (int y = 0; y < width; y++)
@@ -849,7 +856,7 @@ void FireUtilityDialog() {
                         if (((x - y) & 0x3f) < 3) c = 0xff3f6fcfu;  // diagonal river
                         terr[y * width + x] = c;
                     }
-                *reinterpret_cast<uint8_t*>(m + 0x00) = 1;  // mark dirty
+                mapObj->overlayDirty = 1;  // mark dirty
                 fprintf(stderr, "[MapProbe] painted %dx%d test pattern into terrain array\n", width, width);
             }
             if (testPattern && over && width > 0) {
@@ -862,14 +869,14 @@ void FireUtilityDialog() {
             }
             Minimap_CreateAndUpload(mapObj);
             fprintf(stderr, "[MapProbe] Minimap_CreateAndUpload done — buffers +0x08=%p +0x10=%p\n",
-                   *reinterpret_cast<void**>(m + 0x08), *reinterpret_cast<void**>(m + 0x10));
+                   mapObj->terrainImage, mapObj->overlayImage);
         }
     }
 
     fprintf(stderr, "[ToolHarness] gameSubsys(gameWorld+0x120)=%p — opening utility dialog "
            "(param=Description %p)...\n", gameSys, desc);
 
-    ToolbarUtility_HarnessOpen(gameSys, reinterpret_cast<uint64_t>(desc));
+    ToolbarUtility_HarnessOpen(gameSys, reinterpret_cast<uint64_t>(desc));   // LEFT: the harness opener's uint64_t param (Dialog)
     fprintf(stderr, "[ToolHarness] utility-dialog open returned — dialog should now render "
            "(watch subsequent frames for crashes).\n");
 
@@ -889,10 +896,10 @@ void FireUtilityDialog() {
     // then its terrain ImageBuffer (+0x08) and overlay ImageBuffer (+0x10). If
     // those buffers are null in standalone the minimap can't render. Report them.
     {
-        uintptr_t gw = reinterpret_cast<uintptr_t>(gameWorld);
-        void* mapObj = *reinterpret_cast<void**>(gw + 0x148);
+        Minimap* mapObj = gameWorld->m_imageCapture;
         fprintf(stderr, "[MapProbe] gameWorld+0x148 (minimap subsystem) = %p\n", mapObj);
         if (mapObj) {
+            // LEFT (q, w): a raw qword / dword dump of the object's bytes, not a field read.
             uint64_t* q = reinterpret_cast<uint64_t*>(mapObj);
             for (int i = 0; i < 8; i++)
                 fprintf(stderr, "[MapProbe]   +0x%02x = 0x%016llx\n", i * 8,
@@ -901,10 +908,9 @@ void FireUtilityDialog() {
             fprintf(stderr, "[MapProbe]   ints +0x00=%d +0x04=%d +0x18=%d +0x1c=%d\n",
                    w[0], w[1], w[6], w[7]);
             // Sample the raw pixel arrays: +0x18 terrain, +0x28 overlay.
-            uintptr_t m2 = reinterpret_cast<uintptr_t>(mapObj);
-            uint32_t* terr = *reinterpret_cast<uint32_t**>(m2 + 0x18);
-            uint32_t* over = *reinterpret_cast<uint32_t**>(m2 + 0x28);
-            int width = w[1];
+            uint32_t* terr = mapObj->terrainPixels;
+            uint32_t* over = mapObj->overlayPixels;
+            int width = w[1];   // Minimap::size
             auto sampleArr = [width](const char* nm, uint32_t* a) {
                 if (!a) { fprintf(stderr, "[MapProbe]   %s=null\n", nm); return; }
                 int nz = 0, n = width * width;
@@ -922,9 +928,9 @@ void FireUtilityDialog() {
 // SetEditMode(pc, 0) path (mode-tree must be built — BANISHED_LIVE_TOOLS=1), then drive the
 // cursor-free select scan so an entity's info DialogInstance opens crash-free without a live
 // cursor. The live path (real mouse click) runs through EditTool::OnKey every frame.
-void FireSelectEntity(void* entityUI) {
+void FireSelectEntity(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) {
         fprintf(stderr, "[ToolHarness] EditTool activation FAILED (no tool at entityUI+0x28). "
                "Ensure BANISHED_LIVE_TOOLS=1 so the mode-tree (with the key=0 EditTool node) is built.\n");
@@ -937,7 +943,7 @@ void FireSelectEntity(void* entityUI) {
     fprintf(stderr, "[ToolHarness] founding houses captured: %d\n", houses);
     int opened = 0;
     for (int i = 0; i < houses && !opened; i++) {
-        void* house = StartTown_GetFoundingHouseEntity(i);
+        ComponentEntity* house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
         if (!house) continue;
         fprintf(stderr, "[ToolHarness] selecting founding house[%d] entity=%p...\n", i, house);
         opened = EditTool_HarnessSelectEntity(tool, house);
@@ -953,9 +959,9 @@ void FireSelectEntity(void* entityUI) {
 
 // Same as FireSelectEntity but targets a CITIZEN recovered from the Picking::Scene,
 // so the opened dialog is controlled by CitizenUI (name/age/profession/hearts).
-void FireSelectCitizen(void* entityUI) {
+void FireSelectCitizen(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness] ERROR: entityUI null\n"); return; }
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) {
         fprintf(stderr, "[ToolHarness] EditTool activation FAILED. Ensure BANISHED_LIVE_TOOLS=1.\n");
         return;
@@ -989,44 +995,43 @@ void FireSelectCitizen(void* entityUI) {
 
 // Drain-observation state (set by FireMarkRemoval, read each frame after).
 bool     s_mr_fired      = false;
-uint64_t s_mr_entity     = 0;    // the marked entity ptr (post-CheckPtr)
-uintptr_t s_mr_tileSlot  = 0;    // address of the tile slot it came from
+ComponentEntity*  s_mr_entity   = nullptr;   // the marked entity ptr (post-CheckPtr)
+ComponentEntity** s_mr_tileSlot = nullptr;   // the tile slot it came from (MapCell blocker / occupant)
 int      s_mr_fireFrame  = 0;
 
 // Pinned-panel residual-risk observer state (see FirePinPanel).
 bool     s_pin_fired     = false;
-void*    s_pin_ctrl      = nullptr;  // EntityUI controller (its +0x28 = datasource IBP)
-uint64_t s_pin_entity    = 0;        // the marked-then-freed house entity ptr
+UI::DialogController* s_pin_ctrl = nullptr;  // EntityUI controller (its +0x28 = datasource IBP)
+ComponentEntity* s_pin_entity    = nullptr;  // the marked-then-freed house entity ptr
 int      s_pin_fireFrame = 0;
 
-inline void* GetGW() { return GameUpdateLoop::_singleton; }
+inline GameUpdateLoop* GetGW() { return GameUpdateLoop::_singleton; }
 
 // Read component[0]'s type-id (best-effort, for identifying what we marked).
-uint32_t Comp0TypeId(uintptr_t entity) {
-    int cnt = *reinterpret_cast<int*>(entity + 0x38);
-    void** arr = *reinterpret_cast<void***>(entity + 0x30);
-    if (cnt <= 0 || !arr || !arr[0]) return 0;
-    void* comp = arr[0];
+uint32_t Comp0TypeId(const ComponentEntity* entity) {
+    int cnt = entity->_componentCount;
+    Object::InternalPtr<Component>* arr = entity->_components;
+    if (cnt <= 0 || !arr || !arr[0].Get()) return 0;
+    Component* comp = arr[0].Get();
     if (!comp) return 0;
-    return reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+    return comp->Type();
 }
 
 void FireMarkRemoval() {
-    void* gw = GetGW();
+    GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[MarkRemoval] ERROR: gameWorld null\n"); return; }
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
 
-    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
-    void* entityList = *reinterpret_cast<void**>(gwA + 0xe8);
+    Map* map = gw->m_game;
+    EntityList* entityList = gw->m_entityList;
     if (!map || !entityList) {
         fprintf(stderr, "[MarkRemoval] ERROR: map=%p entityList=%p\n", map, entityList);
         return;
     }
-    int width = *reinterpret_cast<int*>(map);
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    int width = map->size;
+    MapCell* tileArray = map->cells;
     fprintf(stderr, "[MarkRemoval] gw=%p map=%p width=%d tileArray=%p entityList=%p removalList.count(before)=%d\n",
-           gw, map, width, (void*)tileArray, entityList,
-           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(entityList) + 0xD8));
+           gw, map, width, tileArray, entityList,
+           entityList->removalList.count);
 
     // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
     // ActHunt_DynArraySetCount_3110 (0x140003110).
@@ -1040,35 +1045,34 @@ void FireMarkRemoval() {
     for (int row = lo; row <= hi && !s_mr_fired; ++row) {
         for (int col = lo; col <= hi && !s_mr_fired; ++col) {
             int cell = width * row + col;
-            uintptr_t cellBase = tileArray + static_cast<uintptr_t>(cell) * 0x30;
+            MapCell* cellBase = &tileArray[static_cast<uintptr_t>(cell)];
             ++scanned;
             for (int slot = 8; slot >= 0; slot -= 8) {   // helper_7d60 uses +0x08; also try +0x00
-                uintptr_t slotAddr = cellBase + static_cast<uintptr_t>(slot);
-                uint64_t ent = *reinterpret_cast<uint64_t*>(slotAddr);
+                // +0x08 MapCell::occupant, +0x00 MapCell::blocker
+                ComponentEntity** slotAddr = slot ? &cellBase->occupant : &cellBase->blocker;
+                ComponentEntity* ent = *slotAddr;
                 if (!ent) continue;
                 ++occupied;
                 // Mirror helper_7d60: local = slot value; CheckPtr(&local); test +0x40 bit 0x400.
-                void* local = reinterpret_cast<void*>(ent);
+                ComponentEntity* local = ent;
                 if (!local) continue;
-                uintptr_t e = reinterpret_cast<uintptr_t>(local);
-                uint32_t flags = *reinterpret_cast<uint32_t*>(e + 0x40);
+                uint32_t flags = local->_entityFlags;
                 if (flags & 0x400) continue;             // already marked
-                uint32_t tid = Comp0TypeId(e);
-                int compCnt = *reinterpret_cast<int*>(e + 0x38);
+                uint32_t tid = Comp0TypeId(local);
+                int compCnt = local->_componentCount;
                 fprintf(stderr, "[MarkRemoval] target found: cell=(%d,%d) idx=%d slot=+0x%02x entity=%p "
                        "flags(+0x40)=0x%08x comps(+0x38)=%d comp0.typeId=0x%08x\n",
                        row, col, cell, slot, local, flags, compCnt, tid);
 
                 // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
                 ActHunt_MarkEntityRemoval_c2ea0(local);
-                uint32_t flagsAfter = *reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(local) + 0x40);
+                uint32_t flagsAfter = local->_entityFlags;
 
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
-                uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
-                int cntBefore = *reinterpret_cast<int*>(rl + 0x8);
-                ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);
-                int cntAfter = *reinterpret_cast<int*>(rl + 0x8);
+                IBPArray* rl = &entityList->removalList;
+                int cntBefore = rl->count;
+                ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);
+                int cntAfter = rl->count;
 
                 fprintf(stderr, "[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
                        "removalList.count %d -> %d\n",
@@ -1077,7 +1081,7 @@ void FireMarkRemoval() {
                 fprintf(stderr, "[MarkRemoval] now watching EntityList::Update drain it (removalList.count "
                        "should return to 0 and the tile slot clear within a few frames)...\n");
 
-                s_mr_entity    = reinterpret_cast<uint64_t>(local);
+                s_mr_entity    = local;
                 s_mr_tileSlot  = slotAddr;
                 s_mr_fired     = true;
                 break;
@@ -1109,53 +1113,53 @@ void FireMarkRemoval() {
 // current guard would deref freed memory and (b) a CheckPtr at the top of
 // SA_DialogEntityAlive is the correct, sufficient fix. The Tick never derefs rawDS
 // past +0x28, so the observation itself stays crash-free.
-void* GetControllerByType(void* dialog, uint32_t tid) {
+UI::DialogController* GetControllerByType(UI::DialogInstance* dialog, uint32_t tid) {
     if (!dialog) return nullptr;
     if (tid == 0 || tid == 0xFFFFFFFFu) return nullptr;
     uintptr_t buf[2] = {};
-    ::new (buf) Object::InternalPtr<UI::DialogController>(
-        reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(tid));  // B.3.6 bridge
-    void* ctrl = reinterpret_cast<void*>(buf[0]);
+    Object::InternalPtr<UI::DialogController>* ref = ::new (buf) Object::InternalPtr<UI::DialogController>(
+        dialog->GetController(tid));
+    UI::DialogController* ctrl = ref->Get();
     return ctrl;
 }
 
-void FirePinPanel(void* entityUI) {
+void FirePinPanel(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[PinPanel] ERROR: entityUI null\n"); return; }
 
     // 1. Activate the default EditTool (mode-tree needs BANISHED_LIVE_TOOLS=1).
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[PinPanel] EditTool activation FAILED (set BANISHED_LIVE_TOOLS=1)\n"); return; }
 
     // 2. Open a founding-house info dialog.
     int houses = StartTown_GetFoundingHouseCount();
-    void* house = nullptr; int opened = 0;
+    ComponentEntity* house = nullptr; int opened = 0;
     for (int i = 0; i < houses && !opened; ++i) {
-        house = StartTown_GetFoundingHouseEntity(i);
+        house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
         if (house) opened = EditTool_HarnessSelectEntity(tool, house);
     }
     if (!opened || !house) { fprintf(stderr, "[PinPanel] no house info dialog opened (houses=%d)\n", houses); return; }
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
 
     // 3. Grab the EntityUI (guard target) + ToolUI (pin flag) controllers.
-    void* entCtrl  = GetControllerByType(dialog, EntityUI::TypeId());
-    void* toolCtrl = GetControllerByType(dialog, ToolUI::TypeId());
-    void* ds = entCtrl ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entCtrl) + 0x28) : nullptr;
+    UI::DialogController* entCtrl  = GetControllerByType(dialog, EntityUI::TypeId());
+    UI::DialogController* toolCtrl = GetControllerByType(dialog, ToolUI::TypeId());
+    void* ds = entCtrl ? entCtrl->_dataSource : nullptr;
     fprintf(stderr, "[PinPanel] house=%p dialog=%p EntityUIctrl=%p(+0x28 ds=%p) ToolUIctrl=%p\n",
            house, dialog, entCtrl, ds, toolCtrl);
     if (!entCtrl) { fprintf(stderr, "[PinPanel] no EntityUI controller — cannot probe guard\n"); return; }
 
     // 4. Force the PINNED condition so EditTool's close-on-death can't save us.
     if (toolCtrl) {
-        *reinterpret_cast<char*>(static_cast<uint8_t*>(toolCtrl) + 0x40) = 1;
+        static_cast<ToolUI*>(toolCtrl)->pinned = 1;   // GetController(ToolUI's id)
         fprintf(stderr, "[PinPanel] set ToolUI+0x40=1 (pinned) — close-on-death now suppressed\n");
     } else {
         fprintf(stderr, "[PinPanel] WARN: no ToolUI controller; close-on-death may still fire if EditTool is ticked\n");
     }
 
     // 5. Mark the house for removal (freed on the next EntityList drain).
-    void* gw = GetGW();
-    void* entityList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : nullptr;
-    void* local = house;
+    GameUpdateLoop* gw = GetGW();
+    EntityList* entityList = gw ? gw->m_entityList : nullptr;
+    ComponentEntity* local = house;
     if (!local || !entityList) {
         fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
                local, reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
@@ -1163,16 +1167,16 @@ void FirePinPanel(void* entityUI) {
         return;
     }
     ActHunt_MarkEntityRemoval_c2ea0(local);                                   // 0x1400c2ea0
-    uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
-    int cntBefore = *reinterpret_cast<int*>(rl + 8);
-    ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);   // 0x140003110
+    IBPArray* rl = &entityList->removalList;
+    int cntBefore = rl->count;
+    ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);   // 0x140003110
     fprintf(stderr, "[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
            "across the free (rawDS vs CheckPtr-hardened)...\n",
-           *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(local) + 0x40),
-           cntBefore, *reinterpret_cast<int*>(rl + 8));
+           local->_entityFlags,
+           cntBefore, rl->count);
 
     s_pin_ctrl      = entCtrl;
-    s_pin_entity    = reinterpret_cast<uint64_t>(local);
+    s_pin_entity    = local;
     s_pin_fired     = true;
 }
 
@@ -1242,7 +1246,7 @@ void FirePinPanel(void* entityUI) {
 // Read `records=` and `badMagic=` separately from `entries=`. `entries` moving is
 // not coverage: it is exactly the reading that was already green while the half
 // this route exists for had never executed once.
-static void DlgSettings_InstallBuffer(void* entity, int idx) {
+static void DlgSettings_InstallBuffer(ComponentEntity* entity, int idx) {
     if (!entity || !System::MemoryAllocator::_singleton) return;   // B3R: read live (was the g_pMemAllocSingleton snapshot)
     const char* e = Opt().dlgSettingsRoute;
     if (!e || !*e || std::strcmp(e, "0") == 0) return;
@@ -1255,19 +1259,17 @@ static void DlgSettings_InstallBuffer(void* entity, int idx) {
     // Entity+0x30 is the component-IBP array, +0x38 the count; a component's
     // type id is its vtable slot +0x10.
     const uint32_t tidUIComp = UIComponent::TypeId();
-    uint64_t uiCompIBP = 0;
+    UIComponent* uiComp = nullptr;
     if (tidUIComp) {
-        const uint64_t ent = reinterpret_cast<uint64_t>(entity);
-        const int count = *reinterpret_cast<int32_t*>(ent + 0x38);
+        const int count = entity->_componentCount;
         for (int i = 0; i < count; ++i) {
-            void* comp = *reinterpret_cast<void**>(
-                *reinterpret_cast<uintptr_t*>(ent + 0x30) + static_cast<int64_t>(i) * 8);
+            Component* comp = entity->_components[static_cast<int64_t>(i)].Get();
             if (!comp) continue;
-            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
-            if (tid == tidUIComp) { uiCompIBP = reinterpret_cast<uint64_t>(comp); break; }
+            const uint32_t tid = comp->Type();
+            if (tid == tidUIComp) { uiComp = static_cast<UIComponent*>(comp); break; }
         }
     }
-    if (uiCompIBP == 0) {
+    if (uiComp == nullptr) {
         // A CONTROL on this instrument, not just its verdict. "No UIComponent"
         // and "my type-id lookup is wrong" produce the identical null, and the
         // second would indict a sound conclusion. So dump what the entity DOES
@@ -1275,42 +1277,39 @@ static void DlgSettings_InstallBuffer(void* entity, int idx) {
         // populated with real names and none is UIComponent, the finding is the
         // entity's; if the list is empty or every name is null, the finding is
         // the instrument's.
-        const uint64_t ent = reinterpret_cast<uint64_t>(entity);
-        const int count = tidUIComp ? *reinterpret_cast<int32_t*>(ent + 0x38) : -1;
+        const int count = tidUIComp ? entity->_componentCount : -1;
         fprintf(stderr, "[DlgSettings:route] house[%d] NO UIComponent. searched tid=0x%08x "
                 "components=%d:", idx, tidUIComp, count);
         for (int i = 0; i < count; ++i) {
-            void* comp = *reinterpret_cast<void**>(
-                *reinterpret_cast<uintptr_t*>(ent + 0x30) + static_cast<int64_t>(i) * 8);
+            Component* comp = entity->_components[static_cast<int64_t>(i)].Get();
             if (!comp) { fprintf(stderr, " <null>"); continue; }
-            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
+            const uint32_t tid = comp->Type();
             const char* nm = ::Object::GetTypeNameById(tid);
             fprintf(stderr, " %s(0x%08x)", nm ? nm : "?", tid);
         }
         fprintf(stderr, "\n");
         return;
     }
-    uint8_t* c = reinterpret_cast<uint8_t*>(uiCompIBP);
-    void* existing = *reinterpret_cast<void**>(c + 0x28);
+    void* existing = uiComp->data;
     if (existing) {
         fprintf(stderr, "[DlgSettings:route] house[%d] ALREADY has a buffer %p count=%u -- left alone\n",
-                idx, existing, *reinterpret_cast<uint32_t*>(c + 0x30));
+                idx, existing, uiComp->dataCount);
         return;
     }
-    void* buf = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(bytes), 8);
+    uint8_t* buf = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(bytes), 8));
     if (!buf) { fprintf(stderr, "[DlgSettings:route] house[%d] MemAlloc failed\n", idx); return; }
     std::memset(buf, 0, static_cast<size_t>(bytes));
-    *reinterpret_cast<void**>(c + 0x28)    = buf;
-    *reinterpret_cast<uint32_t*>(c + 0x30) = static_cast<uint32_t>(bytes);
-    *reinterpret_cast<uint32_t*>(c + 0x34) = static_cast<uint32_t>(bytes);
+    uiComp->data      = buf;
+    uiComp->dataCount = bytes;
+    uiComp->dataCap   = bytes;
     fprintf(stderr, "[DlgSettings:route] house[%d] UIComponent=%p settings buffer=%p bytes=%d "
-            "(zeroed -- first open must report badMagic)\n", idx, (void*)c, buf, bytes);
+            "(zeroed -- first open must report badMagic)\n", idx, uiComp, buf, bytes);
 }
 
-void FireHousePanel(void* entityUI) {
+void FireHousePanel(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[HousePanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[HousePanel] EditTool activation FAILED (set BANISHED_LIVE_TOOLS=1)\n"); return; }
 
     // Open the FIRST founding house that yields a dialog. BANISHED_HOUSEPANEL_INDEX
@@ -1318,10 +1317,10 @@ void FireHousePanel(void* entityUI) {
     int houses = StartTown_GetFoundingHouseCount();
     int want = -1;
     if (const char* e = Opt().housePanelIndex) want = std::atoi(e);
-    void* house = nullptr; int opened = 0; int pickedIdx = -1;
+    ComponentEntity* house = nullptr; int opened = 0; int pickedIdx = -1;
     for (int i = 0; i < houses && !opened; ++i) {
         if (want >= 0 && i != want) continue;
-        house = StartTown_GetFoundingHouseEntity(i);
+        house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
         if (house) {
             DlgSettings_InstallBuffer(house, i);   // no-op unless the route is armed
             opened = EditTool_HarnessSelectEntity(tool, house);
@@ -1332,7 +1331,7 @@ void FireHousePanel(void* entityUI) {
         fprintf(stderr, "[HousePanel] no house info dialog opened (houses=%d want=%d)\n", houses, want);
         return;
     }
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    void* dialog = reinterpret_cast<void*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
     fprintf(stderr, "[HousePanel] OPEN house[%d]=%p dialog=%p — panel stays open; Slot7 now "
            "repopulates rows every frame while the death harness drains the roster\n",
            pickedIdx, house, dialog);
@@ -1342,10 +1341,10 @@ void FireHousePanel(void* entityUI) {
     {
         const char* re = Opt().dlgSettingsRoute;
         if (re && *re && std::strcmp(re, "0") != 0) {
-            void* other = nullptr;
+            ComponentEntity* other = nullptr;
             for (int i = 0; i < houses; ++i) {
                 if (i == pickedIdx) continue;
-                other = StartTown_GetFoundingHouseEntity(i);
+                other = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
                 if (other) { DlgSettings_InstallBuffer(other, i); break; }
             }
             if (!other) {
@@ -1406,11 +1405,10 @@ static void FireUIComponentCensus() {
         fprintf(stderr, "[UICompCensus] no GameWorld singleton\n");
         return;
     }
-    void* gw = GameUpdateLoop::_singleton;
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(gw) + 0xe8);
-    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
-    int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    EntityList* entityList = gw->m_entityList;
+    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;
+    int       en  = entityList ? entityList->masterArray.count : 0;
 
     const uint32_t tidUIComp = UIComponent::TypeId();
 
@@ -1421,31 +1419,28 @@ static void FireUIComponentCensus() {
     }
 
     for (int i = 0; i < en && arr; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
         ++entities;
 
-        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
-        void* uiComp = nullptr;
+        const int       cN = ent->_componentCount;
+        Object::InternalPtr<Component>* const cA = ent->_components;
+        UIComponent* uiComp = nullptr;
         const char* firstName = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
             ++compsWalked;
-            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
+            const uint32_t tid = comp->Type();
             if (!firstName) firstName = ::Object::GetTypeNameById(tid);
-            if (tidUIComp && tid == tidUIComp) { uiComp = comp; break; }
+            if (tidUIComp && tid == tidUIComp) { uiComp = static_cast<UIComponent*>(comp); break; }
         }
         if (!uiComp) continue;
         ++withUI;
 
-        uint8_t* u = static_cast<uint8_t*>(uiComp);
-        void* buf   = *reinterpret_cast<void**>(u + 0x28);
-        uint32_t n  = *reinterpret_cast<uint32_t*>(u + 0x30);
-        uint32_t cap= *reinterpret_cast<uint32_t*>(u + 0x34);
+        void* buf   = uiComp->data;
+        uint32_t n  = uiComp->dataCount;
+        uint32_t cap= uiComp->dataCap;
         if (buf && n) ++withBuffer;
         if (shown < maxShow) {
             ++shown;
@@ -1503,33 +1498,30 @@ static void FireUIComponentCensus() {
 // Read `badMagic=` and `records=` SEPARATELY from `entries=`. `entries` moving
 // is not coverage: it was already non-zero while the half this route exists for
 // had never executed once.
-static void FireDlgSettingsRoute(void* entityUI) {
-    void* tool = EditTool_HarnessAcquire(entityUI);
+static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) {
         fprintf(stderr, "[DlgSettings:route] EditTool activation FAILED "
                         "(set BANISHED_LIVE_TOOLS=1)\n");
         return;
     }
     if (GameUpdateLoop::_singleton == nullptr) return;
-    void* gw = GameUpdateLoop::_singleton;
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(gw) + 0xe8);
-    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
-    int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    EntityList* entityList = gw->m_entityList;
+    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;
+    int       en  = entityList ? entityList->masterArray.count : 0;
     const uint32_t tidUIComp = UIComponent::TypeId();
 
-    void* A = nullptr; int aIdx = -1;
+    ComponentEntity* A = nullptr; int aIdx = -1;
     for (int i = 0; i < en && arr && !A; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
-        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        const int       cN = ent->_componentCount;
+        Object::InternalPtr<Component>* const cA = ent->_components;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
-            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
+            const uint32_t tid = comp->Type();
             if (tidUIComp && tid == tidUIComp) { A = ent; aIdx = i; break; }
         }
     }
@@ -1551,10 +1543,10 @@ static void FireDlgSettingsRoute(void* entityUI) {
     fprintf(stderr, "[DlgSettings:route] select(A) ok -- expect one OnOpened "
                     "with a buffer and badMagic (the buffer is zeroed)\n");
 
-    void* B = nullptr;
+    ComponentEntity* B = nullptr;
     const int houses = StartTown_GetFoundingHouseCount();
     for (int i = 0; i < houses && !B; ++i) {
-        void* h = StartTown_GetFoundingHouseEntity(i);
+        ComponentEntity* h = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
         if (h && h != A) B = h;
     }
     if (!B) {
@@ -1579,18 +1571,17 @@ static void FireDlgSettingsRoute(void* entityUI) {
     {
         const uint32_t tid2 = tidUIComp;
         (void)tid2;
-        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(A) + 0x38);
-        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(A) + 0x30);
+        const int       cN = A->_componentCount;
+        Object::InternalPtr<Component>* const cA = A->_components;
         for (int c = 0; c < cN && cA; ++c) {
-            void* comp = *reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
-            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
+            const uint32_t tid = comp->Type();
             if (tid != tidUIComp) continue;
-            uint8_t* u = static_cast<uint8_t*>(comp);
-            void* buf = *reinterpret_cast<void**>(u + 0x28);
+            uint8_t* buf = static_cast<UIComponent*>(comp)->data;
             fprintf(stderr, "[DlgSettings:route] after close, A's buffer=%p "
                     "head=%08x (0xdeadbeef means SaveSettings wrote it)\n",
-                    buf, buf ? *reinterpret_cast<uint32_t*>(buf) : 0u);
+                    buf, buf ? *reinterpret_cast<uint32_t*>(buf) : 0u);   // LEFT: the settings buffer's first dword (the magic), byte storage
             break;
         }
     }
@@ -1609,19 +1600,18 @@ static void FireDlgSettingsRoute(void* entityUI) {
 // Needs a pasture: either BANISHED_BUILD_DEMO_PASTURE or TOOL_HARNESS=pasture's
 // own commit in an earlier run (mutually exclusive with this mode).
 // ============================================================
-void FirePasturePanel(void* entityUI) {
+void FirePasturePanel(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[PasturePanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[PasturePanel] EditTool activation FAILED\n"); return; }
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;
     if (!gs) { fprintf(stderr, "[PasturePanel] no entity-list singleton\n"); return; }
-    int n = *reinterpret_cast<int*>(gs + 0x98);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
-    void* pastureComp = (n > 0 && list) ? *reinterpret_cast<void**>(list) : nullptr;
+    int n = gs->pastureCount;
+    PastureComponent** list = gs->pastures;
+    PastureComponent* pastureComp = (n > 0 && list) ? *list : nullptr;
 
     // The gs+0x90 registry holds only pastures that have REGISTERED — i.e. finished
     // construction. A pasture the FencedTool just committed is still a building site,
@@ -1630,23 +1620,21 @@ void FirePasturePanel(void* entityUI) {
     // uses, which finds the component on the entity regardless of build state — clicking
     // an unfinished pasture opens its panel in retail too.
     if (!pastureComp) {
-        void* gw = GameUpdateLoop::_singleton;
-        uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
-        uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
-        int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+        EntityList* entityList = gw->m_entityList;
+        ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;
+        int       en  = entityList ? entityList->masterArray.count : 0;
         const uint32_t tidPastureComp = PastureComponent::TypeId();
         for (int i = 0; i < en && arr && !pastureComp; ++i) {
-            void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-            void* ent = *slot;
+            ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
             if (!ent) continue;
-            int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-            uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+            int       cN = ent->_componentCount;
+            Object::InternalPtr<Component>* cA = ent->_components;
             for (int c = 0; c < cN && cA; ++c) {
-                void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-                void* comp = *cs;
+                Component* comp = cA[static_cast<uintptr_t>(c)].Get();
                 if (!comp) continue;
-                if (reinterpret_cast<Object::Base*>(comp)->Type() == tidPastureComp) {   // B.3.8 bridge
-                    pastureComp = comp; break;
+                if (comp->Type() == tidPastureComp) {
+                    pastureComp = static_cast<PastureComponent*>(comp); break;
                 }
             }
         }
@@ -1658,18 +1646,15 @@ void FirePasturePanel(void* entityUI) {
                "BANISHED_BUILD_DEMO_PASTURE or use BANISHED_TOOL_HARNESS=pasturefull\n");
         return;
     }
-    uint64_t entRef =
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x10);
+    ComponentEntity* entRef = pastureComp->_entity;
     if (!entRef) { fprintf(stderr, "[PasturePanel] pasture[0] has no entity backref\n"); return; }
 
-    int opened = EditTool_HarnessSelectEntity(tool, reinterpret_cast<void*>(entRef));
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    int opened = EditTool_HarnessSelectEntity(tool, entRef);
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
     fprintf(stderr, "[PasturePanel] select pasture ent=%p -> opened=%d dialog=%p "
            "(comp=%p type(+0x28)=%p count(+0x38)=%d max(+0x40)=%d)\n",
-           reinterpret_cast<void*>(entRef), opened, dialog, pastureComp,
-           *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pastureComp) + 0x28),
-           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x38),
-           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x40));
+           entRef, opened, dialog, pastureComp,
+           pastureComp->livestockType, pastureComp->animalCount, pastureComp->capacity);
 
     // BANISHED_PASTUREPANEL_SELECT=<item> — simulate the player picking a
     // livestock type from the combo: exactly the event DialogInstance routes on
@@ -1680,33 +1665,31 @@ void FirePasturePanel(void* entityUI) {
     if (selEnv && *selEnv && dialog) {
         int wantItem = std::atoi(selEnv);
         uint32_t tidPUI = PastureUI::TypeId();
-        void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-        int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
-        void* pui = nullptr;
+        UI::DialogController** ctrlArr = dialog->_controllers.GetData();
+        int cnt = dialog->_controllers.GetSize();
+        PastureUI* pui = nullptr;
         for (int i = 0; ctrlArr && i < cnt; i++) {
-            void* c = ctrlArr[i];
+            UI::DialogController* c = ctrlArr[i];
             if (!c) continue;
-            if (reinterpret_cast<Object::Base*>(c)->Type() == tidPUI) { pui = c; break; }   // B.3.8 bridge
+            if (c->Type() == tidPUI) { pui = static_cast<PastureUI*>(c); break; }
         }
         if (!pui) {
             fprintf(stderr, "[PasturePanel] SELECT: no PastureUI controller among %d "
                    "controllers (tid=%u)\n", cnt, tidPUI);
         } else {
-            void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pui) + 0x30);
-            int items = combo
-                            ? reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount() : -1;  // B.3.6 bridge
+            UI::ComboElement* combo = pui->selectResource;   // SelectResourceUI +0x30
+            int items = combo ? combo->GetItemCount() : -1;
             fprintf(stderr, "[PasturePanel] SELECT: PastureUI=%p combo=%p items=%d want=%d\n",
                    pui, combo, items, wantItem);
             if (combo && items > 0) {
                 if (wantItem >= items) wantItem = items - 1;
-                reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
-                reinterpret_cast<PastureUI*>(pui)->OnElementEvent(                        // B.3.8 bridge
-                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,  // B.3.8 bridge
+                combo->SetCurrentItem(wantItem);
+                pui->OnElementEvent(
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,   // LEFT: the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)
                     0, 0, 0, nullptr);
                 fprintf(stderr, "[PasturePanel] SELECT fired: item=%d -> pasture type(+0x28)=%p "
                        "max(+0x40)=%d\n", wantItem,
-                       *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pastureComp) + 0x28),
-                       *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pastureComp) + 0x40));
+                       pastureComp->livestockType, pastureComp->capacity);
             }
         }
     }
@@ -1747,39 +1730,37 @@ void FirePasturePanel(void* entityUI) {
 // (code/Game/Game/starttown.cpp). Prints on every failure branch, so a silent log
 // means this never ran rather than that the panel opened.
 // ============================================================
-void FireOrchardPanel(void* entityUI) {
+void FireOrchardPanel(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[OrchardPanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[OrchardPanel] EditTool activation FAILED\n"); return; }
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) { fprintf(stderr, "[OrchardPanel] gameWorld null\n"); return; }
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* entityList = gw->m_entityList;
     if (!entityList) { fprintf(stderr, "[OrchardPanel] EntityList (gw+0xe8) null\n"); return; }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
+    ComponentEntity** arr = entityList->masterArray.data;
+    int       n   = entityList->masterArray.count;
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardPanel] cannot scan (arr=%p n=%d tidOrchardComponent=%u)\n",
-               reinterpret_cast<void*>(arr), n, tidOrchardComp);
+               arr, n, tidOrchardComp);
         return;
     }
 
-    void* orchEnt = nullptr;
-    void* orchComp = nullptr;
+    ComponentEntity* orchEnt = nullptr;
+    OrchardComponent* orchComp = nullptr;
     for (int i = 0; i < n && !orchEnt; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
-        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        int       cN = ent->_componentCount;
+        Object::InternalPtr<Component>* cA = ent->_components;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
-                orchEnt = ent; orchComp = comp; break;
+            if (comp->Type() == tidOrchardComp) {
+                orchEnt = ent; orchComp = static_cast<OrchardComponent*>(comp); break;
             }
         }
     }
@@ -1790,7 +1771,7 @@ void FireOrchardPanel(void* entityUI) {
     }
 
     int opened = EditTool_HarnessSelectEntity(tool, orchEnt);
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
     fprintf(stderr, "[OrchardPanel] select orchard ent=%p -> opened=%d dialog=%p\n",
            orchEnt, opened, dialog);
     if (!dialog) {
@@ -1804,29 +1785,28 @@ void FireOrchardPanel(void* entityUI) {
     // +0x38 with a good +0x30 is the ProgressElement type-id trap; both null means
     // Slot4 never ran at all.
     const uint32_t tidOUI = OrchardUI::TypeId();
-    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-    int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
-    void* oui = nullptr;
+    UI::DialogController** ctrlArr = dialog->_controllers.GetData();
+    int cnt = dialog->_controllers.GetSize();
+    OrchardUI* oui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; i++) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tidOUI) { oui = c; break; }   // B.3.8 bridge
+        if (c->Type() == tidOUI) { oui = static_cast<OrchardUI*>(c); break; }
     }
     if (!oui) {
         fprintf(stderr, "[OrchardPanel] no OrchardUI controller among %d controllers "
                "(tid=%u)\n", cnt, tidOUI);
         return;
     }
-    void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x30);
-    void* yield = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x38);
-    int items = combo
-                    ? reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount() : -1;  // B.3.6 bridge
+    UI::ComboElement* combo = oui->selectResource;   // SelectResourceUI +0x30
+    UI::ProgressElement* yield = oui->yield;
+    int items = combo ? combo->GetItemCount() : -1;
     // OrchardComponent+0x60 is the selected tree type (Slot11 writes it, Slot12 reads
     // it). Printing it before AND after the select is what turns "the event fired"
     // into "the type actually landed" — see the diagnostics-report-outcomes rule.
     auto orchType = [&]() -> unsigned long long {
-        return orchComp ? *reinterpret_cast<unsigned long long*>(
-                              reinterpret_cast<uintptr_t>(orchComp) + 0x60) : 0ull;
+        // LEFT: treeType (a ComponentDescription*) is logged as an integer (%llx).
+        return orchComp ? *reinterpret_cast<unsigned long long*>(&orchComp->treeType) : 0ull;
     };
     fprintf(stderr, "[OrchardPanel] OrchardUI=%p combo(+0x30)=%p items=%d yield(+0x38)=%p "
            "comp=%p type(+0x60)=%llx\n",
@@ -1840,9 +1820,9 @@ void FireOrchardPanel(void* entityUI) {
         int wantItem = std::atoi(selEnv);
         if (combo && items > 0) {
             if (wantItem >= items) wantItem = items - 1;
-            reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
-            reinterpret_cast<OrchardUI*>(oui)->OnElementEvent(                        // B.3.8 bridge
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,  // B.3.8 bridge
+            combo->SetCurrentItem(wantItem);
+            oui->OnElementEvent(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,   // LEFT: the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)
                 0, 0, 0, nullptr);
             fprintf(stderr, "[OrchardPanel] SELECT fired: item=%d -> orchard type(+0x60)=%llx "
                    "(%s)\n", wantItem, orchType(),
@@ -1853,41 +1833,39 @@ void FireOrchardPanel(void* entityUI) {
     }
 }
 
-void FireTradePanel(void* entityUI) {
+void FireTradePanel(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[TradePanel] ERROR: entityUI null\n"); return; }
 
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) { fprintf(stderr, "[TradePanel] EditTool activation FAILED\n"); return; }
 
 
     // Find the trading post by scanning the entity list for a TradeComponent. The
     // raw .rdata type-id slot 0x1401c4b80 is unregistered in standalone, so match on
     // the component's own vtable+0x10 GetTypeId (same approach as trade_probe.cpp).
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) { fprintf(stderr, "[TradePanel] gameWorld null\n"); return; }
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    EntityList* entityList = gw->m_entityList;
     if (!entityList) { fprintf(stderr, "[TradePanel] EntityList (gw+0xe8) null\n"); return; }
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
-    int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
+    ComponentEntity** arr = entityList->masterArray.data;
+    int       n   = entityList->masterArray.count;
     const uint32_t tidTradeComp = TradeComponent::TypeId();
     if (!arr || n <= 0 || !tidTradeComp) {
         fprintf(stderr, "[TradePanel] cannot scan (arr=%p n=%d tidTradeComponent=%u)\n",
-               reinterpret_cast<void*>(arr), n, tidTradeComp);
+               arr, n, tidTradeComp);
         return;
     }
 
-    void* postEnt = nullptr;
+    ComponentEntity* postEnt = nullptr;
     for (int i = 0; i < n && !postEnt; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
-        int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-        uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        int       cN = ent->_componentCount;
+        Object::InternalPtr<Component>* cA = ent->_components;
         for (int c = 0; c < cN && cA; ++c) {
-            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
-            void* comp = *cs;
+            Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
-            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidTradeComp) {   // B.3.8 bridge
+            if (comp->Type() == tidTradeComp) {
                 postEnt = ent; break;
             }
         }
@@ -1899,7 +1877,7 @@ void FireTradePanel(void* entityUI) {
     }
 
     int opened = EditTool_HarnessSelectEntity(tool, postEnt);
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
     fprintf(stderr, "[TradePanel] select post ent=%p -> opened=%d dialog=%p\n",
            postEnt, opened, dialog);
     if (!dialog) {
@@ -1911,17 +1889,17 @@ void FireTradePanel(void* entityUI) {
     // Enumerate the dialog's controllers and look for TradeUI. Reporting ALL of them
     // distinguishes "TradeUI stayed stubbed" from "no controller was created at all".
     const uint32_t tidTradeUI = TradeUI::TypeId();
-    void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-    int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
+    UI::DialogController** ctrlArr = dialog->_controllers.GetData();
+    int cnt = dialog->_controllers.GetSize();
     fprintf(stderr, "[TradePanel] dialog has %d controller(s) (TradeUI tid=%u)\n", cnt, tidTradeUI);
-    void* tui = nullptr;
+    TradeUI* tui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; ++i) {
-        void* c = ctrlArr[i];
+        UI::DialogController* c = ctrlArr[i];
         if (!c) { fprintf(stderr, "[TradePanel]   ctrl[%d] = <null>\n", i); continue; }
-        uint32_t id = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
+        uint32_t id = c->Type();
         fprintf(stderr, "[TradePanel]   ctrl[%d] = %p tid=%u%s\n", i, c, id,
                id == tidTradeUI ? "   <== TradeUI" : "");
-        if (id == tidTradeUI) tui = c;
+        if (id == tidTradeUI) tui = static_cast<TradeUI*>(c);
     }
     if (!tui) {
         fprintf(stderr, "[TradePanel] NO TradeUI controller — the panel opened but the trade "
@@ -1934,9 +1912,8 @@ void FireTradePanel(void* entityUI) {
     // signal of whether DepsReady() passed — and while the 10 leaves are unported it
     // SHOULD read null, with the gate's own "STAYING STUBBED" block just above in
     // stderr. Both null AND no gate message would mean the slot never dispatched.
-    uintptr_t s = reinterpret_cast<uintptr_t>(tui);
-    void* tableSell = *reinterpret_cast<void**>(s + 0xC8);
-    void* tableBuy  = *reinterpret_cast<void**>(s + 0xD0);
+    void* tableSell = tui->_tableSell;
+    void* tableBuy  = tui->_tableBuy;
     fprintf(stderr, "[TradePanel] TradeUI=%p tableSell(+0xC8)=%p tableBuy(+0xD0)=%p -> setup %s\n",
            tui, tableSell, tableBuy,
            (tableSell && tableBuy) ? "RAN (gate passed — panel is LIVE)"
@@ -1954,18 +1931,17 @@ void FireTradePanel(void* entityUI) {
 // (the 0x140117d60 port) on each captured founding-house building, marking any
 // footprint resources for removal, then watches EntityList::Update drain them.
 void FireClearFootprint() {
-    void* gw = GetGW();
+    GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearFootprint] ERROR: gameWorld null\n"); return; }
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
-    void* el = *reinterpret_cast<void**>(gwA + 0xe8);
-    int cntBefore = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
+    EntityList* el = gw->m_entityList;
+    int cntBefore = el ? el->removalList.count : -1;
 
     int houses = StartTown_GetFoundingHouseCount();
     fprintf(stderr, "[ClearFootprint] founding houses=%d removalList.count(before)=%d\n", houses, cntBefore);
 
     int totalMarked = 0;
     for (int i = 0; i < houses; ++i) {
-        void* house = StartTown_GetFoundingHouseEntity(i);
+        void* house = StartTown_GetFoundingHouseEntity(i);   // handed on as void* (the ClearArea harness API)
         if (!house) continue;
         uint32_t caFlags = 0;
         void* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
@@ -1980,7 +1956,7 @@ void FireClearFootprint() {
         totalMarked += marked;
     }
 
-    int cntAfter = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
+    int cntAfter = el ? el->removalList.count : -1;
     fprintf(stderr, "[ClearFootprint] total marked=%d  removalList.count %d -> %d%s\n",
            totalMarked, cntBefore, cntAfter,
            totalMarked == 0 ? "  (no resources under founding houses — cleared ground; "
@@ -1998,47 +1974,46 @@ void FireClearFootprint() {
 // footprint — a safe, deterministic proof that a building whose footprint contains a
 // resource marks it for removal via the ported helper_7d60 path.
 void FireClearPlace() {
-    void* gw = GetGW();
+    GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearPlace] ERROR: gameWorld null\n"); return; }
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
-    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearPlace] ERROR: map null\n"); return; }
-    int width = *reinterpret_cast<int*>(map);
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    int width = map->size;
+    MapCell* tileArray = map->cells;
 
     // 1. Find a resource cell (non-null tile occupant not yet flagged) near centre.
-    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
         for (int col = 100; col <= 156 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
-            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
         }
     if (rcRow < 0) { fprintf(stderr, "[ClearPlace] no resource cell found near centre\n"); return; }
-    fprintf(stderr, "[ClearPlace] resource at cell=(%d,%d) entity=%p\n", rcRow, rcCol, (void*)resEnt);
+    fprintf(stderr, "[ClearPlace] resource at cell=(%d,%d) entity=%p\n", rcRow, rcCol, resEnt);
 
-    // 2. Get a founding house and its BuildComponent (holds the footprint rect at +0x28).
+    // 2. Get a founding house and its footprint component (the rect at +0x28). The
+    //    finder's name says Build; its type id is MapComponent's (Entity/exe_bodies.h).
     void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
     if (!house) { fprintf(stderr, "[ClearPlace] no founding house to borrow\n"); return; }
-    uint64_t bc = 0;
+    MapComponent* bc = nullptr;
     fn_FindComponent_Build(house, &bc);
     if (!bc) { fprintf(stderr, "[ClearPlace] house has no BuildComponent\n"); return; }
-    uintptr_t b = (uintptr_t)bc;
 
     // 3. Save the real footprint, then override it to a 1x1 rect over the resource cell.
-    int16_t sCol = *reinterpret_cast<int16_t*>(b + 0x28);
-    int16_t sRow = *reinterpret_cast<int16_t*>(b + 0x2a);
-    int16_t sW   = *reinterpret_cast<int16_t*>(b + 0x2c);
-    int16_t sH   = *reinterpret_cast<int16_t*>(b + 0x2e);
-    *reinterpret_cast<int16_t*>(b + 0x28) = (int16_t)rcCol;
-    *reinterpret_cast<int16_t*>(b + 0x2a) = (int16_t)rcRow;
-    *reinterpret_cast<int16_t*>(b + 0x2c) = 1;
-    *reinterpret_cast<int16_t*>(b + 0x2e) = 1;
+    int16_t sCol = bc->tileX0;
+    int16_t sRow = bc->tileY0;
+    int16_t sW   = bc->tileX1;
+    int16_t sH   = bc->tileY1;
+    bc->tileX0 = (int16_t)rcCol;
+    bc->tileY0 = (int16_t)rcRow;
+    bc->tileX1 = 1;
+    bc->tileY1 = 1;
 
-    void* el = *reinterpret_cast<void**>(gwA + 0xe8);
-    int cntBefore = el ? *reinterpret_cast<int*>((uintptr_t)el + 0xD8) : -1;
+    EntityList* el = gw->m_entityList;
+    int cntBefore = el ? el->removalList.count : -1;
 
     // 4. Sweep the house (with the overridden footprint) — marks the resource.
     fprintf(stderr, "[ClearPlace] sweeping house[0]=%p with footprint overridden to (%d,%d) 1x1...\n",
@@ -2046,13 +2021,13 @@ void FireClearPlace() {
     int marked = ClearAreaComponent_HarnessSweep(house);
 
     // 5. Restore the real footprint immediately (house uncorrupted).
-    *reinterpret_cast<int16_t*>(b + 0x28) = sCol;
-    *reinterpret_cast<int16_t*>(b + 0x2a) = sRow;
-    *reinterpret_cast<int16_t*>(b + 0x2c) = sW;
-    *reinterpret_cast<int16_t*>(b + 0x2e) = sH;
+    bc->tileX0 = sCol;
+    bc->tileY0 = sRow;
+    bc->tileX1 = sW;
+    bc->tileY1 = sH;
 
-    int cntAfter = el ? *reinterpret_cast<int*>((uintptr_t)el + 0xD8) : -1;
-    uint32_t resFlags = *reinterpret_cast<uint32_t*>((uintptr_t)resEnt + 0x40);
+    int cntAfter = el ? el->removalList.count : -1;
+    uint32_t resFlags = resEnt->_entityFlags;
     fprintf(stderr, "[ClearPlace] marked=%d  resource flags(+0x40)=0x%08x (bit0x400 %s)  "
            "removalList.count %d -> %d\n",
            marked, resFlags, (resFlags & 0x400) ? "SET" : "MISSING", cntBefore, cntAfter);
@@ -2064,20 +2039,19 @@ void FireClearPlace() {
 // the GAME'S OWN per-frame component tick (not the harness) auto-clears it. Proves the
 // full automatic chain: EntityList ticks component -> FootprintSweep -> mark -> drain.
 void FireClearLive() {
-    void* gw = GetGW();
+    GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearLive] ERROR: gameWorld null\n"); return; }
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
-    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearLive] ERROR: map null\n"); return; }
-    int width = *reinterpret_cast<int*>(map);
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    int width = map->size;
+    MapCell* tileArray = map->cells;
 
-    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
         for (int col = 100; col <= 156 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
-            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
         }
@@ -2092,19 +2066,18 @@ void FireClearLive() {
            ((caFlags >> 3) & 1) ? "LIVE (will be ticked)"
                                 : "NOT live — set BANISHED_CLEAR_FOOTPRINT=1");
 
-    uint64_t bc = 0;
+    MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)
     fn_FindComponent_Build(house, &bc);
     if (!bc) { fprintf(stderr, "[ClearLive] no BuildComponent\n"); return; }
-    uintptr_t b = (uintptr_t)bc;
     // Override the footprint to a 1x1 rect over the resource (persistent — the live tick
     // needs it in place when it fires). Minor house corruption acceptable for the probe.
-    *reinterpret_cast<int16_t*>(b + 0x28) = (int16_t)rcCol;
-    *reinterpret_cast<int16_t*>(b + 0x2a) = (int16_t)rcRow;
-    *reinterpret_cast<int16_t*>(b + 0x2c) = 1;
-    *reinterpret_cast<int16_t*>(b + 0x2e) = 1;
+    bc->tileX0 = (int16_t)rcCol;
+    bc->tileY0 = (int16_t)rcRow;
+    bc->tileX1 = 1;
+    bc->tileY1 = 1;
     fprintf(stderr, "[ClearLive] overrode house[0] footprint to resource cell (%d,%d) entity=%p — "
            "waiting for the LIVE component tick to auto-clear it (watch [ClearArea LIVE])...\n",
-           rcCol, rcRow, (void*)resEnt);
+           rcCol, rcRow, resEnt);
 
     s_mr_fired = true; s_mr_entity = 0; s_mr_tileSlot = 0;
 }
@@ -2117,21 +2090,20 @@ void FireClearLive() {
 // rejected (placed=0), matching retail's clearable-terrain rule. (Tool/template
 // accessors declared at the top of this file.)
 void FireClearPlaceOver() {
-    void* gw = GetGW();
+    GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearPlaceOver] ERROR: gameWorld null\n"); return; }
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
-    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearPlaceOver] ERROR: map null\n"); return; }
-    int width = *reinterpret_cast<int*>(map);
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    int width = map->size;
+    MapCell* tileArray = map->cells;
 
     // Find a resource cell near centre.
-    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
     for (int row = 110; row <= 150 && rcRow < 0; ++row)
         for (int col = 110; col <= 150 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
-            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
         }
@@ -2139,16 +2111,16 @@ void FireClearPlaceOver() {
 
     void* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
     if (!tmpl) { fprintf(stderr, "[ClearPlaceOver] ERROR: WoodHouse template null\n"); return; }
-    void* tool = PlacementTool_Factory_SA();
+    PlacementTool* tool = static_cast<PlacementTool*>(PlacementTool_Factory_SA());   // LEFT: placementtool.cpp's void* return (owner: Player)
     if (!tool) { fprintf(stderr, "[ClearPlaceOver] ERROR: tool factory null\n"); return; }
-    *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x20) = tmpl;
+    tool->descriptionPtr = static_cast<ComponentDescription*>(tmpl);   // LEFT: starttown.cpp's void* return (owner: Game)
     if (!PlacementTool_HarnessStartupProbe(tool)) {
         fprintf(stderr, "[ClearPlaceOver] Startup probe failed\n"); return;
     }
 
     int centerCell = width * rcRow + rcCol;
     fprintf(stderr, "[ClearPlaceOver] placing WoodHouse AT resource cell (%d,%d) ent=%p (BANISHED_CLEAR_PLACE_OVER "
-           "must be set to succeed)...\n", rcCol, rcRow, (void*)resEnt);
+           "must be set to succeed)...\n", rcCol, rcRow, resEnt);
     int placed = PlacementTool_HarnessPlaceAtCell(tool, centerCell);
     fprintf(stderr, "[ClearPlaceOver] CREATE over resource -> %d %s\n", placed,
            placed ? "(building MATERIALISED over the resource — refinement #2 works)"
@@ -2163,20 +2135,19 @@ void FireClearPlaceOver() {
 // citizen work-scheduler (gw+0x118, primary count at sched[6]). Restores the footprint.
 extern "C" char ClearArea_State0Enter(void* data, void* sm);
 void FireClearHarvest() {
-    void* gw = GetGW();
+    GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearHarvest] ERROR: gameWorld null\n"); return; }
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
-    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearHarvest] ERROR: map null\n"); return; }
-    int width = *reinterpret_cast<int*>(map);
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    int width = map->size;
+    MapCell* tileArray = map->cells;
 
-    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
         for (int col = 100; col <= 156 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
-            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
         }
@@ -2188,34 +2159,33 @@ void FireClearHarvest() {
     void* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
     if (!caComp) { fprintf(stderr, "[ClearHarvest] house has no ClearAreaComponent\n"); return; }
 
-    uint64_t bc = 0;
+    MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)
     fn_FindComponent_Build(house, &bc);
     if (!bc) { fprintf(stderr, "[ClearHarvest] house has no BuildComponent\n"); return; }
-    uintptr_t b = (uintptr_t)bc;
-    int16_t sCol = *reinterpret_cast<int16_t*>(b + 0x28);
-    int16_t sRow = *reinterpret_cast<int16_t*>(b + 0x2a);
-    int16_t sW   = *reinterpret_cast<int16_t*>(b + 0x2c);
-    int16_t sH   = *reinterpret_cast<int16_t*>(b + 0x2e);
-    *reinterpret_cast<int16_t*>(b + 0x28) = (int16_t)rcCol;
-    *reinterpret_cast<int16_t*>(b + 0x2a) = (int16_t)rcRow;
-    *reinterpret_cast<int16_t*>(b + 0x2c) = 1;
-    *reinterpret_cast<int16_t*>(b + 0x2e) = 1;
+    int16_t sCol = bc->tileX0;
+    int16_t sRow = bc->tileY0;
+    int16_t sW   = bc->tileX1;
+    int16_t sH   = bc->tileY1;
+    bc->tileX0 = (int16_t)rcCol;
+    bc->tileY0 = (int16_t)rcRow;
+    bc->tileX1 = 1;
+    bc->tileY1 = 1;
 
-    // Work scheduler: gw+0x118 -> int*; primary AVL count at sched[6] (+0x18).
-    int* sched = *reinterpret_cast<int**>(gwA + 0x118);
-    int schedBefore = sched ? sched[6] : -1;
+    // Work scheduler: gw+0x118; primary AVL count at +0x18 (sched[6]).
+    WorkScheduler* sched = gw->m_tutorial;
+    int schedBefore = sched ? sched->field_0x18 : -1;
 
     fprintf(stderr, "[ClearHarvest] house[0]=%p ClearAreaComp=%p resource=(%d,%d) ent=%p — driving "
-           "State0Enter (harvest dispatch)...\n", house, caComp, rcCol, rcRow, (void*)resEnt);
+           "State0Enter (harvest dispatch)...\n", house, caComp, rcCol, rcRow, resEnt);
     ClearArea_State0Enter(caComp, nullptr);   // not-done path: sm unused
 
-    int schedAfter = sched ? sched[6] : -1;
+    int schedAfter = sched ? sched->field_0x18 : -1;
 
     // Restore footprint.
-    *reinterpret_cast<int16_t*>(b + 0x28) = sCol;
-    *reinterpret_cast<int16_t*>(b + 0x2a) = sRow;
-    *reinterpret_cast<int16_t*>(b + 0x2c) = sW;
-    *reinterpret_cast<int16_t*>(b + 0x2e) = sH;
+    bc->tileX0 = sCol;
+    bc->tileY0 = sRow;
+    bc->tileX1 = sW;
+    bc->tileY1 = sH;
 
     fprintf(stderr, "[ClearHarvest] ran crash-free. scheduler primary count %d -> %d %s\n",
            schedBefore, schedAfter,
@@ -2254,9 +2224,9 @@ extern "C" void* g_pConstructionDemoEntity;
 
 enum UpgradeStage { UP_IDLE = 0, UP_WAIT_BUILT, UP_DIALOG_OPEN, UP_DONE };
 UpgradeStage s_up_stage      = UP_IDLE;
-void*        s_up_entityUI   = nullptr;
-void*        s_up_entity     = nullptr;   // the building being upgraded
-void*        s_up_tool       = nullptr;   // active EditTool (dialog owner)
+PlayerToolManager* s_up_entityUI = nullptr;
+ComponentEntity* s_up_entity   = nullptr;   // the building being upgraded
+EditTool*    s_up_tool       = nullptr;   // active EditTool (dialog owner)
 int          s_up_armFrame   = 0;
 int          s_up_openFrame  = 0;
 
@@ -2279,23 +2249,23 @@ int UpgradeClickDelay() {
 }
 
 // BuildComponent (0x14000d6c0 / type 0x1401c7008) on `entity`, CheckPtr'd.
-void* UpgradeFindBuildComp(void* entity) {
+BuildComponent* UpgradeFindBuildComp(void* entity) {   // void*: the bridge globals hand theirs over untyped
     if (!entity) return nullptr;
-    uint64_t ibp = 0;
+    BuildComponent* ibp = nullptr;
     Dialog_FindComponent_d6c0(entity, &ibp);   // 0x14000d6c0
-    return reinterpret_cast<void*>(ibp);
+    return ibp;
 }
 // Retail's own two reads: +0x48 = delivered build effort, required = desc(+0x18)+0x30
 // * multiplier(+0x4c) — identical to destroycomponent_states.cpp Yard_Delivered/Required.
-int UpgradeDelivered(void* bc) {
-    return bc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x48) : 0;
+int UpgradeDelivered(BuildComponent* bc) {
+    return bc ? bc->laborProgress : 0;
 }
-int UpgradeRequired(void* bc) {
+int UpgradeRequired(BuildComponent* bc) {
     if (!bc) return 0;
-    void* desc = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bc) + 0x18);
+    Description* desc = bc->_description;
     if (!desc) return 0;
-    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x30) *
-           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x4c);
+    return static_cast<BuildDescription*>(desc)->_i30 *   // as Yard_Required (destroycomponent_states.cpp)
+           bc->costMultiplier;
 }
 
 // Pick the upgrade subject: the construction-demo house if one was seeded (the only
@@ -2308,15 +2278,16 @@ void* UpgradePickSubject(bool* outIsDemo) {
                                                  : nullptr;
 }
 
-void FireUpgradeArm(void* entityUI, int frameNum) {
+void FireUpgradeArm(PlayerToolManager* entityUI, int frameNum) {
     bool isDemo = false;
-    void* subject = UpgradePickSubject(&isDemo);
+    // LEFT: g_pConstructionDemoEntity / StartTown_GetFoundingHouseEntity are void* (starttown.cpp, owner: Game).
+    ComponentEntity* subject = static_cast<ComponentEntity*>(UpgradePickSubject(&isDemo));
     s_up_entityUI = entityUI;
     s_up_entity   = subject;
     s_up_armFrame = frameNum;
     s_up_stage    = UP_WAIT_BUILT;
 
-    void* bc = UpgradeFindBuildComp(subject);
+    BuildComponent* bc = UpgradeFindBuildComp(subject);
     fprintf(stderr, "[Upgrade] armed at frame %d: subject=%p (%s) BuildComponent=%p "
            "delivered=%d required=%d\n", frameNum, subject,
            isDemo ? "construction-demo house — will be built organically"
@@ -2336,11 +2307,12 @@ void FireUpgradeArm(void* entityUI, int frameNum) {
 // Open the subject's info dialog through the live EditTool (same path a click takes).
 bool UpgradeOpenDialog() {
     if (!s_up_entityUI || !s_up_entity) return false;
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_entityUI) + 0x28);
+    // The current tool, taken as the EditTool (SelectEntity refuses any other tool).
+    EditTool* tool = static_cast<EditTool*>(s_up_entityUI->currentTool);
     if (!tool) {
         fprintf(stderr, "[Upgrade] installing default EditTool via SetEditMode(pc,0)...\n");
         EntityUI_SetEditMode_Impl(s_up_entityUI, 0);
-        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_entityUI) + 0x28);
+        tool = static_cast<EditTool*>(s_up_entityUI->currentTool);
     }
     if (!tool) {
         fprintf(stderr, "[Upgrade] EditTool activation FAILED (needs BANISHED_LIVE_TOOLS=1)\n");
@@ -2348,7 +2320,7 @@ bool UpgradeOpenDialog() {
     }
     s_up_tool = tool;
     int opened = EditTool_HarnessSelectEntity(tool, s_up_entity);
-    void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    void* dialog = reinterpret_cast<void*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
     fprintf(stderr, "[Upgrade] select entity=%p -> opened=%d dialog=%p\n",
            s_up_entity, opened, dialog);
     return opened != 0 && dialog != nullptr;
@@ -2359,36 +2331,34 @@ bool UpgradeOpenDialog() {
 // exactly the event UpgradeUI_OnRemove accepts. It then writes the target template
 // (UpgradeUIConfig+0x20) into DestroyComponent+0x60 and pumps the BuildState SM.
 void FireUpgradeClick() {
-    void* dialog = s_up_tool
-        ? *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_tool) + 0x28) : nullptr;
-    UpgradeUI* ctrl = dialog ? reinterpret_cast<UpgradeUI*>(                    // B.3.8 bridge
-        GetControllerByType(dialog, UpgradeUI::TypeId())) : nullptr;
+    UI::DialogInstance* dialog = s_up_tool
+        ? reinterpret_cast<UI::DialogInstance*>(s_up_tool->entityRef) : nullptr;   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UpgradeUI* ctrl = dialog ? static_cast<UpgradeUI*>(
+        GetControllerByType(dialog, UpgradeUI::TypeId())) : nullptr;   // GetController(UpgradeUI's id)
     fprintf(stderr, "[Upgrade] dialog=%p UpgradeUI controller=%p\n", dialog, static_cast<void*>(ctrl));
     if (!ctrl) {
         fprintf(stderr, "[Upgrade] FAILED: no UpgradeUI controller in the panel — this building's "
                "UI has no upgrade page (check the template's UIDescription).\n");
         return;
     }
-    uintptr_t c = reinterpret_cast<uintptr_t>(ctrl);
 
     // Slot 4 (OnCreated) binds the button into +0x30 and sets its element id. The
     // slot-8 self-heal normally does this; drive it directly if it hasn't run.
-    if (*reinterpret_cast<uint64_t*>(c + 0x30) == 0)
+    if (ctrl->button == nullptr)
         ctrl->OnCreated();
 
-    void* button = *reinterpret_cast<void**>(c + 0x30);
-    void* ds     = *reinterpret_cast<void**>(c + 0x28);
+    UI::ButtonElement* button = ctrl->button;
+    void* ds     = ctrl->_dataSource;
     fprintf(stderr, "[Upgrade] controller config(+0x10)=%p datasource(+0x28)=%p button(+0x30)=%p\n",
-           *reinterpret_cast<void**>(c + 0x10), ds, button);
+           ctrl->_config.Get(), ds, button);
     if (!button) {
         fprintf(stderr, "[Upgrade] FAILED: UpgradeUI never bound its button (+0x30 null) — Serialize "
                "was blocked (run with BANISHED_DESTROY_TRACE=1 for the reason).\n");
         return;
     }
-    void* src = button;   // p2 points at the source-element pointer
+    Object::InternalPtr<UI::Element> src(button);   // p2 points at the source-element pointer
     fprintf(stderr, "[Upgrade] >>> firing UpgradeUI slot 9 (msg=0x12 id=33000) <<<\n");
-    ctrl->OnElementEvent(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&src),   // B.3.8 bridge
-                         0x12, 33000, 0, 0, 0, nullptr);
+    ctrl->OnElementEvent(&src, 0x12, 33000, 0, 0, 0, nullptr);
     fprintf(stderr, "[Upgrade] click delivered — follow [DestroySM] for state 3 -> 4 -> 5 "
            "and the UPGRADE SPAWN.\n");
 }
@@ -2397,7 +2367,7 @@ void FireUpgradeClick() {
 void UpgradeTick(int frameNum) {
     switch (s_up_stage) {
     case UP_WAIT_BUILT: {
-        void* bc = UpgradeFindBuildComp(s_up_entity);
+        BuildComponent* bc = UpgradeFindBuildComp(s_up_entity);
         int delivered = UpgradeDelivered(bc);
         int required  = UpgradeRequired(bc);
         int waited    = frameNum - s_up_armFrame;
@@ -2488,11 +2458,11 @@ bool        s_br_selected  = false;   // BANISHED_BRIDGE_SELECT fired yet?
 // chosen span for N frames before committing, so BridgeTool::Draw (slot 8, the red/green
 // preview ported in bridgetool_draw.cpp) renders the multi-cell drag path rather than only
 // the single-cell hover the harness would otherwise produce.
-void*       s_br_tool      = nullptr;
+DragTool*   s_br_tool      = nullptr;
 int         s_br_dragStart = -1, s_br_dragEnd = -1;
 int         s_br_dragUntil = 0;
 
-void BridgeCommit(void* tool, int startCell, int endCell);
+void BridgeCommit(DragTool* tool, int startCell, int endCell);
 
 int BridgeDragFrames() {
     const char* e = Opt().bridgeDragFrames;
@@ -2556,27 +2526,26 @@ void BridgeDumpEntity(const char* what, void* ent) {
     if (!ent) { fprintf(stderr, "[Bridge] %s = null\n", what); return; }
     const uint32_t tidPicking = PickingComponent::TypeId();
 
-    uint8_t* e = static_cast<uint8_t*>(ent);
-    const int count = *reinterpret_cast<int32_t*>(e + 0x38);
-    uintptr_t arr   = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    ComponentEntity* e = static_cast<ComponentEntity*>(ent);   // LEFT: g_BridgeLastMaster / g_BridgeLastSegments are void* (bridgetool, owner: Player)
+    const int count = e->_componentCount;
+    Object::InternalPtr<Component>* arr = e->_components;
     fprintf(stderr, "[Bridge] %s=%p components=%d:", what, ent, count);
     for (int i = 0; i < count && arr; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* comp = *slot;
+        Component* comp = arr[static_cast<uintptr_t>(i)].Get();
         if (!comp) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
+        uint32_t tid = comp->Type();
         fprintf(stderr, " %s(%u)", BridgeComponentName(tid), tid);
         // Picking: report the user data we seated — this is the SetMeshUserData fix.
         if (tidPicking && tid == tidPicking)
             fprintf(stderr, "{pickId=%d userData=%p master=%p}",
-                   *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28),
-                   *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x30),
+                   static_cast<PickingComponent*>(comp)->pickingId,
+                   static_cast<PickingComponent*>(comp)->userData,
                    g_BridgeLastMaster);
     }
     fprintf(stderr, "\n");
 }
 
-void FireBridgeTool(void* entityUI) {
+void FireBridgeTool(PlayerToolManager* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness][bridge] ERROR: entityUI null\n"); return; }
 
     const char* tmplPath = Opt().bridgeTemplate;
@@ -2586,18 +2555,19 @@ void FireBridgeTool(void* entityUI) {
     fprintf(stderr, "[ToolHarness][bridge]   -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness][bridge] ERROR: template did not resolve\n"); return; }
 
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
-    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
+    Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness][bridge] after SetEditMode: activeTool=%p\n", tool);
     if (!tool) {
         fprintf(stderr, "[ToolHarness][bridge] activation FAILED — expect a node{CreateBridge -> "
                "BridgeTool} in the [Tools] BuildToolModeTree line.\n");
         return;
     }
-    uint8_t* t = static_cast<uint8_t*>(tool);
-    uintptr_t bridgeDesc = *reinterpret_cast<uintptr_t*>(t + 0x38);
+    // The tool the tree installs for a CreateBridgeDescription is the BridgeTool.
+    BridgeTool* bridge = static_cast<BridgeTool*>(tool);
+    CreateBridgeDescription* bridgeDesc = bridge->bridgeDesc;
     fprintf(stderr, "[ToolHarness][bridge]   descriptionPtr(+0x20)=%p bridgeDesc(+0x38)=%p\n",
-           *reinterpret_cast<void**>(t + 0x20), reinterpret_cast<void*>(bridgeDesc));
+           bridge->descriptionPtr, bridgeDesc);
     if (!bridgeDesc) {
         fprintf(stderr, "[ToolHarness][bridge] FAILED: Startup left bridgeDesc null — the tool "
                "descriptor carries no CreateBridgeDescription.\n");
@@ -2605,30 +2575,27 @@ void FireBridgeTool(void* entityUI) {
     }
 
     // The masks ValidatePath enforces (see bridgetool_validate.cpp).
-    const uint32_t maskBody     = *reinterpret_cast<uint32_t*>(bridgeDesc + 0x20);
-    const uint32_t maskApproach = *reinterpret_cast<uint32_t*>(bridgeDesc + 0x24);
+    const uint32_t maskBody     = bridgeDesc->_u20;
+    const uint32_t maskApproach = bridgeDesc->_u24;
     fprintf(stderr, "[ToolHarness][bridge]   maskBody=0x%x maskApproach=0x%x maskRequired=0x%x "
            "maskNeighbor=0x%x radius=%d\n", maskBody, maskApproach,
-           *reinterpret_cast<uint32_t*>(bridgeDesc + 0x2c),
-           *reinterpret_cast<uint32_t*>(bridgeDesc + 0x30),
-           *reinterpret_cast<int*>(bridgeDesc + 0x34));
+           bridgeDesc->_u2c, bridgeDesc->_u30, bridgeDesc->_i34);
 
-    void* gw = GameUpdateLoop::_singleton;
-    int* mapGrid = gw ? *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
-    uintptr_t terrain = mapGrid ? *reinterpret_cast<uintptr_t*>(
-                                      reinterpret_cast<uintptr_t>(mapGrid) + 0x80) : 0;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    Map* mapGrid = gw ? gw->m_game : nullptr;
+    MapCell* terrain = mapGrid ? mapGrid->cells : nullptr;
     if (!terrain) {
         fprintf(stderr, "[ToolHarness][bridge] ERROR: no terrain array (gw=%p mapGrid=%p)\n", gw, mapGrid);
         return;
     }
-    const int W = *mapGrid;
+    const int W = mapGrid->size;
     auto bitAt = [&](int idx) -> uint32_t {
-        uintptr_t c = terrain + static_cast<uintptr_t>(idx) * 0x30;
-        return 1u << (*reinterpret_cast<uint8_t*>(c + 0x29) & 0x1f);
+        return 1u << (terrain[static_cast<uintptr_t>(idx)].terrainType & 0x1f);
     };
 
-    // The BridgeTool: a DragTool. CalcCost is retail [14] (+0x70).
-    DragTool* drag = static_cast<DragTool*>(tool);   // B.3.x bridge
+    // The BridgeTool: a DragTool. CalcCost is retail [14] (+0x70). Dispatched through
+    // DragTool (not the final BridgeTool) so the slot stays a virtual call.
+    DragTool* drag = static_cast<DragTool*>(tool);
 
     // Where the town is, so we cross NEAR it. The first crossable span on the map is
     // typically at the map edge, and builders then spend the whole job walking (and a
@@ -2640,18 +2607,17 @@ void FireBridgeTool(void* entityUI) {
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            uint8_t* e = static_cast<uint8_t*>(StartTown_GetFoundingHouseEntity(i));
+            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
             if (!e) continue;
-            const int cc = *reinterpret_cast<int32_t*>(e + 0x38);
-            uintptr_t ca = *reinterpret_cast<uintptr_t*>(e + 0x30);
+            const int cc = e->_componentCount;
+            Object::InternalPtr<Component>* ca = e->_components;
             for (int k = 0; k < cc && ca; ++k) {
-                void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
-                void* comp = *slot;
+                Component* comp = ca[k].Get();
                 if (!comp) continue;
-                if (reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */
-                        != tidMap) continue;
-                sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
-                sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
+                if (comp->Type() != tidMap) continue;
+                const MapComponent* mc = static_cast<const MapComponent*>(comp);   // Type() == MapComponent's id
+                sumCol += mc->tileX0;
+                sumRow += mc->tileY0;
                 ++n;
                 break;
             }
@@ -2752,12 +2718,11 @@ void FireBridgeTool(void* entityUI) {
     for (int i = 0; i < nCand && attempts < kMaxAttempts && startCell < 0; ++i) {
         const Cand& c = cands[i];
         ++attempts;
-        *reinterpret_cast<int32_t*>(t + 0x2c) = c.a;
-        *reinterpret_cast<int32_t*>(t + 0x30) = c.b;
-        int pathType = 0; uint32_t h = 0, wd = 0; uint64_t extra = 0;
-        int rc = drag->CalcCost(c.a, c.b, reinterpret_cast<uint32_t*>(&pathType),
-                                reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&wd),
-                                reinterpret_cast<int*>(&extra));
+        bridge->startCell = c.a;
+        bridge->endCell   = c.b;
+        uint32_t pathType = 0; int h = 0, wd = 0; uint64_t extra = 0;   // pathType printed %d as before
+        int rc = drag->CalcCost(c.a, c.b, &pathType, &h, &wd,
+                                reinterpret_cast<int*>(&extra));   // LEFT: an 8-byte local behind CalcCost's int* (resizing it is not B.4's)
         if (rc == 0 && pathType == 1) {
             startCell = c.a; endCell = c.b;
             fprintf(stderr, "[ToolHarness][bridge] span accepted after %d of %d candidates "
@@ -2775,10 +2740,10 @@ void FireBridgeTool(void* entityUI) {
 
     // Optionally hold the drag open first so slot 8 (Draw) renders the span preview.
     if (BridgeDragFrames() > 0) {
-        *reinterpret_cast<uint8_t*>(t + 0x28) = 1;          // dragState = dragging
-        *reinterpret_cast<int32_t*>(t + 0x2c) = startCell;
-        *reinterpret_cast<int32_t*>(t + 0x30) = endCell;
-        s_br_tool = tool; s_br_dragStart = startCell; s_br_dragEnd = endCell;
+        bridge->dragState = 1;                               // dragState = dragging
+        bridge->startCell = startCell;
+        bridge->endCell   = endCell;
+        s_br_tool = drag; s_br_dragStart = startCell; s_br_dragEnd = endCell;
         s_br_dragUntil = 0;                                  // armed on the first tick
         s_br_stage = BR_DRAG;
         fprintf(stderr, "[ToolHarness][bridge] holding the drag open for %d frames (%d..%d) so "
@@ -2786,14 +2751,13 @@ void FireBridgeTool(void* entityUI) {
                BridgeDragFrames(), startCell, endCell);
         return;
     }
-    BridgeCommit(tool, startCell, endCell);
+    BridgeCommit(drag, startCell, endCell);
 }
 
 // DragTool::CalcPath (retail [13], +0x68) — the commit a drag-release makes.
-void BridgeCommit(void* tool, int startCell, int endCell) {
-    uint8_t* t = static_cast<uint8_t*>(tool);
-    *reinterpret_cast<uint8_t*>(t + 0x28) = 0;               // drag released
-    bool placed = static_cast<DragTool*>(tool)->CalcPath(startCell, endCell);   // B.3.x bridge
+void BridgeCommit(DragTool* tool, int startCell, int endCell) {
+    tool->dragState = 0;                                     // drag released
+    bool placed = tool->CalcPath(startCell, endCell);
     fprintf(stderr, "[ToolHarness][bridge] CalcPath (commit) -> %d; master=%p segments=%d\n",
            placed ? 1 : 0, g_BridgeLastMaster, g_BridgeLastSegmentCount);
     if (!placed || g_BridgeLastSegmentCount == 0) {
@@ -2840,16 +2804,17 @@ int BridgeSelectDelay() {
     return (n > 1) ? n : 120;
 }
 
-void BridgeSelectFire(void* entityUI) {
+void BridgeSelectFire(PlayerToolManager* entityUI) {
     if (!g_BridgeLastMaster) {
         fprintf(stderr, "[Bridge][select] no master entity — nothing to select.\n");
         return;
     }
     // The bridge harness left the BridgeTool active at entityUI+0x28; swap back to the
     // default EditTool (the one a player would be holding when they click a bridge).
+    // The current tool is taken as the EditTool (SelectEntity refuses any other tool).
     EntityUI_SetEditMode_Impl(entityUI, 0);
-    void* tool = entityUI ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28)
-                          : nullptr;
+    EditTool* tool = entityUI ? static_cast<EditTool*>(entityUI->currentTool)
+                              : nullptr;
     if (!tool) {
         fprintf(stderr, "[Bridge][select] EditTool activation FAILED (nothing at entityUI+0x28) — "
                "needs BANISHED_LIVE_TOOLS=1.\n");
@@ -2859,7 +2824,7 @@ void BridgeSelectFire(void* entityUI) {
            "full click (info dialog + selection outline).\n", tool, g_BridgeLastMaster);
     fflush(stdout);
 
-    const int opened = EditTool_HarnessSelectEntity(tool, g_BridgeLastMaster);
+    const int opened = EditTool_HarnessSelectEntity(tool, static_cast<ComponentEntity*>(g_BridgeLastMaster));   // LEFT: g_BridgeLastMaster is void* (bridgetool, owner: Player)
 
     fprintf(stderr, "[Bridge][select] select -> %d (1=info dialog opened). Returned without "
            "faulting; a crash from this lands in the NEXT Draw.\n", opened);
@@ -2867,7 +2832,7 @@ void BridgeSelectFire(void* entityUI) {
 }
 
 // Poll the placed segments until each reports delivered >= required.
-void BridgeTick(void* entityUI, int frameNum) {
+void BridgeTick(PlayerToolManager* entityUI, int frameNum) {
     if (!s_br_selected) {
         const int delay = BridgeSelectDelay();
         if (delay > 0 && s_br_armFrame != 0 && frameNum - s_br_armFrame >= delay) {
@@ -2885,7 +2850,7 @@ void BridgeTick(void* entityUI, int frameNum) {
     // The construction site may be the MASTER (one build job for the whole span) rather
     // than the individual deck pieces, so poll both.
     int done = 0, withBuild = 0;
-    void* mbc = UpgradeFindBuildComp(g_BridgeLastMaster);
+    BuildComponent* mbc = UpgradeFindBuildComp(g_BridgeLastMaster);
     if (mbc) {
         ++withBuild;
         int delivered = UpgradeDelivered(mbc), required = UpgradeRequired(mbc);
@@ -2894,7 +2859,7 @@ void BridgeTick(void* entityUI, int frameNum) {
                frameNum, g_BridgeLastMaster, mbc, delivered, required);
     }
     for (int i = 0; i < g_BridgeLastSegmentCount; ++i) {
-        void* bc = UpgradeFindBuildComp(g_BridgeLastSegments[i]);
+        BuildComponent* bc = UpgradeFindBuildComp(g_BridgeLastSegments[i]);
         if (!bc) continue;
         ++withBuild;
         int delivered = UpgradeDelivered(bc);
@@ -2940,7 +2905,9 @@ void BridgeTick(void* entityUI, int frameNum) {
 
 }  // namespace
 
-extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
+extern "C" void ToolHarness_Tick(void* entityUIArg, int frameNum) {
+    // GameUpdateLoop's Update hands its m_toolManager over (gameupdateloop.cpp).
+    PlayerToolManager* entityUI = static_cast<PlayerToolManager*>(entityUIArg);   // LEFT: tool_harness.h's void* (its declaration and gameupdateloop.cpp's are not this block's)
     Init();
     if (!s_enabled) return;
 
@@ -2949,16 +2916,15 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     if (s_mr_fired) {
         int rel = frameNum - s_mr_fireFrame;
         if (rel >= 0 && rel <= 12) {
-            void* gw = GetGW();
+            GameUpdateLoop* gw = GetGW();
             if (gw) {
-                uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
-                void* el = *reinterpret_cast<void**>(gwA + 0xe8);
-                int cnt = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
-                uint64_t slotVal = s_mr_tileSlot ? *reinterpret_cast<uint64_t*>(s_mr_tileSlot) : 0;
+                EntityList* el = gw->m_entityList;
+                int cnt = el ? el->removalList.count : -1;
+                ComponentEntity* slotVal = s_mr_tileSlot ? *s_mr_tileSlot : nullptr;
                 bool drained = s_mr_tileSlot ? (cnt == 0 && slotVal != s_mr_entity)
                                              : (cnt == 0);
                 fprintf(stderr, "[Removal] +%2d frames: removalList.count=%d  tileSlot=%p  (%s)\n",
-                       rel, cnt, (void*)slotVal,
+                       rel, cnt, slotVal,
                        drained ? "DRAINED — marked entities removed" : "pending");
             }
         }
@@ -2971,16 +2937,15 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     if (s_pin_fired && s_pin_ctrl) {
         int rel = frameNum - s_pin_fireFrame;
         if (rel >= 0 && rel <= 14) {
-            void* gw = GetGW();
-            void* el = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8) : nullptr;
-            int cnt = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
-            uint8_t* ctrl = static_cast<uint8_t*>(s_pin_ctrl);
+            GameUpdateLoop* gw = GetGW();
+            EntityList* el = gw ? gw->m_entityList : nullptr;
+            int cnt = el ? el->removalList.count : -1;
+            UI::DialogController* ctrl = s_pin_ctrl;
             // RAW +0x28 (guard's read) — pointer only, never dereferenced here.
-            void* rawDS = *reinterpret_cast<void**>(ctrl + 0x28);
+            void* rawDS = ctrl->_dataSource;
             // CheckPtr-hardened read: CheckPtr a COPY of the +0x28 IBP so the probe
             // is non-destructive; it nulls if the weak-ref's target was freed.
-            uint64_t ibpCopy = *reinterpret_cast<uint64_t*>(ctrl + 0x28);
-            void* checkedDS = reinterpret_cast<void*>(ibpCopy);
+            void* checkedDS = ctrl->_dataSource;
             // NOTE: CheckPtr does NOT null this dangling ref (the datasource weak-ref
             // isn't generation-invalidated by a raw free) — so a guard-side CheckPtr is
             // NOT the fix. The real fix closes the dialog at the drain when its entity is
@@ -2989,7 +2954,7 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
             // the panel. Kept as a headless regression probe. checkedDS is logged only to
             // show CheckPtr's (in)effectiveness, not as a fix signal.
             fprintf(stderr, "[PinPanel] +%2d frames: removalCount=%d rawDS=%p checkedDS=%p entity=%p%s\n",
-                   rel, cnt, rawDS, checkedDS, reinterpret_cast<void*>(s_pin_entity),
+                   rel, cnt, rawDS, checkedDS, s_pin_entity,
                    (rawDS == nullptr) ? "  (datasource cleared — dialog closed)" : "");
         }
     }
