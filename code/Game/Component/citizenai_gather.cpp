@@ -253,9 +253,8 @@ static RawMaterialDescription* FindRawMaterialChild(const ComponentDescription* 
 extern "C" int Storage_GetResourceCount2(int64_t param_1) {
     Component* self = reinterpret_cast<Component*>(param_1);   // LEFT: SIG Storage_GetResourceCount2 (Component/exe_bodies.h, wave X)
     EnsureInit();
-    StorageComponent* storBuf[2] = {nullptr, nullptr};
-    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(self->_entity), storBuf);   // LEFT: SIG WorkBase_FindComponent_6270 takes uintptr_t (wave X)
-    StorageComponent* stor = storBuf[0];
+    // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
+    StorageComponent* stor = self->_entity->FindComponent<StorageComponent>();
     int total = 0;
     if (stor == nullptr) return 0;
     int count = stor->slotCount;
