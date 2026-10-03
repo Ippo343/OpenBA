@@ -242,3 +242,10 @@ Metric at `8196d1cf`: **7,986** to remove (wave S done).
 | 53 | P2-R-COLL | `10db088d` | the generic AVL bodies take the Set; typed node structs; set_core without casts; hand-offs to the erased core marked `elem_stride`: 243 -> 137 in 13 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
 
 Metric at `10db088d`: **7,388** to remove.
+
+| 54 | P2-CAI-6 | `98dec703` | citizenai_work_scheduler reads the scheduler trees by name (`known_port_issues` 200-201): 218 -> 17 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 55 | P2-CAI-4 | `9793505e` | `WorkCandidateNode` 0x30 / `WorkCandidateTree` (retail 0x1400f8000, 0x1400f79b0), citizenai_housing_idle by name, seven dead thunks deleted (rows 210-211): 202 -> 7 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 56 | P2-WORK-1 | `ba34cbd9` | ClearArea's set roots, BuildRoad's material / road type typed; cleararea, buildstructure, buildroad, clearstorage by name (rows 220-221): 243 -> 56 | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 57 | P2-R-OBJ | `24f32afa` | `TypeNode` balance / height two int16 (retail 0x180030540, row 100 CONFIRMED), the type tree and External's sets by name, `PathStackElement`: 200 -> 123 in 25 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+
+Metric at `24f32afa`: **6,728** to remove.
