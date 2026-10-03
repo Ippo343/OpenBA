@@ -101,11 +101,12 @@ namespace IO { class Serializer; }
 extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0
 
 // ---- gameupdateloop_teardown.cpp
-extern "C" void EntityList_Shutdown_c3d30(void* selfV);  // 0x1400c3d30
-extern "C" void EntityList_Dtor_c3e60(void* selfV);  // 0x1400c3e60
-extern "C" void CitizenList_Dtor_907b0(void* selfV);  // 0x1400907b0
-extern "C" void EntityUI_Dtor_1024d0(void* selfV);  // 0x1401024d0
-extern "C" void Tutorial_Dtor_f8ff0(void* selfV);  // 0x1400f8ff0
+struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
+extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
+extern "C" void EntityList_Dtor_c3e60(EntityList* self);  // 0x1400c3e60
+extern "C" void CitizenList_Dtor_907b0(CitizenBehavior* self);  // 0x1400907b0
+extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self);  // 0x1401024d0
+extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self);  // 0x1400f8ff0
 
 // ---- geometry_serialize.cpp
 class WorldGeometry;
