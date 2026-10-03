@@ -70,6 +70,7 @@
 #include "Game/exe_constants.h"
 #include "Game/Map.h"                          // Map::size / cells (GameUpdateLoop +0xF8)
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"           // GameUpdateLoop +0x88
 #include "Component/CharacterDescription.h"
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
@@ -228,7 +229,7 @@ namespace {
 //     negation below. A .rdata float stored as its bit pattern is read through RdataF.
 static inline float RdataF(uint32_t bits) {
     float f;
-    std::memcpy(&f, &bits, sizeof f);   // CAST-OK: float_bits
+    std::memcpy(&f, &bits, sizeof f);
     return f;
 }
 
@@ -600,7 +601,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* selfBytes, void* tim
         }
     }
 
-    CharMgr_sub_8660(reinterpret_cast<float*>(GameUpdateLoop::_singleton->m_characterGrid),   // LEFT: SIG CharMgr_sub_8660 (Component/exe_bodies.h, wave X)
-                     self->characterIndex);   // 0x140018660
+    // 0x140018660 (was its CharMgr_sub_8660 forwarder, charmanager.cpp)
+    GameUpdateLoop::_singleton->m_characterGrid->Place(self->characterIndex);
 }
 
