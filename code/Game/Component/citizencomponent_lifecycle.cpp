@@ -49,6 +49,10 @@
 #include "Work/exe_bodies.h"
 #include "Player/exe_bodies.h"
 #include "Action/exe_bodies.h"
+#include "Component/WorkComponent.h"   // B4 P2 CIT-4: WorkComponent::workId
+#include "Game/WorkScheduler.h"        // B4 P2 CIT-4: GameUpdateLoop::m_tutorial trees
+#include "Game/WorkSchedulerNodes.h"   // B4 P2 CIT-4: WorkSchedulerIdNode
+#include "Work/Work.h"                 // B4 P2 CIT-4: Work::field_24
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.
@@ -133,33 +137,32 @@ void CitizenComponent::AddChild(CitizenComponent* child) {
 // fallback 0x140030b90). Resolve the entity's WorkComponent, read its profession key
 // (comp+0x28), then look that key up in the world priority RB-tree (GameWorld+0x118).
 // ============================================================
-static int ProfessionKeyOfEntity(uint64_t handle) {
-    int64_t outIBP = 0;
-    void* ibp = WorkBase_FindComponent_3050(static_cast<int64_t>(handle), &outIBP);  // returns &outIBP
-    int64_t comp = ibp ? *reinterpret_cast<int64_t*>(ibp) : 0;
-    return comp ? *reinterpret_cast<int32_t*>(comp + 0x28) : 0;
+static int ProfessionKeyOfEntity(ComponentEntity* handle) {
+    WorkComponent* comp = handle->FindComponent<WorkComponent>();   // 0x140003050
+    return comp ? comp->workId : 0;
 }
 
-// GameWorld+0x118 is a red-black tree keyed on profession id; node key at node[0],
-// left node+0x18, right node+0x20, value ptr node+0x8, priority at value+0x24.
+// GameWorld+0x118 is the work scheduler; its trees[0] (+0x30) is keyed on the work id
+// (WorkSchedulerIdNode: key at +0, left +0x18, right +0x20, the Work at +0x8), the
+// priority at Work +0x24.
 static int LookupProfessionPriority(int key) {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    uint8_t* world = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    int64_t tree = *reinterpret_cast<int64_t*>(world + 0x118);
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
+    WorkScheduler* tree = world->m_tutorial;
     if (!tree) return 0;
-    int* node = *reinterpret_cast<int**>(tree + 0x30);   // root
+    WorkSchedulerIdNode* node = tree->trees[0].root;   // root
     while (node) {
-        if (key < node[0])      node = *reinterpret_cast<int**>(node + 6);   // left  (node+0x18)
-        else if (key > node[0]) node = *reinterpret_cast<int**>(node + 8);   // right (node+0x20)
+        if (key < node->key)      node = node->left;    // left  (node+0x18)
+        else if (key > node->key) node = node->right;   // right (node+0x20)
         else {
-            int64_t value = *reinterpret_cast<int64_t*>(node + 2);           // node+0x8
-            return value ? *reinterpret_cast<int*>(value + 0x24) : 0;
+            Work* value = node->work.Get();              // node+0x8
+            return value ? value->field_24 : 0;
         }
     }
     return 0;   // absent: retail builds an empty IBP and derefs; guarded to 0 here
 }
 
-static inline int ProfessionPriorityOf(uint64_t handle) {
+static inline int ProfessionPriorityOf(ComponentEntity* handle) {
     return LookupProfessionPriority(ProfessionKeyOfEntity(handle));
 }
 
@@ -167,9 +170,9 @@ static inline int ProfessionPriorityOf(uint64_t handle) {
 // CitizenComp_SortByProfession_02a0 (0x1400302a0) — see file-header note.
 // ============================================================
 void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* /*tmpV*/) {
-    uint64_t* array = reinterpret_cast<uint64_t*>(arrV);
+    ComponentEntity** array = reinterpret_cast<ComponentEntity**>(arrV);   // LEFT: SIG CitizenComp_SortByProfession_02a0 (Component/exe_bodies.h, wave X)
     if (!array || n < 2) return;
-    std::sort(array, array + n, [](uint64_t a, uint64_t b) {
+    std::sort(array, array + n, [](ComponentEntity* a, ComponentEntity* b) {
         return ProfessionPriorityOf(a) < ProfessionPriorityOf(b);
     });
 }
@@ -189,8 +192,8 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
     // 1-3. reset path/target, set gender mesh variant, place at spawn transform
     ModelComponent* modelIBP = _entity->FindComponent<ModelComponent>();
     if (modelIBP) {
-        ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(modelIBP), static_cast<uint16_t>(gender == 0), 0);
-        ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(modelIBP), pos, 0.0f);
+        ModelSelectMesh(modelIBP, static_cast<uint16_t>(gender == 0), 0);   // 0x1401253d0
+        modelIBP->SetTransformFromYaw(reinterpret_cast<const Math::Vector3*>(pos), 0.0f);   // 0x140003870  // LEFT: Initialize's `const float* pos` (CitizenComponent.h; outside callers pass float[3])
     }
 
     // 4. gender
@@ -202,7 +205,7 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
     if (rng) GenerateCitizenName(rng, gender == 0, nameBuf, static_cast<int>(sizeof(nameBuf)));
     {
         System::String tmpStr(nameBuf);
-        *reinterpret_cast<System::String*>(&name) = tmpStr;   // B.3.1 bridge
+        *reinterpret_cast<System::String*>(&name) = tmpStr;   // B.3.1 bridge  // LEFT: H5 CitizenComponent::name (System::String raw storage)
     }
 
     // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)
@@ -261,10 +264,10 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
                                      char isElder, float age, char forceEmploy,
                                      int64_t* parentIBP, int64_t spawnKey) {
-    reinterpret_cast<CitizenComponent*>(selfV)->Initialize(
-        reinterpret_cast<const float*>(pos), gender, isElder, age, forceEmploy,
-        parentIBP ? reinterpret_cast<CitizenComponent*>(*parentIBP) : nullptr,
-        reinterpret_cast<Profession*>(spawnKey));
+    reinterpret_cast<CitizenComponent*>(selfV)->Initialize(   // LEFT: B4 FORWARD C signature (wave X)
+        reinterpret_cast<const float*>(pos), gender, isElder, age, forceEmploy,   // LEFT: B4 FORWARD C signature (wave X)
+        parentIBP ? reinterpret_cast<CitizenComponent*>(*parentIBP) : nullptr,   // LEFT: B4 FORWARD C signature (wave X)
+        reinterpret_cast<Profession*>(spawnKey));   // LEFT: B4 FORWARD C signature (wave X)
 }
 
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,
@@ -319,5 +322,5 @@ void CitizenComponent::Slot11() {
 
 // B4 FORWARD: 1 outside caller(s) (Game/starttown.cpp)
 void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
-    reinterpret_cast<CitizenComponent*>(selfV)->AddChild(*reinterpret_cast<CitizenComponent**>(param2V));
+    reinterpret_cast<CitizenComponent*>(selfV)->AddChild(*reinterpret_cast<CitizenComponent**>(param2V));   // LEFT: B4 FORWARD C signature (wave X)
 }
