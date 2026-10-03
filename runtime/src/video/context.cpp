@@ -332,7 +332,7 @@ void Context::SetImageBuffer(const void* image, int32_t slot) {
     if (image != _imageBuffers[slot]) {
         _dirty |= RtVideo::kDirtyImageBuffers;
         _imageBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
-        _imageBuffers[slot] = const_cast<void*>(image);
+        _imageBuffers[slot] = const_cast<void*>(image);  // LEFT: dx11 seam (dx11/src/contextdata.cpp hands the setters void*)
     }
 
 }
@@ -345,7 +345,7 @@ void Context::SetRenderBuffer(const void* rb) {
 
     if (_renderBuffer != rb) {
         _dirty |= RtVideo::kDirtyRenderBuffer;
-        _renderBuffer = const_cast<void*>(rb);
+        _renderBuffer = const_cast<void*>(rb);  // LEFT: dx11 seam (dx11/src/contextdata.cpp hands the setters void*)
     }
 
 }

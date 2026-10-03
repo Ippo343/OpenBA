@@ -329,12 +329,12 @@ void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
         rtcoll::AsArray<&rtcoll::kSpec_InnerArrayU8>(&levels)->SetSize(count);
 
     SerializeLevelBlobs(ser, count,
-                        reinterpret_cast<rtcoll::ArrayHdr*>(levels.GetData()));
+                        reinterpret_cast<rtcoll::ArrayHdr*>(levels.GetData()));  // LEFT: ERASED the core takes rtcoll::ArrayHdr (Collection.h)
 
     // 0x1800f31e2: the field reads for Create happen HERE, after the
     // serialization, and `kind` is RELOADED. Both are faithful.
     RecreateFromFields(this, _kind,
-                       reinterpret_cast<LevelArray*>(&levels));   // B.3.5 bridge
+                       reinterpret_cast<LevelArray*>(&levels));   // B.3.5 bridge  // LEFT: H5 ImageBuffer::levels raw header
 
     // ---- destroy the temporary --------------------------------------------
     // DESTROYS EVERY ELEMENT and then frees the block, in that order: the
@@ -342,7 +342,7 @@ void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
     // only then is the outer buffer released. Writing this as "free the block"
     // would leak one buffer per mip level, every load.
     const int32_t levelCount = levels.GetSize();
-    rtcoll::FreeInnerArraysCore(reinterpret_cast<uint8_t*>(levels.GetData()),
+    rtcoll::FreeInnerArraysCore(reinterpret_cast<uint8_t*>(levels.GetData()),  // LEFT: ERASED the core takes bytes (Collection.h)
                                 levelCount, &kV_LevelBlob);
     // ENDGAME B.3.2 step 2 — the explicit `rtcoll::ArrayDtorImpl(&levels)` call
     // is GONE, not replaced by an explicit `levels.~Array()`: the per-element

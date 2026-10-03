@@ -578,7 +578,7 @@ void SunLight::DrawLight(Video::Context& context, Renderer& renderer,
     // `Device::deviceData` is a `void*` in Device.h (video's header), so the
     // one view of it as its `Video::DeviceData` is here.
     const bool modern =
-        static_cast<Video::DeviceData*>(::Video::Device::_singleton->deviceData)->Slot7();
+        ::Video::Device::_singleton->deviceData->Slot7();
 
     Math::Matrix bias;
     if (modern) BiasMatrixA(bias); else BiasMatrixB(bias);

@@ -69,6 +69,9 @@
 #include "Component/AttendanceComponent.h"
 #include "Component/InteractComponent.h"
 #include "Component/StatusIconComponent.h"
+#include "Component/ModelComponent.h"   // the model translation
+#include "Game/Map.h"                   // Map::size (m_game)
+#include "Game/GameSettings.h"          // GameSettings::statusIconEnable
 #include "Entity/ComponentEntity.h"
 #include "graphics/Mesh.h"
 #include "Component/Component.h"   // B.3.x W0: Component slots by name
@@ -134,9 +137,9 @@ uint64_t CitizenAIComponent::State_Education() {
     EnsureInit();
 
     // cooldown stamp: Time(DAT_1721fc) -> timers[3]
-    int64_t timeStamp = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStamp), kRdata_1401721fc);
-    timers[3] = timeStamp;
+    System::Time timeStamp{};
+    RtSystem_Time_Ctor(&timeStamp, kRdata_1401721fc);
+    timers[3] = timeStamp._ticks;
 
     if (citizen->clothingLevel != 0) {
         return 0;  // low byte 0 (retail's RAX carries the citizen pointer above it)
@@ -145,12 +148,12 @@ uint64_t CitizenAIComponent::State_Education() {
     int64_t local_res8 = 0;            // dd30 out: found component (also Ctor10 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
-    // citizen ModelComponent world pos -> grid cell (ModelComponent's transform: raw)
-    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
-    int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    // citizen ModelComponent world pos -> grid cell
+    const ModelComponent* model = citizen->character->modelComponent;
+    int mapSize = GameUpdateLoop::_singleton->m_game->size;
     int half = mapSize >> 1;
-    int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(half));
-    int cy = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(half));
+    int cx = static_cast<int>(model->transform.translation.x + static_cast<float>(half));
+    int cy = static_cast<int>(model->transform.translation.y + static_cast<float>(half));
     if (cx < 0) cx = 0;
     if (mapSize <= cx) cx = mapSize - 1;
     if (cy < 0) cy = 0;
@@ -166,8 +169,7 @@ uint64_t CitizenAIComponent::State_Education() {
     }
 
     int64_t outBest = 0;
-    int64_t* listpair = *reinterpret_cast<int64_t**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (int64_t* list; Component/exe_bodies.h)
     CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 4);
 
@@ -201,9 +203,9 @@ uint64_t CitizenAIComponent::State_Education() {
 uint64_t CitizenAIComponent::State_SeekHappiness() {
     EnsureInit();
 
-    int64_t timeStamp = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStamp), kRdata_1401721fc);
-    timers[8] = timeStamp;
+    System::Time timeStamp{};
+    RtSystem_Time_Ctor(&timeStamp, kRdata_1401721fc);
+    timers[8] = timeStamp._ticks;
 
     if (0 < citizen->field_0xAC) {
         return 0;  // low byte 0
@@ -212,11 +214,11 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
     int64_t local_res8 = 0;            // dd30 out: found component (Ctor5 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
-    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
-    int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    const ModelComponent* model = citizen->character->modelComponent;
+    int mapSize = GameUpdateLoop::_singleton->m_game->size;
     int half = mapSize >> 1;
-    int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(half));
-    int cy = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(half));
+    int cx = static_cast<int>(model->transform.translation.x + static_cast<float>(half));
+    int cy = static_cast<int>(model->transform.translation.y + static_cast<float>(half));
     if (cx < 0) cx = 0;
     if (mapSize <= cx) cx = mapSize - 1;
     if (cy < 0) cy = 0;
@@ -231,8 +233,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
     }
 
     int64_t outBest = 0;
-    int64_t* listpair = *reinterpret_cast<int64_t**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (int64_t* list; Component/exe_bodies.h)
     CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 2);
 
@@ -254,8 +255,8 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
                 if (mi->_geometry.activeMask == 0) {
                     // mask empty -> remove from scene
                     if (-1 < mi->iconId) {
-                        reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
-                            ->RemoveObject(static_cast<uint32_t>(mi->iconId));   // B.3.5 bridge
+                        GameUpdateLoop::_singleton->m_graphicsScene
+                            ->RemoveObject(static_cast<uint32_t>(mi->iconId));
                         mi->iconId = -1;
                     }
                     uint32_t before = mi->_flags;
@@ -265,15 +266,15 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
                 } else {
                     // mask non-empty -> ensure in scene + run the slot-8 Tick
                     GameSettings* settings = g_gameSettings;
-                    if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
+                    if (settings && settings->statusIconEnable != '\0' &&
                         mi->iconId < 0) {
-                        uint32_t id = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
-                            ->AddObject(&mi->_geometry);   // B.3.5 bridge
+                        uint32_t id = GameUpdateLoop::_singleton->m_graphicsScene
+                            ->AddObject(&mi->_geometry);
                         mi->iconId = static_cast<int32_t>(id);
                         SceneWatch_Note(id, &mi->_geometry, "CitizenAI::handlers2 carry-mesh");
                     }
-                    int64_t t0 = 0;
-                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t0), 0.0f);
+                    System::Time t0{};
+                    RtSystem_Time_Ctor(&t0, 0.0f);
                     mi->Tick(&t0);
                     uint32_t before = mi->_flags;
                     uint32_t after = before | 4;
@@ -319,44 +320,45 @@ uint64_t CitizenAIComponent::State_FindWork() {
     float outVec[3] = { 0.0f, 0.0f, 0.0f };   // local_58 (target out)
 
     // citizen ModelComponent world pos -> local_48 vec3 (x,y,z packed)
-    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
+    const ModelComponent* model = citizen->character->modelComponent;
     float pos[3];
-    pos[0] = *reinterpret_cast<float*>(model + 0x158);
-    pos[1] = *reinterpret_cast<float*>(model + 0x15c);
-    pos[2] = *reinterpret_cast<float*>(model + 0x160);
+    pos[0] = model->transform.translation.x;
+    pos[1] = model->transform.translation.y;
+    pos[2] = model->transform.translation.z;
 
     int bestCost = 0x7fffffff;            // local_res8 low 32
 
     // transform sub-object on the InteractComponent's description (InteractDescription).
-    void* sub = posComp->_description;
-    void* transform = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
+    Description* sub = posComp->_description;
+    Description* transform = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
                       ? sub : nullptr;
     uint8_t found = 0;
-    found = WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp),
-                            reinterpret_cast<uintptr_t>(transform) + 0x28, pos, outVec, &bestCost);
+    // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
+    found = WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp),   // LEFT: SIG WorkImpl_WalkablePos_122be0 (uintptr_t; Work/exe_bodies.h)
+                            reinterpret_cast<uintptr_t>(transform) + 0x28, pos, outVec, &bestCost);   // LEFT: SIG WorkImpl_WalkablePos_122be0
 
-    // walk each use location (field28 array, count in field30's low half: untyped, raw)
+    // walk each use location (InteractComponent::useLocations, useLocationCount)
     int childCount = posComp->useLocationCount;
     if (0 < childCount) {
-        int i = 0; int64_t off = 0;
+        int i = 0;
         do {
-            int64_t* slot = reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(posComp->useLocations) + off);
-            uint8_t r = WorkImpl_WalkablePosRecursive_122b00(static_cast<uintptr_t>(*slot), 0, pos, outVec, &bestCost);
+            InteractComponent* child = posComp->useLocations[i];
+            uint8_t r = WorkImpl_WalkablePosRecursive_122b00(reinterpret_cast<uintptr_t>(child), 0, pos, outVec, &bestCost);   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00 (uintptr_t; Work/exe_bodies.h)
             found |= r;
-            i++; off += 8;
+            i++;
         } while (i < posComp->useLocationCount);
     }
 
     if (found != 0) {
         // WalkTowards toward outVec; time = citizen CitizenDescription _f120
-        void* descRaw = citizen->_description;
-        void* desc = (descRaw && Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription))
-                     ? descRaw : nullptr;
+        Description* descRaw = citizen->_description;
+        const CitizenDescription* desc = (descRaw && Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription))
+                     ? static_cast<const CitizenDescription*>(descRaw) : nullptr;
         CitizenComponent* ibpHolder = citizen;
         // [STANDALONE GUARD] the desc null-check is ours; the original derefs +0x120
         // unconditionally (would fault if the description type-check failed).
-        float walkTime = desc ? reinterpret_cast<CitizenDescription*>(desc)->_f120 : 0.0f;
-        CitizenAI_Pathfinding_WalkTowards_bb490(&ibpHolder, 0xffffffff, reinterpret_cast<uint32_t*>(outVec), 4, walkTime, 1);
+        float walkTime = desc ? desc->_f120 : 0.0f;
+        CitizenAI_Pathfinding_WalkTowards_bb490(&ibpHolder, 0xffffffff, reinterpret_cast<uint32_t*>(outVec), 4, walkTime, 1);   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490 (uint32_t* destination; Component/exe_bodies.h)
 
         citizen->statusFlags |= 4;
         citizen->field_0x30 = -1;

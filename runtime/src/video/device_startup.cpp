@@ -673,7 +673,7 @@ namespace {
 // normalised into one helper shared with the Application file.
 void UnregisterInline(rtsetavl::Set* set, unsigned id) {
     for (rtsetavl::Node* n = set->root; n; ) {
-        const unsigned key = *reinterpret_cast<const unsigned*>(n);
+        const unsigned key = *reinterpret_cast<const unsigned*>(n);  // LEFT: ERASED rtsetavl node key (set core, wave X)
         if (key > id)       n = n->left;                       // JA
         else if (key >= id) { rtsetavl::Erase(set, n); return; }  // JNC -> equal
         else                n = n->right;

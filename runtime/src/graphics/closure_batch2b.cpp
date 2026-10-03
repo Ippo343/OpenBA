@@ -249,8 +249,8 @@ namespace Graphics {
 // Scene.h and handed raw element storage by the array row) are each viewed
 // once as the `Graphics::RendererDrawGroup` they are.
 extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
-    Graphics::RendererDrawGroup* const d = static_cast<Graphics::RendererDrawGroup*>(self);
-    const Graphics::RendererDrawGroup* const s = static_cast<const Graphics::RendererDrawGroup*>(src);
+    Graphics::RendererDrawGroup* const d = static_cast<Graphics::RendererDrawGroup*>(self);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
+    const Graphics::RendererDrawGroup* const s = static_cast<const Graphics::RendererDrawGroup*>(src);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
 
     d->_renderBuffer = s->_renderBuffer;                               // +0x000
     rtgfxd::RtGraphics_Camera_CopyCtor(&d->_camera, &s->_camera);          // +0x008

@@ -140,7 +140,7 @@ namespace {
 // answer belongs to the device and not to us. LEFT: `Device::deviceData` is a
 // `void*` in Device.h (video's header), so the one view of it is here.
 bool DeviceSupportsColourShadowTarget() {
-    return static_cast<Video::DeviceData*>(::Video::Device::_singleton->deviceData)->Slot6();
+    return ::Video::Device::_singleton->deviceData->Slot6();
 }
 
 // `operator new` / `operator delete`, transcribed — see the header block.

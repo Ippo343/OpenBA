@@ -74,12 +74,23 @@ static_assert(sizeof(MaterialParameterSet) == 0x20, "MaterialInstance parameter 
 // which compares and copies four consecutive floats from `+0x08..+0x17` of
 // `_constants._data + index*0x18` into Video::Context+0x208 + slot*0x10.
 // +0x00..+0x07 is not read by any function this lane decompiled.
+// B.4 (R-GFX): +0x00 is the constant's NAME, a `System::String` data pointer:
+// `?GetConstantName@MaterialInstance@` hands it out, `FindConstant` (wave28)
+// strcmp's it, Serialize (wave24) runs `String::Serialize` (0x1800c9930) on it,
+// and the array's own copy (0x1800616c0, array.cpp `AssignStringPlus16`) adopts
+// it with a refcount bump. The POD spelling (trivially destructible, the
+// `Object::External::_path` reason). Declaring the pointer raises the element's
+// alignment from 4 to 8; nothing sizes this array through the trait-derived
+// `SpecFor` (its SetSize is the registered 0x1800616c0, `MOV EDX,8`), and the
+// only by-value holder is `Array<MaterialConstant>`, whose layout is the 16-byte
+// header either way.
 struct MaterialConstant {
-    uint8_t _head[0x08];   // +0x00  not read by lane F
+    RtSystem::String name; // +0x00
     float   value[4];      // +0x08..+0x17
 };
 static_assert(sizeof(MaterialConstant) == 0x18, "MaterialInstance constant entry is 0x18");
 static_assert(offsetof(MaterialConstant, value) == 0x08, "MaterialConstant::value @ +0x08");
+static_assert(offsetof(MaterialConstant, name)  == 0x00, "MaterialConstant::name @ +0x00");
 
 // ============================================================
 // Graphics::MaterialInstance — an Object::External subclass, 0x60 bytes.

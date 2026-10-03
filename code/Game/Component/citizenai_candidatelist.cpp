@@ -54,9 +54,37 @@
 // Signature matches the original (base, count); the original's 3rd scratch arg
 // (R8) is unused by the callee.
 // ============================================================
-void CitizenAI_SortByPriority(void* base, int count) {
-    if (!base || count < 2) return;
-    int32_t* a = reinterpret_cast<int32_t*>(base);  // triples: a[3*k+0]=id, +1=prio, +2=unused
+namespace {
+
+// B4 P2 CAI-1: the candidate list TransitionState (0x14010db90) hands
+// BuildCandidateStateList: a {data, count, capacity} array of 12-byte {state id,
+// priority, unused} records. Layout from the tree's port of 0x14010dca0 (the append
+// allocates capacity * 0xc with alignment 4 and copies three dwords per record; the
+// shuffle swaps the three dwords; TransitionState reads id at +0 with stride 3 ints).
+struct StateCandidate {
+    int32_t id;         // +0x00 CitizenAI state id
+    int32_t priority;   // +0x04 sort key (descending)
+    int32_t unused;     // +0x08 always 0
+};
+static_assert(sizeof(StateCandidate) == 0xc, "StateCandidate is 12 bytes");
+static_assert(offsetof(StateCandidate, id) == 0x0, "");
+static_assert(offsetof(StateCandidate, priority) == 0x4, "");
+static_assert(offsetof(StateCandidate, unused) == 0x8, "");
+
+struct StateCandidateList {
+    StateCandidate* data;   // +0x00
+    int32_t count;          // +0x08
+    int32_t capacity;       // +0x0C
+};
+static_assert(sizeof(StateCandidateList) == 0x10, "StateCandidateList is {ptr, int, int}");
+static_assert(offsetof(StateCandidateList, data) == 0x0, "");
+static_assert(offsetof(StateCandidateList, count) == 0x8, "");
+static_assert(offsetof(StateCandidateList, capacity) == 0xc, "");
+
+} // namespace
+
+static void CitizenAI_SortByPriority(StateCandidate* a, int count) {
+    if (!a || count < 2) return;
     // DESCENDING by priority (highest at index 0). The original (0x14002fe10) is an
     // introsort whose small-array pass selection-sorts the MINIMUM to the END, i.e.
     // it sorts descending. TransitionState (0x14010db90) iterates the result
@@ -65,19 +93,19 @@ void CitizenAI_SortByPriority(void* base, int count) {
     // ascending, which made citizens always pick the lowest-priority state — e.g.
     // Leisure/Wander over Work/needs.) Stable insertion sort, descending.
     for (int i = 1; i < count; i++) {
-        int32_t id   = a[3 * i + 0];
-        int32_t prio = a[3 * i + 1];
-        int32_t unu  = a[3 * i + 2];
+        int32_t id   = a[i].id;
+        int32_t prio = a[i].priority;
+        int32_t unu  = a[i].unused;
         int j = i - 1;
-        while (j >= 0 && a[3 * j + 1] < prio) {
-            a[3 * (j + 1) + 0] = a[3 * j + 0];
-            a[3 * (j + 1) + 1] = a[3 * j + 1];
-            a[3 * (j + 1) + 2] = a[3 * j + 2];
+        while (j >= 0 && a[j].priority < prio) {
+            a[j + 1].id       = a[j].id;
+            a[j + 1].priority = a[j].priority;
+            a[j + 1].unused   = a[j].unused;
             j--;
         }
-        a[3 * (j + 1) + 0] = id;
-        a[3 * (j + 1) + 1] = prio;
-        a[3 * (j + 1) + 2] = unu;
+        a[j + 1].id       = id;
+        a[j + 1].priority = prio;
+        a[j + 1].unused   = unu;
     }
 }
 
@@ -146,8 +174,7 @@ int CitizenComponent::HasSufficientResources() {
     // deref null+0x50/+0x58.
     int iVar2 = 0;
     if (storageObj) {
-        int64_t rows = reinterpret_cast<int64_t>(storageObj->residentSlots);
-        iVar2 = *reinterpret_cast<int*>(rows + 8 + (int64_t)homeSlot * 0x10);
+        iVar2 = storageObj->residentSlots[homeSlot].count;
     }
     float fVar1 = lVar3desc->_fc4;   // CVTTSS2SI = trunc
     int factor = (int)fVar1;
@@ -157,16 +184,16 @@ int CitizenComponent::HasSufficientResources() {
     int rowCount = local_res8->residentSlotCount;
     int iVar7 = 0;
     if (0 < rowCount) {
-        int* piVar5 = reinterpret_cast<int*>(reinterpret_cast<int64_t>(local_res8->residentSlots) + 8);
+        const ResidenceComponent::Family* piVar5 = local_res8->residentSlots;
         int64_t lVar6 = rowCount;
         do {
-            if (0 < *piVar5) iVar7++;
-            piVar5 += 4;       // stride 0x10
+            if (0 < piVar5->count) iVar7++;
+            piVar5++;          // stride 0x10
             lVar6--;
         } while (lVar6 != 0);
     }
 
-    int iVar4 = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(local_res8));
+    int iVar4 = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(local_res8));   // LEFT: SIG CitizenComp_Storage_GetResourceCount
     return (iVar7 * iVar2 * factor <= iVar4) ? 1 : 0;
 }
 
@@ -189,16 +216,16 @@ int CitizenComponent::HasSufficientResources2() {
     int rowCount = local_res8->residentSlotCount;
     int iVar6 = 0;
     if (0 < rowCount) {
-        int* piVar4 = reinterpret_cast<int*>(reinterpret_cast<int64_t>(local_res8->residentSlots) + 8);
+        const ResidenceComponent::Family* piVar4 = local_res8->residentSlots;
         int64_t lVar5 = rowCount;
         do {
-            if (0 < *piVar4) iVar6++;
-            piVar4 += 4;       // stride 0x10
+            if (0 < piVar4->count) iVar6++;
+            piVar4++;          // stride 0x10
             lVar5--;
         } while (lVar5 != 0);
     }
 
-    int iVar3 = Storage_GetResourceCount2(reinterpret_cast<int64_t>(local_res8));
+    int iVar3 = Storage_GetResourceCount2(reinterpret_cast<int64_t>(local_res8));   // LEFT: SIG Storage_GetResourceCount2
     float threshold = lVar1desc->_fd4;
     // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
     // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
@@ -258,7 +285,7 @@ int CitizenComponent::CarryCount() {
         }
         return 0;
     }
-    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carry));
+    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carry));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
 }
 
 // ============================================================
@@ -291,58 +318,55 @@ int CitizenComponent::CarryCount() {
 //   uVar15 = old count + 1        (new count)
 //   if (uVar15 == uVar7) return;  // overflow guard (never true for these ranges)
 // The triple to append is {id, prio, 0}.
-static void AppendCandidate(int64_t* L, int id, int prio) {
-    uint8_t* lb = reinterpret_cast<uint8_t*>(L);
-    uint32_t uVar7  = *reinterpret_cast<uint32_t*>(lb + 8);    // old count
-    uint32_t uVar15 = (uint32_t)(*reinterpret_cast<int*>(lb + 8) + 1);  // new count
+static void AppendCandidate(StateCandidateList* L, int id, int prio) {
+    uint32_t uVar7  = (uint32_t)L->count;                     // old count
+    uint32_t uVar15 = (uint32_t)(L->count + 1);               // new count
     if (uVar15 == uVar7) return;                              // (int)+1==same -> overflow
 
-    int32_t local_38[3] = { id, prio, 0 };
+    StateCandidate local_38 = { id, prio, 0 };
 
-    void* pvVar13 = reinterpret_cast<void*>(L[0]);            // old buffer
-    *reinterpret_cast<uint32_t*>(lb + 8) = uVar15;            // store new count
+    StateCandidate* pvVar13 = L->data;                        // old buffer
+    L->count = (int32_t)uVar15;                               // store new count
 
-    if (*reinterpret_cast<int*>(lb + 0xc) < (int)uVar15) {    // grow
-        *reinterpret_cast<uint32_t*>(lb + 0xc) = uVar15;
+    if (L->capacity < (int)uVar15) {                          // grow
+        L->capacity = (int32_t)uVar15;
         if ((uVar15 == uVar7 + 1) && (uVar7 != 0)) {
-            *reinterpret_cast<uint32_t*>(lb + 0xc) = uVar15 * 3;
+            L->capacity = (int32_t)(uVar15 * 3);
         }
-        int newcap = *reinterpret_cast<int*>(lb + 0xc);
-        void* pvVar8 = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)newcap * 0xc), 4);
-        L[0] = reinterpret_cast<int64_t>(pvVar8);
+        int newcap = L->capacity;
+        L->data = static_cast<StateCandidate*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)newcap * 0xc), 4));
     }
 
     int iVar20 = 0;
-    if (pvVar13 == reinterpret_cast<void*>(L[0])) iVar20 = (int)uVar7;  // in-place: keep tail
+    if (pvVar13 == L->data) iVar20 = (int)uVar7;              // in-place: keep tail
     int64_t lVar12 = iVar20;
     if (lVar12 < (int)uVar15) {
-        int64_t lVar19 = lVar12 * 0xc;
         do {
-            int32_t* puVar18 = reinterpret_cast<int32_t*>(L[0] + lVar19);
+            StateCandidate* puVar18 = &L->data[lVar12];
             if (puVar18 != nullptr) {
-                int32_t* puVar17;
+                const StateCandidate* puVar17;
                 if (lVar12 < (int)uVar7) {
-                    puVar17 = reinterpret_cast<int32_t*>(
-                        reinterpret_cast<uint8_t*>(pvVar13) + (int64_t)iVar20 * 0xc);
+                    puVar17 = &pvVar13[iVar20];
                 } else {
-                    puVar17 = local_38;
+                    puVar17 = &local_38;
                 }
-                puVar18[0] = puVar17[0];
-                puVar18[1] = puVar17[1];
-                puVar18[2] = puVar17[2];
+                puVar18->id       = puVar17->id;
+                puVar18->priority = puVar17->priority;
+                puVar18->unused   = puVar17->unused;
             }
             lVar12++;
             iVar20++;
-            lVar19 += 0xc;
         } while (lVar12 < (int)uVar15);
     }
 
-    if (pvVar13 != reinterpret_cast<void*>(L[0])) {
+    if (pvVar13 != L->data) {
         System::MemoryAllocator::MemFree(pvVar13);
     }
 }
 
-void CitizenAIComponent::BuildCandidateStateList(int64_t* outList, char param3) {
+void CitizenAIComponent::BuildCandidateStateList(int64_t* outListRaw, char param3) {
+    StateCandidateList* outList = reinterpret_cast<StateCandidateList*>(outListRaw);   // LEFT: SIG CitizenAIComponent::BuildCandidateStateList (CitizenAIComponent.h, CIT-3 / CAI-3)
     CitizenComponent* cz = citizen;
 
     // --- Special early branch: SICK (disease) with a care building ---
@@ -427,7 +451,7 @@ void CitizenAIComponent::BuildCandidateStateList(int64_t* outList, char param3) 
         float* pf1 = &cz->happiness;
         float c1721fc = kRdata_1401721fc;
         if ((*pf1 <= fv1 && fv1 != *pf1) &&
-            (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c1721fc)) {   // B.3.4b bridge
+            (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c1721fc)) {   // B.3.4b bridge  // LEFT: CitizenAIComponent.h (CIT-3) leisureTimer is int64_t, retail System::Time
             leisure = true;
         }
         if (!leisure) {
@@ -437,14 +461,14 @@ void CitizenAIComponent::BuildCandidateStateList(int64_t* outList, char param3) 
             float* pf2 = &cz->happiness;
             float c172234 = kRdata_140172234;
             if ((*pf2 <= fv2 && fv2 != *pf2) &&
-                (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172234)) {   // B.3.4b bridge
+                (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172234)) {   // B.3.4b bridge  // LEFT: CitizenAIComponent.h (CIT-3) leisureTimer is int64_t, retail System::Time
                 leisure = true;
             }
         }
         if (!leisure) {
             // OR AsSeconds(leisureTimer) > DAT_172254
             float c172254 = RdataF(kRdata_140172254);
-            if (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge
+            if (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge  // LEFT: CitizenAIComponent.h (CIT-3) leisureTimer is int64_t, retail System::Time
         }
         // id 0xc both ways; only the priority differs (2 when tripped, 0 otherwise).
         AppendCandidate(outList, 0xc, leisure ? 2 : 0);
@@ -534,11 +558,11 @@ void CitizenAIComponent::BuildCandidateStateList(int64_t* outList, char param3) 
             int ltpPrio = 0;
             if (happy >= 1) {
                 // Time t(DAT_172234); prio = (t < dataC8) ? 3 : 1
-                int64_t timeBuf = 0;
+                System::Time timeBuf = {};
                 float c172234 = kRdata_140172234;
-                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeBuf), c172234);
+                RtSystem_Time_Ctor(&timeBuf, c172234);
                 int64_t acc = dataC8;
-                ltpPrio = (timeBuf < acc) ? 3 : 1;
+                ltpPrio = (timeBuf._ticks < acc) ? 3 : 1;
                 AppendCandidate(outList, 0xd, ltpPrio);
             }
 
@@ -548,34 +572,31 @@ void CitizenAIComponent::BuildCandidateStateList(int64_t* outList, char param3) 
     // ============================================================
     // LAB_14010f144: Fisher-Yates shuffle + SortByPriority
     // ============================================================
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8);
+    int count = outList->count;
     if (0 < count) {
         System::Random* rng = GameUpdateLoop::_singleton->m_random;
-        int64_t off = 0;
         int i = 0;
         do {
-            uint32_t r = rng->Rand(static_cast<uint32_t>(*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(outList) + 8)));
+            uint32_t r = rng->Rand(static_cast<uint32_t>(outList->count));
             if (r != (uint32_t)i) {
-                int64_t buf = outList[0];
-                int64_t roff = (int64_t)(int)r * 0xc;
-                int32_t u0 = *reinterpret_cast<int32_t*>(buf + off);
-                int32_t u1 = *reinterpret_cast<int32_t*>(buf + 4 + off);
-                int32_t u2 = *reinterpret_cast<int32_t*>(buf + 8 + off);
-                *reinterpret_cast<int32_t*>(buf + off)     = *reinterpret_cast<int32_t*>(buf + roff);
-                *reinterpret_cast<int32_t*>(buf + 4 + off) = *reinterpret_cast<int32_t*>(buf + 4 + roff);
-                *reinterpret_cast<int32_t*>(buf + 8 + off) = *reinterpret_cast<int32_t*>(buf + 8 + roff);
-                buf = outList[0];
-                *reinterpret_cast<int32_t*>(buf + roff)     = u0;
-                *reinterpret_cast<int32_t*>(buf + 4 + roff) = u1;
-                *reinterpret_cast<int32_t*>(buf + 8 + roff) = u2;
+                StateCandidate* buf = outList->data;
+                int ri = (int)r;
+                int32_t u0 = buf[i].id;
+                int32_t u1 = buf[i].priority;
+                int32_t u2 = buf[i].unused;
+                buf[i].id       = buf[ri].id;
+                buf[i].priority = buf[ri].priority;
+                buf[i].unused   = buf[ri].unused;
+                buf = outList->data;
+                buf[ri].id       = u0;
+                buf[ri].priority = u1;
+                buf[ri].unused   = u2;
             }
             i++;
-            off += 0xc;
-        } while (i < *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8));
+        } while (i < outList->count);
     }
-    if (1 < *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8)) {
-        CitizenAI_SortByPriority(reinterpret_cast<void*>(outList[0]),
-                                 *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8));
+    if (1 < outList->count) {
+        CitizenAI_SortByPriority(outList->data, outList->count);
     }
 }
 

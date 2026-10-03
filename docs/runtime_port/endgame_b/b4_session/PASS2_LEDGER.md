@@ -158,3 +158,38 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - R-OBJ: `Factory::Startup`'s unregistered-parent path still faults reading 0x28 as retail does, but GCC
   now emits it as an explicit load + `ud2`.
 - Allocation results not matching the tier-I name shape: `TypeChildAlloc`, `InternalMemAlloc`.
+
+## Round 3 hand-ins (CAI-5, CAI-2, WORK-2, R-GFX, CAI-3)
+### Coordinator (after CAI-1, CIT-1, CIT-2 are merged): the `System::Time` members held as `int64_t`
+- `CitizenAIComponent` `timers[16]`, `leisureTimer`, `dataC8`: integer arithmetic in citizenai_candidatelist.cpp
+  (`timers[id] < 1`, `int64_t acc = dataC8`), citizenai_gather.cpp (`timers[6] = stamp`), citizenai_leisure.cpp
+  (`leisureTimer = 0`); seven Time / InternalPtr serializer casts wait on it.
+- `CitizenComponent` +0x60, +0x70, +0x78, `clothingTimer` (see CIT-1 / CIT-2 above).
+### R-COLL second visit <- R-GFX
+- `array_graphics_mesh.cpp` (29 casts) can use `GraphicsMesh::DetailLevel*` (the "TriangleList" name there is
+  the misnomer); `array.cpp`'s `_tags` / `MaterialConstant` readers and `array_destroy.cpp`'s VtxStream can use
+  `AnimationGroup::Tag`, `MaterialConstant::name`, `VertexProgram::Element` / `ElementArray` / `Stream`.
+### S2 follow-up (Action.h)
+- <- CAI-2: `ActionStack::field_0x10` is `Action*` where retail holds an `InternalPtr<Action>`.
+### GAME-4 <- CAI-3
+- `g_pForceWorkBuilding` is `void*` (two casts).
+### Wave X additions
+- CAI-5: `WorkBST_RegisterWork_1a30`, `Pf_AvlRebalanceA_a8c0` (the template is only instantiated in
+  action_pf_avl.cpp), `WorkBase_FindComponent_2ed0`, `CitizenAI_PlayAnimationCtor4_ba6b0`.
+- CAI-2: `CitizenAI_ActionExecutor_c4c50`, the move-tick `1094c0`, `ResidenceCheck_2ac30`, `ec70` / `e370` /
+  `dd30`, `Storage_GetResourceCount2`, `ActChild_TransferToCarrier_ca230`,
+  `CitizenComp_StorageComponent_QueryCount`, `WorkAct_GatherRawMatCtor_bf790`, the SA-owned
+  `PerfX::TerrainGet` / `PerfX::PickCullSkip` callbacks. No caller left: `CharMgr_sub_8660` (charmanager.cpp),
+  `Pf_PickReachableCell_edb0` (action_pf_road.cpp), `Pf_RemoveAnimalCtor_bbea0` (action_pf_roots_drop.cpp).
+- WORK-2: `WorkImpl_WalkablePos*`, `WorkImpl_BuildStructureStep_6ef0` (its "time" argument is a reused slot
+  holding a WorkPlaceComponent), `PlayerTrade_Retrace_25920`, `TradeWork_helper_14b00` / `_impl_4b40`;
+  MarketWork's claim Set is two raw fields (a six-file header change).
+- CAI-3: the `CitizenComp_*` int64 entry points, `CitizenAI_PerformWorkCtor4/6/8/11`, `NavigateTo`,
+  `WalkTowards`, `ActMv_FindComponentFamily_12d0`, `Component::Update(void*)`.
+- R-GFX: the `ExternalPtrHandle::p` alias (one alias serves five types, 12 reads), the collection element ops
+  taking `void*`, the CullStack and EdgeMesh vertex doors (tool_base_render.cpp), PlayAnimation's time
+  parameters, the `rtpickgrid` / `rtgfxgrid` helpers. dx11 seam: Context `_renderBuffer` / `_imageBuffers`,
+  `SetVertexBuffer` / `SetImageBuffer` / `SetRenderBuffer`.
+### Separate task (retail differences), found this round
+- Row 260: consumeproduce's first input pass writes 12 bytes into an 8-byte local (retail uses 16 and jumps to
+  the action setup). Rows 220-221: `ClearArea::Validate` / `BuildStructure::Validate`.

@@ -64,7 +64,7 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(stream, 5);
 
     // citizen is an InternalPtr<CitizenComponent> (eight bytes): its serializer.
-    reinterpret_cast<Object::InternalBasePtr*>(&citizen)->Serialize(*s);   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&citizen)->Serialize(*s);   // B.3.4 bridge; LEFT: citizen is a CitizenComponent* over an InternalPtr (readers tree-wide; wave X)
     if (citizen) {
         uint32_t tid = CitizenAISer_TidCitizenComponent();
         if (tid && !citizen->IsDerivedFrom(tid))
@@ -76,12 +76,12 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     int version = s->GetVersion();
     if (version < 5) {
         for (int i = 0; i < 14; ++i)
-            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[14]), 0.0f);
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[15]), 0.0f);
+            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[14]), 0.0f);   // LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[15]), 0.0f);   // LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
     } else {
         for (int i = 0; i < 16; ++i)
-            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge
+            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
     }
 
     version = s->GetVersion();
@@ -92,9 +92,9 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     version = s->GetVersion();
     if (version > 1) s->Serialize(state, nullptr);
     version = s->GetVersion();
-    if (version > 2) reinterpret_cast<System::Time*>(&leisureTimer)->Serialize(*s);   // B.3.4b bridge
+    if (version > 2) reinterpret_cast<System::Time*>(&leisureTimer)->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
     version = s->GetVersion();
-    if (version > 3) reinterpret_cast<System::Time*>(&dataC8)->Serialize(*s);   // B.3.4b bridge
+    if (version > 3) reinterpret_cast<System::Time*>(&dataC8)->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
 
     s->~Serializer();   // B.3.4 bridge
 }
