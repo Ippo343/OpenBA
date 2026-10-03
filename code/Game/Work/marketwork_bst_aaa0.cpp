@@ -248,7 +248,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
 
     // ae38: CALL 0x140025920(tree, &cursor). (The retrace takes the header and the
     // cursor slot as int64_t*: LEFT.)
-    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree),
+    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree),   // LEFT: SIG PlayerTrade_Retrace_25920
                               reinterpret_cast<int64_t*>(useB ? &cursorB : &cursorA));   // LEFT: SIG PlayerTrade_Retrace_25920
 }
 
