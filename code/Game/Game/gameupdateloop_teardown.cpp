@@ -60,8 +60,7 @@
 // its reason: the arrays EntityList.h / CitizenBehavior.h / PlayerToolManager.h
 // declare as three raw fields (not a Collection::Array, so `~Array` is reached
 // through a cast; H5 in headers owned by ENT / PLAYER), the trees whose root is
-// a `void*` there (CitizenBehavior +0x100 / +0x160, PathGraph +0x18,
-// WorkScheduler +0x20), and the tool registry whose node is defined in
+// a `void*` there (WorkScheduler +0x20), and the tool registry whose node is defined in
 // Dialog/toolbardialog.cpp.
 namespace {
 
@@ -96,29 +95,32 @@ extern "C" void Array8_Clear_1740(void* hdrV) {
 // ============================================================
 // 0x1400174e0 — recursive node free, children +0x20/+0x28, owns a buffer at +0x08
 // ============================================================
-// (Its only trees are CitizenBehavior +0x100 / +0x160, whose roots
-// CitizenBehavior.h declares `void*`: the node has no type to read it by.)
-extern "C" void TreeNodeFree_174e0(void* hdrV, void* nodeV) {
-    if (!nodeV) return;
-    TreeNodeFree_174e0(hdrV, P(nodeV, 0x20));   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-    TreeNodeFree_174e0(hdrV, P(nodeV, 0x28));   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-    Arr(nodeV, 0x08).~Array();   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-    MemFree(nodeV);
+// The nodes of CitizenBehavior's two entity-bucket trees (+0x100 profession,
+// +0x160 template: CitizenBucketNode<Key>, Entity/CitizenBehavior.h). Retail
+// has ONE body for both key types (B13): one template here.
+template <class Key>
+void TreeNodeFree_174e0(void* hdrV, CitizenBucketNode<Key>* node) {
+    if (!node) return;
+    TreeNodeFree_174e0(hdrV, node->left);
+    TreeNodeFree_174e0(hdrV, node->right);
+    Arr(node, 0x08).~Array();   // LEFT: CitizenBehavior.h (ENT): the bucket's entity Array is three raw fields (H5)
+    MemFree(node);
 }
 
 // ============================================================
 // 0x1400173d0 — clear a {root,count} tree of TreeNodeFree_174e0 nodes
 // ============================================================
-extern "C" void Tree_Clear_173d0(void* hdrV) {
-    void* root = P(hdrV, 0x00);   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-    if (root) {
-        TreeNodeFree_174e0(hdrV, P(root, 0x20));   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-        TreeNodeFree_174e0(hdrV, P(root, 0x28));   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-        Arr(root, 0x08).~Array();   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-        MemFree(root);
+template <class Key>
+void Tree_Clear_173d0(CitizenBucketNode<Key>*& root, int32_t& count) {
+    CitizenBucketNode<Key>* node = root;
+    if (node) {
+        TreeNodeFree_174e0(&root, node->left);
+        TreeNodeFree_174e0(&root, node->right);
+        Arr(node, 0x08).~Array();   // LEFT: CitizenBehavior.h (ENT): the bucket's entity Array is three raw fields (H5)
+        MemFree(node);
     }
-    P(hdrV, 0x00) = nullptr;   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
-    I32(hdrV, 0x08) = 0;   // LEFT: CitizenBehavior.h (ENT): +0x100 / +0x160 tree roots are void*
+    root = nullptr;
+    count = 0;
 }
 
 // ============================================================
@@ -136,10 +138,10 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
 // pair array (+0x00)
 // ============================================================
 extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
-    void* root = self->m_bstRoot;
+    PathCostNode* root = self->m_bstRoot;
     if (root) {
-        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, P(root, 0x18));   // LEFT: CitizenBehavior.h (ENT): PathGraph::m_bstRoot is void*
-        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, P(root, 0x20));   // LEFT: CitizenBehavior.h (ENT): PathGraph::m_bstRoot is void*
+        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, root->left);
+        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, root->right);
         MemFree(root);
     }
     self->m_bstRoot = nullptr;
@@ -343,7 +345,7 @@ extern "C" void CitizenList_Dtor_907b0(CitizenBehavior* self) {
     Arr(self, 0x30 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): notifyEntries is three raw fields, not a Collection::Array (H5)
     Arr(self, 0x2e * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): professionResources is three raw fields, not a Collection::Array (H5)
 
-    Tree_Clear_173d0(&self->field_0x160);
+    Tree_Clear_173d0(self->field_0x160, self->field_0x168);
     ArrayOfArrays_Clear_175d0(&self->field_0x150);
     ArrayOfArrays_Clear_175d0(&self->field_0x140);
 
@@ -351,7 +353,7 @@ extern "C" void CitizenList_Dtor_907b0(CitizenBehavior* self) {
     Arr(self, 0x24 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): field_0x120 is three raw fields, not a Collection::Array (H5)
     Arr(self, 0x22 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): field_0x110 is three raw fields, not a Collection::Array (H5)
 
-    Tree_Clear_173d0(&self->field_0x100);
+    Tree_Clear_173d0(self->field_0x100, self->field_0x108);
 
     for (int idx = 0x1e; idx >= 0; idx -= 2)
         Arr(self, idx * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): the sixteen +0x00..+0xF0 lists are three raw fields each (H5)
