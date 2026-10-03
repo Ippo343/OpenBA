@@ -9,8 +9,10 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Entity/citizenbehavior_funcs.h"
-#include "Component/coll_bridge.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"                          // Map::size / cells / PathDistance
+#include "Component/ComponentDescription.h"   // StorageComponent::Item::_resource sub-descriptions
+#include "Component/Description.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -176,38 +178,34 @@ bool PathGraph::ProcessPaths() {
         remaining = 6;
     }
 
-    // Get map grid pointer: *(int**)(g_pGameWorldSingleton + 0xf8)
-    // (GameUpdateLoop::m_game is still void*: LEFT)
-    int* mapGrid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    // The world map: g_pGameWorldSingleton + 0xf8
+    Map* map = GameUpdateLoop::_singleton->m_game;
 
     // Pairs array: each entry is {int32 cellA, int32 cellB} = 8 bytes
-    int32_t* pairs = reinterpret_cast<int32_t*>(pg->m_pairs);
+    PathCellPair* pairs = pg->m_pairs;
 
     for (int i = remaining; i >= 0; i--) {
         int idx = pg->m_pendingIdx;
-        int32_t cellA = pairs[idx * 2];
-        int32_t cellB = pairs[idx * 2 + 1];
+        int32_t cellA = pairs[idx].cellA;
+        int32_t cellB = pairs[idx].cellB;
 
         // Compute path cost between cells
         uint32_t cost = 0;
-        cost = (uint32_t)Pf_IsDstReachable_f810(mapGrid, (uint32_t)cellA,
-                                                (uint32_t)cellB, 0);   // 0x14009f810
+        cost = (uint32_t)map->PathDistance((uint32_t)cellA, (uint32_t)cellB, 0);   // 0x14009f810
 
         // If cost < 2 (unreachable or adjacent), fall back to Euclidean grid distance
         if (cost < 2) {
-            int mapWidth = *mapGrid;
+            int mapWidth = map->size;
             int dx = cellA / mapWidth - cellB / mapWidth;
             int dy = cellA % mapWidth - cellB % mapWidth;
             float dist = sqrtf((float)(dx * dx + dy * dy));
             cost = (uint32_t)dist;
         }
 
-        // Get region IDs from nav data: *(int64*)(mapGrid+0x20) = navData
-        // Region at navData + 0x18 + cell * 0x30
-        int64_t navData = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uint8_t*>(mapGrid) + 0x80);  // piVar3+0x20 in qword = +0x80 bytes
-        int regionA = *reinterpret_cast<int*>(navData + 0x18 + (int64_t)cellA * 0x30);
-        int regionB = *reinterpret_cast<int*>(navData + 0x18 + (int64_t)cellB * 0x30);
+        // Region IDs from the map's cell array (+0x80, MapCell stride 0x30, regionId +0x18)
+        MapCell* cells = map->cells;
+        int regionA = cells[(int64_t)cellA].regionId;
+        int regionB = cells[(int64_t)cellB].regionId;
 
         // BST key: (max, min) of region IDs
         int keyHigh = regionA;
@@ -218,33 +216,33 @@ bool PathGraph::ProcessPaths() {
         }
 
         // Search BST for existing entry
-        uint32_t* foundNode = nullptr;
-        uint32_t* bstNode = reinterpret_cast<uint32_t*>(pg->m_bstRoot);
+        PathCostNode* foundNode = nullptr;
+        PathCostNode* bstNode = pg->m_bstRoot;
         while (bstNode != nullptr) {
-            int nodeHigh = (int)bstNode[0];
+            int nodeHigh = bstNode->regionHigh;
             if (keyHigh < nodeHigh) {
-                // Go left: bstNode[6] = left child (offset +0x18)
-                bstNode = *reinterpret_cast<uint32_t**>(&bstNode[6]);
+                // Go left (+0x18)
+                bstNode = bstNode->left;
             } else if (keyHigh > nodeHigh) {
                 // Check low key
                 if (keyHigh == nodeHigh) {
                     // Same high, check low
-                    if (keyLow < (int)bstNode[1]) {
-                        bstNode = *reinterpret_cast<uint32_t**>(&bstNode[6]);
+                    if (keyLow < bstNode->regionLow) {
+                        bstNode = bstNode->left;
                     } else {
                         foundNode = bstNode;
                         break;
                     }
                 } else {
-                    // Go right: bstNode[8] = right child (offset +0x20)
-                    bstNode = *reinterpret_cast<uint32_t**>(&bstNode[8]);
+                    // Go right (+0x20)
+                    bstNode = bstNode->right;
                 }
             } else {
                 // keyHigh == nodeHigh
-                if (keyLow < (int)bstNode[1]) {
-                    bstNode = *reinterpret_cast<uint32_t**>(&bstNode[6]);
-                } else if (keyLow > (int)bstNode[1]) {
-                    bstNode = *reinterpret_cast<uint32_t**>(&bstNode[8]);
+                if (keyLow < bstNode->regionLow) {
+                    bstNode = bstNode->left;
+                } else if (keyLow > bstNode->regionLow) {
+                    bstNode = bstNode->right;
                 } else {
                     foundNode = bstNode;
                     break;
@@ -259,17 +257,17 @@ bool PathGraph::ProcessPaths() {
             key.low = keyLow;
             key.value = 0;
 
-            void* outNode = nullptr;
+            PathCostNode* outNode = nullptr;
             PathBST_Insert_25a10(   // 0x140025a10
-                reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(pg) + 0x18),  // &pg->m_bstRoot
-                reinterpret_cast<uint64_t*>(&outNode),
-                reinterpret_cast<uint32_t*>(&key));
-            foundNode = reinterpret_cast<uint32_t*>(outNode);
+                reinterpret_cast<int64_t*>(&pg->m_bstRoot),   // LEFT: SIG PathBST_Insert_25a10 (Action/exe_bodies.h)
+                reinterpret_cast<uint64_t*>(&outNode),        // LEFT: SIG PathBST_Insert_25a10
+                reinterpret_cast<uint32_t*>(&key));           // LEFT: SIG PathBST_Insert_25a10
+            foundNode = outNode;
         }
 
         // Store the computed distance
         if (foundNode) {
-            foundNode[2] = cost;
+            foundNode->cost = cost;
         }
 
         // Decrement pending index
@@ -283,7 +281,7 @@ bool PathGraph::ProcessPaths() {
         // Citizen assignment sweep
         CitizenAssignCitizens(pg);   // 0x1400d43b0
         // Clear the pairs array
-        PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30
+        PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30  LEFT: SIG PathPairs_Clear_25b30 (Action/exe_bodies.h)
     }
 
     return true;
@@ -311,18 +309,17 @@ void PathGraph::BuildPathGraph() {
     int dbgEntities = 0, dbgEntRegionOk = 0, dbgPairsAdded = 0;
 
     // Get key pointers from the game world singleton
-    // (GameUpdateLoop::m_game and m_citizenList are still void*: LEFT)
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    int* mapGrid = reinterpret_cast<int*>(world->m_game);
-    uint8_t* citizenBehavior = reinterpret_cast<uint8_t*>(world->m_citizenList);
+    Map* map = world->m_game;
+    CitizenBehavior* town = world->m_citizenList;
     ProfessionList* buildingList = world->m_professionList;
 
     // ---- Step 1: Collect grid cell IDs for all buildings ----
     // Retail (0x1400d70c0): lVar3 = *(gw+0xf0), loop over *(int*)(lVar3+0x28)
     // entries of *(longlong*)(lVar3+0x20) — the CitizenBehavior/town RESIDENCE
     // list, NOT gw+0xb0 (that is the ProfessionList, used only in Step 4 keys).
-    int buildingCount = *reinterpret_cast<int*>(citizenBehavior + 0x28);
-    int64_t* buildingArray = *reinterpret_cast<int64_t**>(citizenBehavior + 0x20);
+    int buildingCount = town->field_0x28;
+    ComponentEntity** buildingArray = town->field_0x20;
 
     // Dynamic array for building grid IDs
     int* buildingCells = nullptr;
@@ -331,12 +328,11 @@ void PathGraph::BuildPathGraph() {
 
     for (int i = 0; i < buildingCount; i++) {
         // Get InternalBasePtr for this building
-        int64_t entityIBP = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uint8_t*>(buildingArray) + i * 8);
+        ComponentEntity* entityIBP = buildingArray[i];
 
         // Get grid cell ID for the building
         int gridId = -1;
-        gridId = Pf_EntityAnchorCell_7fb0(&entityIBP, nullptr);   // 0x140087fb0
+        gridId = EntityAnchorCell(&entityIBP, nullptr);   // 0x140087fb0
 
         // Grow array if needed (same pattern as decompiled code)
         int newCount = cellCount + 1;
@@ -347,7 +343,7 @@ void PathGraph::BuildPathGraph() {
                 if (cellCapacity != 0 && newCount == cellCapacity + 1) {
                     newCap = newCount * 3;
                 }
-                int* newArr = reinterpret_cast<int*>(
+                int* newArr = static_cast<int*>(
                     System::MemoryAllocator::MemAlloc((int64_t)newCap * 4, 4));
 
                 // Copy existing + new entry
@@ -385,27 +381,22 @@ void PathGraph::BuildPathGraph() {
     }
 
     // ---- Step 2: Clear old BST ----
-    void* oldBst = pg->m_bstRoot;
+    PathCostNode* oldBst = pg->m_bstRoot;
     if (oldBst != nullptr) {
         // Recursively free left and right subtrees
-        WorkBase_TreeNodeFree_e320(   // 0x14000e320
-            reinterpret_cast<uint8_t*>(pg) + 0x18,  // &pg->m_bstRoot
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(oldBst) + 0x18));
-        WorkBase_TreeNodeFree_e320(
-            reinterpret_cast<uint8_t*>(pg) + 0x18,
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(oldBst) + 0x20));
+        WorkBase_TreeNodeFree_e320(&pg->m_bstRoot, oldBst->left);    // 0x14000e320
+        WorkBase_TreeNodeFree_e320(&pg->m_bstRoot, oldBst->right);
         System::MemoryAllocator::MemFree(oldBst);
     }
     pg->m_bstRoot = nullptr;
     pg->m_bstCount = 0;
 
     // ---- Step 3: Clear pairs array ----
-    PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30
+    PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30  LEFT: SIG PathPairs_Clear_25b30 (Action/exe_bodies.h)
 
     // ---- Step 4: Generate pairs from profession entities x buildings ----
-    // Nav data for region lookups
-    int64_t navData = *reinterpret_cast<int64_t*>(
-        reinterpret_cast<uint8_t*>(mapGrid) + 0x80);
+    // The map's cell array, for region lookups
+    MapCell* cells = map->cells;
 
     // Building list at citizenBehavior+0xb0 (via game world +0xb0)
     int profGroupCount = buildingList->professions.GetSize();
@@ -413,19 +404,18 @@ void PathGraph::BuildPathGraph() {
 
     for (int gi = 0; gi < profGroupCount; gi++) {
         // Get profession key from building list
-        // (ProfessionList keeps its Array as raw storage, H5: LEFT)
-        uint64_t profKey = reinterpret_cast<uint64_t*>(buildingList->professions.GetData())[gi];
+        Profession* profKey = buildingList->professions.GetData()[gi];
 
         // Look up profession BST at citizenBehavior+0x100
-        uint64_t* profNode = *reinterpret_cast<uint64_t**>(citizenBehavior + 0x100);
+        ProfessionBucket* profNode = town->field_0x100;
         int entityCount = 0;
         while (profNode != nullptr) {
-            if (profKey < profNode[0]) {
-                profNode = reinterpret_cast<uint64_t*>(profNode[4]);
-            } else if (profKey > profNode[0]) {
-                profNode = reinterpret_cast<uint64_t*>(profNode[5]);
+            if (profKey < profNode->key) {
+                profNode = profNode->left;
+            } else if (profKey > profNode->key) {
+                profNode = profNode->right;
             } else {
-                entityCount = (int)profNode[2];
+                entityCount = profNode->count;
                 break;
             }
         }
@@ -433,13 +423,13 @@ void PathGraph::BuildPathGraph() {
         // For each entity in this profession group
         for (int64_t ei = 0; ei < entityCount; ei++) {
             // Re-lookup profession BST (same pattern as decompiled code)
-            uint64_t* lookupNode = *reinterpret_cast<uint64_t**>(citizenBehavior + 0x100);
-            uint64_t* foundNode = nullptr;
+            ProfessionBucket* lookupNode = town->field_0x100;
+            ProfessionBucket* foundNode = nullptr;
             while (lookupNode != nullptr) {
-                if (profKey < lookupNode[0]) {
-                    lookupNode = reinterpret_cast<uint64_t*>(lookupNode[4]);
-                } else if (profKey > lookupNode[0]) {
-                    lookupNode = reinterpret_cast<uint64_t*>(lookupNode[5]);
+                if (profKey < lookupNode->key) {
+                    lookupNode = lookupNode->left;
+                } else if (profKey > lookupNode->key) {
+                    lookupNode = lookupNode->right;
                 } else {
                     foundNode = lookupNode;
                     break;
@@ -448,15 +438,14 @@ void PathGraph::BuildPathGraph() {
             if (!foundNode) break;
 
             // Get entity IBP from the profession node's entity array
-            int64_t entityIBP = *reinterpret_cast<int64_t*>(foundNode[1] + ei * 8);
+            ComponentEntity* entityIBP = foundNode->entities[ei];
 
             // Get grid cell ID for this entity
             int entityCell = -1;
-            entityCell = Pf_EntityAnchorCell_7fb0(&entityIBP, nullptr);   // 0x140087fb0
+            entityCell = EntityAnchorCell(&entityIBP, nullptr);   // 0x140087fb0
 
             // Get entity's region ID
-            int entityRegion = *reinterpret_cast<int*>(
-                navData + 0x18 + (int64_t)(uint32_t)entityCell * 0x30);
+            int entityRegion = cells[(int64_t)(uint32_t)entityCell].regionId;
             ++dbgEntities;
             if (entityRegion >= 0) ++dbgEntRegionOk;
 
@@ -464,8 +453,7 @@ void PathGraph::BuildPathGraph() {
             if (entityRegion >= 0 && buildingCells != nullptr) {
                 for (int bi = 0; bi < cellCount; bi++) {
                     int buildingCell = buildingCells[bi];
-                    int buildingRegion = *reinterpret_cast<int*>(
-                        navData + 0x18 + (int64_t)buildingCell * 0x30);
+                    int buildingRegion = cells[(int64_t)buildingCell].regionId;
 
                     if (buildingRegion < 0) continue;
 
@@ -478,20 +466,20 @@ void PathGraph::BuildPathGraph() {
                     }
 
                     // Check if this pair already exists in BST
-                    int* bstNode = reinterpret_cast<int*>(pg->m_bstRoot);
+                    PathCostNode* bstNode = pg->m_bstRoot;
                     bool found = false;
                     while (bstNode != nullptr) {
-                        int nodeHigh = bstNode[0];
+                        int nodeHigh = bstNode->regionHigh;
                         if (keyHigh < nodeHigh) {
-                            bstNode = *reinterpret_cast<int**>(&bstNode[6]);
+                            bstNode = bstNode->left;
                         } else if (keyHigh > nodeHigh) {
-                            bstNode = *reinterpret_cast<int**>(&bstNode[8]);
+                            bstNode = bstNode->right;
                         } else {
                             // keyHigh == nodeHigh
-                            if (keyLow < bstNode[1]) {
-                                bstNode = *reinterpret_cast<int**>(&bstNode[6]);
-                            } else if (keyLow > bstNode[1]) {
-                                bstNode = *reinterpret_cast<int**>(&bstNode[8]);
+                            if (keyLow < bstNode->regionLow) {
+                                bstNode = bstNode->left;
+                            } else if (keyLow > bstNode->regionLow) {
+                                bstNode = bstNode->right;
                             } else {
                                 found = true;
                                 break;
@@ -503,12 +491,12 @@ void PathGraph::BuildPathGraph() {
 
                     // Add pair to pairs array
                     // Each pair is {int entityCell, int buildingCell} = 8 bytes
-                    int32_t pairData[2] = { entityCell, buildingCell };
+                    PathCellPair pairData = { entityCell, buildingCell };
                     int curPairCount = (int)pg->m_pairCount;
                     int newPairCount = curPairCount + 1;
 
                     // Grow pairs array (same dynamic array pattern)
-                    void* oldPairs = pg->m_pairs;
+                    PathCellPair* oldPairs = pg->m_pairs;
                     pg->m_pairCount = newPairCount;
                     int pairCap = pg->m_pairCapacity;
                     if (pairCap < newPairCount) {
@@ -525,12 +513,12 @@ void PathGraph::BuildPathGraph() {
                     // Copy existing entries + new
                     int copyStart = (oldPairs == pg->m_pairs) ? curPairCount : 0;
                     for (int k = copyStart; k < newPairCount; k++) {
-                        int64_t* dest = reinterpret_cast<int64_t*>(pg->m_pairs);
+                        PathCellPair* dest = pg->m_pairs;
                         if (dest) {
                             if (k < curPairCount && oldPairs) {
-                                dest[k] = reinterpret_cast<int64_t*>(oldPairs)[k];
+                                dest[k] = oldPairs[k];
                             } else {
-                                dest[k] = *reinterpret_cast<int64_t*>(pairData);
+                                dest[k] = pairData;
                             }
                         }
                     }
@@ -553,9 +541,9 @@ void PathGraph::BuildPathGraph() {
                     {
                         void* dummy = nullptr;
                         PathBST_Insert_25a10(   // 0x140025a10
-                            reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(pg) + 0x18),
-                            reinterpret_cast<uint64_t*>(&dummy),
-                            reinterpret_cast<uint32_t*>(&bstKey));
+                            reinterpret_cast<int64_t*>(&pg->m_bstRoot),   // LEFT: SIG PathBST_Insert_25a10 (Action/exe_bodies.h)
+                            reinterpret_cast<uint64_t*>(&dummy),          // LEFT: SIG PathBST_Insert_25a10
+                            reinterpret_cast<uint32_t*>(&bstKey));        // LEFT: SIG PathBST_Insert_25a10
                     }
                 }
             }
@@ -747,24 +735,19 @@ void CitizenBehavior::CountResources() {
         bool hadDeadResources = false;
 
         // Iterate storage items: array at +0x28, stride 0x10
-        // Each item: [0x00] = item description ptr, [0x08] = quantity (int cast from longlong)
-        // StorageComponent.h keeps the item array as raw storage (H5): LEFT.
+        // Each item: [0x00] = the stored material's template, [0x08] = quantity
         for (int32_t j = 0; j < itemCount; j++) {
-            int64_t* itemEntry = reinterpret_cast<int64_t*>(
-                reinterpret_cast<int64_t>(storage->storageSlots) + j * 0x10);
+            StorageComponent::Item* itemEntry = &storage->storageSlots[j];
 
-            // Find RawMaterialDescription on the item entity
-            // Item entity has components at +0x28/+0x30 (different from top-level entity +0x30/+0x38)
-            // The item's first qword is a description whose child list is at
-            // +0x28 / count +0x30 (its class is not settled here: LEFT).
-            int64_t itemEntity = itemEntry[0];
+            // Find RawMaterialDescription among the template's sub-descriptions
+            // (ComponentDescription +0x28 / count +0x30)
+            ComponentDescription* itemEntity = itemEntry->_resource;
             RawMaterialDescription* rawMat = nullptr;
             if (itemEntity) {
-                int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
+                int subCompCount = itemEntity->_subDescCount;
                 uint32_t rawMatTypeId = RawMaterialDescription::TypeId();
                 for (int k = 0; k < subCompCount; k++) {
-                    Object::Base* subComp = *reinterpret_cast<Object::Base**>(
-                        *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
+                    Description* subComp = itemEntity->_subDescs[k];
                     if (!subComp) continue;
                     int compTypeId = static_cast<int>(subComp->Type());
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
@@ -779,7 +762,7 @@ void CitizenBehavior::CountResources() {
 
             // Weight per unit (+0x48) times the item quantity
             int32_t weightPerUnit = rawMat->_weight;
-            int32_t quantity = static_cast<int32_t>(itemEntry[1]);
+            int32_t quantity = itemEntry->_count;
             int32_t totalAmount = weightPerUnit * quantity;
 
             // RawMaterialFlags (+0x5c)
@@ -800,7 +783,7 @@ void CitizenBehavior::CountResources() {
             }
 
             // Categorize by profession flag
-            addToProfession(flags, static_cast<int32_t>(itemEntry[1]));
+            addToProfession(flags, itemEntry->_count);
         }
 
         // Update notification worker counts from storage+0x38 (capacity/worker count)
@@ -826,18 +809,16 @@ void CitizenBehavior::CountResources() {
 
         // Iterate storage items
         for (int32_t j = 0; j < itemCount; j++) {
-            int64_t* itemEntry = reinterpret_cast<int64_t*>(
-                reinterpret_cast<int64_t>(storage->storageSlots) + j * 0x10);
+            StorageComponent::Item* itemEntry = &storage->storageSlots[j];
 
-            // Find RawMaterialDescription on the item entity
-            int64_t itemEntity = itemEntry[0];
+            // Find RawMaterialDescription among the template's sub-descriptions
+            ComponentDescription* itemEntity = itemEntry->_resource;
             RawMaterialDescription* rawMat = nullptr;
             if (itemEntity) {
                 uint32_t rawMatTypeId = RawMaterialDescription::TypeId();
-                int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
+                int subCompCount = itemEntity->_subDescCount;
                 for (int k = 0; k < subCompCount; k++) {
-                    Object::Base* subComp = *reinterpret_cast<Object::Base**>(
-                        *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
+                    Description* subComp = itemEntity->_subDescs[k];
                     if (!subComp) continue;
                     int compTypeId = static_cast<int>(subComp->Type());
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
@@ -852,7 +833,7 @@ void CitizenBehavior::CountResources() {
 
             // RawMaterialFlags (+0x5c); categorize by profession flag (no notification
             // update in Phase 2)
-            addToProfession(rawMat->_flags, static_cast<int32_t>(itemEntry[1]));
+            addToProfession(rawMat->_flags, itemEntry->_count);
         }
     }
 }
@@ -1091,10 +1072,10 @@ void CitizenBehavior::CollectStats() {
         // Retail (0x14008a730): local_res8 = **(ulonglong**)(param_1+0xa0) â€”
         // the array base, ONE deref gives array[0] (the citizen), then its
         // Component +0x18 description.
-        void* descBase = citizens[0]->_description;
+        Description* descBase = citizens[0]->_description;
         CitizenDescription* citizenDesc = nullptr;
         if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
-            citizenDesc = reinterpret_cast<CitizenDescription*>(descBase);   // Component::_description is void*: LEFT
+            citizenDesc = static_cast<CitizenDescription*>(descBase);   // after the type check (B10)
         }
 
         // Read CitizenDescription+0xA4
@@ -1107,7 +1088,7 @@ void CitizenBehavior::CollectStats() {
         descBase = citizens[0]->_description;
         citizenDesc = nullptr;
         if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
-            citizenDesc = reinterpret_cast<CitizenDescription*>(descBase);   // Component::_description is void*: LEFT
+            citizenDesc = static_cast<CitizenDescription*>(descBase);   // after the type check (B10)
         }
 
         float maxHappiness = 0.0f;
@@ -1137,60 +1118,44 @@ void CitizenBehavior::CollectStats() {
     // Stats history at +0x150: each sub-array is a 0x10-byte struct
     //   { void* data, int count, int capacity }
     // 21 professions, 3 values each, at hist + 0x80 + profIdx*0x30 + {0, 0x10, 0x20}
-    // (CitizenBehavior.h keeps +0x150 as a void* data pointer: LEFT)
-    uintptr_t hist = reinterpret_cast<uintptr_t>(field_0x150);
+    // The +0x150 data is an array of Collection::Array<int32_t> (0x10 each): [0..7]
+    // the population series, then three series per profession entry.
+    Collection::Array<int32_t>* hist = field_0x150;
 
     for (int prof = 0; prof < 21; prof++) {
-        uintptr_t histSlot = hist + 0x80 + prof * 0x30;
+        Collection::Array<int32_t>* histSlot = &hist[8 + prof * 3];   // hist + 0x80 + prof * 0x30
         const ProfessionResourceEntry& profEntry = professionResources[prof];
 
         // Every push below is Collection::Array<T>::SetSize(n, fill) — B.3.2,
         // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes
-        // the fill). Elements are the int32 history samples.
+        // the fill): Array<int32_t>'s trait-derived spec is that row. Elements are
+        // the int32 history samples.
 
         // Push currentCount (+0x00)
-        int curArrayCount = *reinterpret_cast<int*>(histSlot + 0x08);
-        GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x00).SetSize(
-            curArrayCount + 1, GameColl::I32NoInit{profEntry.currentCount});
+        int curArrayCount = histSlot[0].GetSize();
+        histSlot[0].SetSize(curArrayCount + 1, profEntry.currentCount);
 
         // Push field_0x0C (+0x0C)
-        int f0CArrayCount = *reinterpret_cast<int*>(histSlot + 0x10 + 0x08);
-        GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x10).SetSize(
-            f0CArrayCount + 1, GameColl::I32NoInit{profEntry.field_0x0C});
+        int f0CArrayCount = histSlot[1].GetSize();
+        histSlot[1].SetSize(f0CArrayCount + 1, profEntry.field_0x0C);
 
         // Push _field10 (+0x10)
-        int f10ArrayCount = *reinterpret_cast<int*>(histSlot + 0x20 + 0x08);
-        GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x20).SetSize(
-            f10ArrayCount + 1, GameColl::I32NoInit{profEntry._field10});
+        int f10ArrayCount = histSlot[2].GetSize();
+        histSlot[2].SetSize(f10ArrayCount + 1, profEntry._field10);
     }
 
     // -- Phase 3: Push population stats --
     // 8 computed stats at hist + 0x00..0x70 (each 0x10-byte sub-array)
     // Same helper as Phase 2: Collection::Array<T>::SetSize(n, fill) — B.3.2,
     // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes the fill).
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x00).SetSize(
-        *reinterpret_cast<int*>(hist + 0x08) + 1, GameColl::I32NoInit{citizenCount});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x10).SetSize(
-        *reinterpret_cast<int*>(hist + 0x18) + 1, GameColl::I32NoInit{adults});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x20).SetSize(
-        *reinterpret_cast<int*>(hist + 0x28) + 1, GameColl::I32NoInit{dead});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x30).SetSize(
-        *reinterpret_cast<int*>(hist + 0x38) + 1, GameColl::I32NoInit{children});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x40).SetSize(
-        *reinterpret_cast<int*>(hist + 0x48) + 1, GameColl::I32NoInit{happinessPct});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x60).SetSize(
-        *reinterpret_cast<int*>(hist + 0x68) + 1, GameColl::I32NoInit{healthPct});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x50).SetSize(
-        *reinterpret_cast<int*>(hist + 0x58) + 1, GameColl::I32NoInit{educatedPct});
-
-    GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x70).SetSize(
-        *reinterpret_cast<int*>(hist + 0x78) + 1, GameColl::I32NoInit{workingPct});
+    hist[0].SetSize(hist[0].GetSize() + 1, citizenCount);
+    hist[1].SetSize(hist[1].GetSize() + 1, adults);
+    hist[2].SetSize(hist[2].GetSize() + 1, dead);
+    hist[3].SetSize(hist[3].GetSize() + 1, children);
+    hist[4].SetSize(hist[4].GetSize() + 1, happinessPct);
+    hist[6].SetSize(hist[6].GetSize() + 1, healthPct);
+    hist[5].SetSize(hist[5].GetSize() + 1, educatedPct);
+    hist[7].SetSize(hist[7].GetSize() + 1, workingPct);
 
     // -- Phase 4: Clear per-tick accumulators in profResources --
     // Clear +0x0C and +0x10 of each ProfessionResourceEntry
@@ -1198,13 +1163,4 @@ void CitizenBehavior::CollectStats() {
         professionResources[e].field_0x0C = 0;  // +0x0C of entry
         professionResources[e]._field10 = 0;    // +0x10 of entry
     }
-}
-
-
-// ============================================================
-// B4 FORWARD: 1 outside caller (code/Game/Game/gameupdateloop.cpp, which still
-// hands a CitizenBehaviorRaw*). The closing wave rewires it and deletes this.
-// ============================================================
-void CitizenBehavior_Update(void* self, int64_t* deltaTime) {
-    reinterpret_cast<CitizenBehavior*>(self)->Update(deltaTime);
 }
