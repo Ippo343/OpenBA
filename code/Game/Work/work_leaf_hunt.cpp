@@ -53,28 +53,9 @@
 //                     each slot (the canonical FindComponentByTypeId shape).
 //   * "+0x28/+0x30" : list ptr at entity+0x28, count at entity+0x30, NO CheckPtr.
 
-// ---- 0x14002a730  HuntWork_Serialize_sub_a730 ----------------------------------
-// FindComponent (+0x30/+0x38, WITH CheckPtr), typeId @0x1401c7890.
-// ABI: InternalBasePtr* fn(longlong entity, InternalBasePtr* retIBP)  (member value-return).
-void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<HuntComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<HuntComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// ---- 0x14000a0b0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
-// typeId @0x1401c4250. (HarvestOrchard "DescComp" finder.)
-void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<FruitComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<FruitComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// ---- 0x140004fe0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
-// typeId @0x1401c7ba0. (PastureComponent finder.)
-void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<PastureComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<PastureComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
+// (0x14002a730 / 0x14000a0b0 / 0x140004fe0, the B4 FORWARD forwarders to
+// ComponentEntity::FindComponent<HuntComponent / FruitComponent / PastureComponent>, had
+// no caller left: deleted, B4 P2 WORK-3.)
 
 // ---- 0x1400063d0  HuntWork_helper_63d0  ----------------------------------------
 // The "+0x28/+0x30" variant: RCX is a ComponentDescription (the list is its
