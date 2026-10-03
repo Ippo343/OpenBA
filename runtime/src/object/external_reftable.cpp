@@ -110,7 +110,7 @@ namespace RtObjFactoryDtor {
 // 0x180008340 in avl_trees.cpp is the same 0x30-byte node releasing +0x00
 // instead, and releasing both in either body corrupts the heap. This lane
 // re-read both disassemblies rather than trust the comment, and both stand.
-void ReferenceSubtreeFree(void* set, void* node);
+void ReferenceSubtreeFree(void* set, RtObject::ReferenceSet::Node* node);
 }
 
 namespace {
@@ -188,12 +188,11 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     // 1800bcb80. `this` for the teardown is the SET (`ADD RCX,0x20`), not the
     // factory: retail loads RCX = this+0x20. The callee ignores it, but a port
     // that passed the factory would be relying on that.
-    rtrefset::Set* refs =
-        reinterpret_cast<rtrefset::Set*>(reinterpret_cast<uint8_t*>(self) + 0x20);
-    if (refs->root) ++g_c.teardownNonEmpty;
-    RtObjFactoryDtor::ReferenceSubtreeFree(refs, refs->root);
-    refs->root  = nullptr;                       // 1800bcb90, qword
-    refs->count = 0;                             // 1800bcb94, DWORD
+    RtObject::ReferenceSet& refs = self->_references;   // this + 0x20
+    if (refs._root) ++g_c.teardownNonEmpty;
+    RtObjFactoryDtor::ReferenceSubtreeFree(&refs, refs._root);
+    refs._root  = nullptr;                       // 1800bcb90, qword
+    refs._count = 0;                             // 1800bcb94, DWORD
 
     // ---- the local Serializer and its codec ---------------------------------
     Serializer ser;
@@ -217,9 +216,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     // the local is the loop bound either way. It is read as a SIGNED int
     // (`kScalarInt`, +0xa0) and the read-path loop is `JLE` / `JL` on it, so a
     // negative count is a zero-iteration loop rather than a wild one.
-    int32_t count = static_cast<int32_t>(
-        reinterpret_cast<rtresset::Set*>(
-            reinterpret_cast<uint8_t*>(self) + 0x10)->count);
+    int32_t count = self->_resources._count;     // this + 0x18
     Rw(rw)->SerializeInt(count, nullptr);        // +0xa0
 
     if (stream->direction == rt::io::kDirectionReading) {
@@ -255,7 +252,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 rtrefset::Node* outSlot = nullptr;   // [RBP-0x20]
                 // TRANSITIONAL CAST, the class->POD direction: `rtrefset::Insert`
                 // is an unconverted C body whose value parameter is the POD.
-                rtrefset::Insert(refs, &outSlot, &key,
+                rtrefset::Insert(reinterpret_cast<rtrefset::Set*>(&refs), &outSlot, &key,  // CAST-OK: elem_stride
                                  reinterpret_cast<const Filename*>(&keyPath));
             }                                    // 1800bcc6b — keyPath's release
 
@@ -267,7 +264,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
             // other. It is idempotent, and it is transcribed rather than
             // folded because "obviously redundant" is how a port stops being a
             // port.
-            rtresset::Node* found;
+            RtObject::ResourceSet::Node* found;
             {
             System::Filename tmpB(scratch.AsString());   // as keyPath above
 
@@ -288,11 +285,10 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
             //   node key null  -> fall through to the second test, then RIGHT
             //   search key null with a non-null node key -> LEFT
             //   both null      -> FOUND
-            found = reinterpret_cast<rtresset::Set*>(
-                    reinterpret_cast<uint8_t*>(self) + 0x10)->root;
+            found = self->_resources._root;      // this + 0x10
             while (found) {
                 char* searchKey = lookup._data;
-                char* nodeKey   = rtresset::Elem(found)->path.data;
+                char* nodeKey   = found->element.path.data;
                 if (nodeKey) {
                     if (!searchKey) {
                         ++g_c.nullSearchKey;
@@ -310,7 +306,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 }
                 // second test — 1800bcd37
                 if (!searchKey) break;           // FOUND (both keys null)
-                nodeKey = rtresset::Elem(found)->path.data;
+                nodeKey = found->element.path.data;
                 if (nodeKey && rtcrt::StrICmp(nodeKey, searchKey) >= 0) break;  // FOUND
                 found = found->right;            // 1800bcd54, +0x28
             }
@@ -320,7 +316,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
 
             if (found) {                         // 1800bcdb2
                 ++g_c.resFound;
-                rtresset::Elem(found)->referenceId = id;   // +0x14
+                found->element.referenceId = id;   // +0x14
             } else {
                 ++g_c.resMissed;
             }
@@ -333,9 +329,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
         ++g_c.save;
 
         uint32_t id = 1;                         // 1800bcdf4, ids start at ONE
-        rtresset::Node* n =
-            reinterpret_cast<rtresset::Set*>(
-                reinterpret_cast<uint8_t*>(self) + 0x10)->root;
+        RtObject::ResourceSet::Node* n = self->_resources._root;   // this + 0x10
 
         if (n) {
             while (n->left) n = n->left;         // 1800bce10, leftmost
@@ -345,7 +339,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 // 1..N in in-order key order over a tree this body never
                 // modifies, so a second pass writes the identical value into
                 // the identical node.
-                rtresset::Elem(n)->referenceId = id;        // +0x14
+                n->element.referenceId = id;        // +0x14
 
                 // 1800bce37: NO NULL CHECK on `element.external`. Faithful —
                 // retail relies on the pointer always being there, and a guard
@@ -357,7 +351,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                         // the null local must not be constructed twice.
                         System::Filename ret;
                         RtObject_External_GetPath(
-                            rtresset::Elem(n)->external,
+                            n->element.external,
                             reinterpret_cast<Filename*>(&ret));  // 1800bce3b
 
                         // 1800bce41 IS AN ADOPT WITH NO FOLLOWING
@@ -379,7 +373,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                     n = n->right;
                     while (n->left) n = n->left;
                 } else {
-                    rtresset::Node* p = n->parent;           // +0x18
+                    RtObject::ResourceSet::Node* p = n->parent;           // +0x18
                     if (!p) {
                         n = n->parent;                       // 1800bcf02 -> null
                     } else if (p->left == n) {               // 1800bcee0, +0x20
@@ -431,7 +425,7 @@ void RtObjectExternalRefTableSummary() {
         "teardownNonEmpty=%llu resFound=%llu resMissed=%llu "
         "nullSearchKey=%llu nullNodeKey=%llu nullEncoding=%llu nullRw=%llu\n",
         (unsigned long long)g_c.calls, (unsigned long long)g_c.save,
-        (unsigned long long)g_c.load, (unsigned long long)g_c.entries,
+        (unsigned long long)g_c.load, g_c.entries,
         (unsigned long long)g_c.teardownNonEmpty,
         (unsigned long long)g_c.resFound, (unsigned long long)g_c.resMissed,
         (unsigned long long)g_c.nullSearchKey, (unsigned long long)g_c.nullNodeKey,

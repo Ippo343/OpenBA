@@ -150,7 +150,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
 
     // ---- 0x1800be257: descend `this->_resources` (this + 0x10) -------------
     rtsetavl24::Set* const tree =
-        reinterpret_cast<rtsetavl24::Set*>(&self->_resources);
+        reinterpret_cast<rtsetavl24::Set*>(&self->_resources);  // CAST-OK: elem_stride
     // TRANSITIONAL CAST, the class->POD direction: `rtresset::Find` is an
     // unconverted C body (external_set.cpp) whose key parameter is the POD.
     // Same eight bytes, same single field; it goes when that file converts.

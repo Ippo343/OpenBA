@@ -156,7 +156,7 @@ void RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename*
         // TRANSITIONAL CAST, the class->POD direction: `rtresset::Find` is an
         // unconverted C body (external_set.cpp) whose key parameter is the POD.
         node = rtresset::Find(
-            reinterpret_cast<const rtresset::Set*>(&self->_resources),
+            reinterpret_cast<const rtresset::Set*>(&self->_resources),  // CAST-OK: elem_stride
             reinterpret_cast<const Filename*>(&probe));
     }   // 0x1800bf04f — probe's release, still ahead of the store
 

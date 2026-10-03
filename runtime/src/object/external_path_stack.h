@@ -10,6 +10,7 @@
 // entry points drive, or it is testing a copy of the port.
 // ============================================================================
 
+#include <cstddef>
 #include <cstdint>
 
 #include "../../types/object/External.h"
@@ -43,6 +44,29 @@ struct PathStackCounters {
 };
 extern PathStackCounters g_psc;
 
+// One element of `ExternalFactory::_pathStack` as the four container bodies
+// below construct, copy and release it: the same 0x10 bytes as
+// `PathStackEntry` (External.h), with the two halves spelled as the CLASS they
+// are. Layout from retail: the stride is 0x10 (`SHL RDX,0x4` in
+// GetPathStackFilename 0x1800bcf60 / GetPathStackDirectory 0x1800bcfd0), the
+// directory is +0x00 and the filename +0x08 (`ADD RDX,0x8` in the first one;
+// PushPath 0x1800bd0e0 builds the pair from two adjacent stack slots). The
+// destroy-range 0x18002e8d0 releases +0x08 before +0x00. It is a VIEW: nothing
+// declares a member of this type, so no constructor or destructor of it ever
+// runs; the bodies construct and release each half by hand, as retail does.
+// (`PathStackEntry` keeps the RtSystem::Filename POD halves because
+// `Collection::Array<PathStackEntry>` is a member of both ExternalFactory
+// declarations; typing it would make the array's element trait non-trivial: H5.)
+struct PathStackElement {
+    System::Filename directory;   // +0x00
+    System::Filename filename;    // +0x08
+};
+static_assert(sizeof(PathStackElement) == 0x10, "path-stack stride 0x10 (0x1800bcf60 SHL RDX,0x4)");
+static_assert(offsetof(PathStackElement, directory) == 0x00, "GetPathStackDirectory 0x1800bcfd0");
+static_assert(offsetof(PathStackElement, filename)  == 0x08, "GetPathStackFilename 0x1800bcf60 ADD RDX,0x8");
+static_assert(sizeof(PathStackElement) == sizeof(PathStackEntry), "the same bytes as External.h's POD");
+static_assert(offsetof(PathStackElement, filename) == offsetof(PathStackEntry, filename), "alias filename");
+
 }  // namespace RtObject
 
 extern "C" {
@@ -50,8 +74,10 @@ extern "C" {
 // reader can grep either way.
 void  RtObject_PathStackSetSize_18002e220(void* arr, int n, const void* fill);
 void  RtObject_PathStackDestroyRange_18002e8d0(void* ignoredThis, uint8_t* base, int count);
-void* RtObject_PathStackRemoveLast_18002ccb0(void* arr, void* out);
-void  RtObject_PathStackRemoveAt_18002de30(void* arr, int index);
+RtObject::PathStackEntry* RtObject_PathStackRemoveLast_18002ccb0(
+          Collection::Array<RtObject::PathStackEntry>* arr, RtObject::PathStackEntry* out);
+void  RtObject_PathStackRemoveAt_18002de30(Collection::Array<RtObject::PathStackEntry>* arr,
+                                           int index);
 }
 
 // external_path_stack_probe.cpp

@@ -208,7 +208,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     // `Set<ResourceEntry>::Find` — and it has to be inlined here, because this
     // one needs the NODE (to update its usageMask in place) while `Find`
     // returns the `External*`.
-    rtresset::Set* const set = reinterpret_cast<rtresset::Set*>(&self->_resources);
+    rtresset::Set* const set = reinterpret_cast<rtresset::Set*>(&self->_resources);  // CAST-OK: elem_stride
     rtresset::Node* node = set->root;
     if (node == nullptr) ++g_ac.emptyTree;
 
@@ -295,7 +295,7 @@ void DumpAddCounters() {
     printf("[ExtAdd] calls=%llu insert=%llu hit=%llu "
                 "(visited=%llu skipped=%llu) descL=%llu descR=%llu empty=%llu\n",
                 (unsigned long long)g_ac.calls,
-                (unsigned long long)g_ac.inserted,
+                g_ac.inserted,
                 (unsigned long long)g_ac.hit,
                 (unsigned long long)g_ac.hitVisited,
                 (unsigned long long)g_ac.hitSkipped,

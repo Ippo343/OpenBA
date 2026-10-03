@@ -216,11 +216,11 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // NULL GUARDS" note), and this one does not.
     const uint32_t typeId = ExternalGetTypeId(self);
 
-    const Factory* factory = reinterpret_cast<const Factory*>(      // B.3.3 bridge
-        ::Object::Factory::_singleton);   // class static (B.3.9 OBJ, D7)
-    const TypeNode* node = factory->root;
+    const ::Object::Factory* factory =
+        ::Object::Factory::_singleton;   // class static (B.3.9 OBJ, D7)
+    const ::Object::Factory::TypeSet::Node* node = factory->_types._root;
     while (node != nullptr) {
-        const uint32_t key = node->key;
+        const uint32_t key = node->element.typeId;
         if (typeId < key)      node = node->left;    // 1800bba2a, +0x38
         else if (key < typeId) node = node->right;   // 1800bba24, +0x40
         else                   break;                // 1800bba22
@@ -229,7 +229,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     const char* typeName = nullptr;
     if (node != nullptr) {
         ++g_st.typeFound;
-        typeName = node->value.info->name;           // 1800bba35/39: [n+0x10]->[+0x08]
+        typeName = node->element.record.info->name;  // 1800bba35/39: [n+0x10]->[+0x08]
     } else {
         ++g_st.typeMissing;
     }

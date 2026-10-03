@@ -127,7 +127,6 @@ constexpr uint32_t kCompiledMagic = 0x5412a91fu;
 // B3R RT-Core: CompressedStream::Open / Commit, FileSystem::CloseFile,
 // Base::IsDerivedFrom and String::Serialize are called by name.
 using SerFactoryFn  = void* (*)(void* encoding, Serializer* ser, int flag);
-using FactoryFn     = void* (*)();
 
 // `Collection::Array<ExternalArrayElement>::SetSize`, 0x18002c6a0. NOT exported
 // in either build, so this is a genuine ADDRESS door and the only one this file
@@ -306,14 +305,14 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // Look the type up and BUILD one. `Factory::_singleton`'s tree,
                 // then `BaseTypeInfo::factoryFn` at +0x20 -- the object-creation
                 // path, reached here through the DLL's own typeinfo.
-                const Factory* f = reinterpret_cast<const Factory*>(   // B.3.3 bridge
-                    ::Object::Factory::_singleton);   // class static (B.3.9 OBJ, D7)
-                const TypeNode* n = f->root;
+                const ::Object::Factory* f =
+                    ::Object::Factory::_singleton;   // class static (B.3.9 OBJ, D7)
+                const ::Object::Factory::TypeSet::Node* n = f->_types._root;
                 const uint32_t want = static_cast<uint32_t>(typeId);
                 while (n != nullptr) {
-                    if (want < n->key)      n = n->left;          // 1800bc732, +0x38
-                    else if (n->key < want) n = n->right;         // 1800bc72c, +0x40
-                    else break;                                   // 1800bc72a
+                    if (want < n->element.typeId)      n = n->left;    // 1800bc732, +0x38
+                    else if (n->element.typeId < want) n = n->right;   // 1800bc72c, +0x40
+                    else break;                                        // 1800bc72a
                 }
 
                 // FAITHFUL FAULT ON A MISS. 1800bc73b puts ZERO in RCX and
@@ -323,12 +322,11 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // happen, because that fault IS how a missing registration
                 // reports itself (type_system.cpp, "NO ADDED NULL GUARDS").
                 const BaseTypeInfo* const volatile* infoSlot =
-                    reinterpret_cast<const BaseTypeInfo* const volatile*>(
-                        reinterpret_cast<const uint8_t*>(n) + 0x10);
+                    &n->element.record.info;                      // n + 0x10
                 const BaseTypeInfo* info = *infoSlot;
 
-                obj = static_cast<External*>(
-                          reinterpret_cast<FactoryFn>(info->factoryFn)());   // 1800bc742
+                ::Object::Base* const created = info->factoryFn();   // 1800bc742
+                obj = reinterpret_cast<External*>(created);   // LEFT: H10 `obj` is the RtObject::External POD (the body's parameter and return, declared extern "C" for outside callers)
                 ++g_lc.created;
 
                 // `External::TypeId()` (0x180029350): the record's +0x00,
@@ -336,8 +334,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // ENDGAME B.3.9 OBJ D6 step 1) -- no lazy RT_DATA_SLOT cache
                 // on the loader thread.
                 const bool isExternal =                           // 0x1800c0390
-                    reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(
-                        ::Object::External::TypeId());
+                    created->IsDerivedFrom(::Object::External::TypeId());   // `obj` IS `created`
                 if (!isExternal || obj == nullptr) {              // 1800bc758/761
                     ++g_lc.notAnExternal;
                     bad = true;
@@ -442,7 +439,7 @@ void DumpLoadCounters() {
                 (unsigned long long)g_lc.openCompFailed,
                 (unsigned long long)g_lc.nullSerializer,
                 (unsigned long long)g_lc.badMagic,
-                (unsigned long long)g_lc.created,
+                g_lc.created,
                 (unsigned long long)g_lc.reusedExisting,
                 (unsigned long long)g_lc.notAnExternal,
                 (unsigned long long)g_lc.badVersion,

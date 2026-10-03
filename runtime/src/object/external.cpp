@@ -348,8 +348,8 @@ Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* 
 // ENDGAME B.3.9 OBJ (B39_RULES D7): the cell is the class static
 // `Object::Factory::_singleton` (Runtime 0x1801fc6e8), onto which the minted
 // row is redirected -- no resolve, no cache, no init ordering to assume.
-static void** FactorySingletonSlot() {
-    return reinterpret_cast<void**>(&::Object::Factory::_singleton);
+static ::Object::Factory* const* FactorySingletonSlot() {
+    return &::Object::Factory::_singleton;
 }
 
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
@@ -378,37 +378,37 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
     }
 
     const External* ours = nullptr;
-    void** pFactorySingleton = FactorySingletonSlot();
-    const uint8_t* factoryRoot =
-        pFactorySingleton ? *reinterpret_cast<const uint8_t* const*>(*pFactorySingleton)
+    using TypeNode = ::Object::Factory::TypeSet::Node;
+    ::Object::Factory* const* pFactorySingleton = FactorySingletonSlot();
+    const TypeNode* factoryRoot =
+        pFactorySingleton ? (*pFactorySingleton)->_types._root   // Factory +0x00
                           : nullptr;
 
     while (cursor != nullptr) {
         External* candidate = cursor->element.external;
         // Object::Base::Type() (retail slot 2, +0x10), by name on the real class.
         uint32_t actual =
-            reinterpret_cast<const ::Object::Base*>(candidate)->Type();   // B.3.x bridge
+            reinterpret_cast<const ::Object::Base*>(candidate)->Type();   // B.3.x bridge  // LEFT: H10 ResourceEntry::external is the RtObject::External POD (External.h)
 
         if (actual == typeId) { ours = candidate; break; }
 
         // Inlined IsDerivedFrom: locate `actual` in Factory's type map, then
         // walk its ancestor chain looking for `typeId`.
-        const uint8_t* node = factoryRoot;
+        const TypeNode* node = factoryRoot;
         while (node != nullptr) {
-            uint32_t nodeId = *reinterpret_cast<const uint32_t*>(node);
+            uint32_t nodeId = node->element.typeId;              // +0x00
             if (actual < nodeId)
-                node = *reinterpret_cast<const uint8_t* const*>(node + FactoryTypeNodeOffsets::kLeft);
+                node = node->left;                               // +0x38
             else if (nodeId < actual)
-                node = *reinterpret_cast<const uint8_t* const*>(node + FactoryTypeNodeOffsets::kRight);
+                node = node->right;                              // +0x40
             else
                 break;
         }
-        const uint8_t* chain = node + FactoryTypeNodeOffsets::kAncestorChain;  // unguarded
+        const ::Object::TypeRecord* chain = &node->element.record;   // +0x08, unguarded
         bool derived = false;
         do {
-            if (*reinterpret_cast<const uint32_t*>(chain) == typeId) { derived = true; break; }
-            chain = *reinterpret_cast<const uint8_t* const*>(
-                chain + FactoryTypeNodeOffsets::kAncestorNext);
+            if (chain->typeId == typeId) { derived = true; break; }
+            chain = chain->parent;                               // +0x10
         } while (chain != nullptr);
         if (derived) { ours = candidate; break; }
 
