@@ -790,10 +790,11 @@ TextFileStream::TextFileStream(const System::String& type,
       _bufCursor(0) {
     ++RtIO::g_fsc.textCtor;
 
-    void* enc = RtSystem::RtMemAlloc(8, 4);                       // 1800ba3ee
-    if (enc) ::new (enc) TextEncoding();
+    void* encMem = RtSystem::RtMemAlloc(8, 4);                       // 1800ba3ee
+    Encoding* enc = nullptr;
+    if (encMem) enc = ::new (encMem) TextEncoding();
     if (_encoding) RtSystem::RtMemFree(_encoding);
-    _encoding = static_cast<Encoding*>(enc);                      // ..4e
+    _encoding = enc;                      // ..4e
 
     RtIO::RtIo_TextFileStream_SetObject(                          // 1800ba45e
         reinterpret_cast<RtIo::TextFileStream*>(this),

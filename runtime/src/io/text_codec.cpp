@@ -80,6 +80,7 @@
 #include <cstring>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"            // IO::Stream::_direction
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"
 
@@ -92,12 +93,6 @@ namespace {
 // at 0x180029c8b..0x180029cba IS `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`
 // (0x1800c7a50) -- lane Q proved that composition instruction for instruction.
 // B3R RT-IO: called by name, System::MemoryAllocator::MemAlloc / MemFree.
-
-// B3X W0: the three ReaderWriter calls below go by name; `ser->readerWriter`
-// is the rt::io POD view of the object.
-inline ::IO::ReaderWriter* Rw(rt::io::ReaderWriter* rw) {
-    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
 
 }  // namespace
 
@@ -489,11 +484,10 @@ extern "C" int32_t RtIo_TextCodec_ConvertText(int32_t srcFmt, uint8_t forceDetec
 // allocator's critical section at 0x180029c90, `0x1800c7ad0` bare at
 // 0x180029e14. That asymmetry is retail's.
 // ============================================================================
-extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav,
+extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, void* datav,
                                           void* /*unused*/) {
     if (count <= 0) return;                                        // 0x180029bb0
 
-    auto* ser = static_cast<rt::io::Serializer*>(serv);
     char** slot = static_cast<char**>(datav);                      // R12
 
     for (int32_t i = 0; i < count; ++i, ++slot) {                  // 0x180029bf0
@@ -505,12 +499,12 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
                 *reinterpret_cast<const int32_t*>(*slot - 8) + 1);
         tagged |= 0x80000000u;                                     // BTS EAX,31
 
-        Rw(ser->readerWriter)->SerializeUInt(tagged, nullptr);    // +0x98
+        ser->_readerWriter->SerializeUInt(tagged, nullptr);    // +0x98
 
         const bool wasWide = (tagged >> 31) == 0;                  // SHR/NOT/AND 1
         uint32_t len = tagged & 0x7FFFFFFFu;                       // BTR EDX,31
 
-        const bool reading = (ser->stream->direction == rt::io::kDirectionReading);
+        const bool reading = (ser->_stream->_direction == rt::io::kDirectionReading);
 
         if (reading && len != 0)
             RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),
@@ -518,7 +512,7 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
 
         if (!wasWide || !reading || len == 0) {
             // ---- PLAIN: the payload is bytes --------------------- 0x180029e23
-            Rw(ser->readerWriter)->SerializeCharArray(
+            ser->_readerWriter->SerializeCharArray(
                 static_cast<int32_t>(len), *slot, nullptr);        // +0x18
             continue;
         }
@@ -527,7 +521,7 @@ extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav
         const uint64_t bytes = static_cast<uint64_t>(len) * 2;     // ADD RBX,RBX
         uint8_t* const tmp = static_cast<uint8_t*>(::System::MemoryAllocator::MemAlloc(bytes, 4));
 
-        Rw(ser->readerWriter)->SerializeUShortArray(
+        ser->_readerWriter->SerializeUShortArray(
             static_cast<int32_t>(len),
             reinterpret_cast<uint16_t*>(tmp), nullptr);            // +0x50
 

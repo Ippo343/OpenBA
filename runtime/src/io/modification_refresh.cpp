@@ -755,14 +755,14 @@ void Modification::RefreshList() {
         // 0x1800afae2 — the icon, then the preview. Each arrives in a temporary
         // Array this body hands to the member's operator= and then frees.
         {
-            ModArray tmp;
+            ModArrayOf<uint32_t> tmp;
             pkgObj->IO::PackageFile::GetIconData(&tmp);          // 0x180025530
             if (&m->ints != &tmp) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
             ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
         {
-            ModArray tmp;
+            ModArrayOf<uint8_t> tmp;
             pkgObj->IO::PackageFile::GetPreviewData(&tmp);       // 0x180025580
             if (&m->bytes != &tmp) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
             ::System::MemoryAllocator::MemFree(tmp.data);
@@ -983,7 +983,7 @@ namespace IO {
 // used to be spelled here as `self + 0x80` / `self + 0x98` are now the named
 // members `_iconData` / `_previewData`, each pinned by a static_assert in
 // runtime/types/io/PackageFile.h.
-void* PackageFile::GetIconData(RtIO::ModArray* ret) const {
+void* PackageFile::GetIconData(RtIO::ModArrayOf<uint32_t>* ret) const {
     const void* const member = &_iconData;              // LEA RDX,[RCX+0x80]
     ret->data = nullptr;                                // MOV [RBX],RAX
     ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
@@ -992,7 +992,7 @@ void* PackageFile::GetIconData(RtIO::ModArray* ret) const {
     return ret;
 }
 
-void* PackageFile::GetPreviewData(RtIO::ModArray* ret) const {
+void* PackageFile::GetPreviewData(RtIO::ModArrayOf<uint8_t>* ret) const {
     const void* const member = &_previewData;           // LEA RDX,[RCX+0x98]
     ret->data = nullptr;
     ret->size = 0;

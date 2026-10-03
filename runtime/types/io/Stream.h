@@ -498,10 +498,11 @@ public:
     // allocation), the dead free of the previous encoding, the store.
     // +0x21..0x23 and +0x2c are not written.
     MemoryStream() : _data(nullptr), _ownsData(0), _cursor(0), _size(0) {
-        void* enc = RtSystem::RtMemAlloc(8, 4);
-        if (enc) ::new (enc) BinaryEncoding();
+        void* encMem = RtSystem::RtMemAlloc(8, 4);
+        Encoding* enc = nullptr;
+        if (encMem) enc = ::new (encMem) BinaryEncoding();
         if (_encoding) RtSystem::RtMemFree(_encoding);
-        _encoding = static_cast<Encoding*>(enc);
+        _encoding = enc;
     }
 
     // slot 0  +0x00  0x1800242a0 — MSVC's vector deleting dtor, stride 0x30.
@@ -721,10 +722,11 @@ protected:
           _headerData(nullptr), _headerSize(0), _headerCap(0),
           _blockData(nullptr), _blockSize(0), _blockCap(0),
           _compression(nullptr) {
-        void* enc = RtSystem::RtMemAlloc(8, 4);
-        if (enc) ::new (enc) BinaryEncoding();
+        void* encMem = RtSystem::RtMemAlloc(8, 4);
+        Encoding* enc = nullptr;
+        if (encMem) enc = ::new (encMem) BinaryEncoding();
         if (_encoding) RtSystem::RtMemFree(_encoding);
-        _encoding = static_cast<Encoding*>(enc);
+        _encoding = enc;
     }
 };
 
