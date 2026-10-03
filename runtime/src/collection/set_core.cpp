@@ -30,9 +30,8 @@
 // pick the right one from `sizeof(T)` at compile time rather than a caller
 // picking it by hand.
 //
-// The `void*` at each boundary is the transitional cast ENDGAME §B.4 allows for
-// a resolved-body seam; it disappears when the ported bodies themselves become
-// members (step 2).
+// B.4 (R-COLL): the forwarders take the core's own erased types; the one cast
+// from a typed `Set<T>` / `Set<T>::Node` sits in `AvlOps` (Collection.h).
 //
 // PORTABILITY: no <windows.h>.
 // ============================================================================
@@ -116,22 +115,16 @@ int AvlStrCmpSigned(const char* a, const char* b) {
 }
 
 // ---------------------------------------------------------------------------
-// element 0x10 / node 0x30 — set_avl.cpp (Wave 9 lane VID2).
+// element 0x10 / node 0x30 — set_avl.cpp (Wave 9 lane VID2). The template's
+// `AvlOps<…,0x10>` hands the erased node / set types (Collection.h); the two
+// rotations 0x18000b040 / 0x18000b170 are reached only from inside the retrace
+// and the erase, so they have no forwarder here.
 // ---------------------------------------------------------------------------
-void PortedRetrace16(void* set, void** slot) {              // 0x18000adc0
-    rtsetavl::Retrace(static_cast<rtsetavl::Set*>(set),  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-                      reinterpret_cast<rtsetavl::Node**>(slot));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+void PortedRetrace16(rtsetavl::Set* set, rtsetavl::Node** slot) {   // 0x18000adc0
+    rtsetavl::Retrace(set, slot);
 }
-void* PortedRotateLeft16(void* set, void* n) {              // 0x18000b040
-    return rtsetavl::RotateLeft(static_cast<rtsetavl::Set*>(set),  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-                                static_cast<rtsetavl::Node*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
-void* PortedRotateRight16(void* set, void* n) {             // 0x18000b170
-    return rtsetavl::RotateRight(static_cast<rtsetavl::Set*>(set),  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-                                 static_cast<rtsetavl::Node*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
-void PortedErase16(void* set, void* z) {                    // 0x18000aba0
-    rtsetavl::Erase(static_cast<rtsetavl::Set*>(set), static_cast<rtsetavl::Node*>(z));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+void PortedErase16(rtsetavl::Set* set, rtsetavl::Node* z) {         // 0x18000aba0
+    rtsetavl::Erase(set, z);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,36 +133,17 @@ void PortedErase16(void* set, void* z) {                    // 0x18000aba0
 // "erase (no door)"), so `AvlOps<…,0x18>` keeps the template's generic erase,
 // which is the same algorithm.
 // ---------------------------------------------------------------------------
-void PortedRetrace24(void* set, void** slot) {              // 0x180023170
-    rtsetavl24::Retrace(static_cast<rtsetavl24::Set*>(set),  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-                        reinterpret_cast<rtsetavl24::Node**>(slot));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
-void* PortedRotateLeft24(void* set, void* n) {              // 0x180023570
-    return rtsetavl24::RotateLeft(static_cast<rtsetavl24::Set*>(set),  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-                                  static_cast<rtsetavl24::Node*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
-void* PortedRotateRight24(void* set, void* n) {             // 0x1800236a0
-    return rtsetavl24::RotateRight(static_cast<rtsetavl24::Set*>(set),  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-                                   static_cast<rtsetavl24::Node*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+void PortedRetrace24(rtsetavl24::Set* set, rtsetavl24::Node** slot) {   // 0x180023170
+    rtsetavl24::Retrace(set, slot);
 }
 
 // ---------------------------------------------------------------------------
 // element 0x30 / node 0x50 — avl_trees.cpp group A (Object::Factory's type
 // tree). Its container header is `RtObject::Factory`, which is the same
-// {root, count} pair every other Set has; the cast is the same transitional
-// seam as above.
+// {root, count} pair every other Set has.
 // ---------------------------------------------------------------------------
-void PortedRetrace48(void* set, void** slot) {              // 0x180030540
-    rtavl::Retrace50(reinterpret_cast<RtObject::Factory*>(set),  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-                     reinterpret_cast<RtObject::TypeNode**>(slot));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
-void* PortedRotateLeft48(void* set, void* n) {              // 0x1800307b0
-    return rtavl::RotateLeft50(reinterpret_cast<RtObject::Factory*>(set),  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-                               reinterpret_cast<RtObject::TypeNode*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
-void* PortedRotateRight48(void* set, void* n) {             // 0x1800308e0
-    return rtavl::RotateRight50(reinterpret_cast<RtObject::Factory*>(set),  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-                                reinterpret_cast<RtObject::TypeNode*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+void PortedRetrace48(RtObject::Factory* set, RtObject::TypeNode** slot) {   // 0x180030540
+    rtavl::Retrace50(set, slot);
 }
 
 }  // namespace detail

@@ -52,6 +52,12 @@
                          //   its element inside the node
 #include <type_traits>   // the traits rtcoll::SpecFor<T> reads
 
+// The erased node and container types the ported AVL cores take (B.4 R-COLL):
+// `detail::AvlOps<Node, W>` hands a typed `Set<T>` / `Set<T>::Node` to them.
+namespace rtsetavl   { struct Set; struct Node; }   // runtime/src/collection/set_avl.h
+namespace rtsetavl24 { struct Set; struct Node; }   // runtime/src/collection/set_avl_e24.h
+namespace RtObject   { struct Factory; struct TypeNode; }   // runtime/types/object/TypeInfo.h
+
 namespace Collection {
 
 // ============================================================
@@ -488,7 +494,7 @@ inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void
 // (PLAN.md §4.1 decision 1).
 // ============================================================
 namespace detail {
-void* ListNodeAlloc(uint64_t bytes, int align);
+void* AllocateListNode(uint64_t bytes, int align);
 void  ListNodeFree(void* p);
 }  // namespace detail
 
@@ -633,7 +639,7 @@ class LinkedList {
         static_assert(__has_trivial_destructor(T),
                       "LinkedList nodes are raw-freed: T must be trivially destructible");
 
-        Node* node = static_cast<Node*>(detail::ListNodeAlloc(sizeof(Node), 8));  // LEFT: an alloc result; the tier-I shape does not match the ListNodeAlloc spelling
+        Node* node = static_cast<Node*>(detail::AllocateListNode(sizeof(Node), 8));
         if (!node) { return nullptr; }
 
         node->element = T();     // retail's dead store, kept — see above
@@ -924,7 +930,7 @@ void  SetNodeFree(void* node);
 // supplies its own statics; `DefaultAllocator` means retail's two doors.
 template <class Allocator>
 struct AllocTraits {
-    static void* Alloc(uint64_t bytes, int align) { return Allocator::Allocate(bytes, align); }
+    static void* Allocate(uint64_t bytes, int align) { return Allocator::Allocate(bytes, align); }
     static void  Free(void* p)                    { Allocator::Free(p); }
     // The free as a POINTER. The erase core takes it by pointer, and the
     // `AvlOps<…,0x10>` forwarder recognises retail's own door by comparing
@@ -934,7 +940,7 @@ struct AllocTraits {
 };
 template <>
 struct AllocTraits<DefaultAllocator> {
-    static void* Alloc(uint64_t bytes, int align) { return SetNodeAlloc(bytes, align); }
+    static void* Allocate(uint64_t bytes, int align) { return SetNodeAlloc(bytes, align); }
     static void  Free(void* p)                    { SetNodeFree(p); }
     static void (*FreeFn())(void*) { return &SetNodeFree; }
 };
@@ -982,27 +988,17 @@ struct CompareTraits<AVLCompare, const char*> {
 };
 
 // ---------------------------------------------------------------------------
-// The container header the cores mutate: {root, count}, 0x10 bytes. Every Set
-// instantiation and every ported core agrees on it (set_avl.h, set_avl_e24.h,
-// and Set's own layout below), which is why the cores can be reached through a
-// `void*`.
-// ---------------------------------------------------------------------------
-template <class NodeT>
-struct SetHdr {
-    NodeT*  root;
-    int32_t count;
-    int32_t pad0c;
-};
-
-// ---------------------------------------------------------------------------
 // AvlGeneric<NodeT> — set_avl.cpp's four bodies with `NodeT*` in place of the
 // baked-in offsets. Read set_avl.cpp's banners for the evidence behind every
 // line here; the transcription notes that matter to a reader of THIS file are
 // repeated inline.
+//
+// The container is the `Set` itself (`SetT`, its `_root` / `_count`): the
+// {root, count} header every Set instantiation and every ported core agrees on
+// (set_avl.h, set_avl_e24.h, and Set's own layout below).
 // ---------------------------------------------------------------------------
 template <class NodeT>
 struct AvlGeneric {
-    using Hdr = SetHdr<NodeT>;
 
     // 0x18000adee..0x18000ae1f. 16-BIT arithmetic throughout, and the max
     // DEFAULTS TO THE RIGHT height (`MOVZX EAX,CX / CMOVG AX,DX`).
@@ -1014,9 +1010,9 @@ struct AvlGeneric {
     }
 
     // retail 0x18000b040 — rotate LEFT about `n`.
-    static NodeT* RotateLeft(void* setRaw, NodeT* n) {
-        Hdr* set = static_cast<Hdr*>(setRaw);  // LEFT: the Set core's void* receiver (rtsetavl callers hold void*)
-        if (n == set->root) set->root = n->right;
+    template <class SetT>
+    static NodeT* RotateLeft(SetT* set, NodeT* n) {
+        if (n == set->_root) set->_root = n->right;
 
         NodeT* p = n->parent;
         if (p) {
@@ -1038,9 +1034,9 @@ struct AvlGeneric {
     }
 
     // retail 0x18000b170 — the exact mirror.
-    static NodeT* RotateRight(void* setRaw, NodeT* n) {
-        Hdr* set = static_cast<Hdr*>(setRaw);  // LEFT: the Set core's void* receiver (rtsetavl callers hold void*)
-        if (n == set->root) set->root = n->left;
+    template <class SetT>
+    static NodeT* RotateRight(SetT* set, NodeT* n) {
+        if (n == set->_root) set->_root = n->left;
 
         NodeT* p = n->parent;
         if (p) {
@@ -1065,7 +1061,8 @@ struct AvlGeneric {
     // NODE, and retail re-reads it after every rotation because a rotation can
     // move a different node into the position being examined. A null child
     // skips the rotation ENTIRELY, not just the pre-rotation.
-    static void Retrace(void* setRaw, NodeT** slot) {
+    template <class SetT>
+    static void Retrace(SetT* setRaw, NodeT** slot) {
         if (*slot == nullptr) return;
 
         for (;;) {
@@ -1111,11 +1108,10 @@ struct AvlGeneric {
     // `freeNode` is the node deallocation. For `DefaultAllocator` the caller
     // passes retail's own 0x180009c30 door, so this is byte-for-byte retail's
     // free; a test allocator passes its own.
-    static void Erase(void* setRaw, NodeT* z, void (*freeNode)(void*)) {
-        Hdr* set = static_cast<Hdr*>(setRaw);  // LEFT: the Set core's void* receiver (rtsetavl callers hold void*)
-
+    template <class SetT>
+    static void Erase(SetT* set, NodeT* z, void (*freeNode)(void*)) {
         NodeT* retraceFromParent = z->parent;
-        set->count -= 1;                         // 0x18000abae, before anything else
+        set->_count -= 1;                        // 0x18000abae, before anything else
 
         NodeT* retraceFromChild = nullptr;
         NodeT* replacement      = nullptr;
@@ -1125,14 +1121,14 @@ struct AvlGeneric {
             NodeT* p     = z->parent;
             NodeT* child = z->right == nullptr ? z->left : z->right;
             if (p) { if (p->left == z) p->left = child; else p->right = child; }
-            else   { set->root = child; }
+            else   { set->_root = child; }
 
             replacement      = child;
             retraceFromChild = replacement;
             if (replacement) replacement->parent = z->parent;
 
             freeNode(z);
-            Retrace(setRaw, replacement ? &retraceFromChild : &retraceFromParent);
+            Retrace(set, replacement ? &retraceFromChild : &retraceFromParent);
             return;
         }
 
@@ -1159,9 +1155,9 @@ struct AvlGeneric {
         s->parent = z->parent;
 
         if (z->parent == nullptr) {
-            set->root = s;
+            set->_root = s;
             s->parent = nullptr;                 // 0x18000ad28, a SECOND store
-            retraceFromChild = set->root;
+            retraceFromChild = set->_root;
         } else {
             retraceFromChild = s;
             NodeT* p = z->parent;
@@ -1169,7 +1165,7 @@ struct AvlGeneric {
         }
 
         freeNode(z);
-        Retrace(setRaw, replacement ? &retraceFromParent : &retraceFromChild);
+        Retrace(set, replacement ? &retraceFromParent : &retraceFromChild);
     }
 };
 
@@ -1194,36 +1190,39 @@ struct AvlGeneric {
 // since `_root` is at +0x00, so the `void* set` the other widths pass IS that
 // pointer and the two spellings agree byte for byte. The retrace never touches
 // `_count`, exactly like the other three widths.
+//
+// These three keep their `void*` signatures: they are defined in R-IO's
+// modification_refresh.cpp. The two rotations have no caller (the template
+// reaches a width's rotations only through its retrace).
 void  PortedRetrace8(void* set, void** slot);         // 0x1800274c0
 void* PortedRotateLeft8(void* set, void* n);          // 0x180027e20
 void* PortedRotateRight8(void* set, void* n);         // 0x180027f50
 
-void  PortedRetrace16(void* set, void** slot);        // 0x18000adc0
-void* PortedRotateLeft16(void* set, void* n);         // 0x18000b040
-void* PortedRotateRight16(void* set, void* n);        // 0x18000b170
-void  PortedErase16(void* set, void* z);              // 0x18000aba0
-void  PortedRetrace24(void* set, void** slot);        // 0x180023170
-void* PortedRotateLeft24(void* set, void* n);         // 0x180023570
-void* PortedRotateRight24(void* set, void* n);        // 0x1800236a0
-void  PortedRetrace48(void* set, void** slot);        // 0x180030540
-void* PortedRotateLeft48(void* set, void* n);         // 0x1800307b0
-void* PortedRotateRight48(void* set, void* n);        // 0x1800308e0
+// The other three widths take the erased node and container types of their
+// ported core (B.4 R-COLL: typed at the core, set_core.cpp forwards with no
+// cast). The rotations 0x18000b040 / b170, 0x180023570 / 236a0 and
+// 0x1800307b0 / 308e0 are reached only from inside their own retrace, so the
+// template has no forwarder for them.
+void  PortedRetrace16(rtsetavl::Set* set, rtsetavl::Node** slot);        // 0x18000adc0
+void  PortedErase16(rtsetavl::Set* set, rtsetavl::Node* z);              // 0x18000aba0
+void  PortedRetrace24(rtsetavl24::Set* set, rtsetavl24::Node** slot);    // 0x180023170
+void  PortedRetrace48(RtObject::Factory* set, RtObject::TypeNode** slot);  // 0x180030540
 #endif
 
 template <class NodeT, unsigned ElemWidth>
 struct AvlOps : AvlGeneric<NodeT> {};
 
+// The typed wrappers over the ONE ported core per width (B.4 policy: retail
+// shares these bodies across every element type of the width). Each casts a
+// typed `Set<T>` / `Set<T>::Node` to the core's erased node once, at the call:
+// the layouts agree by the LayoutProbe asserts below (parent / left / right /
+// balance / height at `align8(sizeof(T)) + 0x00 .. 0x1a`).
 #if !defined(BANISHED_UNIT_TEST)
 template <class NodeT>
 struct AvlOps<NodeT, 0x8> : AvlGeneric<NodeT> {
-    static void Retrace(void* set, NodeT** slot) {
-        PortedRetrace8(set, reinterpret_cast<void**>(slot));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateLeft(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateLeft8(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateRight(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateRight8(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
+    template <class SetT>
+    static void Retrace(SetT* set, NodeT** slot) {
+        PortedRetrace8(set, reinterpret_cast<void**>(slot));  // LEFT: SIG PortedRetrace8 (void* signature, defined in modification_refresh.cpp: R-IO)
     }
     // No erase was ever emitted at this width either: `Mod::~Mod` tears the
     // whole tree down post-order (0x180010470) and nothing ever removes one
@@ -1232,35 +1231,26 @@ struct AvlOps<NodeT, 0x8> : AvlGeneric<NodeT> {
 
 template <class NodeT>
 struct AvlOps<NodeT, 0x10> : AvlGeneric<NodeT> {
-    static void Retrace(void* set, NodeT** slot) {
-        PortedRetrace16(set, reinterpret_cast<void**>(slot));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateLeft(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateLeft16(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateRight(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateRight16(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
+    template <class SetT>
+    static void Retrace(SetT* set, NodeT** slot) {
+        PortedRetrace16(reinterpret_cast<rtsetavl::Set*>(set), reinterpret_cast<rtsetavl::Node**>(slot));  // CAST-OK: elem_stride
     }
     // The ported erase frees through retail's own 0x180009c30 door, so the
     // `freeNode` a DefaultAllocator Set hands it is the same function; a Set
     // with any other allocator gets the generic body instead of a node freed
     // to the wrong heap.
-    static void Erase(void* set, NodeT* z, void (*freeNode)(void*)) {
-        if (freeNode == &SetNodeFree) PortedErase16(set, z);
+    template <class SetT>
+    static void Erase(SetT* set, NodeT* z, void (*freeNode)(void*)) {
+        if (freeNode == &SetNodeFree) PortedErase16(reinterpret_cast<rtsetavl::Set*>(set), reinterpret_cast<rtsetavl::Node*>(z));  // CAST-OK: elem_stride
         else                          AvlGeneric<NodeT>::Erase(set, z, freeNode);
     }
 };
 
 template <class NodeT>
 struct AvlOps<NodeT, 0x18> : AvlGeneric<NodeT> {
-    static void Retrace(void* set, NodeT** slot) {
-        PortedRetrace24(set, reinterpret_cast<void**>(slot));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateLeft(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateLeft24(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateRight(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateRight24(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
+    template <class SetT>
+    static void Retrace(SetT* set, NodeT** slot) {
+        PortedRetrace24(reinterpret_cast<rtsetavl24::Set*>(set), reinterpret_cast<rtsetavl24::Node**>(slot));  // CAST-OK: elem_stride
     }
     // No erase was ever emitted for this width (set_avl_e24.h's table: "erase
     // (no door)") — the generic body, which is the same algorithm, serves it.
@@ -1268,14 +1258,9 @@ struct AvlOps<NodeT, 0x18> : AvlGeneric<NodeT> {
 
 template <class NodeT>
 struct AvlOps<NodeT, 0x30> : AvlGeneric<NodeT> {
-    static void Retrace(void* set, NodeT** slot) {
-        PortedRetrace48(set, reinterpret_cast<void**>(slot));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateLeft(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateLeft48(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
-    }
-    static NodeT* RotateRight(void* set, NodeT* n) {
-        return static_cast<NodeT*>(PortedRotateRight48(set, n));  // LEFT: the ported AVL rotate/retrace bodies take void* nodes (set_avl.cpp, shared by every node family)
+    template <class SetT>
+    static void Retrace(SetT* set, NodeT** slot) {
+        PortedRetrace48(reinterpret_cast<RtObject::Factory*>(set), reinterpret_cast<RtObject::TypeNode**>(slot));  // CAST-OK: elem_stride
     }
 };
 #endif  // !BANISHED_UNIT_TEST
@@ -1606,9 +1591,8 @@ private:
     // A NULL ALLOCATION RETURNS NULL AND THE CALLER STORES IT AS THE CHILD —
     // retail does not check either (CLAUDE.md: do not "fix" a faithful crash).
     static Node* AllocNode(const T* src, Node* parent) {
-        void* mem = Alloc::Alloc(sizeof(Node), 8);
-        if (!mem) return nullptr;
-        Node* n = static_cast<Node*>(mem);  // LEFT: the Set node / key view: element bytes of a type-erased node
+        Node* n = static_cast<Node*>(Alloc::Allocate(sizeof(Node), 8));
+        if (!n) return nullptr;
         new (static_cast<void*>(&n->element)) T(*src);
         n->parent   = parent;
         n->left     = nullptr;
@@ -1633,9 +1617,8 @@ private:
     // which is byte-for-byte retail's four node constructors'.
     template <class Ctor>
     static Node* EmplaceNode(const EmplaceReq<Ctor>* req, Node* parent) {
-        void* mem = Alloc::Alloc(sizeof(Node), 8);
-        if (!mem) return nullptr;
-        Node* n = static_cast<Node*>(mem);  // LEFT: the Set node / key view: element bytes of a type-erased node
+        Node* n = static_cast<Node*>(Alloc::Allocate(sizeof(Node), 8));
+        if (!n) return nullptr;
         (*req->ctor)(static_cast<void*>(&n->element));
         n->parent  = parent;
         n->left    = nullptr;
@@ -1895,7 +1878,7 @@ void RtColl_ArraySetSize_18007a790(void* a, int n);  // 0x18007a790
 void RtColl_ArraySetSize_18007a900(void* a, int n);  // 0x18007a900
 void RtColl_ArraySetSize_18007aa40(void* a, int n);  // 0x18007aa40
 // ---- collection/array_destroy.cpp
-void RtColl_DestroyElem_180044050(void* elem);  // 0x180044050
+void RtColl_DestroyElem_180044050(uint8_t* elem);  // 0x180044050
 void RtColl_DestroyInner_1800419b0(void* ignoredThis, void* base, int count);  // 0x1800419b0
 void RtColl_DestroyInner_18004ff80(void* ignoredThis, void* base, int count);  // 0x18004ff80
 void RtColl_DestroyInner_180052110(void* ignoredThis, void* base, int count);  // 0x180052110
