@@ -456,7 +456,7 @@ bool ReflectionImageBuffer::Serialize(IO::Stream& stream) {
             // `ImageBufferCtor` builds in it. Never the ctor's return value — see
             // the `ImageBufferCtor` banner.
             Video::ImageBuffer* const img =
-                static_cast<Video::ImageBuffer*>(ImageBufferOperatorNew(0x68));
+                static_cast<Video::ImageBuffer*>(ImageBufferOperatorNew(0x68));  // LEFT: class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)
             if (img != nullptr) ImageBufferCtor(img);
             _depth = img;
 
@@ -484,7 +484,7 @@ bool ReflectionImageBuffer::Serialize(IO::Stream& stream) {
                 RenderBufferOperatorDelete(_target);
             }
             Video::RenderBuffer* const rb =
-                static_cast<Video::RenderBuffer*>(RenderBufferOperatorNew(0x30));
+                static_cast<Video::RenderBuffer*>(RenderBufferOperatorNew(0x30));  // LEFT: class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)
             if (rb != nullptr) {
                 rb->colorBuffer = nullptr;             // three zeroed qwords:
                 rb->depthBuffer = nullptr;             //   +0x00, +0x08,
@@ -614,7 +614,7 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // transcribed because it is what the slot's mangled name says, and the write
     // is spelled with the cast at the one site rather than by making the field
     // `mutable`, which would hide the disagreement in the declaration.
-    ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);
+    ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);  // LEFT: retail's const (UEBA) slot writes _generation (see above)
 
     // LEFT: the slot's three references arrive as `void*` (the declaration
     // GeneratedImageBuffer.h and tests/unit/rb_graphics_abi_test.cpp share);
@@ -652,7 +652,7 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // copies the camera straight into it and the transform is overwritten there;
     // `Graphics::Camera` cannot be a C++ local (its default ctor is protected, B5-4).
     Graphics::RendererSceneEntry group;            // ctor: `_drawableIds` zeroed (+0x100)
-    group._scene        = static_cast<const Graphics::Scene*>(scene);
+    group._scene        = static_cast<const Graphics::Scene*>(scene);  // LEFT: SIG slot takes void* (GeneratedImageBuffer.h + rb_graphics_abi_test)
     group._renderBuffer = p->_target;
     rtgfxd::RtGraphics_Camera_CopyCtor(&group._camera, &cam);
     group._camera._cameraToWorld = mirrored;

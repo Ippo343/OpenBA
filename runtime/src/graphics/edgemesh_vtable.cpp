@@ -169,11 +169,11 @@ inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
 // `rt::io::Serializer*`, External.h -- not this block's header).
 inline void ExtBase(void* slot, IO::Serializer& ser) {
     RtObject_ExternalPtrSerialize_GraphicsMesh(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));  // LEFT: POD ExternalPtr serialize thunk (External.h, R-OBJ / wave X)
 }
 inline void ExtMat(void* slot, IO::Serializer& ser) {
     RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));  // LEFT: POD ExternalPtr serialize thunk (External.h, R-OBJ / wave X)
 }
 // 0x1800136f0, the TriangleList `Array<>::SetSize`, is called by its body
 // name `rtcoll::RtColl_ArraySetSize_1800136f0` (Collection.h), on the typed

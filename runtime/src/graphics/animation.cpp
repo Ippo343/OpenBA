@@ -220,7 +220,7 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
     // `MOV [0x1801fe7b0],RBX` -- publish the instance. (B.3.9: the class
     // static; the POD view `self` is the same object.)
     Graphics::AnimationManager::_singleton =
-        reinterpret_cast<Graphics::AnimationManager*>(self);   // B.3.9 bridge (POD view)
+        reinterpret_cast<Graphics::AnimationManager*>(self);   // B.3.9 bridge (POD view)  // LEFT: POD the ctor door builds the RtGraphics view (wave X)
 
     return self;
 }

@@ -279,7 +279,7 @@ GraphicsMesh::~GraphicsMesh() {
 
     char* const name = self->_name.data;
     if (name != nullptr) {
-        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;
+        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;  // CAST-OK: string_header
         --*refs;
         if (*refs == 0) {
             self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8

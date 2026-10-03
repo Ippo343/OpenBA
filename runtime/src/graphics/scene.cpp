@@ -299,7 +299,7 @@ const float kBigNeg       = -1.0e8f;
 //   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
 // B3R: rtpickgrid::BoxTransform, by name.
 float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
-    return static_cast<float*>(rtpickgrid::BoxTransform(out, xf, localBox));
+    return static_cast<float*>(rtpickgrid::BoxTransform(out, xf, localBox));  // LEFT: SIG rtpickgrid::BoxTransform returns void* (picking/, wave X)
 }
 
 // Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191,
@@ -524,7 +524,7 @@ void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
 // are retired; this member is the only body.
 // ============================================================================
 Graphics::Geometry::Geometry() {
-    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)
+    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)  // LEFT: POD Geometry ctor writes through the RtGraphics view (closing wave)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
     self->_attached._data    = nullptr;
@@ -594,7 +594,7 @@ Graphics::Geometry::Geometry() {
 Graphics::Geometry::~Geometry() {
     while (_attached.GetSize() > 0)
         DetachBody(this, _attached[0]);
-    decltype(_attached)::ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(&_attached));
+    decltype(_attached)::ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(&_attached));  // LEFT: ERASED the core takes rtcoll::ArrayHdr (Collection.h, R-COLL)
 }
 
 // ============================================================================
@@ -1188,7 +1188,7 @@ bool Geometry::Clean() {
         const Math::Transform xf = _transform;
         float box[6];
         const float* world = RtBoxTransform(box, &xf,
-                                            reinterpret_cast<const float*>(&_localBounds));
+                                            reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform takes float[6] (picking/, wave X)
         _prevWorldBounds = _worldBounds;
         _worldBounds.min.x = world[0];
         _worldBounds.min.y = world[1];
@@ -1319,8 +1319,8 @@ Scene::ObjectId Scene::AddObject(Geometry* geometry) {
     Geometry* local = geometry;
     // The grid insert reads `MOV RAX,[RSI]`, i.e. a POINTER TO the Geometry*,
     // which is why retail spills its argument to a local first.
-    return RtSceneGridAdd(reinterpret_cast<RtGraphics::Scene*>(this),          // B.3.5 bridge
-                          reinterpret_cast<RtGraphics::Geometry* const*>(&local));
+    return RtSceneGridAdd(reinterpret_cast<RtGraphics::Scene*>(this),          // B.3.5 bridge  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+                          reinterpret_cast<RtGraphics::Geometry* const*>(&local));  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
 }
 
 // ---------------------------------------------------------------------------
@@ -1344,7 +1344,7 @@ void Scene::RemoveObject(ObjectId id) {
     SceneNode* node = &_nodes[static_cast<int32_t>(id)];
     const ObjectId local = id;
 
-    RtSceneGridUnthread(reinterpret_cast<RtGraphics::Scene*>(this),            // B.3.5 bridge
+    RtSceneGridUnthread(reinterpret_cast<RtGraphics::Scene*>(this),            // B.3.5 bridge  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
                         static_cast<int32_t>(id));
 
     node->_object = nullptr;
@@ -1424,7 +1424,7 @@ void Scene::Clean() {
         do {
             Geometry* geo = _nodes[i]._object;
             if (geo->_dirtyFlags != 0 && geo->Clean())          // VIRTUAL, slot 8
-                RtSceneGridReindex(reinterpret_cast<RtGraphics::Scene*>(this), i);  // B.3.5 bridge
+                RtSceneGridReindex(reinterpret_cast<RtGraphics::Scene*>(this), i);  // B.3.5 bridge  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
 
             count = _nodes.GetSize();
             ++i;

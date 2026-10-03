@@ -95,7 +95,7 @@ constexpr uint32_t kDirtyMaterialStagingBit = 0x00008000u;
 constexpr size_t kMaterialStagingOffset = 0x208 - 0x200;   // into _pixelConstantStaging
 
 template <typename T> inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
+    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);  // LEFT: file-local accessor; its readers hold the RtGraphics material POD (wave X)
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ unsigned long long g_matNewCalls  = 0;
 // call. The sentence about growing the cutover surface was true when written and
 // is answered: the surface it named is ours now.
 void SetupShaders(void* program, Context* ctx) {
-    reinterpret_cast<::Video::VideoProgram*>(program)
+    reinterpret_cast<::Video::VideoProgram*>(program)  // LEFT: POD material slot holds the program as void* (wave X)
         ->SetupShaders(static_cast<void*>(ctx));   // B.3.5 bridge
 }
 
@@ -302,7 +302,7 @@ void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
     //                                            MOV RAX,[RAX+0x28] ;
     //                                            MOV RCX,[RAX+RDI*8])
     SetupShaders(_material.Get()->_passes._data[shader].Get(),
-                 reinterpret_cast<RtVideo::Context*>(&context));   // B.3.5 bridge
+                 reinterpret_cast<RtVideo::Context*>(&context));   // B.3.5 bridge  // LEFT: SIG callee takes the RtVideo POD view (wave X)
 
     // set = _parameters._data + shader*0x20  (SHL RDI,5 ; ADD RDI,[RSI+0x30])
     const RtGraphics::MaterialParameterSet* set = _parameters._data + shader;
@@ -323,7 +323,7 @@ void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
     for (int32_t i = 0; i < set->constants._size; ++i) {
         const RtGraphics::MaterialBinding& b = set->constants._data[i];
         const float* src = _constants._data[b.sourceIndex].value;
-        float* dst = reinterpret_cast<float*>(
+        float* dst = reinterpret_cast<float*>(  // LEFT: Context::_pixelConstantStaging stays bytes (outside indexers, Context.h)
             &context._pixelConstantStaging[kMaterialStagingOffset + b.shaderSlot * 0x10]);
 
         // (c) unordered counts as different, and all four are compared before

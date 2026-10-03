@@ -288,7 +288,7 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // the embedded +0x60 with the pointer-to-array +0x70 cost Wave 6 an
     // integration run, and is silent whenever the garbage count reads 0.
     const bool ok =
-        reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+        reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: H5 MeshInstance::_animation raw storage
             ->::Graphics::AnimationState::Update(
                 timeRef,
                 GetMesh()->GetNodes(),                 // &mesh->_nodes (+0x60)

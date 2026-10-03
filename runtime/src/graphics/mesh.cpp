@@ -2074,8 +2074,8 @@ void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                 static_cast<::Graphics::AnimationGroup*>(group.p)),
             index,
             GetMesh()->GetNodes(),
-            *static_cast<const System::Time*>(startTime),
-            *static_cast<const System::Time*>(blendTime),
+            *static_cast<const System::Time*>(startTime),  // LEFT: SIG PlayAnimation time params are void* (Mesh.h, outside callers, wave X)
+            *static_cast<const System::Time*>(blendTime),  // LEFT: SIG PlayAnimation time params are void* (Mesh.h, outside callers, wave X)
             weight, true);
 }
 
@@ -2349,7 +2349,7 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
         const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a2fe2
         const int32_t n = em->_triangleLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
-            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);
+            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
             const GraphicsMesh::TriangleList* const lists = em->_triangleLists._data;
 
             const MaterialInstance* material =
@@ -2367,10 +2367,10 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
     {
-        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a3087 RELOAD
+        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a3087 RELOAD  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
         const int32_t n = em->_edgeLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
-            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);
+            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
             const GraphicsMesh::TriangleList* const lists = em->_edgeLists._data;
 
             const MaterialInstance* material =

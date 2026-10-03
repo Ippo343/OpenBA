@@ -237,7 +237,7 @@ const Matrix kZUpToYUp = {{
 
 // ?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z — retail 0x1800fe5c0
 extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustum) {
-    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge
+    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge  // LEFT: POD the Camera ctor door is extern "C" (wave X)
         ->::Graphics::Camera::SetFrustum(*frustum);
 }
 
@@ -255,7 +255,7 @@ extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
                                           const Transform3* cameraToWorld, bool swapZUpToYUp) {
     // 25 dwords: the ctor DOES move +0x60 as a dword, so the frustum's pad
     // bytes come across too. (SetFrustum does not — see the member below.)
-    std::memcpy(&self->frustum, frustum, sizeof(Frustum));
+    std::memcpy(&self->frustum, frustum, sizeof(Frustum));  // LEFT: retail moves 25 dwords incl. pad; a struct copy may change store widths
     std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
     // Was `memset(&self->projection, 0, sizeof(Matrix))`. ENDGAME B.3.1 made
     // Math::Matrix a real class whose default ctor (retail 0x18001d770) zeroes
@@ -674,7 +674,7 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
     local.name = nullptr;
     char* data = name.data;                          // System::String is one pointer
     if (data) {
-        ++*reinterpret_cast<int32_t*>(data - 4);
+        ++*reinterpret_cast<int32_t*>(data - 4);  // CAST-OK: string_header
         local.name = data;
     }
     local.image = image.Get();
@@ -684,7 +684,7 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
                                &local);
 
     if (local.name) {
-        int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);
+        int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);  // CAST-OK: string_header
         if (--*refCount == 0) RtMemFree(local.name - 8);
     }
 }

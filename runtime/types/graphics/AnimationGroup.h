@@ -219,7 +219,11 @@ public:
         float    _float10;                   // +0x10  init 0.1f
         uint32_t _pad14;                     // +0x14  never written
     };
-    Collection::Array<uint8_t> _tags;        // +0x38  Array<Tag>, stride 0x18 (SetSize 0x18005a220)
+    // Typed: `Tag` is trivially default-constructible, copyable and
+    // destructible (POD Strings), so the member's implicit ~Array is the same
+    // free-the-buffer the raw header's was, with no element step; sizing and
+    // teardown stay on the registered rows (0x18005a220, 0x18001c2d0).
+    Collection::Array<Tag> _tags;            // +0x38  stride 0x18 (SetSize 0x18005a220)
     // B.4: typed. `float` is trivially destructible, so the member dtor
     // ~AnimationGroup runs is the same Clear-then-J1 as the raw header's.
     Collection::Array<float> _blendTimes;    // +0x48  the fade table
@@ -233,6 +237,9 @@ static_assert(offsetof(AnimationGroup, _defaultBlend)== 0x30, "AnimationGroup::_
 static_assert(offsetof(AnimationGroup, _tags)        == 0x38, "AnimationGroup::_tags @ +0x38");
 static_assert(offsetof(AnimationGroup, _blendTimes)  == 0x48, "AnimationGroup::_blendTimes @ +0x48");
 static_assert(sizeof(AnimationGroup::Tag) == 0x18, "AnimationGroup::Tag stride 0x18 (0x18005a220)");
+static_assert(std::is_trivially_destructible<AnimationGroup::Tag>::value &&
+              std::is_trivially_default_constructible<AnimationGroup::Tag>::value,
+              "Tag stays trivial: `_tags`' implicit ~Array must run no element step");
 static_assert(offsetof(AnimationGroup::Tag, _string00) == 0x00, "Tag +0x00 String");
 static_assert(offsetof(AnimationGroup::Tag, _string08) == 0x08, "Tag +0x08 String");
 static_assert(offsetof(AnimationGroup::Tag, _float10)  == 0x10, "Tag +0x10 float (init 0.1f)");

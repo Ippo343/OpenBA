@@ -183,11 +183,11 @@ void VideoProgram::SetupShaders(void* ctxv) const {
     // than a reinterpret_cast so this file does not depend on the array staying
     // suitably aligned for a void* if the header is ever re-divided.
     void* videoProgramSlot = nullptr;
-    std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));
+    std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));  // LEFT: Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)
     if (videoProgramSlot != static_cast<const void*>(this)) {
         ctx->_dirty |= kDirtyVideoProgram;
         const VideoProgram* me = this;
-        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));
+        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));  // LEFT: as above
     }
 
     Apply(ctx, ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);
