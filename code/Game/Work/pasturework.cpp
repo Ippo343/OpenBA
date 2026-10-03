@@ -155,7 +155,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // component as an integer: LEFT)
     // -------------------------------------------------------
     if (local_58->workState == 0) {
-        int iVar9 = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(local_58));
+        int iVar9 = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(local_58));   // LEFT: SIG WorkComponent_CalcMaxWorkers
         local_58->workState = iVar9;
     }
 
@@ -190,7 +190,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         Map* map = gameWorld->m_game;
         // The map helpers (0x14009ccf0, 0x1400a00f0, 0x14009f3e0) take the map as int*:
         // LEFT.
-        int* piVar4 = reinterpret_cast<int*>(map);
+        int* piVar4 = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h) take the Map as int*
 
         // Get citizen position for pathfinding: CharacterComponent (+0x278) ->
         // ModelComponent (+0x68) -> the transform's translation
@@ -211,7 +211,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         if (local_a8->capacity < pastureCount) {
             // Find an animal to remove via helper (0x140128350 takes the component as an
             // integer: LEFT)
-            int slotIdx = WorkLeaf_Pasture_8350(reinterpret_cast<uintptr_t>(local_a8));
+            int slotIdx = WorkLeaf_Pasture_8350(reinterpret_cast<uintptr_t>(local_a8));   // LEFT: SIG WorkLeaf_Pasture_8350
             if (slotIdx >= 0) {
                 // The livestock at that slot, its entity's AnimalComponent (0x140005500)
                 LivestockComponent* livestock = local_a8->animals[slotIdx];
@@ -224,7 +224,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                         // The animal entity's CharacterComponent (the guarded finder
                         // 0x1400012d0 takes the entity as an integer: LEFT)
                         CharacterComponent* familyIBP[2] = {nullptr, nullptr};
-                        ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(natResIBP->_entity), familyIBP);  // Entity_FindComponent_Family @ 0x1400012d0
+                        ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(natResIBP->_entity), familyIBP);  // Entity_FindComponent_Family @ 0x1400012d0   // LEFT: SIG ActMv_FindComponentFamily_12d0
                         CharacterComponent* familyComp = familyIBP[0];
                         const Math::Vector3& animalPos = familyComp->modelComponent->transform.translation;
 
@@ -261,17 +261,16 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                             float local_70[4];  // Vector3 + padding
                             Reimpl_MapGetTerrainPos(map, local_70, &local_80.x, '\0', nullptr);
 
-                            // Build RemoveAnimal action (0x1400bbea0 takes the position and
-                            // the description as integers: LEFT)
+                            // Build RemoveAnimal action (0x1400bbea0)
                             CitizenComponent* local_90 = *citizenIBP;
-                            AnimalComponent* local_a0_ibp = natResIBP;
-                            Pf_RemoveAnimalCtor_bbea0(
+                            Component* local_a0_ibp = natResIBP;   // the AnimalComponent IBP
+                            RemoveAnimalActions(
                                 &local_90,              // citizenIBP
                                 field_20,               // priority
-                                reinterpret_cast<uint32_t*>(local_70),               // position
+                                local_70,               // position
                                 animalCell,             // cell index
                                 &local_a0_ibp,          // the AnimalComponent IBP
-                                reinterpret_cast<int64_t>(animalDesc),     // description ptr
+                                animalDesc,             // description ptr
                                 1);                     // flag (CONCAT31 result)
 
                             // Assign work to citizen
@@ -303,8 +302,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         // -------------------------------------------------------
         InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
-        // (0x140123070 takes the component as an integer: LEFT)
-        int posCount = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(posComp), 2);
+        int posCount = InteractNodeCount(posComp, 2);   // 0x140123070
 
         if (posCount > 0) {
             int iPvVar20 = 0;
@@ -335,7 +333,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                         CitizenComponent* local_90_val = *citizenIBP;
                         WorkScheduler* storageWorkMgr = gameWorld->m_tutorial;
                         uint64_t overflowResult = WorkGrid_TryAssignWorkplace_f8620(
-                            reinterpret_cast<uintptr_t>(storageWorkMgr), &local_90_val,
+                            reinterpret_cast<uintptr_t>(storageWorkMgr), &local_90_val,   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
                             storageWork->workId, '\x01');
 
                         if ((char)overflowResult != '\0') {
@@ -429,7 +427,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 // Register work with CitizenAI (CitizenAI_impl_1a30):
                 // (tree root = self+0x48, outResult = the GetTarget slot, key = citizen IBP;
                 // the helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);
+                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
                 return 2;
             }
         }
@@ -447,7 +445,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int PastureWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return false;
 }
 
@@ -464,7 +462,7 @@ int PastureWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*
 // ============================================================
 int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, int /*arg3*/) {
     // Insert citizen into BST (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
 
     // Check if param3 entity is valid
     ComponentEntity* entity = *param3;
@@ -616,7 +614,7 @@ int PastureWork::Validate() {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
                         break;
                     }
                     searchNode = searchNode->right;
@@ -669,7 +667,7 @@ void PastureWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkBST_BST_Serialize_296b0
 }
 
 
@@ -713,7 +711,7 @@ PastureWork::PastureWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
 // (The entity slot is void*, the caller's ABI: LEFT.)
 // ============================================================
 PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr), _field50(0) {
-    field_10 = *(ComponentEntity**)entityIBP;
+    field_10 = *(ComponentEntity**)entityIBP;   // LEFT: the ctor's entity slot is void* (its callers' ABI)
     if (field_10 != nullptr &&
         GameUpdateLoop::_singleton != nullptr) {
         MapComponent* a = field_10->FindComponent<MapComponent>();

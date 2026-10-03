@@ -137,7 +137,7 @@ static void AssignWorkToEntity(HerbalistWork* self, CitizenComponent** citizenIB
 
     // Register work with citizen AI subsystem at self+0x48 (the tree helper takes the
     // container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
 }
 
 
@@ -219,7 +219,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
     // If the worker capacity cache is 0, calculate it (the tree's port of 0x14012e5c0
     // called here takes the component as an integer: LEFT)
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
         matDesc->workState = maxWorkers;
     }
 
@@ -235,7 +235,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
     Map* map = gameWorld->m_game;
     // The map helpers (0x140008830, 0x14009ccf0, 0x1400a00f0, 0x14009f3e0) take the map
     // as int* / void*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
 
     int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;
@@ -402,7 +402,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
         StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
         // (0x14012cf10 takes the storage as an integer: LEFT)
-        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
+        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
         if (storageCount < 1) {
             return 0;
         }
@@ -432,7 +432,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
         }
 
         // (the tree helper takes the container as uintptr_t*: LEFT)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
 
         // Increment fail counter
         _field58 = failCount + 1;
@@ -449,7 +449,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int HerbalistWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return false;
 }
 
@@ -460,7 +460,7 @@ int HerbalistWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HerbalistWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return 0;
 }
 
@@ -593,7 +593,7 @@ int HerbalistWork::Validate() {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
                         break;
                     }
                     searchNode = searchNode->right;
@@ -636,7 +636,7 @@ void HerbalistWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkBST_BST_Serialize_296b0
 
     // Serialize int at self+0x58
     serializer2.Serialize(_field58, nullptr);

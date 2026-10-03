@@ -149,7 +149,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
+    int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
     if (storageCount >= 1) {
         (*citizenIBP)->LongTermPlan();
         return 2;
@@ -198,7 +198,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     int huntCount = _field50;
 
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
         matDesc->workState = maxWorkers;
     }
 
@@ -211,7 +211,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     // -------------------------------------------------------
     Map* map = gameWorld->m_game;
     // The map helpers (0x140008830, 0x1400a00f0) take the map as int*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
     System::Random* rng = gameWorld->m_random;
 
     int areaRadius = area->_radius;
@@ -318,7 +318,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
         WorkAct_HuntWorkCtor_bbbc0(
             &citizenEntRef,        // citizen entity IBP
             field_20,              // priority
-            reinterpret_cast<int64_t*>(&huntComp2),         // hunt component IBP
+            reinterpret_cast<int64_t*>(&huntComp2),         // hunt component IBP   // LEFT: SIG WorkAct_HuntWorkCtor_bbbc0
             pathPos,               // terrain position
             0.0f,                  // float param
             1);                    // char param (specific location)
@@ -336,7 +336,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
         WorkAct_HuntWorkCtor_bbbc0(
             &citizenEntRef2,       // citizen entity IBP
             field_20,              // priority
-            reinterpret_cast<int64_t*>(&huntComp3),         // hunt component IBP
+            reinterpret_cast<int64_t*>(&huntComp3),         // hunt component IBP   // LEFT: SIG WorkAct_HuntWorkCtor_bbbc0
             fallbackPos,           // fallback position (0,0,0)
             kRdata_140172198,     // float param (roaming radius)
             0);                    // char param (roaming mode)
@@ -360,7 +360,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     }
 
     // (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
     return 2;
 }
 
@@ -372,7 +372,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int HuntWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return false;
 }
 
@@ -383,7 +383,7 @@ int HuntWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, 
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HuntWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return 0;
 }
 
@@ -512,7 +512,7 @@ int HuntWork::Validate() {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
                         break;
                     }
                     searchNode = searchNode->right;
@@ -567,7 +567,7 @@ void HuntWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkBST_BST_Serialize_296b0
 }
 
 

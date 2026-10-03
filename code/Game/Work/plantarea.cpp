@@ -251,7 +251,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             insertKey.cell = i;
             insertKey._pad04 = 0;
             insertKey.citizen = *citizenRef;
-            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);
+            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);   // LEFT: SIG WorkCellBST_Insert_9a40
 
             // Mark primary cell as used (not available)
             validityArray[i] = 0;
@@ -263,7 +263,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
                 insertKey2.cell = pairedIdx;
                 insertKey2._pad04 = 0;
                 insertKey2.citizen = *citizenRef;
-                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult2, &insertKey2);
+                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult2, &insertKey2);   // LEFT: SIG WorkCellBST_Insert_9a40
                 validityArray[pairedIdx] = 0;
             }
 
@@ -323,7 +323,7 @@ int PlantArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*par
         } else if ((int)primaryIdx > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             break;
         }
     }
@@ -354,7 +354,7 @@ int PlantArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*par
             } else if ((int)pairedIdx > node2->element.cell) {
                 node2 = node2->right;
             } else {
-                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node2);
+                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node2);   // LEFT: SIG WorkCellBST_Remove_ca60
                 break;
             }
         }
@@ -383,7 +383,7 @@ int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param
         } else if ((int)primaryIdx > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             break;
         }
     }
@@ -404,7 +404,7 @@ int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param
             } else if ((int)pairedIdx > node2->element.cell) {
                 node2 = node2->right;
             } else {
-                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node2);
+                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node2);   // LEFT: SIG WorkCellBST_Remove_ca60
                 return 0;
             }
         }
@@ -548,7 +548,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.cell) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
                     break;
                 }
             }
@@ -594,7 +594,7 @@ void PlantArea::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize the set at +0x48
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);   // LEFT: SIG WorkCellBST_Serialize_9de0
 
     // Serialize field cell count at +0x60
     int cellCountBuf[2] = { field_60, 0 };

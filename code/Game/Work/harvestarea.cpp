@@ -170,7 +170,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // the component as an integer: LEFT)
     int treeCount = _field50;
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
         matDesc->workState = maxWorkers;
     }
     if (treeCount > matDesc->workState) {
@@ -181,7 +181,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // Step 3: Setup iteration
     Map* map = gameWorld->m_game;
     // The map helpers (0x14009ccf0, 0x1400a00f0) take the map as int*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
 
     // Get citizen position
     const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
@@ -311,7 +311,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                     actionBuf,                    // citizenIBP
                                     field_20,                     // priority
                                     harvestMode,                  // 1=single, 2=paired
-                                    reinterpret_cast<void**>(natRes),   // target NatRes array (harvestMode entries)
+                                    reinterpret_cast<void**>(natRes),   // target NatRes array (harvestMode entries)   // LEFT: SIG WorkAct_HarvestAreaCtor_c1530
                                     pathPos,                      // position
                                     packedCellInfo,               // packed cell indices
                                     0);                           // param7
@@ -338,7 +338,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 keyBuf.slot = i;
                                 keyBuf._pad04 = 0;
                                 keyBuf.citizen = *citizenIBP;
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);   // LEFT: SIG WorkCellBST_Insert_9a40
 
                                 // Mark cell as used
                                 validityArray[i] = 0;
@@ -350,7 +350,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                     keyBuf2.slot = cellIdx2;
                                     keyBuf2._pad04 = 0;
                                     keyBuf2.citizen = *citizenIBP;
-                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult2, &keyBuf2);
+                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult2, &keyBuf2);   // LEFT: SIG WorkCellBST_Insert_9a40
                                     validityArray[cellIdx2] = 0;
                                 }
 
@@ -384,7 +384,7 @@ static void HarvestArea_RemoveCellNode(HarvestArea* self, int key) {
         } else if (key > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&self->_field48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&self->_field48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             return;
         }
     }
@@ -606,7 +606,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.slot) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
                     break;
                 }
             }
@@ -647,7 +647,7 @@ void HarvestArea::Persist(IO::Stream& stream) {
 
     // Serialize the claim tree at +0x48 (the helper takes the container as uintptr_t*:
     // LEFT)
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkCellBST_Serialize_9de0
 
     // Serialize field cell count at +0x60
     int cellCount = _field60;
