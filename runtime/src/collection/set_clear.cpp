@@ -136,19 +136,8 @@ const rtcoll::DestroySpec kD_PairStrStr = {
     "2 Strings @+0x008,+0x000, stride 0x010", 0x010, 2, { 0x008, 0x000 }
 };
 
-void DestroyElement(void* node) {
-    // The arm each release took is readable from the slot afterwards, and that
-    // asymmetry is deliberate in Body B: NULL means the string survived
-    // (refcount did not reach zero), a non-null `p - 8` means it was freed.
-    // Reading it here is how the arm counts come from INSIDE the body rather
-    // than from a guess about the corpus.
-    uint8_t* e = static_cast<uint8_t*>(node);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-    void* const before8 = *reinterpret_cast<void**>(e + 0x08);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-    void* const before0 = *reinterpret_cast<void**>(e + 0x00);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-    rtcoll::ReleaseStringsCore(e, 1, &kD_PairStrStr);
-    if (before8) (*reinterpret_cast<void**>(e + 0x08) ? ++g_strFreed : ++g_strShared);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-    if (before0) (*reinterpret_cast<void**>(e + 0x00) ? ++g_strFreed : ++g_strShared);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-}
+struct PairStrStr;
+void DestroyElement(PairStrStr* e);
 
 // ---------------------------------------------------------------------------
 // The ELEMENT of this Set, with retail's destructor on it (ENDGAME B.3.2
@@ -168,6 +157,24 @@ struct PairStrStr {
     ~PairStrStr() { DestroyElement(this); }
 };
 static_assert(sizeof(PairStrStr) == 0x10, "the element of a 0x30-byte node");
+static_assert(offsetof(PairStrStr, key)   == 0x00, "PairStrStr::key @ +0x00");
+static_assert(offsetof(PairStrStr, value) == 0x08, "PairStrStr::value @ +0x08");
+
+// ~Pair<System::String, System::String>, retail 0x18000fa90 (the banner above
+// kD_PairStrStr). The release itself is the one (stride, offset-table) Body B
+// core, which walks the element as bytes.
+void DestroyElement(PairStrStr* e) {
+    // The arm each release took is readable from the slot afterwards, and that
+    // asymmetry is deliberate in Body B: NULL means the string survived
+    // (refcount did not reach zero), a non-null `p - 8` means it was freed.
+    // Reading it here is how the arm counts come from INSIDE the body rather
+    // than from a guess about the corpus.
+    char* const before8 = e->value;
+    char* const before0 = e->key;
+    rtcoll::ReleaseStringsCore(reinterpret_cast<uint8_t*>(e), 1, &kD_PairStrStr);  // CAST-OK: elem_stride
+    if (before8) (e->value ? ++g_strFreed : ++g_strShared);
+    if (before0) (e->key ? ++g_strFreed : ++g_strShared);
+}
 
 // The instantiation. `align8(sizeof(PairStrStr)) + 0x20 == 0x30` is the node
 // 0x18000f970 allocates, and the width picks the ported AVL core in
@@ -177,17 +184,12 @@ static_assert(sizeof(PairSet)       == 0x10, "Set is {root, count}");
 static_assert(sizeof(PairSet::Node) == 0x30, "0x18000f970 allocates 0x30");
 
 // ---------------------------------------------------------------------------
-// retail 0x18000f890 — the recursive post-order destroy.
+// retail 0x18000f890 — the recursive post-order destroy. It IS the template's
+// static `PairSet::DestroySubtree` (null test, left, right, `~PairStrStr`, the
+// 0x180009c30 free), which `Clear` below reaches; the one-line C shim onto it
+// had no caller in `code runtime standalone dx11 engine tests` and is deleted
+// (B.4 R-COLL, rule B8).
 // ---------------------------------------------------------------------------
-void DestroySubtree(void* /*ignored — retail passes junk here*/, Node* n) {
-    // ONE LINE ONTO THE INSTANTIATION (ENDGAME B.3.2 step 1). The template's
-    // static `DestroySubtree` is this body: null test first, then left, then
-    // right, then the element destructor (which IS `DestroyElement` above, via
-    // `~PairStrStr`), then the node free through 0x180009c30 — both children
-    // loaded BEFORE the free, because the allocator writes a boundary tag into
-    // the block it takes back.
-    PairSet::DestroySubtree(reinterpret_cast<PairSet::Node*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
-}
 
 // ---------------------------------------------------------------------------
 // retail 0x18000f7d0 — Clear.
@@ -204,7 +206,7 @@ void Clear(Set* set) {
     // post-order, then the root's element, then the root's node, then the two
     // zero stores — which retail performs even when the tree was already empty
     // (it branches to a second copy of them rather than skipping).
-    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
+    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: SIG rtsetclear::Clear (Collection.h; its callers hold the erased rtsetavl::Set: engine_platform.cpp, persistence_registry_win.cpp, persistence_saves.cpp, configuration.cpp)
 }
 
 }  // namespace rtsetclear

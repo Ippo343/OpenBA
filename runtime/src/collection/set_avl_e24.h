@@ -58,7 +58,8 @@ namespace rtsetavl24 {
 // `child->height + 1` or 0). Both 16-bit, and retail's arithmetic on them is
 // 16-bit throughout — see Recompute in the .cpp.
 struct Node {
-    uint8_t  element[0x18];   // +0x00  NEVER read by anything in this file
+    uint64_t element[3];      // +0x00  opaque to the core; the node ctor
+                              //   0x1800230cb..dd copies it as three qwords
     Node*    parent;          // +0x18
     Node*    left;            // +0x20
     Node*    right;           // +0x28

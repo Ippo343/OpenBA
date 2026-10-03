@@ -120,6 +120,39 @@ static_assert(sizeof(PathId) == 0x10, "the element fills Set::Node's +0x00..+0x0
 static_assert(offsetof(PathId, value) == 0x08,
               "0x1800278e9 MOV dword ptr [RAX+0x8],ECX");
 
+// B.4 (R-COLL): the node 0x1800278c0 allocates (0x30, align 8) and builds —
+// the element above at +0x00, parent +0x10, the two null children +0x18 /
+// +0x20 and ONE dword zero at +0x28 over balance and height. It is
+// rtsetavl::Node's layout (set_avl.h) with the element typed, so the shared
+// retrace 0x1800279f0 serves it.
+struct PathIdNode {
+    PathId      element;   // +0x00
+    PathIdNode* parent;    // +0x10
+    PathIdNode* left;      // +0x18
+    PathIdNode* right;     // +0x20
+    int16_t     balance;   // +0x28
+    int16_t     height;    // +0x2a
+    uint32_t    pad2c;     // +0x2c  never written by the ctor
+};
+static_assert(sizeof(PathIdNode) == 0x30, "0x1800278c0 allocates 0x30");
+static_assert(offsetof(PathIdNode, element) == 0x00, "PathIdNode::element @ +0x00");
+static_assert(offsetof(PathIdNode, parent)  == offsetof(Node, parent),  "PathIdNode::parent @ +0x10");
+static_assert(offsetof(PathIdNode, left)    == offsetof(Node, left),    "PathIdNode::left @ +0x18");
+static_assert(offsetof(PathIdNode, right)   == offsetof(Node, right),   "PathIdNode::right @ +0x20");
+static_assert(offsetof(PathIdNode, balance) == offsetof(Node, balance), "PathIdNode::balance @ +0x28");
+static_assert(offsetof(PathIdNode, height)  == offsetof(Node, height),  "PathIdNode::height @ +0x2a");
+static_assert(offsetof(PathIdNode, pad2c)   == 0x2c, "PathIdNode::pad2c @ +0x2c");
+
+// The {root, count} header the insert core takes: set_avl.h's `Set` with the
+// typed node.
+struct PathIdSet {
+    PathIdNode* root;    // +0x00
+    int32_t     count;   // +0x08
+    int32_t     pad0c;   // +0x0c
+};
+static_assert(sizeof(PathIdSet) == sizeof(Set), "PathIdSet is {root, count}");
+static_assert(offsetof(PathIdSet, count) == offsetof(Set, count), "PathIdSet::count @ +0x08");
+
 namespace {
 
 // The two allocator doors, same shape and same reasoning as avl_trees.cpp:165 —
@@ -179,21 +212,22 @@ int StrCmpSigned(const char* a, const char* b) {
 // exactly as retail does. No guard is added: retail relies on the allocation
 // succeeding and a guard here would hide the failure rather than handle it.
 // ---------------------------------------------------------------------------
-Node* AllocNode(void* /*ignoredSet*/, const PathId* pair, Node* parent) {
-    Node* n = static_cast<Node*>(MemAlloc(0x30u, 8));
+PathIdNode* AllocNode(void* /*ignoredSet*/, const PathId* pair, PathIdNode* parent) {
+    PathIdNode* n = static_cast<PathIdNode*>(MemAlloc(0x30u, 8));
     if (n == nullptr) return nullptr;
 
-    char** keySlot = reinterpret_cast<char**>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    char** keySlot = &n->element.key;
     *keySlot = nullptr;                       // retail stores the zero FIRST
     if (pair->key) {
         *keySlot = pair->key;
         ++RtSystem::StringRefCount(pair->key);
     }
-    reinterpret_cast<PathId*>(n)->value = pair->value;   // a DWORD store  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    n->element.value = pair->value;           // a DWORD store
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(n) + 0x28) = 0;  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    n->balance = 0;   // retail: ONE dword store at +0x28 over balance and
+    n->height  = 0;   //   height (H7: two named stores, address order)
     return n;
 }
 
@@ -212,15 +246,13 @@ namespace {
 // the case-SENSITIVE comparator, the null-arm asymmetry, its own node
 // allocator, and the retrace reached at its own address.
 struct PathIdPolicy : Collection::detail::NoCounters {
-    using Node    = rtsetavl::Node;
-    using SetT    = rtsetavl::Set;
+    using Node    = PathIdNode;
+    using SetT    = PathIdSet;
     using Element = PathId;
 
     static Node*&   Root(SetT* s)  { return s->root; }
     static int32_t& Count(SetT* s) { return s->count; }
-    static const char* NodeKey(const Node* n) {
-        return *reinterpret_cast<const char* const*>(n);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
-    }
+    static const char* NodeKey(const Node* n) { return n->element.key; }
     static const char* SearchKey(const Element* p) { return p->key; }  // retail re-reads
     static bool IsNull(const char* k) { return k == nullptr; }
     // *** CASE-SENSITIVE `strcmp`, NOT `_stricmp`. *** This is the one field
@@ -237,11 +269,13 @@ struct PathIdPolicy : Collection::detail::NoCounters {
     }
     // 0x1800279f0's own registration is the door, so the address is what runs
     // and the site's `calls=` counts it.
-    static void Retrace(SetT* set, Node** slot) { rtsetavl::Retrace(set, slot); }   // 0x1800279f0
+    static void Retrace(SetT* set, Node** slot) {   // 0x1800279f0: the erased core every 16-byte element shares
+        rtsetavl::Retrace(reinterpret_cast<Set*>(set), reinterpret_cast<rtsetavl::Node**>(slot));  // CAST-OK: elem_stride
+    }
 };
 }  // namespace
 
-Node** InsertCore(Set* set, Node** outSlot, const PathId* pair) {
+PathIdNode** InsertCore(PathIdSet* set, PathIdNode** outSlot, const PathId* pair) {
     return Collection::detail::InsertCorePattern<PathIdPolicy>(set, outSlot, pair);
 }
 
@@ -266,7 +300,7 @@ Node** Insert(Set* set, Node** outSlot, char* const* key, const uint32_t* value)
     temp.value = *value;
     // temp._pad0c deliberately left uninitialised: retail's store is a DWORD.
 
-    InsertCore(set, outSlot, &temp);
+    InsertCore(reinterpret_cast<PathIdSet*>(set), reinterpret_cast<PathIdNode**>(outSlot), &temp);  // LEFT: SIG rtpathid::Insert (Collection.h; its caller holds the erased rtsetavl::Set / Node: modification_setupfilesystem.cpp)
 
     StringReleaseInline(&temp.key);
     return outSlot;
@@ -297,7 +331,7 @@ void SubtreeFree(void* ignoredThis, Node* node) {
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    StringReleaseInline(reinterpret_cast<char**>(node));  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    StringReleaseInline(&reinterpret_cast<PathIdNode*>(node)->element.key);  // LEFT: SIG rtpathid::SubtreeFree (Collection.h; its caller holds the erased rtsetavl::Node: modification_setupfilesystem.cpp)
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }
