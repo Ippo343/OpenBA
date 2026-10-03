@@ -140,11 +140,11 @@ using EncFactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
 // SerializeUInt +0x98, DeletingDtor slot 0). `VSlot` stays for the IO::Encoding
 // factory slot alone -- that table has no destructor slot and does not flip.
 inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
-    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
+    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 }
 
 inline void* VSlot(void* obj, int byteOffset) {
-    void** vt = *reinterpret_cast<void***>(obj);
+    void** vt = *reinterpret_cast<void***>(obj);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
     return vt[byteOffset / 8];
 }
 
@@ -206,7 +206,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                                 ? rt::io::encoding_vtbl::kCreateReader   // +0x18
                                 : rt::io::encoding_vtbl::kCreateWriter;  // +0x20
     ReaderWriter* rw =
-        reinterpret_cast<EncFactoryFn>(VSlot(enc, factorySlot))(enc, &ser, 0);
+        reinterpret_cast<EncFactoryFn>(VSlot(enc, factorySlot))(enc, &ser, 0);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
     ser.readerWriter = rw;                       // 1800bcbbc
     if (!rw) ++g_c.nullRw;
 
@@ -253,7 +253,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 // TRANSITIONAL CAST, the class->POD direction: `rtrefset::Insert`
                 // is an unconverted C body whose value parameter is the POD.
                 rtrefset::Insert(reinterpret_cast<rtrefset::Set*>(&refs), &outSlot, &key,  // CAST-OK: elem_stride
-                                 reinterpret_cast<const Filename*>(&keyPath));
+                                 reinterpret_cast<const Filename*>(&keyPath));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
             }                                    // 1800bcc6b — keyPath's release
 
             // Temporary B: a SECOND AddRef'd alias, normalised again, then
@@ -352,7 +352,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                         System::Filename ret;
                         RtObject_External_GetPath(
                             n->element.external,
-                            reinterpret_cast<Filename*>(&ret));  // 1800bce3b
+                            reinterpret_cast<Filename*>(&ret));  // 1800bce3b  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
                         // 1800bce41 IS AN ADOPT WITH NO FOLLOWING
                         // AdjustDelimiters, so it is neither the String ctor

@@ -66,6 +66,7 @@
 #include <new>          // placement new into the retail hidden return slots
 
 #include "../../types/object/External.h"
+#include "../../types/object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
@@ -263,7 +264,7 @@ uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
         // The class->POD cast is the registered entry point's signature, which
         // B31_RULES keeps until the whole family converts.
         System::Filename got;
-        RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&got));
+        RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&got));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
         System::Filename key(got);   // the second copy; transcribed, see above
 
         node = ResourceSetFind(&self->_resources, key._data);
@@ -323,9 +324,9 @@ Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* 
 // have sorted; that is retail's behaviour, not an accident of this transcript.
 //
 // THE DERIVED-TYPE TEST IS LANE A's TERRITORY. Retail inlines an IsDerivedFrom
-// walk over Object::Factory's type map here. This port transcribes the raw
-// offsets (see FactoryTypeNodeOffsets in External.h) WITHOUT claiming what the
-// fields are called. Two consequences worth stating:
+// walk over Object::Factory's type map here, read by name since B.4 P2
+// (Factory::TypeSet::Node, TypeRecord: TypeInfo.h).
+// Two consequences worth stating:
 //   * `Factory::_singleton` is read by address, since Lane A owns the accessor.
 //   * Retail does NOT null-check the type-map lookup: a type id absent from the
 //     map falls out of the search loop with a null node and is then read at
@@ -367,7 +368,7 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
             // As GetReferenceId above: `got` is GetPath's hidden return slot,
             // `key` is retail's second copy, and both release before the read.
             System::Filename got;
-            RtObject_External_GetPath(prev, reinterpret_cast<Filename*>(&got));
+            RtObject_External_GetPath(prev, reinterpret_cast<Filename*>(&got));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
             System::Filename key(got);
 
             found = ResourceSetFind(&self->_resources, key._data);
@@ -441,7 +442,7 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
 ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
                                                   ExternalPtr<External>* ret,
                                                   const Filename* path,
-                                                  void* /*type — unused by retail*/) {
+                                                  ::Object::Type /*type — unused by retail*/) {
 
     bool noIdentifier;
     {
@@ -473,7 +474,7 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
         {
             System::Filename got;   // GetPath's hidden return slot; see above
             RtObject_External_GetPath(self->_resources[i],
-                                      reinterpret_cast<Filename*>(&got));
+                                      reinterpret_cast<Filename*>(&got));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
             const int keyLen = key.GetLength();
             const int gotLen = got.GetLength();

@@ -108,7 +108,7 @@ namespace {
 // `External::Load` drives and the one External.h names. B3X W0: called by
 // name; the bool result is discarded, as retail does here.
 void ExternalSerialize(External* self, IO::Stream& stream) {
-    reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge
+    reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     // ENDGAME B.3.1 step 2. `tmp` is GetPath's hidden return slot: it is
     // declared null and CONSTRUCTED INTO by the call, never assigned to.
     System::Filename tmp;
-    RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&tmp));   // 0x180006250
+    RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&tmp));   // 0x180006250  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
     // 1800be5d3 — the second reference the comment above is about, taken by
     // retail's copy ctor (0x1800067d0) and kept.
@@ -280,7 +280,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
 
         rtresset::Node* out = nullptr;
         rtresset::Insert(set, &out,
-                         reinterpret_cast<const Filename*>(&path), &value);             // 1800be6bd
+                         reinterpret_cast<const Filename*>(&path), &value);             // 1800be6bd  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
     }
 
     // ---- 1800be6c7..1800be6f7 -------------------------------------------

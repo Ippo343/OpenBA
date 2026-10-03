@@ -65,7 +65,7 @@ extern "C" void RtObject_InternalPtrArray_Serialize(::IO::Serializer* ser, int c
     // TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): the callers
     // still spell the POD; it goes with the POD in step 2.
     using TypedPtr = ::Object::InternalPtr<RtObject::Internal>;
-    TypedPtr::SerializeArray(*ser, count, reinterpret_cast<TypedPtr*>(elems), typeId);
+    TypedPtr::SerializeArray(*ser, count, reinterpret_cast<TypedPtr*>(elems), typeId);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // ENDGAME B.3.9 TI-REST (B39_RULES D6): T's type id is the class's own

@@ -137,7 +137,7 @@ void InternalMemFree(void* p) {
 }
 // Wave 2 ported this and proved it bit-exact over 16,035,064 calls.
 uint32_t InternalRand(::Random* random) {
-    return reinterpret_cast<System::Random*>(random)->Rand();   // 0x1800c7f90
+    return reinterpret_cast<System::Random*>(random)->Rand();   // 0x1800c7f90  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 // B.3.4 STREAMS (6/6) — `Internal::Clone`'s two `IO::MemoryStream` locals.
@@ -164,7 +164,7 @@ void* MemoryStreamCtor(void* self) {
     return ::new (self) IO::MemoryStream();
 }
 void MemoryStreamDtor(void* self) {
-    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();
+    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 }
 
 #endif
@@ -201,7 +201,7 @@ void ArrayPtrSetSizeFill(Collection::Array<Internal*>* a, int newSize, Internal*
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(
+        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -227,7 +227,7 @@ void ArrayPtrSetSize(Collection::Array<Internal*>* a, int newSize) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(
+        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -255,7 +255,7 @@ void ArrayPtrReserve(Collection::Array<Internal*>* a, int n) {
         a->_capacity = n;
         if (n == oldSize + 1 && oldSize != 0)
             a->_capacity = n * 3;
-        a->_data = static_cast<Internal**>(
+        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     if (old != a->_data) {
@@ -283,7 +283,7 @@ void ArrayIntSetSize(Collection::Array<int32_t>* a, int newSize) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<int32_t*>(
+        a->_data = static_cast<int32_t*>(  // LEFT: InternalMemAlloc is the inlined Array<int32_t> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 2), 4));
     }
     int i = (old == a->_data) ? oldSize : 0;

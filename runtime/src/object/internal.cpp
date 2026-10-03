@@ -143,10 +143,10 @@ namespace {
 // bytes. The cast is the transitional kind B31_RULES sanctions for a
 // not-yet-converted POD; it disappears with the POD in step 2.
 inline ::Object::InternalBasePtr* AsClass(InternalBasePtr* p) {
-    return reinterpret_cast< ::Object::InternalBasePtr*>(p);
+    return reinterpret_cast< ::Object::InternalBasePtr*>(p);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 inline const ::Object::InternalBasePtr* AsClass(const InternalBasePtr* p) {
-    return reinterpret_cast<const ::Object::InternalBasePtr*>(p);
+    return reinterpret_cast<const ::Object::InternalBasePtr*>(p);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
 
 }  // namespace
@@ -239,7 +239,7 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
 
     // A one-byte `char` through the bool slot (+0x78), as retail passes it.
     char present = (*self != nullptr) ? 1 : 0;
-    enc->SerializeBool(*reinterpret_cast<bool*>(&present), nullptr);
+    enc->SerializeBool(*reinterpret_cast<bool*>(&present), nullptr);  // LEFT: R-IO SerializeBool takes bool&; retail passes the one-byte char (H8: a bool would normalise it)
     if (present == 0) {
         *self = nullptr;
         return;
@@ -253,17 +253,17 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
         type  = 0xffffffffu;
     } else {
         index = p->factoryIndex;
-        type = reinterpret_cast<const Base*>(p)->Type();   // slot 2 +0x10 (B.3.x bridge)
+        type = reinterpret_cast<const Base*>(p)->Type();   // slot 2 +0x10 (B.3.x bridge)  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
     }
     const uint32_t gen = (*self != nullptr) ? (*self)->generation : 0u;
 
     enc->SerializeInt(index, nullptr);                          // +0xa0
-    enc->SerializeUInt(const_cast<uint32_t&>(gen), nullptr);    // +0x98
+    enc->SerializeUInt(const_cast<uint32_t&>(gen), nullptr);    // +0x98  // LEFT: SIG the door's `const uint32_t& gen` against SerializeUInt(uint32_t&) (R-IO / wave X)
     enc->SerializeUInt(type, nullptr);                          // +0x98
 
     // ?PersistObject@InternalFactory@Object@@ (0x1800bff10), the member by
     // name (B3R RT-Core) on `Object::InternalFactory::Get()`.
-    *self = reinterpret_cast<RtObject::Internal*>(
+    *self = reinterpret_cast<RtObject::Internal*>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
         ::Object::InternalFactory::Get()->PersistObject(*ser._stream, gen, index, type));
 }
 

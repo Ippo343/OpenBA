@@ -118,14 +118,6 @@ using RtSystem::Sys;
 // fuller layout here would be asserting something this lane did not measure.
 // ---------------------------------------------------------------------------
 
-// The Set header that `Object::Factory` begins with. `~Factory` writes exactly
-// these two fields at the end — `MOV [RBX],RAX` (qword) and `MOV [RBX+8],EAX`
-// (DWORD, not a qword).
-struct FactorySetHdr {
-    TypeNode* root;    // +0x00
-    int32_t   count;   // +0x08
-};
-
 // ---------------------------------------------------------------------------
 // The two already-ported callees, called by name (B3R RT-Core):
 //   0x1800093e0  rtavl::PtrArrayDtor -- a trivial J1-equivalent
@@ -167,12 +159,12 @@ struct FactorySetHdr {
 // registered type count (a few hundred types => under 20 frames). An explicit
 // stack would be a different program with a different overflow point.
 // ============================================================================
-void TypeSubtreeFree(void* set, TypeNode* node) {
+void TypeSubtreeFree(void* set, ::Object::Factory::TypeSet::Node* node) {
     if (node == nullptr)
         return;
     TypeSubtreeFree(set, node->left);
     TypeSubtreeFree(set, node->right);
-    rtavl::PtrArrayDtor(&node->value.children);   // node + 0x20
+    rtavl::PtrArrayDtor(&node->element.record.children);   // node + 0x20
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -209,16 +201,18 @@ void TypeSubtreeFree(void* set, TypeNode* node) {
 // argument SetNodeFree ignores anyway.
 // ============================================================================
 void RtObject_Factory_Dtor(void* self) {
-    FactorySetHdr* s = static_cast<FactorySetHdr*>(self);   // LEFT: SIG RtObject_Factory_Dtor(void*) (TypeInfo.h; caller engine_lifecycle.cpp holds Object::Factory*: wave X)
-    TypeNode* root = s->root;
+    // `~Factory` writes exactly the Set header's two fields at the end —
+    // `MOV [RBX],RAX` (qword) and `MOV [RBX+8],EAX` (DWORD, not a qword).
+    ::Object::Factory::TypeSet& s = static_cast<::Object::Factory*>(self)->_types;   // LEFT: SIG RtObject_Factory_Dtor(void*) (TypeInfo.h; caller engine_lifecycle.cpp holds Object::Factory*: wave X)
+    ::Object::Factory::TypeSet::Node* root = s._root;
     if (root != nullptr) {
         TypeSubtreeFree(self, root->left);
         TypeSubtreeFree(self, root->right);
-        rtavl::PtrArrayDtor(&root->value.children);   // root + 0x20
+        rtavl::PtrArrayDtor(&root->element.record.children);   // root + 0x20
         rtalloc::FreeLockedIgnoringSelf(self, root);
     }
-    s->root  = nullptr;
-    s->count = 0;
+    s._root  = nullptr;
+    s._count = 0;
 }
 
 // ============================================================================

@@ -155,7 +155,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     // unconverted C body (external_set.cpp) whose key parameter is the POD.
     // Same eight bytes, same single field; it goes when that file converts.
     rtsetavl24::Node* const node =
-        rtresset::Find(tree, reinterpret_cast<const Filename*>(&probe));
+        rtresset::Find(tree, reinterpret_cast<const Filename*>(&probe));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
 
     // (probe's 0x1800be26f release is its destructor now. It runs at the end of
     // the function instead of here — nothing between the two reads its buffer,

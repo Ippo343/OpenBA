@@ -406,7 +406,7 @@ bool Factory::Startup() {
             // or more children is what exercises it.
             if (newSize == static_cast<int32_t>(oldSize) + 1 && oldSize != 0)
                 parentRec->childCapacity = newSize * 3;            // 32-bit LEA
-            parentRec->children = static_cast<TypeRecord**>(TypeChildAlloc(
+            parentRec->children = static_cast<TypeRecord**>(TypeChildAlloc(  // LEFT: TypeChildAlloc (TypeInfo.h) is the inlined Array<TypeRecord*> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape
                 static_cast<uint64_t>(
                     static_cast<int64_t>(parentRec->childCapacity)) * 8, 8));
         }

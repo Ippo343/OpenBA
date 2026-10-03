@@ -175,12 +175,12 @@ void CloseIfOpen(RtIO::FileInfo* fi) {
 // swapped against their slots; the offsets are retail's and are what stays.
 // Both pass the third argument (the name) as zero, as retail does.
 void SerU32(void* impl, uint32_t* v) {
-    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeInt(     // +0xa0 (B.3.x bridge)
-        *reinterpret_cast<int32_t*>(v), nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeInt(     // +0xa0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+        *reinterpret_cast<int32_t*>(v), nullptr);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail's slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 }
 void SerI32(void* impl, int32_t* v) {
-    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeUInt(    // +0x98 (B.3.x bridge)
-        *reinterpret_cast<uint32_t*>(v), nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeUInt(    // +0x98 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+        *reinterpret_cast<uint32_t*>(v), nullptr);  // LEFT: as SerU32 above
 }
 
 }  // namespace
@@ -253,7 +253,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     alignas(IO::CompressedFileStream) unsigned char cfsMem[sizeof(IO::CompressedFileStream)];
     IO::CompressedFileStream* const cfsObj =
         ::new (static_cast<void*>(cfsMem)) IO::CompressedFileStream();
-    RtIo::CompressedFileStream& cfs = *reinterpret_cast<RtIo::CompressedFileStream*>(cfsObj);
+    RtIo::CompressedFileStream& cfs = *reinterpret_cast<RtIo::CompressedFileStream*>(cfsObj);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 
     // ---- 1800bc669..1800bc695 -------------------------------------------
     // Slot 7 of a FileStream is `Open`. On the MemoryStream/CompressedStream
@@ -263,7 +263,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // B3X W0: `IO::FileStream::Open`, slot 7, by name on the embedded
     // BinaryFileStream (+0x68) the real constructor above built.
     if (!static_cast<::IO::FileStream&>(cfsObj->_file).Open(
-            *reinterpret_cast<const ::System::Filename*>(path))) {   // B.3.x bridge
+            *reinterpret_cast<const ::System::Filename*>(path))) {   // B.3.x bridge  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
         ++g_lc.openFileFailed;
     } else if (!cfsObj->IO::CompressedStream::Open(cfsObj->_file, 1)) {   // 0x1800aa560
         ++g_lc.openCompFailed;
@@ -277,9 +277,9 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
         ser.impl   = nullptr;
 
         void*  enc   = cfs.base.base.encoding;
-        void** encVt = *reinterpret_cast<void***>(enc);
+        void** encVt = *reinterpret_cast<void***>(enc);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
         const size_t slot = (cfs.base.base.direction == 0) ? 0x18 : 0x20;   // 1800bc6bc
-        ser.impl = reinterpret_cast<SerFactoryFn>(encVt[slot / sizeof(void*)])(
+        ser.impl = reinterpret_cast<SerFactoryFn>(encVt[slot / sizeof(void*)])(  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
                        enc, &ser, 0);
 
         bool bad = false;
@@ -346,7 +346,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 uint32_t version;
                 SerU32(ser.impl, &version);
                 const int32_t objVersion =          // slot 3 +0x18 (B.3.x bridge)
-                    reinterpret_cast<::Object::External*>(obj)->GetFileVersion();
+                    reinterpret_cast<::Object::External*>(obj)->GetFileVersion();  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
                 if (static_cast<int32_t>(version) != objVersion) {
                     ++g_lc.badVersion;
                     bad = true;
@@ -359,7 +359,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // object's CURRENT size and then serializes it, so the same
                 // instruction reads on a load and writes on a save.
                 int32_t depCount = obj->_refs._size;              // 1800bc790
-                SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));
+                SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));  // LEFT: as SerU32 above
 
                 if (ser.stream->direction == 0) {                 // 1800bc7b0
                     ++g_lc.sizedArray;
@@ -370,12 +370,12 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // at +0x08 and +0x0c. External.h calls the tail one opaque
                 // `uint64_t`; this body is the writer that splits it, and it
                 // splits it in two, not one.
-                uint8_t* elem = reinterpret_cast<uint8_t*>(obj->_refs._data);
+                uint8_t* elem = reinterpret_cast<uint8_t*>(obj->_refs._data);  // LEFT: External.h ExternalArrayElement {char* owned; uint64_t opaque}: splitting `opaque` into its two int32s (0x1800bc7fc / 0x1800bc811) breaks array.cpp:854's one-qword copy (R-COLL); `owned` is retail's Filename (H5)
                 for (int32_t i = 0; i < depCount; ++i, elem += 0x10) {
                     ++g_lc.deps;
-                    reinterpret_cast<::System::String*>(elem)->Serialize(&ser);   // 1800bc7e9
-                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc
-                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811
+                    reinterpret_cast<::System::String*>(elem)->Serialize(&ser);   // 1800bc7e9  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc  // LEFT: as above
+                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811  // LEFT: as above
                 }
 
                 // ---- 1800bc820..1800bc82b -------------------------------
@@ -391,7 +391,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
         // Both the good and the bad exits run it; they differ only in where
         // they go next, which is what decides the return value.
         if (ser.impl != nullptr) {
-            delete reinterpret_cast<::IO::ReaderWriter*>(ser.impl);   // slot 0 (B.3.x bridge)
+            delete reinterpret_cast<::IO::ReaderWriter*>(ser.impl);   // slot 0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
         } else {
             ++g_lc.nullSerializer;
         }

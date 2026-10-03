@@ -402,7 +402,7 @@ inline void Destroy(Base* p) { delete p; }
 // behaviour; removing the deviation is not this step. ENDGAME B.3R, W0-P0c.
 inline bool IsDerivedFromNullSafe(const void* p, uint32_t typeId) {
     if (!p) return false;
-    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);
+    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: SIG `const void* p` (callers tree-wide hand in untyped refs: wave X)
 }
 
 using TypeRecord = RtObject::TypeRecord;
