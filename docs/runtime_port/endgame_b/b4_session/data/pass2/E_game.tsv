@@ -1,0 +1,201 @@
+file	file_casts	blocker	casts	declared_in	note
+starttown.cpp	195	LOCAL:CreatePlacedDescription	34	Component/CreatePlacedDescription.h	cpd+0x44/+0x48 = _i44/_i48 already declared
+starttown.cpp	195	LOCAL:CharacterGrid	20	Component/CharacterGrid.h	gridPtr+0x10 slots (0x18), charComp+0x68/+0x10, owner+0x30/+0x38; CharacterGrid.h exists
+starttown.cpp	195	LOCAL:Map	18	Game/Map.h	mapObj+0x80 cells, cell+8 resource, +0x28; Map/MapCell declare cells (stride 0x30)
+starttown.cpp	195	LOCAL:CitizenBehavior	14	Entity/CitizenBehavior.h	townMgr+0xA0/+0xA8 = citizens/citizenCount already declared
+starttown.cpp	195	LOCAL:CitizenComponent	13	Component/CitizenComponent.h	cz+0x288 description, +0x3c, +0x1f0: check +0x3c/+0x1f0 declared
+starttown.cpp	195	SIG:FindComponentOnEntity-void*	10	Game/starttown.cpp (file-local)	file-local finders take void*; ComponentEntity+0x30/+0x38 and desc+0x28/+0x30 are declared
+starttown.cpp	195	LOCAL:GameUpdateLoop	10	Game/starttown.cpp	local void* gws = _singleton; type it
+starttown.cpp	195	SIG:TownRegistry-int64-callees	7	Game/town_workplace_registry.cpp, Component/exe_bodies.h	town manager passed as int64_t
+starttown.cpp	195	LOCAL:InteractDescription	7	Component/InteractDescription.h	idesc+0x20 table {+0x30 data,+0x38 count}, 0x18-stride String+floats entry; check header
+starttown.cpp	195	LOCAL:ResidenceComponent	7	Component/ResidenceComponent.h	+0x50 slot array {data,count}, resident+0x288 desc, cd+0xc4 float
+starttown.cpp	195	SIG:Map-as-int*	6	Component/exe_bodies.h	map passed as int* to 0xe1f/neighbour helpers
+starttown.cpp	195	NOCLASS:path-array-entry	6	Game/starttown.cpp	{float* pts; int n} 0x10-stride entry of WorldGeometry path array
+starttown.cpp	195	LOCAL:RadiusDescription	6	Component/RadiusDescription.h	rd+0x28 radius; check header has the field
+starttown.cpp	195	LOCAL:StorageComponent	6	Component/StorageComponent.h	stComp+0x38 count
+starttown.cpp	195	LOCAL:RawMaterialDescription	6	Component/RawMaterialDescription.h	desc+0x5c flags / +0x48 volume
+starttown.cpp	195	LOCAL:WorldGeometry	4	Game/WorldGeometry.h	+0x1E8 / +0x1E0: ContourOutlines() accessor exists, +0x1E8 count needs a name
+starttown.cpp	195	LOCAL:HerbalistDescription	4	Component/HerbalistDescription.h	hd+0x20 accept list / +0x28 count
+starttown.cpp	195	H5:ExternalRef::strPtr	3	Game/MapGenerator.h	String held as raw storage
+starttown.cpp	195	CONST:FindOrLoad	2	runtime Object header	const_cast of FindOrLoad result
+starttown.cpp	195	LOCAL:WorkPlaceComponent	2	Component/WorkPlaceComponent.h	known tree defect (known_port_issues 14): low dword of workers ptr read as count
+starttown.cpp	195	LOCAL:FishingDescription	2	Component/FishingDescription.h	fd+0x2c mask
+starttown.cpp	195	LOCAL:ProfessionList	2	Game/ProfessionList.h	profList+0x30 array; header exists
+starttown.cpp	195	SIG:WorkBase_FindComponent_6270-uintptr_t	2	Work/exe_bodies.h	FindComponent takes uintptr_t entity, returns IBP as uintptr_t
+starttown.cpp	195	FIELD:ExternalRef::resolved	1	Game/MapGenerator.h	void* -> ComponentDescription* (one ref type for every pool)
+starttown.cpp	195	H5:CitizenBehavior::field_0x120	1	Entity/CitizenBehavior.h	raw {data,count,cap} Array<ExternalPtr<ComponentDescription>>
+starttown.cpp	195	SIG:Random-void*	1	Game/starttown.cpp	rng held as void*/bytes
+starttown.cpp	195	OTHER:PerfX-terrain-bytes	1	standalone/perf_terrain.h	PerfX::TerrainNoteWrite takes the cell as bytes
+gameupdateloop_teardown.cpp	111	SIG:Teardown-externC-void*	65	Entity/EntityList.h	EntityList_Shutdown/Dtor take void* self; EntityList.h exists, fields +0x08/+0xD0/+0x88/+0x98 need checking
+gameupdateloop_teardown.cpp	111	NOCLASS:work-tree-node	40	Work/exe_bodies.h	generic {root,count} tree + node-free helpers on void*; node layouts (kids +0x18/+0x20 or +0x20/+0x28) have no class
+gameupdateloop_teardown.cpp	111	FLOOR:byte_io	6	gameupdateloop_teardown.cpp	the P/I32/Arr offset-accessor helpers themselves
+gameupdateloop_load.cpp	85	ERASED:ArraySpec-elem	34	runtime collection ArraySpec	element assign/init/destroy callbacks take uint8_t* d/s; SetSize via local array types
+gameupdateloop_load.cpp	85	H5:PlayerController::camera	8	Game/PlayerController.h	Camera held as raw bytes (protected default ctor)
+gameupdateloop_load.cpp	85	POD:RtMath::Frustum	8	runtime/types/	Frustum stack bytes (+ Renderer/Random AllocSub results)
+gameupdateloop_load.cpp	85	SIG:AllocSub-void*	7	Game/gameupdateloop_load.cpp	AllocSub returns void*
+gameupdateloop_load.cpp	85	SIG:ExternalFactory-void*	5	Game/gameupdateloop_load.cpp	factory held as void*
+gameupdateloop_load.cpp	85	CONST:FindOrLoad	5	runtime Object header	const_cast of FindOrLoad
+gameupdateloop_load.cpp	85	LOCAL:ProfessionList	4	Game/ProfessionList.h	profList+0x30/+0x38 array; header exists
+gameupdateloop_load.cpp	85	POD:RtSystem::Random	4	runtime/types/system	stack bytes + Rt ctor
+gameupdateloop_load.cpp	85	H5:TerrainGenerator::_field80	4	Game/TerrainGenerator.h	+0x80 raw Array triple of size rows (stride 0x44)
+gameupdateloop_load.cpp	85	POD:RtSystem::Time	3	runtime/types/system	Time on stack bytes, Rt ctor
+gameupdateloop_load.cpp	85	POD:RtMath::Vector	3	runtime/types/	light dir / colour passed as void*
+game_leaf_helpers.cpp	57	ERASED:ArraySpec-elem	31	Game/game_leaf_helpers.cpp	element assign/init/destroy callbacks (uint8_t* d/s) for 0x18/0x30 stride String-bearing rows
+game_leaf_helpers.cpp	57	NOCLASS:work-tree-node	9	Game/game_leaf_helpers.cpp	tree free on qword-indexed void* (root p[2], kids +0x18/+0x20)
+game_leaf_helpers.cpp	57	SIG:ExternalFactory-void*	9	Game/game_leaf_helpers.cpp	factory void*, factory+8 generation int, const_cast of Find
+game_leaf_helpers.cpp	57	SIG:Array-dtor-hdr-void*	2	Game/game_leaf_helpers.cpp	Game_DestroyStringArray18/30 take void* header; callers in mapgenerator.cpp
+game_leaf_helpers.cpp	57	SIG:Game_MusicPlayerDtor-void*	2	Game/MusicPlayer.h	MusicPlayer dtor takes void*; five trivial arrays at +0x10..+0x50; MusicPlayer.h exists
+game_leaf_helpers.cpp	57	H5:Minimap::terrainPixels	2	Game/Minimap.h	pixel Arrays declared as raw three fields
+game_leaf_helpers.cpp	57	H5:Weather::emitters	2	Game/Weather.h	emitters/effects Arrays declared as raw three fields
+citizenlist_serialize.cpp	35	ERASED:ArraySpec-elem	19	Entity/CitizenBehavior.h	ArraySpec element callbacks (uint8_t*) and SetSize via local array aliases
+citizenlist_serialize.cpp	35	ERASED:AVL-retrace	4	Player/exe_bodies.h	shared AVL retrace takes int64_t* header and node slot
+citizenlist_serialize.cpp	35	FIELD:CitizenBehavior::field_0x190	3	Entity/CitizenBehavior.h	three clocks declared int64_t -> System::Time
+citizenlist_serialize.cpp	35	ERASED:Array-core-int64	2	Game/exe_bodies.h	array body takes element base as long long (field_0x110/0x120)
+citizenlist_serialize.cpp	35	FIELD:CitizenBehavior::entry-timer	2	Entity/CitizenBehavior.h	entry _field14/timer int64 -> System::Time
+citizenlist_serialize.cpp	35	SIG:CellMap-insert-int64	2	Game/exe_bodies.h	cell-map insert takes the town manager as int64_t
+citizenlist_serialize.cpp	35	OTHER:InternalBasePtr-raw-slot	1	runtime object/Internal.h	IBP slot raw pointer serialised via IBP*
+citizenlist_serialize.cpp	35	FIELD:CitizenBehavior::field_0x100	1	Entity/CitizenBehavior.h	void* tree root -> CompRefNode**
+citizenlist_serialize.cpp	35	FIELD:CitizenBehavior::field_0x160	1	Entity/CitizenBehavior.h	void* tree root -> LegacyNode**
+gameupdateloop_serialize.cpp	35	ERASED:ArraySpec-elem	12	Game/gameupdateloop_serialize.cpp	0x28-stride String-bearing element callbacks (uint8_t*)
+gameupdateloop_serialize.cpp	35	OTHER:InternalBasePtr-raw-slot	4	runtime object/Internal.h	key is an InternalPtr raw slot
+gameupdateloop_serialize.cpp	35	NOCLASS:weather-effect-record	3	Game/Weather.h	effect geo+0xC4/+0xC0 floats (weather)
+gameupdateloop_serialize.cpp	35	FLOOR:string_header	3	Game/gameupdateloop_serialize.cpp	fname[0] char*, str-4 refcount header
+gameupdateloop_serialize.cpp	35	ERASED:Set-insert-int64	2	Component/exe_bodies.h	shared set insert takes int64_t* header
+gameupdateloop_serialize.cpp	35	ERASED:AVL-retrace	2	Component/exe_bodies.h	shared AVL retrace takes int64_t*
+gameupdateloop_serialize.cpp	35	POD:RtObject::Internal	2	runtime object/Internal.h	entity -> Rt Internal mirror
+gameupdateloop_serialize.cpp	35	POD:Save::SavedState	2	Save header	destructor-less stack twin of SavedState
+gameupdateloop_serialize.cpp	35	OTHER:colour-uint-overload	1	Game/gameupdateloop_serialize.cpp	retail serialises colour through the uint overload (int& of float)
+gameupdateloop_serialize.cpp	35	H5:GameUpdateLoop::field_0x1C	1	Game/GameUpdateLoop.h	Vector4 declared as float[4]
+gameupdateloop_serialize.cpp	35	FIELD:ComponentEntity::_entityList	1	Entity/ComponentEntity.h	void* -> EntityList*
+gameupdateloop_serialize.cpp	35	POD:RtSystem::Filename	1	runtime/types/system	Filename mirror
+gameupdateloop_serialize.cpp	35	FLOOR:alloc_header	1	Game/gameupdateloop_serialize.cpp	std::malloc scratch buffer
+mapgenerator.cpp	32	ERASED:ArraySpec-elem	21	Game/MapGenerator.h	ArraySpec element callbacks (0x18/0x30 stride, uint8_t*) and SetSize via local aliases
+mapgenerator.cpp	32	H5:ExternalRef::strPtr	10	Game/MapGenerator.h	String held as raw storage in ExternalRef
+mapgenerator.cpp	32	SIG:Serialize-stream	1	Game/MapGenerator.h	void* stream
+gamegrid_serialize.cpp	30	ERASED:ArraySpec-elem	20	Game/Map.h	MapCell (0x30) ArraySpec callbacks and SetSize via MapCellArray
+gamegrid_serialize.cpp	30	LOCAL:Map	4	Game/Map.h	field_0xE8 is AvlNode28* (declared); node reads via uint8_t*/int32_t*
+gamegrid_serialize.cpp	30	OTHER:InternalBasePtr-raw-slot	2	runtime object/Internal.h	blocker/occupant IBP slots
+gamegrid_serialize.cpp	30	SIG:Map-as-int*	2	Component/exe_bodies.h	classify helper takes map as int*
+gamegrid_serialize.cpp	30	SIG:road-mesh-rebuild-int64	2	Action/exe_bodies.h	road mesh rebuild takes (int64_t, uint32_t*)
+gameupdateloop.cpp	29	POD:RtObject::Internal	7	runtime object/Internal.h	toolbar / dialog IBP bridge
+gameupdateloop.cpp	29	H5:PlayerController::camera	6	Game/PlayerController.h	Camera raw storage
+gameupdateloop.cpp	29	LOCAL:Toolbar	6	Game/Toolbar.h	toolbar+0xC8/+0xD8/+0x100 raw reads; add fields to Toolbar.h
+gameupdateloop.cpp	29	CONST:FindOrLoad	3	runtime Object header	const_cast of FindOrLoad
+gameupdateloop.cpp	29	POD:RtGraphics::Renderer	3	runtime/types/graphics	Renderer/Scene/AnimationManager members held as POD mirror
+gameupdateloop.cpp	29	OTHER:InternalBasePtr-raw-slot	2	runtime object/Internal.h	m_scenarioInstance DeletePtr
+gameupdateloop.cpp	29	OTHER:const-Time	1	Game/gameupdateloop.cpp	const_cast of a Time reference
+gameupdateloop.cpp	29	FIELD:Video::Context::_pixelConstantStaging	1	runtime video Context	ctx+0x288 inside raw pixel-constant staging
+citizen_names.cpp	24	LOCAL:NameDatabase	18	Game/NameDatabase.h	db+0x20..0x38: header declares _array1.._array4 as Collection::Array
+citizen_names.cpp	24	SIG:Random-void*	3	Game/citizen_names.cpp	rng void*
+citizen_names.cpp	24	SIG:NameDatabase-uintptr_t	2	Game/citizen_names.cpp	db passed as uintptr_t
+citizen_names.cpp	24	CONST:FindOrLoad	1	runtime Object header	const_cast of FindOrLoad
+menudialogloopt.cpp	20	SIG:MenuLoop-void*	7	Game/chunked_scene_loader.cpp	standalone loader holds the menu loop as void*
+menudialogloopt.cpp	20	H5:PlayerController::camera	3	Game/PlayerController.h	Camera raw storage
+menudialogloopt.cpp	20	CONST:FindOrLoad	3	runtime Object header	const_cast
+menudialogloopt.cpp	20	H5:MenuDialogLoopT::arrays	2	Game/MenuDialogLoopT.h	arrayStorage raw Array<T>
+menudialogloopt.cpp	20	POD:RtGraphics::Renderer	2	runtime/types/graphics	Renderer/Scene ctors are doors on POD mirrors
+menudialogloopt.cpp	20	FIELD:Video::Context::_pixelConstantStaging	2	runtime video Context	ctx+0x288 inside raw staging
+menudialogloopt.cpp	20	FIELD:MenuScene::_sunLight	1	Game/MenuScene.h	+0xbb0 void* -> SunLight*
+eventlog.cpp	19	SIG:EventLog-wrapper-void*	13	Game/EventLog.h	entityIBP void*
+eventlog.cpp	19	ERASED:ArraySpec-elem	5	Game/EventLog.h	EventLogEntry ArraySpec hooks take uint8_t*; SetSizeFill via alias
+eventlog.cpp	19	H5:EventLogEntry	1	Game/EventLog.h	entry raw stack storage (holds a String)
+forester_force_harness.cpp	18	LOCAL:ForesterComponent	8	Component/ForesterComponent.h	comp+0x18, +0x50/+0x51 (plantTrees/cutTrees declared)
+forester_force_harness.cpp	18	LOCAL:ComponentEntity	6	Entity/ComponentEntity.h	entity+0x30/+0x38 declared (_components/_componentCount)
+forester_force_harness.cpp	18	NOCLASS:ForceWork-record	4	Game/force_work.h	s_fw stack record (+0x10 IBP, +0x28 cell)
+construction_force_harness.cpp	14	LOCAL:BuildComponent	12	Component/BuildComponent.h	+0x18/+0x48/+0x4c declared (laborProgress/costMultiplier); matComp+0x30 class to check
+construction_force_harness.cpp	14	POD:RtObject::Internal	2	runtime object/Internal.h	site -> Rt Internal
+geometry_draw.cpp	13	H5:WorldGeometry::_arrays	9	Game/WorldGeometry.h	nine untyped {data,size|cap} slots
+geometry_draw.cpp	13	OTHER:const-this	2	Game/WorldGeometry.h	accessors are non-const members
+geometry_draw.cpp	13	OTHER:InterpolatedState-transform	1	Game/WorldGeometry.h	_transform reinterpreted as InterpolatedState
+geometry_draw.cpp	13	FIELD:Video::Context::_unknown20f0	1	runtime video Context	dynamic index cursor held as uint64
+menudialogloopt_stubs.cpp	13	H5:MenuDialogLoopT::arrays	6	Game/MenuDialogLoopT.h	three arrays raw storage
+menudialogloopt_stubs.cpp	13	CONST:FindOrLoad	3	runtime Object header	const_cast of FindOrLoad
+menudialogloopt_stubs.cpp	13	POD:RtGraphics::Renderer	2	runtime/types/graphics	~Scene/~Renderer doors take POD mirrors
+menudialogloopt_stubs.cpp	13	FIELD:MenuDialogLoopT::_dlcShip	1	Game/MenuDialogLoopT.h	void* -> Geometry*
+menudialogloopt_stubs.cpp	13	SIG:MenuLoop-void*	1	Game/menudialogloopt_stubs.cpp	first-tick clamp writes MainLoop Time through const
+minimap_paint.cpp	13	POD:RtGraphics::Renderer	6	runtime/types/graphics	Renderer/Scene ctor/dtor doors on POD mirrors
+minimap_paint.cpp	13	FIELD:Video::Context::_pixelConstantStaging	5	runtime video Context	ctx+0x288.. clear colour into raw staging
+minimap_paint.cpp	13	H5:PlayerController::camera	2	Game/Minimap.h	Camera raw storage (protected default ctor)
+water_contour_mesh.cpp	13	OTHER:std::malloc-scratch	13	Game/water_contour_mesh.cpp	typed malloc/realloc scratch; use std::vector / typed alloc helper
+exe_bodies.h	12	SIG:Engine-raw-void*	8	Game/exe_bodies.h	enginePtr+0x98/+0xC8, g_gameContainer+0x38 raw reads
+exe_bodies.h	12	SIG:Random-void*	2	Game/exe_bodies.h	rng void*
+exe_bodies.h	12	SIG:UserInterface-void*	1	Game/exe_bodies.h	ui / dialogLoaderLoop void*
+exe_bodies.h	12	SIG:String-retval	1	Game/exe_bodies.h	retStr stores into String slot
+game_main.cpp	11	FIELD:Audio::Device::xaudio	4	Audio/Device.h	XAudio2 interfaces held as void*; vtable calls
+game_main.cpp	11	FLOOR:win32	3	Game/game_main.cpp	HWND from void* windowHandle
+game_main.cpp	11	SIG:MenuLoop-void*	3	Game/game_main.h	loops passed as void** / void*
+game_main.cpp	11	H5:Engine::Engine-stack	1	Game/game_main.cpp	Engine in raw stack storage (ctor is a door)
+force_work.cpp	10	SIG:ForceWork-void*	4	Game/force_work.h	harnesses hand entity / component as void*
+force_work.cpp	10	FLOOR:ptr_int	3	Game/force_work.cpp	VirtualQuery probe address arithmetic
+force_work.cpp	10	FLOOR:vslot	3	Game/force_work.cpp	vtable probe of an unknown object
+terraingenerator.cpp	10	H5:TerrainGenerator::strings	7	Game/TerrainGenerator.h	raw String storage
+terraingenerator.cpp	10	H5:TerrainGenerator::_field80	1	Game/TerrainGenerator.h	raw Array triple
+terraingenerator.cpp	10	SIG:Serialize-stream	1	Game/TerrainGenerator.h	void* stream
+terraingenerator.cpp	10	OTHER:bool-field-normalise	1	Game/TerrainGenerator.h	bool field would normalise the byte (H8)
+goals_serialize.cpp	8	ERASED:AVL-retrace	8	Goal/exe_bodies.h	shared tree insert/retrace take int64_t* / uintptr_t*
+serialize_arrays.cpp	7	ERASED:ArraySpec-elem	5	Game/serialize_arrays.cpp	SetSize via local array aliases on void* header
+serialize_arrays.cpp	7	OTHER:float-triple-as-Vector3	2	Game/serialize_arrays.cpp	three named floats serialised as Vector3
+town_workplace_registry.cpp	7	FIELD:CitizenBehavior::field_0x100	3	Entity/CitizenBehavior.h	void* tree root -> ProfessionTreeNode*, int64_t* root param of 0x140017230
+town_workplace_registry.cpp	7	SIG:TownRegistry-int64-callees	2	Game/town_workplace_registry.cpp	int64_t town parameter of outside callers
+town_workplace_registry.cpp	7	SIG:TownRegistry-void*	2	Game/town_workplace_registry.cpp	void* ref / workplace parameters of outside callers
+climategenerator.cpp	6	H5:ClimateGenerator::_field28	2	Game/ClimateGenerator.h	raw String storage
+climategenerator.cpp	6	SIG:Serialize-stream	2	Game/ClimateGenerator.h	void* stream / serializer
+climategenerator.cpp	6	OTHER:bool-field-normalise	1	Game/ClimateGenerator.h	bool field normalise (H8)
+climategenerator.cpp	6	H5:ClimateGenerator::_climateData	1	Game/ClimateGenerator.h	0xC0 bytes raw storage
+founding_spawn.cpp	6	SIG:starttown-template-void*	2	Game/starttown.cpp	template handed as void*
+founding_spawn.cpp	6	SIG:TownRegistry-int64-callees	2	Component/exe_bodies.h	0x140117080 takes profession/component as int64
+founding_spawn.cpp	6	SIG:AllocSub-void*	1	Game/founding_spawn.cpp	static_cast from MemAlloc void*
+founding_spawn.cpp	6	FIELD:ExternalRef::resolved	1	Game/MapGenerator.h	template void* from ExternalRef
+game_settings_persist.cpp	5	SIG:Persistence-void*	5	Game/game_settings_persist.cpp	void* p persistence object (Persist override)
+toolbar.cpp	5	H5:Toolbar::strings	5	Game/Toolbar.h	two raw Strings (+0x30/+0x38)
+worldsetup_reload.cpp	5	SIG:WorldSetup-receiver-void*	5	Dialog	receiver class unsettled (MainMenuDialog twin); +0xC0/+0xB8 raw
+disease.cpp	4	H5:Disease::_name	4	Game/Disease.h	raw String + void* stream/serializer
+game.cpp	4	SIG:Game-int64-descs	4	Game/game.h	desc / citizen list handed as void*/int64
+region_seed.cpp	4	SIG:Map-as-int*	3	Action/exe_bodies.h	map as void*/int* graph param
+region_seed.cpp	4	FIELD:Map::regionPairCache	1	Game/Map.h	int64_t* regionPairCache -> RegionPairCache*
+serialize_externals.cpp	4	CONST:FindOrLoad	2	runtime Object header	const_cast of FindOrLoad
+serialize_externals.cpp	4	SIG:Serialize-externals-void*	2	Game/serialize_externals.h	refField / serializer void*
+serialize_struct60b.cpp	4	SIG:struct60b-void*	4	Game/serialize_struct60b.cpp	void* header/first args of ACT-a callers
+weather_particles.cpp	4	SIG:Weather-void*	3	Game/weather_particles.cpp	geo / descriptor / sim void*
+weather_particles.cpp	4	ERASED:ArraySpec-elem	1	Game/weather_particles.cpp	SetSize via alias on void* header
+worldgen.cpp	4	SIG:worldgen-BuildTerrain-void*	2	Game/worldgen.cpp	two untyped parameters wg / gen
+worldgen.cpp	4	FLOOR:string_header	1	Game/worldgen.cpp	triple as String
+worldgen.cpp	4	CONST:FindOrLoad	1	runtime Object header	const_cast of Find
+worldgen_f390_ranges.cpp	4	ERASED:ArraySpec-elem	4	Game/worldgen_f390_ranges.cpp	ArraySpec callback uint8_t*
+keystone_a_gamedtor.cpp	3	POD:RtSystem::CriticalSection	1	runtime/types/system	CS dtor is a door on POD mirror
+keystone_a_gamedtor.cpp	3	FIELD:Map::regionPairCache	1	Game/Map.h	int64_t* -> RegionPairCache*
+keystone_a_gamedtor.cpp	3	H5:Map::pickingScene	1	Game/Map.h	embedded Picking::Scene raw bytes
+town_storage_seed.cpp	3	SIG:town-storage-void*	3	Game/town_storage_seed.cpp	void* parameters of outside callers (storagelocationcomponent.cpp, starttown.cpp)
+worldgen_f390_coastline.cpp	3	ERASED:ArraySpec-elem	3	Game/worldgen_f390_coastline.cpp	ArraySpec callback uint8_t*
+exe_type.h	2	FLOOR:vslot	2	Object/exe_type.h	factory-fn pointer casts in the type registration macro
+mapquery.cpp	2	SIG:MapQuery-outTri-void*	2	Game/mapquery.cpp	outTri is void* in the C declaration ~150 callers hold; pickingScene raw (H5 Map::pickingScene)
+menuscene.cpp	2	H5:PlayerController::camera	2	Game/MenuScene.h	MenuScene camera raw storage (+0x34); External::Serialize takes void* stream
+pathfinder_seed.cpp	2	SIG:Map-void*	2	Game/gameupdateloop_load.cpp	local declaration takes void* map; CriticalSection ctor is a door (POD)
+professionlist.cpp	2	SIG:Serialize-stream	1	Game/ProfessionList.h	void* stream
+professionlist.cpp	2	CONST:FindOrLoad	1	runtime Object header	FindNext const_cast
+serialize_externals_typed.cpp	2	SIG:Serialize-externals-void*	2	Game/serialize_externals.h	refField / serializer void*
+serialize_resize_helpers.cpp	2	SIG:resize-helper-void*	2	Game/serialize_resize_helpers.cpp	arrayHeader void* passed by worldgen.cpp / others
+splash_loop_stubs.cpp	2	SIG:MenuLoop-void*	2	Game/splash_loop_stubs.cpp	first-tick clamp through const Time / vptr identity compare
+uifade.cpp	2	SIG:UserInterface-void*	2	Game/uifade.h	void* parameter of the STANDALONE loop stubs
+w2_takescreenshot.cpp	2	SIG:GameUpdateLoop-self-void*	1	Game/w2_takescreenshot.cpp	void* its outside caller passes
+w2_takescreenshot.cpp	2	POD:RtSystem::Filename	1	runtime/types/system	Exists takes the RtSystem::Filename mirror
+weather_particle_draw.cpp	2	FIELD:Video::Context::_unknown20f0	2	runtime video Context	index cursor held as uint64_t _unknown20f0
+weather_sun.cpp	2	SIG:GameUpdateLoop-self-void*	2	Game/weather_sun.cpp	ctx / self void* of gameupdateloop.cpp entry
+MenuDialogLoopT.h	1	FIELD:MenuDialogLoopT::_audioScene	1	Game/MenuDialogLoopT.h	_audioScene held as void*; type it Audio::Scene*
+eventlog_achievement.cpp	1	SIG:EventLog-wrapper-void*	1	Game/EventLog.h	UI::String passed as void* uiName
+geometry_serialize.cpp	1	FIELD:WorldGeometry::_arrayD8	1	Game/WorldGeometry.h	_arrayD8 raw array serialised as uint16
+inputbindings.cpp	1	CONST:FindOrLoad	1	runtime Object header	const_cast of FindOrLoad (StringTable)
+maptilegrid.cpp	1	SIG:Map-void*	1	Game/gameupdateloop_load.cpp	local declaration takes void* map
+minimap_upload.cpp	1	SIG:Minimap-void*	1	standalone/tool_harness.cpp	tool_harness holds the Minimap as void*
+musiclist.cpp	1	SIG:Serialize-stream	1	Game/MusicList.h	void* stream
+namedatabase.cpp	1	SIG:Serialize-stream	1	Game/NameDatabase.h	void* stream
+profession.cpp	1	SIG:Serialize-stream	1	Game/Profession.h	void* stream
+scenario.cpp	1	SIG:Serialize-stream	1	Game/Scenario.h	void* stream
+serialize_externals_array.cpp	1	SIG:Serialize-externals-void*	1	Game/serialize_externals.h	arrayBase void*
+serialize_heightmap_mesh.cpp	1	SIG:WorldGeometry-self-void*	1	Game/serialize_heightmap_mesh.cpp	self void* of outside callers
+serialize_image_upload.cpp	1	SIG:WorldGeometry-self-void*	1	Game/serialize_image_upload.cpp	self void* of outside callers
+tornado.cpp	1	SIG:Serialize-stream	1	Game/Tornado.h	void* stream
+unreg_lane5_musicplayer.cpp	1	CONST:FindOrLoad	1	runtime Object header	const_cast of FindOrLoad
+weather.cpp	1	SIG:Serialize-stream	1	Game/Weather.h	void* stream
+weather_sim.cpp	1	H5:ClimateGenerator::_climateData	1	Game/ClimateGenerator.h	+0x44 is 0xC0 bytes raw storage read as floats
+worldgen_f390_shims.cpp	1	SIG:Random-void*	1	Game/worldgen_f390_shims.cpp	void* receiver of outside callers

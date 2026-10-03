@@ -30,7 +30,7 @@ public:
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5600
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c55b0
     void CheckEntity() override;                               // [8] 0x1400c55a0 own `RET 0` (same bytes as the base body)
-    bool GetTarget(void* param) override;                      // [9] 0x1400c5560
+    bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c5560
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<ComponentEntity> _field20;   // +0x20 the natural-resource entity (Persist checks ComponentEntity)

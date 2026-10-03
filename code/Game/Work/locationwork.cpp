@@ -91,11 +91,7 @@ void LocationWork::Persist(void* stream) {
 // 6. If found, create WalkTowards action and assign work
 // 7. Store citizen ref at +0x48
 // ============================================================
-int LocationWork::Execute(void* citizenIBPArg, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = (CitizenComponent**)citizenIBPArg;
-
+int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // Step 1: Already has target?
     if (_field48 != nullptr) {
         return 1;
@@ -202,7 +198,7 @@ int LocationWork::Execute(void* citizenIBPArg, void* /*context*/) {
 // LocationWork::Slot6 (0x1400ef850) — clear target, return false
 // Constructs null InternalBasePtr into +0x48 (a plain null store).
 // ============================================================
-int LocationWork::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
+int LocationWork::OnComplete(CitizenComponent** /*arg1*/, ComponentEntity** /*arg2*/, int /*arg3*/) {
     _field48 = nullptr;
     return false;
 }
@@ -212,7 +208,7 @@ int LocationWork::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
 // LocationWork::Slot7 (0x1400ef820) — clear target, void return
 // Constructs null InternalBasePtr into +0x48 (a plain null store).
 // ============================================================
-int LocationWork::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
+int LocationWork::OnCancel(CitizenComponent** /*arg1*/, ComponentEntity** /*arg2*/, int /*arg3*/) {
     _field48 = nullptr;
     return 0;
 }
@@ -264,9 +260,9 @@ int LocationWork::Validate() {
 // (0x140002e10), its profession (+0x48) into the return slot (void* in Work.h's
 // slot: LEFT). IDENTICAL to HuntWork/PastureWork Slot10.
 // ============================================================
-void* LocationWork::GetTarget(void* outPtr) {
+Profession** LocationWork::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *(Profession**)outPtr = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

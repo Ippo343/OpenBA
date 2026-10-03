@@ -202,8 +202,8 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
 // GetTarget (0x1400c6610)
 // Returns true if param matches entity at +0x28.
 // ============================================================
-bool CreateNaturalResource::GetTarget(void* param) {
-    return (*(void**)param == parentEntity.Get()) ? 1 : 0;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+bool CreateNaturalResource::GetTarget(ComponentEntity** param) {
+    return (*param == parentEntity.Get()) ? 1 : 0;
 }
 
 // ============================================================

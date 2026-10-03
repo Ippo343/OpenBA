@@ -99,8 +99,8 @@
 // mis-named "insert". Verified 2026-08-22 by decompiling 0x1400eff60.
 // (The slot's key parameter is void* in Work.h: LEFT.)
 //
-int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    MarketBst_aaa0(&_field48, (CitizenComponent**)param2);
+int MarketWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
+    MarketBst_aaa0(&_field48, param2);
     return false;
 }
 
@@ -117,8 +117,8 @@ int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // off a key would have unlinked garbage and corrupted the tree.
 // Verified by decompiling 0x1400eff50 and 0x1400eff60 — both call 0x14002aaa0.
 //
-int MarketWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    MarketBst_aaa0(&_field48, (CitizenComponent**)param2);
+int MarketWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
+    MarketBst_aaa0(&_field48, param2);
     return 0;
 }
 
@@ -272,11 +272,10 @@ int MarketWork::Validate() {
 // ============================================================
 // The entity's (+0x10) WorkPlaceComponent (FindComponent 0x140002e10), its
 // profession (+0x48) into the return slot. IDENTICAL pattern to other Work classes.
-// (The return slot is void* in Work.h's slot: LEFT.)
 //
-void* MarketWork::GetTarget(void* outPtr) {
+Profession** MarketWork::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *(Profession**)outPtr = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 
@@ -560,13 +559,10 @@ static void MW_Stage2Teardown(MW_SupplyTree* tree, MarketWork::DemandList* recor
 // claim-driven, so it fires only when a citizen whose profession key (+0x1f0) matches
 // this workplace's WPC+0x48 enters AI state Idle.
 // ---- STAGE 1 (retail 0x1400eff80 .. 0x1400f021f) --------------------------
-int MarketWork::Execute(void* citizenHolder, void* ctx) {
+int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     (void)ctx;   // sched+0x130; retail slot 4 never reads param_3 -- it is only a
                  // decompiler artefact of a caller-saved stack slot reused as a temp.
 
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenSlot = (CitizenComponent**)citizenHolder;
 
     // --- 0x1400effd0..0x1400efffc: hauler-slot cap ------------------------
     // EDI = MarketWork+0x50, the claim count = citizens already claimed by this

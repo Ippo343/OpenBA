@@ -107,11 +107,7 @@ static inline int ClampToMap(int val, int mapSize) {
 //
 // Returns: 1 = not ready/retry, 2 = action pushed
 // ============================================================
-int FishingWork::Execute(void* citizenIBPArg, void* /*time*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = reinterpret_cast<CitizenComponent**>(citizenIBPArg);
-
+int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) {
     // Get game world
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
@@ -323,7 +319,7 @@ int FishingWork::Execute(void* citizenIBPArg, void* /*time*/) {
                 int priority = field_20;  // +0x20
                 CitizenComponent* ce = *citizenIBP;
 
-                Profession* actionVal = *(Profession**)GetTarget(&entityRef);
+                Profession* actionVal = *GetTarget((Profession**)&entityRef);   // LEFT: slot 10 writes into this reused entity slot (scratch shared with the action ctor)
 
                 ce->statusFlags |= 4;
                 ce->field_0x30 = priority;
@@ -348,7 +344,7 @@ int FishingWork::Execute(void* citizenIBPArg, void* /*time*/) {
                 int priority = field_20;
                 CitizenComponent* ce = *citizenIBP;
 
-                Profession* actionVal = *(Profession**)GetTarget(&citizenRef2);
+                Profession* actionVal = *GetTarget((Profession**)&citizenRef2);   // LEFT: slot 10 writes into this reused entity slot (scratch shared with the action ctor)
 
                 ce->statusFlags |= 4;
                 ce->field_0x30 = priority;
@@ -705,7 +701,7 @@ void FishingWork::Persist(void* stream) {
 //                   bits[7:4] = spot index
 // Returns: 0 (via cleared upper bytes)
 // ============================================================
-int FishingWork::OnComplete(void* param2, void* param3, int arg3) {
+int FishingWork::OnComplete(CitizenComponent** param2, ComponentEntity** param3, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     (void)param2;
     (void)param3;
@@ -753,11 +749,11 @@ int FishingWork::OnComplete(void* param2, void* param3, int arg3) {
 // `2` that hit a neighbouring boundary tag was the crash in EntityList::Shutdown.
 // See [[feedback_ghidra_dropped_args]]: an indirect call's register args are not
 // in the decompile; read the disassembly for every slot that forwards.
-int FishingWork::OnCancel(void* param2, void* param3, int arg3) {
+int FishingWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Copy the pointed-to values
-    void* copy2 = *(void**)param2;
-    void* copy3 = *(void**)param3;
+    CitizenComponent* copy2 = *param2;
+    ComponentEntity* copy3 = *param3;
 
     // Dispatch slot 6 OnComplete with the packed slot word forwarded; retail
     // returns its result (0 on every path).
@@ -796,7 +792,7 @@ int FishingWork::Cleanup() {
 // Uses FUN_140002e10 to find PositionComponent on building entity.
 // Returns param2 (hidden return pointer pattern).
 // ============================================================
-void* FishingWork::GetTarget(void* param2) {
+Profession** FishingWork::GetTarget(Profession** param2) {
     // CheckPtr on building entity IBP (at self+0x10); its WorkPlaceComponent
     // (FUN_140002e10)
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
@@ -804,7 +800,7 @@ void* FishingWork::GetTarget(void* param2) {
     // CheckPtr on the returned IBP
 
     // The workplace's profession (+0x48) into the return slot
-    *(Profession**)param2 = workPlace->profession;
+    *param2 = workPlace->profession;
 
     return param2;
 }

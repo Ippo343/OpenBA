@@ -1,0 +1,183 @@
+file	file_casts	blocker	casts	declared_in	note
+code/Game/Component/citizenai_work_scheduler.cpp	221	LOCAL:WorkScheduler	207	code/Game/Game/WorkScheduler.h + WorkSchedulerNodes.h	node structs (Id 0x30, Count 0x28, Bucket 0x38) already declared; type the walkers
+code/Game/Component/citizenai_work_scheduler.cpp	221	SIG:CitizenAI_WorkScheduler_Insert	11	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_work_scheduler.cpp	221	SIG:Work-slots	2	code/Game/Work/Work.h	Work::GetTarget(void*) buffer params
+code/Game/Component/citizenai_work_scheduler.cpp	221	LOCAL:GameUpdateLoop	1	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizencomponent.cpp	220	LOCAL:CitizenBehavior	73	code/Game/Entity/CitizenBehavior.h	citizens(+0xA0)/count(+0xA8), field_0x20 residences, attendance already declared; type the reads
+code/Game/Component/citizencomponent.cpp	220	LOCAL:GameUpdateLoop	24	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizencomponent.cpp	220	LOCAL:CitizenComponent	22	code/Game/Component/CitizenComponent.h	profession/home/workplace/spouse/school/age/gender all declared (+0x1F0..+0x288)
+code/Game/Component/citizencomponent.cpp	220	SIG:CitizenComp_Entity_impl_ef40	20	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizencomponent.cpp	220	LOCAL:ModelComponent	19	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizencomponent.cpp	220	LOCAL:StorageComponent	14	code/Game/Component/StorageComponent.h	storageSlots(+0x28)/slotCount(+0x30) declared; row stride 0x10 {data,count,cap} needs an Item/Row struct check
+code/Game/Component/citizencomponent.cpp	220	LOCAL:Map	12	code/Game/Game/Map.h	Map::cells + MapCell(0x30) declared; +0x26/+0x29 flags fields exist in MapCell
+code/Game/Component/citizencomponent.cpp	220	FIELD:CitizenBehavior::field_0x100	11	code/Game/Entity/CitizenBehavior.h	void* tree root (0x38-byte nodes, u64 key +0, array +8, count +0x10, left +0x20, right +0x28); needs node struct
+code/Game/Component/citizencomponent.cpp	220	FWD:CitizenComponent-C-spellings	9	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizencomponent.cpp	220	POD:RtObject::Internal	6	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizencomponent.cpp	220	SIG:CitizenComp_sub_40f0	5	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizencomponent.cpp	220	LOCAL:ComponentEntity	3	code/Game/Entity/ComponentEntity.h	_components(+0x30)/count(+0x38) declared; use FindComponent<T>() / Get()
+code/Game/Component/citizencomponent.cpp	220	OTHER:Time-local-held-as-int64	1	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizencomponent.cpp	220	OTHER:Startup	1	code/Game/Component/citizencomponent.cpp	CitizenComponent::Startup _description cast
+code/Game/Component/citizenai_housing_idle.cpp	202	NOCLASS:WorkCandidateTree node (0x30)	95	code/Game/Game/WorkSchedulerNodes.h (new struct)	node {Work* +0, int cost +8, parent +0x10, left +0x18, right +0x20, s16 bal +0x28/ht +0x2A}
+code/Game/Component/citizenai_housing_idle.cpp	202	SIG:CitizenAI_helper_7b60	22	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_housing_idle.cpp	202	SIG:CitizenAI_Reg_helpers(int64_t* root slots)	19	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_housing_idle.cpp	202	SIG:CitizenAI_helper_7830	15	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_housing_idle.cpp	202	SIG:CitizenAI_helper_79b0	14	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_housing_idle.cpp	202	SIG:CitizenAI_helper_7550	13	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_housing_idle.cpp	202	LOCAL:GameUpdateLoop	9	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_housing_idle.cpp	202	LOCAL:WorkScheduler	8	code/Game/Game/WorkScheduler.h + WorkSchedulerNodes.h	node structs (Id 0x30, Count 0x28, Bucket 0x38) already declared; type the walkers
+code/Game/Component/citizenai_housing_idle.cpp	202	LOCAL:ProfessionList	4	code/Game/Game/ProfessionList.h	GameUpdateLoop::m_professionList(+0xB0) typed; +0x30/+0x38 tree fields need declaring
+code/Game/Component/citizenai_housing_idle.cpp	202	LOCAL:ModelComponent	2	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_housing_idle.cpp	202	FLOOR:crt	1	(mark CAST-OK: crt)	memset-style helper Helper_3f010
+code/Game/Component/citizenai_leisure.cpp	162	NOCLASS:LeisureCandidateSet node (0x28)	63	code/Game/Component/citizenai_leisure.cpp (new struct)	0x28 AVL-ish node via NodeAlloc, 3 pointers + int; layout to confirm vs WorkSchedulerCountNode
+code/Game/Component/citizenai_leisure.cpp	162	SIG:CitizenAI_State_Leisure_sub_fd50	29	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_leisure.cpp	162	SIG:State_Leisure-callees	24	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_leisure.cpp	162	LOCAL:Map	16	code/Game/Game/Map.h	Map::cells + MapCell(0x30) declared; +0x26/+0x29 flags fields exist in MapCell
+code/Game/Component/citizenai_leisure.cpp	162	SIG:ScanArrAt	8	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_leisure.cpp	162	SIG:CitizenAI_helper_a720	6	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_leisure.cpp	162	POD:RtObject::Internal	5	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenai_leisure.cpp	162	LOCAL:GameUpdateLoop	4	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_leisure.cpp	162	LOCAL:ModelComponent	3	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_leisure.cpp	162	SIG:CellArrayBase	2	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_leisure.cpp	162	SIG:VGetTypeId	2	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_actionctors.cpp	130	OTHER:IBP-held-as-int64	48	code/Game/Component/citizenai_actionctors.cpp	InternalBasePtr locals kept as int64_t/uint64_t and passed as uint64_t* to Action ctors
+code/Game/Component/citizenai_actionctors.cpp	130	POD:RtObject::Internal	30	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenai_actionctors.cpp	130	SIG:CitizenAI_PerformWorkCtor	15	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_actionctors.cpp	130	OTHER:Time-local-held-as-int64	11	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizenai_actionctors.cpp	130	SIG:FindLimitComponent	9	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_actionctors.cpp	130	FLOOR:float_bits	6	(mark CAST-OK: float_bits)	float returned/reinterpreted as uint32
+code/Game/Component/citizenai_actionctors.cpp	130	SIG:PrologueResolveStack	3	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_actionctors.cpp	130	SIG:InstallLeadMessage	3	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_actionctors.cpp	130	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_actionctors.cpp	130	SIG:PushMoveTo	2	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_executor.cpp	121	SIG:CharacterComponent_MoveTick_1094c0	41	(extern "C" with outside callers; no header)	void*/int64_t param; callers in other modules declare local externs
+code/Game/Component/citizenai_executor.cpp	121	SIG:CitizenAI_ActionExecutor_c4c50	29	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_executor.cpp	121	SIG:Inl-math-helpers	14	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_executor.cpp	121	LOCAL:GameUpdateLoop	13	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_executor.cpp	121	SIG:RegisterCitizenPickMesh	13	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_executor.cpp	121	LOCAL:ModelComponent	11	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:Strat_cbf0	26	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:Strat_c5f0	22	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:FindResidenceComp	8	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:Shuffle896a0	7	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:Strat_ca20	7	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	LOCAL:GameUpdateLoop	6	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:Strat_c4b0	5	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:AdultIdle	4	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:SeatWorker	4	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:CitizenList_AssignWorker_c3d0	4	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:TownRegistry_RegisterResidence	3	(extern "C" with outside callers; no header)	void*/int64_t param; callers in other modules declare local externs
+code/Game/Component/citizen_employ_cascade.cpp	101	SIG:CitizenEmploy_SeatWorkersAt	2	(extern "C" with outside callers; no header)	void*/int64_t param; callers in other modules declare local externs
+code/Game/Component/citizen_employ_cascade.cpp	101	LOCAL:CitizenBehavior	2	code/Game/Entity/CitizenBehavior.h	citizens(+0xA0)/count(+0xA8), field_0x20 residences, attendance already declared; type the reads
+code/Game/Component/citizen_employ_cascade.cpp	101	POD:RtObject::Internal	1	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizen_updatehealth.cpp	90	NOCLASS:QuadtreeWalker records (0x24)	37	code/Game/Component/exe_bodies.h / Map_RadiusQuery_92990	0x2430 walker, 0xFF records of 0x24 {pos,ext,nodeId}; Map_RadiusQuery_92990 takes float* map
+code/Game/Component/citizen_updatehealth.cpp	90	SIG:PlagueHospitalCensus	11	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_updatehealth.cpp	90	ERASED:Array<int>-resize	11	code/Game/Component/exe_bodies.h / citizen_updatehealth.cpp	CitizenComp_IntArrayResize(void* arrBase,...) resize of an int Array {data,count,cap}
+code/Game/Component/citizen_updatehealth.cpp	90	SIG:CitizenComp_AnyCitizenSick	7	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_updatehealth.cpp	90	LOCAL:ModelComponent	7	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizen_updatehealth.cpp	90	LOCAL:CharacterGrid	6	code/Game/Component/CharacterGrid.h	GameUpdateLoop::m_characterGrid is typed; pass CharacterGrid* instead of float* cast
+code/Game/Component/citizen_updatehealth.cpp	90	LOCAL:GameUpdateLoop	4	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizen_updatehealth.cpp	90	LOCAL:Disease	2	code/Game/Game/Disease.h	Disease/Profession ctor-side offset reads; header exists
+code/Game/Component/citizen_updatehealth.cpp	90	FWD:CitizenComp_Infect	2	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizen_updatehealth.cpp	90	OTHER:Time-local-held-as-int64	1	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizen_updatehealth.cpp	90	SIG:Map_RadiusQuery_92990	1	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizen_updatehealth.cpp	90	FIELD:CitizenComponent::Time-members	1	code/Game/Component/CitizenComponent.h	foodTimer/field_0x60/0x70/0x78/happinessTimer/clothingTimer/schoolTime are int64_t; declare System::Time
+code/Game/Component/citizen_lifeevent_handler.cpp	81	SIG:Entity_PlaceAtCell_7b20	31	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_lifeevent_handler.cpp	81	LOCAL:GameUpdateLoop	14	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizen_lifeevent_handler.cpp	81	SIG:Cemetery_PickFreeSlot_6c60	7	(extern "C" with outside callers; no header)	void*/int64_t param; callers in other modules declare local externs
+code/Game/Component/citizen_lifeevent_handler.cpp	81	SIG:Cemetery_FindNearestWithSlot_9740	7	(extern "C" with outside callers; no header)	void*/int64_t param; callers in other modules declare local externs
+code/Game/Component/citizen_lifeevent_handler.cpp	81	LOCAL:ModelComponent	7	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizen_lifeevent_handler.cpp	81	LOCAL:CemeteryComponent	6	code/Game/Component/CemeteryComponent.h	slot array +0x48/+0x50 + description +0x20; verify fields exist
+code/Game/Component/citizen_lifeevent_handler.cpp	81	POD:RtObject::Internal	4	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizen_lifeevent_handler.cpp	81	SIG:FindComponentByTypeId	2	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_lifeevent_handler.cpp	81	SIG:CompTypeId	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_lifeevent_handler.cpp	81	SIG:ComponentEntity_FindTombstoneComp_4800	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_lifeevent_handler.cpp	81	FWD:CitizenComponent_HandleLifeEvent	1	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizenai_growup.cpp	74	LOCAL:StorageComponent	39	code/Game/Component/StorageComponent.h	storageSlots(+0x28)/slotCount(+0x30) declared; row stride 0x10 {data,count,cap} needs an Item/Row struct check
+code/Game/Component/citizenai_growup.cpp	74	SIG:CitizenAI_Entity_impl_f230	15	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_growup.cpp	74	SIG:ModelCell	7	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_growup.cpp	74	LOCAL:ModelComponent	4	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_growup.cpp	74	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_growup.cpp	74	OTHER:Time-local-held-as-int64	3	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizenai_growup.cpp	74	POD:RtObject::Internal	2	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenai_growup.cpp	74	FWD:CitizenAI_State_LongTermPlan	1	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizenai_findhelpers.cpp	62	SIG:Entity_impl_ec70	33	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_findhelpers.cpp	62	SIG:ScanCompList1	6	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_findhelpers.cpp	62	SIG:ScanCompList2	6	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_findhelpers.cpp	62	POD:RtObject::Internal	5	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenai_findhelpers.cpp	62	LOCAL:GameUpdateLoop	4	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_findhelpers.cpp	62	SIG:ResidenceCheck_2ac30	4	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_findhelpers.cpp	62	SIG:CitizenAI_helper_70b0	3	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_findhelpers.cpp	62	SIG:CompTypeId	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_reassign_workers.cpp	61	SIG:PathGraph_ReassignWorkers	33	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizen_reassign_workers.cpp	61	SIG:Entity_ReassignCost_6c60	18	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_reassign_workers.cpp	61	SIG:FindComponentDerived	5	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_reassign_workers.cpp	61	LOCAL:GameUpdateLoop	5	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_findtarget.cpp	58	SIG:CitizenAI_sub_78c0	52	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_findtarget.cpp	58	POD:RtObject::Internal	3	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenai_findtarget.cpp	58	LOCAL:GameUpdateLoop	2	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_findtarget.cpp	58	SIG:CompTypeId	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_gather.cpp	58	SIG:SelectAndTransfer	17	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_gather.cpp	58	SIG:State_GatherResources-callees	10	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_gather.cpp	58	SIG:Storage_GetResourceCount2	8	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenai_gather.cpp	58	LOCAL:GameUpdateLoop	6	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_gather.cpp	58	SIG:FindRawMaterialChild	6	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_gather.cpp	58	OTHER:Time-local-held-as-int64	5	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizenai_gather.cpp	58	LOCAL:ModelComponent	3	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_gather.cpp	58	SIG:GatherTransferLoop	3	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_assign_citizens.cpp	56	SIG:CitizenAssignCitizens	27	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizen_assign_citizens.cpp	56	SIG:NormalizeMismatched	10	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_assign_citizens.cpp	56	SIG:IsIdleHealthy	6	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_assign_citizens.cpp	56	SIG:ComputeCost	4	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_assign_citizens.cpp	56	LOCAL:GameUpdateLoop	4	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizen_assign_citizens.cpp	56	FIELD:CitizenBehavior::field_0x100	3	code/Game/Entity/CitizenBehavior.h	void* tree root (0x38-byte nodes, u64 key +0, array +8, count +0x10, left +0x20, right +0x28); needs node struct
+code/Game/Component/citizen_assign_citizens.cpp	56	SIG:CitizenAt	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_assign_citizens.cpp	56	SIG:FindWorkplaceComp	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_candidatelist.cpp	52	SIG:CitizenAIComponent::BuildCandidateStateList	38	code/Game/Component/CitizenAIComponent.h	BuildCandidateStateList(int64_t* outList,...): the list is a raw Array
+code/Game/Component/citizenai_candidatelist.cpp	52	LOCAL:ResidenceComponent	9	code/Game/Component/ResidenceComponent.h	residentSlots(+0x50) Family* declared; reads at +8/+0xC are Family count/cap
+code/Game/Component/citizenai_candidatelist.cpp	52	FIELD:CitizenAIComponent::Time-members	3	code/Game/Component/CitizenAIComponent.h	timers[16]/leisureTimer/dataC8 are int64_t; declare System::Time
+code/Game/Component/citizenai_candidatelist.cpp	52	SIG:CitizenAI_SortByPriority	1	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_candidatelist.cpp	52	OTHER:Time-local-held-as-int64	1	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizenaicomponent.cpp	42	SIG:CitizenComp_Storage_GetResourceCount	15	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenaicomponent.cpp	42	SIG:CitizenComp_StorageComponent_QueryCount	13	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizenaicomponent.cpp	42	LOCAL:ModelComponent	5	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenaicomponent.cpp	42	LOCAL:StorageComponent	4	code/Game/Component/StorageComponent.h	storageSlots(+0x28)/slotCount(+0x30) declared; row stride 0x10 {data,count,cap} needs an Item/Row struct check
+code/Game/Component/citizenaicomponent.cpp	42	SIG:CitizenAIComponent::Decide	1	code/Game/Component/CitizenAIComponent.h	BuildCandidateStateList(int64_t* outList,...): the list is a raw Array
+code/Game/Component/citizenaicomponent.cpp	42	FWD:CitizenComp_Entity_FindComponent_Storage	1	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizenaicomponent.cpp	42	SIG:Component-Update(void* time)	1	code/Game/Component/Component.h	Update(void* time) virtual slot
+code/Game/Component/citizenaicomponent.cpp	42	POD:RtObject::Internal	1	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenaicomponent.cpp	42	OTHER:force-work-harness	1	code/Game/Component/citizenaicomponent.cpp	harness stores g_pForceWorkBuilding through void**(&citizen->disease) alias
+code/Game/Component/citizenai_handlers3.cpp	38	SIG:State-callee-ints	20	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_handlers3.cpp	38	LOCAL:ModelComponent	9	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_handlers3.cpp	38	LOCAL:GameUpdateLoop	5	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_handlers3.cpp	38	OTHER:Time-local-held-as-int64	4	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizenai_handlers2.cpp	30	LOCAL:ModelComponent	10	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_handlers2.cpp	30	SIG:State-callee-ints	9	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_handlers2.cpp	30	LOCAL:GameUpdateLoop	8	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_handlers2.cpp	30	OTHER:Time-local-held-as-int64	3	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizencomponent_serialize.cpp	30	FIELD:CitizenComponent::consumedTypes	9	code/Game/Component/CitizenComponent.h	void* consumedTypes (+0x98): Array<ExternalPtr<?>> data; H5 raw triple with count/cap
+code/Game/Component/citizencomponent_serialize.cpp	30	FIELD:CitizenComponent::Time-members	7	code/Game/Component/CitizenComponent.h	foodTimer/field_0x60/0x70/0x78/happinessTimer/clothingTimer/schoolTime are int64_t; declare System::Time
+code/Game/Component/citizencomponent_serialize.cpp	30	SIG:Serialize-stream	6	code/Game/Component/CitizenComponent.h + Object/Component.h	Persist(void* stream) override; type IO::Stream& in the Component base slot
+code/Game/Component/citizencomponent_serialize.cpp	30	SIG:SerializeValidatedIBP	4	code/Game/Component/CitizenComponent.h + Object/Component.h	Persist(void* stream) override; type IO::Stream& in the Component base slot
+code/Game/Component/citizencomponent_serialize.cpp	30	SIG:SerializeExternalPtr(void**)	4	code/Game/Component/CitizenComponent.h + Object/Component.h	Persist(void* stream) override; type IO::Stream& in the Component base slot
+code/Game/Component/citizenai_handlers.cpp	21	OTHER:IBP-held-as-int64	6	code/Game/Component/citizenai_actionctors.cpp	InternalBasePtr locals kept as int64_t/uint64_t and passed as uint64_t* to Action ctors
+code/Game/Component/citizenai_handlers.cpp	21	LOCAL:ModelComponent	6	code/Game/Component/ModelComponent.h	transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transform; MeshInstance +0x134 scale
+code/Game/Component/citizenai_handlers.cpp	21	POD:RtObject::Internal	4	runtime/types (Object::InternalBasePtr ctor)	InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor from Object::Base*
+code/Game/Component/citizenai_handlers.cpp	21	SIG:Action-ctors(uint64_t IBP)	2	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizenai_handlers.cpp	21	LOCAL:GameUpdateLoop	2	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenai_handlers.cpp	21	OTHER:Time-local-held-as-int64	1	code/Game/Component/*.cpp (locals)	System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+code/Game/Component/citizencomponent_lifecycle.cpp	19	FWD:CitizenComponent-C-spellings	6	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizencomponent_lifecycle.cpp	19	LOCAL:WorkScheduler	5	code/Game/Game/WorkScheduler.h + WorkSchedulerNodes.h	node structs (Id 0x30, Count 0x28, Bucket 0x38) already declared; type the walkers
+code/Game/Component/citizencomponent_lifecycle.cpp	19	SIG:CitizenComp_SortByProfession_02a0	4	code/Game/Component/exe_bodies.h	int64_t/void* param(s) declared here; retype to the class and update callers
+code/Game/Component/citizencomponent_lifecycle.cpp	19	SIG:ProfessionKeyOfEntity	2	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizencomponent_lifecycle.cpp	19	LOCAL:GameUpdateLoop	2	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizenaicomponent_serialize.cpp	8	FIELD:CitizenAIComponent::Time-members	6	code/Game/Component/CitizenAIComponent.h	timers[16]/leisureTimer/dataC8 are int64_t; declare System::Time
+code/Game/Component/citizenaicomponent_serialize.cpp	8	SIG:Serialize-stream	2	code/Game/Component/CitizenComponent.h + Object/Component.h	Persist(void* stream) override; type IO::Stream& in the Component base slot
+code/Game/Component/citizen_onremove.cpp	7	SIG:FindNearestCitizen-int64	4	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_onremove.cpp	7	LOCAL:GameUpdateLoop	3	code/Game/Game/GameUpdateLoop.h	m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset reads
+code/Game/Component/citizen_assignworkplace.cpp	4	FLOOR:ptr_int	2	(mark CAST-OK: ptr_int)	return address / module base in a trace line
+code/Game/Component/citizen_assignworkplace.cpp	4	FWD:CitizenComp_AssignWorkplace	2	code/Game/Component/citizencomponent_funcs.h / callers	B4 FORWARD: C spelling kept for outside callers; remove when callers are typed
+code/Game/Component/citizen_needsupdate.cpp	4	SIG:StatusIcon-SetFlag-free-fn	3	(file-local static / extern "C" in the .cpp)	int64_t/void* param of an in-file helper; retype params
+code/Game/Component/citizen_needsupdate.cpp	4	FIELD:CitizenComponent::Time-members	1	code/Game/Component/CitizenComponent.h	foodTimer/field_0x60/0x70/0x78/happinessTimer/clothingTimer/schoolTime are int64_t; declare System::Time
+code/Game/Component/citizen_lifeevent.cpp	2	H5:UI::String	2	code/Game/Component/citizen_lifeevent.cpp	UI::String / System::String held in raw members (stringName, uiStr)
+code/Game/Component/citizenaidescription.cpp	1	SIG:Serialize-stream	1	code/Game/Component/CitizenComponent.h + Object/Component.h	Persist(void* stream) override; type IO::Stream& in the Component base slot
+code/Game/Component/citizendescription.cpp	1	SIG:Serialize-stream	1	code/Game/Component/CitizenComponent.h + Object/Component.h	Persist(void* stream) override; type IO::Stream& in the Component base slot

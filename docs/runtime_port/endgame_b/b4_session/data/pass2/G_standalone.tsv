@@ -1,0 +1,71 @@
+file	file_casts	blocker	casts	declared_in	note
+tool_harness.cpp	455	LOCAL:ComponentEntity	65	Entity/ComponentEntity.h	founding house entity as uint8_t*; _components walk
+tool_harness.cpp	455	LOCAL:EntityList	63	Entity/EntityList.h	entityList +0x08/+0x10/+0xD0/+0xD8 arrays and +0x40 flags; EntityList.h exists
+tool_harness.cpp	455	LOCAL:Map	54	Game/Map.h	mapGrid+0x80 cells read
+tool_harness.cpp	455	SIG:EditTool_HarnessAcquire-void*	53	Player/edittool_funcs.h	tool is void* from EditTool_HarnessAcquire; offsets +0x10/+0x20/+0x28 (entityRef uint64)/+0x38/+0x68
+tool_harness.cpp	455	LOCAL:GameUpdateLoop	48	Game/GameUpdateLoop.h	gw+0xE8 entity list / +0xF8 map / +0xF0 citizens / +0x118 / +0x120 / +0x148: members declared; gw held as void*
+tool_harness.cpp	455	LOCAL:BuildComponent	36	Component/BuildComponent.h	BuildComponent footprint rect +0x28..0x2e / +0x48/+0x4c
+tool_harness.cpp	455	LOCAL:DragTool	23	Player/dragtool.h	DragTool +0x28 flag / +0x2c start / +0x30 end; out-params int*
+tool_harness.cpp	455	LOCAL:EntityUI	19	Dialog/EntityUI.h	entityUI+0x28 tool IBP slot; header exists
+tool_harness.cpp	455	LOCAL:PastureComponent	16	Component/PastureComponent.h	pasture comp +0x10/+0x28/+0x38/+0x40, PastureUI +0x30
+tool_harness.cpp	455	LOCAL:UpgradeUI	14	Dialog/UpgradeUI.h	controller config +0x10 / datasource +0x28 / button +0x30
+tool_harness.cpp	455	LOCAL:DialogInstance	14	ui/DialogInstance.h	dialog+0x78 controller array / +0x80 count; GetController
+tool_harness.cpp	455	NOCLASS:ui-buffer-component	13	standalone/tool_harness.cpp	component +0x28 buffer ptr / +0x30 count / +0x34 cap; no class
+tool_harness.cpp	455	SIG:EntityUI_SetEditMode-uint64	10	Player/edittool_funcs.h	template / entity / component handed as uint64_t / void*
+tool_harness.cpp	455	LOCAL:OrchardComponent	8	Component/OrchardComponent.h	orchard comp +0x60, OrchardUI +0x30/+0x38
+tool_harness.cpp	455	SIG:UI-element-void*	6	ui/UserInterface.h	combo held as void*: ComboElement / InternalPtr<Element>
+tool_harness.cpp	455	LOCAL:CreateBridgeDescription	6	Component/CreateBridgeDescription.h	bridgeDesc+0x20..0x34 masks / radius
+tool_harness.cpp	455	LOCAL:Geometry	3	Graphics/Geometry.h	mesh+0x34 transform
+tool_harness.cpp	455	LOCAL:TradeUI	3	Dialog/TradeUI.h	TradeUI tableSell +0xC8 / tableBuy +0xD0
+tool_harness.cpp	455	POD:InternalPtr-locals	1	runtime object/Internal.h	src as InternalPtr<Element>*
+main.cpp	20	FIELD:DeviceData::swapChain	11	dx11/src/devicedata.cpp	swap chain is +0x18 of the DX11 DeviceData subclass; vtable calls on IDXGISwapChain
+main.cpp	20	FLOOR:vslot	9	standalone/main.cpp	factory fn / offset-checked field probe of a created object (diagnostic)
+perf_experimental.cpp	20	NOCLASS:AnimationState-layers	11	Graphics/Animation headers	Animation / AnimationState layers walk: +0x4c/+0x50/+0x60 keys, state +0x08/+0x10, layer, group +0x20
+perf_experimental.cpp	20	LOCAL:ModelComponent	7	Component/ModelComponent.h	d.model + 0x148 raw read
+perf_experimental.cpp	20	OTHER:static-bool-as-byte	1	standalone/perf_experimental.cpp	class static bool read through uint8_t*
+perf_experimental.cpp	20	POD:RtMath::Frustum	1	runtime/types/	result slot is raw caller storage the retslot body constructs into
+scene_watch.cpp	17	FIELD:MeshInstance::_mesh	5	runtime/types/graphics	MeshInstance::_mesh untyped RtGraphics::ExternalPtr POD; m+0x50/+0x58
+scene_watch.cpp	17	NOCLASS:mesh-level-record	5	Graphics/Mesh headers	0xb0-stride mesh level records (lv+0x10/+0x20/+0x40/+0xa0)
+scene_watch.cpp	17	H5:PlayerController::camera	4	Game/PlayerController.h	camera is raw uint8_t[0xD8]; +0x88/+0x8c/+0x90 floats
+scene_watch.cpp	17	LOCAL:ModelComponent	3	Component/ModelComponent.h	owning ModelComponent fields +0x164/+0x166 (header: g + 0x13c/0x13e)
+food_panel_harness.cpp	16	FIELD:EditTool::entityRef	6	Player/EditTool.h	tool is the void* EditTool_HarnessAcquire returns; +0x28 entityRef uint64
+food_panel_harness.cpp	16	LOCAL:EntityUI	4	Dialog/EntityUI.h	entityUI+0x28 tool IBP slot read as void*
+food_panel_harness.cpp	16	FIELD:CitizenBehavior::field_0x100	3	Entity/CitizenBehavior.h	void* tree root; 0x38-byte node has no type (ProfessionTreeNode local to Game)
+food_panel_harness.cpp	16	SIG:EditTool_CloseInfoDialog-uintptr_t	2	Player/edittool_funcs.h	dialog passed as uintptr_t
+food_panel_harness.cpp	16	SIG:EntityUI_SetEditMode-uint64	1	Player/edittool_funcs.h	template passed as uint64_t
+mouse_inject.cpp	11	FIELD:UI::Element::_name	5	ui/Element.h	_name/_toolTipString held as void* String storage read as char*
+mouse_inject.cpp	11	FLOOR:dx11_seam	2	standalone/mouse_inject.cpp	Input::Device singleton bytes -> RtInput::State
+mouse_inject.cpp	11	POD:RtUI::DialogInstance	2	ui/ or runtime types	n->element void*; RtUI::DialogInstance mirror
+mouse_inject.cpp	11	POD:InternalPtr-locals	2	runtime object/Internal.h	uint64 locals as InternalPtr<>*
+autostart.cpp	8	FIELD:g_StandaloneScenarioDialog	3	Dialog (mainmenudialog.cpp)	void* global; +kSD_EntryCount / +kSD_SelectedIndex raw reads
+autostart.cpp	8	FIELD:g_StandaloneNewGameDialog	2	Dialog/NewGameDialog.h, mainmenudialog.cpp	g_StandaloneNewGameDialog is void*; +ButtonOk offset read
+autostart.cpp	8	SIG:Dialog-void*	1	standalone/modal_driver.cpp, Dialog headers	dialog handed as void*
+autostart.cpp	8	SIG:ModDialog_LastOpened-void*	1	Dialog/mod_dialog_vtables.cpp	returns void*
+autostart.cpp	8	FIELD:g_StandaloneSaveLoadDialog	1	Dialog (mainmenudialog.cpp)	void* global -> SaveLoadDialog*
+stress_harness.cpp	8	SIG:CompProf-void*	4	Entity/entitylist.cpp	comp is void* (entitylist.cpp declares CompProf_Begin* itself)
+stress_harness.cpp	8	SIG:CitizenEmploy-int64	2	Component/exe_bodies.h	profession as uint64 key
+stress_harness.cpp	8	FLOOR:win32	1	standalone/stress_harness.cpp	PROCESS_MEMORY_COUNTERS cast
+stress_harness.cpp	8	H5:CitizenComponent::name	1	Component/CitizenComponent.h	name (+0x28) is raw String storage
+pausemenu_harness.cpp	7	SIG:Dialog-void*	4	Dialog headers	dialogs arrive as void*
+pausemenu_harness.cpp	7	FLOOR:vslot	3	standalone/pausemenu_harness.cpp	dialog's vtable word compared to detect a live dialog
+orchard_force_start.cpp	6	FIELD:EditTool::entityRef	4	Player/EditTool.h	void* tool + 0x28
+orchard_force_start.cpp	6	POD:InternalPtr-locals	1	runtime object/Internal.h	combo handed as InternalPtr<Element>*
+orchard_force_start.cpp	6	SIG:EditTool_HarnessAcquire-void*	1	Player/edittool_funcs.h	void* tool -> EditTool*
+modal_driver.cpp	5	FIELD:MainLoopCallback::_func	4	engine/MainLoop.h	_func/_context are void*
+modal_driver.cpp	5	SIG:UserInterface-dialog-list-void*	1	ui/UserInterface.h	dialog-list element is void*
+entity_comp_validator.cpp	4	SIG:IBP-array-void*	4	Entity/entitylist.cpp	IBP array arrives as void* through the validator hook
+panel_hold_harness.cpp	4	FIELD:EditTool::entityRef	2	Player/EditTool.h	void* tool + 0x28
+panel_hold_harness.cpp	4	SIG:UserInterface-dialog-list-void*	1	ui/UserInterface.h	dialog-list element is void*
+panel_hold_harness.cpp	4	SIG:Dialog-void*	1	Dialog headers	ctrl void*
+panel_staffing_driver.cpp	4	FIELD:EditTool::entityRef	2	Player/EditTool.h	void* tool + 0x28
+panel_staffing_driver.cpp	4	SIG:EditTool_CloseInfoDialog-uintptr_t	2	Player/edittool_funcs.h	dialog uintptr_t, tool void*
+builder_seat_harness.cpp	2	SIG:CitizenEmploy-int64	2	Component/exe_bodies.h	CitizenList_AddWorker_91130 takes the town manager as int64
+cropfield_force_start.cpp	2	FLOOR:vslot	2	standalone/cropfield_force_start.cpp	harness reads the node's vtable slot 2 and calls it
+food_workers_harness.cpp	2	SIG:CitizenEmploy-int64	2	Component/exe_bodies.h	CitizenEmploy_SeatWorkers takes town / profession as integers
+orchard_workers_harness.cpp	2	SIG:CitizenEmploy-int64	2	Component/exe_bodies.h	CitizenEmploy_SeatWorkers takes town / profession as integers
+redzone_alloc.cpp	2	FLOOR:alloc_header	2	system/MemoryAllocator.h	freeLists is uint64_t (FreeTag*); alloc_header ceiling full
+saveload_harness.cpp	2	SIG:GameUpdateLoop-self-void*	2	Game/gameupdateloop.cpp	entry declared with void* gul; +0x98 ui
+trade_buy_harness.cpp	2	FIELD:EditTool::entityRef	2	Player/EditTool.h	void* tool + 0x28
+boot_window.cpp	1	SIG:dx11-config-void*	1	dx11/src/devicedata.cpp	dx11 seam hands the configuration as void*
+food_placement_harness.cpp	1	FLOOR:vslot	1	standalone/food_placement_harness.cpp	vtable walk of a component
+orchard_diag.cpp	1	FLOOR:vslot	1	standalone/orchard_diag.cpp	node vptr word printed raw

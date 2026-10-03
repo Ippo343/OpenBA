@@ -269,10 +269,10 @@ void ShowTool::CheckEntity() {
 // ShowTool::GetTarget (0x140042680)
 // Returns true if the citizen's (+0x20) owning entity (Component +0x10) matches the param.
 // ============================================================
-bool ShowTool::GetTarget(void* param) {
+bool ShowTool::GetTarget(ComponentEntity** param) {
     CitizenComponent* entity = _field20.Get();
     if (!entity) return false;  // entity gone, no match
-    return entity->_entity == *(void**)param;   // LEFT: Action::GetTarget's parameter is void* (Action.h)
+    return entity->_entity == *param;
 }
 
 // ============================================================

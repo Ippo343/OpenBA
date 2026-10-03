@@ -115,11 +115,7 @@ static HarvestOrchard::ClaimNode* BST_Find(HarvestOrchard::ClaimNode* root, int 
 // - Passes raw material ref and material count to action constructor
 // - Orchard slot data at +0x50 with stride 0x28 (not +0x58 with stride 0x20)
 //
-int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
-
+int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     CitizenComponent* citizenRef = *citizenIBP;
 
     // Step 1: Check auto-pickup (0x1400e3db0, Work::TryAutoPickup)
@@ -376,7 +372,7 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
 // distinct picked slot, `picked` stuck at 1/12, and state 11 could never reach its
 // `picked >= live` latch. The [OrchardGrow] harness corroborated it — exactly one of
 // twelve trees was repeatedly zeroed and re-ripened.
-int HarvestOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
+int HarvestOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the claim tree for the key and remove if found (the helper takes the
     // container as uintptr_t*: LEFT)
     ClaimNode* node = _field48;
@@ -402,7 +398,7 @@ int HarvestOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
 // The mirror of Slot6: same BST walk, but it DOES restore the validity byte, on both
 // the found and not-found exits (0x1400ed84d and 0x1400ed865). Cancelling a pick
 // returns that tree to the pool.
-int HarvestOrchard::OnCancel(void* /*param2*/, void* /*param3*/, int param4) {
+int HarvestOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the claim tree for the key and remove if found (the helper takes the
     // container as uintptr_t*: LEFT)
     ClaimNode* node = _field48;
@@ -568,12 +564,11 @@ cleanup:
 
 // ============================================================
 // HarvestOrchard::Slot10 -- GetWorkEntity: the entity's WorkPlaceComponent
-// (0x140002e10), its profession (+0x48) into the return slot (void* in Work.h's slot:
-// LEFT).
+// (0x140002e10), its profession (+0x48) into the return slot.
 // ============================================================
-void* HarvestOrchard::GetTarget(void* outPtr) {
+Profession** HarvestOrchard::GetTarget(Profession** outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *(Profession**)outPtr = workPlace->profession;
+    *outPtr = workPlace->profession;
     return outPtr;
 }
 

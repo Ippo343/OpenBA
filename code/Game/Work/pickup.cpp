@@ -236,7 +236,7 @@ static Work* Pickup_FindTypeWork(WorkScheduler* scheduler, int typeId) {
 // always null -- and fell back to this body; CALLER_SURFACE section 9 defect 3.)
 // Retail reads RCX/RDX/R8 only.
 // ============================================================
-int Pickup::Execute(void* citizenSlot, void* time) {
+int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
     if (status != 0) return 1;
 
@@ -244,10 +244,6 @@ int Pickup::Execute(void* citizenSlot, void* time) {
     if (!GameUpdateLoop::_singleton) {
         return 1;
     }
-
-    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
-    // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenRef = (CitizenComponent**)citizenSlot;
 
     const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
     // 0x1401c6be0 (Pickup's own cell) is UNREGISTERED -- Pickup_Tid's raw-.rdata read
@@ -504,14 +500,13 @@ int Pickup::Execute(void* citizenSlot, void* time) {
 // 4. If different: cancel old work, re-run Slot4 for both entities
 // 5. Return false (keep executing)
 // ============================================================
-int Pickup::Slot5(void* entityIBP, void* param3) {
+int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
     // Check status != 0 and citizenIBP != null
     if (status == 0 || citizenIBP == nullptr) {
         return 0;
     }
 
-    // The citizen slot (void* in Work.h's slot: LEFT); its profession (+0x1f0)
-    CitizenComponent** citizenSlot = (CitizenComponent**)entityIBP;
+    // The citizen slot's profession (+0x1f0)
     Profession* citizenProfession = (*citizenSlot)->profession;
 
     CitizenComponent* storedCitizen = citizenIBP;
@@ -553,7 +548,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
 // Resets citizenIBP to null, sets status to 2 (completing).
 // Returns false.
 // ============================================================
-int Pickup::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
+int Pickup::OnComplete(CitizenComponent** /*arg1*/, ComponentEntity** /*arg2*/, int /*arg3*/) {
     citizenIBP = nullptr;   // ??0InternalBasePtr(nullptr)
     status = 2;
     return false;
@@ -564,7 +559,7 @@ int Pickup::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
 // Pickup::Slot7 / OnCancel (0x1400f2e80)
 // Resets citizenIBP to null, sets status to 0 (unassigned).
 // ============================================================
-int Pickup::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
+int Pickup::OnCancel(CitizenComponent** /*arg1*/, ComponentEntity** /*arg2*/, int /*arg3*/) {
     citizenIBP = nullptr;   // ??0InternalBasePtr(nullptr)
     status = 0;
     return 0;
@@ -616,11 +611,10 @@ int Pickup::Validate() {
 // ============================================================
 // Pickup::Slot10 / GetTarget (0x1400f3a50)
 // The ProfessionList's +0x30 profession (GameWorld+0xb0).
-// This is a global target, not per-instance. (The return slot is void* in Work.h's
-// slot: LEFT.)
+// This is a global target, not per-instance.
 // ============================================================
-void* Pickup::GetTarget(void* outPtr) {
-    *(Profession**)outPtr = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+Profession** Pickup::GetTarget(Profession** outPtr) {
+    *outPtr = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return outPtr;
 }
 

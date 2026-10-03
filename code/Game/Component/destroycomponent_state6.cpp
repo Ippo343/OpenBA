@@ -151,7 +151,7 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
 // (child at action+0x10) calling `vtable+0x40` (abort) on each, release the slot's
 // IBP and store a null IBP; finally reset the current index to -1 and release the
 // current-action IBP. That is what stops citizens walking into a collapsing building.
-extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp) {
+extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, ComponentEntity** pEntityIbp) {
     if (!stack || !pEntityIbp) return;
     uintptr_t st = reinterpret_cast<uintptr_t>(stack);
     int count = *reinterpret_cast<int*>(st + 8);
@@ -169,7 +169,7 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
         if (!act) continue;
         act = items[i];
         if (!act) continue;
-        void* entityCopy = *pEntityIbp;            // retail copies the raw ptr to a local
+        ComponentEntity* entityCopy = *pEntityIbp;  // retail copies the raw ptr to a local
         hit = reinterpret_cast<Action*>(act)->GetTarget(&entityCopy);   // B.3.x bridge (slot 9)
     }
     if (!hit) return;
@@ -211,7 +211,7 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp)
 // count @+0xa8) — the same array citizen_employ_cascade.cpp and citizen_onremove.cpp
 // walk — and runs the abort above on each citizen's CitizenAIComponent action stack
 // (citizen+0x278, list at +0x48).
-extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, void** pEntityIbp) {
+extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, ComponentEntity** pEntityIbp) {
     if (!townMgr || !pEntityIbp) return;
     uintptr_t tm = reinterpret_cast<uintptr_t>(townMgr);
     int n = *reinterpret_cast<int*>(tm + 0xa8);
@@ -220,7 +220,7 @@ extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, void** pEnti
     if (!base) return;
     for (int i = 0; i < n; ++i) {
         void** slot = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
-        void* entityCopy = *pEntityIbp;
+        ComponentEntity* entityCopy = *pEntityIbp;
         uintptr_t citizen = reinterpret_cast<uintptr_t>(*slot);
         if (!citizen) continue;
         uintptr_t ai = *reinterpret_cast<uintptr_t*>(citizen + 0x278);
@@ -388,7 +388,7 @@ char DestroyComponent::State6Enter() {
         if (GameUpdateLoop::_singleton != nullptr) {
             // GameUpdateLoop::m_citizenList (+0xf0) is still void* (GAME-a): LEFT.
             void* townMgr = GameUpdateLoop::_singleton->m_citizenList;
-            void* entityCopy = _entity;
+            ComponentEntity* entityCopy = _entity;
             if (townMgr) TownMgr_AbortCitizenActionsFor_89e30(townMgr, &entityCopy);
         }
         StorageComponent* storage = FindOn<StorageComponent>(_entity);
