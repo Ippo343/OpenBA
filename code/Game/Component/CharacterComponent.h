@@ -76,7 +76,10 @@ public:
                                   //       0x1400c5150 DeletePtr's every element, then MemFree
     int32_t  actionCount;         // +0x50 Array count (serialized)
     int32_t  actionCapacity;      // +0x54 Array capacity
-    Action*  field_0x58;          // +0x58 InternalPtr<Action> (cell 0x1401c5da8); DeletePtr'd by 0x1400c5150
+    ::Object::InternalPtr<Action> field_0x58;   // +0x58 InternalPtr<Action> (cell 0x1401c5da8); DeletePtr'd
+                                  //       by 0x1400c5150; the Work action builders DeletePtr it
+                                  //       (IAT 0x140151ab8) before storing the lead
+                                  //       SendComponentMessage (e.g. 0x1400bb89b MOV [RSI+0x10],RAX)
     int32_t  currentAction;       // +0x60 int, ctor -1: the index into `actions` Update runs (>= 0)
     uint8_t  _pad64[4];           // +0x64
     ModelComponent*   modelComponent;   // +0x68 InternalPtr (cell 0x1401c7a50)

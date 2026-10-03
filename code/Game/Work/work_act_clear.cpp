@@ -43,6 +43,10 @@
 #include "Component/CharacterComponent.h"
 #include "Entity/ComponentEntity.h"
 #include <cstdint>
+#include "Action/SendComponentMessage.h"   // B4 P2 WORK-3: the action ctors by name
+#include "Action/CompleteTask.h"
+#include "Action/MoveTo.h"
+#include "Action/PerformWork.h"
 
 // ============================================================
 // Sub-callees, called by name (B3R)
@@ -71,9 +75,6 @@
 
 static inline void* WAC_Alloc(uint64_t size, uint32_t align) {
     return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
-}
-static inline void WAC_IbpCtor(void* ibp, void* o)  {
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(o));   // B.3.3 bridge
 }
 
 // Inlined action-stack append, mirroring the disasm's inlined FUN_1400c54e0 body on the
@@ -144,8 +145,8 @@ static void WAC_AppendInline(CharacterComponent* character, Action* actionIbpVal
 void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
                                    void** param_4, float* param_5, uint32_t param_6,
                                    uint32_t /*param_7*/) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);
-    Component* const* targets = reinterpret_cast<Component* const*>(param_4);
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG WorkAct_HarvestAreaCtor_c1530
+    Component* const* targets = reinterpret_cast<Component* const*>(param_4);   // LEFT: SIG WorkAct_HarvestAreaCtor_c1530
 
     // --- heading = Entity_impl_29a0(param_5, &{param_4[0] entity}) → XMM6 (0x1400c1563..0x1400c158b) ---
     ComponentEntity* firstEntityInner = targets[0]->_entity;
@@ -164,52 +165,50 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
     void* plVar15 = &character->actions;
     WorkBase_TaskListCleanup_c5400(plVar15);
 
-    Action* ibpA = nullptr; // local_68 / local_res20 scratch IBP
-    Action* ibpB = nullptr; // second scratch IBP (local_res20 alt)
+    ::Object::InternalPtr<Action> ibpA; // local_68 / local_res20 scratch IBP
+    ::Object::InternalPtr<Action> ibpB; // second scratch IBP (local_res20 alt)
 
     // --- SendComponentMessage action → stored at character+0x58 (DeletePtr prior) (0x1400c15e7..0x1400c1677) ---
     {
         void* obj = WAC_Alloc(0x40, 8); // LEA EDX,[R12+8]; LEA ECX,[RDX+0x38] = 0x40
-        void* sm = nullptr;
+        Action* sm = nullptr;
         if (obj) {
-            uint64_t innerIbp = 0;
-            WAC_IbpCtor(&innerIbp, nullptr);
+            ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             ComponentEntity* entityInner = (*citizenRef)->_entity;
-            sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+            sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
         }
-        WAC_IbpCtor(&ibpA, sm);
+        ibpA = sm;
         if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-            reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+            character->field_0x58.DeletePtr();
         character->field_0x58 = ibpA;
     }
 
     // --- CompleteTask action; append via FUN_1400c54e0 (0x1400c1677..0x1400c16dc) ---
     {
         void* obj = WAC_Alloc(0x38, 8); // MOV EDX,8; LEA ECX,[RDX+0x30] = 0x38
-        void* ct = nullptr;
+        Action* ct = nullptr;
         if (obj) {
             CitizenComponent* entityInner = *citizenRef;
             // RDX=&entityInner, R8=&local_res8(innerIbp from prior IbpCtor), but disasm
             // reuses local_res8 (just IbpCtor'd to 0 at +0x1693). Mirror with fresh inner.
-            uint64_t innerIbp = 0;
-            WAC_IbpCtor(&innerIbp, nullptr);
-            ct = Pf_CompleteTaskCopyCtor_5da0(obj, param_2, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, param_6);
+            ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
+            ct = new (obj) CompleteTask(param_2, &entityInner, &innerIbp, param_6);
         }
-        WAC_IbpCtor(&ibpB, ct);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(plVar15), &ibpB);
+        ibpB = ct;
+        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpB);   // LEFT: CharacterComponent +0x48 is declared as fields, not an ActionStack (wave X)
     }
 
     // --- ShowTool (~Hoe = -1; disasm OR R8D,0xffffffff) action; append via FUN_1400c54e0 (0x1400c16dc..0x1400c1729) ---
     {
         void* obj = WAC_Alloc(0x30, 8); // MOV EDX,8; LEA ECX,[RDX+0x28] = 0x30
-        void* st = nullptr;
+        Action* st = nullptr;
         if (obj) {
             CitizenComponent* entityInner = *citizenRef;
-            st = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0); // OR R8D,0xffffffff @0x1400c16fb
+            st = new (obj) ShowTool(&entityInner, ~0); // OR R8D,0xffffffff @0x1400c16fb
         }
-        WAC_IbpCtor(&ibpA, st);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(plVar15), &ibpA);
+        ibpA = st;
+        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpA);   // LEFT: CharacterComponent +0x48 is declared as fields, not an ActionStack (wave X)
     }
 
     // --- LOOP: for i in [0, param_3): inline RemoveNaturalResource action per param_4[i]
@@ -220,19 +219,18 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
             ComponentEntity* innerR4 = (*targets)->_entity; // RDI
 
             void* obj = WAC_Alloc(0x38, 8); // MOV EDX,8; LEA ECX,[RDX+0x30] @0x1400c174a = 8+0x30 = 0x38
-            void* actionObj = nullptr;      // R14 (the built action, or 0)
+            Action* actionObj = nullptr;    // R14 (the built action, or 0)
             if (obj) {
                 CitizenComponent* entityInner = *citizenRef; // RBX = *(*param_1)
                 ComponentEntity* targetInner = innerR4;
                 // 0x1400c176d..0x1400c1796: the inlined RemoveNaturalResource ctor
                 // (+0x20 citizen inner, +0x28 param_4[i] inner, +0x30 = 1) — the real ctor.
-                new (obj) RemoveNaturalResource(&targetInner, &entityInner, 1);
-                actionObj = obj;
+                actionObj = new (obj) RemoveNaturalResource(&targetInner, &entityInner, 1);
             }
-            WAC_IbpCtor(&ibpA, actionObj); // &local_res8 → ibpA scratch
+            ibpA = actionObj; // &local_res8 → ibpA scratch
 
             // inline append of ibpA (0x1400c17ad..0x1400c18ec)
-            WAC_AppendInline(character, ibpA);
+            WAC_AppendInline(character, ibpA.Get());
 
             // set bit 0x14 (0x100000) on param_4[i]'s flags; on change and an entity,
             // notify it via FUN_1400c3470 (0x1400c18f0..0x1400c1929)
@@ -266,13 +264,13 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
             CitizenComponent* entityInner = *citizenRef;
             int p7  = static_cast<int>(local_60->_u80);         // [RSP+0x30]
             int64_t time = local_60->_time68._ticks;            // [RSP+0x20]
-            void* pw = nullptr;
-            pw = Pf_PerformWorkCtor7_9720(obj, &entityInner, heading, actionType, time, 1, p7);
-            WAC_IbpCtor(&ibpA, pw);
-            pwIbp = ibpA;
+            Action* pw = nullptr;
+            pw = new (obj) PerformWork(&entityInner, heading, actionType, time, 1, p7);
+            ibpA = pw;
+            pwIbp = ibpA.Get();
         } else {
-            WAC_IbpCtor(&ibpA, nullptr);
-            pwIbp = ibpA;
+            ibpA = nullptr;
+            pwIbp = ibpA.Get();
         }
         WAC_AppendInline(character, pwIbp);
     }
@@ -300,17 +298,15 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
                 }
             }
             ComponentEntity* entityInner = (*citizenRef)->_entity;
-            uint64_t famRet = 0;
-            void* familyIBP = nullptr;
-            familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
+            CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
             float speed = kRdata_140172280; // -1.0f
-            void* mv = nullptr;
-            mv = Pf_MoveToCtor_9170(obj, familyIBP, pathType, 0, param_5, 0xe1f, 0, speed);
-            WAC_IbpCtor(&ibpA, mv);
-            mvIbp = ibpA;
+            Action* mv = nullptr;
+            mv = new (obj) MoveTo(&family, pathType, 0, param_5, 0xe1f, 0, speed);
+            ibpA = mv;
+            mvIbp = ibpA.Get();
         } else {
-            WAC_IbpCtor(&ibpA, nullptr);
-            mvIbp = ibpA;
+            ibpA = nullptr;
+            mvIbp = ibpA.Get();
         }
         WAC_AppendInline(character, mvIbp);
     }
@@ -324,12 +320,11 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
             CitizenComponent* entityInner = *citizenRef;                  // RBX
             uint32_t toolType = derived ? local_60->_u80 : 0;             // EDI = [R15+0x80]
             // 0x1400c1d1e..0x1400c1d3f: the inlined ShowTool ctor — the real ctor.
-            new (obj) ShowTool(&entityInner, static_cast<int>(toolType));
-            WAC_IbpCtor(&ibpB, obj); // &local_res20
-            stIbp = ibpB;
+            ibpB = new (obj) ShowTool(&entityInner, static_cast<int>(toolType)); // &local_res20
+            stIbp = ibpB.Get();
         } else {
-            WAC_IbpCtor(&ibpB, nullptr);
-            stIbp = ibpB;
+            ibpB = nullptr;
+            stIbp = ibpB.Get();
         }
         WAC_AppendInline(character, stIbp);
     }
