@@ -704,12 +704,13 @@ extern "C" bool EditTool_IsEditTool(void* tool) {
 // something else (a build tool the harness or the player left armed), switch back to
 // edit mode first — SetEditMode(pc, 0) destroys that tool and installs an EditTool —
 // rather than reinterpreting it. Returns null if no EditTool could be activated.
-extern "C" void* EditTool_HarnessAcquire(void* entityUI) {
+// B4 P2 T1: typed (the tool manager in, the EditTool out). extern "C" keeps the link name
+// the harnesses' local declarations bind to (several still spell the two pointers void*).
+extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI) {
     if (!entityUI) return nullptr;
-    // LEFT: the harnesses (standalone/*, STANDALONE) hand the tool manager over as void*.
-    PlayerToolManager* manager = (PlayerToolManager*)entityUI;
-    void* tool = manager->currentTool;
-    if (EditTool_IsEditTool(tool)) return tool;
+    PlayerToolManager* manager = entityUI;
+    Tool* tool = manager->currentTool;
+    if (EditTool_IsEditTool(tool)) return static_cast<EditTool*>(tool);   // IsDerivedFrom(EditTool) above
     if (tool) {
         static int warned = 0;
         if (warned < 4) {
@@ -721,10 +722,10 @@ extern "C" void* EditTool_HarnessAcquire(void* entityUI) {
     }
     EntityUI_SetEditMode_Impl(entityUI, 0);
     tool = manager->currentTool;
-    return EditTool_IsEditTool(tool) ? tool : nullptr;
+    return EditTool_IsEditTool(tool) ? static_cast<EditTool*>(tool) : nullptr;
 }
 
-extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
+extern "C" int EditTool_HarnessSelectEntity(EditTool* editTool, ComponentEntity* entity) {
     if (!editTool || !entity) return 0;
     // Refuse a non-EditTool outright: d3b0 would write the dialog + entity refs into
     // whatever object this is, and Entity_impl_cb40 would deref its +0x30 as an entity.
@@ -738,9 +739,8 @@ extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
         }
         return 0;
     }
-    // LEFT: the harnesses (standalone/*, STANDALONE) hand the tool and the entity over as void*.
-    EditTool* tool = (EditTool*)editTool;
-    Object::InternalPtr<ComponentEntity> entityParam((ComponentEntity*)entity);
+    EditTool* tool = editTool;
+    Object::InternalPtr<ComponentEntity> entityParam(entity);
     tool->SelectEntity(&entityParam);   // 0x1400fd3b0
     void* dlg = (void*)tool->entityRef;
     printf("[EditSel] direct select entity=%p -> dialog=%p (%s)\n",
@@ -754,11 +754,11 @@ extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
 // userData is the entity backref we can recover with Picking::Scene::GetUserData.
 // This bypasses the cursor ray (headless harness) but exercises the exact chain a
 // real click uses: pick userData -> EditTool_SelectEntity -> CitizenUI dialog.
-extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
+extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
     Picking::Scene* scene = GameUpdateLoop::_singleton->m_pickingScene;
     if (!scene) { printf("[EditSel] picking scene null\n"); return 0; }
-    EditTool* tool = (EditTool*)editTool;   // LEFT: the harness API's void* (STANDALONE)
+    EditTool* tool = editTool;
 
     // Citizens register with low pick-ids (0..N). Probe the first several; the first
     // that yields a live userData entity gets selected.
@@ -780,12 +780,12 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
     return 0;
 }
 
-extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
+extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool) {
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
 
     Map* entityList = GameUpdateLoop::_singleton->m_game;   // +0xf8
     int gridSize = (entityList && entityList->size > 0) ? entityList->size : 256;
-    EditTool* tool = (EditTool*)editTool;   // LEFT: the harness API's void* (STANDALONE)
+    EditTool* tool = editTool;
     int tried = 0, found = 0;
 
     // Expanding Chebyshev rings around centre (124,124), same valley the placement/

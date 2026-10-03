@@ -62,7 +62,9 @@
 
 // Both provided by the existing tool harness / dialog layer.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
-extern "C" void* EditTool_HarnessAcquire(void* entityUI);
+class EditTool;            // Player/EditTool.h (included below)
+class PlayerToolManager;   // Game/PlayerToolManager.h
+extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);   // B4 P2 T1: typed (edittool.cpp)
 extern "C" bool  EditTool_IsEditTool(void* tool);
 extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
 // EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
@@ -264,15 +266,16 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
 
     // ── open the panel ────────────────────────────────────────────────────────────
     // Must be an EditTool, not merely "a tool" — see EditTool_HarnessAcquire.
-    void* tool = EditTool_HarnessAcquire(entityUI);
+    // LEFT (the argument): ProbeClass holds the tool manager as void* (this file's
+    // FoodPanel_Tick signature, STANDALONE).
+    EditTool* tool = EditTool_HarnessAcquire(static_cast<PlayerToolManager*>(entityUI));
     if (!tool) {
         std::fprintf(stderr, "[FoodPanel]   EditTool activation FAILED — cannot open a panel\n");
         return;
     }
     const int opened = EditTool_HarnessSelectEntity(tool, ent);
-    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
-    // (+0x28, the open dialog) is a uint64_t in PLAYER's header (PLAYER running).
-    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
+    // LEFT: EditTool::entityRef (+0x28, the open dialog) is a uint64_t (Player/EditTool.h).
+    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);
     std::fprintf(stderr, "[FoodPanel]   select -> opened=%d dialog=%p\n", opened,
                  static_cast<void*>(dialog));
     if (!dialog) {
@@ -541,10 +544,10 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
 
     // (b) the real close path.
-    // LEFT: EditTool_CloseInfoDialog takes the dialog as uintptr_t (Player/edittool_funcs.h,
-    // PLAYER running) and `tool` is the void* EditTool_HarnessAcquire returns.
-    EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool), reinterpret_cast<uintptr_t>(dialog));
-    void* after = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+    // LEFT: EditTool_CloseInfoDialog takes the dialog as uintptr_t (Player/edittool_funcs.h)
+    // and EditTool::entityRef is a uint64_t (Player/EditTool.h).
+    EditTool_CloseInfoDialog(tool, reinterpret_cast<uintptr_t>(dialog));
+    void* after = reinterpret_cast<void*>(tool->entityRef);
     std::fprintf(stderr, "[FoodPanel]   teardown: CloseInfoDialog -> tool dialog=%p %s\n",
                  after, after ? "STILL OPEN — close path did not take" : "(closed)");
     std::fflush(stderr);
