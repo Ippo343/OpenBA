@@ -483,6 +483,7 @@ TUT (rows 80-84, 88-89):
 | 250 | `Entity_impl_ec70` / `CitizenAI_helper_e370` / `ResidenceCheck_2ac30` (`citizenai_findhelpers.cpp`, 0x14008ec70 / 0x14008e370 / 0x14012ac30), `CitizenAI_FindBestTarget_dd30` / `CitizenAI_sub_78c0` (`citizenai_findtarget.cpp`, 0x14008dd30 / 0x1400178c0) | every scan result is null-tested before its field read: `IsDerivedFromNullSafe` on a null slot, `desc ? _coldThreshold : 0`, `derived ? _locationType : 0`, `rawMat ? _flags : 0`, `pvVar12 ? _radius : 0`, `marketComp ? PickReachableCell : -1`, `costComp ? FindBestAdjacentCell : -1`, `storComp ? ResidenceCheck : false`, and a scoped StorageComponent fallback scan when FindComponent<StorageComponent> misses | the files' banners say the scans are "additionally NULL-guarded" for unfilled standalone type ids; retail not re-read | SUSPECTED (P2 CAI-2; kept, typed only) |
 | 251 | `CooldownStamp` / `HideRenderWorkplaceMesh` / `FindRawMaterialChild` (`citizenai_gather.cpp`, in 0x14010bc90 / 0x14010b3e0 / 0x14012ab00) | CooldownStamp reads `_fd8` only when the description IsDerivedFrom CitizenDescription, else 0; the icon branch returns on a null ResidenceComponent / StatusIconComponent / entity and a null `g_gameSettings`; FindRawMaterialChild skips null slots; the material cost is 0x7fffffff when no RawMaterialDescription is found | the file's own comment: "Original reads *(0+0xd8) when the IsDerivedFrom check fails"; the rest are its "every deref null-guarded" notes; not re-read | SUSPECTED (P2 CAI-2; kept, typed only) |
 | 252 | `CharacterComponent_MoveTick_1094c0` tail / `RegisterCitizenPickMesh` (`citizenai_executor.cpp`, 0x1401094c0; the pick registration is the tree's copy of PickingComponent::OnAdded 0x140128f50) | `if (model)` before RootAnimationOffset, `pf ?` on the terrain query's result, `model ? yaw : 0` in the trace, and seven early returns in the pick registration (null model / picking component, negative mesh index, null description or no type id, not a PickingDescription, null group table / group / mesh). Since B4 P2 CAI-2 the -O2 build drops the `model/pickComp null` test (both pointers are dereferenced earlier in the tick) | the file's banner: "every engine dispatch-slot / exe sub-callee is null-guarded"; not re-read | SUSPECTED (P2 CAI-2; kept, typed only) |
+| 240 | `CitizenAIComponent::State_Leisure` and its helpers (`citizenai_leisure.cpp`) | `VGetTypeId` answers 0xffffffff for a null component / sub-description; `ScanArr` / `ScanType5` return null for a null entity or a null entity description; `CitizenAI_helper_a720` and the inline happiness test treat a non-HappinessDescription as "type != 5" (no read); `pvVar26 ? _ibc : 0` for a non-CitizenDescription; `if (pp)` before the position resolve | retail's inline scans read `[RBX+0x38]` / `[RBX+0x30]` of the entity and call `[[slot]+0x10]` with no test (0x14010ac53, 0x14010ac70); the inline happiness test does `CMOVNZ RCX,RBX` over RCX = 0 and reads `[RCX+0x20]` (0x14010ad9b..0x14010ada4): a null+0x20 read when the description is not a HappinessDescription; 0x14004a720 / 0x14002fd50 / 0x1400899d0 not re-read | CONFIRMED (CAI-5, State_Leisure's inline copies; the helpers SUSPECTED; kept, typed only) |
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -517,6 +518,13 @@ TUT (rows 80-84, 88-89):
   `useAnimal` / `param_14` 0 / 1, `WorkAct_PerformWorkCtor_c1eb0`'s 0 / 1), so no stored value
   differs from the old tree's. The array appends of ConsumeRawMaterial /
   PickupStoredRawMaterial keep retail's `&array[i] != nullptr` test, which an -O2 compiler may fold.
+- (CAI-5, row 241) `CitizenAIComponent::State_Leisure` (`citizenai_leisure.cpp`) now reads
+  `HappinessComponent::registered` (+0x28, `bool` in the header) by name; at -O2 GCC turns
+  `if (!(... || !registered)) happinessMode = true;` into a COPY of the byte into `happinessMode`,
+  which later becomes PlayAnimation's fifth argument. Retail tests the byte and stores a literal 1
+  (0x14010adaa `CMP byte ptr [RDI+0x28],0` / 0x14010adb0 `MOV byte ptr [RBP+0x6f],0x1`); the old
+  tree read the qword and tested its low byte. Identical while `registered` holds 0 / 1 (every
+  writer in the tree stores a C++ bool). CONFIRMED.
 
 ### 14f. Names that mislead (naming only)
 
