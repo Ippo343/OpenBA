@@ -2074,8 +2074,8 @@ void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                 static_cast<::Graphics::AnimationGroup*>(group.p)),
             index,
             GetMesh()->GetNodes(),
-            *static_cast<const System::Time*>(startTime),
-            *static_cast<const System::Time*>(blendTime),
+            *static_cast<const System::Time*>(startTime),  // LEFT: SIG PlayAnimation time params are void* (Mesh.h, outside callers, wave X)
+            *static_cast<const System::Time*>(blendTime),  // LEFT: SIG PlayAnimation time params are void* (Mesh.h, outside callers, wave X)
             weight, true);
 }
 
@@ -2112,7 +2112,7 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
 
     const GraphicsMesh* const mesh = GetMesh().Get();
     const GraphicsMesh::TriangleList* const lists =
-        reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data)[level]  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        mesh->_detailLevels._data[level]
             ._triangleLists._data;
     const int64_t node = lists[element]._f14;     // MOVSXD
 
@@ -2184,7 +2184,7 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
         const float distSq = (dy + dx) + dz;                   // retail's order
 
         const GraphicsMesh::DetailLevel* const lvl =
-            reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+            mesh->_detailLevels._data;
         for (int32_t i = 0; i < levelCount; ++i) {             // 180101070
             const float d = lvl[i]._distance;
             if (d * d > distSq) { level = i; break; }          // COMISS / JA
@@ -2193,7 +2193,7 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     }
 
     const GraphicsMesh::DetailLevel* const levels =                              // 18010109a
-        reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        mesh->_detailLevels._data;
     const int32_t listCount = levels[level]._triangleLists._size;
     if (listCount <= 0) return;                                // 1801010c0
 
@@ -2208,8 +2208,7 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
         const GraphicsMesh::TriangleList* const lists = levels[level]._triangleLists._data;
 
         uint32_t arg10 = 0xffffffffu;                          // OR $-1,%r10d
-        int32_t arg8 = reinterpret_cast<const GraphicsMesh::DetailLevel*>(
-            meshNow->_detailLevels._data)[level]._maxInstances;  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        int32_t arg8 = meshNow->_detailLevels._data[level]._maxInstances;
 
         if (lists[i]._f14 < 0) {                               // 180101103  JGE
             if (!_animation._instanced) {                      // 180101116
@@ -2350,7 +2349,7 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
         const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a2fe2
         const int32_t n = em->_triangleLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
-            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);
+            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
             const GraphicsMesh::TriangleList* const lists = em->_triangleLists._data;
 
             const MaterialInstance* material =
@@ -2368,10 +2367,10 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
     {
-        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a3087 RELOAD
+        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a3087 RELOAD  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
         const int32_t n = em->_edgeLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
-            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);
+            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
             const GraphicsMesh::TriangleList* const lists = em->_edgeLists._data;
 
             const MaterialInstance* material =
@@ -2409,9 +2408,7 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 // ---------------------------------------------------------------------------
 const Collection::Array<Object::ExternalPtr<MaterialInstance> >&
 GraphicsMesh::GetMaterialList(int32_t skin) const {
-    // LEFT: `_skinMaterials` stays a raw header (GraphicsMesh.h).
-    return reinterpret_cast<const Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
-        _skinMaterials._data)[skin];
+    return _skinMaterials._data[skin];
 }
 
 // ---------------------------------------------------------------------------

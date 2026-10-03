@@ -233,7 +233,7 @@ void Array8Assign(Collection::Array<MaterialBinding>* dst,
 // B.4: the ArraySpec callbacks take the element as bytes (array_internal.h's
 // signature); each views it ONCE as the `MaterialParameterSet` it is (LEFT).
 void PassAssign(uint8_t* dstv, const uint8_t* srcv) {
-    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);
+    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     const MaterialParameterSet* const src = reinterpret_cast<const MaterialParameterSet*>(srcv);
 
     dst->textures._data = nullptr;                        // MOV [RBX],R8 (R8==0)
@@ -249,7 +249,7 @@ void PassAssign(uint8_t* dstv, const uint8_t* srcv) {
 
 // The INIT arm, read at 0x180060e1b: four zeroed qwords, nothing else.
 void PassInit(uint8_t* dstv) {
-    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);
+    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     dst->textures._data  = nullptr;  dst->textures._size  = 0;  dst->textures._capacity  = 0;
     dst->constants._data = nullptr;  dst->constants._size = 0;  dst->constants._capacity = 0;
 }
@@ -260,7 +260,7 @@ void PassInit(uint8_t* dstv) {
 // the allocator in that order and the allocator is shared state.
 void PassDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
     if (count <= 0) return;                       // TEST R8D,R8D / JLE ret
-    MaterialParameterSet* const sets = reinterpret_cast<MaterialParameterSet*>(base);
+    MaterialParameterSet* const sets = reinterpret_cast<MaterialParameterSet*>(base);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     for (int i = 0; i < count; ++i) {
         // `e` is one `MaterialParameterSet` (Material.h): `constants` @ +0x10,
         // `textures` @ +0x00 — trait-equivalent for the same MaterialBinding

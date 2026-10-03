@@ -86,7 +86,11 @@
 #include "Component/ResidenceComponent.h"
 #include "Component/StatusIconComponent.h"
 #include "Component/StorageComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"   // GameUpdateLoop +0xF0 (the dd30 candidate lists)
+#include "Game/Map.h"                 // GameUpdateLoop +0xF8
 #include "Game/ProfessionList.h"
 #include "Game/Profession.h"
 #include "graphics/Mesh.h"
@@ -130,21 +134,18 @@ static void EnsureInit() {
     s_init = true;
 }
 
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
-static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
-
-// the citizen's ModelComponent; its transform (+0x158/+0x15c) is raw.
-static int64_t CitizenModel(CitizenComponent* citizen) {
+// the citizen's ModelComponent (CharacterComponent +0x68).
+static ModelComponent* CitizenModel(CitizenComponent* citizen) {
     CharacterComponent* ch = citizen->character;
-    if (ch == nullptr) return 0;
-    return reinterpret_cast<int64_t>(ch->modelComponent);
+    if (ch == nullptr) return nullptr;
+    return ch->modelComponent;
 }
 
-// model world pos (+0x158/+0x15c) -> clamped grid cell (w*row + col).
-static uint32_t ModelCell(int64_t model, int* mapGrid) {
-    int w = *mapGrid;
-    int col = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(w >> 1));
-    int row = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(w >> 1));
+// model world pos (transform.translation +0x158/+0x15c) -> clamped grid cell (w*row + col).
+static uint32_t ModelCell(const ModelComponent* model, const Map* map) {
+    int w = map->size;
+    int col = static_cast<int>(model->transform.translation.x + static_cast<float>(w >> 1));
+    int row = static_cast<int>(model->transform.translation.y + static_cast<float>(w >> 1));
     if (col < 0) col = 0; if (w <= col) col = w - 1;
     if (row < 0) row = 0; if (w <= row) row = w - 1;
     return static_cast<uint32_t>(w * row + col);
@@ -153,12 +154,12 @@ static uint32_t ModelCell(int64_t model, int* mapGrid) {
 // cooldown rate scalar: ( (IsDerivedFrom(citizen->_description, CitizenDescription) ? desc : 0)->_fd8 ) * mult.
 // Original reads *(0+0xd8) when the IsDerivedFrom check fails — guard to 0 to stay crash-safe.
 static int64_t CooldownStamp(CitizenComponent* citizen, float mult) {
-    void* desc = citizen->_description;
+    Description* desc = citizen->_description;
     bool ok = (desc && Object::IsDerivedFromNullSafe(desc, s_tid_CitizenDescription));
-    float rate = ok ? reinterpret_cast<CitizenDescription*>(desc)->_fd8 : 0.0f;
-    int64_t stamp = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stamp), rate * mult);
-    return stamp;
+    float rate = ok ? static_cast<CitizenDescription*>(desc)->_fd8 : 0.0f;
+    System::Time stamp = {0};
+    RtSystem_Time_Ctor(&stamp, rate * mult);
+    return stamp._ticks;
 }
 
 // The shared StatusIconComponent "show icon" branch (decompile: found==0 + home storage empty).
@@ -171,7 +172,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(i
     if (citizen->home == nullptr) return;
 
     ResidenceComponent* storComp = citizen->home->FindComponent<ResidenceComponent>();
-    int cnt = storComp ? getCount(reinterpret_cast<int64_t>(storComp)) : 0;
+    int cnt = storComp ? getCount(reinterpret_cast<int64_t>(storComp)) : 0;   // LEFT: SIG CitizenComp_Storage_GetResourceCount / Storage_GetResourceCount2 take int64_t (wave X)
     if (cnt != 0) return;  // not empty -> nothing to show
 
     StatusIconComponent* mi = citizen->home->FindComponent<StatusIconComponent>();
@@ -186,8 +187,8 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(i
     if (mi->_geometry.activeMask == 0) {
         // mask empty -> remove from scene
         if (-1 < mi->iconId) {
-            reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
-                ->RemoveObject(static_cast<uint32_t>(mi->iconId));   // B.3.5 bridge
+            GameUpdateLoop::_singleton->m_graphicsScene
+                ->RemoveObject(static_cast<uint32_t>(mi->iconId));
             mi->iconId = -1;
         }
         uint32_t before = mi->_flags;
@@ -197,15 +198,15 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(i
     } else {
         // mask non-empty -> ensure in scene + run the slot-8 Tick
         GameSettings* settings = g_gameSettings;
-        if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
+        if (settings && settings->statusIconEnable != '\0' &&
             mi->iconId < 0) {
-            uint32_t id = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
-                ->AddObject(&mi->_geometry);   // B.3.5 bridge
+            uint32_t id = GameUpdateLoop::_singleton->m_graphicsScene
+                ->AddObject(&mi->_geometry);
             mi->iconId = static_cast<int32_t>(id);
             SceneWatch_Note(id, &mi->_geometry, "CitizenAI::Gather carry-mesh");
         }
-        int64_t t0 = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t0), 0.0f);
+        System::Time t0 = {0};
+        RtSystem_Time_Ctor(&t0, 0.0f);
         mi->Tick(&t0);
         uint32_t before = mi->_flags;
         uint32_t after = before | 4;
@@ -220,17 +221,18 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(i
 // Scan an entity's child list (slots at entity+0x28, count at entity+0x30) for the first child
 // whose vtable+0x10 type id == RawMaterialDescription, IsDerivedFrom-confirmed. Returns the child
 // (or null). Mirrors the inner do/while in the decompile.
-static void* FindRawMaterialChild(int64_t entity) {
-    if (entity == 0) return nullptr;
-    int count = *reinterpret_cast<int*>(entity + 0x30);
-    int64_t slots = *reinterpret_cast<int64_t*>(entity + 0x28);
+// (B4 P2 CAI-2: the "entity" is a material template, ComponentDescription +0x28 / +0x30.)
+static RawMaterialDescription* FindRawMaterialChild(const ComponentDescription* entity) {
+    if (entity == nullptr) return nullptr;
+    int count = entity->_subDescCount;
+    Description** slots = entity->_subDescs;
     for (int i = 0; i < count; ++i) {
-        int64_t child = *reinterpret_cast<int64_t*>(slots + (int64_t)i * 8);
-        if (child == 0) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.8 bridge (slot 2)
+        Description* child = slots[i];
+        if (child == nullptr) continue;
+        uint32_t tid = child->Type();   // slot 2
         if (tid == s_tid_RawMaterialDescription) {
-            if (Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(child), s_tid_RawMaterialDescription))
-                return reinterpret_cast<void*>(child);
+            if (Object::IsDerivedFromNullSafe(child, s_tid_RawMaterialDescription))
+                return static_cast<RawMaterialDescription*>(child);
             return nullptr;
         }
     }
@@ -246,23 +248,23 @@ static void* FindRawMaterialChild(int64_t entity) {
 //   (row+8 - row+0xc) to the running count. Returns the total. Closure = Entity_FindComponent_Storage
 //   + IsDerivedFrom only -> closure-safe.
 // ============================================================
+//   (B4 P2 CAI-2: param_1 is a Component, only its +0x10 entity is read; the rows are
+//    StorageComponent::Item.)
 extern "C" int Storage_GetResourceCount2(int64_t param_1) {
+    Component* self = reinterpret_cast<Component*>(param_1);   // LEFT: SIG Storage_GetResourceCount2 (Component/exe_bodies.h, wave X)
     EnsureInit();
-    int64_t storBuf[2] = {0, 0};
-    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
-    int64_t stor = storBuf[0];
+    // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
+    StorageComponent* stor = self->_entity->FindComponent<StorageComponent>();
     int total = 0;
-    if (stor == 0) return 0;
-    int count = *reinterpret_cast<int*>(stor + 0x30);
-    int64_t byteOff = 0;
+    if (stor == nullptr) return 0;
+    int count = stor->slotCount;
     for (int i = 0; i < count; ++i) {
-        int64_t rows = *reinterpret_cast<int64_t*>(stor + 0x28);
-        int64_t row = *reinterpret_cast<int64_t*>(rows + byteOff);
-        void* rm = FindRawMaterialChild(row);
-        if (rm && (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c) >> 6 & 1) != 0) {
-            total += *reinterpret_cast<int*>(rows + 8 + byteOff) - *reinterpret_cast<int*>(rows + 0xc + byteOff);
+        StorageComponent::Item* rows = stor->storageSlots;
+        ComponentDescription* row = rows[i]._resource;
+        RawMaterialDescription* rm = FindRawMaterialChild(row);
+        if (rm && (rm->_flags >> 6 & 1) != 0) {
+            total += rows[i]._count - rows[i]._reserve;
         }
-        byteOff += 0x10;
     }
     return total;
 }
@@ -277,13 +279,14 @@ static void GatherTransferLoop(CitizenComponent* citizen, int64_t pathResult, in
     int64_t carrierSlot = 0;                 // ef40 out (RBP+0x77 / local_res18)
     CitizenComp_Entity_impl_ef40(citizen, &carrierSlot, &entIBP, 0);
     while (carrierSlot != 0) {
-        void* rm = FindRawMaterialChild(carrierSlot);
-        int slotCost = rm ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : 0x7fffffff;
+        RawMaterialDescription* rm = FindRawMaterialChild(
+            reinterpret_cast<ComponentDescription*>(carrierSlot));   // LEFT: SIG CitizenComp_Entity_impl_ef40 (the slot out is int64_t*, wave X)
+        int slotCost = rm ? rm->_weight : 0x7fffffff;
         if (capLeft < slotCost) break;
         ActChild_TransferToCarrier_ca230(pathResult, carrierSlot, 1);
         capLeft -= slotCost;
         entIBP = found;
-        CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(pathResult), &carrierSlot, &entIBP, 0);
+        CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(pathResult), &carrierSlot, &entIBP, 0);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (arg 1 ignored; the tree passes pathResult)
     }
 }
 
@@ -301,28 +304,27 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
     for (;;) {
         // Storage(found) -> stor
         int64_t storWrap = found;
-        int64_t storBuf[2] = {0, 0};
+        StorageComponent* storBuf[2] = {nullptr, nullptr};
         WorkBase_FindComponent_6270(storWrap, storBuf);
-        int64_t stor = storBuf[0];
-        if (stor == 0) {
+        StorageComponent* stor = storBuf[0];
+        if (stor == nullptr) {
             return;
         }
 
-        int rowCount = *reinterpret_cast<int*>(stor + 0x30);   // local_60
+        int rowCount = stor->slotCount;                         // local_60
         int chosenIdx = -1;                                     // local_res8 low
         int matchCount = 0;                                    // pvVar21
 
         // pass 1: count matches + preferred index
-        int64_t rowsBase = 0;  // local_res10 (= *(stor+0x28))
+        StorageComponent::Item* rowsBase = nullptr;  // local_res10 (= *(stor+0x28))
         for (int cur = 0; cur < rowCount; ++cur) {
-            rowsBase = *reinterpret_cast<int64_t*>(stor + 0x28);
-            int64_t cursor = (int64_t)cur * 0x10;
-            int64_t child = *reinterpret_cast<int64_t*>(rowsBase + cursor);
-            void* rm = FindRawMaterialChild(child);
-            bool flagged = rm && (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c) >> 6 & 1) != 0;
-            int avail = *reinterpret_cast<int*>(rowsBase + cursor + 8) - *reinterpret_cast<int*>(rowsBase + cursor + 0xc);
+            rowsBase = stor->storageSlots;
+            ComponentDescription* child = rowsBase[cur]._resource;
+            RawMaterialDescription* rm = FindRawMaterialChild(child);
+            bool flagged = rm && (rm->_flags >> 6 & 1) != 0;
+            int avail = rowsBase[cur]._count - rowsBase[cur]._reserve;
             if (flagged && avail > 0) {
-                if (*reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(rm) + 0x58) != '\0')
+                if (rm->_unknown58)
                     chosenIdx = matchCount;
                 ++matchCount;
             }
@@ -336,32 +338,31 @@ static void SelectAndTransfer(int64_t found, int64_t pathResult, int capLeft) {
 
         // pass 2: find the chosenIdx-th match
         int matchCounter = 0;   // local_res10 low
-        int64_t hitChild = 0;   // the row child to transfer (lVar5)
+        ComponentDescription* hitChild = nullptr;   // the row child to transfer (lVar5)
         int hitCursor = -1;
         for (int cur = 0; cur < rowCount; ++cur) {
-            int64_t rb = *reinterpret_cast<int64_t*>(stor + 0x28);   // local_88
-            int64_t cursor = (int64_t)cur * 0x10;
-            int64_t child = *reinterpret_cast<int64_t*>(rb + cursor);
-            void* rm = FindRawMaterialChild(child);
-            bool flagged = rm && (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c) >> 6 & 1) != 0;
-            int avail = *reinterpret_cast<int*>(rb + cursor + 8) - *reinterpret_cast<int*>(rb + cursor + 0xc);
+            StorageComponent::Item* rb = stor->storageSlots;   // local_88
+            ComponentDescription* child = rb[cur]._resource;
+            RawMaterialDescription* rm = FindRawMaterialChild(child);
+            bool flagged = rm && (rm->_flags >> 6 & 1) != 0;
+            int avail = rb[cur]._count - rb[cur]._reserve;
             if (flagged && avail > 0) {
                 if (matchCounter == chosenIdx) { hitChild = child; hitCursor = cur; break; }
                 ++matchCounter;
             }
         }
 
-        if (hitChild == 0 || hitCursor < 0) {
+        if (hitChild == nullptr || hitCursor < 0) {
             return;   // LAB_14010bb8a: lVar5 == 0 -> done
         }
 
         // LAB_14010bb8a: resolve the chosen row child's RawMaterial cost, transfer if capLeft allows
-        void* rm = FindRawMaterialChild(hitChild);
-        int cost = rm ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rm) + 0x48) : 0x7fffffff;
+        RawMaterialDescription* rm = FindRawMaterialChild(hitChild);
+        int cost = rm ? rm->_weight : 0x7fffffff;
         if (capLeft < cost) {
             return;
         }
-        ActChild_TransferToCarrier_ca230(pathResult, hitChild, 1);
+        ActChild_TransferToCarrier_ca230(pathResult, reinterpret_cast<int64_t>(hitChild), 1);   // LEFT: SIG ActChild_TransferToCarrier_ca230 takes int64_t (wave X)
         ++transfers;
         capLeft -= cost;
         // goto LAB_14010b92f: re-loop with reduced capacity
@@ -383,7 +384,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount: the citizen entity's StorageComponent -> QueryCount
         StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-        int qc = (own) ? CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(own)) : 0;
+        int qc = (own) ? CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(own)) : 0;   // LEFT: SIG CitizenComp_StorageComponent_QueryCount takes int64_t (wave X)
         if (qc > 0) {
             // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
             // (ValidateAndEnterState), so the upper bits of r carry no value.
@@ -394,9 +395,9 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         }
 
         // compute the citizen grid cell
-        int64_t model = CitizenModel(citizen);
-        int* mg = MapGrid();
-        int w = *mg;
+        ModelComponent* model = CitizenModel(citizen);
+        Map* mg = GameUpdateLoop::_singleton->m_game;   // +0xF8
+        int w = mg->size;
         uint32_t cell = ModelCell(model, mg);
 
         // bGoal = home ? 7fb0(&home) : -1
@@ -412,7 +413,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         float dest[4] = {0, 0, 0, 0};   // local_70
         int64_t found = 0;              // local_res10
         int64_t outComp = 0;           // local_res18
-        int64_t* listpair = *reinterpret_cast<int64_t**>(GW() + 0xf0);
+        int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (Component/exe_bodies.h, wave X)
         CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
         (void)w;
 
@@ -429,7 +430,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         // 1) StatusIcon set-flag(6) on the home
         if (citizen->home != nullptr) {
             StatusIconComponent* icon = citizen->home->FindComponent<StatusIconComponent>();
-            CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 6, '\0');
+            icon->SetFlag(6, '\0');   // 0x14012c3f0 (was its CitizenComp_FUN_14012c3f0 forwarder)
         }
 
         // 2) InteractComponent(home) -> 2e20 -> destPos; FindPath
@@ -441,12 +442,13 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
         int64_t pathResult = 0;                                          // local_res20
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
-                       reinterpret_cast<uint64_t*>(&destEntityIBP), destPos,
-                       reinterpret_cast<void**>(&found), dest, 0, -1, 0, 1, '\x01', 1, 0);
+                       reinterpret_cast<uint64_t*>(&destEntityIBP), destPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790 (Action/exe_bodies.h, wave X)
+                       reinterpret_cast<void**>(&found),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                       dest, 0, -1, 0, 1, '\x01', 1, 0);
 
         // 3) capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
         int townCap = GameUpdateLoop::_singleton->m_professionList->field_0x30->priority;
-        int citCap = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(citizen));
+        int citCap = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(citizen));   // LEFT: SIG WorkLeaf_FreeStorageCapacity_116540 takes intptr_t (wave X)
         int capLeft = (townCap < citCap) ? citCap : townCap;
 
         // 4) transfer loop (ef40 walks carrier slots of `found`, the carry target)
@@ -481,7 +483,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount
         StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-        int qc = (own) ? CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(own)) : 0;
+        int qc = (own) ? CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(own)) : 0;   // LEFT: SIG CitizenComp_StorageComponent_QueryCount takes int64_t (wave X)
         if (qc > 0) {
             // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
             // (ValidateAndEnterState), so the upper bits of r carry no value.
@@ -492,9 +494,9 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         }
 
         // compute cell
-        int64_t model = CitizenModel(citizen);
-        int* mg = MapGrid();
-        int w = *mg;
+        ModelComponent* model = CitizenModel(citizen);
+        Map* mg = GameUpdateLoop::_singleton->m_game;   // +0xF8
+        int w = mg->size;
         uint32_t cell = ModelCell(model, mg);
 
         // bGoal = home ? 7fb0(&home) : -1
@@ -510,7 +512,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         float srcPos[4] = {0, 0, 0, 0};  // local_88
         int64_t found = 0;               // local_70
         int64_t outComp = 0;             // local_res10
-        int64_t* listpair = *reinterpret_cast<int64_t**>(GW() + 0xf0);
+        int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (Component/exe_bodies.h, wave X)
         CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, srcPos, 1);
         (void)w;
 
@@ -526,7 +528,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         // ---- found != 0: StatusIcon flag(7), InteractComponent+2e20, FindPath ----
         if (citizen->home != nullptr) {
             StatusIconComponent* icon = citizen->home->FindComponent<StatusIconComponent>();
-            CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 7, '\0');
+            icon->SetFlag(7, '\0');   // 0x14012c3f0 (was its CitizenComp_FUN_14012c3f0 forwarder)
         }
 
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
@@ -537,12 +539,13 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
         int64_t pathResult = 0;                                          // local_78
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
-                       reinterpret_cast<uint64_t*>(&destEntityIBP), destPos,
-                       reinterpret_cast<void**>(&found), srcPos, 0, -1, 0, 1, '\x01', 1, 0);
+                       reinterpret_cast<uint64_t*>(&destEntityIBP), destPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790 (Action/exe_bodies.h, wave X)
+                       reinterpret_cast<void**>(&found),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                       srcPos, 0, -1, 0, 1, '\x01', 1, 0);
 
         // capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
         int townCap = GameUpdateLoop::_singleton->m_professionList->field_0x30->priority;
-        int citCap = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(citizen));
+        int citCap = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(citizen));   // LEFT: SIG WorkLeaf_FreeStorageCapacity_116540 takes intptr_t (wave X)
         int capLeft = (townCap < citCap) ? citCap : townCap;
         // Distribution diagnostic (firewood-evenness): the per-trip take budget is
         // max(town default, citizen free carry) in WEIGHT units — degenerate values

@@ -97,7 +97,11 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
 int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t param_3, int64_t* param_4, float* param_5, uint64_t , int64_t* param_7);  // 0x14008e370
 
 // ---- citizenai_findtarget.cpp
-void* CitizenAI_sub_78c0(int64_t param_1, void* param_2);  // 0x1400178c0
+class ComponentEntity;
+class MarketLocationComponent;
+namespace Object { template <class T> class InternalPtr; }
+::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
+    ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
 int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint32_t param_3, uint32_t param_4, int64_t* param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
 
 // ---- citizenai_gather.cpp

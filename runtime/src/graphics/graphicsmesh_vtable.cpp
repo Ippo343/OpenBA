@@ -279,7 +279,7 @@ GraphicsMesh::~GraphicsMesh() {
 
     char* const name = self->_name.data;
     if (name != nullptr) {
-        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;
+        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;  // CAST-OK: string_header
         --*refs;
         if (*refs == 0) {
             self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8
@@ -379,10 +379,8 @@ namespace {
 // BEFORE VERTEX in each pair, the same order `EdgeMesh::Serialize` uses for its
 // eight, and it is transcribed rather than sorted.
 //
-// B.4: each `_deviceData` is the buffer's companion and +0x30 is its slot 6,
-// `Serialize`, called by name. LEFT: `DetailLevel::Buffer::_deviceData` is a
-// `void*` (the unit test pins the `Buffer` struct), so the view of it as its
-// companion is the one cast per kind below.
+// B.4: each buffer's `platformData` is its companion and +0x30 is its slot 6,
+// `Serialize`, called by name (the buffers are the real `Video` classes).
 void TriangleListPass(GraphicsMesh::DetailLevel* level, IO::Serializer& ser) {
     IO::ReaderWriter* const rw = ser._readerWriter;
     int32_t n = level->_triangleLists._size;                   // +0xa0
@@ -392,10 +390,10 @@ void TriangleListPass(GraphicsMesh::DetailLevel* level, IO::Serializer& ser) {
     RtGraphics_EdgeMesh_SerializeTriangleListArray(ser, n, level->_triangleLists._data);   // 0x180014850
 
     // faithful: all four unguarded
-    static_cast<Video::IndexBufferData*>(level->_indexBuffer._deviceData)->Serialize(&ser);           // +0x40
-    static_cast<Video::VertexBufferData*>(level->_vertexBuffer._deviceData)->Serialize(&ser);         // +0x20
-    static_cast<Video::IndexBufferData*>(level->_skinIndexBuffer._deviceData)->Serialize(&ser);       // +0x80
-    static_cast<Video::VertexBufferData*>(level->_skinVertexBuffer._deviceData)->Serialize(&ser);     // +0x60
+    level->_indexBuffer.platformData->Serialize(&ser);           // +0x40
+    level->_vertexBuffer.platformData->Serialize(&ser);         // +0x20
+    level->_skinIndexBuffer.platformData->Serialize(&ser);       // +0x80
+    level->_skinVertexBuffer.platformData->Serialize(&ser);     // +0x60
 
     rw->SerializeInt(level->_maxInstances, nullptr);           // +0xa8
 }
@@ -511,7 +509,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005d840(&_detailLevels, n);
 
-        DetailLevel* e = reinterpret_cast<DetailLevel*>(_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+        DetailLevel* e = _detailLevels._data;
         for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
             rw->SerializeFloat(e->_distance, nullptr);
             StringSerialize(&e->_name, ser);
@@ -529,10 +527,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005cda0(&_skinMaterials, n);
 
-        // LEFT: `_skinMaterials` stays a raw header (GraphicsMesh.h).
-        Collection::Array<Object::ExternalPtr<MaterialInstance> >* e =
-            reinterpret_cast<Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
-                _skinMaterials._data);
+        Collection::Array<Object::ExternalPtr<MaterialInstance> >* e = _skinMaterials._data;
         for (int64_t i = 0; i < static_cast<int64_t>(n); ++i, ++e) {
             int32_t m = e->_size;
             rw->SerializeInt(m, nullptr);

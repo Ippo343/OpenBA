@@ -168,7 +168,7 @@ static void AssignWorkToEntity(ForesterWork* self, CitizenComponent** citizenIBP
 
     // Register work with citizen AI subsystem at self+0x48 (the tree helper takes the
     // container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
 }
 
 
@@ -254,7 +254,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // If the worker capacity cache is 0, calculate it (the tree's port of 0x14012e5c0
     // called here takes the component as an integer: LEFT)
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
         matDesc->workState = maxWorkers;
     }
 
@@ -270,7 +270,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     Map* map = gameWorld->m_game;
     // The map helpers (0x14009c480, 0x140008830, 0x14009ccf0, 0x1400a00f0, 0x14009f5d0,
     // 0x14009f3e0) take the map as int* / void*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
 
     int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;
@@ -286,7 +286,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // Get the GrowthDescription from the forester description's material ref
     // (0x14000c3c0 takes the description as an integer: LEFT)
     void* natResDesc = nullptr;
-    WorkLeaf_FindGrowthDescription_c3c0(reinterpret_cast<intptr_t>(radiusComp->_ref20), &natResDesc);
+    WorkLeaf_FindGrowthDescription_c3c0(reinterpret_cast<intptr_t>(radiusComp->_ref20), &natResDesc);   // LEFT: SIG WorkLeaf_FindGrowthDescription_c3c0
 
     // Get citizen's current position: CharacterComponent (+0x278) -> ModelComponent
     // (+0x68) -> the transform's translation (+0x158)
@@ -412,7 +412,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                             // Check natural resource density limits (0x140120c30 takes
                             // the description as an integer: LEFT)
                             bool densityOk = static_cast<uint8_t>(WorkLeaf_FootprintOwnerCheck_120c30(
-                                reinterpret_cast<intptr_t>(natResDesc), testCellX, testCellY));   // the door read AL
+                                reinterpret_cast<intptr_t>(natResDesc), testCellX, testCellY));   // the door read AL   // LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30
                             if (densityOk) {
                                 // Reset fail counter
                                 _field58 = 0;
@@ -542,7 +542,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                                             s_harvestCount, (void*)nrc);
                                     fflush(stderr);
                                     // (0x1401260f0 takes the component as an integer: LEFT)
-                                    ActCNR_RemoveNatRes_1260f0(reinterpret_cast<int64_t>(nrc), workIBPbuf, 1);
+                                    ActCNR_RemoveNatRes_1260f0(reinterpret_cast<int64_t>(nrc), workIBPbuf, 1);   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
                                     // With BANISHED_PRODUCE_SPAWN_ENTITY the force-produce just
                                     // REMOVED the tree (dirty-list -> freed next EntityList tick).
                                     // Do NOT also queue the real cut sequence on it: its pending
@@ -588,7 +588,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
         // (0x14012cf10 takes the storage as an integer: LEFT)
-        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
+        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
         if (storageCount < 1) {
             return 0;
         }
@@ -618,7 +618,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         }
 
         // (the tree helper takes the container as uintptr_t*: LEFT)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
 
         // Increment fail counter
         _field58 = failCount + 1;
@@ -672,7 +672,7 @@ void ForesterWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkBST_BST_Serialize_296b0
 
     // Serialize int field at self+0x58
     serializer2.Serialize(_field58, nullptr);
@@ -687,7 +687,7 @@ void ForesterWork::Persist(IO::Stream& stream) {
 // Standalone exe only. (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int ForesterWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return 0;
 }
 
@@ -699,7 +699,7 @@ int ForesterWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2
 // Standalone exe only.
 // ============================================================
 int ForesterWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
     return 0;
 }
 
@@ -830,7 +830,7 @@ int ForesterWork::Validate() {
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node (the helper takes the container as
                         // uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), treeNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), treeNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
                         break;
                     }
                     treeNode = treeNode->right;

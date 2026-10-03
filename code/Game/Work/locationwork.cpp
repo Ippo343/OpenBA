@@ -68,7 +68,7 @@ void LocationWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // Serialize InternalBasePtr at +0x48 (the member is raw storage, H5: LEFT)
-    reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(serializer);   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(serializer);   // B.3.4 bridge   // LEFT: H5 the slot is an InternalPtr declared as a bare pointer
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
     if (_field48 != nullptr) {
@@ -101,7 +101,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
+    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
     if (itemCount > 0) {
         (*citizenIBP)->LongTermPlan();
     }
@@ -136,7 +136,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // Check main position (the component and the description's use nodes, +0x28;
     // 0x140122be0 / 0x140122b00 take them as integers: LEFT)
     uint8_t found = WorkImpl_WalkablePos_122be0(
-        reinterpret_cast<uintptr_t>(interact), reinterpret_cast<uintptr_t>(&interactDesc->_useNodes),
+        reinterpret_cast<uintptr_t>(interact), reinterpret_cast<uintptr_t>(&interactDesc->_useNodes),   // LEFT: SIG WorkImpl_WalkablePos_122be0
         srcPosArr, bestPos, &bestDist);
 
     // Also check the parts' use locations
@@ -145,7 +145,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         InteractComponent** subArray = interact->useLocations;
         for (int i = 0; i < subCount; i++) {
             uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
-                reinterpret_cast<uintptr_t>(subArray[i]), 0, srcPosArr, bestPos, &bestDist);
+                reinterpret_cast<uintptr_t>(subArray[i]), 0, srcPosArr, bestPos, &bestDist);   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00
             found = found | subFound;
         }
     }
@@ -163,7 +163,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     CitizenAI_Pathfinding_WalkTowards_bb490(
         &citizenIBPLocal,
         field_20,                // priority from self+0x20
-        reinterpret_cast<uint32_t*>(bestPos),
+        reinterpret_cast<uint32_t*>(bestPos),   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490
         0,                       // flag1
         kRdata_14017214c,            // UV scale constant
         0);                      // flag2 (cleared upper bits)

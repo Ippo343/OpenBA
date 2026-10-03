@@ -139,7 +139,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // the component as an integer: LEFT)
     int treeCount = _field50;
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
         matDesc->workState = maxWorkers;
     }
     if (treeCount > matDesc->workState) {
@@ -163,7 +163,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // Step 3: Get map and citizen position
     Map* map = gameWorld->m_game;
     // The map helpers (0x14009ccf0, 0x1400a00f0) take the map as int*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
 
     const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
@@ -237,7 +237,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 // LEFT)
                                 void* rawMatRef = descComp->_ref30;
                                 uintptr_t rawMatIBP = 0;
-                                WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(rawMatRef), &rawMatIBP);
+                                WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(rawMatRef), &rawMatIBP);   // LEFT: SIG WorkAcc_FindComponent_6330
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
@@ -295,9 +295,9 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 WorkAct_GatherWorkCtor_bb7b0(
                                     actionBuf,                     // citizenIBP
                                     (uint32_t)field_20,            // work id / priority (self+0x20)
-                                    reinterpret_cast<int64_t*>(&entityRef),                    // entity ref ptr
+                                    reinterpret_cast<int64_t*>(&entityRef),                    // entity ref ptr   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
                                     pathPos,                       // position
-                                    reinterpret_cast<uint64_t>(rawMatRef),   // raw material ref
+                                    reinterpret_cast<uint64_t>(rawMatRef),   // raw material ref   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
                                     altCellFlag,                   // alternating-cell flag
                                     rawMatAmount,                  // float, -> CreateRawMaterial XMM2
                                     (uint32_t)nearestCell,         // map cell index
@@ -333,7 +333,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 keyBuf.slot = i;
                                 keyBuf._pad04 = 0;
                                 keyBuf.citizen = *citizenIBP;
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);   // LEFT: SIG WorkCellBST_Insert_9a40
 
                                 // Mark slot as used
                                 validityArray[i] = 0;
@@ -382,7 +382,7 @@ int HarvestOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** 
         } else if (param4 > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             break;
         }
     }
@@ -408,7 +408,7 @@ int HarvestOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*
         } else if (param4 > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
             break;
         }
     }
@@ -550,7 +550,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.slot) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
                     break;
                 }
             }
@@ -586,7 +586,7 @@ void HarvestOrchard::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // (the helper takes the container as uintptr_t*: LEFT)
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkCellBST_Serialize_9de0
 
     int cellCount = _field60;
     int cellCountBuf[2] = { cellCount, 0 };
