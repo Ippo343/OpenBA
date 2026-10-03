@@ -70,6 +70,12 @@
 #include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenAIComponent.h"
 #include "Component/CitizenComponent.h"
+#include "Component/MarketLocationComponent.h"   // CitizenAI_sub_78c0's out pointer
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"              // GameUpdateLoop +0xF0, the candidate lists
+#include "Game/Map.h"                            // GameUpdateLoop +0xF8
+#include "Game/WeatherSimulation.h"              // GameUpdateLoop +0x130
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -105,25 +111,19 @@ static void EnsureInit() {
 }
 
 // vtable[+0x10] == Object::Base::GetTypeId(this) — read the runtime type id of a component.
-static inline uint32_t CompTypeId(void* comp) {
-    return reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+static inline uint32_t CompTypeId(const Object::Base* comp) {
+    return comp->Type();   // slot 2
 }
-
-// gameWorld base (g_pGameWorldSingleton is void** → *g_pGameWorldSingleton = the object).
-static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
-static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
 // Scan an entity's comp-list1 (entity+0x30 array, entity+0x38 count) for a component whose
 // GetTypeId()==tid, IsDerivedFrom-confirm, return it (or null). CheckPtr each slot.
-static void* ScanCompList1(int64_t entity, uint32_t tid) {
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
+static Component* ScanCompList1(ComponentEntity* entity, uint32_t tid) {
+    int n = entity->_componentCount;
+    Object::InternalPtr<Component>* arr = entity->_components;
     for (int i = 0; i < n; ++i) {
-        int64_t* slot = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
-        void* comp = reinterpret_cast<void*>(*slot);
+        Component* comp = arr[i].Get();
         if (comp && CompTypeId(comp) == tid) {
-            int64_t* slot2 = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
-            void* obj = reinterpret_cast<void*>(*slot2);
+            Component* obj = arr[i].Get();
             if (obj && Object::IsDerivedFromNullSafe(obj, tid)) return obj;
             return nullptr;
         }
@@ -133,14 +133,14 @@ static void* ScanCompList1(int64_t entity, uint32_t tid) {
 
 // Scan a comp-list2 (base+0x28 array, base+0x30 count) — the description/sub-component list of
 // a slot. Entries are raw component pointers (no CheckPtr in the original). Return matching or null.
-static void* ScanCompList2(int64_t base, uint32_t tid) {
-    int n = *reinterpret_cast<int*>(base + 0x30);
-    int64_t arr = *reinterpret_cast<int64_t*>(base + 0x28);
+static Description* ScanCompList2(ComponentDescription* base, uint32_t tid) {
+    int n = base->_subDescCount;
+    Description** arr = base->_subDescs;
     for (int i = 0; i < n; ++i) {
-        int64_t comp = *reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(i) * 8);
-        if (comp && CompTypeId(reinterpret_cast<void*>(comp)) == tid) {
-            if (Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(comp), tid))
-                return reinterpret_cast<void*>(comp);
+        Description* comp = arr[i];
+        if (comp && CompTypeId(comp) == tid) {
+            if (Object::IsDerivedFromNullSafe(comp, tid))
+                return comp;
             return nullptr;
         }
     }
@@ -155,14 +155,17 @@ static void* ScanCompList2(int64_t base, uint32_t tid) {
 //   Returns true if the residence's threshold field (desc+0x28) is <= the gameworld's current
 //   value (gw+0x130 -> +0x18), OR there is still pending capacity (param_1+0x48 > 0).
 // ============================================================
+//   (B4 P2 CAI-2: the receiver is the ResidenceComponent every caller passes.)
 bool ResidenceCheck_2ac30(int64_t param_1) {
+    ResidenceComponent* self = reinterpret_cast<ResidenceComponent*>(param_1);   // LEFT: SIG ResidenceCheck_2ac30 (Component/exe_bodies.h, wave X)
     EnsureInit();
-    void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    float cur = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(GW() + 0x130) + 0x18);
-    void* desc = (obj && Object::IsDerivedFromNullSafe(obj, s_tid_ResidenceDescription)) ? obj : nullptr;
-    float thresh = desc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x28) : 0.0f;
+    Description* obj = self->_description;
+    float cur = GameUpdateLoop::_singleton->m_weather->temperature;   // +0x130 -> +0x18
+    ResidenceDescription* desc = (obj && Object::IsDerivedFromNullSafe(obj, s_tid_ResidenceDescription))
+                                     ? static_cast<ResidenceDescription*>(obj) : nullptr;
+    float thresh = desc ? desc->_coldThreshold : 0.0f;
     if (thresh <= cur) return true;
-    return 0 < *reinterpret_cast<int64_t*>(param_1 + 0x48);
+    return 0 < self->heatRemaining._ticks;
 }
 
 // ============================================================
@@ -184,17 +187,19 @@ uint64_t CitizenAIComponent::CanReachHome() {
 // CitizenAI_helper_70b0 (0x1400170b0) — pure leaf: sum the int field at +8 of each stride-0x10
 //   record in the array at (param_1+0x50), over (param_1+0x58) records. Returns the 32-bit sum.
 // ============================================================
-uint64_t CitizenAI_helper_70b0(int64_t param_1) {
-    uint32_t count = *reinterpret_cast<uint32_t*>(param_1 + 0x58);
-    int64_t arr = *reinterpret_cast<int64_t*>(param_1 + 0x50);
+//   (B4 P2 CAI-2: the record array is ResidenceComponent::residentSlots, a Family each.)
+uint64_t CitizenAI_helper_70b0(const ResidenceComponent* param_1) {
+    uint32_t count = static_cast<uint32_t>(param_1->residentSlotCount);
+    const ResidenceComponent::Family* arr = param_1->residentSlots;
     uint32_t sum = 0;
     for (uint32_t i = 0; i < count; ++i) {
-        sum += *reinterpret_cast<int*>(arr + static_cast<int64_t>(i) * 0x10 + 8);
+        sum += arr[i].count;
     }
     return static_cast<uint64_t>(sum);
 }
 
 // Path cost from cell -> goal: f810 (real A* cost), else euclidean-on-grid fallback (sqrt+width).
+// mapGrid is the Map as the int* the Pf_* / WorkBase_* signatures take; *mapGrid is Map::size.
 static int CellCost(int* mapGrid, uint32_t cell, uint32_t goal) {
     int c = Pf_IsDstReachable_f810(mapGrid, cell, goal, '\x01');
     if (c < 0) {
@@ -208,8 +213,8 @@ static int CellCost(int* mapGrid, uint32_t cell, uint32_t goal) {
 }
 
 // World pos (vec3) -> grid cell index, clamped to [0, w-1] in each axis. (cell = row*w + col)
-static uint32_t WorldToCell(int* mapGrid, const float* vec) {
-    int w = *mapGrid;
+static uint32_t WorldToCell(const Map* map, const float* vec) {
+    int w = map->size;
     int col = static_cast<int>(vec[0] + static_cast<float>(w >> 1));
     int row = static_cast<int>(vec[1] + static_cast<float>(w >> 1));
     if (col < 0) col = 0;
@@ -226,38 +231,39 @@ static uint32_t WorldToCell(int* mapGrid, const float* vec) {
 //   keep the cheapest whose ValidateCell passes AND whose Storage passes ResidenceCheck_2ac30.
 //   Out: *param_2 = best entity, param_4 = best target vec3. Returns param_2.
 // ============================================================
+//   (B4 P2 CAI-2: param_1 is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0;
+//    the list is its +0x20 entity array.)
 int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, float* param_4) {
+    CitizenBehavior* list = reinterpret_cast<CitizenBehavior*>(param_1);    // LEFT: SIG Entity_impl_ec70 (Component/exe_bodies.h, wave X)
+    ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2); // LEFT: SIG Entity_impl_ec70 (the out entity)
     EnsureInit();
-    int* mapGrid = MapGrid();
+    Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
+    int* mapGrid = reinterpret_cast<int*>(map);      // LEFT: SIG Pf_IsDstReachable_f810 / WorkBase_ValidateCell_a00f0 take int* (wave X)
     int best = 0x7fffffff;
-    *param_2 = 0;
-    if (*reinterpret_cast<int*>(param_1 + 0x28) < 1) return param_2;
+    *found = nullptr;
+    if (list->field_0x28 < 1) return param_2;
 
     int idx = 0;
-    int64_t byteOff = 0;
     do {
-        int64_t cand = *reinterpret_cast<int64_t*>(byteOff + *reinterpret_cast<int64_t*>(param_1 + 0x20));
+        ComponentEntity* cand = list->field_0x20[idx];
 
-        void* interact = ScanCompList1(cand, s_tid_InteractComponent);
-        int64_t interactIBP = 0;
-        new (&interactIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
+        Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
         float vec[4] = {0, 0, 0, 0};
-        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP), vec, 0, 0, nullptr);
-        uint32_t cell = WorldToCell(mapGrid, vec);
+        Pf_EntityResolvePos_2e20(interact, vec, 0, 0, nullptr);
+        uint32_t cell = WorldToCell(map, vec);
         int cost = CellCost(mapGrid, cell, param_3);
 
         if (cost < best) {
             uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
             if (static_cast<char>(valid) != '\0') {
-                int64_t* self_00 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x20) + byteOff);
+                ComponentEntity* self_00 = list->field_0x20[idx];
                 int64_t storIBP[2] = {0, 0};
-                void* storPtr = CitizenComp_Entity_FindComponent_Storage(*self_00, storIBP);
-                int64_t storComp = storPtr ? *reinterpret_cast<int64_t*>(storPtr) : 0;
+                void* storPtr = CitizenComp_Entity_FindComponent_Storage(reinterpret_cast<int64_t>(self_00), storIBP);   // LEFT: SIG CitizenComp_Entity_FindComponent_Storage (wave X)
+                int64_t storComp = storPtr ? *reinterpret_cast<int64_t*>(storPtr) : 0;   // LEFT: SIG CitizenComp_Entity_FindComponent_Storage (void* retslot)
                 bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
                 if (ok && (-1 < cost)) {
-                    *param_2 = cand;
+                    *found = cand;
                     param_4[0] = vec[0];
                     param_4[1] = vec[1];
                     param_4[2] = vec[2];
@@ -266,8 +272,7 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
             }
         }
         ++idx;
-        byteOff += 8;
-    } while (idx < *reinterpret_cast<int*>(param_1 + 0x28));
+    } while (idx < list->field_0x28);
     return param_2;
 }
 
@@ -289,27 +294,32 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
 int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t param_3,
                                int64_t* param_4, float* param_5, uint64_t /*param_6*/,
                                int64_t* param_7) {
+    // (B4 P2 CAI-2: param_1 is the CitizenBehavior, GameUpdateLoop +0xF0: [0]/[1] its +0x00
+    //  list, [2]/[3] +0x10, [4]/[5] +0x20; param_2 / param_7 hold a ComponentEntity*.)
+    CitizenBehavior* list = reinterpret_cast<CitizenBehavior*>(param_1);       // LEFT: SIG CitizenAI_helper_e370 (Component/exe_bodies.h, wave X)
+    ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2);    // LEFT: SIG CitizenAI_helper_e370 (the out entity)
+    ComponentEntity** origP7 = reinterpret_cast<ComponentEntity**>(param_7);   // LEFT: SIG CitizenAI_helper_e370 (the preferred entity)
     EnsureInit();
-    int* mapGrid = MapGrid();
-    int64_t* origP7 = param_7;
+    Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
+    int* mapGrid = reinterpret_cast<int*>(map);      // LEFT: SIG Pf_* / WorkBase_* take int* (wave X)
     int64_t* ret = param_2;
-    *param_2 = 0;
+    *found = nullptr;
     int best = 0x7fffffff;
 
     // -------- Phase A: the preferred candidate (*param_7) --------
-    int64_t preferred = *param_7;
-    if (preferred != 0) {
+    ComponentEntity* preferred = *origP7;
+    if (preferred != nullptr) {
         float vec[4] = {0, 0, 0, 0};
-        int64_t candIBP = preferred;
+        ComponentEntity* candIBP = preferred;
         uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, vec));
         uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
             int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
-            int64_t candA = *origP7;
+            ComponentEntity* candA = *origP7;
             int64_t outSlot = 0;
-            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(candA), &outSlot, &candA, 0);
+            CitizenComp_Entity_impl_ef40(candA, &outSlot, &candA, 0);
             if (outSlot != 0) {
-                *param_2 = *origP7;
+                *found = *origP7;
                 param_5[0] = vec[0];
                 param_5[1] = vec[1];
                 param_5[2] = vec[2];
@@ -319,27 +329,26 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
     }
 
     // -------- Phase B: market candidate list (param_1[2] / count param_1[3]) --------
-    if (0 < static_cast<int>(param_1[3])) {
+    if (0 < list->field_0x18) {
         int i = 0;
-        int64_t off = 0;
         do {
-            int64_t cand = *reinterpret_cast<int64_t*>(off + param_1[2]);
-            int64_t candIBP = cand;
+            ComponentEntity* cand = list->field_0x10[i];
+            ComponentEntity* candIBP = cand;
             uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
             int cost = CellCost(mapGrid, cell, param_3);
             if (cost < best) {
-                int64_t candE = cand;
+                ComponentEntity* candE = cand;
                 int64_t outSlot = 0;
-                CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(mapGrid), &outSlot, &candE, 0);
+                CitizenComp_Entity_impl_ef40(mapGrid, &outSlot, &candE, 0);
                 int64_t slot = outSlot;
                 if (outSlot != 0) {
                     float vec[4] = {0, 0, 0, 0};
-                    int64_t marketIBP[2] = {0, 0};
-                    void* mp = CitizenAI_sub_78c0(cand, marketIBP);
-                    int64_t marketComp = mp ? *reinterpret_cast<int64_t*>(mp) : 0;
+                    ::Object::InternalPtr<MarketLocationComponent> marketIBP[2];
+                    ::Object::InternalPtr<MarketLocationComponent>* mp = CitizenAI_sub_78c0(cand, marketIBP);
+                    int64_t marketComp = mp ? reinterpret_cast<int64_t>(mp->Get()) : 0;   // LEFT: SIG Pf_PickReachableCell_edb0 takes int64_t (wave X)
                     int mcost = marketComp ? Pf_PickReachableCell_edb0(marketComp, param_3, vec) : -1;
                     if ((-1 < mcost) && (mcost < best)) {
-                        *param_2 = cand;
+                        *found = cand;
                         param_5[0] = vec[0];
                         param_5[1] = vec[1];
                         param_5[2] = vec[2];
@@ -349,72 +358,65 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 }
             }
             ++i;
-            off += 8;
-        } while (i < static_cast<int>(param_1[3]));
+        } while (i < list->field_0x18);
     }
 
     // -------- Phase C: raw-material / storage candidate list (param_1[0] / count param_1[1]) --------
-    if (0 < static_cast<int>(param_1[1])) {
+    if (0 < list->field_0x08) {
         int i = 0;
-        int64_t off = 0;
         do {
-            int64_t cand = *reinterpret_cast<int64_t*>(off + *param_1);
-            int64_t candIBP = cand;
+            ComponentEntity* cand = list->field_0x00[i];
+            ComponentEntity* candIBP = cand;
             uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
             int cost = CellCost(mapGrid, cell, param_3);
             if (cost < best) {
-                int64_t candE = cand;
+                ComponentEntity* candE = cand;
                 int64_t slotOut[2] = {0, 0};
-                CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(mapGrid), slotOut, &candE, 0);
+                CitizenComp_Entity_impl_ef40(mapGrid, slotOut, &candE, 0);
                 int64_t slot = slotOut[0];
                 if (slot != 0) {
                     // RawMaterialDescription on the ef40-picked slot's comp-list2 (slot+0x28 / +0x30)
-                    void* rawMat = ScanCompList2(slot, s_tid_RawMaterialDesc);
+                    Description* rawMat = ScanCompList2(
+                        reinterpret_cast<ComponentDescription*>(slot), s_tid_RawMaterialDesc);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (the slot out is int64_t*, wave X)
 
                     // StorageLocationComponent on the candidate entity (comp-list1)
-                    void* storComp = ScanCompList1(cand, s_tid_StorageLocationComp);
-                    int64_t storIBP = 0;
-                    new (&storIBP) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(storComp));   // B.3.3 bridge
+                    Component* storComp = ScanCompList1(cand, s_tid_StorageLocationComp);
 
-                    if (storIBP != 0) {
-                        int64_t storC = storIBP;
+                    if (storComp != nullptr) {
+                        Component* storC = storComp;
                         // mask from StorageLocationDescription sub-object at storC+0x18, +0x20
-                        void* sub = *reinterpret_cast<void**>(storC + 0x18);
-                        void* derived = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_StorageLocationDesc)) ? sub : nullptr;
-                        uint32_t mask = derived ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(derived) + 0x20) : 0;
+                        Description* sub = storC->_description;
+                        StorageLocationDescription* derived = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_StorageLocationDesc))
+                                                                  ? static_cast<StorageLocationDescription*>(sub) : nullptr;
+                        uint32_t mask = derived ? derived->_locationType : 0;
                         if (mask == 0) {
                             float tmp[4] = {0, 0, 0, 0};
-                            void* sp = WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(storC + 0x10), tmp);
-                            int64_t s = sp ? *reinterpret_cast<int64_t*>(sp) : 0;
+                            void* sp = WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(storC->_entity), tmp);   // LEFT: SIG WorkBase_FindComponent_6270 takes uintptr_t (wave X)
+                            StorageComponent* s = sp ? *reinterpret_cast<StorageComponent**>(sp) : nullptr;   // LEFT: SIG WorkBase_FindComponent_6270 (void* retslot)
                             // [M-D SCOPED FALLBACK] the registered 6270 port's typeid is dead
                             // .rdata (0x1401c7e78 unregistered) -> never matches in standalone;
                             // self-contained scan of the owning entity instead (do NOT fill the
                             // shared global). Same lesson as GrowthComponent +0x30.
-                            if (s == 0) {
+                            if (s == nullptr) {
                                 static uint32_t s_tidStorageComp = 0;
                                 if (s_tidStorageComp == 0)
                                     s_tidStorageComp = StorageComponent::TypeId();
-                                s = reinterpret_cast<int64_t>(
-                                    ScanCompList1(*reinterpret_cast<int64_t*>(storC + 0x10),
-                                                  s_tidStorageComp));
+                                s = static_cast<StorageComponent*>(
+                                    ScanCompList1(storC->_entity, s_tidStorageComp));
                             }
-                            mask = s ? *reinterpret_cast<uint32_t*>(s + 0x3c) : 0;
+                            mask = s ? s->rawMaterialFlags : 0;
                         }
-                        uint32_t radiusFlags = rawMat ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x5c) : 0;
+                        uint32_t radiusFlags = rawMat ? static_cast<RawMaterialDescription*>(rawMat)->_flags : 0;
                         if ((radiusFlags & mask) != 0) {
                             float vec[4] = {0, 0, 0, 0};
                             // 2nd StorageLocationComponent scan over the entity (cost source)
-                            void* costComp = ScanCompList1(cand, s_tid_StorageLocationComp);
-                            int64_t costIBP = 0;
-                            new (&costIBP) ::Object::InternalBasePtr(
-                                reinterpret_cast<RtObject::Internal*>(costComp));   // B.3.3 bridge
-                            int64_t costSrc = costIBP;
+                            Component* costComp = ScanCompList1(cand, s_tid_StorageLocationComp);
+                            int64_t costSrc = reinterpret_cast<int64_t>(costComp);   // LEFT: SIG Pf_FindBestAdjacentCell_d5d0 takes int64_t (wave X)
                             int dcost = costSrc ? Pf_FindBestAdjacentCell_d5d0(costSrc, param_3, vec, 0) : -1;
                             if ((-1 < dcost) && (dcost < best)) {
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];
-                                *param_2 = cand;
+                                *found = cand;
                                 param_5[2] = vec[2];
                                 *param_4 = slot;
                                 best = dcost;
@@ -424,40 +426,33 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 }
             }
             ++i;
-            off += 8;
-        } while (i < static_cast<int>(param_1[1]));
+        } while (i < list->field_0x08);
     }
 
     // -------- Phase D: residence candidate list (param_1[4] / count param_1[5]) --------
-    if (0 < static_cast<int>(param_1[5])) {
+    if (0 < list->field_0x28) {
         int i = 0;
-        int64_t off = 0;
         do {
-            int64_t cand = *reinterpret_cast<int64_t*>(off + param_1[4]);
+            ComponentEntity* cand = list->field_0x20[i];
 
             // ResidenceComponent on the entity (comp-list1 at cand+0x30 / +0x38)
-            void* resComp = ScanCompList1(cand, s_tid_ResidenceComponent);
-            int64_t resIBP = 0;
-            new (&resIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(resComp));   // B.3.3 bridge
-            uint64_t occ = CitizenAI_helper_70b0(resIBP);
+            ResidenceComponent* resComp = static_cast<ResidenceComponent*>(
+                ScanCompList1(cand, s_tid_ResidenceComponent));
+            uint64_t occ = CitizenAI_helper_70b0(resComp);
 
             if (static_cast<int>(occ) < 1) {
                 // InteractComponent on the entity -> world position
-                void* interact = ScanCompList1(cand, s_tid_InteractComponent);
-                int64_t interactIBP = 0;
-                new (&interactIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
+                Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
                 float vec[4] = {0, 0, 0, 0};
-                Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP), vec, 0, 0, nullptr);
-                uint32_t cell = WorldToCell(mapGrid, vec);
+                Pf_EntityResolvePos_2e20(interact, vec, 0, 0, nullptr);
+                uint32_t cell = WorldToCell(map, vec);
 
                 // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra
                 // ZoneRefresh "arguments"; 0x14009c480 takes RCX only and they are gone)
                 int cost = Pf_IsDstReachable_f810(mapGrid, cell, param_3, '\x01');
                 if (cost < 0) {
-                    int w = *mapGrid;
+                    int w = map->size;
                     int dRow = static_cast<int>(cell) / w - static_cast<int>(param_3) / w;
                     int dCol = static_cast<int>(cell) % w - static_cast<int>(param_3) % w;
                     uint32_t d2 = static_cast<uint32_t>(dRow * dRow + dCol * dCol);
@@ -466,30 +461,30 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 }
                 if (cost < best) {
                     Pf_ZoneRefresh_9c480(mapGrid);   // 0x14009c480 (RCX only)
-                    int64_t cellArr = *reinterpret_cast<int64_t*>(mapGrid + 0x20);  // int* +0x20 = +0x80 bytes
-                    int64_t cGoal = static_cast<int64_t>(static_cast<int>(param_3)) * 0x30 + cellArr;
-                    int64_t cCand = static_cast<int64_t>(static_cast<int>(cell)) * 0x30 + cellArr;
-                    uint32_t fGoal = 1u << (*reinterpret_cast<uint8_t*>(cGoal + 0x29) & 0x1f);
-                    uint32_t fCand = 1u << (*reinterpret_cast<uint8_t*>(cCand + 0x29) & 0x1f);
+                    MapCell* cellArr = map->cells;   // +0x80
+                    MapCell* cGoal = &cellArr[static_cast<int>(param_3)];
+                    MapCell* cCand = &cellArr[static_cast<int>(cell)];
+                    uint32_t fGoal = 1u << (cGoal->terrainType & 0x1f);
+                    uint32_t fCand = 1u << (cCand->terrainType & 0x1f);
                     uint32_t both = fCand | fGoal;
                     uint32_t flags = both | 0xe1f;
                     bool proceed = true;
                     if (((flags & fGoal) != 0) && ((flags & fCand) != 0)) {
                         if ((both & 0x1e0) == 0) {
-                            uint16_t gz = *reinterpret_cast<uint16_t*>(cGoal + 0x26);
+                            uint16_t gz = cGoal->zone;
                             if (gz == 0) {
                                 proceed = false;
                             } else {
-                                uint16_t cz = *reinterpret_cast<uint16_t*>(cCand + 0x26);
+                                uint16_t cz = cCand->zone;
                                 if (cz == 0 || gz != cz) proceed = false;
                             }
                         }
                         if (proceed) {
-                            int64_t entHolder[2] = {cand, 0};
+                            ComponentEntity* entHolder[2] = {cand, nullptr};
                             int64_t outSlot = 0;
-                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);
+                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (arg 1 ignored; the tree passes the flags register)
                             if ((outSlot != 0) && (-1 < cost)) {
-                                *param_2 = cand;
+                                *found = cand;
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];
                                 param_5[2] = vec[2];
@@ -501,8 +496,7 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                 }
             }
             ++i;
-            off += 8;
-        } while (i < static_cast<int>(param_1[5]));
+        } while (i < list->field_0x28);
     }
 
     return ret;
