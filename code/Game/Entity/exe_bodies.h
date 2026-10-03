@@ -14,16 +14,12 @@
 // header is gone since B3R W2-EZ: its includers include this one directly).
 //
 // Declared in another header already (not redeclared here):
-//   CitizenBehavior_Update                 0x14008c2b0  (code/Game/Entity/citizenbehavior_funcs.h)
 //   ComponentEntity_CtorFromDescription    0x1400c3720  (code/Game/Entity/componententity_funcs.h)
 //   EntityList_RegisterEntity_Impl         0x1400c48a0  (code/Game/Entity/componententity_funcs.h)
 //   EntityList_PostUpdateNodeHandler       0x1400c2c70  (code/Game/Entity/entitylist_funcs.h)
-//   EntityList_Update                      0x1400c4090  (code/Game/Entity/entitylist_funcs.h)
 //   EntityList_PreUpdate                   0x1400c3bd0  (code/Game/Entity/entitylist_funcs.h)
 //   EntityList_PostUpdateStaging           0x1400c3ab0  (code/Game/Entity/entitylist_funcs.h)
-//   EntityList_PostUpdate                  0x1400c43d0  (code/Game/Entity/entitylist_funcs.h)
 //   EntityList_RemoveEntity                0x1400c38e0  (code/Game/Entity/entitylist_funcs.h)
-//   EntityList_Serialize                   0x1400c44a0  (code/Game/Entity/entitylist_funcs.h)
 
 #include <cstdint>
 #include "object/TypeInfo.h"   // ::Object::Base (FindComponentByTypeId)
@@ -120,7 +116,7 @@ void fn_FindComponent_Unknown7ee8(void* entity, void* retval);
 // ComponentEntity's _components / _componentCount are read by name.
 inline void* FindComponentByTypeId(void* entity, int typeId) {
     if (!entity) return nullptr;
-    ComponentEntity* e = (ComponentEntity*)entity;
+    ComponentEntity* e = (ComponentEntity*)entity;   // LEFT: SIG FindComponentByTypeId(void*) (callers in other blocks, wave X)
     int count = e->_componentCount;
     Object::InternalPtr<Component>* arr = e->_components;  // array of InternalPtr (8 bytes each)
     for (int i = 0; i < count; i++) {
