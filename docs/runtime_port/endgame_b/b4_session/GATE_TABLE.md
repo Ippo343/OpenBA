@@ -234,3 +234,11 @@ The `runs/` baseline was re-cut from a clean rebuild of `0ba19d11` (0 problems; 
 | 48 | P2-S1 | `8196d1cf` | `External::Serialize`, `Internal::Persist`, `OnSerializeSettings` and every override take `IO::Stream&`; 325 body casts; seventeen null-stream guards retail lacks dropped (`known_port_issues` 125-126) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `8196d1cf`: **7,986** to remove (wave S done).
+
+| 49 | P2-ENT (header point) | `b92eb128` | `CitizenBehavior.h` node types: `CitizenBucketNode<Key>` 0x38 (retail 0x140017460), `PathCostNode` 0x30, `PathCellPair` | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 50 | P2-ENT | `9b703063` | citizenbehavior, entitylist, componententity by name; `ComponentEntity::_entityList` typed, +0x20 is `System::Time _lastUpdateTime`; four dead forwarders deleted: 161 -> 41 in five files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 51 | P2-CIT-4 | `d8b79c39` | citizencomponent, _serialize, _lifecycle by name; four `CitizenComponent` timers are `System::Time`: 268 -> 50 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 52 | P2-GAME-2 | `0923dbed` | the game-world teardown bodies take typed receivers; load / serialize element operations typed: 286 -> 133 | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 53 | P2-R-COLL | `10db088d` | the generic AVL bodies take the Set; typed node structs; set_core without casts; hand-offs to the erased core marked `elem_stride`: 243 -> 137 in 13 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+
+Metric at `10db088d`: **7,388** to remove.
