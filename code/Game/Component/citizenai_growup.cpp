@@ -441,13 +441,6 @@ void CitizenComponent::LongTermPlan() {
     arrA = nullptr; arrACount = 0;
 }
 
-// B4 FORWARD: 13 outside caller(s) (Work/buildroad.cpp, clearstorage.cpp, consumeproduce.cpp,
-// fishingwork.cpp, foresterwork.cpp, gatherrawmaterials.cpp, herbalistwork.cpp, huntwork.cpp,
-// locationwork.cpp, marketwork.cpp, pickup.cpp, tradework.cpp)
-extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
-    reinterpret_cast<CitizenComponent*>(param_1)->LongTermPlan();   // LEFT: B4 FORWARD (callers in consumeproduce.cpp, fishingwork.cpp: WORK-2)
-}
-
 // ============================================================
 // 0x14010c890 — CitizenAIComponent::State_GrowUp  (state id 4)
 // ============================================================
