@@ -171,11 +171,8 @@ inline void Apply(Video::Context* ctx, const T*& slot, const T* value, uint32_t 
 // ============================================================================
 namespace Video {
 
-void VideoProgram::SetupShaders(void* ctxv) const {
-    // LEFT (B.4 R-VIDEO): the parameter is retail's `Context&`
-    // (`AEAVContext@2@`), but graphics/wave21_lane_gfxbody.cpp (R-GFX) hands it a
-    // `void*`, so it stays untyped until that caller converts.
-    Context* ctx = static_cast<Context*>(ctxv);
+void VideoProgram::SetupShaders(Context& context) const {
+    Context* ctx = &context;
 
     // Context+0x200 is `_videoProgram`, a POINTER that lives in the first eight
     // bytes of the `_pixelConstantStaging` array — see the WAVE 9 LANE CTX note
