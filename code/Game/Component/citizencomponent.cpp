@@ -860,58 +860,44 @@ LAB_140113873:
 }
 
 // ============================================================
-// BST node layout for the profession registry tree
-// (gameWorld+0xF0 -> +0x100 = tree root)
+// The profession registry tree (gameWorld+0xF0 -> CitizenBehavior::field_0x100):
+// ProfessionBucket nodes (CitizenBehavior.h), keyed by the Profession's address,
+// each holding the entities of that profession (entities / count).
+// The work scheduler's by-id tree (gameWorld+0x118 -> +0x30): WorkSchedulerIdNode.
 // ============================================================
-// node[0] = key (uint64_t, matches citizen->data1F0)
-// node[1] = array_ptr (pointer to array of entity IBPs)
-// node[2] = count (int, number of jobs)
-// node[3] = padding
-// node[4] = left child
-// node[5] = right child
 
 // ============================================================
-// BST node layout for the region map tree
-// (gameWorld+0x118 -> +0x30 = tree root)
-// ============================================================
-// node[0] = key (int32_t, region ID)
-// node[1] = value (pointer to region descriptor)
-// node[2] = padding
-// node[3] = left child (at int offset +6 = byte offset +0x18)
-// node[4] = right child (at int offset +8 = byte offset +0x20)
-
-// ============================================================
-// BST lookup: profession registry (uint64 key)
+// BST lookup: profession registry (keyed by the Profession's address)
 // Returns count of jobs, or 0 if not found.
 // ============================================================
-static int LookupProfessionJobCount(const CitizenBehavior* registry, uint64_t key) {
-    uintptr_t* node = (uintptr_t*)registry->field_0x100;   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+static int LookupProfessionJobCount(const CitizenBehavior* registry, const Profession* key) {
+    const ProfessionBucket* node = registry->field_0x100;
     while (node) {
-        uint64_t nodeKey = node[0];
+        const Profession* nodeKey = node->key;
         if (key < nodeKey) {
-            node = (uintptr_t*)node[4]; // left   LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            node = node->left;    // +0x20
         } else if (key > nodeKey) {
-            node = (uintptr_t*)node[5]; // right   LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            node = node->right;   // +0x28
         } else {
             // Found
-            return (int)node[2];
+            return node->count;
         }
     }
     return 0; // not found
 }
 
 // Get job array entry from profession registry
-static ComponentEntity* GetJobEntity(const CitizenBehavior* registry, uint64_t key, int64_t index) {
-    uintptr_t* node = (uintptr_t*)registry->field_0x100;   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+static ComponentEntity* GetJobEntity(const CitizenBehavior* registry, const Profession* key, int64_t index) {
+    const ProfessionBucket* node = registry->field_0x100;
     while (node) {
-        uint64_t nodeKey = node[0];
+        const Profession* nodeKey = node->key;
         if (key < nodeKey) {
-            node = (uintptr_t*)node[4];   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            node = node->left;
         } else if (key > nodeKey) {
-            node = (uintptr_t*)node[5];   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            node = node->right;
         } else {
             // Found — read array[index]
-            ComponentEntity** arr = (ComponentEntity**)node[1];   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            ComponentEntity** arr = node->entities;
             return arr[index];
         }
     }
@@ -947,9 +933,9 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     // Read citizen's profession (the profession registry's key)
-    uint64_t profKey = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int
+    const Profession* profKey = profession;
     // [STANDALONE GUARD] profession-list null until assigned → no workplace to switch.
-    if (profKey == 0) return false;
+    if (profKey == nullptr) return false;
 
     // Lookup job count from profession registry
     const CitizenBehavior* registry = gameWorld->m_citizenList;
@@ -1176,27 +1162,27 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     ComponentEntity* best = nullptr;
     CitizenBehavior* tree = gw->m_citizenList;
-    uint64_t key = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int
+    Profession* key = profession;
 
-    // tree lookup helper (red-black ordered by uint64 at node[0]); node layout:
-    //   node[0]=key, node[1]=valueArrayPtr, node[2]=count(low32), node[4]=left, node[5]=right
-    auto findNode = [&](uint64_t k) -> uint64_t* {
-        uint64_t* p = reinterpret_cast<uint64_t*>(tree->field_0x100);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+    // tree lookup helper (ordered by the Profession's address; CitizenBehavior.h's
+    // ProfessionBucket: key, entities, count, left +0x20, right +0x28)
+    auto findNode = [&](const Profession* k) -> ProfessionBucket* {
+        ProfessionBucket* p = tree->field_0x100;
         while (p != nullptr) {
-            if (k < p[0]) p = reinterpret_cast<uint64_t*>(p[4]);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
-            else if (k <= p[0]) return p;
-            else p = reinterpret_cast<uint64_t*>(p[5]);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            if (k < p->key) p = p->left;
+            else if (k <= p->key) return p;
+            else p = p->right;
         }
         return nullptr;
     };
 
-    uint64_t* keyNode = findNode(key);
-    int outerCount = keyNode ? (int)keyNode[2] : 0;
+    ProfessionBucket* keyNode = findNode(key);
+    int outerCount = keyNode ? keyNode->count : 0;
     int bestSlots = 0;
     for (int64_t i = 0; i < outerCount; i++) {
-        uint64_t* node = findNode(key);
+        ProfessionBucket* node = findNode(key);
         if (!node) break;
-        ComponentEntity* entry = *reinterpret_cast<ComponentEntity**>(node[1] + i * 8);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+        ComponentEntity* entry = node->entities[i];
 
         // the entry's WorkPlaceComponent (DAT_1401c80e0)
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
@@ -1240,20 +1226,20 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
 ComponentEntity* CitizenComponent::FindRankedWorkplace() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     CitizenBehavior* tree = gw->m_citizenList;
-    uint64_t key = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int
+    Profession* key = profession;
 
-    auto findNode = [&](uint64_t k) -> uint64_t* {
-        uint64_t* p = reinterpret_cast<uint64_t*>(tree->field_0x100);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+    auto findNode = [&](const Profession* k) -> ProfessionBucket* {
+        ProfessionBucket* p = tree->field_0x100;
         while (p != nullptr) {
-            if (k < p[0]) p = reinterpret_cast<uint64_t*>(p[4]);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
-            else if (k <= p[0]) return p;
-            else p = reinterpret_cast<uint64_t*>(p[5]);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+            if (k < p->key) p = p->left;
+            else if (k <= p->key) return p;
+            else p = p->right;
         }
         return nullptr;
     };
 
-    uint64_t* keyNode = findNode(key);
-    int outerCount = keyNode ? (int)keyNode[2] : 0;
+    ProfessionBucket* keyNode = findNode(key);
+    int outerCount = keyNode ? keyNode->count : 0;
 
     // dynamic candidate array
     ComponentEntity** cand = nullptr;
@@ -1261,9 +1247,9 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
     int candCap = 0;
 
     for (int64_t i = 0; i < outerCount; i++) {
-        uint64_t* node = findNode(key);
+        ProfessionBucket* node = findNode(key);
         if (!node) break;
-        ComponentEntity* entry = *reinterpret_cast<ComponentEntity**>(node[1] + i * 8);   // LEFT: Entity/CitizenBehavior.h field_0x100 node (ENT)
+        ComponentEntity* entry = node->entities[i];
 
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
         int curWorkers = wp->workerCount;
