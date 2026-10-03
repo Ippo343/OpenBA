@@ -258,14 +258,7 @@ bool StringEqualsInline(const char* a, const char* b) {
 
 // Each element's leading `System::String` data pointer (+0x00).
 inline const char* ElementName(const MaterialTexture& t) { return t.name; }
-inline const char* ElementName(const MaterialConstant& c) {
-    // MaterialConstant keeps +0x00 as eight raw bytes (Material.h): a `char*`
-    // member would raise the element's alignment to 8 and with it the align
-    // argument its array hands the allocator. The bytes ARE the pointer.
-    const char* name;
-    std::memcpy(&name, c._head, sizeof name);
-    return name;
-}
+inline const char* ElementName(const MaterialConstant& c) { return c.name.data; }
 
 // The shared loop. The stride is the element's size (`ADD R11,<n>` at the
 // bottom: 0x18 for a constant, 0x10 for a texture).

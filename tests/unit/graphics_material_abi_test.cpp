@@ -507,13 +507,13 @@ UNIT_TEST(graphics_graphicsmesh_layout) {
     // dispatch through are the record's +0x40, +0x20, +0x80, +0x60 — which is
     // the reading that fixed the whole 0xb0 layout, so it is a test.
     CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _indexBuffer) +
-                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x40);
+                   offsetof(Video::IndexBuffer, platformData)), 0x40);
     CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _vertexBuffer) +
-                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x20);
+                   offsetof(Video::VertexBuffer, platformData)), 0x20);
     CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _skinIndexBuffer) +
-                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x80);
+                   offsetof(Video::IndexBuffer, platformData)), 0x80);
     CHECK_EQ((int)(offsetof(Graphics::GraphicsMesh::DetailLevel, _skinVertexBuffer) +
-                   offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData)), 0x60);
+                   offsetof(Video::VertexBuffer, platformData)), 0x60);
 
     // `Node::_parent` is LEFT UNINITIALISED by retail's default constructor and
     // the copy constructor DOES propagate it; nothing may zero it. The test that
@@ -562,9 +562,9 @@ UNIT_TEST(graphics_graphicsmesh_aliases_lane_es_mesh_h_overlays) {
 
     // The embedded video buffer header is the same 0x20 bytes lane E pinned from
     // EdgeMesh's eight, `_deviceData` included.
-    CHECK_EQ((int)sizeof(Graphics::GraphicsMesh::DetailLevel::Buffer),
+    CHECK_EQ((int)sizeof(Video::VertexBuffer),
              (int)sizeof(RtGraphics::VideoBufferHeader));
-    CHECK_EQ((int)offsetof(Graphics::GraphicsMesh::DetailLevel::Buffer, _deviceData),
+    CHECK_EQ((int)offsetof(Video::VertexBuffer, platformData),
              (int)offsetof(RtGraphics::VideoBufferHeader, _deviceData));
 }
 

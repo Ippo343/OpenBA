@@ -483,9 +483,9 @@ public:
     const VertexBuffer* _vertexBuffers[16];             // 0x00b8
     int32_t  _vertexOffsets[16];                        // 0x0138
     int32_t  _vertexStrides[16];                        // 0x0178
-    // LEFT (B.4 R-VIDEO): `const IndexBuffer*` in retail; graphics/meshinstance_draw.cpp
-    // (R-GFX) stores a `const void*` into it by name, so it stays untyped.
-    void*    _indexBuffer;                              // 0x01b8
+    // B.4 (R-GFX), H4: `const IndexBuffer*`, the class `?SetIndexBuffer@Context@Video@@
+    // QEAAXPEBVIndexBuffer@2@H@Z` (0x180019fb0) stores here.
+    const IndexBuffer* _indexBuffer;                    // 0x01b8
     int32_t  _indexOffset;                              // 0x01c0
     int32_t  _unknown01c4;                              // 0x01c4
     const RenderState* _renderState;                    // 0x01c8

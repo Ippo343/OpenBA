@@ -192,12 +192,12 @@ void BindMaterialImage(Video::Context& context, void* obj) {
 
 // The index binding: `Context::SetIndexBuffer` (0x180019fb0, no C++ body) —
 // compare, dirty 0x10, the offset stored BEFORE the pointer as retail does.
-void BindIndexBuffer(Video::Context& context, const void* buffer, int32_t first) {
+void BindIndexBuffer(Video::Context& context, const Video::IndexBuffer* buffer, int32_t first) {
     if (context._indexBuffer == buffer && context._indexOffset == first)
         return;
     context._dirty |= RtVideo::kDirtyIndexBuffer;
     context._indexOffset = first;
-    context._indexBuffer = const_cast<void*>(buffer);
+    context._indexBuffer = buffer;
 }
 
 // The draw itself: `obj = ctx->_contextData; obj->vtable[12](obj, 0, rec->_f00,

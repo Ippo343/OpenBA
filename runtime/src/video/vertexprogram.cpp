@@ -120,21 +120,11 @@ using Video::VertexProgram;
 // its unexported template instance (rtcoll::, Collection.h), which is why the
 // triples are plain structs here and not `Collection::Array<T>` (H5: an
 // `Array` would run its own destructor on top of the explicit teardown below).
-struct V0Element {                 // stride 0x18
-    System::String name;           // +0x00
-    System::String semantic;       // +0x08
-    uint32_t       format;         // +0x10
-    int32_t        index;          // +0x14
-};
-static_assert(sizeof(V0Element) == 0x18, "v0 vertex element is 0x18 bytes");
-struct V0ElementArray { V0Element* data; int32_t size; int32_t capacity; };
-
-struct V0Stream {                  // stride 0x18
-    V0ElementArray elements;       // +0x00
-    System::String name;           // +0x10
-};
-static_assert(sizeof(V0Stream) == 0x18, "v0 vertex stream is 0x18 bytes");
-static_assert(offsetof(V0Stream, name) == 0x10, "v0 stream name @ 0x10");
+// B.4 (R-GFX): the two records are `Video::VertexProgram::Element` / `Stream`
+// (ShaderProgram.h), where the collection bodies can name them too.
+using V0Element      = VertexProgram::Element;
+using V0ElementArray = VertexProgram::ElementArray;
+using V0Stream       = VertexProgram::Stream;
 struct V0StreamArray { V0Stream* data; int32_t size; int32_t capacity; };
 
 struct StringArray { System::String* data; int32_t size; int32_t capacity; };

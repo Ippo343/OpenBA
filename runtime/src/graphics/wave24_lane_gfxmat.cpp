@@ -458,7 +458,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
     {
         RtGraphics::MaterialConstant* p = _constants._data;
         for (int32_t i = n; i > 0; --i) {
-            SerString(p->_head, ser);
+            SerString(&p->name, ser);
             rw->SerializeFloatArray(4, p->value, nullptr);  // +0x28, (enc, 4, p+8, 0)
             ++p;
             ++g_matSerConstants;

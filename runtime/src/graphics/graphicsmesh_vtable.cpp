@@ -379,10 +379,8 @@ namespace {
 // BEFORE VERTEX in each pair, the same order `EdgeMesh::Serialize` uses for its
 // eight, and it is transcribed rather than sorted.
 //
-// B.4: each `_deviceData` is the buffer's companion and +0x30 is its slot 6,
-// `Serialize`, called by name. LEFT: `DetailLevel::Buffer::_deviceData` is a
-// `void*` (the unit test pins the `Buffer` struct), so the view of it as its
-// companion is the one cast per kind below.
+// B.4: each buffer's `platformData` is its companion and +0x30 is its slot 6,
+// `Serialize`, called by name (the buffers are the real `Video` classes).
 void TriangleListPass(GraphicsMesh::DetailLevel* level, IO::Serializer& ser) {
     IO::ReaderWriter* const rw = ser._readerWriter;
     int32_t n = level->_triangleLists._size;                   // +0xa0
@@ -392,10 +390,10 @@ void TriangleListPass(GraphicsMesh::DetailLevel* level, IO::Serializer& ser) {
     RtGraphics_EdgeMesh_SerializeTriangleListArray(ser, n, level->_triangleLists._data);   // 0x180014850
 
     // faithful: all four unguarded
-    static_cast<Video::IndexBufferData*>(level->_indexBuffer._deviceData)->Serialize(&ser);           // +0x40
-    static_cast<Video::VertexBufferData*>(level->_vertexBuffer._deviceData)->Serialize(&ser);         // +0x20
-    static_cast<Video::IndexBufferData*>(level->_skinIndexBuffer._deviceData)->Serialize(&ser);       // +0x80
-    static_cast<Video::VertexBufferData*>(level->_skinVertexBuffer._deviceData)->Serialize(&ser);     // +0x60
+    level->_indexBuffer.platformData->Serialize(&ser);           // +0x40
+    level->_vertexBuffer.platformData->Serialize(&ser);         // +0x20
+    level->_skinIndexBuffer.platformData->Serialize(&ser);       // +0x80
+    level->_skinVertexBuffer.platformData->Serialize(&ser);     // +0x60
 
     rw->SerializeInt(level->_maxInstances, nullptr);           // +0xa8
 }

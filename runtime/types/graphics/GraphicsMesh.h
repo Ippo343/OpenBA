@@ -140,6 +140,7 @@
 #include "../collection/Collection.h"      // Collection::Array
 #include "../math/Math.h"                  // ::Transform
 #include "../volume/Volume.h"              // ::Box
+#include "../video/Buffers.h"              // B.4: Video::VertexBuffer / IndexBuffer (DetailLevel)
 
 // *** THIS HEADER DELIBERATELY DOES NOT INCLUDE `Mesh.h`, AND THAT IS A
 // WORKAROUND FOR A LATENT DEFECT IN THE TREE, NOT A PREFERENCE. ***
@@ -292,33 +293,46 @@ public:
     // and `Mesh.h`'s `GraphicsMeshView` already calls the array `_detailLevels`,
     // so the name follows the exports. Said plainly so nobody mistakes it for a
     // read symbol.
+    //
+    // B.4 (R-GFX, known_port_issues row 102): THIS IS THE 0xb0 ELEMENT
+    // `runtime/src/collection/array_graphics_mesh.cpp` calls "TriangleList".
+    // Re-read from Runtime-x64.dll: the element ctor 0x1800fefc0 stores
+    // `[+0x00] = 0` (the String), `[+0x08] = 0` (the ExternalPtr),
+    // `dword [+0x10] = 0x461c4000` (10000.0f, `_distance`), the four buffer
+    // headers at +0x18 / +0x38 / +0x58 / +0x78 (dword 0, byte 0, then
+    // PlatformConstruct: Vertex, Index, Vertex, Index), `[+0x98] = [+0xa0] = 0`
+    // (the Array<TriangleList> header) and `dword [+0xa8] = 1`
+    // (`_maxInstances`), and returns `this`: field for field the layout below.
+    // `Array<DetailLevel>`'s SetSize is 0x18005d840 (stride 0xb0), its copy
+    // 0x180013c50, its element destroy 0x180014910 and ~Array 0x180013fb0. The
+    // 0x18-byte `TriangleList` above is the element of `_triangleLists` at
+    // +0x98, a different struct; the collection file's names are the misnomer.
     // ========================================================================
     struct DetailLevel {
         RtSystem::String _name;          // +0x00  ?GetSubMeshName@ reads level 0's
         Object::ExternalPtr<Video::ImageBuffer> _image;  // +0x08  ?GetImage@
         float    _distance;              // +0x10  ?GetDetailLevelDistance@
         uint32_t _pad14;                 // +0x14  no body read touches it
-        // The four buffers. Each is the 0x20-byte embedded
-        // `Video::{Vertex,Index}Buffer` header, and it is the `_deviceData` qword
-        // at +0x08 of each that `TriangleListPass` and `PlatformSerialize`
-        // dispatch through — see the file banner.
+        // The four buffers: the REAL 0x20-byte `Video::VertexBuffer` /
+        // `Video::IndexBuffer` (Buffers.h), embedded. Their `platformData` at
+        // +0x08 is what `TriangleListPass` and `PlatformSerialize` dispatch
+        // through — see the file banner.
         //
-        // `Mesh.h`'s `RtGraphics::VideoBufferHeader` is the SAME 0x20 bytes,
-        // pinned from `EdgeMesh`'s eight; it is not named here because this
-        // header cannot include `Mesh.h` (see the include note above), and the
-        // two are cross-asserted in the unit test instead.
-        struct Buffer {
-            int32_t _size;        // +0x00  ctor: 0
-            uint8_t _flags;       // +0x04  ctor: 0
-            uint8_t _pad05[3];    // +0x05
-            void*   _deviceData;  // +0x08  written by PlatformConstruct
-            void*   _listPrev;    // +0x10  the device's global buffer list
-            void*   _listNext;    // +0x18
-        };
-        Buffer _vertexBuffer;      // +0x18  ?GetVertexBuffer@
-        Buffer _indexBuffer;       // +0x38  ?GetIndexBuffer@
-        Buffer _skinVertexBuffer;  // +0x58  ?GetSkinVertexBuffer@
-        Buffer _skinIndexBuffer;   // +0x78  ?GetSkinIndexBuffer@
+        // B.4 (R-GFX): the class's own element ctor 0x1800fefc0 writes
+        // `dword [buf] = 0; byte [buf+4] = 0` and then CALLs
+        // `?PlatformConstruct@VertexBuffer@Video@@` 0x1800f57e0 on +0x18 / +0x58
+        // and `?PlatformConstruct@IndexBuffer@Video@@` 0x1800f3680 on +0x38 /
+        // +0x78, i.e. each sub-object IS that class (the `size` / `dynamic`
+        // pair, then the companion). Both classes are trivially copyable and
+        // have no C++ ctor or dtor (Buffers.h asserts it), so declaring them
+        // here makes nothing run that did not run before. They replace a local
+        // field-identical `Buffer` struct; `Mesh.h`'s `RtGraphics::
+        // VideoBufferHeader` is the same 0x20 bytes (cross-asserted in the unit
+        // test).
+        Video::VertexBuffer _vertexBuffer;      // +0x18  ?GetVertexBuffer@     0x1800125e0
+        Video::IndexBuffer  _indexBuffer;       // +0x38  ?GetIndexBuffer@      0x1800125c0
+        Video::VertexBuffer _skinVertexBuffer;  // +0x58  ?GetSkinVertexBuffer@ 0x180012620
+        Video::IndexBuffer  _skinIndexBuffer;   // +0x78  ?GetSkinIndexBuffer@  0x180012600
         // Array<TriangleList>. A RAW 16-byte header, for `AnimationGroup.h`'s
         // reason: element construction, copy and destruction run through the
         // REGISTERED `kSpec_*` rows in `runtime/src/collection/array.cpp` at
@@ -582,13 +596,16 @@ static_assert(offsetof(GraphicsMesh::DetailLevel, _skinVertexBuffer) == 0x58, "D
 static_assert(offsetof(GraphicsMesh::DetailLevel, _skinIndexBuffer)  == 0x78, "DetailLevel::_skinIndexBuffer @ +0x78 (0x180012600)");
 static_assert(offsetof(GraphicsMesh::DetailLevel, _triangleLists)    == 0x98, "DetailLevel::_triangleLists @ +0x98 (0x180012640)");
 static_assert(offsetof(GraphicsMesh::DetailLevel, _maxInstances)     == 0xa8, "DetailLevel::_maxInstances @ +0xa8 (0x180012700)");
-static_assert(sizeof(GraphicsMesh::DetailLevel::Buffer) == 0x20,
-              "the embedded Video buffer header is 0x20 bytes (the four getters "
-              "are 0x20 apart: +0x18, +0x38, +0x58, +0x78)");
-static_assert(offsetof(GraphicsMesh::DetailLevel::Buffer, _deviceData) == 0x08,
-              "Buffer::_deviceData @ +0x08 -- what PlatformConstruct writes and "
-              "what TriangleListPass dispatches through (+0x20/+0x40/+0x60/+0x80 "
-              "of the record)");
+static_assert(offsetof(GraphicsMesh::DetailLevel, _vertexBuffer) +
+              offsetof(Video::VertexBuffer, platformData) == 0x20 &&
+              offsetof(GraphicsMesh::DetailLevel, _indexBuffer) +
+              offsetof(Video::IndexBuffer, platformData) == 0x40,
+              "the companions TriangleListPass dispatches through are the "
+              "record's +0x20 / +0x40 / +0x60 / +0x80 (0x1800a4670)");
+static_assert(offsetof(GraphicsMesh::DetailLevel, _name)   == 0x00 &&
+              offsetof(GraphicsMesh::DetailLevel, _pad14)  == 0x14 &&
+              offsetof(GraphicsMesh::DetailLevel, _padAC)  == 0xac,
+              "DetailLevel +0x00 / +0x14 / +0xac");
 
 }  // namespace Graphics
 

@@ -205,7 +205,21 @@ public:
     Collection::Array<uint8_t> _clips;       // +0x20  Array<Graphics::Animation>, stride 0x70
     float    _defaultBlend;                  // +0x30  seconds; ctor default 0.1f
     uint32_t _pad34;                         // +0x34  never written by any body read
-    Collection::Array<uint8_t> _tags;        // +0x38  Array<{String,String,float}>, stride 0x18
+    // `_tags`' element (B.4 R-GFX): 0x18 bytes, read from its SetSize instance
+    // 0x18005a220 — the init arm zeroes the two String slots (0x18005a303 /
+    // 0x18005a306) and stores 0x3dcccccd (0.1f, the default `_defaultBlend`
+    // also gets) at +0x10 (0x18005a30a); the copy adopts the two Strings and
+    // copies the dword (0x18005a2c8..0x18005a2ed); the destroy releases the two
+    // Strings (0x18001cbf0). +0x14 is written by none of them. The POD String
+    // spelling, as `_name` elsewhere in this family. Names by offset: no body
+    // read says what the two strings and the float mean.
+    struct Tag {
+        RtSystem::String _string00;          // +0x00
+        RtSystem::String _string08;          // +0x08
+        float    _float10;                   // +0x10  init 0.1f
+        uint32_t _pad14;                     // +0x14  never written
+    };
+    Collection::Array<uint8_t> _tags;        // +0x38  Array<Tag>, stride 0x18 (SetSize 0x18005a220)
     // B.4: typed. `float` is trivially destructible, so the member dtor
     // ~AnimationGroup runs is the same Clear-then-J1 as the raw header's.
     Collection::Array<float> _blendTimes;    // +0x48  the fade table
@@ -218,6 +232,11 @@ static_assert(offsetof(AnimationGroup, _clips)       == 0x20, "AnimationGroup::_
 static_assert(offsetof(AnimationGroup, _defaultBlend)== 0x30, "AnimationGroup::_defaultBlend @ +0x30");
 static_assert(offsetof(AnimationGroup, _tags)        == 0x38, "AnimationGroup::_tags @ +0x38");
 static_assert(offsetof(AnimationGroup, _blendTimes)  == 0x48, "AnimationGroup::_blendTimes @ +0x48");
+static_assert(sizeof(AnimationGroup::Tag) == 0x18, "AnimationGroup::Tag stride 0x18 (0x18005a220)");
+static_assert(offsetof(AnimationGroup::Tag, _string00) == 0x00, "Tag +0x00 String");
+static_assert(offsetof(AnimationGroup::Tag, _string08) == 0x08, "Tag +0x08 String");
+static_assert(offsetof(AnimationGroup::Tag, _float10)  == 0x10, "Tag +0x10 float (init 0.1f)");
+static_assert(offsetof(AnimationGroup::Tag, _pad14)    == 0x14, "Tag +0x14 never written");
 static_assert(sizeof(Animation) == 0x70,
               "AnimationGroup::_clips has stride 0x70 (GetAnimation's imul); if "
               "Graphics::Animation ever stops being 0x70 the array walks wrong");

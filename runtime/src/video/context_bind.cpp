@@ -355,7 +355,7 @@ void Video::Context::BindResources() {
 
     // --- 0x00010 index buffer -----------------------------------------------
     if (_dirty & 0x10u) {
-        const IndexBuffer* ib = static_cast<const IndexBuffer*>(_indexBuffer);   // LEFT: Context.h _indexBuffer
+        const IndexBuffer* ib = _indexBuffer;
         if (ib) {
             // The Context argument retail loads into RDX at 0x1800ef1e2 and
             // VideoDX11's body never reads. The SLOT takes it.
