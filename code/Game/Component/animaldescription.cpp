@@ -28,7 +28,7 @@
 #include <new>
 #include "system/MemoryAllocator.h"
 
-extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
+extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x14002f080 / createInPlace 0x14002f0c0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then

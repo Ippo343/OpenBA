@@ -73,15 +73,14 @@ void Pickup::Persist(IO::Stream& stream) {
     // Serialize the int status at +0x48
     serializer.Serialize(status, nullptr);
 
-    // Serialize InternalBasePtr at +0x50 (the typed slot serialized through its base:
-    // LEFT)
-    reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(serializer);   // LEFT: H5 the slot is InternalPtr<CitizenComponent> declared CitizenComponent*
+    // Serialize InternalBasePtr at +0x50 (the typed slot serialized through its base)
+    citizenIBP.InternalBasePtr::Serialize(serializer);
 
     // Validate the deserialized ptr against Pickup type
-    if (citizenIBP != nullptr) {
+    if (citizenIBP.Get() != nullptr) {
         // DAT_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, not the legacy
         // variable name "s_typeId_Pickup" -- this is not Pickup's own cell).
-        if (!Object::IsDerivedFromNullSafe(citizenIBP, CitizenComponent::TypeId())) {
+        if (!Object::IsDerivedFromNullSafe(citizenIBP.Get(), CitizenComponent::TypeId())) {
             citizenIBP = nullptr;
         }
     }
@@ -316,7 +315,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     Object::InternalPtr<ComponentEntity> dropIBP = nullptr;
     ComponentEntity* storeOut = nullptr;
     amount = rawMatIBP->quantity;
-    PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(townMgr),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+    PickBestDropTarget(townMgr,
                        &storeOut, static_cast<uint32_t>(selfAccess),
                        field_10->_description,
                        amount, 1, &scratch.x, &dropIBP);   // 0x14008d590
@@ -491,18 +490,18 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
 // ============================================================
 int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
     // Check status != 0 and citizenIBP != null
-    if (status == 0 || citizenIBP == nullptr) {
+    if (status == 0 || citizenIBP.Get() == nullptr) {
         return 0;
     }
 
     // The citizen slot's profession (+0x1f0)
     Profession* citizenProfession = (*citizenSlot)->profession;
 
-    CitizenComponent* storedCitizen = citizenIBP;
+    CitizenComponent* storedCitizen = citizenIBP.Get();
 
     if (citizenProfession != storedCitizen->profession) {
         // Citizen changed workplace -- cancel old work and re-target
-        CitizenComponent* oldCitizen = citizenIBP;
+        CitizenComponent* oldCitizen = citizenIBP.Get();
 
         WorkBase_TaskListCleanup_c5400(&oldCitizen->character->actionStack);
 
@@ -561,7 +560,7 @@ int Pickup::OnCancel(CitizenComponent** /*arg1*/, ComponentEntity** /*arg2*/, in
 // ============================================================
 int Pickup::Cleanup() {
     if (status == 1) {
-        CitizenComponent* citizenEntity = citizenIBP;
+        CitizenComponent* citizenEntity = citizenIBP.Get();
 
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
     }
@@ -576,7 +575,7 @@ int Pickup::Cleanup() {
 // Returns true if valid (or no citizen assigned).
 // ============================================================
 int Pickup::Validate() {
-    CitizenComponent* citizenRef = citizenIBP;
+    CitizenComponent* citizenRef = citizenIBP.Get();
 
     if (citizenRef == nullptr) {
         return true;  // No citizen assigned -- nothing to validate
@@ -614,7 +613,7 @@ Profession** Pickup::GetTarget(Profession** outPtr) {
 // 10 bytes, unhookable.
 // ============================================================
 int Pickup::GetPriority() {
-    return citizenIBP != nullptr ? 1 : 0;
+    return citizenIBP.Get() != nullptr ? 1 : 0;
 }
 
 

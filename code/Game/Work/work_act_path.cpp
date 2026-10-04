@@ -156,10 +156,10 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     ComponentEntity* headSlot;
     float headingSrc = 0.0f;
     headSlot = srcRef ? *srcRef : nullptr;                             // local_res8 = *srcLoc
-    headingSrc = ActChild_Entity29a0_c29a0(srcPos, &headSlot); // XMM6 (0xbf929)
+    headingSrc = HeadingToward(srcPos, &headSlot); // XMM6 (0xbf929)
     float headingDst = 0.0f;
     headSlot = (dstRef) ? *dstRef : nullptr;                           // local_res8 = *dstLoc (0xbf931)
-    headingDst = ActChild_Entity29a0_c29a0(dstPos, &headSlot); // XMM8 (0xbf944)
+    headingDst = HeadingToward(dstPos, &headSlot); // XMM8 (0xbf944)
 
     const float kTime075 = kRdata_140172124; // DAT_140172124 = 0.75f (0xbf962)
 

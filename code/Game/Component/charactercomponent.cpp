@@ -229,7 +229,7 @@ void CharacterComponent::Startup() {
         // tail skips the picking update (the render-transform write via Geometry::SetTransform
         // is unaffected). When the picking subsystem registers citizens via AddMesh, +0x28
         // will hold a real id and this becomes a no-op.
-        PickingComponent* pickComp = pickingComponent;
+        PickingComponent* pickComp = pickingComponent.Get();
         if (pickComp) {
             pickComp->pickingId = -1;
             // PickingComponent::Startup (exe 0x140128c30) copies the component's entity
@@ -241,7 +241,7 @@ void CharacterComponent::Startup() {
             pickComp->userData = pickComp->_entity;
         }
 
-        ModelComponent* model = modelComponent;
+        ModelComponent* model = modelComponent.Get();
         // GameUpdateLoop::m_characterGrid (+0x88)
         CharacterGrid* charMgr = GameUpdateLoop::_singleton
                                      ? GameUpdateLoop::_singleton->m_characterGrid
@@ -264,7 +264,7 @@ void CharacterComponent::Startup() {
         }
         else if (Opt().movetickTrace) {
             fprintf(stderr, "[CharIdx] SKIPPED char=%p entity=%p model=%p charMgr=%p\n",
-                    static_cast<void*>(this), static_cast<void*>(owner), static_cast<void*>(modelComponent),
+                    static_cast<void*>(this), static_cast<void*>(owner), static_cast<void*>(modelComponent.Get()),
                     static_cast<void*>(charMgr));
         }
     }

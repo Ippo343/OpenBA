@@ -76,7 +76,7 @@ BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
                      uint32_t roadState, uint32_t terrainType)
     : Work(ownerIbp),
       field_48(nullptr),
-      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t
+      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad takes the road description as uint64_t: its by-address door BuildRoad_CtorParams_Impl is called from Player/roadtool_calcpath.cpp (X6-GAME-B) with the description as uint64_t
       field_58(static_cast<int32_t>(cellIdx)),
       field_5c(mapDescVal),
       field_60(static_cast<int32_t>(roadTypeExisting)),
@@ -120,12 +120,12 @@ void BuildRoad::Persist(IO::Stream& stream) {
     serializer.Serialize(field_58, nullptr);
 
     // InternalBasePtr::Serialize for entity ref (+0x48)
-    reinterpret_cast<Object::InternalBasePtr*>(&field_48)->Serialize(serializer);   // B.3.4 bridge  // LEFT: InternalPtr member declared T*, streamed through InternalBasePtr::Serialize
+    field_48.InternalBasePtr::Serialize(serializer);
 
     // Validate entity ref type after deserialize
-    if (field_48 != nullptr) {
+    if (field_48.Get() != nullptr) {
         // TypeId at DAT_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell).
-        bool valid = Object::IsDerivedFromNullSafe(field_48, CitizenComponent::TypeId());
+        bool valid = Object::IsDerivedFromNullSafe(field_48.Get(), CitizenComponent::TypeId());
         if (!valid) {
             field_48 = nullptr;
         }
@@ -175,7 +175,7 @@ int BuildRoad::OnCancel(CitizenComponent**, ComponentEntity**, int) {
 // Walks entity -> +0x278 (StateMachineComponent) -> +0x48 (task list)
 // ============================================================
 int BuildRoad::Cleanup() {
-    if (field_48 == nullptr) return 0;
+    if (field_48.Get() == nullptr) return 0;
 
     // The citizen's CharacterComponent (+0x278) action list (+0x48)
     WorkBase_TaskListCleanup_c5400(&field_48->character->actionStack);
@@ -188,7 +188,7 @@ int BuildRoad::Cleanup() {
 // Uses shared Work::ValidateTask helper (FUN_1400f7100).
 // ============================================================
 int BuildRoad::Validate() {
-    CitizenComponent* entityRef = field_48;
+    CitizenComponent* entityRef = field_48.Get();
 
     if (entityRef != nullptr) {
         // Call shared validate helper with a copy of the citizen ref
@@ -221,7 +221,7 @@ Profession** BuildRoad::GetTarget(Profession** retbuf) {
 // NOT HOOKED — only 10 bytes total, too small.
 // ============================================================
 int BuildRoad::GetPriority() {
-    return (field_48 != nullptr) ? 1 : 0;
+    return (field_48.Get() != nullptr) ? 1 : 0;
 }
 
 // ============================================================
@@ -289,7 +289,7 @@ long long g_brExecClearPath    = 0;   // the plain "walk there and build it" bra
 }
 
 int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) {
-    if (field_48 != nullptr) {
+    if (field_48.Get() != nullptr) {
         return 1;
     }
 
@@ -431,7 +431,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
             ComponentEntity* foundEntity = nullptr;
             PickBestDropTarget(
-                reinterpret_cast<const RawArray<ComponentEntity*>*>(citizenList), &foundEntity,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+                citizenList, &foundEntity,
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
                 field_50, 1, '\0', velocity, reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(&foundStorageIBP));   // 0x14008d590  // LEFT: the scratch slot is reused for three types
 

@@ -90,8 +90,8 @@ PlantOrchard::PlantOrchard(void** entityIBP, ComponentDescription* treeType) : W
 
 // The door OrchardComponent's states 9 and 12 call (orchardcomponent_states.cpp, block
 // MI-B): the real ctor on caller memory (B8-5).
-extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType) {
-    if (!mem) return mem;
+extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType) {
+    if (!mem) return nullptr;
     OrchardDiag_NotePlantConstructed();
-    return static_cast<Object::Base*>(new (mem) PlantOrchard(entityIBP, treeType));
+    return new (mem) PlantOrchard(entityIBP, treeType);
 }

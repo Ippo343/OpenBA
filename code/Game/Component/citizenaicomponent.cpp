@@ -275,7 +275,7 @@ static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
     CharacterComponent* meshIBP = citizen->character;
     if (meshIBP == nullptr) return;                            // no CharacterComponent
     // The ModelComponent's MeshInstance colour (+0x28 + 0x10c = +0x134..+0x140).
-    ModelComponent* model = meshIBP->modelComponent;
+    ModelComponent* model = meshIBP->modelComponent.Get();
     if (model == nullptr) return;                              // ModelComponent not live yet
     model->meshInstance._color[0] = scale;
     model->meshInstance._color[1] = scale;

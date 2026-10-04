@@ -157,7 +157,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
     // 8-byte store (trap #2 cuts both ways: widening it would smash the upper half).
     // (The Set container is two raw fields of MarketWork: the count is reached from
     // the root field's address: LEFT.)
-    *reinterpret_cast<int32_t*>(tree + 1) -= 1;   // LEFT: the claim Set is two raw MarketWork fields
+    *reinterpret_cast<int32_t*>(tree + 1) -= 1;   // LEFT: H5 the claim Set is two raw MarketWork fields (+0x48 root, +0x50 count): retail's inlined ~Set (0x14002a910) frees each claim's carry list through 0x14002af40, which a Collection::Set<Claim> member's Clear would not
 
     ClaimNode* const right = z->right;
     if (right == nullptr) {
@@ -277,10 +277,10 @@ extern "C" void MarketBst_aaa0(MarketWork::ClaimNode** tree, CitizenComponent** 
     if (node == nullptr) return;
 
     do {
-        if (*key < node->element.citizen) {
+        if (*key < node->element.citizen.Get()) {
             node = node->left;
         } else {
-            if (node->element.citizen >= *key) {
+            if (node->element.citizen.Get() >= *key) {
                 MarketBst_ac40(tree, node);   // ab07
                 return;
             }

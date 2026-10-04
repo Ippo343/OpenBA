@@ -333,7 +333,7 @@ void DestroyComponent::RubbleStep() {
 
     // Tell the owner entity its model changed (the MultiObjectComponent child forwarder).
     ComponentEntity* modelOwner = modelComp->_entity;
-    if (modelOwner) ModelComponentNotify_Reimpl(modelOwner, 0);
+    if (modelOwner) modelOwner->SendEvent(0);
 
     // Burnt materials on whatever mesh is now showing.
     modelComp->SetMaterialSet(rubbleMaterialSet);

@@ -311,9 +311,9 @@ UNIT_TEST(wrk_leaf_tradework) {
 // `vt[10](work, retbuf)` must hand the body this == work and retbuf == buffer.
 struct WrkGetTargetProbe {
     virtual void* Slot0(void* p) { return p; }
-    virtual void* GetTarget(void* retbuf) {
+    virtual void* GetTarget(uint64_t* retbuf) {
         seenThis = this;
-        *reinterpret_cast<uint64_t*>(retbuf) = 0x5a5aull;
+        *retbuf = 0x5a5aull;
         return retbuf;
     }
     void* seenThis = nullptr;
@@ -321,10 +321,10 @@ struct WrkGetTargetProbe {
 
 UNIT_TEST(wrk_gettarget_raw_call_order) {
     WrkGetTargetProbe probe;
-    void** vt = *reinterpret_cast<void***>(&probe);
+    void** vt = *reinterpret_cast<void***>(&probe);   // LEFT: FLOOR? vtable probe: the test reads the compiler's table to make the raw retail-shaped slot call
     uint64_t buf = 0;
     using Fn = void* (*)(void* self, void* retbuf);
-    void* r = reinterpret_cast<Fn>(vt[1])(&probe, &buf);
+    void* r = reinterpret_cast<Fn>(vt[1])(&probe, &buf);   // LEFT: FLOOR? vtable probe: slot 1 called through a C function pointer, the register order under test
     CHECK(r == &buf);
     CHECK(probe.seenThis == &probe);
     CHECK_EQ(buf, (uint64_t)0x5a5a);

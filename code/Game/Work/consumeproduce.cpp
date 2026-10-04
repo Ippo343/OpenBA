@@ -139,7 +139,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     }
 
     // Serialize each InternalBasePtr in the array
-    CitizenComponent** ibpArray = field_58;
+    Object::InternalPtr<CitizenComponent>* ibpArray = field_58;
 #ifdef _DEBUG
     if (ibpCount > 0 && ibpArray == nullptr) {
         printf("[ConsumeProduce::Serialize] BUG: ibpCount=%d but ibpArray=NULL! this=%p isLoading=%d field_58=%p field_60=%d\n",
@@ -147,7 +147,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     }
 #endif
     for (int i = 0; i < ibpCount; i++) {
-        reinterpret_cast<Object::InternalBasePtr*>(&ibpArray[i])->Serialize(serializer);   // B.3.4 bridge  // LEFT: H5 field_58 holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (a typed Array would run its dtor)
+        ibpArray[i].InternalBasePtr::Serialize(serializer);
 
         // After deserialize, validate the entity type.
         //
@@ -165,7 +165,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
         // and these refs are citizens in the overwhelming majority, so clearing them would
         // destroy live state — strictly worse than skipping a check we cannot perform.
         // Same both-pointer-and-value shape as completetask.cpp's reader.
-        CitizenComponent* ptr = ibpArray[i];
+        CitizenComponent* ptr = ibpArray[i].Get();
         if (ptr != nullptr) {
             bool valid = Object::IsDerivedFromNullSafe(ptr, CitizenComponent::TypeId());  // DAT_1401c7158
             if (!valid) {
@@ -360,7 +360,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         }
 
         // Find an empty slot (field_58[slot] == 0)
-        CitizenComponent** slotCitizens = field_58;
+        Object::InternalPtr<CitizenComponent>* slotCitizens = field_58;
         int attempts = 0;
         while (slotCitizens[slot] != nullptr) {
             slot++;
@@ -489,7 +489,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 uintptr_t foundEntity = 0;
                 PickBestDropTarget(
-                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+                    worldEntityList,
                     reinterpret_cast<ComponentEntity**>(&foundEntity),   // LEFT: the slot doubles as the position out below (8 bytes, 12 written: known_port_issues row 260)
                     (uint32_t)field_28, matEntity,
                     available, '\x01', searchPos, &field_10);   // 0x14008d590
@@ -588,7 +588,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 ComponentEntity* foundStorage = nullptr;
                 PickBestDropTarget(
-                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList), &foundStorage,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+                    worldEntityList, &foundStorage,
                     mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
                     &field_10);   // 0x14008d590
 
@@ -929,7 +929,7 @@ int ConsumeProduce::Cleanup() {
     int count = field_60;
     if (count <= 0) return 0;
 
-    CitizenComponent** ibpArray = field_58;
+    Object::InternalPtr<CitizenComponent>* ibpArray = field_58;
 
     for (int i = 0; i < count; i++) {
         if (ibpArray[i] == nullptr) continue;
@@ -955,14 +955,14 @@ int ConsumeProduce::Validate() {
         return 1;
     }
 
-    CitizenComponent** ibpArray = field_58;
+    Object::InternalPtr<CitizenComponent>* ibpArray = field_58;
     bool allValid = true;
     int validCount = 0;
     int* tempTypes = nullptr;  // dynamic array of type IDs per valid citizen
     int tempCapacity = 0;
 
     for (int i = 0; i < count; i++) {
-        CitizenComponent* entityIBP = ibpArray[i];
+        CitizenComponent* entityIBP = ibpArray[i].Get();
         if (entityIBP == nullptr) continue;
 
         // Validate task for this citizen

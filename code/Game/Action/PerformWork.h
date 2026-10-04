@@ -27,9 +27,6 @@ public:
     PerformWork();                                                   // create 0x140022b90
     PerformWork(CitizenComponent* const* citizen, float facingYaw, uint32_t animationId, int64_t time,
                 bool useTool, int field44);   // 0x1400c9720
-    // B4 FORWARD: the untyped spelling for by-name outside sites (see performwork.cpp).
-    PerformWork(void* entity, float facingYaw, uint32_t animationId, int64_t time, uint8_t useTool,
-                int field44);
     ~PerformWork() override = default;                         // [0] 0x140022bd0
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c9550
     int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c9420

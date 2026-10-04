@@ -79,8 +79,8 @@ HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
 
 // The door OrchardComponent's state 11 calls (orchardcomponent_states.cpp, block MI-B):
 // the real ctor on caller memory (B8-5).
-extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
-    if (!mem) return mem;
+extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
+    if (!mem) return nullptr;
     OrchardDiag_NoteHarvestConstructed();
-    return static_cast<Object::Base*>(new (mem) HarvestOrchard(entityIBP));
+    return new (mem) HarvestOrchard(entityIBP);
 }

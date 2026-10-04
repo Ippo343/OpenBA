@@ -107,8 +107,8 @@ extern "C" MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim
 
     // 0x14000d9d0 — deep-copy the 16-byte-element dynamic array from src+0x08.
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
-                           reinterpret_cast<int64_t*>(&src->carries));   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
+                           reinterpret_cast<int64_t*>(&src->carries));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
 
     n->parent  = parent;    // aeb5
     n->left    = nullptr;   // aeb9 — left
@@ -170,7 +170,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
         MarketWork::ClaimNode* node = MarketBst_ae50(tree, src, nullptr);   // ab86: parent = NULL
         *tree = node;                                      // ab91
         *out  = node;                                      // ab94
-        *reinterpret_cast<int32_t*>(tree + 1) += 1;        // ac21   // LEFT: the claim Set is two raw MarketWork fields (count reached from the root slot)
+        *reinterpret_cast<int32_t*>(tree + 1) += 1;        // ac21   // LEFT: H5 the claim Set is two raw MarketWork fields (+0x48 root, +0x50 count): retail's inlined ~Set (0x14002a910) frees each claim's carry list through 0x14002af40, which a Collection::Set<Claim> member's Clear would not
         return out;
     }
 
@@ -184,8 +184,8 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
     for (;;) {
         retraceSlot = cur;
 
-        CitizenComponent* curKey = cur->element.citizen;   // abaa
-        CitizenComponent* srcKey = src->citizen;           // abad (CMP [RBX],RAX)
+        CitizenComponent* curKey = cur->element.citizen.Get();   // abaa
+        CitizenComponent* srcKey = src->citizen.Get();           // abad (CMP [RBX],RAX)
 
         if (srcKey < curKey) {                             // abb0 JC — UNSIGNED
             MarketWork::ClaimNode* left = cur->left;       // abd6
@@ -198,10 +198,10 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
             continue;
         }
 
-        srcKey = src->citizen;                             // abbb — re-read AFTER
+        srcKey = src->citizen.Get();                             // abbb — re-read AFTER
                                                            // CheckPtr, which may
                                                            // have resolved the ref
-        curKey = cur->element.citizen;                     // abbe (CMP [RDI],RAX)
+        curKey = cur->element.citizen.Get();                     // abbe (CMP [RDI],RAX)
 
         if (curKey >= srcKey) {                            // abc1 JNC — key present
             *out = cur;                                    // abfa
@@ -222,7 +222,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
     Avl38Retrace(tree, &retraceSlot);   // 0x140025920
 
     *out = newNode;                                        // ac1e
-    *reinterpret_cast<int32_t*>(tree + 1) += 1;            // ac21   // LEFT: the claim Set is two raw MarketWork fields
+    *reinterpret_cast<int32_t*>(tree + 1) += 1;            // ac21   // LEFT: H5 the claim Set is two raw MarketWork fields (+0x48 root, +0x50 count): retail's inlined ~Set (0x14002a910) frees each claim's carry list through 0x14002af40, which a Collection::Set<Claim> member's Clear would not
     return out;                                            // ac2f
 }
 
@@ -271,7 +271,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimNode** tree,
     tmp.carries.capacity = 0;                       //        AND cap in retail
 
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&tmp.carries), reinterpret_cast<int64_t*>(vec)); // aa32   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&tmp.carries), reinterpret_cast<int64_t*>(vec)); // aa32   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
 
     MarketBst_ab60(tree, out, &tmp);                // aa43 (return value discarded here)
 

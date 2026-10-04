@@ -293,7 +293,7 @@ void ImmigrationComponent::Spawn() {
             y = (r == 2) ? edge : (W - edge) - 1;
         }
         float hp[3] = {0, 0, 0};
-        Pf_EntityResolvePos_2e20(pc, hp, 0, 0, nullptr);
+        InteractNodePosition(pc, hp, 0, 0, nullptr);
         int cx = static_cast<int>(hp[0] + static_cast<float>(W >> 1));
         int cy = static_cast<int>(hp[1] + static_cast<float>(W >> 1));
         if (cx < 0) cx = 0;
@@ -348,11 +348,11 @@ void ImmigrationComponent::Spawn() {
         int nChildren = pc->useLocationCount;
         for (int ci = 0; ci < nChildren; ++ci) {
             nPts += static_cast<uint32_t>(InteractNodeCount(
-                pc->useLocations[ci], 2));   // 0x140123070
+                pc->useLocations[ci].Get(), 2));   // 0x140123070
         }
         uint32_t ptIdx = rng->Rand(static_cast<uint32_t>(nPts));
         Math::Vector3 meet(0.0f, 0.0f, 0.0f);
-        Pf_EntityResolvePos_2e20(pc, &meet.x, 2, static_cast<int>(ptIdx), nullptr);
+        InteractNodePosition(pc, &meet.x, 2, static_cast<int>(ptIdx), nullptr);
 
         // Clone the nomad template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
@@ -387,9 +387,9 @@ void ImmigrationComponent::Spawn() {
 // ============================================================
 void ImmigrationComponent::Dismiss() {
     int n = groupCount;
-    ComponentEntity** arr = group;
+    Object::InternalPtr<ComponentEntity>* arr = group;
     for (int i = 0; i < n; ++i) {
-        PostEventToEntity(arr[i], 1);
+        PostEventToEntity(arr[i].Get(), 1);
     }
     if (arr) System::MemoryAllocator::MemFree(arr);
     group = nullptr;
@@ -472,9 +472,9 @@ void ImmigrationComponent::Accept() {
     const int n = groupCount;
     TownMgr(gw)->field_0x1B0 += n;
 
-    ComponentEntity** arr = group;
+    Object::InternalPtr<ComponentEntity>* arr = group;
     auto nomadAt = [&](int i) -> ComponentEntity* {
-        return arr[i];
+        return arr[i].Get();
     };
     auto convert = [&](int i, CitizenComponent* const* parent, int gender, char child) -> CitizenComponent* {
         ComponentEntity* ent = nomadAt(i);
@@ -557,7 +557,7 @@ char ImmigrationComponent::TickWaiting(StateMachine* sm, const System::Time* tim
 // state 0x10 ARRIVING — enter 0x14004d090: reset the group and spawn it
 char ImmigrationComponent::EnterArriving() {
     arrivedCount = 0;
-    ComponentEntity** old = group;
+    Object::InternalPtr<ComponentEntity>* old = group;
     if (old) System::MemoryAllocator::MemFree(old);
     group = nullptr;
     groupCount = 0;

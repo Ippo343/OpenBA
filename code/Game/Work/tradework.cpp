@@ -296,7 +296,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // fetch source cell from the citizen's model (character +0x68, translation):
         CitizenComponent* c2 = *citizenRef;
-        ModelComponent* nav = c2->character->modelComponent;
+        ModelComponent* nav = c2->character->modelComponent.Get();
         int mapSize = gw ? gw->m_game->size : 0;
         int cellX = TW_ClampCell(nav->transform.translation.x, mapSize);
         int cellY = TW_ClampCell(nav->transform.translation.y, mapSize);
@@ -306,7 +306,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
         ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+        PickBestDropTarget(resList, &srcStorPrimary, cell,
                            resType, qty, 1, searchPos, srcStorIBP);
         if (srcStorPrimary == nullptr) { continue; }
 
@@ -315,7 +315,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        Pf_EntityResolvePos_2e20(posComp, destPos, 0, rnd, nullptr);
+        InteractNodePosition(posComp, destPos, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
@@ -338,7 +338,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // fetch destination cell from the citizen's model (character +0x68, translation):
         CitizenComponent* c2 = *citizenRef;
-        ModelComponent* nav = c2->character->modelComponent;
+        ModelComponent* nav = c2->character->modelComponent.Get();
         int mapSize = gw ? gw->m_game->size : 0;
         int cellX = TW_ClampCell(nav->transform.translation.x, mapSize);
         int cellY = TW_ClampCell(nav->transform.translation.y, mapSize);
@@ -348,7 +348,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
         ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+        PickBestDropTarget(resList, &srcStorage, cell,
                            resType, 1, 0, srcPos, srcIBP);
         if (srcStorage == nullptr) continue;
 
@@ -395,16 +395,16 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // The null arm is the tree's guard; retail reads +0x30 of the result unguarded.
         uint32_t range = interactDesc ? static_cast<uint32_t>(interactDesc->_useNodes.count) : 0;
         if (posComp->useLocationCount > 0) {
-            InteractComponent** parts = posComp->useLocations;
+            Object::InternalPtr<InteractComponent>* parts = posComp->useLocations;
             int cn = posComp->useLocationCount;
             for (int k = 0; k < cn; k++) {
-                range += InteractNodeCount(parts[k], 0);   // 0x140123070
+                range += InteractNodeCount(parts[k].Get(), 0);   // 0x140123070
             }
         }
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
         float srcPos2[4] = {};                             // local_68
-        Pf_EntityResolvePos_2e20(posComp, srcPos2, 0, rnd, nullptr);
+        InteractNodePosition(posComp, srcPos2, 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2
@@ -460,7 +460,7 @@ int TradeWork::Cleanup() {
         }
 
         // Cancel the work item
-        CitizenComponent* citizen = leftmost->value.citizen;
+        CitizenComponent* citizen = leftmost->value.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
@@ -490,7 +490,7 @@ int TradeWork::Validate() {
 
     // In-order traversal
     while (node != nullptr) {
-        CitizenComponent* citizen = node->value.citizen;   // local_res8
+        CitizenComponent* citizen = node->value.citizen.Get();   // local_res8
 
         // Validate this entry (retail passes its stale RDX, which the body never reads)
         bool stillValid = ValidateTask(nullptr, &citizen, nullptr);
@@ -557,10 +557,10 @@ int TradeWork::Validate() {
         for (uint32_t i = 0; i < removeCount; i++) {
             Node* searchNode = bstRoot;
             while (searchNode != nullptr) {
-                if (removeArr[i] < searchNode->value.citizen) {
+                if (removeArr[i] < searchNode->value.citizen.Get()) {
                     searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= searchNode->value.citizen) {
+                    if (removeArr[i] <= searchNode->value.citizen.Get()) {
                         // LEFT: 0x140025740's C signature (PLAYER) takes the set as int64_t*.
                         PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(&bstRoot), searchNode);   // LEFT: 0x140025740's C signature (PLAYER) takes the set as int64_t*.
                         break;

@@ -309,7 +309,7 @@ int NextRoutePoint(BoatComponent* boat, const Math::Vector3* ref) {
 void CharacterComponent::DriveToward(const Math::Vector3* target, float heading, float speed) {
     field_0x28 = true;
 
-    ModelComponent* model = modelComponent;
+    ModelComponent* model = modelComponent.Get();
     if (!model) return;
     const Math::Vector3* mp = ModelPos(model);
 
@@ -318,7 +318,7 @@ void CharacterComponent::DriveToward(const Math::Vector3* target, float heading,
     field_0x2C.x = nrm.x;
     field_0x2C.y = nrm.y;
     field_0x2C.z = nrm.z;
-    ModelComponent* model2 = modelComponent;
+    ModelComponent* model2 = modelComponent.Get();
     field_0x3C = heading;
     // +0x13c is the MeshInstance's _color[2], the visual scale AnimalComponent writes.
     field_0x38 =

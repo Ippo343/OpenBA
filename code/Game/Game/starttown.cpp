@@ -3355,7 +3355,7 @@ int DL_CollectAnimals(const CharacterGrid* grid, int wantType, std::vector<DL_An
         const CharacterComponent* charComp = slot->character.Get();
         if (!charComp) continue;
         ++(*outLive);
-        const ModelComponent* model = charComp->modelComponent;
+        const ModelComponent* model = charComp->modelComponent.Get();
         if (!model) continue;
         const ComponentEntity* owner = charComp->_entity;
         if (!owner || wantType == 0) continue;

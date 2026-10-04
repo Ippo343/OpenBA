@@ -50,7 +50,7 @@ namespace {
 inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 }  // namespace
 
-extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
+extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 namespace {
 // The tree's allocation of a loaded array: count elements, zeroed, 8-aligned; the

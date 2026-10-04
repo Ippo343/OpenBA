@@ -73,20 +73,8 @@ namespace {
 // ABSTRACT base Action's cell: Action::TypeId() since ENDGAME B.3.9 RF gave the
 // abstract bases their records.
 
-// Serialize one pointer field as the InternalBasePtr retail keeps there and null
-// it when the pointee is not derived from `tid`.
-// LEFT: CharacterComponent declares these InternalPtr members as plain T* (its
-// readers in other blocks spell them so); the Serialize view is a cast.
-template <class T>
-void SerializeValidatedIBP(T*& field, IO::Serializer& ser, uint32_t tid) {
-    Object::InternalBasePtr* ibp = reinterpret_cast<Object::InternalBasePtr*>(&field);   // LEFT: POD CharacterComponent declares its InternalPtr members as plain T* (header and readers not this set's)
-    ibp->Serialize(ser);
-    if (field && tid && !::Object::IsDerivedFromNullSafe(field, tid))
-        field = nullptr;
-}
-
-// The same for a member declared as retail's InternalPtr<T> (CharacterComponent +0x58,
-// B4 P2 WORK-3): the InternalBasePtr is the member itself.
+// Serialize one InternalPtr<T> member through its InternalBasePtr and null it when
+// the pointee is not derived from `tid`.
 template <class T>
 void SerializeValidatedIBP(Object::InternalPtr<T>& field, IO::Serializer& ser, uint32_t tid) {
     field.InternalBasePtr::Serialize(ser);

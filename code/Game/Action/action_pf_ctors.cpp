@@ -138,7 +138,7 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
     // harness (Leisure/Work anchor a citizen on an inert workplace building's position comp).
     int total = interact ? (&interact->_useNodes)[kind].count : 0;
     for (int i = 0; i < self->useLocationCount; ++i) {
-        total = total + InteractNodeCount(self->useLocations[i], kind);
+        total = total + InteractNodeCount(self->useLocations[i].Get(), kind);
     }
     return total;
 }
@@ -191,25 +191,10 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: outside callers in animalcomponent, citizenai_actionctors, citizenai_handlers,
-// nomadcomponent_states, build_actions, work_act_clear, work_act_consume, work_act_hunt,
-// work_act_path, work_act_perform, work_act_rawmat, work_base_actionctor
-void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_) {
-    ActionStackPush(stack,
-                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0: its callers (animalcomponent.cpp, citizenai_handlers.cpp, nomadcomponent_states.cpp, build_actions.cpp) hold the action as int64_t / Action* / void* locals built by placement or by void*-returning ctors, not as an InternalPtr<Action>
-}
-
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Entity, Game, Player, Work)
 
 // ---- action_pf_roots_route.cpp's C spellings (kept here: that file's reinterpret column
 // has no room for them).
 
-// B4 FORWARD: 12 outside callers (citizenai_findhelpers, citizenai_findtarget,
-// citizenai_housing_idle, citizenai_leisure, citizen_assign_citizens,
-// citizen_lifeevent_handler, citizenbehavior, buildstructure, firework_search,
-// marketwork, work_base_reimpl, work_base_walkpos)
-int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
-    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);   // LEFT: SIG Pf_IsDstReachable_f810: citizenai_housing_idle.cpp:340 (COMP) holds the map as int* (&m_game->size)
-}
 
 

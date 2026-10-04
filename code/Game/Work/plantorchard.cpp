@@ -126,7 +126,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
     Map* mapGrid = map;
 
     CitizenComponent* citizen = *citizenRef;
-    ModelComponent* posComp = citizen->character->modelComponent;
+    ModelComponent* posComp = citizen->character->modelComponent.Get();
 
     int mapSz = map->size;
     int citizenCellX = (int)(posComp->transform.translation.x + (float)(mapSz >> 1));
@@ -313,7 +313,7 @@ int PlantOrchard::Cleanup() {
             node = node->left;
         }
 
-        CitizenComponent* citizen = leftmost->element.citizen;
+        CitizenComponent* citizen = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
         count = _cells._count;
@@ -349,7 +349,7 @@ int PlantOrchard::Validate() {
 
     // In-order traversal
     while (node != nullptr) {
-        CitizenComponent* ibpData = node->element.citizen;
+        CitizenComponent* ibpData = node->element.citizen.Get();
 
         uint8_t valid = ValidateTask(nullptr, &ibpData, nullptr);
 

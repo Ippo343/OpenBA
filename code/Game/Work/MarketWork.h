@@ -68,7 +68,7 @@ public:
     // The element of the claim tree (0x18): the claiming citizen (the unsigned sort key)
     // and its carry list, an Array<Carry> {data, count, capacity} (node ctor 0x14002ae50).
     struct Claim {
-        CitizenComponent* citizen;       // +0x00 InternalPtr<CitizenComponent> (Cleanup 0x1400f1ca0 reads its +0x278)
+        Object::InternalPtr<CitizenComponent> citizen;   // +0x00 (Cleanup 0x1400f1ca0 reads its +0x278)
         CarryList         carries;       // +0x08 Array<Carry> {data, count, capacity}
     };
     // Execute's (0x1400eff80) function-local arrays.
@@ -137,6 +137,10 @@ static_assert(offsetof(MarketWork::ClaimNode, parent) == 0x18, "claim node paren
 static_assert(offsetof(MarketWork::ClaimNode, left) == 0x20, "claim node left @ +0x20 (0x14002aeb9)");
 static_assert(offsetof(MarketWork::ClaimNode, right) == 0x28, "claim node right @ +0x28 (0x14002aebd)");
 static_assert(offsetof(MarketWork::ClaimNode, balance) == 0x30, "claim node balance @ +0x30 (0x14002aec1)");
+
+// 0x14002af40 (work_leaf_market.cpp): post-order free of a claim subtree (each node's carry
+// list, then the node). `ctx` is the tree root slot retail threads through RCX, unread.
+void WorkLeaf_MarketTreeCleanup_2af40(MarketWork::ClaimNode* const* ctx, MarketWork::ClaimNode* node);
 
 static_assert(sizeof(MarketWork) == 0x58, "MarketWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(MarketWork) == 8, "MarketWork is 8-aligned");

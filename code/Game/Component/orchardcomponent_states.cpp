@@ -268,7 +268,7 @@ char OrchardComponent::EnterPlanting() {
 
     // 7. build the PlantOrchard work item carrying the chosen tree type
     O9_STEP(5, "alloc + PlantOrchard_CtorFromEntity");
-    void* work = nullptr;
+    Work* work = nullptr;
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
@@ -276,7 +276,7 @@ char OrchardComponent::EnterPlanting() {
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
         }
     }
-    void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
+    Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
 
     // 8. post it. Retail hand-rolls the component scan for type id DWORD_1401c8070 here
     // instead of calling the shared finder; FindComponent<WorkComponent> performs the
@@ -291,11 +291,11 @@ char OrchardComponent::EnterPlanting() {
                 "[Orchard9] step6 values: entity=%p targetIBP=%p work=%p workIBP=%p "
                 "PostWork=%p\n",
                 static_cast<void*>(_entity), static_cast<void*>(target),
-                work, workIBP, (void*)&CitizenAI_WorkScheduler_Post);
+                static_cast<void*>(work), static_cast<void*>(workIBP.Get()), (void*)&CitizenAI_WorkScheduler_Post);
             std::fflush(stderr);
         }
     }
-    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
+    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
     O9_STEP(7, "DONE - state 9 enter completed");
     return 1;
 }
@@ -382,7 +382,7 @@ void OrchardPostTendArea(ComponentEntity* entity) {
     // reads the result — kept for shape.
     (void)entity->FindComponent<WorkComponent>();   // 0x140003050
 
-    void* work = nullptr;
+    Work* work = nullptr;
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
@@ -390,10 +390,10 @@ void OrchardPostTendArea(ComponentEntity* entity) {
             work = TendArea_CtorFromEntity(mem, &entityLocal, 1);
         }
     }
-    void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
+    Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
 
     WorkComponent* target = entity->FindComponent<WorkComponent>();   // 0x140003050
-    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
+    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
 }
 
 // Is the work component currently holding a work slot for us? (0x14012ead0)
@@ -584,7 +584,7 @@ char OrchardComponent::TickTending(StateMachine* sm) {
 char OrchardComponent::EnterReplanting() {
     (void)_entity->FindComponent<WorkComponent>();   // 0x140003050
 
-    void* work = nullptr;
+    Work* work = nullptr;
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
@@ -592,7 +592,7 @@ char OrchardComponent::EnterReplanting() {
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
         }
     }
-    void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
+    Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
 
     WorkComponent* target = _entity->FindComponent<WorkComponent>();   // 0x140003050
     {   // state 12 is only reachable when ValidateRefs found a hole, so "we got here at
@@ -604,7 +604,7 @@ char OrchardComponent::EnterReplanting() {
             std::fflush(stderr);
         }
     }
-    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
+    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
     return 1;
 }
 
@@ -638,7 +638,7 @@ char OrchardComponent::TickReplanting(StateMachine* sm) {
 // item derives its worklist from the component's slot array instead.
 // ============================================================
 char OrchardComponent::EnterHarvesting() {
-    void* work = nullptr;
+    Work* work = nullptr;
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
@@ -646,10 +646,10 @@ char OrchardComponent::EnterHarvesting() {
             work = HarvestOrchard_CtorFromEntity(mem, &entityLocal);
         }
     }
-    void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
+    Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
 
     WorkComponent* target = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
+    CitizenAI_WorkScheduler_Post(target, 1, 0, &workIBP);
 
     // Footprint stamp. Retail passes the Map (GameUpdateLoop::m_game) and the rect as
     // four int16s off the MapComponent.

@@ -76,7 +76,7 @@ public:
     System::Time      waitTimer;      // +0x48 counts down to the arrival season
     int32_t           arrivedCount;   // +0x50 nomads of the group at the hall
     uint8_t           _pad54[4];      // +0x54
-    ComponentEntity** group;          // +0x58 Array<InternalPtr<ComponentEntity>> data (freed by the dtor)
+    Object::InternalPtr<ComponentEntity>* group;   // +0x58 Array<InternalPtr<ComponentEntity>> data (freed by the dtor)
     int32_t           groupCount;     // +0x60
     int32_t           groupCapacity;  // +0x64
 };

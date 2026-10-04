@@ -112,13 +112,13 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
     if (!chr) return;
     WorkBase_TaskListCleanup_c5400(&chr->actionStack);   // 0x1400c5400
     void* mem = System::MemoryAllocator::MemAlloc(0x480, 8);
-    void* act = nullptr;
+    Action* act = nullptr;
     if (mem) {
         CharacterComponent* ownerIBP = chr;
         act = ::new (mem) ::MoveTo(&ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);   // 0x1400c9170
     }
-    void* actIBP = act;
-    Pf_ActStackPush_54e0(&chr->actionStack, &actIBP);   // 0x1400c54e0
+    ::Object::InternalPtr<Action> actIBP = act;
+    ActionStackPush(&chr->actionStack, &actIBP);   // 0x1400c54e0
 }
 
 // ============================================================

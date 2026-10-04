@@ -214,7 +214,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
             int slotIdx = WorkLeaf_Pasture_8350(local_a8);
             if (slotIdx >= 0) {
                 // The livestock at that slot, its entity's AnimalComponent (0x140005500)
-                LivestockComponent* livestock = local_a8->animals[slotIdx];
+                LivestockComponent* livestock = local_a8->animals[slotIdx].Get();
 
                 AnimalComponent* natResIBP = livestock->_entity->FindComponent<AnimalComponent>();
 
@@ -305,7 +305,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
             int iPvVar20 = 0;
             do {
                 float local_80[3];
-                Pf_EntityResolvePos_2e20(posComp, local_80, 2, iPvVar20, nullptr);
+                InteractNodePosition(posComp, local_80, 2, iPvVar20, nullptr);
 
                 int iVar10map = map->size;
                 int iVar21pos = (int)(local_80[0] + (float)(iVar10map >> 1));
@@ -716,9 +716,9 @@ PastureWork::PastureWork(void* entityIBP) : AutoPickupWork() {
 // Convenience for PastureComponent Slot14 (pasturecomponent_states.cpp, block MI-B):
 // MemAlloc(0x58,8) + the faithful ctor. `entityRefSlot` points at an 8-byte entity ref
 // (the pasture's owner entity).
-extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot) {
+extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot) {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
-    return p ? static_cast<Object::Base*>(new (p) PastureWork(entityRefSlot)) : nullptr;
+    return p ? new (p) PastureWork(entityRefSlot) : nullptr;
 }
 
 

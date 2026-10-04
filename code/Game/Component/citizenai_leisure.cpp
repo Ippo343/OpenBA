@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         ? static_cast<CitizenDescription*>(descRaw) : nullptr;
 
     // citizen ModelComponent transform translation -> grid cell (uVar37=srcCell).
-    ModelComponent* model = citizen->character->modelComponent;
+    ModelComponent* model = citizen->character->modelComponent.Get();
     int w0 = piVar5->size;
     int colC = static_cast<int>(static_cast<float>(w0 >> 1) + model->transform.translation.x);
     int rowC = static_cast<int>(static_cast<float>(w0 >> 1) + model->transform.translation.y);
@@ -394,7 +394,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         InteractComponent* posIBP = local_res20->FindComponent<InteractComponent>();   // 0x140002ed0
         InteractComponent** pp = &posIBP;
         float dpos[4] = {0, 0, 0, 0};
-        if (pp) Pf_EntityResolvePos_2e20(*pp, dpos, 0, 0, nullptr);
+        if (pp) InteractNodePosition(*pp, dpos, 0, 0, nullptr);
         int w = piVar5->size;
         int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos[0]);
         int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos[1]);

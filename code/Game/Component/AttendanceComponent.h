@@ -66,7 +66,7 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist
     // 0x140044410: the count, then per entry an InternalBasePtr nulled unless
     // IsDerivedFrom CitizenComponent (0x1401c7158).
-    CitizenComponent** queue;          // +0x28 the waiting citizens (Array data, freed by the dtor)
+    Object::InternalPtr<CitizenComponent>* queue;   // +0x28 the waiting citizens (Array data, freed by the dtor)
     int32_t            queueCount;     // +0x30
     int32_t            queueCapacity;  // +0x34
     StateController _controller;   // +0x38 the embedded controller (D6)

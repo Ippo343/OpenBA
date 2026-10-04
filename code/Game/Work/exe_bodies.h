@@ -43,17 +43,17 @@ class Work;   // Work/Work.h
 extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
-extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- pasturework.cpp
-extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
+extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
 
 // ---- plantorchard_ctor.cpp
 class ComponentDescription;
-extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- tendarea_ctor.cpp
-extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- work_act_clear.cpp
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
@@ -86,7 +86,8 @@ class RawMaterialDescription;
 RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut);  // 0x140006330
 
 // ---- work_base_actionctor.cpp
-void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targetIBP, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
+class NaturalResourceComponent;
+void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t workId, NaturalResourceComponent* const* targetRef, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
 class PickupRawMaterial;
 PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenComponent* const* p2, ComponentEntity* const* p3);  // 0x1400c9b70
 void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP, float* worldPos, int cellIdx, uint8_t cancelFirst);  // 0x1400c0ad0
@@ -172,9 +173,9 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int pa
 class CropFieldComponent;
 void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropFieldComponent member; its header is COMP-c's)
 struct WorkEntityAssignment;   // Work/Work.h
-void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* key);  // 0x1400298a0
-void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const WorkEntityAssignment* ins);  // 0x140029920
-void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser);  // 0x140029c10
+void WorkLeaf_BstRemoveByIBP_298a0(Collection::Set<WorkEntityAssignment>* set, ComponentEntity* const* key);  // 0x1400298a0
+void* WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, void* outNode, const WorkEntityAssignment* ins);  // 0x140029920
+void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0
@@ -195,5 +196,4 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp);  // 0x14
 int WorkLeaf_Pasture_8350(const PastureComponent* pasture);  // 0x140128350
 void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer);  // 0x14012b310
 
-// ---- work_leaf_market.cpp
-void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node);  // 0x14002af40
+// ---- work_leaf_market.cpp (WorkLeaf_MarketTreeCleanup_2af40: Work/MarketWork.h)

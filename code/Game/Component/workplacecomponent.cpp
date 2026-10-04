@@ -117,7 +117,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
     if (g_wpcRosterOnly) return;
     if (workerCount != 0) return;
 
-    ModelComponentNotify_Reimpl(_entity, 3);   // 0x1400c2b70
+    _entity->SendEvent(3);   // 0x1400c2b70
 
     // Partial-world guard (see Attach): skip the status-icon visual toggles when the
     // standalone entity lacks the renderable StatusIconComponent (c7e08).
@@ -219,7 +219,7 @@ void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
             // +0x20 read — an inert standalone workplace may have a null description.
             WorkPlaceDescription* desc = _description ? WPC_Description(this) : nullptr;
             if (desc && jobSlot == desc->_profession0) {
-                ModelComponentNotify_Reimpl(_entity, 2);   // 0x1400c2b70
+                _entity->SendEvent(2);   // 0x1400c2b70
             }
         }
 
@@ -417,7 +417,7 @@ void WorkPlaceComponent::ApplyOccupiedVisual() {
     Profession* jobSlot = profession;
     WorkPlaceDescription* desc = WPC_Description(this);
     if (desc && jobSlot == desc->_profession0) {
-        ModelComponentNotify_Reimpl(_entity, 2);   // 0x1400c2b70
+        _entity->SendEvent(2);   // 0x1400c2b70
     }
 
     // The StatusIconComponent mesh-flag toggle (FUN_14012c3f0) is DELIBERATELY NOT driven

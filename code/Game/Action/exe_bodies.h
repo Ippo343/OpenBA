@@ -67,7 +67,6 @@ struct ActionStack;           // Action/Action.h
 namespace IO { class Serializer; }
 void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970
 void ActMv_UpdateFacing_c8d20(MoveTo* self);  // 0x1400c8d20
-void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4);  // 0x14010a1f0 B4 FORWARD: code/Game/Component/citizencomponent_lifecycle.cpp still calls this -> SetAnimation
 bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionStack* param4);  // 0x1400c8c10 (retail returns AL = 1)
 
 // ---- action_base_movedeps.cpp
@@ -95,10 +94,8 @@ void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
 
 // ---- action_child_ctors.cpp
-void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType);  // 0x140042890
 class ComponentEntity;        // Entity/ComponentEntity.h
 float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0
-float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
@@ -112,8 +109,6 @@ extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
-void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_);  // 0x1400c54e0
-void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
 class Component;              // Component/Component.h
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
@@ -176,9 +171,7 @@ void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
 int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14012d5d0
 namespace Object { template <class T> class InternalPtr; }
-ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
-// B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
-int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
+ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 
 // ---- keystone_a_zone.cpp
 class PathfinderThread;       // Game/PathfinderThread.h

@@ -104,7 +104,7 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
 
     // 14002b618..b628 (0x14000da70 takes the array header as int64_t*: LEFT)
     if (SerIsLoading(serializer)) {
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
     }
 
     // 14002b62d..b662: element loop. Note retail reloads the buffer pointer AFTER the
@@ -136,7 +136,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
     n->element.carries.count = 0;      // with capacity: one 8-byte zero
     n->element.carries.capacity = 0;
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -159,7 +159,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
 //   serializer [RDX]
 void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
 
-    int32_t* const treeCount = reinterpret_cast<int32_t*>(tree + 1);   // LEFT: the claim Set is two raw MarketWork fields
+    int32_t* const treeCount = reinterpret_cast<int32_t*>(tree + 1);   // LEFT: H5 the claim Set is two raw MarketWork fields (+0x48 root, +0x50 count): retail's inlined ~Set (0x14002a910) frees each claim's carry list through 0x14002af40, which a Collection::Set<Claim> member's Clear would not
 
     // 14002b2b0..b2c0: node count in/out.
     int nodeCount = *treeCount;
@@ -173,17 +173,16 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
         // omitted behaviour.
         for (int i = 0; i < nodeCount; ++i) {
             // 14002b2f1..b2f9: key + payload header cleared every iteration (3 qwords).
-            CitizenComponent* key = nullptr;
+            Object::InternalPtr<CitizenComponent> key = nullptr;
             MarketWork::CarryList payload = { nullptr, 0, 0 };   // 16 bytes, the exact
                                                                  // size ActRm_VectorClone_d9d0 reads.
 
             // 14002b2fd..b329: read the key, then drop it unless it derives from the
             // expected type. Retail overwrites the key with 0 on a type mismatch and
             // still inserts the node — a null-keyed node, not a skipped one.
-            // (InternalBasePtr::Serialize on the typed slot: the tree's InternalPtr is
-            // the bare pointer; the slot is serialized through its base: LEFT.)
-            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);   // LEFT: H5 the key is InternalPtr<CitizenComponent> declared CitizenComponent*
-            if (key != nullptr && !Object::IsDerivedFromNullSafe(key, CitizenComponent::TypeId())) {
+            // (InternalBasePtr::Serialize on the typed slot.)
+            key.InternalBasePtr::Serialize(*serializer);
+            if (key.Get() != nullptr && !Object::IsDerivedFromNullSafe(key.Get(), CitizenComponent::TypeId())) {
                 key = nullptr;
             }
 
@@ -195,7 +194,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
                 // 14002b341..b397: empty tree. NOTE the faithful oddity — when MemAlloc
                 // fails retail stores the NULL straight into the root (MOV [R14],RBX
                 // with RBX=0 at 14002b394) and still bumps the count. No retrace here.
-                *tree = MarketBst_MakeNode(key, &payload, nullptr);
+                *tree = MarketBst_MakeNode(key.Get(), &payload, nullptr);
                 *treeCount += 1;   // 14002b4ad
             } else {
                 // 14002b39c..b4ad: unsigned-key descent, insert-if-absent, then retrace.
@@ -205,21 +204,21 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
                     // 14002b3a3: CheckPtr on the CURRENT NODE (the node pointer itself,
                     // which doubles as the address of its key field).
                     // 14002b3ac/b3b0: CMP [RBP-0x20],RAX / JC -> unsigned "key < node->key".
-                    if (key < cur->element.citizen) {
+                    if (key.Get() < cur->element.citizen.Get()) {
                         ClaimNode* left = cur->left;
                         if (left != nullptr) { cur = left; continue; }
                         // 14002b448..b49d: link a new LEFT child (null on alloc failure).
-                        cur->left = MarketBst_MakeNode(key, &payload, cur);
+                        cur->left = MarketBst_MakeNode(key.Get(), &payload, cur);
                         inserted = true;
                         break;
                     }
                     // 14002b3b2: CheckPtr on the KEY slot this time (&local key), not the node.
                     // 14002b3c0/b3c3: JNC when node->key >= key -> duplicate, nothing to do.
-                    if (cur->element.citizen >= key) break;
+                    if (cur->element.citizen.Get() >= key.Get()) break;
                     ClaimNode* right = cur->right;
                     if (right != nullptr) { cur = right; continue; }
                     // 14002b3ed..b442: link a new RIGHT child.
-                    cur->right = MarketBst_MakeNode(key, &payload, cur);
+                    cur->right = MarketBst_MakeNode(key.Get(), &payload, cur);
                     inserted = true;
                     break;
                 }
@@ -254,8 +253,8 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             // 14002b506..b524: write the key, and null it out in memory if it no longer
             // derives from the expected type. This MUTATES the live tree on save —
             // faithful, and deliberate in retail (it is how stale refs get culled).
-            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*serializer);   // LEFT: H5 Claim::citizen is InternalPtr<CitizenComponent> declared CitizenComponent*
-            CitizenComponent* key = node->element.citizen;
+            node->element.citizen.InternalBasePtr::Serialize(*serializer);
+            CitizenComponent* key = node->element.citizen.Get();
             if (key != nullptr && !Object::IsDerivedFromNullSafe(key, CitizenComponent::TypeId())) {
                 node->element.citizen = nullptr;
             }
@@ -267,7 +266,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
-                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
+                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {

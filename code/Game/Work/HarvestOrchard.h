@@ -53,7 +53,7 @@ public:
     struct Claim {
         int32_t           slot;      // +0x00
         int32_t           _pad04;    // +0x04 written 0 with the key
-        CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent> (Cleanup reads its +0x278)
+        Object::InternalPtr<CitizenComponent> citizen;   // +0x08 (Cleanup reads its +0x278)
     };
     // Its 0x30-byte node: parent +0x10, left +0x18, right +0x20.
     using ClaimNode = Collection::Set<Claim>::Node;

@@ -305,8 +305,8 @@ static void MaterialCountArrayAssign(RawArray<TrackerComponent::Entry>* dst, con
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
     // LEFT: TrackerComponent (block COMP-? header) keeps its two lists as raw
     // {data, count, capacity} triples.
-    RawArray<TrackerComponent::Entry>* live = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->displayed);   // LEFT: Component/TrackerComponent.h displayed raw (DLG-1)
-    RawArray<TrackerComponent::Entry>* archive = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->produced);   // LEFT: Component/TrackerComponent.h produced raw (DLG-1)
+    RawArray<TrackerComponent::Entry>* live = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->displayed);   // LEFT: H5 TrackerComponent::displayed is a raw {data, count, capacity} triple (retail Array<Entry>; the typed member is its own behaviour commit)
+    RawArray<TrackerComponent::Entry>* archive = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->produced);   // LEFT: H5 TrackerComponent::produced is a raw {data, count, capacity} triple (retail Array<Entry>; the typed member is its own behaviour commit)
     int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
     if (gen != tracker->trackerId) {
         MaterialCountArrayAssign(archive, live);   // 0x14000d9d0
@@ -438,11 +438,11 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
 // B4 FORWARD: outside callers (Action/consumerawmaterial, pickupstoredrawmaterial;
 // Component/trackercomponent; Work/marketwork_bst_b290)
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
-    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
+    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
 }
 
 // B4 FORWARD: outside callers (Work/marketwork_bst_a9f0, marketwork_bst_b290)
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
-    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
-                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
+    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
+                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
 }

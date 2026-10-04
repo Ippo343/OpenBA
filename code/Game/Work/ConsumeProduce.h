@@ -55,7 +55,7 @@ public:
     int32_t  field_4c;           // +0x4C: int (serialized)
     int32_t  field_50;           // +0x50: Type (zeroed, serialized)
     int32_t  field_54;           // +0x54: int (serialized)
-    CitizenComponent** field_58; // +0x58: Array<InternalPtr<CitizenComponent>> data (zeroed; Persist
+    Object::InternalPtr<CitizenComponent>* field_58; // +0x58: Array<InternalPtr<CitizenComponent>> data (zeroed; Persist
                                  //        0x1400e9020 validates each element against CitizenComponent)
     int32_t  field_60;           // +0x60: DynArray count (zeroed)
     int32_t  field_64;           // +0x64: DynArray capacity (zeroed)

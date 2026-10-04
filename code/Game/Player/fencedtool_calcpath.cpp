@@ -114,7 +114,7 @@ void SeatPickOwner_1290d0(PickingComponent* pickComp, ComponentEntity* const* ma
     Picking::Scene* scene = gw ? gw->m_pickingScene : nullptr;
     if (scene)
         scene->SetMeshUserData(static_cast<uint32_t>(pickComp->pickingId),
-                      pickComp->userData, 0, 0, nullptr);
+                      pickComp->userData.Get(), 0, 0, nullptr);
 }
 
 // Grid cell -> world pos via the 0x14009f3e0 terrain query (bridge CellRectCentre

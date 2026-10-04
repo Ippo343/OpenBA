@@ -55,7 +55,7 @@ public:
     int32_t  status;             // +0x48: 0=unassigned, 1=assigned, 2=completing (Persist
                                  //        0x1400f3aa0 Serialize(int&))
     uint8_t  _pad4C[4];          // +0x4C: padding
-    CitizenComponent* citizenIBP; // +0x50: InternalPtr<CitizenComponent> (Persist validates the
+    Object::InternalPtr<CitizenComponent> citizenIBP; // +0x50 (Persist validates the
                                  //        cell 0x1401c7158; Cleanup reads its +0x278)
     Profession* candidateList;   // +0x58: ExternalPtr<Profession> (Persist v1+ 0x140018020); the
                                  //        name is the tree's, not what the field holds

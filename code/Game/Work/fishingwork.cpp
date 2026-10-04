@@ -528,7 +528,7 @@ int FishingWork::Validate() {
     int iterIndex = 0;
 
     for (int i = 0; i < citizenCount; i++) {
-        CitizenComponent* citizenRef = citizenRefs[i];
+        CitizenComponent* citizenRef = citizenRefs[i].Get();
         if (citizenRef == nullptr) continue;
 
         // Validate this citizen's task
@@ -647,15 +647,15 @@ void FishingWork::Persist(IO::Stream& stream) {
     }
 
     // 4. Loop over each citizen IBP, serialize and validate
-    CitizenComponent** ibpPtr = citizenRefs;
+    Object::InternalPtr<CitizenComponent>* ibpPtr = citizenRefs;
     int64_t remaining = (int64_t)citizenCount;
     if (remaining > 0) {
         do {
             // Serialize the InternalBasePtr
-            reinterpret_cast<Object::InternalBasePtr*>(ibpPtr)->Serialize(serializer);   // B.3.4 bridge  // LEFT: H5 citizenRefs holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (FishingWork.h; a typed Array would run its dtor)
+            ibpPtr->InternalBasePtr::Serialize(serializer);
 
             // Validate: if the ptr is non-null and not derived from expected type, null it
-            CitizenComponent* ptrVal = *ibpPtr;
+            CitizenComponent* ptrVal = ibpPtr->Get();
             if (ptrVal != nullptr) {
                 if (!Object::IsDerivedFromNullSafe(ptrVal, CitizenComponent::TypeId())) {
                     *ibpPtr = nullptr;

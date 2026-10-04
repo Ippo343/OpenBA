@@ -260,7 +260,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             InteractComponent* posBuf[2] = {nullptr, nullptr};
             posBuf[0] = entity->FindComponent<InteractComponent>();   // 0x140002ed0
             float wpos[4] = {0, 0, 0, 0};
-            if (posBuf[0]) Pf_EntityResolvePos_2e20(posBuf[0], wpos, 0, 0, nullptr);
+            if (posBuf[0]) InteractNodePosition(posBuf[0], wpos, 0, 0, nullptr);
             int dim = map->size;
             int ix = static_cast<int>(wpos[0] + static_cast<float>(dim >> 1));
             int iy = static_cast<int>(wpos[1] + static_cast<float>(dim >> 1));
@@ -304,7 +304,7 @@ void CitizenComponent::LongTermPlan() {
     float*   arrB = nullptr;  int arrBCount = 0; int arrBCap = 0;          // local_60 / (int)local_58 / local_58._4_4_
 
     // citizen home cell (model pos) — uVar15 / local_res18
-    const ModelComponent* model = character->modelComponent;
+    const ModelComponent* model = character->modelComponent.Get();
     uint32_t homeCell = ModelCell(model, mapGrid);
 
     // iterate the citizen-storage rows (slotCount, storageSlots: StorageComponent::Item,
@@ -343,7 +343,7 @@ void CitizenComponent::LongTermPlan() {
         Object::InternalPtr<ComponentEntity> matchIBP = nullptr;   // local_a8
         ComponentEntity* outBest  = nullptr;   // local_98
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(listPair), &outBest, homeCell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+        PickBestDropTarget(listPair, &outBest, homeCell,
                            rowBase->_resource, rowBase->_count, '\x01', outVec, &matchIBP);
         if (outBest == nullptr) {
             // d590 found nothing for this row → treat as committed-with-empty (the original
@@ -454,7 +454,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
     float destB[4] = {0, 0, 0, 0};   // local_90
 
     // the citizen's ModelComponent (translation.z = walk-time src, local_70)
-    const ModelComponent* model = citizen->character->modelComponent;
+    const ModelComponent* model = citizen->character->modelComponent.Get();
     // model+0x160 (local_70) is read by the original but only the desc->foodInterval*scale
     // path is used for the cooldown below; the raw value is not consumed. home cell from model pos:
     uint32_t homeCell = ModelCell(model, mapGrid);

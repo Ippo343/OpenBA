@@ -40,7 +40,7 @@ TendArea::TendArea(void** entityIBP, int kind) : Work(entityIBP) {
 
 // The door OrchardComponent's state 10 calls (orchardcomponent_states.cpp, block MI-B):
 // the real ctor on caller memory (B8-5).
-extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind) {
-    if (!mem) return mem;
-    return static_cast<Object::Base*>(new (mem) TendArea(entityIBP, kind));
+extern "C" Work* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind) {
+    if (!mem) return nullptr;
+    return new (mem) TendArea(entityIBP, kind);
 }

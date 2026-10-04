@@ -473,7 +473,7 @@ int HarvestArea::Cleanup() {
         }
 
         // Cancel work via citizen AI
-        CitizenComponent* citizenEntity = leftmost->element.citizen;
+        CitizenComponent* citizenEntity = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         const int before = count;
@@ -522,7 +522,7 @@ int HarvestArea::Validate() {
 
     // Traverse in-order
     while (node != nullptr) {
-        CitizenComponent* ibpData = node->element.citizen;
+        CitizenComponent* ibpData = node->element.citizen.Get();
 
         uint8_t valid = ValidateTask(nullptr, &ibpData, nullptr);
 

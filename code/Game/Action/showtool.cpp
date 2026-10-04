@@ -125,7 +125,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // Character mesh holder = CharacterComponent (+0x278) -> its ModelComponent (+0x68).
     CharacterComponent* smComp = citizen->character;
     if (!smComp) return;
-    ModelComponent* charMeshHolder = smComp->modelComponent;
+    ModelComponent* charMeshHolder = smComp->modelComponent.Get();
     if (!charMeshHolder) return;
 
     // --- Storage scan: pick the highest-count item in the citizen's storage. ---
@@ -314,12 +314,6 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
 //   RCX=self, RDX=param_2 ({inner ptr}), R8D=toolType (int @ +0x28).
 //   Base Internal ctor; Action vtable -> ShowTool vtable; +0x20 = *param_2; +0x28 = toolType.
 // ============================================================
-void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
-    // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp, the Work action
-    // builders) hold the citizen reference as void*.
-    return static_cast<Object::Base*>(
-        new (self) ShowTool(static_cast<CitizenComponent* const*>(param_2), toolType));  // LEFT: SIG the ShowTool in-place ctor door: outside callers (citizenai_actionctors.cpp, the Work action builders) hand the citizen reference as void*
-}
 
 // 0x140042890: Action() (Internal, +0x10/+0x18 = 0), then +0x20 = *param_2 (the
 // door's double store `+0x20 = 0; +0x20 = *param_2`: the InternalPtr's own ctor stores

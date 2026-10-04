@@ -40,7 +40,7 @@
 #include <new>
 
 
-extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
+extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x140007a80 / createInPlace 0x140007ac0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then

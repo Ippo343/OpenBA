@@ -289,13 +289,13 @@ void DumpOrchards(int frameNum) {
                 // `growthRate >= 1.0f`, so a sapling correctly bears nothing and a fruit
                 // ratio of 0 says nothing about whether anything is wrong — this is the
                 // number that decides it.
-                if (NaturalResourceComponent* nr = slot.resource) {     // +0x10
+                if (NaturalResourceComponent* nr = slot.resource.Get()) {     // +0x10
                     float mat = nr->resourceScale;                       // +0x28
                     if (mat < mMin) mMin = mat;
                     if (mat > mMax) mMax = mat;
                     if (mat >= 1.0f) ++matured;
                 }
-                FruitComponent* g = slot.fruit;                          // +0x18
+                FruitComponent* g = slot.fruit.Get();                          // +0x18
                 if (!g) continue;
                 float ratio = g->ripeness;                               // +0x30
                 if (g->fruitFlag) ++active;                              // +0x34

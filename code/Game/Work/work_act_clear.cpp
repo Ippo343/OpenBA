@@ -148,7 +148,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
     // --- heading = Entity_impl_29a0(param_5, &{param_4[0] entity}) → XMM6 (0x1400c1563..0x1400c158b) ---
     ComponentEntity* firstEntityInner = targets[0]->_entity;
     float heading = 0.0f;
-    heading = ActChild_Entity29a0_c29a0(param_5, &firstEntityInner);
+    heading = HeadingToward(param_5, &firstEntityInner);
 
     // --- derive the description off param_4[0]; keep it if IsDerivedFrom(c7b68) (0x1400c158e..0x1400c15b6) ---
     Description* targetComp = targets[0]->_description;

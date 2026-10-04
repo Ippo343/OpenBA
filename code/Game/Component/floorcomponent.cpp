@@ -125,7 +125,7 @@ void Map::RemoveFloor(uint32_t floorId, int x, int y, int w, int h) {
             *p = static_cast<int8_t>(*p - 1);
         }
     }
-    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08   // LEFT: Map.h pickingScene raw (H5, DLG-1)
+    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08   // LEFT: H5 Map::pickingScene is raw storage (Game/Map.h, X6-GAME-A's header)
 }
 
 // FloorComponent::PlaceFloor — FUN_14011f390: increment the footprint's per-cell floor
@@ -186,7 +186,7 @@ void FloorComponent::PlaceFloor() {
         }
     }
 
-    uint32_t meshId = reinterpret_cast<Picking::Scene*>(map->pickingScene)->AddMesh(   // LEFT: Map.h pickingScene raw (H5, DLG-1)
+    uint32_t meshId = reinterpret_cast<Picking::Scene*>(map->pickingScene)->AddMesh(   // LEFT: H5 Map::pickingScene is raw storage (Game/Map.h, X6-GAME-A's header)
         Object::ExternalPtr<Picking::PickingMesh>(mesh), xform, nullptr, 0, 0, nullptr);
     floorFlag = true;
     floorId = static_cast<int32_t>(meshId);

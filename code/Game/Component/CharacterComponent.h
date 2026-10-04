@@ -83,8 +83,8 @@ public:
     //                  SendComponentMessage (e.g. 0x1400bb89b MOV [RSI+0x10],RAX)
     //   +0x18 current  int, ctor -1: the index into `actions` Update runs (>= 0)
     ActionStack actionStack;      // +0x48
-    ModelComponent*   modelComponent;   // +0x68 InternalPtr (cell 0x1401c7a50)
-    PickingComponent* pickingComponent; // +0x70 InternalPtr (cell 0x1401c7c10)
+    Object::InternalPtr<ModelComponent>   modelComponent;   // +0x68 (cell 0x1401c7a50)
+    Object::InternalPtr<PickingComponent> pickingComponent; // +0x70 (cell 0x1401c7c10)
     CharacterDescription* characterDescription; // +0x78 not serialized: _description when it is a
                                                 //       CharacterDescription (cell 0x1401c70b0), on load
 };

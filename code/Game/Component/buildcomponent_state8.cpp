@@ -254,7 +254,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
             if (!me) continue;
             int16_t cur = me->meshIndex;
             if (cur == 0) {
-                ModelComponentNotify_Reimpl(me->_entity, 0);
+                me->_entity->SendEvent(0);
             } else {
                 BC8_SetMeshFrame(me, 0);
                 BC8_ReaddDrawChildren(me);
@@ -321,7 +321,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
             if (!me) continue;
             int finalFrame = BC8_MeshFrameCount(me, BC8_MeshModelDesc(me)) - 1;
             if (finalFrame == (int)me->meshIndex) {
-                ModelComponentNotify_Reimpl(me->_entity, 0);
+                me->_entity->SendEvent(0);
             } else {
                 BC8_SetMeshFrame(me, finalFrame);
                 BC8_ReaddDrawChildren(me);
@@ -397,7 +397,7 @@ char BuildComponent::State8Update(StateMachine* sm) {
             int16_t cur = me->meshIndex;
             if (frame != (int)cur) {
                 BC8_SetMeshFrame(me, frame);
-                ModelComponentNotify_Reimpl(me->_entity, 0);
+                me->_entity->SendEvent(0);
                 if (pickingComponents[i].Get() != nullptr) {
                     PickingComponent_RegisterMesh(pickingComponents[i].Get());  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
                 }
@@ -414,7 +414,7 @@ char BuildComponent::State8Update(StateMachine* sm) {
             int finalFrame = frameCount - 1;
             int16_t cur = me->meshIndex;
             if (finalFrame == (int)cur) {
-                ModelComponentNotify_Reimpl(me->_entity, 0);
+                me->_entity->SendEvent(0);
             } else {
                 BC8_SetMeshFrame(me, finalFrame);
                 BC8_ReaddDrawChildren(me);
@@ -436,14 +436,14 @@ char BuildComponent::State8Update(StateMachine* sm) {
 char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
     if (BuildComponent_DemoGateSkip(this)) return 1;
 
-    ModelComponentNotify_Reimpl(_entity, 4);
+    _entity->SendEvent(4);
 
     CitizenBehavior* townMgr = nullptr;
     if (GameUpdateLoop::_singleton != nullptr)
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> selfIBP(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents._data, &selfIBP);
+        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &selfIBP);
         if (idx >= 0) {
             int count = townMgr->buildComponents._size;
             BuildComponent** base = townMgr->buildComponents._data;

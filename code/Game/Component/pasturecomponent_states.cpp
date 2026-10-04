@@ -223,9 +223,9 @@ void PastureComponent::Reproduce() {
     const int limit = ComputeCapacity() + 3;
 
     for (int i = 0; i < animalCount; ++i) {
-        LivestockComponent** arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals;
         if (!arr) return;
-        LivestockComponent* livestock = arr[i];
+        LivestockComponent* livestock = arr[i].Get();
         if (!livestock) continue;
         ComponentEntity* owner = livestock->_entity;
         AnimalComponent* animal = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
@@ -272,11 +272,11 @@ void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uin
     const int count = animalCount;
     if (count == 0) return;
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    LivestockComponent** arr = animals;
+    Object::InternalPtr<LivestockComponent>* arr = animals;
     if (!w || !arr) return;
 
     uint32_t idx = w->m_random->Rand(static_cast<uint32_t>(count));
-    LivestockComponent* livestock = arr[idx];
+    LivestockComponent* livestock = arr[idx].Get();
     if (!livestock) return;
 
     AnimalComponent* animal = livestock->_entity->FindComponent<AnimalComponent>();   // 0x140005500
@@ -316,9 +316,9 @@ void PastureComponent::ReleaseAllAnimals() {
             std::fflush(stderr);
             break;
         }
-        LivestockComponent** arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals;
         if (!arr) break;
-        LivestockComponent* animal = arr[animalCount - 1];
+        LivestockComponent* animal = arr[animalCount - 1].Get();
         if (!animal) break;
         PastureComponent* cur = animal->pasture;
         if (cur == nullptr) break;                  // already free: retail would spin here
@@ -459,7 +459,7 @@ void PastureProduce(PastureComponent* self) {
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             float xy[3] = {0, 0, 0};
-            Pf_EntityResolvePos_2e20(pos, xy, 2, c, nullptr);
+            InteractNodePosition(pos, xy, 2, c, nullptr);
             const int dim = grid->size;
             int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
             int gy = static_cast<int>(xy[1] + static_cast<float>(dim >> 1));
@@ -608,7 +608,7 @@ static void PastureCtrl_PopulateTable() {
 
 // PastureWork factory-with-entity (code/Game/Work/pasturework.cpp): MemAlloc(0x58,8)
 // + the retail ctor 0x1400f2d80. `entityRefSlot` points at an 8-byte entity ref.
-extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);
+extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot);
 
 // ============================================================
 // PastureComponent slot 13 (0x140127dd0) — capability query for the three
@@ -698,9 +698,9 @@ void PastureComponent::Command(int cmd) {
             wpc->SetAccepting(false);
         } else {
             ComponentEntity* entRef = _entity;
-            void* work = PastureWork_CreateForEntity(&entRef);
-            void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
-            CitizenAI_WorkScheduler_Post(wc, 1, 1, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG PastureWork_CreateForEntity returns void*
+            Work* work = PastureWork_CreateForEntity(&entRef);
+            Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
+            CitizenAI_WorkScheduler_Post(wc, 1, 1, &workIBP);
             wpc->SetAccepting(true);
         }
         return;
@@ -726,7 +726,7 @@ void PastureComponent::Command(int cmd) {
     auto transferInto = [&](PastureComponent* dst) {
         while (keep < animalCount) {
             if (dst->ComputeCapacity() <= dst->animalCount) break;
-            LivestockComponent** arr = animals;
+            Object::InternalPtr<LivestockComponent>* arr = animals;
             if (!arr) break;                        // standalone guard
             if (!arr[0]) break;                     // standalone guard
             PastureComponent* dstRef = dst;

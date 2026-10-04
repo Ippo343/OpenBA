@@ -112,12 +112,12 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
             a->_field38._ticks = 0;
             animAction = a;
         }
-        Action* animIBP = animAction;   // the InternalPtr<Action> the push copies
-        Pf_ActStackPush_54e0(stack, &animIBP);
+        ::Object::InternalPtr<Action> animIBP = animAction;   // the InternalPtr<Action> the push copies
+        ActionStackPush(stack, &animIBP);
     }
 
     // (4) MoveTo action (always)
-    void* moveAction = nullptr;
+    Action* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
         CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity);   // 0x1400012d0 (the InternalPtr the finder writes)
@@ -131,10 +131,8 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
         float speed = kRdata_140172280;
         moveAction = ::new (mmem) MoveTo(&familyOut, 1 /*Slow*/, 0, dest, 0xe1f, 0, speed);   // 0x1400c9170
     }
-    int64_t moveIBP = 0;
-    new (&moveIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<::Object::Internal*>(moveAction));   // B.3.3 bridge; LEFT: `moveAction` is a void* local holding the MoveTo (COMP's file)
-    Pf_ActStackPush_54e0(stack, &moveIBP);
+    ::Object::InternalPtr<Action> moveIBP = moveAction;
+    ActionStackPush(stack, &moveIBP);
 }
 
 // ============================================================
@@ -178,7 +176,7 @@ bool CitizenAIComponent::State_Wander() {
     if (!grid) return false;
 
     // --- cell coords from `target` model position ---
-    const ModelComponent* tModel = target->character->modelComponent;
+    const ModelComponent* tModel = target->character->modelComponent.Get();
     int mapSize = grid->size;
     int half = mapSize >> 1;
     int tx = static_cast<int>(tModel->transform.translation.x + static_cast<float>(half));
@@ -189,7 +187,7 @@ bool CitizenAIComponent::State_Wander() {
     if (mapSize <= ty) ty = mapSize - 1;
 
     // --- cell coords from the citizen's model position ---
-    const ModelComponent* sModel = citizen->character->modelComponent;
+    const ModelComponent* sModel = citizen->character->modelComponent.Get();
     int sx = static_cast<int>(sModel->transform.translation.x + static_cast<float>(half));
     int sy = static_cast<int>(sModel->transform.translation.y + static_cast<float>(half));
     if (sx < 0) sx = 0;

@@ -107,8 +107,8 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     // over whatever local sits next on the stack (reference_out_param_buffer_too_small).
     float a[3] = {0.0f, 0.0f, 0.0f};
     float b[3] = {0.0f, 0.0f, 0.0f};
-    Pf_EntityResolvePos_2e20(footprint, a, 2, 0, nullptr);
-    Pf_EntityResolvePos_2e20(footprint, b, 2, 1, nullptr);
+    InteractNodePosition(footprint, a, 2, 0, nullptr);
+    InteractNodePosition(footprint, b, 2, 1, nullptr);
 
     GameUpdateLoop* const w = GameUpdateLoop::_singleton;
     if (!w) return;

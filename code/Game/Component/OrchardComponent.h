@@ -43,9 +43,9 @@ struct OrchardCtrlTag { using Owner = class OrchardComponent; };   // the handle
 struct OrchardSlot {
     int32_t                   tile;       // +0x00 cell index into the Map's cell array
     int32_t                   state;      // +0x04 0 empty, 1 planted (bound), 2 hole
-    ComponentEntity*          tree;       // +0x08 InternalPtr<ComponentEntity>: the tree on the cell
-    NaturalResourceComponent* resource;   // +0x10 InternalPtr<NaturalResourceComponent>
-    FruitComponent*           fruit;      // +0x18 InternalPtr<FruitComponent>
+    Object::InternalPtr<ComponentEntity>          tree;       // +0x08 the tree on the cell
+    Object::InternalPtr<NaturalResourceComponent> resource;   // +0x10
+    Object::InternalPtr<FruitComponent>           fruit;      // +0x18
     bool                      picked;     // +0x20 harvested this season
     uint8_t                   _pad21[7];  // +0x21
 };

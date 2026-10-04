@@ -355,7 +355,7 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
                 icon->SetFlag(static_cast<uint8_t>(flag), 0);   // 0x14012c3f0
         }
         // Model refresh (variant 3 = idle/empty).
-        ModelComponentNotify_Reimpl(_entity, 3);
+        _entity->SendEvent(3);
         // 3D positional audio teardown.
         {
             // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
@@ -445,7 +445,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
     // --- FAITHFUL CORE: model refresh on the family's first member, then append. ---
     Family* rec = &residentSlots[family];
     if (rec->count == 0) {
-        ModelComponentNotify_Reimpl(_entity, 2);   // variant 2 = occupied
+        _entity->SendEvent(2);   // variant 2 = occupied
     }
     // Grow the family array to count+1 and append the citizen pointer (*citizenIBP).
     ActHunt_DynArraySetCount_3110(rec, rec->count + 1, citizenIBP);

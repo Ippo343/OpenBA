@@ -165,7 +165,7 @@ void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
 // fields (+0x208/+0x228/+0x230).
 void AttendanceComponent::ProcessQueue() {
     while (queueCount > 0) {
-        CitizenComponent* worker = queue[0];
+        CitizenComponent* worker = queue[0].Get();
         if (worker->school == this) {
             AttendanceComponent_ReleasePartnerSlot(worker, '\x01');
         } else {
@@ -328,12 +328,11 @@ void AttendanceComponent::Persist(IO::Stream& stream) {
         GameColl::AsArray<GameColl::Ptr8>(&queue).SetSize(count);
     }
 
-    CitizenComponent** q = queue;
+    Object::InternalPtr<CitizenComponent>* q = queue;
     for (int32_t i = 0; i < count && q; ++i, ++q) {
-        // LEFT: the queue entries are InternalPtr<CitizenComponent> in retail, CitizenComponent* here
-        reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(ser);   // LEFT: H5 queue is a raw CitizenComponent* triple
-        if (*q == nullptr) continue;
-        if (!::Object::IsDerivedFromNullSafe(*q, CitizenComponent::TypeId()))
+        q->InternalBasePtr::Serialize(ser);
+        if (q->Get() == nullptr) continue;
+        if (!::Object::IsDerivedFromNullSafe(q->Get(), CitizenComponent::TypeId()))
             *q = nullptr;
     }
 }

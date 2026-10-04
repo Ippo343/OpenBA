@@ -144,7 +144,7 @@ int MarketWork::Cleanup() {
         }
 
         // Cancel the work item: the claiming citizen's action list
-        CitizenComponent* citizen = leftmost->element.citizen;
+        CitizenComponent* citizen = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
         count = _field50;
@@ -179,7 +179,7 @@ int MarketWork::Validate() {
 
     // In-order traversal
     while (node != nullptr) {
-        CitizenComponent* entityIBP = node->element.citizen;
+        CitizenComponent* entityIBP = node->element.citizen.Get();
 
         // Validate this entity
         bool stillValid = ValidateTask(nullptr, &entityIBP, nullptr);
@@ -250,10 +250,10 @@ int MarketWork::Validate() {
             // Find and remove the node with this key
             ClaimNode* searchNode = _field48;
             while (searchNode != nullptr) {
-                if (removeArr[i] < searchNode->element.citizen) {
+                if (removeArr[i] < searchNode->element.citizen.Get()) {
                     searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= searchNode->element.citizen) {
+                    if (removeArr[i] <= searchNode->element.citizen.Get()) {
                         MarketBst_ac40(&_field48, searchNode);
                         break;
                     }
@@ -937,7 +937,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             float destPos[3] = {0.0f, 0.0f, 0.0f};
             Object::InternalPtr<ComponentEntity> exclude = field_10;  // this market
             ComponentEntity* found = nullptr;
-            PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(town),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+            PickBestDropTarget(town,
                                &found,
                                static_cast<uint32_t>(cellIdx), resType, take, '\x01',
                                destPos, &exclude);   // 0x14008d590
@@ -953,7 +953,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             uint32_t weight = static_cast<uint32_t>(icDesc->_useNodes.count);
             const int icChildren = interact->useLocationCount;
             for (int k = 0; k < icChildren; ++k) {
-                weight += InteractNodeCount(interact->useLocations[k], 0);   // 0x140123070
+                weight += InteractNodeCount(interact->useLocations[k].Get(), 0);   // 0x140123070
             }
             const uint32_t roll = GameUpdateLoop::_singleton->m_random->Rand(weight);
             float marketPos[3] = {0.0f, 0.0f, 0.0f};
@@ -1202,7 +1202,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
         uint32_t weight = static_cast<uint32_t>(micDesc->_useNodes.count);
         const int micChildren = mic->useLocationCount;
         for (int k = 0; k < micChildren; ++k) {
-            weight += InteractNodeCount(mic->useLocations[k], 0);   // 0x140123070
+            weight += InteractNodeCount(mic->useLocations[k].Get(), 0);   // 0x140123070
         }
         const uint32_t roll2 = GameUpdateLoop::_singleton->m_random->Rand(weight);
         float marketPos2[3] = {0.0f, 0.0f, 0.0f};

@@ -142,7 +142,7 @@ static Node* CellBST_AllocNode(const WorkCellAssignment* rec, Node* parent) {
 // cell index. Prototype: void* fn(longlong* root, void* outResult, uint* keyRec).
 // keyRec = {int key@+0; ptr IBP@+8}; key = *keyRec; the node is written to *outResult.
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_*: one body over the area works' raw field pairs (H5) and the scheduler's WorkSchedulerTree (ICF)
+    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: FLOOR? the erased core's view of its {root, count} header: one body (ICF) over the area works' Collection::Set<T> members (reached through the typed wrappers in Work/exe_bodies.h) and the scheduler's WorkSchedulerTree / bucket entries
     const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);  // LEFT: SIG WorkCellBST_Insert_9a40: the scheduler inserts {id, pad, InternalPtr<Work>} through the same body (ICF)
     Node** pOut = reinterpret_cast<Node**>(outResult);  // LEFT: FLOOR? the erased core's view of its out slot: one body (ICF) hands back the inserted node of the area works' cell sets and of the scheduler's WorkSchedulerTree
     int key = rec->cell;
@@ -258,7 +258,7 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 // (IBP type-checked vs CitizenComponent 0x1401c7158). SAVE is an iterative in-order
 // parent-walk writing each node's key(int @+0) then IBP(@+8). Caller: void fn(root, ser).
 void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_*: the area works hold the set as two raw fields (ClearArea.h / PlantArea.h / PlantOrchard.h / HarvestArea.h / HarvestOrchard.h, H5: a Collection::Set member would run its dtor)
+    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: FLOOR? the erased core's view of its {root, count} header: one body (ICF) over the area works' Collection::Set<T> members (typed wrappers in Work/exe_bodies.h) and the scheduler's raw trees
     int count = set->_count;
     ser->Serialize(count, nullptr);
     bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
@@ -268,11 +268,11 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser) {
         for (int i = 0; i < count; i++) {
             WorkCellAssignment rec; rec.cell = 0; rec._pad04 = 0; rec.citizen = nullptr;
             ser->Serialize(rec.cell, nullptr);
-            CitizenComponent* keyIBP = nullptr;
+            Object::InternalPtr<CitizenComponent> keyIBP = nullptr;
             // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);  // LEFT: WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr
-            if (keyIBP != nullptr && citTid &&
-                !Object::IsDerivedFromNullSafe(keyIBP, citTid))
+            keyIBP.InternalBasePtr::Serialize(*ser);
+            if (keyIBP.Get() != nullptr && citTid &&
+                !Object::IsDerivedFromNullSafe(keyIBP.Get(), citTid))
                 keyIBP = nullptr;
             rec.citizen = keyIBP;
             Node* out = nullptr;
@@ -291,9 +291,9 @@ joined:
     while ((pIVar5 = pIVar7) != nullptr) {
         ser->Serialize(pIVar5->element.cell, nullptr);   // key @+0
         // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8  // LEFT: WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr
+        pIVar5->element.citizen.InternalBasePtr::Serialize(*ser);
         if (pIVar5->element.citizen != nullptr && citTid &&
-            !Object::IsDerivedFromNullSafe(pIVar5->element.citizen, citTid))
+            !Object::IsDerivedFromNullSafe(pIVar5->element.citizen.Get(), citTid))
             pIVar5->element.citizen = nullptr;
         pIVar3 = pIVar5->right;   // right child
         if (pIVar3 == nullptr) {

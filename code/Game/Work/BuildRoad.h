@@ -49,7 +49,7 @@ public:
     int   GetPriority() override;                                       // [11] 0x1400295a0
 
     // --- BuildRoad fields (+0x48) ---
-    CitizenComponent* field_48;  // +0x48: InternalPtr<CitizenComponent> — the assigned citizen (zeroed;
+    Object::InternalPtr<CitizenComponent> field_48;  // +0x48: the assigned citizen (zeroed;
                                  //        Persist 0x1400e4980 validates it against CitizenComponent)
     ComponentDescription* field_50; // +0x50: ExternalPtr<ComponentDescription> — the road's material (zeroed; Persist
                                  //        0x1400e4980 streams it by the ExternalPtr body; Execute hands it to

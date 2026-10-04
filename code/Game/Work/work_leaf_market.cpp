@@ -28,6 +28,7 @@
 
 #include "system/MemoryAllocator.h"
 #include "collection/Collection.h"
+#include "Work/MarketWork.h"   // MarketWork::ClaimNode
 #include <cstdint>
 
 // ============================================================
@@ -41,29 +42,17 @@
 // (which fetches the singleton internally) — matches the exe's System::MemoryAllocator
 // ::MemFree, called via dispatch slot [0x140152b68] in the original.
 // Verified offset-by-offset against disassembly @0x14002af40.
-// The node is a Collection::Set node over MarketWork's demand record (0x18 bytes:
-// a key, then an inner Collection::Array {data, count, capacity}). LEFT: the
-// caller (MarketWork, WORK-b) hands the node as void*.
-namespace {
-struct MarketDemand {
-    void*    key;        // +0x00
-    void*    data;       // +0x08 the inner array's data (freed here)
-    int32_t  count;      // +0x10
-    int32_t  capacity;   // +0x14
-};
-using MarketDemandNode = Collection::Set<MarketDemand>::Node;
-static_assert(sizeof(MarketDemandNode) == 0x38, "left +0x20, right +0x28");
-}  // namespace
-
-void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node) {
+// The node is MarketWork's claim-tree node (Collection::Set<MarketWork::Claim>::Node, 0x38:
+// the citizen, then the claim's carry list {data, count, capacity}).
+void WorkLeaf_MarketTreeCleanup_2af40(MarketWork::ClaimNode* const* ctx, MarketWork::ClaimNode* node) {
     (void)ctx;
     if (node == nullptr) return;
-    MarketDemandNode* n = reinterpret_cast<MarketDemandNode*>(node);   // LEFT: SIG WorkLeaf_MarketTreeCleanup_2af40 takes the node as void* (its callers hold the tree untyped)
+    MarketWork::ClaimNode* n = node;
     WorkLeaf_MarketTreeCleanup_2af40(ctx, n->left);  // left
     WorkLeaf_MarketTreeCleanup_2af40(ctx, n->right); // right
-    System::MemoryAllocator::MemFree(n->element.data); // data buffer
-    n->element.data = nullptr;
-    n->element.count = 0;      // retail: one qword store over count and capacity
-    n->element.capacity = 0;
+    System::MemoryAllocator::MemFree(n->element.carries.data); // data buffer
+    n->element.carries.data = nullptr;
+    n->element.carries.count = 0;      // retail: one qword store over count and capacity
+    n->element.carries.capacity = 0;
     System::MemoryAllocator::MemFree(node); // node
 }

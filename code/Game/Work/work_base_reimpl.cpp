@@ -64,7 +64,7 @@
 void Work::InitFromEntity(void* pEntityIBP) {
     // LEFT: Work(void*) and InitFromEntity(void*) keep their callers' untyped
     // entity reference (the leaves' ctors in other blocks).
-    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(pEntityIBP);   // LEFT: SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (X3-COMP: resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference untyped
+    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(pEntityIBP);   // LEFT: SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference untyped
     field_10 = nullptr;
     field_10 = entityRef ? *entityRef : nullptr;   // the tree's guard (retail reads *param_2)
     field_18 = nullptr;
