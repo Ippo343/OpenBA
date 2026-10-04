@@ -189,7 +189,7 @@ Census TakeCensus(GameUpdateLoop* gw) {
 void MemoryMB(double* ws, double* priv) {
     PROCESS_MEMORY_COUNTERS_EX pm; std::memset(&pm, 0, sizeof(pm)); pm.cb = sizeof(pm);
     *ws = *priv = 0;
-    if (GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pm), sizeof(pm))) {
+    if (GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pm), sizeof(pm))) {  // CAST-OK: win32
         *ws   = (double)pm.WorkingSetSize / (1024.0 * 1024.0);
         *priv = (double)pm.PrivateUsage   / (1024.0 * 1024.0);
     }
@@ -230,7 +230,7 @@ void LogHomeLoss(CitizenComponent* cz, const char* where) {
     const float adultAge = Readable(desc) ? desc->adultAge : 0.f;          // +0x44
     // LEFT: CitizenComponent::name (+0x28) is H5 raw storage (a System::String; CIT / W0-H1):
     // its first qword is the character data.
-    const char* name = *reinterpret_cast<const char* const*>(&cz->name);
+    const char* name = *reinterpret_cast<const char* const*>(&cz->name);   // LEFT: H5 CitizenComponent::name (CIT)
     const unsigned long long prof =
         reinterpret_cast<uintptr_t>(cz->profession);  // CAST-OK: ptr_int
     std::fprintf(stderr, "[HomeLoss] frame=%d %s citizen=%p name=%s age=%.2f(adult>=%.1f) hunger=%.1f "
@@ -340,7 +340,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         WorkPlaceComponent* wpc = ent->FindComponent<WorkPlaceComponent>();   // 0x140002e10
         if (!wpc) continue;
         // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the profession as a uint64 key.
-        const uint64_t prof = reinterpret_cast<uintptr_t>(wpc->profession);   // +0x48
+        const uint64_t prof = reinterpret_cast<uintptr_t>(wpc->profession);   // +0x48  // LEFT: SIG CitizenEmploy_SeatWorkers (uint64_t key; wave X)
         if (!prof) continue;
         ++workplaces;
         if (wpc->isAccepting == 0) { ++notAccepting; continue; }            // +0x50
@@ -374,7 +374,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         wanted += missing;
         // LEFT: CitizenEmploy_SeatWorkers (CIT, Component/exe_bodies.h) takes the town
         // manager as int64 and the profession as a uint64 key.
-        const int got = CitizenEmploy_SeatWorkers((int64_t)townMgr, x.prof, missing);
+        const int got = CitizenEmploy_SeatWorkers((int64_t)townMgr, x.prof, missing);   // LEFT: SIG CitizenEmploy_SeatWorkers (int64_t town; wave X)
         seatedTotal += got;
         if (got || s_staffPasses == 0)
             std::fprintf(stderr, "[Stress::staff]   prof=0x%llx buildings=%d want=%d have=%d -> seated %d/%d\n",
@@ -560,8 +560,8 @@ static void CompProf_WatchBegin(void* comp, uint32_t tid) {
     // LEFT: `comp` is void* (entitylist.cpp declares CompProf_Begin* itself, ENTITY);
     // the type id just matched names the class.
     CitizenComponent* cz = nullptr;
-    if (tid == s_tidCitizen) cz = reinterpret_cast<CitizenComponent*>(comp);
-    else if (tid == s_tidCitizenAI) cz = reinterpret_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38
+    if (tid == s_tidCitizen) cz = reinterpret_cast<CitizenComponent*>(comp);   // LEFT: SIG CompProf_BeginKind (void* comp)
+    else if (tid == s_tidCitizenAI) cz = reinterpret_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38  // LEFT: SIG CompProf_BeginKind (void* comp)
     if (cz && Readable(cz)) {
         s_curCitizen = cz;
         s_curHome = cz->home;                                            // +0x238
@@ -569,7 +569,7 @@ static void CompProf_WatchBegin(void* comp, uint32_t tid) {
 }
 
 extern "C" int CompProf_BeginKind(void* comp, int kind) {
-    void* vtbl = *reinterpret_cast<void**>(comp);
+    void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: the profiler keys its table on the vtable word (no floor category names it: coordinator)
     uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);  // CAST-OK: hash
     for (int probe = 0; probe < kCompSlots; ++probe) {
         const int idx = (int)((h + probe) & (kCompSlots - 1));
@@ -577,7 +577,7 @@ extern "C" int CompProf_BeginKind(void* comp, int kind) {
         if (s.vtbl == vtbl && s.kind == kind) { if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId); return idx; }
         if (!s.vtbl) {
             s.vtbl = vtbl; s.kind = kind;
-            s.typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+            s.typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge  // LEFT: SIG CompProf_BeginKind (void* comp: stress_harness.h and entitylist.cpp's local declaration, ENT)
             s.ticks = 0; s.calls = 0;
             if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId);
             return idx;
