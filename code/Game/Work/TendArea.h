@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "Work/Work.h"
+#include "collection/Collection.h"
 #include "Object/exe_type.h"
 
 
@@ -38,7 +39,7 @@ public:
     TendArea();                                                     // (Work_GenericCtor shape)
     TendArea(void** entityIBP, int kind);                           // 0x1400f5a80
 
-    // frees the +0x48 citizen BST
+    // 0x1400f5970: the +0x48 citizen Set's ~Set (its Clear), then the Work stamp
     ~TendArea() override;                                           // [0]  0x14002c5d0
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f5900
     int   Execute(CitizenComponent** citizenIBP, System::Time* context) override;  // [4]  0x1400f5490
@@ -50,14 +51,19 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- TendArea fields (+0x48) ---
-    WorkCitizenSetNode* bstRoot; // +0x48: the set of citizens tending (0x1400296b0 serializes it)
-    int32_t  workerCount;        // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: Collection::Set<InternalPtr<CitizenComponent>>, the citizens tending
+    // (0x1400296b0 serializes it). A real member: the ctor 0x1400f5a80 zeroes root (qword)
+    // and count (dword) under an EH state, the dtor 0x1400f5970 runs its inlined Clear
+    // before the Work stamp. `_citizens._count` (+0x50) is the worker count (0x140029860
+    // `CMP [RCX+0x50]; SETG`: signed). The Set ctor also zeroes its +0x0c pad (+0x54),
+    // which retail's from-entity ctor leaves (known_port_issues row 640).
+    using CitizenSet = Collection::Set<CitizenComponent*>;
+    CitizenSet _citizens;
     int32_t  tendMode;           // +0x58: 0=crop/area, nonzero=orchard mode (Persist Serialize(int&))
 };
 
 static_assert(sizeof(TendArea) == 0x60, "TendArea is 0x60 (retail create MemAlloc)");
 static_assert(alignof(TendArea) == 8, "TendArea is 8-aligned");
-static_assert(offsetof(TendArea, bstRoot) == 0x48, "TendArea +0x48");
-static_assert(offsetof(TendArea, workerCount) == 0x50, "TendArea +0x50");
+static_assert(offsetof(TendArea, _citizens) == 0x48, "TendArea +0x48");
+static_assert(offsetof(TendArea, _citizens) + offsetof(TendArea::CitizenSet, _count) == 0x50, "TendArea +0x50");
 static_assert(offsetof(TendArea, tendMode) == 0x58, "TendArea +0x58");

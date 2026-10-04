@@ -137,7 +137,7 @@ static void AssignWorkToEntity(HerbalistWork* self, CitizenComponent** citizenIB
 
     // Register work with citizen AI subsystem at self+0x48 (the tree helper takes the
     // container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_RegisterWork_1a30(&self->_citizens, &workEntity, citizenIBP);
 }
 
 
@@ -214,7 +214,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
     statusIcon->SetFlag(2, atCapacity ? 1 : 0);
 
     // Get herb count (the assigned count, self+0x50)
-    int herbCount = _field50;
+    int herbCount = _citizens._count;
 
     // If the worker capacity cache is 0, calculate it (the tree's port of 0x14012e5c0
     // called here takes the component as an integer: LEFT)
@@ -432,7 +432,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
         }
 
         // (the tree helper takes the container as uintptr_t*: LEFT)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+        WorkBST_RegisterWork_1a30(&_citizens, &workEnt, citizenIBP);
 
         // Increment fail counter
         _field58 = failCount + 1;
@@ -449,7 +449,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int HerbalistWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return false;
 }
 
@@ -460,7 +460,7 @@ int HerbalistWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HerbalistWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return 0;
 }
 
@@ -472,11 +472,11 @@ int HerbalistWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*
 // here said "rightmost"), cancels the work item via engine call.
 // ============================================================
 int HerbalistWork::Cleanup() {
-    int count = _field50;
+    int count = _citizens._count;
 
     while (count > 0) {
         // Find leftmost node in BST
-        AssignmentNode* node = _field48;
+        AssignmentNode* node = _citizens._root;
         AssignmentNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -487,7 +487,7 @@ int HerbalistWork::Cleanup() {
         CitizenComponent* citizenEntity = leftmost->element;
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
-        count = _field50;
+        count = _citizens._count;
     }
     return 0;
 }
@@ -500,7 +500,7 @@ int HerbalistWork::Cleanup() {
 // Returns true if tree becomes empty, false otherwise.
 // ============================================================
 int HerbalistWork::Validate() {
-    AssignmentNode* root = _field48;
+    AssignmentNode* root = _citizens._root;
     CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
@@ -587,13 +587,13 @@ int HerbalistWork::Validate() {
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
             // Find and remove the node with this key from BST
-            AssignmentNode* searchNode = _field48;
+            AssignmentNode* searchNode = _citizens._root;
             while (searchNode != nullptr) {
                 if (removeArr[i] < searchNode->element) {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&_citizens, searchNode);
                         break;
                     }
                     searchNode = searchNode->right;
@@ -636,7 +636,7 @@ void HerbalistWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(&_citizens, &serializer2);
 
     // Serialize int at self+0x58
     serializer2.Serialize(_field58, nullptr);
@@ -649,25 +649,7 @@ void HerbalistWork::Persist(IO::Stream& stream) {
 // AutoPickupWork -> Work -> Internal dtor chain.
 // ============================================================
 // HerbalistWork dtor (retail 0x1400eec40, called by slot 0 0x14002a640). The stamps and the `~Internal` call are the compiler's chain.
-HerbalistWork::~HerbalistWork() {
-    // Free BST nodes at +0x48
-    AssignmentNode* bstRoot = _field48;
-    if (bstRoot != nullptr) {
-        // Clean up left subtree
-        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->left);
-        // Clean up right subtree
-        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->right);
-        // Free root node
-        {
-            System::MemoryAllocator::MemFree(bstRoot);
-        }
-    }
-
-    // Zero out BST root and count
-    _field48 = nullptr;
-    _field50 = 0;
-
-}
+HerbalistWork::~HerbalistWork() = default;   // the member's ~Set is retail's inlined Clear (0x1400eec40)
 
 
 
@@ -675,11 +657,11 @@ HerbalistWork::~HerbalistWork() {
 // [11] 0x140029860 (shared by 13 tables): `XOR EAX,EAX; CMP [RCX+0x50],EAX; SETG AL`
 // — "is anyone assigned". The old table pointed at Work_Slot11_HasActiveTasks.
 int HerbalistWork::GetPriority() {
-    return _field50 > 0 ? 1 : 0;
+    return _citizens._count > 0 ? 1 : 0;
 }
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
-HerbalistWork::HerbalistWork() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(0) {
+HerbalistWork::HerbalistWork() : AutoPickupWork(), _field58(0) {
 }
 
 // ============================================================

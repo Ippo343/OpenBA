@@ -36,7 +36,7 @@ class HuntWork final : public AutoPickupWork {
 public:
     HuntWork();                                                 // (Work_GenericCtor shape)
 
-    // frees the +0x48 citizen BST
+    // 0x1400ef680: the +0x48 citizen Set's ~Set (its Clear), then the base stamps
     ~HuntWork() override;                                           // [0]  0x14002a700
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ef600
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400eeff0
@@ -48,15 +48,18 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- HuntWork fields (+0x48) ---
-    // +0x48: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
-    // Cleanup 0x1400ef530 reads the element's +0x278). The container stays raw (H5).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* _field48;    // +0x48: zeroed
-    int32_t  _field50;           // +0x50: assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node; Cleanup 0x1400ef530
+    // reads the element's +0x278): the assigned citizens. A real member: the ctor (0x1401226a0)
+    // zeroes root (qword) and count (dword) under an EH state, the dtor 0x1400ef680 runs its
+    // inlined Clear before the AutoPickupWork / Work stamps. `_citizens._count` (+0x50) is
+    // the assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`). The Set ctor also zeroes
+    // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    CitizenSet _citizens;
 };
 
 static_assert(sizeof(HuntWork) == 0x58, "HuntWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(HuntWork) == 8, "HuntWork is 8-aligned");
-static_assert(offsetof(HuntWork, _field48) == 0x48, "HuntWork +0x48");
-static_assert(offsetof(HuntWork, _field50) == 0x50, "HuntWork +0x50");
+static_assert(offsetof(HuntWork, _citizens) == 0x48, "HuntWork +0x48");
+static_assert(offsetof(HuntWork, _citizens) + offsetof(HuntWork::CitizenSet, _count) == 0x50, "HuntWork +0x50");

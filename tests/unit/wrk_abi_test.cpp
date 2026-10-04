@@ -153,10 +153,10 @@ UNIT_TEST(wrk_leaf_buildstructure) {
 
 UNIT_TEST(wrk_leaf_cleararea) {
     WRK_LEAF_SHAPE(ClearArea, Work, 0x78);
-    CHECK_EQ(offsetof(ClearArea, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(ClearArea, field_50), (size_t)0x50);
-    CHECK_EQ(offsetof(ClearArea, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(ClearArea, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(ClearArea, _entities), (size_t)0x48);
+    CHECK_EQ(offsetof(ClearArea, _entities) + offsetof(ClearArea::EntitySet, _count), (size_t)0x50);
+    CHECK_EQ(offsetof(ClearArea, _cells), (size_t)0x58);
+    CHECK_EQ(offsetof(ClearArea, _cells) + offsetof(ClearArea::CellSet, _count), (size_t)0x60);
     CHECK_EQ(offsetof(ClearArea, field_68), (size_t)0x68);
     CHECK_EQ(offsetof(ClearArea, field_70), (size_t)0x70);
     CHECK_EQ(offsetof(ClearArea, field_72), (size_t)0x72);
@@ -185,8 +185,8 @@ UNIT_TEST(wrk_leaf_consumeproduce) {
 UNIT_TEST(wrk_leaf_firework) {
     WRK_LEAF_SHAPE(FireWork, Work, 0x60);
     CHECK_EQ(offsetof(FireWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(FireWork, _field50), (size_t)0x50);
-    CHECK_EQ(offsetof(FireWork, _field58), (size_t)0x58);
+    CHECK_EQ(offsetof(FireWork, _citizens), (size_t)0x50);
+    CHECK_EQ(offsetof(FireWork, _citizens) + offsetof(FireWork::CitizenSet, _count), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_fishingwork) {
@@ -202,8 +202,8 @@ UNIT_TEST(wrk_leaf_fishingwork) {
 
 UNIT_TEST(wrk_leaf_foresterwork) {
     WRK_LEAF_SHAPE(ForesterWork, AutoPickupWork, 0x60);
-    CHECK_EQ(offsetof(ForesterWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(ForesterWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(ForesterWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(ForesterWork, _citizens) + offsetof(ForesterWork::CitizenSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(ForesterWork, _field58), (size_t)0x58);
 }
 
@@ -221,31 +221,31 @@ UNIT_TEST(wrk_leaf_gatherrawmaterials) {
 
 UNIT_TEST(wrk_leaf_harvestarea) {
     WRK_LEAF_SHAPE(HarvestArea, AutoPickupWork, 0x68);
-    CHECK_EQ(offsetof(HarvestArea, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HarvestArea, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HarvestArea, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestArea, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestArea, _field60), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_harvestorchard) {
     WRK_LEAF_SHAPE(HarvestOrchard, AutoPickupWork, 0x68);
-    CHECK_EQ(offsetof(HarvestOrchard, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HarvestOrchard, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HarvestOrchard, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(HarvestOrchard, _cells) + offsetof(HarvestOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestOrchard, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestOrchard, _field60), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_herbalistwork) {
     WRK_LEAF_SHAPE(HerbalistWork, AutoPickupWork, 0x60);
-    CHECK_EQ(offsetof(HerbalistWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HerbalistWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HerbalistWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(HerbalistWork, _citizens) + offsetof(HerbalistWork::CitizenSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HerbalistWork, _field58), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_huntwork) {
     WRK_LEAF_SHAPE(HuntWork, AutoPickupWork, 0x58);
-    CHECK_EQ(offsetof(HuntWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HuntWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HuntWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(HuntWork, _citizens) + offsetof(HuntWork::CitizenSet, _count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_locationwork) {
@@ -261,8 +261,8 @@ UNIT_TEST(wrk_leaf_marketwork) {
 
 UNIT_TEST(wrk_leaf_pasturework) {
     WRK_LEAF_SHAPE(PastureWork, AutoPickupWork, 0x58);
-    CHECK_EQ(offsetof(PastureWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(PastureWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(PastureWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(PastureWork, _citizens) + offsetof(PastureWork::CitizenSet, _count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_pickup) {
@@ -274,8 +274,8 @@ UNIT_TEST(wrk_leaf_pickup) {
 
 UNIT_TEST(wrk_leaf_plantarea) {
     WRK_LEAF_SHAPE(PlantArea, Work, 0x70);
-    CHECK_EQ(offsetof(PlantArea, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(PlantArea, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(PlantArea, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantArea, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantArea, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(PlantArea, field_68), (size_t)0x68);
@@ -283,8 +283,8 @@ UNIT_TEST(wrk_leaf_plantarea) {
 
 UNIT_TEST(wrk_leaf_plantorchard) {
     WRK_LEAF_SHAPE(PlantOrchard, Work, 0x70);
-    CHECK_EQ(offsetof(PlantOrchard, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(PlantOrchard, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(PlantOrchard, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(PlantOrchard, _cells) + offsetof(PlantOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantOrchard, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantOrchard, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(PlantOrchard, field_64), (size_t)0x64);
@@ -293,8 +293,8 @@ UNIT_TEST(wrk_leaf_plantorchard) {
 
 UNIT_TEST(wrk_leaf_tendarea) {
     WRK_LEAF_SHAPE(TendArea, Work, 0x60);
-    CHECK_EQ(offsetof(TendArea, bstRoot), (size_t)0x48);
-    CHECK_EQ(offsetof(TendArea, workerCount), (size_t)0x50);
+    CHECK_EQ(offsetof(TendArea, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(TendArea, _citizens) + offsetof(TendArea::CitizenSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(TendArea, tendMode), (size_t)0x58);
 }
 

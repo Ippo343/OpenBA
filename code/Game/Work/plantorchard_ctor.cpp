@@ -57,8 +57,7 @@ PlantOrchard::PlantOrchard(void** entityIBP, ComponentDescription* treeType) : W
     // PlantOrchard's own fields. Retail writes +0x60 as one 8-byte store, which clears
     // BOTH the count (+0x60) and the capacity (+0x64) of the array triple at +0x58:
     // here the two named fields, in address order.
-    field_48 = nullptr;
-    field_50 = 0;
+    // +0x48 / +0x50: the `_cells` member's ctor zeroes the set (retail 0x1400f50b0, under its EH state).
     field_58 = nullptr;
     field_60 = 0;
     field_64 = 0;

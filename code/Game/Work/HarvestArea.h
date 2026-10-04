@@ -58,10 +58,15 @@ public:
     // Its 0x30-byte node: parent +0x10, left +0x18, right +0x20.
     using ClaimNode = Collection::Set<Claim>::Node;
 
-    // +0x48 / +0x50: Collection::Set<Claim> {root, count}; the container stays raw (H5).
-    ClaimNode* _field48;         // +0x48: zeroed
-    int32_t  _field50;           // +0x50: claim count (0x140029860 `CMP [RCX+0x50],EAX; SETG`)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: Collection::Set<Claim> (0x30-byte nodes: the cell-BST helpers 0x140029a40 /
+    // 0x14001ca60 / 0x140029de0). A real member: the ctor 0x1400ed4c0 zeroes root (qword) and
+    // count (dword) under an EH state; the dtor 0x1400ed410 frees the +0x58 array, THEN runs the
+    // set's inlined Clear (0x14000e320 on the root's +0x18 / +0x20, MemFree, zero root /
+    // count): the dtor body, then this member's ~Set. `_cells._count` (+0x50) is the
+    // claim count (0x140029860 `CMP [RCX+0x50]; SETG`: signed). The Set ctor also zeroes
+    // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
+    using CellSet = Collection::Set<Claim>;
+    CellSet _cells;
     // +0x58 / +0x60 / +0x64: Collection::Array<bool> {data, count, capacity}, one flag per
     // crop-field slot (Persist 0x1400ed350 serializes it through the bool-array door
     // 0x140151458 with the int count at +0x60; Execute and OnComplete 0x1400ecc20 read
@@ -80,8 +85,8 @@ static_assert(offsetof(HarvestArea::ClaimNode, right) == 0x20, "claim node right
 
 static_assert(sizeof(HarvestArea) == 0x68, "HarvestArea is 0x68 (retail create MemAlloc)");
 static_assert(alignof(HarvestArea) == 8, "HarvestArea is 8-aligned");
-static_assert(offsetof(HarvestArea, _field48) == 0x48, "HarvestArea +0x48");
-static_assert(offsetof(HarvestArea, _field50) == 0x50, "HarvestArea +0x50");
+static_assert(offsetof(HarvestArea, _cells) == 0x48, "HarvestArea +0x48");
+static_assert(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count) == 0x50, "HarvestArea +0x50");
 static_assert(offsetof(HarvestArea, _field58) == 0x58, "HarvestArea +0x58");
 static_assert(offsetof(HarvestArea, _field60) == 0x60, "HarvestArea +0x60");
 static_assert(offsetof(HarvestArea, _field64) == 0x64, "HarvestArea +0x64");

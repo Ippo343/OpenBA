@@ -91,7 +91,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     // Step 1: Check max workers
     WorkComponent* workComp = field_10->FindComponent<WorkComponent>();   // 0x140003050
 
-    int currentWorkers = workerCount;
+    int currentWorkers = _citizens._count;
 
     if (workComp->workState == 0) {
         int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: C signature
@@ -210,7 +210,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     }
 
     WorkCitizenSetNode* inserted = nullptr;
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&bstRoot), &inserted, citizenRef);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_RegisterWork_1a30(&_citizens, &inserted, citizenRef);
     return 2;
 }
 
@@ -223,7 +223,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
 // TendArea::OnComplete [6] -- BSTFindRemove + return false (0x1400f5470)
 // ============================================================
 int TendArea::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return false;
 }
 
@@ -232,7 +232,7 @@ int TendArea::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, 
 // TendArea::OnCancel [7] -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
 int TendArea::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return 0;
 }
 
@@ -242,9 +242,9 @@ int TendArea::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, in
 // While the set is not empty: clear the leftmost citizen's action stack.
 // ============================================================
 int TendArea::Cleanup() {
-    while (workerCount > 0) {
+    while (_citizens._count > 0) {
         // Find the leftmost node
-        WorkCitizenSetNode* node = bstRoot;
+        WorkCitizenSetNode* node = _citizens._root;
         WorkCitizenSetNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -266,7 +266,7 @@ int TendArea::Cleanup() {
 // Returns true if all valid, false otherwise.
 // ============================================================
 int TendArea::Validate() {
-    WorkCitizenSetNode* root = bstRoot;
+    WorkCitizenSetNode* root = _citizens._root;
     CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
@@ -348,13 +348,13 @@ int TendArea::Validate() {
     // Remove all invalid entries from the set
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            WorkCitizenSetNode* searchNode = bstRoot;
+            WorkCitizenSetNode* searchNode = _citizens._root;
             while (searchNode != nullptr) {
                 if (removeArr[i] < searchNode->element) {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&bstRoot), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&_citizens, searchNode);
                         break;
                     }
                     searchNode = searchNode->right;
@@ -382,11 +382,11 @@ Profession** TendArea::GetTarget(Profession** outPtr) {
 
 // ============================================================
 // TendArea::GetPriority [11] / HasWorkers (0x140029860)
-// 9-byte thunk, returns (workerCount > 0).
+// 9-byte thunk, returns (_citizens._count > 0).
 // ============================================================
 int TendArea::GetPriority() {
     // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
-    return workerCount > 0 ? 1 : 0;
+    return _citizens._count > 0 ? 1 : 0;
 }
 
 
@@ -404,7 +404,7 @@ void TendArea::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // The set at +0x48
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&bstRoot), &ser);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(&_citizens, &ser);
 
     // tendMode (+0x58)
     ser.Serialize(tendMode, nullptr);
@@ -415,25 +415,14 @@ void TendArea::Persist(IO::Stream& stream) {
 // TendArea dtor (called by slot 0 0x14002c5d0). The stamps and the `~Internal`
 // call are the compiler's chain. Frees the set's nodes.
 // ============================================================
-TendArea::~TendArea() {
-    WorkCitizenSetNode* root = bstRoot;
-    if (root != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&bstRoot, root->left);
-        WorkBase_TreeNodeFree_14c30(&bstRoot, root->right);
-        System::MemoryAllocator::MemFree(root);
-    }
-
-    // Zero out the root and the count
-    bstRoot = nullptr;
-    workerCount = 0;
-}
+TendArea::~TendArea() = default;   // the member's ~Set is retail's inlined Clear (0x1400f5970)
 
 
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The stamps are the compiler's.
-TendArea::TendArea() : Work(), bstRoot(nullptr), workerCount(0), _pad54{}, tendMode(0) {
+TendArea::TendArea() : Work(), tendMode(0) {
 }
 
 // ============================================================

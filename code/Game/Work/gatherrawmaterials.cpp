@@ -161,7 +161,7 @@ void GatherRawMaterials::Persist(IO::Stream& stream) {
     serializer.Serialize(field_60, field_58, nullptr);
 
     // --- Serialize tree at +0x68 (the helper takes the container as uintptr_t*: LEFT) ---
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_68), &serializer);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_68), &serializer);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
 }
 
 // ============================================================
@@ -403,7 +403,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 }
 
                 // (the tree helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
 
                 // Increment build count for this slot
                 field_58[slotIdx] += remaining;
@@ -431,7 +431,7 @@ int GatherRawMaterials::OnComplete(CitizenComponent** param2, ComponentEntity** 
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
 
     // Extract slot index (low byte) and amount (high 24 bits, shifted right by 8)
     uint32_t slotIdx = param4 & 0xFF;
@@ -459,7 +459,7 @@ int GatherRawMaterials::OnCancel(CitizenComponent** param2, ComponentEntity** /*
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
 
     // Extract slot index and amount
     uint32_t slotIdx = param4 & 0xFF;
@@ -611,7 +611,7 @@ int GatherRawMaterials::Validate() {
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node (the helper takes the container as
                         // uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_68), treeNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_68), treeNode);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
                         break;
                     }
                     treeNode = treeNode->right;
@@ -740,7 +740,7 @@ extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
 // scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
 extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute((CitizenComponent**)citizenIBP, nullptr);   // B.3.8 bridge; LEFT: the force harness drives it through a void* function pointer
+    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute((CitizenComponent**)citizenIBP, nullptr);   // B.3.8 bridge; LEFT: SIG ForceWork::DriveWhenIdle (Game/force_work.h, X3-GAME) takes every driver as int (*)(void* work, void* citizenIBP)
 }
 
 // Execute-readiness gate for the force harness. B3R: every helper Execute and its pushed

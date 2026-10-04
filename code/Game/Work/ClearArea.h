@@ -51,12 +51,17 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- ClearArea fields (+0x48) ---
-    WorkEntitySetNode* field_48; // +0x48: set root — entity -> citizen (0x30 nodes, 0x140029b40; B4 P2 WORK-1: H4)
-    int32_t  field_50;           // +0x50: entity tree count
-    uint8_t  _pad54[4];          // +0x54: padding
-    WorkCellSetNode* field_58;   // +0x58: set root — cell -> citizen (0x30 nodes, 0x140029a40; B4 P2 WORK-1: H4)
-    int32_t  field_60;           // +0x60: cell tree count
-    uint8_t  _pad64[4];          // +0x64: padding
+    // +0x48 / +0x58: two Collection::Set members, entity -> citizen (0x30 nodes,
+    // 0x140029b40) and cell -> citizen (0x30 nodes, 0x140029a40). Retail's ctor 0x1400e6960
+    // zeroes each (root qword, count dword) under its own EH member state, +0x48 first; the
+    // dtor 0x1400e6810 clears +0x58 first, then +0x48 (0x14000e320 on +0x18 / +0x20, MemFree
+    // of the root, zero root / count): the members' reverse order. `._count` (+0x50 / +0x60)
+    // are the tree / ground counts. Each Set ctor also zeroes its +0x0c pad (+0x54 / +0x64),
+    // which retail leaves (known_port_issues row 640).
+    using EntitySet = Collection::Set<WorkEntityAssignment>;
+    using CellSet   = Collection::Set<WorkCellAssignment>;
+    EntitySet _entities;         // +0x48
+    CellSet   _cells;            // +0x58
     ComponentDescription* field_68; // +0x68: ExternalPtr<ComponentDescription> filter (Persist 0x1400e6740
                                     //        serializes it by the ExternalPtr body; Execute compares entity +0x28)
     uint8_t  field_70;           // +0x70: bool — clear trees/resources
@@ -67,10 +72,10 @@ public:
 
 static_assert(sizeof(ClearArea) == 0x78, "ClearArea is 0x78 (retail create MemAlloc)");
 static_assert(alignof(ClearArea) == 8, "ClearArea is 8-aligned");
-static_assert(offsetof(ClearArea, field_48) == 0x48, "ClearArea +0x48");
-static_assert(offsetof(ClearArea, field_50) == 0x50, "ClearArea +0x50");
-static_assert(offsetof(ClearArea, field_58) == 0x58, "ClearArea +0x58");
-static_assert(offsetof(ClearArea, field_60) == 0x60, "ClearArea +0x60");
+static_assert(offsetof(ClearArea, _entities) == 0x48, "ClearArea +0x48");
+static_assert(offsetof(ClearArea, _entities) + offsetof(ClearArea::EntitySet, _count) == 0x50, "ClearArea +0x50");
+static_assert(offsetof(ClearArea, _cells) == 0x58, "ClearArea +0x58");
+static_assert(offsetof(ClearArea, _cells) + offsetof(ClearArea::CellSet, _count) == 0x60, "ClearArea +0x60");
 static_assert(offsetof(ClearArea, field_68) == 0x68, "ClearArea +0x68");
 static_assert(offsetof(ClearArea, field_70) == 0x70, "ClearArea +0x70");
 static_assert(offsetof(ClearArea, field_71) == 0x71, "ClearArea +0x71");
