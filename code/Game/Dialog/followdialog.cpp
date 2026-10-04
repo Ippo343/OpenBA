@@ -38,42 +38,49 @@
 #include "Game/ProfessionList.h"
 #include "Game/PlayerToolManager.h"
 #include "Game/PlayerController.h"
+#include "Game/WorkScheduler.h"        // WorkScheduler::trees (GameUpdateLoop +0x118)
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode
 
 // Standalone profession-list data is not fully live (the CitizenAI +0x288 desc
 // backref and the ProfessionList entries can be garbage/-1). Mirror the
 // citizenui.cpp CitUI_OkPtr guard so Slot6's profession-text build can't deref a
 // bogus pointer and hardfault (the Follow crash). Byte-faithful when these
 // pointers are valid (as they are in the live game).
-static inline bool FD_OkPtr(uintptr_t p) { return p >= 0x10000 && p < 0x7FFFFFFFFFF0ULL; }
+static inline bool FD_OkPtr(const void* ptr) {
+    const uintptr_t p = reinterpret_cast<uintptr_t>(ptr);   // CAST-OK: ptr_int
+    return p >= 0x10000 && p < 0x7FFFFFFFFFF0ULL;
+}
 
 // ============================================================
 // WorldGrid_FindEntity (0x1400f9a60)
 // ============================================================
-// BST search by tile index. worldGrid+0x30 = root node ptr.
-// Node: *node = key (int), *(node+6) = left ptr, *(node+8) = right ptr
-// On match: copies *(node+2) into retval (InternalBasePtr).
-static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIndex)
+// BST search by work id in the work scheduler's first id tree (WorkScheduler
+// +0x30, trees[0]; the nodes are WorkSchedulerIdNode: key +0x00, work +0x08,
+// left +0x18, right +0x20 -- Game/WorkSchedulerNodes.h).
+// On match: copies the node's Work into retval (InternalBasePtr).
+static Object::InternalPtr<Work>* WorldGrid_FindEntity_Impl(const WorkScheduler* scheduler,
+                                                            Object::InternalPtr<Work>* retval, int tileIndex)
 {
-    int* node = *(int**)((uintptr_t)worldGrid + 0x30);
+    const WorkSchedulerIdNode* node = scheduler->trees[0].root;
     while (true) {
         if (node == nullptr) {
             new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             return retval;
         }
-        if (*node <= tileIndex) {
-            if (tileIndex <= *node) {
+        if (node->key <= tileIndex) {
+            if (tileIndex <= node->key) {
                 // Exact match
                 if (node != nullptr) {
-                    *(uint64_t*)retval = 0;
-                    *(uint64_t*)retval = *(uint64_t*)(node + 2);
+                    *retval = Object::InternalPtr<Work>();
+                    *retval = node->work;
                     return retval;
                 }
                 new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 return retval;
             }
-            node = *(int**)(node + 8);  // right child
+            node = node->right;  // right child
         } else {
-            node = *(int**)(node + 6);  // left child
+            node = node->left;   // left child
         }
     }
 }
@@ -144,7 +151,7 @@ void FollowDialog::OnUpdateLayout() {
     // Otherwise: show the current profession
     // isChild: guard the description backref (garbage/-1 in standalone).
     CitizenDescription* descBack = ai->description;
-    bool isChild = FD_OkPtr((uintptr_t)descBack) &&
+    bool isChild = FD_OkPtr(descBack) &&
                    (ai->age < descBack->adultAge);
     bool hasWorkplace = (ai->school != nullptr);
 
@@ -154,7 +161,7 @@ void FollowDialog::OnUpdateLayout() {
             // The ProfessionList's child / student entries (retail 0x140068f70:
             // the game's +0xB0, then its +0x40 / +0x48).
             ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
-            if (FD_OkPtr((uintptr_t)professions)) {
+            if (FD_OkPtr(professions)) {
                 if (ai->school == nullptr) {
                     profEntry = professions->childProfession;
                 } else {
@@ -169,7 +176,7 @@ void FollowDialog::OnUpdateLayout() {
         // System::String is parameter 1 on textFollow.
         // Guard: the profession (and its string table) can be garbage in standalone
         // where the profession data is not live — deref would hardfault.
-        if (FD_OkPtr((uintptr_t)profEntry) && FD_OkPtr((uintptr_t)profEntry->stringTable) && textFollow) {
+        if (FD_OkPtr(profEntry) && FD_OkPtr(profEntry->stringTable) && textFollow) {
             // LEFT: Profession::stringName is the String's raw storage (H5, W0-H1's header).
             UI::String uiStr(Object::ExternalPtr<UI::StringTable>(profEntry->stringTable),
                              *reinterpret_cast<const System::String*>(&profEntry->stringName));
@@ -189,21 +196,21 @@ void FollowDialog::OnUpdateLayout() {
     // Special case: action 9 (idle/searching for home)
     // Check if citizen's home tile entity has a different profession — if so, show index 0x10
     if (actionIndex == 9) {
-        uintptr_t homeRef = 0;
+        Work* homeRef = nullptr;
         int homeTile = ai->field_0x30;
         if (homeTile >= 0) {
-            // Look up the work at the home tile in the world's work tree.
-            // LEFT: GameUpdateLoop +0x118 is void* (W0-H2: not the Tutorial resource).
-            void* worldGrid = GameUpdateLoop::_singleton->m_tutorial;
-            uint64_t foundRef = 0;
-            WorldGrid_FindEntity_Impl(worldGrid, &foundRef, homeTile);
-            homeRef = foundRef;
+            // Look up the work by id in the work scheduler's id tree
+            // (GameUpdateLoop +0x118 is the WorkScheduler).
+            WorkScheduler* scheduler = GameUpdateLoop::_singleton->m_tutorial;
+            Object::InternalPtr<Work> foundRef;
+            WorldGrid_FindEntity_Impl(scheduler, &foundRef, homeTile);
+            homeRef = foundRef.Get();
         }
-        if (homeRef != 0) {
+        if (homeRef != nullptr) {
             // The work's target (slot 10) against the citizen's profession
             // The gw+0x118 work tree's node payload is a Work (0x1400f88a0 fills it).
             Profession* descRef = nullptr;
-            reinterpret_cast<Work*>(homeRef)->GetTarget(&descRef);   // B.3.x bridge (slot 10)
+            homeRef->GetTarget(&descRef);   // slot 10
             if (descRef != ai->profession) {
                 actionIndex = 0x10;  // profession mismatch — show "looking for work" string
             }
@@ -213,8 +220,7 @@ void FollowDialog::OnUpdateLayout() {
     // UI::String from textAction's own string table, by index
     {
         if (!textAction) return;  // guard: element may be unresolved
-        UI::String textVal(Object::ExternalPtr<UI::StringTable>(
-                               reinterpret_cast<UI::StringTable*>(textAction->_text.table)),
+        UI::String textVal(Object::ExternalPtr<UI::StringTable>(textAction->_text.table),
                            actionIndex);
         textAction->SetText(&textVal);
     }
@@ -299,8 +305,8 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
     }
 
     // Escape key (key ID 8) — if pressed, close the follow dialog (0x140068f00).
-    void* keyMap = Input::Configuration::_singleton ? Input::Configuration::_singleton->_keyMap : nullptr;
-    if (keyMap && reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 8)) {  // B.3.7 bridge
+    const Input::KeyMap* keyMap = Input::Configuration::_singleton ? Input::Configuration::_singleton->_keyMap : nullptr;
+    if (keyMap && keyMap->Pressed(0, 8)) {
         Close();
     }
 }
