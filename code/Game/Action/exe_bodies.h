@@ -111,22 +111,15 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation); 
 
 // ---- action_child_ctors.cpp
 void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType);  // 0x140042890
-void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4);  // 0x1400cadf0
-void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4);  // 0x1400c57d0
-void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4);  // 0x1400c6a20
 class ComponentEntity;        // Entity/ComponentEntity.h
 float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
-void* ActChild_CompleteRoadCopyCtor_c59d0(void* self, uint32_t p2, uint32_t p3, uint8_t p4);  // 0x1400c59d0
-void* ActChild_HuntAnimalCopyCtor_c8400(void* self, uint64_t* p2, uint64_t* p3);  // 0x1400c8400
 void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3, uint64_t p4, uint32_t p5, uint8_t p6);  // 0x1400c7cd0
-void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count);  // 0x1400c64b0
 void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3, uint64_t, uint8_t p5);  // 0x1400c63b0
 void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);  // 0x1400ca230
 void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_t* param_3, int64_t param_4, int param_5, uint8_t param_6);  // 0x1400ca520
-void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2);  // 0x1400c6440
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
@@ -148,7 +141,6 @@ extern "C" void PathPairs_Clear_25b30(int64_t* param_1);  // 0x140025b30
 // ---- action_pf_ctors.cpp
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_);  // 0x1400c54e0
 void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3, uint64_t* param_4, uint32_t param_5);  // 0x1400c5da0
-void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float param_3, uint64_t* param_4, uint64_t* param_5, uint64_t param_6, uint32_t param_7, uint32_t param_8, uint8_t param_9, uint64_t* param_10, uint32_t param_11);  // 0x1400c71a0
 void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4, float* destination, int param_6, int param_7, float speed);  // 0x1400c9170
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
 void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3, uint32_t param_4, uint64_t* param_5, uint32_t param_6);  // 0x1400cb1d0

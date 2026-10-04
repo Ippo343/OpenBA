@@ -298,12 +298,6 @@ void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
 // FUN_1400c6440 — ConsumeRawMaterial_Action_Ctor3 (2-arg variant)
 //   RCX=self, RDX=param_2.  vtable ConsumeRawMaterial; +0x20=*param_2, +0x28=0, +0x30=0.
 // ============================================================
-void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
-    // B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the entity as uint64_t*.
-    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
-        reinterpret_cast<ComponentEntity* const*>(param_2)));
-}
-
 // 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (one qword: count and capacity;
 // +0x38 untouched).
 ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage)
@@ -375,13 +369,6 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
         } while (i < (int)newCount);
     }
     if (oldArr != _field28) System::MemoryAllocator::MemFree(oldArr);
-}
-
-// B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the action and the
-// material as integers.
-void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
-    reinterpret_cast<ConsumeRawMaterial*>(self)->AddMaterial(
-        reinterpret_cast<ComponentDescription*>(resType), count);
 }
 
 // ============================================================
