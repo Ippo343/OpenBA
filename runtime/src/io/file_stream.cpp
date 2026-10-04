@@ -186,12 +186,12 @@ using RtIo::TextFileStream;
 namespace {
 
 
-// The String-release idiom on a `char*` slot. FileStream::filename and
-// TextFileStream's two object strings are declared `char*` in FileStream.h (a
-// System::String is exactly that one pointer).
+// The String-release idiom on a `char*` slot. TextFileStream's two object
+// strings are declared `char*` in FileStream.h (a System::String is exactly
+// that one pointer). FileStream::_filename is a String member (B4 X-RH).
 void ReleaseStrSlot(char** slot) {
     // ~String (0x180006c80), including retail's release asymmetry (String.h).
-    reinterpret_cast<System::String*>(slot)->~String();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
+    reinterpret_cast<System::String*>(slot)->~String();  // LEFT: H5 TextFileStream::_objectName / _objectType are char* raw storage of a System::String (not in X-RH's assignment)
 }
 
 // ??0FileStream@IO@@QEAA@XZ (0x1800aaa10): ENDGAME B.3.9 IO (W2) -- the door
@@ -466,9 +466,9 @@ bool IO::FileStream::Create(const System::Filename& path) {
     // which is exactly the one pointer a String is, so it is reached as one.
     // NOTE there is NO AdjustDelimiters here: retail's Create does not
     // normalise, so this is String's operator=, not Filename's.
-    reinterpret_cast<System::String&>(_filename) = path.AsString();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
+    _filename = path.AsString();
 
-    _direction = 1;                                             // 1800aa959
+    _direction = 1;                                            // 1800aa959
 
     // ---- 1800aa960..1800aa9ef -------------------------------------------
     // NOT zero-initialised: CreateFileW writes every field of it that anything
@@ -640,12 +640,12 @@ System::String FileStream::GetSource() const {
     ++RtIO::g_fss.getSource;
 
     System::String ret;                                   // 1800aab67: *ret = nullptr
-    if (_filename) {                                      // 1800aab6e
+    if (_filename._data) {                                // 1800aab6e
         // The ADD-REF, spelled exactly as retail spells it and NOT through
         // `String`'s copy constructor: two stores, the pointer and the
         // refcount in front of it. `_data` is public during the migration
         // (String.h) for exactly this kind of transcription.
-        ret._data = _filename;                                 // 1800aab73
+        ret._data = _filename._data;                           // 1800aab73
         ++RtSystem::StringRefCount(ret._data);                 // 1800aab76
         ++RtIO::g_fss.getSourceNonNull;
     }
@@ -737,9 +737,9 @@ bool FileStream::Open(const System::Filename& path) {
     // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
     // `System::String::operator=` (0x1800c9810) — the short-circuit that jumps
     // past BOTH halves is the class's, and Open does not normalise either.
-    reinterpret_cast<System::String&>(_filename) = path.AsString();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
+    _filename = path.AsString();
 
-    _direction = 0;                                       // 1800aaccd — READING
+    _direction = 0;                                      // 1800aaccd — READING
 
     RtIO::FileInfo tmp;                                   // not zero-initialised
     FileSystem::_singleton->OpenFile(&tmp, path);          // 1800aacdf
@@ -762,12 +762,13 @@ bool FileStream::Open(const System::Filename& path) {
 //   3. ~FileInfo(&file)            4. release `_filename`
 //   6. (~Stream) if (encoding) MemFree(encoding)
 // STEP 2 READS THE SINGLETON, IT DOES NOT USE `this` (`MOV RCX,[0x1801fc6a8]`).
+// Step 4 (1800aaaf6) is the `System::String` member's own destructor, which the
+// compiler runs after this body and before ~Stream (B4 X-RH).
 FileStream::~FileStream() {
     ++RtIO::g_fsc.fsDtor;
     if (_file.handle != -1)                                       // 1800aaad5
         FileSystem::_singleton->CloseFile(_file);                 // 1800aaae6
     RtIO::RtIo_FileInfo_Dtor(&_file);                             // 1800aaaf0
-    RtIO::ReleaseStrSlot(&_filename);                             // 1800aaaf6
 }
 
 // ============================================================================
