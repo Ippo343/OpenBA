@@ -168,7 +168,7 @@ static void AssignWorkToEntity(ForesterWork* self, CitizenComponent** citizenIBP
 
     // Register work with citizen AI subsystem at self+0x48 (the tree helper takes the
     // container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 }
 
 
@@ -616,7 +616,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         }
 
         // (the tree helper takes the container as uintptr_t*: LEFT)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
         // Increment fail counter
         _field58 = failCount + 1;
@@ -670,7 +670,7 @@ void ForesterWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkBST_BST_Serialize_296b0
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     // Serialize int field at self+0x58
     serializer2.Serialize(_field58, nullptr);
@@ -685,7 +685,7 @@ void ForesterWork::Persist(IO::Stream& stream) {
 // Standalone exe only. (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int ForesterWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -697,7 +697,7 @@ int ForesterWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2
 // Standalone exe only.
 // ============================================================
 int ForesterWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -828,7 +828,7 @@ int ForesterWork::Validate() {
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node (the helper takes the container as
                         // uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), treeNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), treeNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         break;
                     }
                     treeNode = treeNode->right;
@@ -888,7 +888,4 @@ void* ForesterWork::CreateInPlaceObject(void* storage) {
 
 
 #include "Object/factory_registration.h"
-
-// The factory the forester force harness (forester_force_harness.cpp) names.
-extern "C" void* ForesterWork_Factory(void) { return ForesterWork::CreateNewObject(); }
 DEFINE_EXE_TYPE(ForesterWork, "AutoPickupWork")

@@ -59,7 +59,7 @@ void HighlightComponent::OnRemove() {
     // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
     // in the Scene and +0x120 is not a real object id. Must precede the sceneId
     // read — an inert component's +0x120 is 0, not -1.
-    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;   // LEFT: the embedded EdgeMeshInstance is raw storage (HighlightComponent.h, PLAYER; H5); its first word is the vptr
+    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;   // LEFT: FLOOR? vtable probe (the embedded EdgeMeshInstance is H5 raw storage, HighlightComponent.h; its first word is the vptr)
     int32_t sceneId = highlightId;
     if (sceneId < 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;

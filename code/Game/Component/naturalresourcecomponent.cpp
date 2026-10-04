@@ -48,8 +48,8 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
     ParticleComponent* found = self->_entity->FindComponent<ParticleComponent>();   // 0x140005200
 
     // LEFT: the wrong finder (row 552): retail reads the ModelComponent's +0x28 MeshInstance.
-    bool isAnimating = reinterpret_cast<const Graphics::MeshInstance*>(
-        reinterpret_cast<const uint8_t*>(found) + 0x28)->IsAnimating();
+    bool isAnimating = reinterpret_cast<const Graphics::MeshInstance*>(   // LEFT: row 552 (the wrong finder: retail reads the ModelComponent's +0x28 MeshInstance)
+        reinterpret_cast<const uint8_t*>(found) + 0x28)->IsAnimating();   // LEFT: row 552 (as above)
     if (isAnimating) return;
 
     // Clear bit 2 of the flags
@@ -73,9 +73,9 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 // 0x140005200 — FindComponent<ParticleComponent> into an InternalPtr out-slot.
 // ============================================================
 // B4 FORWARD: 1 outside caller file (diseasecomponent.cpp).
-void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
+void NaturalResourceComponent_FindComponentByType(ComponentEntity* entity, void* outIBP) {
     new (outIBP) ::Object::InternalPtr<ParticleComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ParticleComponent>());
+        entity->FindComponent<ParticleComponent>());
 }
 
 // ===== ENDGAME B.3.8 CIT — NaturalResourceComponent as a REAL class =====

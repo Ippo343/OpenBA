@@ -67,7 +67,7 @@ AvlNode28* AvlNodeAlloc(const PathSegment& key, AvlNode28* parent) {
     n->key = key.minCell;
     // LEFT: ACT-a's AvlNode28 (Action/PathAvl.h) declares its 8-byte element as an
     // int32 key and four bytes of padding; the element's high dword lives there.
-    reinterpret_cast<PathSegment*>(n)->maxCell = key.maxCell;
+    reinterpret_cast<PathSegment*>(n)->maxCell = key.maxCell;   // LEFT: POD AvlNode28 (Action/PathAvl.h, not this set's) declares its 8-byte element as an int32 key + 4 pad bytes
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -157,7 +157,7 @@ void SegTree_Insert(AvlNode28** root, int* pCount, const PathSegment& seg) {
     AvlNode28* cur = *root;
     for (;;) {
         // LEFT: AvlNode28's element as the 8-byte segment (see AvlNodeAlloc above).
-        const PathSegment& nodeSeg = *reinterpret_cast<const PathSegment*>(cur);
+        const PathSegment& nodeSeg = *reinterpret_cast<const PathSegment*>(cur);   // LEFT: POD AvlNode28 (as above)
         int nmin = nodeSeg.minCell;
         int nmax = nodeSeg.maxCell;
         bool goLeft = false, skip = false;
@@ -450,7 +450,7 @@ void PathTool::BuildRoutes() {
     }
     for (AvlNode28* n = InorderFirst(segTree); n; n = InorderNext(n)) {
         // LEFT: AvlNode28's element as the 8-byte segment (see AvlNodeAlloc above).
-        segments.SetSize(segments._size + 1, *reinterpret_cast<const PathSegment*>(n));
+        segments.SetSize(segments._size + 1, *reinterpret_cast<const PathSegment*>(n));   // LEFT: POD AvlNode28 (as above)
     }
 
 

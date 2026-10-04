@@ -69,7 +69,7 @@
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount) {
     // LEFT: H5 the callers' String arrays (ToolbarDescription::_entries, TutorialSetupDialog's
     // two) are raw {data, count, capacity} triples
-    auto* arr = reinterpret_cast<Collection::Array<System::String>*>(hdr);
+    auto* arr = reinterpret_cast<Collection::Array<System::String>*>(hdr);   // LEFT: H5 the callers' String arrays (ToolbarDescription::_entries, tutorialsetupdialog.cpp's two) are raw triples
     unsigned oldCount = static_cast<unsigned>(arr->_size);
     if (newCount == oldCount) return;
     System::String* oldBuf = arr->_data;

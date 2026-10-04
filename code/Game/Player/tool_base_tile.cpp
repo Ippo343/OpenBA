@@ -275,7 +275,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
     ComponentEntity* entity = nullptr;
     if (mem != nullptr) {
-        entity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
+        entity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),   // LEFT: SIG ComponentEntity_CtorFromDescription (X-G2-WAIT) builds into void*
                                                      descriptionPtr);
     }
 

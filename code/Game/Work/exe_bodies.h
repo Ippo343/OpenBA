@@ -31,7 +31,6 @@ extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone ha
 // ---- foresterwork.cpp
 bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
-extern "C" void* ForesterWork_Factory(void);  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials.cpp
 extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)
@@ -97,7 +96,8 @@ void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* work
 void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30
 void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg);  // 0x14001a6e0
 void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP);  // 0x140025520
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer);  // 0x1400296b0
+namespace IO { class Serializer; }
+void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0
 
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40

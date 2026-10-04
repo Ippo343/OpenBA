@@ -200,10 +200,10 @@ void TypeSubtreeFree(void* set, ::Object::Factory::TypeSet::Node* node) {
 // with an explicit `MOV RCX,RBX`. Both therefore pass `this`, which is the
 // argument SetNodeFree ignores anyway.
 // ============================================================================
-void RtObject_Factory_Dtor(void* self) {
+void RtObject_Factory_Dtor(::Object::Factory* self) {
     // `~Factory` writes exactly the Set header's two fields at the end —
     // `MOV [RBX],RAX` (qword) and `MOV [RBX+8],EAX` (DWORD, not a qword).
-    ::Object::Factory::TypeSet& s = static_cast<::Object::Factory*>(self)->_types;   // LEFT: SIG RtObject_Factory_Dtor(void*) (TypeInfo.h; caller engine_lifecycle.cpp holds Object::Factory*: wave X)
+    ::Object::Factory::TypeSet& s = self->_types;
     ::Object::Factory::TypeSet::Node* root = s._root;
     if (root != nullptr) {
         TypeSubtreeFree(self, root->left);
@@ -284,7 +284,7 @@ void RtObject_Factory_Dtor(void* self) {
 // sides (reference_position_only_diffs_hide_one_body). Both resolve the same
 // four external operands: 0x1801fc718, 0x18014b390, 0x1800c6c00, 0x18014b388.
 // ============================================================================
-void RtObject_InternalFactory_Dtor(void* self) {
+void RtObject_InternalFactory_Dtor(::Object::InternalFactory* self) {
     // ENDGAME B.3.2 step 2 — both calls are now direct member destructors:
     // `InternalFactory::persistIds` (Array<int32_t>) and `::objects`
     // (Array<Internal*>) are already real `Collection::Array<T>` members
@@ -293,9 +293,8 @@ void RtObject_InternalFactory_Dtor(void* self) {
     // `int32_t`/`Internal*` element's trait-derived `~Array()` IS byte for
     // byte. Reverse declaration order is kept: persistIds (+0x10) before
     // objects (+0x00), matching the banner above.
-    auto* factory = static_cast<::RtObject::InternalFactory*>(self);   // LEFT: SIG RtObject_InternalFactory_Dtor(void*) (wave X)
-    factory->persistIds.~Array();   // retail 0x18001c750
-    factory->objects.~Array();      // retail 0x18002fb70
+    self->GetPersistIds().~Array();   // retail 0x18001c750
+    self->GetObjects().~Array();      // retail 0x18002fb70
 }
 
 // ============================================================================
@@ -446,8 +445,8 @@ void ResourceSubtreeFree(void* set, RtObject::ResourceSet::Node* node) {
 // The two closing store PAIRS are qword-then-DWORD, like ~Factory's. Nothing
 // at +0x0c of either Set header is written.
 // ============================================================================
-void RtObject_ExternalFactory_Dtor(void* self) {
-    ExternalFactory* f = static_cast<ExternalFactory*>(self);   // LEFT: SIG RtObject_ExternalFactory_Dtor(void*) (wave X)
+void RtObject_ExternalFactory_Dtor(::Object::ExternalFactory* self) {
+    ExternalFactory* f = self;
 
     PathStackArrayDtor(&f->_pathStack);                           // this + 0x30
 

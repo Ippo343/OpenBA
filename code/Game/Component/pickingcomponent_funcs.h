@@ -14,4 +14,5 @@ void PickingComponent_RegisterMesh(PickingComponent* pc);
 
 // Convenience: find `entity`'s PickingComponent and register its mesh (for callers that
 // hold an entity, e.g. the player-placement create path). Respects BANISHED_LIVE_PICKMESH.
-void PickingComponent_RegisterMeshForEntity(void* entity);
+class ComponentEntity;
+void PickingComponent_RegisterMeshForEntity(ComponentEntity* entity);

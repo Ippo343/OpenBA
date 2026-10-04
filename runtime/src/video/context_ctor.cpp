@@ -393,7 +393,7 @@ extern "C" Video::Context* RtVideo_Context_Ctor(Video::Context* self, Video::Dev
     // constructor. LEFT (B.4 R-VIDEO): the three class `operator new` results
     // are `void*`, viewed as the object each allocation is for (a C++ `new`
     // expression would assume a non-null result and drop retail's null tests).
-    Video::RenderBuffer* rb = static_cast<Video::RenderBuffer*>(
+    Video::RenderBuffer* rb = static_cast<Video::RenderBuffer*>(   // LEFT: the class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)
         Video::RenderBuffer::operator new(0x30));
     if (rb) {
         rb->colorBuffer = nullptr;   // +0x00
@@ -471,6 +471,6 @@ void Video::Context::SetDefaultRenderBuffer(void* rb) {
 
     // LEFT (B.4 R-VIDEO): code/Game/Game/minimap_paint.cpp hands this `void*`;
     // the field is typed.
-    _defaultRenderBuffer = static_cast<Video::RenderBuffer*>(rb);
+    _defaultRenderBuffer = static_cast<Video::RenderBuffer*>(rb);   // LEFT: SIG minimap_paint.cpp (another agent's) hands the render buffer as void*
 
 }

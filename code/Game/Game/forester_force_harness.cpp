@@ -48,6 +48,7 @@
 #include "Entity/ComponentEntity.h"    // the lodge, read by name (B4 P2 GAME-1)
 #include "Component/Component.h"
 #include "Work/Work.h"                // the ForesterWork's Work fields (+0x10, +0x28)
+#include "Work/ForesterWork.h"        // ForesterWork::CreateNewObject
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -63,10 +64,8 @@ extern ComponentEntity* g_pForceWorkBuilding;
 // never null-deref a dependency.
 extern bool ForesterWork_ExecuteReady();
 
-// Standalone ForesterWork factory (code/Game/Work/foresterwork.cpp): Work_Alloc(0x60) +
-// Work_GenericCtor (Object::Internal::Internal, zero from +0x10, +0x20/+0x28 = -1, install
-// the ForesterWork vtable, resolve the Slot fns). Leaves +0x10 (work-area) zeroed.
-extern "C" void* ForesterWork_Factory(void);
+// The ForesterWork factory is the class's own CreateNewObject (create 0x14002a310,
+// Work/ForesterWork.h): MemAlloc(sizeof, 8) + the ctor. Leaves +0x10 (work-area) zeroed.
 
 // ForesterWork::Execute driver (foresterwork.cpp): runs the forester work tick directly with
 // the worker citizen's IBP (the Work-driver ABI). Returns the work result code; on finding a
@@ -131,7 +130,7 @@ static ForesterComponent* VerifyLodgeForester(ComponentEntity* lodge, bool dump)
 // ForesterWork — not Leisure/Wander — keeps driving the stack.
 extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     if (!ForceForesterEnvOn()) return false;
-    ComponentEntity* lodge = reinterpret_cast<ComponentEntity*>(g_pForceWorkBuilding);   // LEFT: g_pForceWorkBuilding is void* (GAME-4)
+    ComponentEntity* lodge = g_pForceWorkBuilding;
     if (!lodge || !citizen) return false;
     if (GameUpdateLoop::_singleton == nullptr) return false;
 
@@ -179,11 +178,11 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
 
     // Construct the ForesterWork ONCE and keep it (it carries a per-work cell BST @+0x48 and a
     // fail counter @+0x58 that must survive across drives). Faithful to ForesterWork_CopyCtor:
-    // ForesterWork_Factory does the object build (vtable + Object::Internal + +0x20/+0x28 = -1),
+    // ForesterWork::CreateNewObject does the object build (vtable + Object::Internal + +0x20/+0x28 = -1),
     // then we set the Work_Ctor25 work-area-dependent fields (+0x10 work-area IBP, +0x28 cell).
     static Work* s_fw = nullptr;
     if (!s_fw) {
-        s_fw = reinterpret_cast<Work*>(ForesterWork_Factory());   // LEFT: SIG ForesterWork_Factory returns void* (Work/exe_bodies.h)
+        s_fw = reinterpret_cast<Work*>(ForesterWork::CreateNewObject());   // LEFT: the factory slot's type returns void* (Object/exe_type.h FactoryFn)
         if (!s_fw) return true;
         new (&s_fw->field_10) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(lodge));   // B.3.3 bridge  // +0x10 work-area IBP  // LEFT: POD:RtObject::Internal (Internal.h)

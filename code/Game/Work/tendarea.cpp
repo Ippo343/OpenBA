@@ -209,9 +209,8 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
         citEnt->happinessFlags |= 0x20000;
     }
 
-    // LEFT: 0x140021a30's C signature (outside callers) takes the set as uintptr_t*.
     WorkCitizenSetNode* inserted = nullptr;
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&bstRoot), &inserted, citizenRef);
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&bstRoot), &inserted, citizenRef);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 2;
 }
 
@@ -224,7 +223,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
 // TendArea::OnComplete [6] -- BSTFindRemove + return false (0x1400f5470)
 // ============================================================
 int TendArea::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return false;
 }
 
@@ -233,7 +232,7 @@ int TendArea::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, 
 // TendArea::OnCancel [7] -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
 int TendArea::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -355,7 +354,7 @@ int TendArea::Validate() {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&bstRoot), searchNode);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&bstRoot), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         break;
                     }
                     searchNode = searchNode->right;
@@ -405,7 +404,7 @@ void TendArea::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // The set at +0x48
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&bstRoot), &ser);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&bstRoot), &ser);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     // tendMode (+0x58)
     ser.Serialize(tendMode, nullptr);

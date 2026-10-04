@@ -133,10 +133,10 @@ void WorkComponent::CancelWork() {
 // pasturecomponent_states, resourceproducecomponent_states, Player/removaltool,
 // Player/keystone_a_removalcalcpath; the closing wave rewires them.
 bool WorkComponent_CheckWorkSlot(void* selfP) {
-    return ((WorkComponent*)selfP)->IsWorkPosted();   // B4 FORWARD: the old receiver cast
+    return ((WorkComponent*)selfP)->IsWorkPosted();   // B4 FORWARD: the old receiver cast   // LEFT: B4 FORWARD callers in cropfield / residence / resourceproduce states (other agents') pass void*
 }
 void WorkComponent_RegisterWorkSlot(void* selfP) {
-    ((WorkComponent*)selfP)->CancelWork();   // B4 FORWARD: the old receiver cast
+    ((WorkComponent*)selfP)->CancelWork();   // B4 FORWARD: the old receiver cast   // LEFT: B4 FORWARD callers in six other agents' Component files pass void*
 }
 
 // ============================================================================
@@ -291,5 +291,5 @@ int WorkComponent::CalcMaxWorkers() const {
 // B4 FORWARD: outside callers in Dialog/townhallui.cpp, Dialog/workplaceui.cpp and the
 // inline bodies of Component/exe_bodies.h.
 int fn_StorageCountQuery(void* component) {
-    return ((WorkComponent*)component)->CalcMaxWorkers();   // B4 FORWARD: Component/exe_bodies.h still calls this (fn_CalcWorkerSlots, fn_CitizenComponent_HasVacancy)
+    return ((WorkComponent*)component)->CalcMaxWorkers();   // B4 FORWARD: Component/exe_bodies.h still calls this (fn_CalcWorkerSlots, fn_CitizenComponent_HasVacancy)   // LEFT: B4 FORWARD callers citizencomponent.cpp / workplaceui.cpp / Component/exe_bodies.h (other agents') pass void*
 }

@@ -341,9 +341,9 @@ using MGStructureArray = Collection::Array<uint8_t, Collection::DefaultAllocator
 void MG_Resize(void* header, int newCount, int stride) {
     // B.3.2 bridge: the MapGenerator pools are still raw DynArrayHeader fields.
     switch (stride) {
-    case 8:    reinterpret_cast<MGFamilyArray*>(header)->SetSize(newCount);    break;   // LEFT: SIG MG_Resize (DynArrayHeader is not a Collection::Array; the one erased core is reached through it)
-    case 0x18: reinterpret_cast<MGRefArray*>(header)->SetSize(newCount);       break;   // LEFT: SIG MG_Resize (DynArrayHeader is not a Collection::Array; the one erased core is reached through it)
-    case 0x30: reinterpret_cast<MGStructureArray*>(header)->SetSize(newCount); break;   // LEFT: SIG MG_Resize (DynArrayHeader is not a Collection::Array; the one erased core is reached through it)
+    case 8:    reinterpret_cast<MGFamilyArray*>(header)->SetSize(newCount);    break;   // LEFT: POD MapGenerator::DynArrayHeader<T>: the pool is a raw triple with its own dtor, not the Array the core resizes (H5)
+    case 0x18: reinterpret_cast<MGRefArray*>(header)->SetSize(newCount);       break;   // LEFT: POD MapGenerator::DynArrayHeader<T>: the pool is a raw triple with its own dtor, not the Array the core resizes (H5)
+    case 0x30: reinterpret_cast<MGStructureArray*>(header)->SetSize(newCount); break;   // LEFT: POD MapGenerator::DynArrayHeader<T>: the pool is a raw triple with its own dtor, not the Array the core resizes (H5)
     default:   break;   // no such pool exists; the three callers below are the only ones
     }
 }

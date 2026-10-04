@@ -76,12 +76,12 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     int version = s->GetVersion();
     if (version < 5) {
         for (int i = 0; i < 14; ++i)
-            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[14]), 0.0f);   // LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[15]), 0.0f);   // LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
+            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)   // LEFT: FIELD timers[] are int64_t where retail holds System::Time; citizenai_gather / _growup / _handlers2 / _handlers3 / _candidatelist (not this set) store and compare integers
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[14]), 0.0f);   // LEFT: FIELD timers[] int64_t (as above)
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[15]), 0.0f);   // LEFT: FIELD timers[] int64_t (as above)
     } else {
         for (int i = 0; i < 16; ++i)
-            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
+            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)   // LEFT: FIELD timers[] int64_t (as above)
     }
 
     version = s->GetVersion();
@@ -92,9 +92,9 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     version = s->GetVersion();
     if (version > 1) s->Serialize(state, nullptr);
     version = s->GetVersion();
-    if (version > 2) reinterpret_cast<System::Time*>(&leisureTimer)->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
+    if (version > 2) leisureTimer.Serialize(*s);   // System::Time (X-G1-1b)
     version = s->GetVersion();
-    if (version > 3) reinterpret_cast<System::Time*>(&dataC8)->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)
+    if (version > 3) reinterpret_cast<System::Time*>(&dataC8)->Serialize(*s);   // B.3.4b bridge; LEFT: CitizenAIComponent Time members stay int64_t (readers in citizenai_candidatelist.cpp / _gather.cpp / _leisure.cpp do integer arithmetic)   // LEFT: FIELD dataC8 is int64_t where retail holds System::Time; citizenai_candidatelist.cpp (not this set) reads it as an integer
 
     s->~Serializer();   // B.3.4 bridge
 }

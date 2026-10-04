@@ -160,8 +160,8 @@ static void InstallLeadMessage(CitizenComponent* const* citizenRef, CharacterCom
         act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
     if (ch->field_0x58 != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&ch->field_0x58)->DeletePtr(
-            );   // B.3.3 bridge  // LEFT: CharacterComponent.h (WORK-3) field_0x58 is Action*, retail an InternalPtr<Action>
+        reinterpret_cast< ::Object::InternalBasePtr*>(&ch->field_0x58)->DeletePtr(   // LEFT: POD CharacterComponent::field_0x58 is declared Action*, retail an InternalPtr<Action> (header not this set's)
+            );
     }
     ch->field_0x58 = act;
 }

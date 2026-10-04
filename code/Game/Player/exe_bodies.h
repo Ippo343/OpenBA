@@ -40,7 +40,6 @@ extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell);
 extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell, int* outLength);  // 0x1400fb2d0
 
 // ---- keystone_a_removalcalcpath.cpp
-extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);  // 0x1400f8d50 B4 FORWARD -> WorkScheduler::FindWorkAtCell: 2 outside callers (Action/action_base_cnr.cpp, Component/destroycomponent_states.cpp)
 extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1);  // 0x14011dfa0 B4 FORWARD -> DestroyComponent::RunStateMachine: 1 outside caller (Dialog/upgradeui.cpp)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
 
@@ -107,7 +106,6 @@ int Player_HighlightAdd_55430(int64_t param_1, int param_2);  // 0x140055430 B4 
 extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40
 
 // ---- tool_base_path.cpp
-void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP);  // 0x140005780
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP);  // 0x140003ea0
 uint64_t PlayerPath_Sub_11e710(uintptr_t param_1);  // 0x14011e710 B4 FORWARD -> DestroyComponent::InRemovalState: 2 outside callers (Component/firecomponent_ignite.cpp, Component/workplacecomponent.cpp)
 bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, const ComponentDescription* param_10);  // 0x14009f5d0

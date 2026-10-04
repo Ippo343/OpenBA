@@ -25,7 +25,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_3050, WorkAcc_FindComponent_*
 #include "Component/exe_bodies.h"         // FloorComponent_FindResData, ModelComponentNotify_Reimpl
-#include "Player/exe_bodies.h"            // RemovalCalc_helper_8d50
+#include "Game/WorkScheduler.h"           // WorkScheduler::FindWorkAtCell (0x1400f8d50)
+#include "Work/Work.h"
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
 #include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"           // kRdata_*
@@ -356,14 +357,11 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     ComponentEntity* regIBP = *citizenIBP;
     RegisterRawMaterial(gameWorld->m_citizenList, &regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
 
-    // Query the existing surface work at the cell (for its id at +0x24).
-    // LEFT: 0x1400f8d50's C declaration (Player/exe_bodies.h) takes the scheduler as an
-    // integer; the object it returns (+0x24 read) has no settled class.
-    int64_t surfIBP = 0;
-    RemovalCalc_helper_8d50(reinterpret_cast<int64_t>(gameWorld->m_tutorial), reinterpret_cast<void**>(&surfIBP), cell);   // 0x1400f8d50   // LEFT: SIG RemovalCalc_helper_8d50 (Player/exe_bodies.h)
+    // Query the existing surface work at the cell (for its +0x24).
+    Work* surf = gameWorld->m_tutorial->FindWorkAtCell(cell);   // 0x1400f8d50
     uint32_t surfMatId = 0xffffffff;
-    if (surfIBP != 0) {
-        surfMatId = *reinterpret_cast<uint32_t*>(surfIBP + 0x24);   // LEFT: the returned object's class is not settled (0x1400f8d50)
+    if (surf != nullptr) {
+        surfMatId = static_cast<uint32_t>(surf->field_24);   // Work +0x24
     }
 
     // Spawn a new raw-material entity cloned from the resource description's template.
@@ -389,7 +387,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
         rawMat->profession = nullptr;
     }
 
-    if (surfIBP != 0) {
+    if (surf != nullptr) {
         WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
         work->workFlags = surfMatId;
     }
@@ -431,26 +429,3 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
         }
     }
 }
-
-// ===========================================================================
-// B4 FORWARD: the C spellings other blocks' files still call, one line each.
-// ===========================================================================
-
-// B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Component/spawncomponent.cpp)
-uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
-    return CheckCellTerrain(reinterpret_cast<const Map*>(mapGrid), cellIndex);   // LEFT: SIG ActCNR_CheckTerrain_cb00
-}
-
-
-
-// B4 FORWARD: outside callers (Action/createnaturalresource.cpp)
-uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
-    return ModelMeshCount(reinterpret_cast<const ModelComponent*>(comp), variant);   // LEFT: SIG ActCNR_NR_GetSubVariantCount_125320
-}
-
-// B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Component files)
-void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant) {
-    ModelSelectMesh(reinterpret_cast<ModelComponent*>(comp), variant, subVariant);   // LEFT: SIG ActCNR_NR_SetVariant_1253d0
-}
-
-

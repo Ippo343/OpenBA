@@ -119,8 +119,8 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
         const int n = table ? table->_points._size : 0;
         for (int i = 0; i < n; ++i) {
             const Pathfinding::PointList::Point& entry = table->_points._data[i];
-            if (*reinterpret_cast<const System::String*>(&entry.name) ==   // LEFT: PointList.h Point::name is raw char* storage of a String (runtime header)
-                *nameStr) {   // B.3.1 bridge
+            if (entry.name ==
+                *nameStr) {
                 hit = i;
                 break;
             }

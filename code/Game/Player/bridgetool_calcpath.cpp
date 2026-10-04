@@ -373,7 +373,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
                 // align 8, new tail zeroed. LEFT: MultiObjectComponent (block COMP)
                 // declares the array as three fields, so the grow goes through
                 // coll_bridge's ArrayAt view of +0x48.
-                GameColl::ArrayAt<GameColl::Ptr8>(multi, 0x48).SetSize(newCount);
+                GameColl::ArrayAt<GameColl::Ptr8>(multi, 0x48).SetSize(newCount);   // LEFT: H5 MultiObjectComponent declares its children Array as three raw fields (Component/MultiObjectComponent.h, not this set's)
                 if (multi->children) {
                     multi->children[newCount - 1] = Object::InternalPtr<ComponentEntity>(segIBP);
                     multi->childCount = newCount;

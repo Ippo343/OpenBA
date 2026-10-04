@@ -155,9 +155,8 @@ void PickingComponent_RegisterMesh(PickingComponent* pc) {
 // Entity-level convenience (the tree's): find the entity's PickingComponent and refresh
 // its mesh. Used by callers that hold an entity rather than the component (player
 // placement, the bridge tool).
-void PickingComponent_RegisterMeshForEntity(void* entityV) {
-    if (!entityV) return;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // B4 FORWARD receiver  LEFT: SIG PickingComponent_RegisterMeshForEntity (Player callers)
+void PickingComponent_RegisterMeshForEntity(ComponentEntity* entity) {
+    if (!entity) return;
     PickingComponent* pc = entity->FindComponent<PickingComponent>();
     if (pc) pc->RefreshMesh();
 }

@@ -190,7 +190,7 @@ extern "C" ComponentEntity* ClearAreaComponent_HarnessOwner(ClearAreaComponent* 
 extern "C" int ClearAreaComponent_HarnessSweep(ComponentEntity* ownerEntity) {
     alignas(8) uint8_t buf[sizeof(ClearAreaComponent)];
     std::memset(buf, 0, sizeof(buf));
-    ClearAreaComponent* comp = reinterpret_cast<ClearAreaComponent*>(buf);        // harness-only
+    ClearAreaComponent* comp = reinterpret_cast<ClearAreaComponent*>(buf);        // harness-only   // LEFT: the harness builds a zeroed ClearAreaComponent without its ctor (its own buffer, kept)
     comp->_entity = ownerEntity;
     return comp->FootprintSweep();
 }

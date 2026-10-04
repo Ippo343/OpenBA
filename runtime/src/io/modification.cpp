@@ -243,11 +243,11 @@ static void* ArrayFreeBuffer(ModArrayOf<T>* a) {
 
 // 0x1800111a0 — Collection::Array<int32>::~Array
 void* RtColl_ArrayI32Dtor_1800111a0(void* a) {
-    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: SIG RtColl_ArrayI32Dtor_1800111a0 (void* core entry; PackageFile / vertexlayout callers, wave X)
+    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: ERASED core entry: its caller holds PackageFile::_iconData as a raw triple (H5, package_file_dtor.cpp)
 }
 // 0x1800112a0 — Collection::Array<uint8>::~Array
 void* RtColl_ArrayU8Dtor_1800112a0(void* a) {
-    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: SIG RtColl_ArrayU8Dtor_1800112a0 (void* core entry; PackageFile / vertexlayout callers, wave X)
+    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: ERASED core entry: its callers hold PackageFile::_previewData as a raw triple (H5) and VertexLayout::_signature as an Array<uint8_t>
 }
 
 // 0x180009af0, already ported by lane FIND (filesystem_find_win.cpp) and
@@ -329,9 +329,7 @@ void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
 // 0x1800091f0 — Collection::Array<Filename>::operator=. Unlike the two above it
 // carries its own self-assignment early-out (`CMP RCX,RDX; JNZ`), because its
 // callers do not all guard.
-void* RtColl_ArrayFilenameAssign_1800091f0(void* dstv, const void* srcv) {
-    ModArrayOf<Filename>* dst = static_cast<ModArrayOf<Filename>*>(dstv);   // LEFT: SIG RtColl_ArrayFilenameAssign_1800091f0 (void* core entry, wave X)
-    const ModArrayOf<Filename>* src = static_cast<const ModArrayOf<Filename>*>(srcv);   // LEFT: SIG as above
+void* RtColl_ArrayFilenameAssign_1800091f0(ModArrayOf<Filename>* dst, const ModArrayOf<Filename>* src) {
     if (dst == src) return dst;
     // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
     // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).

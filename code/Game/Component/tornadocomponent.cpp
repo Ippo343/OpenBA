@@ -61,7 +61,7 @@
 #include "Component/firecomponent_funcs.h"   // the fire lane's three bodies
 #include "Action/exe_bodies.h"         // ActCNR_FindComponent_c460/_3f60, ActHunt_*
 #include "Work/exe_bodies.h"           // WorkBase_FindComponent_52c0
-#include "Player/exe_bodies.h"         // PlayerPath_FindComponent_5780
+#include "Player/exe_bodies.h"
 #include "Dialog/dialog_exe_helpers.h" // Dialog_FindComponent_d6c0
 #include <new>
 #include <cstdint>

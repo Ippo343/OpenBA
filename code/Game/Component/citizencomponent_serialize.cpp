@@ -174,7 +174,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(health, nullptr);
     s->Serialize(statusFlags, nullptr);
     foodTimer.Serialize(*s);
-    reinterpret_cast<System::Time*>(&field_0x60)->Serialize(*s);   // B.3.4b bridge  // LEFT: CitizenComponent::field_0x60 int64 ticks (CIT-2 member bodies do integer arithmetic)
+    reinterpret_cast<System::Time*>(&field_0x60)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD CitizenComponent::field_0x60 is int64_t where retail holds System::Time; citizencomponent.cpp / citizen_updatehealth.cpp (not this set) do integer arithmetic
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5948 is Disease's registered type-id cell
@@ -184,8 +184,8 @@ void CitizenComponent::Persist(IO::Stream& stream) {
                                     &tid, "CitizenDisease");
     }
 
-    reinterpret_cast<System::Time*>(&field_0x70)->Serialize(*s);   // B.3.4b bridge  // LEFT: CitizenComponent::field_0x70 int64 ticks (CIT-1 / CIT-2 member bodies do integer arithmetic)
-    reinterpret_cast<System::Time*>(&field_0x78)->Serialize(*s);   // B.3.4b bridge  // LEFT: CitizenComponent::field_0x78 int64 ticks (CIT-2 member bodies do integer arithmetic)
+    reinterpret_cast<System::Time*>(&field_0x70)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD field_0x70 int64_t (as above; citizen_needsupdate.cpp too)
+    reinterpret_cast<System::Time*>(&field_0x78)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD field_0x78 int64_t (as above)
     s->Serialize(happiness, nullptr);
     s->Serialize(happinessFlags, nullptr);
     happinessTimer.Serialize(*s);
@@ -211,7 +211,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
         if (v > 0) s->Serialize(field_0xA8, nullptr);
     }
     s->Serialize(clothingLevel, nullptr);
-    reinterpret_cast<System::Time*>(&clothingTimer)->Serialize(*s);   // B.3.4b bridge  // LEFT: CitizenComponent::clothingTimer int64 ticks (CIT-1 member body assigns ticks)
+    reinterpret_cast<System::Time*>(&clothingTimer)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD clothingTimer int64_t (as above; citizencomponent.cpp / citizen_needsupdate.cpp assign ticks)
     {
         int v = s->GetVersion();
         if (v > 1) s->Serialize(field_0x1E0, nullptr);

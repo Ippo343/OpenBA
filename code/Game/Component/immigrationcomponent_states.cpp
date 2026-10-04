@@ -255,8 +255,8 @@ void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector
     if (!model) return;
     float yaw = rng->RandFloatTol() * kYawRange;
     model->SetTransformFromYaw(&spawnPoint, yaw);   // 0x140003870
-    ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(model),   // 0x1401253d0  LEFT: SIG ActCNR_NR_SetVariant_1253d0
-                                static_cast<uint16_t>(gender), 0);
+    ModelSelectMesh(model,   // 0x1401253d0
+                    static_cast<uint16_t>(gender), 0);
     if (ndesc) {
         Graphics::MaterialInstance* mat = (gender == 0) ? ndesc->_materialGender0 : ndesc->_materialGender1;
         model->meshInstance

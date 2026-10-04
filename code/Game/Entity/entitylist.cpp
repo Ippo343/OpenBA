@@ -875,7 +875,7 @@ void EntityList::PreUpdate() {
         if (hasUpdateFlag && !isDeleted) {
             // Insert into update tree
             uint64_t outBuf = 0;
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&updateTreeRoot), &outBuf, ibpPtr);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&updateTreeRoot), &outBuf, ibpPtr);   // LEFT: H5 EntityList holds the update tree as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
             EntityList_MarkUpdateTreeDirty();
         } else {
             // Search for entity in update tree, remove if found
@@ -895,7 +895,7 @@ void EntityList::PreUpdate() {
                             ReportStagingCorrupt("PreUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), node);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), node);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         EntityList_MarkUpdateTreeDirty();
                         break;
                     }
@@ -936,7 +936,7 @@ void EntityList::PostUpdateStaging() {
         if (hasPostUpdateFlag && !isDeleted) {
             // Insert into post-update tree
             uint64_t outBuf = 0;
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), &outBuf, ibpPtr);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), &outBuf, ibpPtr);   // LEFT: H5 EntityList holds the update tree as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
         } else {
             // Search for entity in post-update tree, remove if found
             EntityTreeNode* node = postUpdateTreeRoot;
@@ -955,7 +955,7 @@ void EntityList::PostUpdateStaging() {
                             ReportStagingCorrupt("PostUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), node);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), node);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         break;
                     }
                     node = node->right;
@@ -1112,11 +1112,11 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
     // Remove found nodes from trees
     if (updateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), updateNode);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), updateNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
         EntityList_MarkUpdateTreeDirty();
     }
     if (postUpdateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), postUpdateNode);   // LEFT: SIG WorkBST_* (Work/exe_bodies.h, wave X)
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), postUpdateNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
     }
 
     // Step 5: Delete the entity IBP reference. Object::InternalBasePtr::DeletePtr
