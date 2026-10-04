@@ -63,23 +63,17 @@ runtime/src/collection/avl_trees.cpp	296	OTHER	TypeInfo.h (R-OBJ): RtObject::Typ
 runtime/src/collection/avl_trees.cpp	296	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<uint8_t*>(n) + 0x48);
 runtime/src/collection/avl_trees.cpp	299	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x4a);
 runtime/src/collection/avl_trees.cpp	299	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<uint8_t*>(n) + 0x4a);
-runtime/src/collection/avl_trees.cpp	701	SIG	SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them	reinterpret_cast<KeyedSet<StringPairNode>*>(map), reinterpret_cast<StringPairNode**>(outSl
-runtime/src/collection/avl_trees.cpp	701	SIG	SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them	reinterpret_cast<StringPairNode**>(outSlot), &temp);
-runtime/src/collection/avl_trees.cpp	830	POD	POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename	static_cast<const RtSystem::Filename*>(key));
-runtime/src/collection/avl_trees.cpp	834	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(o
-runtime/src/collection/avl_trees.cpp	834	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<FilenamePairNode**>(outSlot), &temp);
-runtime/src/collection/avl_trees.cpp	883	SIG	SIG SubtreeFree (outside caller holds the erased rtsetavl::Node: filesystem_createfile_win.cpp)	reinterpret_cast<FilenamePairNode*>(node);
+runtime/src/collection/avl_trees.cpp	833	POD	POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename	static_cast<const RtSystem::Filename*>(key));
+runtime/src/collection/avl_trees.cpp	837	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(o
+runtime/src/collection/avl_trees.cpp	837	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<FilenamePairNode**>(outSlot), &temp);
+runtime/src/collection/avl_trees.cpp	886	SIG	SIG SubtreeFree (outside caller holds the erased rtsetavl::Node: filesystem_createfile_win.cpp)	reinterpret_cast<FilenamePairNode*>(node);
 runtime/src/collection/introsort.cpp	104	OTHER	SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)	reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);
 runtime/src/collection/introsort.cpp	104	OTHER	SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)	static_cast<uint8_t*>(elem) + 0x70);
 runtime/src/collection/introsort.cpp	353	OTHER	void* door (audio.cpp / audio_scene_update.cpp hold void*)	static_cast<EmitterArray*>(dstRaw);
 runtime/src/collection/introsort.cpp	354	OTHER	void* door (audio.cpp / audio_scene_update.cpp hold void*)	static_cast<const EmitterArray*>(srcRaw);
-runtime/src/collection/set_avl_pathid.cpp	303	SIG	SIG rtpathid::Insert (modification_setupfilesystem.cpp holds the erased rtsetavl::Set / Node)	reinterpret_cast<PathIdSet*>(set), reinterpret_cast<PathIdNode**>(outSlot), &temp);
-runtime/src/collection/set_avl_pathid.cpp	303	SIG	SIG rtpathid::Insert (modification_setupfilesystem.cpp holds the erased rtsetavl::Set / Node)	reinterpret_cast<PathIdNode**>(outSlot), &temp);
-runtime/src/collection/set_avl_pathid.cpp	334	SIG	SIG rtpathid::SubtreeFree (its caller holds the erased rtsetavl::Node)	reinterpret_cast<PathIdNode*>(node)->element.key);
-runtime/src/collection/set_clear.cpp	209	SIG	SIG rtsetclear::Clear (its callers hold the erased rtsetavl::Set)	reinterpret_cast<PairSet*>(set)->Clear();
+runtime/src/collection/set_clear.cpp	210	FLOOR?	FLOOR? the settings map header (RtIo::SettingsMap) viewed as the Collection::Set<Pair<String,String>> instantiation whose Clear IS 0x18000f7d0: its owners (Persistence, Configuration) hold the three-w	reinterpret_cast<PairSet*>(set)->Clear();
 runtime/src/engine/engine_lifecycle.cpp	615	OTHER	the class operator-new door returns void* (an allocation result castmetric does not recognise: ledger close)	static_cast<Video::Device*>(RtVideo_Device_OperatorNew(0x108));
 runtime/src/engine/engine_lifecycle.cpp	889	POD	POD the ??1 body takes the RtIO::Modification POD (Modification.h, not this set's)	reinterpret_cast<RtIO::Modification*>(p));
-runtime/src/engine/engine_platform.cpp	190	H5	H5 IO::Persistence holds its settings map as loose fields (_settingsMapRoot / _settingsMapCount at +0x00 / +0x08), so the erased Set core takes the object as its rtsetavl::Set header (typed with _save	static_cast<rtsetavl::Set*>(ps));
 runtime/src/engine/loops.cpp	911	OTHER	Context::_pixelConstantStaging is one 0x98-byte block (+0x200 videoProgram, +0x208 material, +0x248 pixel constants); ~10 readers in runtime/video and code/ index it by byte: splitting it is its own s	reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);
 runtime/src/engine/mainloop_video.cpp	345	FLOOR?	FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit	reinterpret_cast<VideoResourceEntry*>(dst);
 runtime/src/engine/mainloop_video.cpp	346	FLOOR?	FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit	reinterpret_cast<const VideoResourceEntry*>(src);
@@ -105,9 +99,6 @@ runtime/src/graphics/graphicsmesh_vtable.cpp	539	H5	H5 GraphicsMesh::_nodes is A
 runtime/src/graphics/imagebuffer_derived.cpp	459	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::ImageBuffer*>(ImageBufferOperatorNew(0x68));
 runtime/src/graphics/imagebuffer_derived.cpp	487	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::RenderBuffer*>(RenderBufferOperatorNew(0x30));
 runtime/src/graphics/imagebuffer_derived.cpp	617	OTHER	retail's const (UEBA) slot writes _generation (see above)	const_cast<ReflectionImageBuffer*>(this);
-runtime/src/graphics/imagebuffer_derived.cpp	622	SIG	SIG GeneratedImageBuffer slot [11] Render declares retail's Renderer& as void* (GeneratedImageBuffer.h, rb_graphics_abi_test.cpp)	static_cast<Graphics::Renderer*>(renderer);
-runtime/src/graphics/imagebuffer_derived.cpp	623	SIG	SIG GeneratedImageBuffer slot [11] Render declares retail's const Camera& as void* (GeneratedImageBuffer.h, rb_graphics_abi_test.cpp)	static_cast<const Graphics::Camera*>(camera);
-runtime/src/graphics/imagebuffer_derived.cpp	655	SIG	SIG slot takes void* (GeneratedImageBuffer.h + rb_graphics_abi_test)	static_cast<const Graphics::Scene*>(scene);
 runtime/src/graphics/mesh.cpp	801	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<TriangleVertex*>(self);
 runtime/src/graphics/mesh.cpp	802	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const Math::Vector3*>(vec3);
 runtime/src/graphics/mesh.cpp	828	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<EdgeVertex*>(self);
@@ -193,26 +184,16 @@ runtime/src/io/modification.cpp	582	SIG	SIG RtColl_ArrayModAssign_180010110 (the
 runtime/src/io/modification.cpp	762	H5	H5 Mod::file is the RtSystem::Filename POD	reinterpret_cast<const System::Filename*>(&m->file)
 runtime/src/io/modification_refresh.cpp	607	OTHER	IO::Modification holds the Array<Mod> as three fields (_mods/_count/_capacity) that engine/ and save/ read by name (R-IO, wave X)	reinterpret_cast<ModArrayOf<Mod>*>(&_mods);
 runtime/src/io/modification_refresh.cpp	789	H5	H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member	reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);
-runtime/src/io/modification_setupfilesystem.cpp	379	OTHER	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
-runtime/src/io/modification_setupfilesystem.cpp	408	ERASED	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Set*>(&snapshot),
-runtime/src/io/modification_setupfilesystem.cpp	409	ERASED	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node**>(&outSlot),
-runtime/src/io/modification_setupfilesystem.cpp	475	CONST	FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code	const_cast<::Object::External*>(ext);
-runtime/src/io/modification_setupfilesystem.cpp	531	OTHER	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<void* (*)(void*)>(info->inPlaceFactoryFn)(ext);
-runtime/src/io/modification_setupfilesystem.cpp	566	ERASED	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node*>(root->left));
-runtime/src/io/modification_setupfilesystem.cpp	567	ERASED	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node*>(root->right));
+runtime/src/io/modification_setupfilesystem.cpp	360	OTHER	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
+runtime/src/io/modification_setupfilesystem.cpp	456	CONST	FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code	const_cast<::Object::External*>(ext);
+runtime/src/io/modification_setupfilesystem.cpp	512	OTHER	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<void* (*)(void*)>(info->inPlaceFactoryFn)(ext);
 runtime/src/io/package_file_serialize.cpp	158	OTHER	H8 PackageFile::_overridable is uint8_t, retail serializes the byte through SerializeBool (bool&)	static_cast<bool*>(v), nullptr);
-runtime/src/io/persistence.cpp	60	SIG	SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them	static_cast<rtsetavl::Set*>(map),
-runtime/src/io/persistence.cpp	62	SIG	SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them	reinterpret_cast<SettingsMapNode*>(node);
-runtime/src/io/persistence.cpp	112	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
-runtime/src/io/persistence.cpp	116	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
-runtime/src/io/persistence.cpp	120	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
-runtime/src/io/persistence.cpp	124	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
-runtime/src/io/persistence_registry_win.cpp	234	H5	H5 IO::Persistence holds its settings map as loose fields; the erased Set core takes the object as its rtsetavl::Set header (ledger: typed with _savePath and the worker)	static_cast<rtsetavl::Set*>(self));
-runtime/src/io/persistence_registry_win.cpp	241	UNTAGGED		static_cast<rtsetavl::Set*>(map),
-runtime/src/io/persistence_registry_win.cpp	243	SIG	SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them	reinterpret_cast<SettingsMapNode*>(node);
+runtime/src/io/persistence.cpp	111	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+runtime/src/io/persistence.cpp	115	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+runtime/src/io/persistence.cpp	119	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+runtime/src/io/persistence.cpp	123	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
 runtime/src/io/persistence_savelist_job.cpp	191	OTHER	this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)	reinterpret_cast<RtIO::FilenameArray*>(&found));
 runtime/src/io/persistence_saves.cpp	252	H5	H5 Persistence::_workerVtable is the embedded PersistenceWorker held as loose fields	reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();
-runtime/src/io/persistence_saves.cpp	253	ERASED	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Set*>(this));
 runtime/src/io/persistence_saves_win.cpp	60	H5	H5 Persistence::_blockDescData (raw Array storage; behaviour commit owed)	reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->_blockDescData)->~Array();
 runtime/src/io/persistence_saves_win.cpp	63	H5	H5 Persistence::_blockPtrData (raw Array storage; behaviour commit owed)	reinterpret_cast<Collection::Array<void*>*>(&p->_blockPtrData)->~Array();
 runtime/src/io/persistence_worker_win.cpp	281	OTHER	see above	static_cast<IO::PersistenceWorker*>(worker);
@@ -220,31 +201,20 @@ runtime/src/io/serializer.cpp	166	SIG	SIG the RtSerializer_* forwarders take the
 runtime/src/io/text_codec.cpp	488	SIG	SIG RtIo_SerializeStringArray: two element types by caller (System::String* from PackageFile / Pixel- / VertexProgram, char* from AnimatedImageDescription::_frameNames / DocumentTextDescription::_fram	static_cast<char**>(datav);
 runtime/src/io/text_codec.cpp	507	SIG	SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)	reinterpret_cast<RtSystem::String*>(slot),
 runtime/src/io/text_codec.cpp	538	SIG	SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)	reinterpret_cast<RtSystem::String*>(slot),
-runtime/src/object/external_class_doors.cpp	276	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<rt::io::Stream*>(&stream));
-runtime/src/object/external_load.cpp	176	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeInt(
-runtime/src/object/external_load.cpp	177	OTHER	R-IO the file-local SerU32/SerI32 keep retail's slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<int32_t*>(v), nullptr);
-runtime/src/object/external_load.cpp	180	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeUInt(
-runtime/src/object/external_load.cpp	181	OTHER	R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<uint32_t*>(v), nullptr);
-runtime/src/object/external_load.cpp	254	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<RtIo::CompressedFileStream*>(cfsObj);
-runtime/src/object/external_load.cpp	277	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<void***>(enc);
-runtime/src/object/external_load.cpp	279	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<SerFactoryFn>(encVt[slot / sizeof(void*)])(
-runtime/src/object/external_load.cpp	326	ERASED	ERASED the factory slot returns Object::Base*; retail uses the result as the External with no type check, so there is no checked downcast to spell	reinterpret_cast<::Object::External*>(created);
-runtime/src/object/external_load.cpp	359	OTHER	R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<uint32_t*>(&depCount));
-runtime/src/object/external_load.cpp	370	OTHER	External.h ExternalArrayElement {char* owned; uint64_t opaque}: splitting `opaque` into its two int32s (0x1800bc7fc / 0x1800bc811) breaks array.cpp:854's one-qword copy (R-COLL); `owned` is retail's F	reinterpret_cast<uint8_t*>(obj->_refs._data);
-runtime/src/object/external_load.cpp	373	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<::System::String*>(elem)->Serialize(&ser);
-runtime/src/object/external_load.cpp	374	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<int32_t*>(elem + 0x08));
-runtime/src/object/external_load.cpp	375	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<int32_t*>(elem + 0x0c));
-runtime/src/object/external_load.cpp	382	POD	RtIo:: POD mirror of the IO stream class (H10, R-IO)	reinterpret_cast<IO::Stream*>(&cfs));
-runtime/src/object/external_load.cpp	391	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<::IO::ReaderWriter*>(ser.impl);
+runtime/src/object/external_load.cpp	170	OTHER	R-IO the file-local SerU32/SerI32 keep retail's slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<int32_t*>(v), nullptr);
+runtime/src/object/external_load.cpp	174	OTHER	R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<uint32_t*>(v), nullptr);
+runtime/src/object/external_load.cpp	315	ERASED	ERASED the factory slot returns Object::Base*; retail uses the result as the External with no type check, so there is no checked downcast to spell	reinterpret_cast<::Object::External*>(created);
+runtime/src/object/external_load.cpp	348	OTHER	R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<uint32_t*>(&depCount));
+runtime/src/object/external_load.cpp	359	OTHER	External.h ExternalArrayElement {char* owned; uint64_t opaque}: splitting `opaque` into its two int32s (0x1800bc7fc / 0x1800bc811) breaks array.cpp:854's one-qword copy (R-COLL); `owned` is retail's F	reinterpret_cast<uint8_t*>(obj->_refs._data);
+runtime/src/object/external_load.cpp	362	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<::System::String*>(elem)->Serialize(ser);
+runtime/src/object/external_load.cpp	363	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<int32_t*>(elem + 0x08));
+runtime/src/object/external_load.cpp	364	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<int32_t*>(elem + 0x0c));
 runtime/src/object/external_path_stack.cpp	351	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;
 runtime/src/object/external_path_stack.cpp	358	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;
 runtime/src/object/external_path_stack.cpp	363	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;
 runtime/src/object/external_path_stack.cpp	390	OTHER	H10 as RemoveAt's	reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;
 runtime/src/object/external_path_stack.cpp	392	OTHER	H10 as RemoveAt's	reinterpret_cast<RtObject::PathStackElement*>(out);
 runtime/src/object/external_ptr_serialize.cpp	303	CONST	const_cast FindOrLoad returns a const External* (ledger S3: retail drops the const in inlined template code; decide at the close)	const_cast<External*>(found);
-runtime/src/object/external_reftable.cpp	141	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<::IO::ReaderWriter*>(rw);
-runtime/src/object/external_reftable.cpp	145	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<void***>(obj);
-runtime/src/object/external_reftable.cpp	207	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	reinterpret_cast<EncFactoryFn>(VSlot(enc, factorySlot))(enc, &ser, 0);
 runtime/src/object/factory_dtors.cpp	390	POD	H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)	reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();
 runtime/src/object/factory_dtors.cpp	419	OTHER	H10 as ReferenceSubtreeFree's	reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();
 runtime/src/object/internal.cpp	228	OTHER	R-IO SerializeBool takes bool&; retail passes the one-byte char (H8: a bool would normalise it)	reinterpret_cast<bool*>(&present), nullptr);
@@ -268,8 +238,6 @@ runtime/src/picking/scene.cpp	587	OTHER	void* door, GAME-b's gameupdateloop_load
 runtime/src/save/closure_batch2b.cpp	113	FORWARD	B4 FORWARD RtSave_MetaData_CopyCtor: array.cpp's kSpec_MetaData58 row hands raw element bytes (an elem_stride floor candidate at the close)	static_cast<const Save::SaveLoad::SaveInfo*>(src));
 runtime/src/save/saveload_draw.cpp	695	OTHER	Context::_renderBuffer is void* (runtime/types/video/Context.h, X-RL FIELD left)	static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
 runtime/src/system/compression.cpp	469	OTHER	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<uint32_t*>(p);
-runtime/src/system/configuration.cpp	304	SIG	SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them	static_cast<rtsetavl::Set*>(map), &node,
-runtime/src/system/configuration.cpp	571	SIG	SIG rtsetclear::Clear takes the erased rtsetavl::Set (R-COLL)	reinterpret_cast<rtsetavl::Set*>(&_mapRoot));
 runtime/src/system/filename.cpp	45	POD	POD String / Filename bridge (H10)	reinterpret_cast<System::Filename*>(f);
 runtime/src/system/filename.cpp	48	POD	POD String / Filename bridge (H10)	reinterpret_cast<const System::Filename*>(f);
 runtime/src/system/filename.cpp	484	OTHER	retail calls Filename's private member on a String slot (Filename IS a String, one field)	reinterpret_cast<Filename*>(self)));
@@ -291,9 +259,8 @@ runtime/src/system/string.cpp	55	POD	POD String / Filename bridge (H10)	reinterp
 runtime/src/system/string.cpp	58	POD	POD String / Filename bridge (H10)	reinterpret_cast<const System::String*>(s);
 runtime/src/system/string.cpp	128	OTHER	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<int32_t*>(
 runtime/src/system/string.cpp	661	OTHER	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<String*>(RtMemAlloc(static_cast<uint64_t>(n) * 8, 8));
-runtime/src/system/string.cpp	950	SIG	SIG external_load.cpp / external_reftable.cpp build an rt::io POD Serializer (R-IO view)	static_cast<::IO::Serializer*>(serializer));
-runtime/src/system/string.cpp	979	OTHER	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));
-runtime/src/system/string.cpp	981	OTHER	the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed	reinterpret_cast<uint16_t*>(buf), nullptr);
+runtime/src/system/string.cpp	974	OTHER	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));
+runtime/src/system/string.cpp	976	OTHER	the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed	reinterpret_cast<uint16_t*>(buf), nullptr);
 runtime/src/system/thread_win.cpp	285	OTHER	the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)	static_cast<void**>(self->vtable);
 runtime/src/system/thread_win.cpp	287	OTHER	the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)	reinterpret_cast<WorkFn>(vt[0])(self);
 runtime/src/system/thread_win.cpp	289	OTHER	the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)	static_cast<void**>(self->vtable);

@@ -349,3 +349,10 @@ Metric at `8ac8fef0`: **1,479** to remove (of which `dx11/` 240).
 
 Wave X round 4 done (rows 105-108).
 Metric after round 4: # castmetric total: 1451
+
+| 109 | X5-GAME | `64532756` | `behaviour:` `PlayerController::camera` a `Graphics::Camera` member built last in both ctors as retail (0x1400985b0 / 0x140098800); WorldGeometry's nine arrays named members; `ForceWork::DriveWhenIdle`, `TradeWork_impl_ace40`, `LoaderDialog_FromSplashDLT` typed (rows 663-665): 485 -> 447 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 110 | X5-WORK | `0a4f7874` | `Work::field_10` / `field_18` `InternalPtr` members (47 readers); `CharacterComponent` +0x48 an embedded `ActionStack` of `InternalPtr<Action>` (retail 0x1400c54e0): Action Enter / Exit, executor callers, TaskListCleanup take `ActionStack*`: 167 -> 152 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 111 | X5-COMP | `a10fdd6f` | `behaviour:` CitizenBehavior is a real class (sixteen lists, nested / record arrays, both bucket trees as `Collection::Set<CitizenBucket<Key>>`) with retail's ctor 0x140090a30 and dtor 0x1400907b0; memset construct, trivial assert and hand-written teardown deleted; 719 reader lines in 104 files (rows 652-654) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 112 | X5-RT | `a424a694` | `SettingsMapNode` / `SettingsMap` declared once, `StringMapInsert` / `rtsetclear` / `rtpathid` typed, `GeneratedImageBuffer::Render` typed, `String::Serialize(void*)` deleted (reference table and compiled-resource load build the real `IO::Serializer`): 1204 -> 1171 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `a424a694`: **1,341** to remove (of which `dx11/` 240). Wave X round 5 done.
