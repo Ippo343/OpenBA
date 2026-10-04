@@ -99,7 +99,7 @@ void EntityList::QueueDestroy(ComponentEntity* const* entity) {
     if (((*entity)->_entityFlags >> 10) & 1) return;
     ActHunt_MarkEntityRemoval_c2ea0(*entity);   // 0x1400c2ea0
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSizeFill(removalList.count + 1, entity);
+    removalList.SetSize(removalList._size + 1, *entity);
 }
 
 // ============================================================

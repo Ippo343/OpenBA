@@ -311,7 +311,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
         if (((parent->_entityFlags >> 10) & 1) == 0) {
             MarkEntityForRemoval(parent);   // 0x1400c2ea0
             ActHunt_DynArraySetCount_3110(&entityList->removalList,   // 0x140003110
-                                          entityList->removalList.count + 1, &parent);
+                                          entityList->removalList._size + 1, &parent);
         }
     }
 

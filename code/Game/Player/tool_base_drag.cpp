@@ -168,7 +168,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
                     if ((resolved->_entityFlags >> 10 & 1) == 0) {
                         MarkEntityForRemoval(resolved);
                         ActHunt_DynArraySetCount_3110(&entityList->removalList,
-                                                      entityList->removalList.count + 1,
+                                                      entityList->removalList._size + 1,
                                                       &resolved);
                     }
                 }

@@ -983,7 +983,7 @@ void FireSelectCitizen(PlayerToolManager* entityUI) {
 //      pending-removal list at +0xD0. (registered: reg_action_hunt)
 // Then EntityList::Update Step 5 (entitylist.cpp) drains removalList every tick via
 // EntityList_RemoveEntity and clears it. This harness marks one entity, verifies the
-// flag + list count, then logs removalList.count + the tile slot across the next
+// flag + list count, then logs removalList._size + the tile slot across the next
 // frames so we can watch it drain to 0 and the entity vanish. If this works, both
 // track A and track B are just front-ends onto a proven backend.
 //
@@ -1030,7 +1030,7 @@ void FireMarkRemoval() {
     MapCell* tileArray = map->cells;
     fprintf(stderr, "[MarkRemoval] gw=%p map=%p width=%d tileArray=%p entityList=%p removalList.count(before)=%d\n",
            gw, map, width, tileArray, entityList,
-           entityList->removalList.count);
+           entityList->removalList._size);
 
     // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
     // ActHunt_DynArraySetCount_3110 (0x140003110).
@@ -1069,9 +1069,9 @@ void FireMarkRemoval() {
 
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
                 IBPArray* rl = &entityList->removalList;
-                int cntBefore = rl->count;
+                int cntBefore = rl->_size;
                 ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);
-                int cntAfter = rl->count;
+                int cntAfter = rl->_size;
 
                 fprintf(stderr, "[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
                        "removalList.count %d -> %d\n",
@@ -1167,12 +1167,12 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     }
     ActHunt_MarkEntityRemoval_c2ea0(local);                                   // 0x1400c2ea0
     IBPArray* rl = &entityList->removalList;
-    int cntBefore = rl->count;
+    int cntBefore = rl->_size;
     ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);   // 0x140003110
     fprintf(stderr, "[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
            "across the free (rawDS vs CheckPtr-hardened)...\n",
            local->_entityFlags,
-           cntBefore, rl->count);
+           cntBefore, rl->_size);
 
     s_pin_ctrl      = entCtrl;
     s_pin_entity    = local;
@@ -1406,8 +1406,8 @@ static void FireUIComponentCensus() {
     }
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     EntityList* entityList = gw->m_entityList;
-    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;
-    int       en  = entityList ? entityList->masterArray.count : 0;
+    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;
+    int       en  = entityList ? entityList->masterArray._size : 0;
 
     const uint32_t tidUIComp = UIComponent::TypeId();
 
@@ -1507,8 +1507,8 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     EntityList* entityList = gw->m_entityList;
-    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;
-    int       en  = entityList ? entityList->masterArray.count : 0;
+    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;
+    int       en  = entityList ? entityList->masterArray._size : 0;
     const uint32_t tidUIComp = UIComponent::TypeId();
 
     ComponentEntity* A = nullptr; int aIdx = -1;
@@ -1622,8 +1622,8 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     if (!pastureComp) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         EntityList* entityList = gw->m_entityList;
-        ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;
-        int       en  = entityList ? entityList->masterArray.count : 0;
+        ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;
+        int       en  = entityList ? entityList->masterArray._size : 0;
         const uint32_t tidPastureComp = PastureComponent::TypeId();
         for (int i = 0; i < en && arr && !pastureComp; ++i) {
             ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
@@ -1740,8 +1740,8 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
     if (!gw) { fprintf(stderr, "[OrchardPanel] gameWorld null\n"); return; }
     EntityList* entityList = gw->m_entityList;
     if (!entityList) { fprintf(stderr, "[OrchardPanel] EntityList (gw+0xe8) null\n"); return; }
-    ComponentEntity** arr = entityList->masterArray.data;
-    int       n   = entityList->masterArray.count;
+    ComponentEntity** arr = entityList->masterArray._data;
+    int       n   = entityList->masterArray._size;
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardPanel] cannot scan (arr=%p n=%d tidOrchardComponent=%u)\n",
@@ -1847,8 +1847,8 @@ void FireTradePanel(PlayerToolManager* entityUI) {
     if (!gw) { fprintf(stderr, "[TradePanel] gameWorld null\n"); return; }
     EntityList* entityList = gw->m_entityList;
     if (!entityList) { fprintf(stderr, "[TradePanel] EntityList (gw+0xe8) null\n"); return; }
-    ComponentEntity** arr = entityList->masterArray.data;
-    int       n   = entityList->masterArray.count;
+    ComponentEntity** arr = entityList->masterArray._data;
+    int       n   = entityList->masterArray._size;
     const uint32_t tidTradeComp = TradeComponent::TypeId();
     if (!arr || n <= 0 || !tidTradeComp) {
         fprintf(stderr, "[TradePanel] cannot scan (arr=%p n=%d tidTradeComponent=%u)\n",
@@ -1934,7 +1934,7 @@ void FireClearFootprint() {
     GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearFootprint] ERROR: gameWorld null\n"); return; }
     EntityList* el = gw->m_entityList;
-    int cntBefore = el ? el->removalList.count : -1;
+    int cntBefore = el ? el->removalList._size : -1;
 
     int houses = StartTown_GetFoundingHouseCount();
     fprintf(stderr, "[ClearFootprint] founding houses=%d removalList.count(before)=%d\n", houses, cntBefore);
@@ -1956,7 +1956,7 @@ void FireClearFootprint() {
         totalMarked += marked;
     }
 
-    int cntAfter = el ? el->removalList.count : -1;
+    int cntAfter = el ? el->removalList._size : -1;
     fprintf(stderr, "[ClearFootprint] total marked=%d  removalList.count %d -> %d%s\n",
            totalMarked, cntBefore, cntAfter,
            totalMarked == 0 ? "  (no resources under founding houses — cleared ground; "
@@ -2013,7 +2013,7 @@ void FireClearPlace() {
     bc->tileY1 = 1;
 
     EntityList* el = gw->m_entityList;
-    int cntBefore = el ? el->removalList.count : -1;
+    int cntBefore = el ? el->removalList._size : -1;
 
     // 4. Sweep the house (with the overridden footprint) — marks the resource.
     fprintf(stderr, "[ClearPlace] sweeping house[0]=%p with footprint overridden to (%d,%d) 1x1...\n",
@@ -2026,7 +2026,7 @@ void FireClearPlace() {
     bc->tileX1 = sW;
     bc->tileY1 = sH;
 
-    int cntAfter = el ? el->removalList.count : -1;
+    int cntAfter = el ? el->removalList._size : -1;
     uint32_t resFlags = resEnt->_entityFlags;
     fprintf(stderr, "[ClearPlace] marked=%d  resource flags(+0x40)=0x%08x (bit0x400 %s)  "
            "removalList.count %d -> %d\n",
@@ -2911,7 +2911,7 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
     Init();
     if (!s_enabled) return;
 
-    // markremoval drain observation: after the mark fires, log removalList.count +
+    // markremoval drain observation: after the mark fires, log removalList._size +
     // the tile slot for ~12 frames so we can watch EntityList::Update drain it.
     if (s_mr_fired) {
         int rel = frameNum - s_mr_fireFrame;
@@ -2919,7 +2919,7 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
             GameUpdateLoop* gw = GetGW();
             if (gw) {
                 EntityList* el = gw->m_entityList;
-                int cnt = el ? el->removalList.count : -1;
+                int cnt = el ? el->removalList._size : -1;
                 ComponentEntity* slotVal = s_mr_tileSlot ? *s_mr_tileSlot : nullptr;
                 bool drained = s_mr_tileSlot ? (cnt == 0 && slotVal != s_mr_entity)
                                              : (cnt == 0);
@@ -2939,7 +2939,7 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
         if (rel >= 0 && rel <= 14) {
             GameUpdateLoop* gw = GetGW();
             EntityList* el = gw ? gw->m_entityList : nullptr;
-            int cnt = el ? el->removalList.count : -1;
+            int cnt = el ? el->removalList._size : -1;
             UI::DialogController* ctrl = s_pin_ctrl;
             // RAW +0x28 (guard's read) — pointer only, never dereferenced here.
             void* rawDS = ctrl->_dataSource;

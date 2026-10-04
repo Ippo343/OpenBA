@@ -124,7 +124,7 @@ int  PickupRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
             // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
             ActHunt_DynArraySetCount_3110(&worldList->removalList,   // 0x140003110
-                                          worldList->removalList.count + 1, &localEntity);
+                                          worldList->removalList._size + 1, &localEntity);
         }
     }
 

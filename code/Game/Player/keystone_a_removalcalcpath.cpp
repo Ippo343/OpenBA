@@ -749,7 +749,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                             if ((local_e0->_entityFlags >> 10 & 1) == 0) {
                                 MarkEntityForRemoval(local_e0);
                                 ActHunt_DynArraySetCount_3110(&lst->removalList,
-                                                              lst->removalList.count + 1, &local_e0);
+                                                              lst->removalList._size + 1, &local_e0);
                             }
                         } else {
                             DestroyComponent* comp = local_e8->FindComponent<DestroyComponent>();

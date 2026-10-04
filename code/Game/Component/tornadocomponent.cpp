@@ -425,8 +425,8 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
             if (((f >> 10) & 1) == 0) {
                 ActHunt_MarkEntityRemoval_c2ea0(ibp);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                GameColl::AsArray<GameColl::Ptr8>(&entityMgr->removalList)
-                    .SetSizeFill(entityMgr->removalList.count + 1, &ibp);
+                entityMgr->removalList
+                    .SetSize(entityMgr->removalList._size + 1, ibp);
                 if (hitAnimal) ++*hitAnimal;
             }
         }
@@ -834,8 +834,8 @@ void TornadoComponent::Tick(const System::Time* time) {
             if (((f >> 10) & 1) == 0) {
                 ActHunt_MarkEntityRemoval_c2ea0(entity);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                GameColl::AsArray<GameColl::Ptr8>(&entityMgr->removalList)
-                    .SetSizeFill(entityMgr->removalList.count + 1, &entity);
+                entityMgr->removalList
+                    .SetSize(entityMgr->removalList._size + 1, entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "
                               "(pathIndex=%d of %d)\n",
                               path.index, path.count);

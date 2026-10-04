@@ -87,9 +87,9 @@ int ClearAreaComponent::FootprintSweep() {
             // Mark + push (the proven backend).
             ActHunt_MarkEntityRemoval_c2ea0(occ);
             IBPArray* rl = &entityList->removalList;
-            int cnt = rl->count;
+            int cnt = rl->_size;
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(rl).SetSizeFill(cnt + 1, &occ);
+            rl->SetSize(cnt + 1, occ);
             ++marked;
         }
     }

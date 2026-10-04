@@ -78,8 +78,8 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     EntityList* entityList = gw->m_entityList;                                        // +0xe8
-    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;      // +0x08
-    const int n = entityList ? entityList->masterArray.count : 0;                     // +0x10
+    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;      // +0x08
+    const int n = entityList ? entityList->masterArray._size : 0;                     // +0x10
     if (!arr || n <= 0) return;
 
     const uint32_t tidBuild = BuildComponent::TypeId();

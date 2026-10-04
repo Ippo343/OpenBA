@@ -111,7 +111,7 @@ int  RemoveAnimal::AbstractImpl(ActionStack* actionStack) {
 
             // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
             ActHunt_DynArraySetCount_3110(&cleanupMgr->removalList,   // 0x140003110
-                                          cleanupMgr->removalList.count + 1, &localRef);
+                                          cleanupMgr->removalList._size + 1, &localRef);
         }
     }
     return 0;

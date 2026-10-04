@@ -165,8 +165,8 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
     if (!gw) { std::fprintf(stderr, "[FoodPanel] gameWorld null\n"); return; }
     EntityList* el = gw->m_entityList;                 // +0xe8
     if (!el) { std::fprintf(stderr, "[FoodPanel] EntityList null\n"); return; }
-    ComponentEntity** arr = el->masterArray.data;      // +0x08
-    const int n = el->masterArray.count;               // +0x10
+    ComponentEntity** arr = el->masterArray._data;      // +0x08
+    const int n = el->masterArray._size;               // +0x10
 
     ComponentEntity* ent = nullptr; Component* comp = nullptr;
     for (int i = 0; i < n && arr && !ent; ++i) {

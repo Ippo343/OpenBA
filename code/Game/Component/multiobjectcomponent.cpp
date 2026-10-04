@@ -42,10 +42,10 @@ void MultiObjectComponent::OnRemove() {
             ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
 
             if (entityList) {
-                int removalCount = entityList->removalList.count;
+                int removalCount = entityList->removalList._size;
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
-                    .SetSizeFill(removalCount + 1, &entityPtr);
+                entityList->removalList
+                    .SetSize(removalCount + 1, entityPtr);
             }
         }
     }

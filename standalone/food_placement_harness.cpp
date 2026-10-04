@@ -177,8 +177,8 @@ void ProbeClass(const FoodClass& fc) {
     if (!gw) return;
     EntityList* el = gw->m_entityList;   // +0xe8
     if (!el) return;
-    ComponentEntity** arr = el->masterArray.data;   // +0x08
-    const int n = el->masterArray.count;   // +0x10
+    ComponentEntity** arr = el->masterArray._data;   // +0x08
+    const int n = el->masterArray._size;   // +0x10
 
     int instances = 0;
     ComponentEntity* ent = nullptr; Component* comp = nullptr;

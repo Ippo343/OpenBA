@@ -107,8 +107,8 @@ void Fire(int frameNum) {
                      frameNum, static_cast<void*>(townMgr), static_cast<void*>(entityList));
         return;
     }
-    ComponentEntity** arr = entityList->masterArray.data;    // +0x08
-    int       n   = entityList->masterArray.count;           // +0x10
+    ComponentEntity** arr = entityList->masterArray._data;    // +0x08
+    int       n   = entityList->masterArray._size;           // +0x10
     if (!arr || n <= 0) {
         std::fprintf(stderr, "[FoodWorkers] frame=%d: cannot scan (arr=%p n=%d)\n",
                      frameNum, static_cast<void*>(arr), n);

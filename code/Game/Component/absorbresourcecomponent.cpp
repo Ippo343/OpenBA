@@ -113,8 +113,8 @@ char AbsorbResourceComponent::State0Tick() {
             if (((cellEntity->_entityFlags >> 10) & 1) != 0) continue;
             ActHunt_MarkEntityRemoval_c2ea0(cellEntity);
             // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
-                .SetSizeFill(entityList->removalList.count + 1, &cellEntity);
+            entityList->removalList
+                .SetSize(entityList->removalList._size + 1, cellEntity);
         }
     }
     return 1;

@@ -90,8 +90,8 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     EntityList* entityList = gw->m_entityList;                   // +0xe8
     if (!entityList) return;
-    ComponentEntity** arr = entityList->masterArray.data;        // +0x08
-    int       n   = entityList->masterArray.count;               // +0x10
+    ComponentEntity** arr = entityList->masterArray._data;        // +0x08
+    int       n   = entityList->masterArray._size;               // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) return;
 

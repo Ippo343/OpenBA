@@ -199,7 +199,7 @@ void DeleteBoatEntity(BoatComponent* boat) {
     {
         // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         void* arr = &entityList->removalList;
-        const int32_t newCount = entityList->removalList.count + 1;
+        const int32_t newCount = entityList->removalList._size + 1;
         GameColl::AsArray<GameColl::Ptr8>(arr).SetSizeFill(newCount, &entIBP);
     }
 }
