@@ -134,10 +134,7 @@ extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_);  // 0x1400c54e0
-void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3, uint64_t* param_4, uint32_t param_5);  // 0x1400c5da0
-void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4, float* destination, int param_6, int param_7, float speed);  // 0x1400c9170
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
-void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3, uint32_t param_4, uint64_t* param_5, uint32_t param_6);  // 0x1400cb1d0
 class Component;              // Component/Component.h
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h

@@ -389,6 +389,7 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/AnimalComponent.h"
+#include "Action/MoveTo.h"   // 0x1400c9170, by name
 
 
 // 0x140106fc0. Component() is the CALL 0x1401188b0; the 0x140162110 stamp is
@@ -724,8 +725,8 @@ void AnimalComponent::Update(const System::Time* time) {
                                 : nullptr;
                 if (mem) {
                     CharacterComponent* moverIBP = character;
-                    action = Pf_MoveToCtor_9170(mem, &moverIBP, 0 /*Normal*/, 1,
-                                                dest, 0xf9f, 1, MoveSpeed());
+                    action = ::new (mem) MoveTo(&moverIBP, 0 /*Normal*/, 1,
+                                                dest, 0xf9f, 1, MoveSpeed());   // 0x1400c9170
                 }
                 // If the alloc fails, `action` stays null and we push a null IBP —
                 // the same degradation retail takes when MemAlloc fails
@@ -733,7 +734,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
                 int64_t actionIBP = 0;
                 new (&actionIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge  LEFT: SIG Pf_MoveToCtor_9170 returns void*
+                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge  LEFT: H10 InternalBasePtr takes the RtObject::Internal POD
                 Pf_ActStackPush_54e0(stack, &actionIBP);
                 moveTimer._ticks = 0;
 
