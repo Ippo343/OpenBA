@@ -297,8 +297,9 @@ extern "C" System::Configuration* RtSystem_Configuration_Ctor(System::Configurat
     self->_pad0c       = 0;         // +0x0c
     self->_mapRoot     = nullptr;   // +0x10
     self->_mapCount    = 0;         // +0x18
-    self->_unusedData  = nullptr;   // +0x20
-    self->_unusedCount = 0;         // +0x28
+    self->_currentPlatform = 0;     // +0x20  \ retail's one qword zero (H7)
+    self->_currentLanguage = 0;     // +0x24  /
+    self->_currentBuild    = 0;     // +0x28
     System::Configuration::_singleton = self;   // class static (B.3.9 SYS)
     return self;
 }

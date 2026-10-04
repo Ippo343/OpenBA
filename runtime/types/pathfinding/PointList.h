@@ -62,7 +62,8 @@
 #include "../object/External.h"
 #include "../collection/Collection.h"
 #include "../system/String.h"
-#include "../object/Internal.h"                // Object::detail::InternalMemFree
+#include "../math/Math.h"                     // Math::Vector3 (Point::pos)
+#include "../object/Internal.h"               // Object::detail::InternalMemFree
 
 namespace System { class Filename; }
 
@@ -76,16 +77,26 @@ public:
     // elem+0, kArrayFloat(n=3) at elem+8, kScalarFloat at elem+0x14; the stride
     // 0x18 by the Array<Point> bodies 0x180071730 / 0x180071890 / 0x180071600.
     //
-    // `name` STAYS A RAW POINTER: `Collection::Array<Point>` is grown by the
-    // hand-transcribed 0x180071730 body, which moves elements byte-wise and
-    // bumps the refcount itself; a member with a real copy ctor or destructor
-    // would be silently bypassed there. The String release is written out in
-    // pointlist.cpp (`ReleasePointsRange`, retail 0x180071890).
+    // B.4 R-SYS (H5, a `behaviour:` commit): `name` is the real String and
+    // `pos` the real Vector3. No Point is ever constructed, copied or
+    // destroyed as a C++ object: the ctor 0x18010f980 only zeroes the two
+    // Array headers, ~PointList 0x18010f8e0 calls 0x180071600 on both arrays
+    // (0x180071890 releases each element's String, then free, then the header
+    // is ZEROED), and the grow body 0x180071730 copies the String by hand
+    // (null, adopt, bump) — all three stay the hand-written bodies in
+    // pointlist.cpp, which now reach `name._data` / `pos.x` by name. The
+    // member `~Array` that runs after ~PointList's body sees size 0 and
+    // destroys nothing, as before. Vector3: the element's +0x08 is serialized
+    // as `SerializeFloatArray(3, ...)` (slot +0x28), which is exactly
+    // `?Serialize@Vector3@Math@@` 0x1800150e0 inlined.
+    // NAMING (known_port_issues 14f): `radius` is read as a YAW by every
+    // reader (interactdescription.cpp, boatcomponent_route.cpp); the name is
+    // left until retail gives evidence.
     // ------------------------------------------------------------------------
     struct Point {
-        char*   name;      // +0x00  System::String (refcounted; B4 R-CORE: char*, H4)
-        float   pos[3];    // +0x08
-        float   radius;    // +0x14
+        System::String name;    // +0x00  refcounted
+        Math::Vector3  pos;     // +0x08
+        float          radius;  // +0x14
     };
 
     // ??0PointList@Pathfinding@@QEAA@XZ 0x18010f980 -- the REAL constructor.
@@ -151,6 +162,7 @@ public:
 };
 
 static_assert(sizeof(PointList::Point) == 0x18, "Pathfinding::PointList::Point is 0x18 bytes");
+static_assert(offsetof(PointList::Point, name)   == 0x00, "Point::name @ +0x00 (String::Serialize at elem+0)");
 static_assert(offsetof(PointList::Point, pos)    == 0x08, "Point::pos @ +0x08 (kArrayFloat n=3)");
 static_assert(offsetof(PointList::Point, radius) == 0x14, "Point::radius @ +0x14 (kScalarFloat)");
 

@@ -567,12 +567,10 @@ namespace {
 // ---- dependencies this half adds -------------------------------------------
 // 0x18002ace0 -- `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp),
 // by name (B3R RT-IO). There is no export name at that RVA at all. Its
-// signature (system/Configuration.h, R-CORE's) takes a non-const map and the
-// RtSystem::String POD, and returns the node untyped.
+// signature (system/Configuration.h) takes the map's root slot and the key
+// String and returns the node (B.4 R-SYS).
 const SettingsMapNode* MapFind(const IO::Persistence* map, const System::String& key) {
-    return static_cast<const SettingsMapNode*>(                  // LEFT: R-CORE's void* result
-        RtSystem_ConfigMap_Find(const_cast<IO::Persistence*>(map),   // LEFT: R-CORE's non-const map
-                                reinterpret_cast<const RtSystem::String*>(&key)));   // LEFT: R-CORE's POD key
+    return RtSystem_ConfigMap_Find(&map->_settingsMapRoot, &key);
 }
 
 // The allocator boundary for phase 2's array: retail open-codes

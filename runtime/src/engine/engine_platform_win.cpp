@@ -69,8 +69,8 @@ HMODULE RuntimeModule() {
 const uint8_t* LauncherFlagByte(uintptr_t ghidraAddr) {
     HMODULE h = RuntimeModule();
     if (!h) return nullptr;
-    return reinterpret_cast<const uint8_t*>(
-        reinterpret_cast<uintptr_t>(h) + (ghidraAddr - 0x180000000ull));
+    return reinterpret_cast<const uint8_t*>(  // CAST-OK: win32
+        reinterpret_cast<uintptr_t>(h) + (ghidraAddr - 0x180000000ull));  // CAST-OK: win32
 }
 
 bool g_refusalPrinted = false;
@@ -88,8 +88,8 @@ long long RtEnginePlatformShowLauncherDialog() {
     if (h) {
         // 0x1801fc680 is the DLL's HINSTANCE, which for a DLL IS its HMODULE —
         // so `h` is that value, not a substitute for it.
-        DLGPROC proc = reinterpret_cast<DLGPROC>(
-            reinterpret_cast<uintptr_t>(h) + (0x1800a1ae0ull - 0x180000000ull));
+        DLGPROC proc = reinterpret_cast<DLGPROC>(  // CAST-OK: win32
+            reinterpret_cast<uintptr_t>(h) + (0x1800a1ae0ull - 0x180000000ull));  // CAST-OK: win32
         return static_cast<long long>(
             DialogBoxParamW(h, MAKEINTRESOURCEW(0x66), nullptr, proc, 0));
     }

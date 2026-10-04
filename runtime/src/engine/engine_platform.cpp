@@ -146,10 +146,8 @@ bool CommandLineHasValue(const System::Configuration* cfg, const char* keyText) 
 bool CommandLineHasKey(System::Configuration* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
     String key(keyText);       // 0x18000b630: zero, then Set
-    // The map sub-object at +0x10 starts with `_mapRoot`. LEFT: the find takes
-    // the RtSystem::String POD (configuration.cpp, R-CORE).
-    const bool found = RtSystem_ConfigMap_Find(
-        &cfg->_mapRoot, reinterpret_cast<const RtSystem::String*>(&key)) != nullptr;
+    // The map sub-object at +0x10 starts with `_mapRoot`.
+    const bool found = RtSystem_ConfigMap_Find(&cfg->_mapRoot, &key) != nullptr;
     // `key` releases here — retail's 0x1800a1934, now ~String.
     return found;
 }

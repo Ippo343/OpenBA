@@ -2452,8 +2452,8 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                                 const bool hit =
                                     *reinterpret_cast<const System::String*>(&e.name) == nameBuf;   // LEFT: PointList::Point::name is the String's raw char* (runtime/types/pathfinding/PointList.h, R-owned)
                                 if (!hit) continue;
-                                pierX = e.pos[0];
-                                pierY = e.pos[1];
+                                pierX = e.pos.x;
+                                pierY = e.pos.y;
                                 havePier = true;
                                 break;
                             }

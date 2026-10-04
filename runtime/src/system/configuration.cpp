@@ -110,6 +110,7 @@
 
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
+#include "../../types/io/Persistence.h"         // B.4 R-SYS: RtIo::SettingsMapNode, the map's node
 // RtString_GetLength / RtSystem_String_SubString / RtString_ReleaseInline, the
 // three already-ported String primitives the two Parse bodies below need.
 // Spelled "./string.h" rather than "string.h": this file lives in the same
@@ -147,27 +148,18 @@ namespace {
 typedef String* (*GetCmdLineStrFn)(void* self, String* ret, const String* key);
 
 // ---------------------------------------------------------------------------
-// The node the two tree walkers agree on. Only three of its fields are touched
-// by anything in this file; the rest of the node is deliberately NOT described,
-// because nothing here reads it and inventing a layout for it would be a claim
-// no disassembly in front of me supports.
+// The node the two tree walkers agree on. B.4 R-SYS: it is RtIo::SettingsMapNode
+// (io/Persistence.h), the one node every Set<Pair<String,String>> in the DLL
+// shares; this file's local copy of it is gone. The offsets this file reads,
+// with the retail instruction for each:
 // ---------------------------------------------------------------------------
-struct MapNode {
-    char*    key;                    // +0x00  String::data of the key
-    char*    value;                  // +0x08  String::data of the value
-    uint8_t  _unknown10[0x18 - 0x10];
-    MapNode* left;                   // +0x18
-    MapNode* right;                  // +0x20
-};
-static_assert(offsetof(MapNode, key)   == 0x00, "0x18002ace0: MOV R9,[R8]");
-// +0x08 added 2026-09-11 by Wave 22 lane ERRCFG. Pinned by GetCommandLineString
-// at 0x1800c533b (`MOV RCX,[RAX+0x8]`) immediately followed by `INC dword
-// [RCX-0x4]` at 0x1800c534c -- a String refcount bump, so the qword at +0x08 is
-// a System::String's `data`, not an arbitrary pointer. The remaining eight
-// bytes of the node's head stay undescribed for the reason above.
-static_assert(offsetof(MapNode, value) == 0x08, "0x1800c533b: MOV RCX,[RAX+0x8]");
-static_assert(offsetof(MapNode, left)  == 0x18, "0x18002ad3f: MOV R8,[R8+0x18]");
-static_assert(offsetof(MapNode, right) == 0x20, "0x18002ad8d: MOV R8,[R8+0x20]");
+static_assert(offsetof(RtIo::SettingsMapNode, key)   == 0x00, "0x18002ace0: MOV R9,[R8]");
+// +0x08 pinned by GetCommandLineString at 0x1800c533b (`MOV RCX,[RAX+0x8]`)
+// immediately followed by `INC dword [RCX-0x4]` at 0x1800c534c -- a String
+// refcount bump, so the qword at +0x08 is a System::String's data.
+static_assert(offsetof(RtIo::SettingsMapNode, value) == 0x08, "0x1800c533b: MOV RCX,[RAX+0x8]");
+static_assert(offsetof(RtIo::SettingsMapNode, left)  == 0x18, "0x18002ad3f: MOV R8,[R8+0x18]");
+static_assert(offsetof(RtIo::SettingsMapNode, right) == 0x20, "0x18002ad8d: MOV R8,[R8+0x20]");
 
 // Retail's inlined comparison, written out instead of calling std::strcmp.
 // See §3 of the banner for why the sign convention is load-bearing.
@@ -232,18 +224,19 @@ int TreeStrCmp(const char* a, const char* b) {
 //
 // The two null-key arms are retail's and they are ASYMMETRIC on purpose: a null
 // SEARCH key returns the current node, a null NODE key descends. Both are kept.
-extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
-    MapNode* node = *static_cast<MapNode**>(map);  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(
+        RtIo::SettingsMapNode* const* root, const System::String* wanted) {
+    RtIo::SettingsMapNode* node = *root;
     while (node != nullptr) {
         bool goRight = false;
-        if (node->key != nullptr) {
-            if (wanted->data == nullptr) { node = node->left; continue; }
-            if (TreeStrCmp(wanted->data, node->key) < 0) { node = node->left; continue; }
+        if (node->key._data != nullptr) {
+            if (wanted->_data == nullptr) { node = node->left; continue; }
+            if (TreeStrCmp(wanted->_data, node->key._data) < 0) { node = node->left; continue; }
         }
         // rightTest
-        if (wanted->data == nullptr) return node;
-        if (node->key == nullptr) goRight = true;
-        else if (TreeStrCmp(node->key, wanted->data) >= 0) return node;
+        if (wanted->_data == nullptr) return node;
+        if (node->key._data == nullptr) goRight = true;
+        else if (TreeStrCmp(node->key._data, wanted->_data) >= 0) return node;
         (void)goRight;
         node = node->right;
     }
@@ -264,7 +257,6 @@ extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
 void System::Configuration::SetCommandLine(const System::String& cmd) {
 
     void* map = &_mapRoot;
-    MapNode* rootBefore = *static_cast<MapNode**>(map);  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
 
     // ENDGAME B.3.4b: the B.3.1 step-2 bridge is gone from this body — `cmd` IS
     // the class now, because the parameter is. The POD-to-class conversion
@@ -309,9 +301,8 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     // body, called by name (B3R), not a member.
                     rtsetavl::Node* node = nullptr;
                     rtavl::StringMapInsert(
-                        static_cast<rtsetavl::Set*>(map), &node,  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
-                        reinterpret_cast<char* const*>(&key),  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
-                        reinterpret_cast<char* const*>(&val));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+                        static_cast<rtsetavl::Set*>(map), &node,  // LEFT: SIG rtavl::StringMapInsert takes the erased rtsetavl::Set (R-COLL, wave X)
+                        &key._data, &val._data);
                 }
 
                 if (pos >= len) break;
@@ -501,13 +492,10 @@ System::String System::Configuration::GetCommandLineString(
 
     // The find takes the MAP, not `this` — `configuration + 0x10`, whose first
     // qword is the root — which is why it is not a member of this class.
-    void* map = const_cast<void*>(static_cast<const void*>(&_mapRoot));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
-    MapNode* node = static_cast<MapNode*>(  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
-        RtSystem_ConfigMap_Find(map,
-            reinterpret_cast<const RtSystem::String*>(&key)));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+    const RtIo::SettingsMapNode* node = RtSystem_ConfigMap_Find(&_mapRoot, &key);
 
     // 0x1800c533b: the found node's VALUE, and the temporary's reference.
-    char* temp = (node != nullptr) ? node->value : nullptr;
+    char* temp = (node != nullptr) ? node->value._data : nullptr;
     if (temp != nullptr) ++RtSystem::StringRefCount(temp);
 
     // 0x1800c537f: the slot is zeroed FIRST and unconditionally, then adopted.
@@ -580,7 +568,7 @@ System::Configuration::~Configuration() {
     //
     // 0x1800c518f -- the string->string map at +0x10: rtsetclear::Clear
     // (0x18000f7d0).
-    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));  // LEFT: System::Configuration's settings map is held as the void* set root (rtsetavl core; R-IO's settings map)
+    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));  // LEFT: SIG rtsetclear::Clear takes the erased rtsetavl::Set (R-COLL, wave X)
 
     // 0x1800c519d -- the tail call, on `this` itself:
     // rtcoll::RtColl_ArrayDtorElem_180010ab0.

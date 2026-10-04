@@ -163,7 +163,7 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
     // Transform copy-ctor (slot 0x140151418), Transform::operator*(Vector3) (slot 0x140151470).
     const Math::Transform xform = m->transform;
     const Math::Vector3 worldPos =
-        xform * Math::Vector3(entry.pos[0], entry.pos[1], entry.pos[2]);
+        xform * Math::Vector3(entry.pos.x, entry.pos.y, entry.pos.z);
     outPos[0] = worldPos.x;
     outPos[1] = worldPos.y;
     outPos[2] = worldPos.z;

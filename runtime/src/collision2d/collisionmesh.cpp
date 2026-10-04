@@ -69,6 +69,7 @@
 
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
 #include "../../types/collision2d/CollisionMesh.h"
@@ -93,11 +94,6 @@ using Triple3 = CollisionMesh::Triple3;
 using Quad4   = CollisionMesh::Quad4;
 using Face    = CollisionMesh::Face;
 
-// The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
-// POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-}
 
 // ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
 //
@@ -157,9 +153,9 @@ void FaceArraySetSize(Collection::Array<Face>* a, int32_t n) {
 // per element at +0x00, +0x02, +0x04, +0x06, stride 8. Read from the raw
 // disassembly, not the pseudo-C: Ghidra drops the third argument on three of
 // the four calls here (the known indirect-call pitfall).
-void SerializeQuadsBody(Serializer* ser, int32_t count, Quad4* base) {
+void SerializeQuadsBody(IO::Serializer* ser, int32_t count, Quad4* base) {
     if (count <= 0) return;
-    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
+    IO::ReaderWriter* rw = ser->_readerWriter;
     for (int32_t i = 0; i < count; ++i) {                  // SerializeUShort, +0xa8
         rw->SerializeUShort(base[i].a, nullptr);
         rw->SerializeUShort(base[i].b, nullptr);
@@ -173,10 +169,10 @@ void SerializeQuadsBody(Serializer* ser, int32_t count, Quad4* base) {
 // then 0x180066d50), THEN triples (count, grow when reading, then one
 // kArrayUShort(n=3) per element). The `if (reading)` test retail writes is
 // `*(int*)(ser->stream + 8) == 0`, i.e. Stream::direction.
-void SerializeFacesBody(Serializer* ser, int32_t count, Face* base) {
+void SerializeFacesBody(IO::Serializer* ser, int32_t count, Face* base) {
     if (count <= 0) return;
-    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
-    const bool reading = (ser->stream->direction == 0);
+    IO::ReaderWriter* rw = ser->_readerWriter;
+    const bool reading = (ser->_stream->_direction == rt::io::kDirectionReading);
     for (int32_t i = 0; i < count; ++i) {
         Face* f = &base[i];
         rw->SerializeInt(f->field0, nullptr);              // +0xa0
@@ -254,18 +250,13 @@ CollisionMesh::~CollisionMesh() {
 }
 
 // ?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x180108cd0)
-bool CollisionMesh::Serialize(IO::Stream& streamv) {
+bool CollisionMesh::Serialize(IO::Stream& stream) {
     CollisionMesh* self = this;
-    void* const streamvRaw = &streamv;
-    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    ser.readerWriter = rw;
+    // B.4 R-SYS: retail's `??0Serializer@IO@@` (0x1800b9960): the stream, a
+    // null ReaderWriter, then the encoding's CreateReader (+0x18) / CreateWriter
+    // (+0x20) by direction, version 0; `~Serializer` (0x1800b99b0) deletes the
+    // ReaderWriter at scope exit, where the hand-written `delete` stood.
+    IO::Serializer ser(stream, 0);
 
     // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
     // (0x1800c9930) is a member now, so the name door is gone. The registry row
@@ -274,8 +265,8 @@ bool CollisionMesh::Serialize(IO::Stream& streamv) {
     self->_name2.Serialize(&ser);
 
     // SerializeInt is +0xa0, SerializeFloatArray +0x28.
-    IO::ReaderWriter* rwc = AsRw(rw);
-    const bool reading = (stream->direction == 0);
+    IO::ReaderWriter* rwc = ser._readerWriter;
+    const bool reading = (stream._direction == rt::io::kDirectionReading);
 
     // _ptsA
     int32_t nA = self->_ptsA._size;
@@ -307,13 +298,11 @@ bool CollisionMesh::Serialize(IO::Stream& streamv) {
     const void* surfaceTypeInfo = &Collision2D::Surface::GetTypeInfo();   // retail: [0x1801fa820]
     for (int32_t i = 0; i < nS; ++i) {
         RtObject_ExternalPtr_Serialize(
-            reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]), &ser, surfaceTypeInfo);  // LEFT: ExternalPtr array serialized through the External** door (Object block)
+            reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]),  // LEFT: ExternalPtr array serialized through the External** door (Object block)
+            reinterpret_cast<Serializer*>(&ser), surfaceTypeInfo);  // LEFT: SIG RtObject_ExternalPtr_Serialize takes the rt::io::Serializer POD (R-OBJ, wave X)
     }
 
-    if (rw != nullptr) {
-        delete rwc;
-    }
-    return true;
+    return true;   // ~Serializer deletes the ReaderWriter
 }
 
 }  // namespace Collision2D

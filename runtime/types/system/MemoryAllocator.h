@@ -330,7 +330,7 @@ public:
     uint64_t     minRangeSize;   // +0x010 Startup arg1 << 20 (megabytes)
     uint64_t     maxTotalSize;   // +0x018 Startup arg2 << 20; 0 == unlimited
     uint64_t     totalReserved;  // +0x020 AddNewMemoryRange accumulates
-    uint64_t     freeLists[192]; // +0x028 FreeTag* per bin, 0x600 bytes
+    rt::system::FreeTag* freeLists[192]; // +0x028 the head FreeTag of each bin (null == empty), 0x600 bytes
     int32_t      minBin;         // +0x628 search floor; ctor sets 0xbf
     int32_t      pad62c;         // +0x62c never written by any retail function
     int64_t      allocatedBytes; // +0x630 GetAllocatedSize
