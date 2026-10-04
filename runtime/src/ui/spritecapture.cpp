@@ -62,7 +62,6 @@
 namespace {
 
 using UI::Sprite;
-using UI::CaptureArray;
 using UI::CaptureEntry;
 using UI::SpriteCapture;
 
@@ -79,12 +78,8 @@ using UI::SpriteCapture;
 // ENDGAME B.3.2 step 2 — the two by-address SetSize forwarders that used to
 // sit here are GONE.
 //
-// `CaptureArray` (SpriteCapture.h) is a stand-in for `Collection::Array<T>`'s
-// {data,size,capacity} header — declared separately so this header stays
-// standalone, per its own banner — so both call sites below bridge with a
-// `reinterpret_cast` rather than retyping `SpriteCapture` (out of this file's
-// scope: that would need `SpriteCapture`'s own construction/copy paths proven
-// safe first).
+// B4 X7-RT: SpriteCapture's three arrays are typed `Collection::Array` members
+// (SpriteCapture.h), so both call sites below call the members' SetSizeFill:
 //
 //   0x18004bfc0  kSpec_Fill16  {0x10,8,Assign16(plain 16-byte copy),init=null,
 //                destroy=null,byteCopy} == SpecFor<Sprite>(): `Sprite` is a
@@ -182,10 +177,8 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
     // [RBP-0x38] plus a dword -1 at [RBP-0x30], twelve bytes, exactly
     // kSpriteWrittenBytes.
 
-    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)   // LEFT: H5 SpriteCapture::_sprites (+0x40): ~SpriteCapture destroys it FIRST (1800d91d4), then _entries, _sheets; a typed member would be destroyed after the body (last): order reversed unless all three are typed
-        .SetSizeFill(_sprites.size + 1, &fill);            // 0x18004bfc0
-    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
-        ->SetSizeFill(_entries.size + 1, &e);               // 0x18004bde0
+    _sprites.SetSizeFill(_sprites._size + 1, &fill);            // 0x18004bfc0
+    _entries.SetSizeFill(_entries._size + 1, &e);               // 0x18004bde0
 
     // Releases the LOCAL's reference. The stored element has its own: the
     // entry array's element copier COPY-CONSTRUCTS the String
@@ -220,12 +213,12 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     // no early-out; see AddScissor
 
     // ---- (a) locate or append the sheet -------------------------------------
-    const int oldSize = _sheets.size;
+    const int oldSize = _sheets._size;
     int index = 0;
     bool found = false;
     if (oldSize > 0) {
         void* const key = sprite.spriteSheet;
-        SpriteSheet* const* p = _sheets.data;
+        SpriteSheet* const* p = _sheets._data;
         for (index = 0; index < oldSize; ++index, ++p) {
             if (*p == key) { found = true; break; }
         }
@@ -241,28 +234,28 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         // SetSize bodies in array.cpp should see the same shape.
         const int newSize = oldSize + 1;
         if (newSize != oldSize) {
-            SpriteSheet** oldData = _sheets.data;
-            _sheets.size = newSize;
-            if (newSize > _sheets.capacity) {
-                _sheets.capacity = newSize;
+            SpriteSheet** oldData = _sheets._data;
+            _sheets._size = newSize;
+            if (newSize > _sheets._capacity) {
+                _sheets._capacity = newSize;
                 // The 3x growth heuristic, and note the condition: it fires
                 // only on a one-element append to a NON-EMPTY array, so the
                 // first append allocates exactly one slot.
                 if (newSize == oldSize + 1 && oldSize != 0)
-                    _sheets.capacity = newSize * 3;
-                const int64_t bytes = static_cast<int64_t>(_sheets.capacity) * 8;
-                _sheets.data = static_cast<SpriteSheet**>(MemAlloc(static_cast<uint64_t>(bytes), 8));
+                    _sheets._capacity = newSize * 3;
+                const int64_t bytes = static_cast<int64_t>(_sheets._capacity) * 8;
+                _sheets._data = static_cast<SpriteSheet**>(MemAlloc(static_cast<uint64_t>(bytes), 8));
             }
             // Retail runs TWO cursors (EDX and RCX) that hold the same value
             // throughout; both are kept so the copy source reads as it does in
             // the disassembly.
-            int32_t src = (oldData == _sheets.data) ? oldSize : 0;
+            int32_t src = (oldData == _sheets._data) ? oldSize : 0;
             for (int64_t i = src; i < newSize; ++i, ++src) {
-                SpriteSheet** dst = _sheets.data + i;
+                SpriteSheet** dst = _sheets._data + i;
                 SpriteSheet* const* from = (i < oldSize) ? (oldData + src) : &fill;
                 *dst = *from;
             }
-            if (oldData != _sheets.data && oldData != nullptr)
+            if (oldData != _sheets._data && oldData != nullptr)
                 MemFree(oldData);
         }
     }
@@ -317,10 +310,8 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     e.x2 = x2; e.y2 = y2;                 // 0x1800d8e4b
 
     // ---- (c) append ---------------------------------------------------------
-    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)  // LEFT: H5 SpriteCapture::_sprites (+0x40): ~SpriteCapture destroys it FIRST (1800d91d4), then _entries, _sheets; a typed member would be destroyed last
-        .SetSizeFill(_sprites.size + 1, &sprite);             // 0x18004bfc0
-    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
-        ->SetSizeFill(_entries.size + 1, &e);                 // 0x18004bde0
+    _sprites.SetSizeFill(_sprites._size + 1, &sprite);             // 0x18004bfc0
+    _entries.SetSizeFill(_entries._size + 1, &e);                 // 0x18004bde0
 
     ReleaseString(e.name);                // same net-zero release as AddScissor
 }
@@ -345,7 +336,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 //     origin from all four coordinates.
 //
 // Retail:
-//   1800d8a64  if (_entries.size <= 0) skip pass 1 entirely
+//   1800d8a64  if (_entries._size <= 0) skip pass 1 entirely
 //              minX = minY =  0x8000        ; +32768
 //              maxX = maxY = -0x8000        ; -32768
 //   1800d8a90  for each entry e:
@@ -371,14 +362,14 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 // `int` so the width there is stated, not inherited from the platform.
 //
 // THE TWO PASSES USE DIFFERENT CURSORS IN RETAIL (RAX walking the array in
-// pass 1, an `R9` byte offset re-reading `_entries.data` from `R10` every
+// pass 1, an `R9` byte offset re-reading `_entries._data` from `R10` every
 // iteration in pass 2). Both are just `entries[i]`; the second one's re-read
 // matters only if something could reallocate the array mid-loop, and nothing
 // in either pass calls anything at all. Written as one indexed loop each.
 // ---------------------------------------------------------------------------
 void SpriteCapture::EndAddingSprites() {
-    const int32_t count = _entries.size;
-    CaptureEntry* entries = _entries.data;
+    const int32_t count = _entries._size;
+    CaptureEntry* entries = _entries._data;
 
     // The work verdict is "pass 1 actually saw a non-scissor entry". A capture
     // with zero entries, or one holding nothing but scissors, runs the whole
