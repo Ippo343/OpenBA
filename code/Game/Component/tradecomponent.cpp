@@ -355,8 +355,8 @@ void TradeComponent::OnAdded() {
 
     ComponentEntity* entityPtr = _entity;
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): one cast to the town manager.
-    CitizenBehavior* worldMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    // The town manager (GameUpdateLoop::m_citizenList).
+    CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Add to the trading-post list at +0x30
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -386,8 +386,8 @@ void TradeComponent::OnRemove() {
 
     ComponentEntity* entityPtr = _entity;
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): one cast to the town manager.
-    CitizenBehavior* worldMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    // The town manager (GameUpdateLoop::m_citizenList).
+    CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the trading-post list at +0x30
     CemeteryListErase_Reimpl(&worldMgr->field_0x30, &entityPtr);   // 0x140002cc0
@@ -435,8 +435,8 @@ void TradeComponent::Command(int /*command*/) {
             work->InitFromEntity(&entityIBP);
         }
         Object::InternalPtr<TradeWork> workIBP(work);
-        // LEFT: 0x14012ec60 takes the WorkComponent as an integer (COMP-b's declaration).
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched), 1, '\0', &workIBP);   // 0x14012ec60
+        // 0x14012ec60 takes the WorkComponent as an integer (Component/exe_bodies.h, wave X).
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched), 1, '\0', &workIBP);   // 0x14012ec60 LEFT: SIG CitizenAI_WorkScheduler_Post
         newState = '\x01';
     } else {
         sched->CancelWork();   // 0x14012eb50

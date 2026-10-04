@@ -65,6 +65,7 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // Map::size
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -111,8 +112,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
 
     GameUpdateLoop* const w = GameUpdateLoop::_singleton;
     if (!w) return;
-    // LEFT: GameUpdateLoop::m_game (the Map) is void* (GAME-a); its size at +0x00.
-    const int mapSize = *reinterpret_cast<int*>(w->m_game);
+    const int mapSize = w->m_game->size;   // Map +0x00
     const float half  = static_cast<float>(mapSize >> 1);
 
     // Retail derives each cell, packs it into a linear index, then immediately unpacks
