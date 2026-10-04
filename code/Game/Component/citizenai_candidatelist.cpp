@@ -423,7 +423,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
         float* pf1 = &cz->happiness;
         float c1721fc = kRdata_1401721fc;
         if ((*pf1 <= fv1 && fv1 != *pf1) &&
-            (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c1721fc)) {   // B.3.4b bridge  // LEFT: CitizenAIComponent.h (CIT-3) leisureTimer is int64_t, retail System::Time
+            (leisureTimer.AsSeconds() > c1721fc)) {
             leisure = true;
         }
         if (!leisure) {
@@ -433,14 +433,14 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
             float* pf2 = &cz->happiness;
             float c172234 = kRdata_140172234;
             if ((*pf2 <= fv2 && fv2 != *pf2) &&
-                (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172234)) {   // B.3.4b bridge  // LEFT: CitizenAIComponent.h (CIT-3) leisureTimer is int64_t, retail System::Time
+                (leisureTimer.AsSeconds() > c172234)) {
                 leisure = true;
             }
         }
         if (!leisure) {
             // OR AsSeconds(leisureTimer) > DAT_172254
             float c172254 = RdataF(kRdata_140172254);
-            if (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge  // LEFT: CitizenAIComponent.h (CIT-3) leisureTimer is int64_t, retail System::Time
+            if (leisureTimer.AsSeconds() > c172254) leisure = true;
         }
         // id 0xc both ways; only the priority differs (2 when tripped, 0 otherwise).
         AppendCandidate(outList, 0xc, leisure ? 2 : 0);
