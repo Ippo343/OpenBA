@@ -882,7 +882,7 @@ static void DumpSwapChainState(const char* tag) {
         printf("[SwapProbe %s] swapChain NULL (activeDD+0x18)\n", tag);
         return;
     }
-    void* vt = *reinterpret_cast<void**>(swapChain);   // the vtable word, logged only  // CAST-OK: crash_walk
+    [[maybe_unused]] void* vt = *reinterpret_cast<void**>(swapChain);   // the vtable word, logged only  // CAST-OK: crash_walk
 
     BOOL fullscreen = -1;
     IDXGIOutput* output = nullptr;
