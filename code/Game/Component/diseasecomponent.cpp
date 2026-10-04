@@ -108,6 +108,7 @@
 #include "Component/MapComponent.h"
 #include "Component/coll_bridge.h"
 #include "Game/Map.h"
+#include "Work/GridTile.h"   // GridTile, RawArray (0x14009fc00)
 #include "Entity/CitizenBehavior.h"
 #include "Component/DiseaseComponent.h"
 #include "Component/DiseaseDescription.h"
@@ -177,20 +178,8 @@ static inline int64_t TimeFromSeconds(float secs) {
     return t._ticks;
 }
 
-// One entry of the tile list 0x14009fc00 fills (16 bytes: the cell index, a
-// zero dword, the entity on the cell), and the list itself (data / count /
-// capacity), freed by the caller.
-struct TileInfo {
-    int32_t          cell;     // +0x00
-    int32_t          pad04;    // +0x04
-    ComponentEntity* entity;   // +0x08
-};
-static_assert(sizeof(TileInfo) == 0x10, "TileInfo is 16 bytes");
-struct TileInfoList {
-    TileInfo* data;    // +0x00
-    int32_t   count;   // +0x08
-    int32_t   cap;     // +0x0C
-};
+// The tile list 0x14009fc00 fills is a RawArray<GridTile> (Work/GridTile.h),
+// freed by the caller.
 
 bool CDTrace() {
     if (s_trace < 0) {
@@ -255,20 +244,20 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
     }
 
     GameUpdateLoop* gw = GameWorld();
-    void* map = gw ? gw->m_game : nullptr;
+    Map* map = gw ? gw->m_game : nullptr;
 
     MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
 
     // Retail loads the footprint with MOVSX (0x140048031..3f): signed shorts.
-    TileInfoList list = {nullptr, 0, 0};
+    RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(static_cast<int*>(map),   // LEFT: SIG WorkLeaf_GetTilesInArea_9fc00
+        WorkLeaf_GetTilesInArea_9fc00(map,
                         static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
-    TileInfo* const listData  = list.data;
-    const int32_t   listCount = list.count;
+    GridTile* const listData  = list.data;
+    const int32_t   listCount = list.size;
 
     if (listCount > 0) {
         for (int i = 0; i < listCount; ++i) {
@@ -346,21 +335,21 @@ bool DiseaseComponent::CheckCure() {
     }
 
     GameUpdateLoop* gw = GameWorld();
-    void* map = gw ? gw->m_game : nullptr;
+    Map* map = gw ? gw->m_game : nullptr;
 
     MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
     // Retail loads the footprint with MOVSX (0x14004824d..5b): signed shorts.
-    TileInfoList list = {nullptr, 0, 0};
+    RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(static_cast<int*>(map),   // LEFT: SIG WorkLeaf_GetTilesInArea_9fc00
+        WorkLeaf_GetTilesInArea_9fc00(map,
                         static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
 
     int living = 0;
-    for (int i = 0; i < list.count; ++i) {
+    for (int i = 0; i < list.size; ++i) {
         if (list.data[i].entity->FindComponent<NaturalResourceComponent>() != nullptr)   // 0x1400052c0
             ++living;
     }
@@ -530,21 +519,21 @@ void DiseaseComponent::Infect() {
 // 0x200000 and switches the model to animation index 2 (withered).
 void DiseaseComponent::KillOnePlant() {
     GameUpdateLoop* gw = GameWorld();
-    void* map = gw ? gw->m_game : nullptr;
+    Map* map = gw ? gw->m_game : nullptr;
     System::Random* rng = gw ? gw->m_random : nullptr;
 
     MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
     // Retail loads the footprint with MOVSX: signed shorts.
-    TileInfoList list = {nullptr, 0, 0};
+    RawArray<GridTile> list = {nullptr, 0, 0};
     if (map && mc) {
-        WorkLeaf_GetTilesInArea_9fc00(static_cast<int*>(map),   // LEFT: SIG WorkLeaf_GetTilesInArea_9fc00
+        WorkLeaf_GetTilesInArea_9fc00(map,
                         static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
                         static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
 
-    uint32_t tileCount = (uint32_t)list.count;
+    uint32_t tileCount = (uint32_t)list.size;
     int attempts = 0;
     bool killed = false;
     for (;;) {

@@ -86,10 +86,10 @@
 // Externs from sibling reimpl TUs (already registered/defined)
 // ============================================================
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
-extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
+extern "C" void  WorldGen_BuildTerrain(WorldGeometry* wg, TerrainGenerator* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 extern "C" void  Pathfinder_Seed(void* game, int dim);    // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
-extern "C" void  Region_Seed(void* game, int dim);        // region_seed.cpp (keystone A — region map @ game+0x70)
+extern "C" void  Region_Seed(Map* game, int dim);         // region_seed.cpp (keystone A — region map @ game+0x70)
 extern "C" void  CharManager_Seed();                      // charmanager_seed.cpp (move-tick tail — char spatial-hash mgr @ GW+0x88)
 extern "C" void  StartTown_ComputeCamera(MapGenerator* startConfig, Map* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
 extern "C" void  StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoop* world);                  // starttown.cpp (M5 5c — ECS spawn)
@@ -1353,8 +1353,8 @@ void GameUpdateLoop::Load() {
 
     static const bool kEnableWorldgen = true;
     if (kEnableWorldgen && m_savedState == nullptr /*new game*/) {
-        void* worldGeom  = m_worldGeometry;
-        void* terrainGen = m_terrainConfig;
+        WorldGeometry*    worldGeom  = m_worldGeometry;
+        TerrainGenerator* terrainGen = m_terrainConfig;
         int   sizeIdx    = m_mapSize;
         uint32_t seed    = static_cast<uint32_t>(m_seed);
         if (worldGeom && terrainGen) {

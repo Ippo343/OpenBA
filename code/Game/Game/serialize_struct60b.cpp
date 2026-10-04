@@ -220,19 +220,17 @@ void GeometryBatch_Resize(RawArray<GeometryBatch>& hdr, unsigned int newCount) {
 }
 
 // ============================================================
-// The C entry points (B4 FORWARD): action_pf_pools.cpp / action_pf_road.cpp
-// (ACT-a, finished) hold the headers and elements untyped.
+// The C entry points: action_pf_pools.cpp / action_pf_road.cpp call them.
 // ============================================================
-// LEFT: the void* arguments of the ACT-a callers.
+// LEFT: Resize keeps its void* header: action_pf_road.cpp (X-G1-3, running) passes it.
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount) {
     if (!arrayHeader) return;
     GeometryBatch_Resize(*reinterpret_cast<RawArray<GeometryBatch>*>(arrayHeader), newCount);
 }
 
-extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src) {
+extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src) {
     if (!dst || !src) return dst;
-    GeometryBatch_CopyConstruct(*reinterpret_cast<GeometryBatch*>(dst),
-                                *reinterpret_cast<const GeometryBatch*>(src));
+    GeometryBatch_CopyConstruct(*dst, *src);
     return dst;
 }
 

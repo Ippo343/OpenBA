@@ -39,6 +39,7 @@
 class ComponentDescription;
 class ComponentEntity;
 class Profession;
+class RawMaterialDescription;
 namespace UI {
 class ButtonElement;
 class ComboElement;
@@ -50,6 +51,18 @@ class StringTable;
 class TabElement;
 class TextElement;
 }
+
+// UpdateProduction's (0x14007c7f0) display entry, stride 0x18: what the two sorts
+// 0x140015200 / 0x140015500 order (their comparators read +0x08 and +0x10).
+struct TownHallInventoryEntry {
+    const ComponentDescription* entityPtr;   // +0x00 the inventory tree's key
+    RawMaterialDescription*     desc;        // +0x08 its RawMaterialDescription
+    int32_t                     value;       // +0x10 the count shown
+    int32_t                     _pad;        // +0x14
+};
+static_assert(sizeof(TownHallInventoryEntry) == 0x18, "inventory entry stride 0x18 (0x140015200)");
+static_assert(offsetof(TownHallInventoryEntry, desc) == 0x08, "TownHallInventoryEntry::desc @ +0x08");
+static_assert(offsetof(TownHallInventoryEntry, value) == 0x10, "TownHallInventoryEntry::value @ +0x10");
 
 class TownHallUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(TownHallUI)
@@ -99,7 +112,8 @@ public:
         ProfessionNode* parent;    // +0x10
         ProfessionNode* left;      // +0x18
         ProfessionNode* right;     // +0x20
-        int32_t         balance;   // +0x28
+        int16_t         balance;   // +0x28 (retrace 0x140013480: MOV word ptr [R8+0x28])
+        int16_t         height;    // +0x2A (retrace 0x140013480: MOV word ptr [R8+0x2a])
         int32_t         _pad2c;    // +0x2C
     };
     // +0x138: the inventory tree node (0x38; key = the raw material's description).
@@ -119,7 +133,8 @@ public:
         AgricultureNode* parent;   // +0x08
         AgricultureNode* left;     // +0x10
         AgricultureNode* right;    // +0x18
-        int32_t          balance;  // +0x20
+        int16_t          balance;  // +0x20 (retrace 0x1400149a0: MOV word ptr [RDX+0x20])
+        int16_t          height;   // +0x22 (retrace 0x1400149a0: MOV word ptr [RDX+0x22])
         int32_t          _pad24;   // +0x24
     };
 
@@ -230,10 +245,14 @@ static_assert(sizeof(TownHallUI::ProductionRow) == 0x28, "production row stride 
 static_assert(sizeof(TownHallUI::InventoryRow) == 0x10, "inventory row stride 0x10");
 static_assert(sizeof(TownHallUI::ProfessionNode) == 0x30, "profession node 0x30 (MemAlloc(0x30))");
 static_assert(offsetof(TownHallUI::ProfessionNode, left) == 0x18, "ProfessionNode::left @ +0x18 (0x140081234)");
+static_assert(offsetof(TownHallUI::ProfessionNode, balance) == 0x28, "ProfessionNode::balance @ +0x28 (int16, 0x140013480)");
+static_assert(offsetof(TownHallUI::ProfessionNode, height) == 0x2A, "ProfessionNode::height @ +0x2A (int16, 0x140013480)");
 static_assert(sizeof(TownHallUI::InventoryNode) == 0x38, "inventory node 0x38");
 static_assert(offsetof(TownHallUI::InventoryNode, left) == 0x20, "InventoryNode::left @ +0x20 (0x140081163)");
 static_assert(sizeof(TownHallUI::AgricultureNode) == 0x28, "agriculture node 0x28 (MemAlloc(0x28))");
 static_assert(offsetof(TownHallUI::AgricultureNode, left) == 0x10, "AgricultureNode::left @ +0x10 (0x14008110b)");
+static_assert(offsetof(TownHallUI::AgricultureNode, balance) == 0x20, "AgricultureNode::balance @ +0x20 (int16, 0x1400149a0)");
+static_assert(offsetof(TownHallUI::AgricultureNode, height) == 0x22, "AgricultureNode::height @ +0x22 (int16, 0x1400149a0)");
 
 static_assert(sizeof(TownHallUI) == 0x1e8, "TownHallUI is 0x1e8 (create 0x140014660 MemAlloc(0x1e8))");
 static_assert(alignof(TownHallUI) == 8, "qword-aligned (the vptr)");

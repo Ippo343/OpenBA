@@ -480,7 +480,7 @@ void WorkPlaceUI::OnUpdateLayout() {
                 return b ? Object::SlotAddressOf(b, &UI::Element::Enable) : nullptr;
             };
             auto vptrOf = [](UI::Element* b) -> void* {
-                return b ? *reinterpret_cast<void**>(b) : nullptr;   // LEFT: diagnostic prints the vptr
+                return b ? *reinterpret_cast<void**>(b) : nullptr;   // LEFT: diagnostic prints the vptr  // CAST-OK: crash_walk
             };
             std::fprintf(stderr, "[JobArrow] jobType=%p wpMaxCount=%d min(+0x28)=%d "
                          "max(+0x2c)=%d -> upEnabled=%d downEnabled=%d | "
@@ -577,7 +577,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
             CitizenEmploy_Strat_c4b0(townKey, &anyBuf, &slotCopy, profKey);   // 0x14008c4b0
         }
     } else {  // 0x1451 — remove one worker of this profession
-        TownHall_RemoveWorker(town, static_cast<uint64_t>(profKey));   // 0x140091180
+        TownHall_RemoveWorker(town, profession);   // 0x140091180
     }
 }
 

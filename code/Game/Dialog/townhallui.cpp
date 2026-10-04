@@ -21,7 +21,7 @@
 //   StorageComponent::storageSlots (W0 raw storage).
 //   ComponentDescription::_subDescs (COMP-c: void**).
 //   UI::Element::_description (R-UI-a: void*).
-//   The exe helpers' untyped parameters (Pf_AvlRebalanceB_13480, the
+//   The exe helpers' untyped parameters (the
 //   CitizenEmploy strategies, ToolbarUtility_BstInsert_4890: other blocks).
 
 #include "ui/Panels.h"
@@ -292,6 +292,7 @@ void TownHallUI::InitProfessions() {
                 newNode->left = nullptr;            // +0x18: left
                 newNode->right = nullptr;           // +0x20: right
                 newNode->balance = 0;               // +0x28: balance
+                newNode->height = 0;
             }
             professionTree = newNode;
         } else {
@@ -311,10 +312,11 @@ void TownHallUI::InitProfessions() {
                             newNode->left = nullptr;
                             newNode->right = nullptr;
                             newNode->balance = 0;
+                            newNode->height = 0;
                         }
                         parent->left = newNode;
                         // Rebalance
-                        AvlRebalance(reinterpret_cast<AvlNode30**>(&professionTree), reinterpret_cast<AvlNode30**>(&curNode));   // 0x140013480; LEFT: TownHallUI.h ProfessionNode +0x28 is one int32 where the retrace reads int16 balance / height
+                        AvlRebalance(&professionTree, &curNode);   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = curNode->left;
@@ -330,9 +332,10 @@ void TownHallUI::InitProfessions() {
                             newNode->left = nullptr;
                             newNode->right = nullptr;
                             newNode->balance = 0;
+                            newNode->height = 0;
                         }
                         parent->right = newNode;
-                        AvlRebalance(reinterpret_cast<AvlNode30**>(&professionTree), reinterpret_cast<AvlNode30**>(&curNode));   // 0x140013480; LEFT: TownHallUI.h ProfessionNode +0x28 is one int32 where the retrace reads int16 balance / height
+                        AvlRebalance(&professionTree, &curNode);   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = curNode->right;
@@ -601,6 +604,7 @@ void TownHallUI::InitAgriculture() {
                                 newNode->left = nullptr;
                                 newNode->right = nullptr;
                                 newNode->balance = 0;
+                                newNode->height = 0;
                             }
                             agriBST = newNode;
                             agriBSTCount = agriBSTCount + 1;
@@ -619,9 +623,10 @@ void TownHallUI::InitAgriculture() {
                                             newNode->left = nullptr;
                                             newNode->right = nullptr;
                                             newNode->balance = 0;
+                                            newNode->height = 0;
                                         }
                                         parent->left = newNode;
-                                        TownHall_AvlRebalance28(&agriBST, &curNode);   // 0x1400149a0
+                                        AvlRebalance(&agriBST, &curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = curNode->left;
@@ -635,9 +640,10 @@ void TownHallUI::InitAgriculture() {
                                             newNode->left = nullptr;
                                             newNode->right = nullptr;
                                             newNode->balance = 0;
+                                            newNode->height = 0;
                                         }
                                         parent->right = newNode;
-                                        TownHall_AvlRebalance28(&agriBST, &curNode);   // 0x1400149a0
+                                        AvlRebalance(&agriBST, &curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = curNode->right;
@@ -1083,11 +1089,11 @@ static ::Object::Base* TownHall_FindComponentByTypeId(const ComponentDescription
 
     for (int i = 0; i < compCount; i++) {
         Description* comp = compArray[i];
-        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {   // LEFT: STANDALONE pointer-range guard
+        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {   // LEFT: STANDALONE pointer-range guard  // CAST-OK: ptr_int
             continue;
         }
         // vtable slot 2 (+0x10) = GetTypeId()
-        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard
+        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard  // CAST-OK: crash_walk
         if (!vtable) {
             continue;
         }
@@ -1130,12 +1136,7 @@ void TownHallUI::UpdateProduction() {
     int sortComboIdx = sortCombo->_currentItem;
 
     // Collect entries from invBST in-order traversal
-    struct ProdEntry {
-        const ComponentDescription* entityPtr;
-        void*    resourceTypeComp;
-        int      value;
-        int      _pad;
-    };
+    using ProdEntry = TownHallInventoryEntry;   // Dialog/TownHallUI.h
 
     // B.3.2 bridge: this is a local Collection::Array<ProdEntry> — retail's
     // hand-inlined SetSize over a stack-local {data,size,capacity} triple, not a
@@ -1161,7 +1162,7 @@ void TownHallUI::UpdateProduction() {
 
             // Push entry into dynamic array
             entryArr.SetSize(entryArr.GetSize() + 1,
-                             ProdEntry{entityPtr, resourceComp, counterVal, 0});
+                             ProdEntry{entityPtr, static_cast<RawMaterialDescription*>(resourceComp), counterVal, 0});
 
             node = InvBST_Next(node);
         }
@@ -1265,6 +1266,7 @@ void TownHallUI::UpdateAgriculture() {
                 node->left = nullptr;
                 node->right = nullptr;
                 node->balance = 0;
+                node->height = 0;
                 tempBSTRoot = node;
             }
         } else {
@@ -1288,13 +1290,14 @@ void TownHallUI::UpdateAgriculture() {
                 node->left = nullptr;
                 node->right = nullptr;
                 node->balance = 0;
+                node->height = 0;
                 if (entityPtr < parent->key)
                     parent->left = node;
                 else
                     parent->right = node;
                 // Rebalance
                 AgricultureNode* newNodeAddr = node;
-                TownHall_AvlRebalance28(&tempBSTRoot, &newNodeAddr);   // 0x1400149a0
+                AvlRebalance(&tempBSTRoot, &newNodeAddr);   // 0x1400149a0
             }
         }
         tempBSTCount++;
@@ -1681,9 +1684,9 @@ void TownHallUI::OnProfessionSpinner(int index) {
     if (desired < current) {
         int toRemove = current - desired;
         for (int i = 0; i < toRemove; i++) {
-            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index]);   // LEFT: SIG TownHall_RemoveWorker takes uint64_t (Dialog/exe_bodies.h, DLG-2)
-            TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
+            CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
+            Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
+            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
         }
     }
 

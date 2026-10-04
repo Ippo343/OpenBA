@@ -333,7 +333,7 @@ void SetAnim(BoatComponent* boat, uint32_t animId) {
     CharacterComponent* chr = boat->character.Get();
     if (!chr) return;
     const float f = kSpeedBase;
-    ActMv_SetAnimation_a1f0(chr, animId, f, f);
+    ::SetAnimation(chr, animId, f, f);
 }
 }  // namespace
 
@@ -529,7 +529,7 @@ char BoatComponent::State1Tick(StateMachine* smV) {
 char BoatComponent::State2Enter() {
     // 0x140044f8d/f95: XMM2 = 0x14017214c, XMM3 = 0 (XORPS), EDX = 0.
     if (CharacterComponent* chr = character.Get())
-        ActMv_SetAnimation_a1f0(chr, 0, kSpeedBase, 0.0f);
+        ::SetAnimation(chr, 0, kSpeedBase, 0.0f);
 
     PostEventToDestination(this, 9);
     return 1;
@@ -559,7 +559,7 @@ extern "C" char BoatCtrl_Event1_Abort(BoatComponent* /*self*/, StateMachine* smV
 char BoatComponent::State3Enter() {
     if (CharacterComponent* chr = character.Get()) {
         const float f = kSpeedBase;
-        ActMv_SetAnimation_a1f0(chr, 3, f, f);
+        ::SetAnimation(chr, 3, f, f);
     }
     return 1;
 }

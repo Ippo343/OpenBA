@@ -207,7 +207,7 @@ static char Destroy_ReclaimPending_ea20(WorkComponent* yard) {
     int key = yard->workId;
     Work* node = mgr->FindWorkAtCell(key);   // 0x1400f8d50 (the RemovalCalc_helper_8d50 forwarder's member)
     if (!node) return 0;
-    if (!*reinterpret_cast<void* const*>(node)) return 0;   // LEFT: the tree's vptr guard (retail has none: known_port_issues row 391)
+    if (!*reinterpret_cast<void* const*>(node)) return 0;   // LEFT: the tree's vptr guard (retail has none: known_port_issues row 391)  // CAST-OK: crash_walk
     // `node` is the gw+0x118 scheduler's work (id map filled by CitizenAI_impl_88a0
     // 0x1400f88a0 with the posted Work leaves); retail reads AL.
     return static_cast<char>(node->GetPriority());   // slot 11

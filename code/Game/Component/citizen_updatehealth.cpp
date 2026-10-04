@@ -492,14 +492,12 @@ void CitizenComponent::Infect(Disease* disease) {
         // 0xffff6060 (sev 3), type 0xb, icon 1, popup -1, tile -1 (null entity) —
         // including the drop-to-1x-speed tail on the settings +0x17 byte.
         EventLog* eventLog = gw->m_eventNotifier;
-        void* nameTable = disease->_stringTable;
+        const UI::StringTable* nameTable = disease->_stringTable;
         System::String diseaseName;
         bool haveName = false;
         if (nameTable) {
-            // Disease::_stringTable is a void* member and _name the H5 raw String.
             ::new (&diseaseName) System::String(
-                reinterpret_cast<const UI::StringTable*>(nameTable)->GetText(  // B.3.6 bridge   // LEFT: Disease.h (GAME-1) _stringTable void*
-                    *reinterpret_cast<const System::String*>(&disease->_name)));   // LEFT: Disease.h (GAME-1) H5 _name
+                nameTable->GetText(disease->_name));
             haveName = true;
         }
         if (eventLog) {

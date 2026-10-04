@@ -37,6 +37,7 @@
 #include <cstdint>
 
 class ModelComponent;                    // Component/ModelComponent.h
+class StatusIconComponent;               // Component/StatusIconComponent.h (NoteDeferred)
 namespace System { class Time; }         // runtime/types/system/Value.h
 namespace Graphics { class Renderer; }   // runtime/types/graphics/Camera.h
 namespace Math { class Transform; }      // runtime/types/math/Math.h
@@ -107,9 +108,10 @@ bool PickCullSkip(ModelComponent* modelComponent, Picking::Scene* pickScene, uin
 // True when the model's position (model+0x158) is outside the frustum margin and the
 // anim-cull machinery is active (so a later flush will repair anything deferred).
 bool ModelCulled(ModelComponent* modelComponent);
-// Generic deferral: `replay(obj)` is called with the root-only flag clear when the sim
-// goes idle (pause), so deferred presentation state catches up before a paused pan.
-void NoteDeferred(void* obj, void (*replay)(void*));
+// Deferral: `replay(obj)` is called with the root-only flag clear when the sim goes
+// idle (pause), so deferred presentation state catches up before a paused pan. The
+// one user is the status icon's culled reposition (statusiconcomponent.cpp).
+void NoteDeferred(StatusIconComponent* obj, void (*replay)(StatusIconComponent*));
 // Particles: off-screen particle components are not ticked (frozen); returns true to skip.
 bool ParticleCullSkip(const float* pos);
 

@@ -210,10 +210,9 @@ void MainMenuDialog::ReturnToMenu() {
 
     if (gameWorld == nullptr) {
         // No game active: destroy the menu loop's SaveLoad.
-        // LEFT: MenuDialogLoopT::_saveLoad is void* (block GAME's header).
-        void* saveLoad = menuLoop->_saveLoad;
+        Save::SaveLoad* saveLoad = menuLoop->_saveLoad;
         if (saveLoad) {
-            RtSave_SaveLoad_Dtor(reinterpret_cast<Save::SaveLoad*>(saveLoad));   // ??1SaveLoad 0x1800c3c90
+            RtSave_SaveLoad_Dtor(saveLoad);   // ??1SaveLoad 0x1800c3c90
             System::MemoryAllocator::MemFree(saveLoad);
         }
         menuLoop->_saveLoad = nullptr;
@@ -859,8 +858,7 @@ extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr
     }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(MainMenuDialog), 8);
     MenuDialogLoopT* menuLoop = static_cast<MenuDialogLoopT*>(loop);
-    // LEFT: DialogLoopT::_dialogExternal is void* (runtime Engine header).
-    const UI::Dialog* rsc = menuLoop ? static_cast<const UI::Dialog*>(menuLoop->_dialogExternal) : nullptr;
+    const UI::Dialog* rsc = menuLoop ? menuLoop->_dialogExternal : nullptr;
     MainMenuDialog* dlg;
     if (rsc) {
         dlg = ::new (mem) MainMenuDialog(&menuLoop->_ui, rsc,

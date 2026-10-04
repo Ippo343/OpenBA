@@ -39,7 +39,8 @@ extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);  // 
 extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials_ctor.cpp
-extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (local extern in buildcomponent_state1.cpp)
+class Work;   // Work/Work.h
+extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
 extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
@@ -55,7 +56,8 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, Compon
 extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- work_act_clear.cpp
-void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3, void** param_4, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
+class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
+void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t param_2, int param_3, NaturalResourceComponent* const* targets, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
 
 // ---- work_act_consume.cpp
 void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint32_t param_2, ComponentEntity* const* entityRef, float* param_4, float param_5, ComponentDescription* param_6, ComponentDescription* rawMatDesc, uint32_t param_8, int* param_9, uint32_t param_10, uint32_t param_11, float param_12, uint32_t param_13);  // 0x1400bef70
@@ -130,8 +132,10 @@ void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropF
 void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP);  // 0x1400298a0
 void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* insIBP);  // 0x140029920
 void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser);  // 0x140029c10
-void WorkLeaf_SortTilesByDistance_9d7c0(int* mapGrid, void* tileArray, int refCell);  // 0x14009d7c0
-void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h, void* outArr, char collectEmpty);  // 0x14009fc00
+struct GridTile;   // Work/GridTile.h
+template <class T> struct RawArray;   // Action/PathSearch.h
+void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0
+void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp
 class Component;

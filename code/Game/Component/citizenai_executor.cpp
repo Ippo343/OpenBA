@@ -133,7 +133,7 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(ActionStack* param_1) {
             if (iVar1 != 1) break;
             node = node->_next.Get();                            // advance via node+0x10
         } while (node != nullptr);
-        reinterpret_cast< ::Object::InternalBasePtr*>(&param_1->field_0x10)->DeletePtr();   // B.3.3 bridge  // LEFT: Action.h (S2) ActionStack::field_0x10 is Action*, retail an InternalPtr<Action>
+        param_1->field_0x10.DeletePtr();
         // re-Ctor a default InternalBasePtr (null internal) and store into [stack+0x10]
         param_1->field_0x10 = nullptr;
     }
@@ -357,8 +357,7 @@ static inline float fabs_f(float v) {
 
 extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
 
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* selfBytes, const System::Time* time) {
-    CharacterComponent* self = reinterpret_cast<CharacterComponent*>(selfBytes);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (charactercomponent.cpp's extern)
+extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, const System::Time* time) {
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
     if (-1 < self->currentAction) {

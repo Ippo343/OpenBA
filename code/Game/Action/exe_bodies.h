@@ -66,11 +66,14 @@ CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0
 void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir);  // 0x14010a060
 void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4);  // 0x14010a1f0
 uint8_t CitizenBreakCheck(CitizenComponent* citizen);  // 0x140116650
-void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP);  // 0x1400012d0
-void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer);  // 0x140022970
-void ActMv_UpdateFacing_c8d20(void* selfp);  // 0x1400c8d20
-void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4);  // 0x14010a1f0
-void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void*, void* param4);  // 0x1400c8c10
+class CharacterDescription;   // Component/CharacterDescription.h
+class MoveTo;                 // Action/MoveTo.h
+struct ActionStack;           // Action/Action.h
+namespace IO { class Serializer; }
+void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970
+void ActMv_UpdateFacing_c8d20(MoveTo* self);  // 0x1400c8d20
+void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4);  // 0x14010a1f0 B4 FORWARD: code/Game/Component/citizencomponent_lifecycle.cpp still calls this -> SetAnimation
+bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionStack* param4);  // 0x1400c8c10 (retail returns AL = 1)
 
 // ---- action_base_movedeps.cpp
 class ModelComponent;         // Component/ModelComponent.h
@@ -140,8 +143,9 @@ class PopulationComponent;    // Component/PopulationComponent.h
 int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
-void Pf_VectorResize14_ee40(int64_t* param_1, int param_2);  // 0x14001ee40
-void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001f8d0
+struct GeometryBatchVertex;   // Game/WorldGeometryElements.h
+void Pf_VectorResize14_ee40(RawArray<GeometryBatchVertex>* arr, int newCount);  // 0x14001ee40
+void Pf_VectorResize14Fill_f8d0(RawArray<GeometryBatchVertex>* arr, int newCount, const GeometryBatchVertex* fill);  // 0x14001f8d0
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001fa80
 
 // ---- action_pf_region.cpp
@@ -197,5 +201,6 @@ int RoadTool_sub_ce00(Map* map, unsigned int passableTypes, unsigned int start, 
 // ---- region_graph_build.cpp
 
 // ---- region_paircache.cpp
-extern "C" void* Pf_RegionPairCache_Build();  // no retail address (local extern in code/Game/Game/region_seed.cpp)
+struct RegionPairCache;   // Action/PathSearch.h
+extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)
 void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2);  // 0x1400a5d10

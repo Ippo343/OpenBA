@@ -129,11 +129,10 @@ namespace {
 //               External* cached @+0x10}, stride 0x18, align 8.
 // +0x0c..+0x0f is written by NEITHER arm, which — together with the -1
 // generation seed — is why this row cannot be derived from a C++ type's traits.
-// LEFT: rtcoll::ArraySpec's element callbacks take raw `uint8_t*` storage
-// (runtime/types/collection/Collection.h); each names its element once.
-void AssignGoalRefEntry(uint8_t* d, const uint8_t* s) {
-    NamedExternalRef* dst = reinterpret_cast<NamedExternalRef*>(d);
-    const NamedExternalRef* src = reinterpret_cast<const NamedExternalRef*>(s);
+// The element operations take the element; rtcoll::AssignAs / InitAs / DestroyAs
+// (runtime/types/collection/Collection.h) are the one place the core's stepped
+// byte address becomes it.
+void AssignGoalRefEntry(NamedExternalRef* dst, const NamedExternalRef* src) {
     new (dst->name) System::String(src->Name());     // +0x00
     dst->generation = src->generation;               // +0x08
     dst->resolved = src->resolved;                   // +0x10
@@ -144,15 +143,13 @@ void AssignGoalRefEntry(uint8_t* d, const uint8_t* s) {
 // would make the lazy resolver take its "cache still valid" early-out while the
 // pointer is still null — the entry would silently never resolve. Faithful to
 // retail, which stores 0xffffffff explicitly.
-void InitGoalRefEntry(uint8_t* d) {
-    NamedExternalRef* e = reinterpret_cast<NamedExternalRef*>(d);
+void InitGoalRefEntry(NamedExternalRef* e) {
     e->Name()._data = nullptr;                       // +0x00
     e->generation = -1;                              // +0x08 generation -1
     e->resolved = nullptr;                           // +0x10
 }
 
-void DestroyGoalRefEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
-    NamedExternalRef* elems = reinterpret_cast<NamedExternalRef*>(base);
+void DestroyGoalRefEntry(NamedExternalRef* elems, int count) {
     for (int i = 0; i < count; ++i)
         elems[i].Name().~String();
 }
@@ -162,7 +159,9 @@ void DestroyGoalRefEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
 // extent at [0x0c,0x10).
 const rtcoll::ArraySpec kSpec_GoalRefEntry = {          // exe 0x14001b340
     "Array<{String,int32,External*}>", 0x18, 8,
-    &AssignGoalRefEntry, &InitGoalRefEntry, &DestroyGoalRefEntry, false,
+    &rtcoll::AssignAs<NamedExternalRef, &AssignGoalRefEntry>,
+    &rtcoll::InitAs<NamedExternalRef, &InitGoalRefEntry>,
+    &rtcoll::DestroyAs<NamedExternalRef, &DestroyGoalRefEntry>, false,
     /*assign unwritten*/ 0x0c, 0x10,
     /*init   unwritten*/ 0x0c, 0x10,
     /*seed zero       */ 0,    0 };

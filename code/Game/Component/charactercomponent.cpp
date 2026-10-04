@@ -125,7 +125,7 @@ static Component* CharComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, uin
 // handlers push them.
 //
 // ------------------------------------------------------------------
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, const System::Time* time);
+extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, const System::Time* time);   // citizenai_executor.cpp
 
 // RETAIL SLOT WIRING (ENDGAME B.3.8 CIT: the class's compiler vtable carries it —
 // CharacterComponent.h; the members are at the bottom of this file).
@@ -299,7 +299,7 @@ void CharacterComponent::OnRemove() {
 // [8] 0x1401094c0 — the move-tick, EVERY FRAME from the EntityList tree walk
 // (flag bit 2; 0x1400c2e5d passes the update's time pointer through).
 void CharacterComponent::Tick(const System::Time* time) {
-    CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(this), time);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (defined in citizenai_executor.cpp, CAI-2)
+    CharacterComponent_MoveTick_1094c0(this, time);
 }
 
 // [9] 0x140109480 — the bucket-rate Update. Retail forwards the Time operand RAW:

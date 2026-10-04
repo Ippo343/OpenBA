@@ -96,7 +96,7 @@ long     s_counts[kCntMax];
 std::vector<ModelComponent*> s_culledModels;   // models whose pose was left root-only this frame
 struct DeferredPick { ModelComponent* model; Picking::Scene* scene; uint32_t id; PickXfCtor_t ctor; PickSetXf_t set; };
 std::vector<DeferredPick> s_deferredPicks;   // citizens whose pick transform was not pushed
-struct DeferredReplay { void* obj; void (*fn)(void*); };
+struct DeferredReplay { StatusIconComponent* obj; void (*fn)(StatusIconComponent*); };
 std::vector<DeferredReplay> s_deferredReplays;  // icons etc. whose presentation tick was skipped
 bool s_flushing = false;   // replays re-enter the tick bodies; no re-deferral while flushing
 int  s_iterIndex = 0, s_iterCount = 1;   // SetIteration
@@ -444,7 +444,7 @@ bool ModelCulled(ModelComponent* model) {
     return !PointVisible(&model->transform.translation.x);   // +0x158
 }
 
-void NoteDeferred(void* obj, void (*replay)(void*)) {
+void NoteDeferred(StatusIconComponent* obj, void (*replay)(StatusIconComponent*)) {
     if (s_flushing) return;
     if (!s_simRanThisFrame) { s_simRanThisFrame = true; s_culledModels.clear(); s_deferredPicks.clear(); s_deferredReplays.clear(); }
     s_deferredReplays.push_back(DeferredReplay{ obj, replay });
