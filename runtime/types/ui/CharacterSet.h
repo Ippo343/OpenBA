@@ -46,7 +46,7 @@
 
 #include "../object/External.h"
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
-#include "../system/String.h"   // RtSystem::String — the POD, trivially destructible
+#include "../system/String.h"   // System::String — the +0x20 member
 
 namespace System { class Filename; }
 
@@ -55,13 +55,15 @@ namespace UI {
 class CharacterSet : public Object::External {
 public:
     // The REAL constructor: External() (+0x08..+0x18 zero), then the one own
-    // store, +0x20 = 0 (0x1800376fa in Construct's inlined copy).
-    CharacterSet() : Object::External() { _string20.data = nullptr; }
+    // store, +0x20 = 0 (0x1800376fa in Construct's inlined copy): the
+    // System::String member's default constructor (B4 X-RH).
+    CharacterSet() : Object::External() {}
 
     // [0] 0x1800378a0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x28`, the element size).
     // `??1CharacterSet@UI@@UEAA@XZ` 0x1800cb840. VIRTUAL (B3X W1); holds the retired
-    // dtor door's body (the +0x20 release); the compiler chains ~External.
+    // dtor door's body; the +0x20 release (0x1800cb860..0x1800cb88a) is the
+    // String member's destructor, then the compiler chains ~External (B4 X-RH).
     ~CharacterSet() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
@@ -91,7 +93,7 @@ public:
 
 public:
     // ---- the 0x08 bytes CharacterSet adds (public: the doors reach them) ----
-    RtSystem::String _string20;   // +0x20  the one member; see the banner
+    System::String _string20;     // +0x20  the one member; see the banner
 };
 
 static_assert(sizeof(CharacterSet) == 0x28,
