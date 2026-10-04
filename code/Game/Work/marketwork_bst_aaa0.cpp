@@ -147,7 +147,7 @@ extern "C" void MarketBst_aee0(void* /*unusedRcx*/, MarketWork::ClaimNode* node)
 // because 0x140025920 takes a pointer to a cursor it walks upward (and writes through):
 //   [RSP+0x50] "cursorA" -- the parent of whatever left the tree
 //   [RSP+0x58] "cursorB" -- the node that took the erased node's place
-extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNode* z) {
+extern "C" void MarketBst_ac40(MarketWork::ClaimTree* tree, MarketWork::ClaimNode* z) {
     ClaimNode* cursorA = z->parent;    // ac61: MOV RAX,[RDX+0x18] -> [RSP+0x50]
     ClaimNode* cursorB = nullptr;      // [RSP+0x58]
     bool    useB    = false;
@@ -157,7 +157,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
     // 8-byte store (trap #2 cuts both ways: widening it would smash the upper half).
     // (The Set container is two raw fields of MarketWork: the count is reached from
     // the root field's address: LEFT.)
-    *reinterpret_cast<int32_t*>(tree + 1) -= 1;   // LEFT: H5 the claim Set is two raw MarketWork fields (+0x48 root, +0x50 count): retail's inlined ~Set (0x14002a910) frees each claim's carry list through 0x14002af40, which a Collection::Set<Claim> member's Clear would not
+    tree->count -= 1;
 
     ClaimNode* const right = z->right;
     if (right == nullptr) {
@@ -165,7 +165,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
         ClaimNode* const parent = z->parent;
         ClaimNode* const leftAtSplice = z->left;             // ac7a
         if (parent == nullptr) {
-            *tree = leftAtSplice;                            // ac95: MOV [RSI],RAX
+            tree->root = leftAtSplice;                            // ac95: MOV [RSI],RAX
         } else if (parent->left == z) {
             parent->left = leftAtSplice;                     // ac89
         } else {
@@ -183,7 +183,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
             // ---- Case 2: right child only -- splice it in -------------------------
             ClaimNode* const parent = z->parent;             // acfc
             if (parent == nullptr) {
-                *tree = right;                               // ad17
+                tree->root = right;                               // ad17
             } else if (parent->left == z) {
                 parent->left = right;                        // ad0b
             } else {
@@ -230,9 +230,9 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
             ClaimNode* const parent = z->parent;                   // ade8
             s->parent = parent;                                    // adec
             if (parent == nullptr) {
-                *tree = s;                                         // adf6
+                tree->root = s;                                         // adf6
                 s->parent = nullptr;                               // adf9
-                cursorB = *tree;                                   // adfd/ae00
+                cursorB = tree->root;                                   // adfd/ae00
             } else {
                 cursorB = s;                                       // ae07
                 if (parent->left == z) parent->left = s;           // ae12
@@ -247,7 +247,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
     }
 
     // ae38: CALL 0x140025920(tree, &cursor): the shared AVL retrace (Avl38Retrace).
-    Avl38Retrace(tree, useB ? &cursorB : &cursorA);
+    Avl38Retrace(&tree->root, useB ? &cursorB : &cursorA);
 }
 
 // ============================================================================
@@ -271,9 +271,9 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
 // the >= arm) is retail's, and is preserved.
 //
 // Reaching the hit arm means key >= node.key AND node.key >= key, i.e. equality.
-extern "C" void MarketBst_aaa0(MarketWork::ClaimNode** tree, CitizenComponent** key) {
+extern "C" void MarketBst_aaa0(MarketWork::ClaimTree* tree, CitizenComponent** key) {
 
-    ClaimNode* node = *tree;
+    ClaimNode* node = tree->root;
     if (node == nullptr) return;
 
     do {
