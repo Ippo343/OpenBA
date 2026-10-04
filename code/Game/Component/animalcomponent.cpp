@@ -528,7 +528,7 @@ void AnimalComponent::Update(const System::Time* time) {
                 if (remaining > 0) {
                     rearm = false;
                 } else {
-                    GrowthComponent_ModifyFlags(this, 0x200000, 0);
+                    ModifyFlags(0x200000, 0);   // 0x140118950
                     seconds = 0.0f;
                 }
             }

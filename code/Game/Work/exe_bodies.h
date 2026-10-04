@@ -31,7 +31,6 @@ extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone ha
 // ---- foresterwork.cpp
 bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
-extern "C" void* ForesterWork_Factory(void);  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials.cpp
 extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)

@@ -183,13 +183,6 @@ Work* WorkScheduler::FindWorkAtCell(int cell) {
     }
 }
 
-// B4 FORWARD: 2 outside callers (Action/action_base_cnr.cpp,
-// Component/destroycomponent_states.cpp) hold the scheduler as an integer.
-extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3) {
-    *param_2 = reinterpret_cast<WorkScheduler*>(param_1)->FindWorkAtCell(param_3);   // LEFT: B4 FORWARD
-    return param_2;
-}
-
 // ============================================================
 // 0x14011e4d0  DestroyComponent::PostDestroyEvent
 // FindComponent<StateMachineComponent> (0x140003ea0) on the entity, then post

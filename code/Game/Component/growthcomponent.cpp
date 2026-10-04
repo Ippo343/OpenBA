@@ -153,11 +153,6 @@ void Component::ModifyFlags(uint32_t orMask, uint32_t andNotMask) {
         ActHunt_NotifyEntityChanged_c3470(_entity);
     }
 }
-// B4 FORWARD: 1 outside caller file (Component/animalcomponent.cpp); the closing
-// wave rewires it.
-void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask) {
-    reinterpret_cast<Component*>(comp)->ModifyFlags(orMask, andNotMask);   // LEFT: SIG GrowthComponent_ModifyFlags (B4 FORWARD, wave X)
-}
 
 // Reimpl of FUN_140120410 (GrowthComponent get tile index = y*mapW + x from the footprint).
 // Retail loads the shorts with MOVSX.
@@ -268,14 +263,14 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
 
     int64_t acc4 = 0;
     NaturalResourceComponent_FindComponentByType(newEnt, &acc4);   // 0x140005200
-    int64_t* variantWrite = reinterpret_cast<int64_t*>(acc4);   // LEFT: SIG ActCNR_NR_SetVariant_1253d0 (and row 400)
+    ModelComponent* variantWrite = reinterpret_cast<ModelComponent*>(acc4);   // LEFT: row 400 (the ParticleComponent finder's result read as the ModelComponent)
 
-    uint32_t range = ActCNR_NR_GetSubVariantCount_125320(variantTarget, (int)variantSeed);   // 0x140125320
+    uint32_t range = ModelMeshCount(reinterpret_cast<const ModelComponent*>(variantTarget), (int)variantSeed);   // 0x140125320  LEFT: row 400 (as above)
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));
-    ActCNR_NR_SetVariant_1253d0(variantWrite,   // 0x1401253d0
-                                static_cast<uint16_t>(variantSeed), (short)roll2);
+    ModelSelectMesh(variantWrite,   // 0x1401253d0
+                    static_cast<uint16_t>(variantSeed), (short)roll2);
 
     ::Object::InternalPtr<ComponentEntity> regArg = newIBP;
     EntityList_RegisterEntity_Impl(world->m_entityList, &regArg,   // 0x1400c48a0

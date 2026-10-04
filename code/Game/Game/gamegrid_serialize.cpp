@@ -256,7 +256,7 @@ void Map::Serialize(IO::Stream& stream) {
                 MapCell* e = &cells[i];
                 if (e->blocker == nullptr &&
                     e->occupant == nullptr) {
-                    bool occupied = ActCNR_CheckTerrain_cb00(this, i) != 0;
+                    bool occupied = CheckCellTerrain(this, i) != 0;   // 0x14009cb00
                     if (!occupied) {
                         int cls = CreateNaturalResource_helper_e2c0(this, i);   // 0x14009e2c0
                         e->terrainType = static_cast<uint8_t>(cls);

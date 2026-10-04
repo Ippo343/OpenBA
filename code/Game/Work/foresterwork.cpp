@@ -888,7 +888,4 @@ void* ForesterWork::CreateInPlaceObject(void* storage) {
 
 
 #include "Object/factory_registration.h"
-
-// The factory the forester force harness (forester_force_harness.cpp) names.
-extern "C" void* ForesterWork_Factory(void) { return ForesterWork::CreateNewObject(); }
 DEFINE_EXE_TYPE(ForesterWork, "AutoPickupWork")
