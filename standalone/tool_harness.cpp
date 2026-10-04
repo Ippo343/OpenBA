@@ -88,13 +88,13 @@
 //     the faithful Startup (bails safely if Model absent).
 //   StartTown_ResolveTemplateByPath   — resolve "Template\\<Name>.rsc" to a
 //     building DESCRIPTION ComponentEntity for descriptionPtr (+0x20).
-extern "C" int   PlacementTool_HarnessStartupProbe(void* toolSelf);
+extern "C" int   PlacementTool_HarnessStartupProbe(PlacementTool* self);
 extern "C" class ComponentDescription* StartTown_ResolveTemplateByPath(const char* path);
 // Phase 2: drive the faithful CREATE path (helper_d650) for a chosen centre cell.
-extern "C" int   PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell);
+extern "C" int   PlacementTool_HarnessPlaceAtCell(PlacementTool* self, int centerCell);
 // Phase 3B: drive the ghost-preview pipeline (Scene::AddObject + TransformFromYaw +
 // Geometry::SetTransform) for a fixed cell — a cursor-free stand-in for Serialize.
-extern "C" int   PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell);
+extern "C" int   PlacementTool_HarnessPreviewAtCell(PlacementTool* self, int centerCell);
 
 // Phase 4: fire the utility-dialog open path (toolbar case 2) headlessly.
 //   ToolbarUtility_HarnessOpen(gameSubsys, param) — param = a utility item's
@@ -127,10 +127,11 @@ extern "C" int   StartTown_GetFoundingHouseCount();
 
 // Track A: run the ClearAreaComponent footprint sweep (0x140117d60 port) on a
 // building entity — marks its footprint resources for removal. code/Game/Component/clearareacomponent.cpp
-extern "C" int ClearAreaComponent_HarnessSweep(void* ownerEntity);
-extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags);
-extern "C" int   ClearAreaComponent_HarnessSweepComp(void* realComp);
-extern "C" void* ClearAreaComponent_HarnessOwner(void* realComp);
+class ClearAreaComponent;
+extern "C" int ClearAreaComponent_HarnessSweep(ComponentEntity* ownerEntity);
+extern "C" ClearAreaComponent* ClearAreaComponent_HarnessFind(ComponentEntity* entity, uint32_t* outFlags);
+extern "C" int   ClearAreaComponent_HarnessSweepComp(ClearAreaComponent* realComp);
+extern "C" ComponentEntity* ClearAreaComponent_HarnessOwner(ClearAreaComponent* realComp);
 
 namespace {
 
@@ -778,7 +779,7 @@ void FirePreviewPlacement(PlayerToolManager* entityUI) {
 
     const int centerCell = Cell(124, 124);
     fprintf(stderr, "[ToolHarness] driving ghost PREVIEW at cell %d (124,124)...\n", centerCell);
-    int r = PlacementTool_HarnessPreviewAtCell(tool, centerCell);
+    int r = PlacementTool_HarnessPreviewAtCell(static_cast<PlacementTool*>(tool), centerCell);   // the active tool is the PlacementTool this harness made
     fprintf(stderr, "[ToolHarness] ghost PREVIEW -> %d (1=mesh submitted with a valid transform)\n", r);
 
     // Phase 3B item 2: drive operator_fc60 (CreateBar populate + position) once against
@@ -1941,11 +1942,11 @@ void FireClearFootprint() {
 
     int totalMarked = 0;
     for (int i = 0; i < houses; ++i) {
-        void* house = StartTown_GetFoundingHouseEntity(i);   // handed on as void* (the ClearArea harness API)
+        ComponentEntity* house = StartTown_GetFoundingHouseEntity(i);
         if (!house) continue;
         uint32_t caFlags = 0;
-        void* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
-        void* caOwner = caComp ? ClearAreaComponent_HarnessOwner(caComp) : nullptr;
+        ClearAreaComponent* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
+        ComponentEntity* caOwner = caComp ? ClearAreaComponent_HarnessOwner(caComp) : nullptr;
         // Drive the REAL component's sweep (reads its own +0x10 owner) — the exact op a
         // de-inerted Update tick would perform.
         int marked = caComp ? ClearAreaComponent_HarnessSweepComp(caComp) : 0;
@@ -1996,7 +1997,7 @@ void FireClearPlace() {
 
     // 2. Get a founding house and its footprint component (the rect at +0x28). The
     //    finder's name says Build; its type id is MapComponent's (Entity/exe_bodies.h).
-    void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
+    ComponentEntity* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
     if (!house) { fprintf(stderr, "[ClearPlace] no founding house to borrow\n"); return; }
     MapComponent* bc = nullptr;
     fn_FindComponent_Build(house, &bc);
@@ -2057,9 +2058,9 @@ void FireClearLive() {
         }
     if (rcRow < 0) { fprintf(stderr, "[ClearLive] no resource cell found\n"); return; }
 
-    void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
+    ComponentEntity* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
     uint32_t caFlags = 0;
-    void* caComp = house ? ClearAreaComponent_HarnessFind(house, &caFlags) : nullptr;
+    ClearAreaComponent* caComp = house ? ClearAreaComponent_HarnessFind(house, &caFlags) : nullptr;
     if (!house || !caComp) { fprintf(stderr, "[ClearLive] no house/ClearAreaComponent\n"); return; }
     fprintf(stderr, "[ClearLive] house[0]=%p ClearAreaComp=%p flags=0x%08x(tickbit=%d) — %s\n",
            house, caComp, caFlags, (caFlags >> 3) & 1,
@@ -2153,10 +2154,10 @@ void FireClearHarvest() {
         }
     if (rcRow < 0) { fprintf(stderr, "[ClearHarvest] no resource cell found near centre\n"); return; }
 
-    void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
+    ComponentEntity* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
     if (!house) { fprintf(stderr, "[ClearHarvest] no founding house\n"); return; }
     uint32_t caFlags = 0;
-    void* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
+    ClearAreaComponent* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
     if (!caComp) { fprintf(stderr, "[ClearHarvest] house has no ClearAreaComponent\n"); return; }
 
     MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)

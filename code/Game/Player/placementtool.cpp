@@ -773,8 +773,7 @@ DEFINE_EXE_TYPE(PlacementTool, "Tool")
 // The harness hands the tool over as `void*` (standalone/tool_harness.cpp, block
 // STANDALONE): these three entries keep that C signature (B4 FORWARD).
 // ============================================================
-extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
-    PlacementTool* self = reinterpret_cast<PlacementTool*>(toolSelf);   // B4 FORWARD: the harness's spelling
+extern "C" int PlacementTool_HarnessStartupProbe(PlacementTool* self) {
     LogStartupTypeIds();  // logs the 4 type-ids
 
     const ComponentDescription* entity = self->descriptionPtr;  // +0x20
@@ -929,8 +928,7 @@ static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
     return (int)(placed & 0xff);
 }
 
-extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) {
-    PlacementTool* self = reinterpret_cast<PlacementTool*>(toolSelf);   // B4 FORWARD: the harness's spelling
+extern "C" int PlacementTool_HarnessPlaceAtCell(PlacementTool* self, int centerCell) {
     if (!self->descComponent) {
         fprintf(stderr, "[Placement] PLACE: descComponent(+0x28) NULL — run Startup first\n");
         fflush(stderr);
@@ -988,8 +986,7 @@ extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) 
 // (Scene::AddObject → Transform::FromYawPitchOffset → Geometry::SetTransform →
 // MeshInstance::UpdateHierarchy) for a fixed centre cell, leaving the preview mesh
 // standing in the live render scene. Does NOT create a permanent entity.
-extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell) {
-    PlacementTool* self = reinterpret_cast<PlacementTool*>(toolSelf);   // B4 FORWARD: the harness's spelling
+extern "C" int PlacementTool_HarnessPreviewAtCell(PlacementTool* self, int centerCell) {
     if (!self->descComponent || !self->meshInstance) {
         fprintf(stderr, "[Preview] descComponent(+0x28)=%p meshInstance(+0x68)=%p — run Startup first\n",
                 static_cast<const void*>(self->descComponent), static_cast<void*>(self->meshInstance));
