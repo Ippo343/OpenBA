@@ -232,15 +232,6 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
 
 // The node's first 16 bytes come from the entry (TradeStockEntry, TradeUI.h):
 // retail copies key and value as two qwords, so the value's pad dword is copied too.
-static void TradeUI_StorageTreeNodeFill(TradeResourceNode* n, const TradeStockEntry* entry) {
-    n->resource = entry->resource;           // key
-    n->quantity = entry->quantity;           // value (low dword)
-    n->_pad0C[0] = entry->_pad0C[0];         // value (high dword: the pad)
-    n->_pad0C[1] = entry->_pad0C[1];
-    n->_pad0C[2] = entry->_pad0C[2];
-    n->_pad0C[3] = entry->_pad0C[3];
-}
-
 extern "C" TradeResourceNode* TradeUI_StorageTreeNodeNew_e2c0(const ComponentDescription* /*key*/,
                                                               const TradeStockEntry* entry,
                                                               TradeResourceNode* parent) {
@@ -248,7 +239,12 @@ extern "C" TradeResourceNode* TradeUI_StorageTreeNodeNew_e2c0(const ComponentDes
     // key and value from `entry`.
     TradeResourceNode* n = static_cast<TradeResourceNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;                  // retail checks this too
-    TradeUI_StorageTreeNodeFill(n, entry);
+    n->resource = entry->resource;           // key
+    n->quantity = entry->quantity;           // value (low dword)
+    n->_pad0C[0] = entry->_pad0C[0];         // value (high dword: the pad)
+    n->_pad0C[1] = entry->_pad0C[1];
+    n->_pad0C[2] = entry->_pad0C[2];
+    n->_pad0C[3] = entry->_pad0C[3];
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
@@ -271,7 +267,12 @@ extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(TradeResourceNode
             *tree = nullptr;
             *out  = nullptr;
         } else {
-            TradeUI_StorageTreeNodeFill(n, entry);
+            n->resource = entry->resource;
+            n->quantity = entry->quantity;
+            n->_pad0C[0] = entry->_pad0C[0];
+            n->_pad0C[1] = entry->_pad0C[1];
+            n->_pad0C[2] = entry->_pad0C[2];
+            n->_pad0C[3] = entry->_pad0C[3];
             n->parent = nullptr;
             n->left = nullptr;
             n->right = nullptr;
