@@ -891,7 +891,7 @@ int ConsumeProduce::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** 
                 "[WILDWRITE] ConsumeProduce::OnComplete OUT OF RANGE: work=%p entity=%p "
                 "workId=%d param4=0x%x -> posIdx=%u (count %d, cap %d, array %p) "
                 "slotIdx=%u (count %d)\n",
-                (void*)this, field_10, field_20, param4, intIdx,
+                (void*)this, field_10.Get(), field_20, param4, intIdx,
                 field_70, field_74, (void*)intArray, slotIdx, field_60);
             RedzoneAlloc_PrintBacktrace("ConsumeProduce::OnComplete");
         }
