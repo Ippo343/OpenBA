@@ -264,7 +264,9 @@ void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* 
 
 // convenience: build a world-relative Vector3 (p - origin) into `dst`
 inline void RelVec(float* dst, const float* p, float ox, float oy) {
-    *reinterpret_cast<Math::Vector3*>(dst) = Math::Vector3(p[0] - ox, p[1] - oy, p[2] - 0.0f);
+    dst[0] = p[0] - ox;
+    dst[1] = p[1] - oy;
+    dst[2] = p[2] - 0.0f;
 }
 
 // ===========================================================================
@@ -296,8 +298,9 @@ void Impl_b930(HighlightComponent* hc) {
     int centerIdx = g * ((rh >> 1) + ry) + (rw >> 1) + rx;
     float bias = (float)(g >> 1) - kCenterBias;
     float centerCell[3], centerWorld[3];
-    *reinterpret_cast<Math::Vector3*>(centerCell) = Math::Vector3(
-        (float)(centerIdx % g) - bias, (float)(centerIdx / g) - bias, 0.0f);
+    centerCell[0] = (float)(centerIdx % g) - bias;
+    centerCell[1] = (float)(centerIdx / g) - bias;
+    centerCell[2] = 0.0f;
     Reimpl_MapGetTerrainPos(mapGrid, centerWorld, centerCell, 0, nullptr);
     float ox = centerWorld[0];
     float oy = centerWorld[1];
@@ -315,8 +318,9 @@ void Impl_b930(HighlightComponent* hc) {
 
     auto cellToRel = [&](int idx, float* rel) {
         float cell[3], world[3];
-        *reinterpret_cast<Math::Vector3*>(cell) = Math::Vector3(
-            (float)(idx % g) - (float)(g >> 1), (float)(idx / g) - (float)(g >> 1), 0.0f);
+        cell[0] = (float)(idx % g) - (float)(g >> 1);
+        cell[1] = (float)(idx / g) - (float)(g >> 1);
+        cell[2] = 0.0f;
         Reimpl_MapGetTerrainPos(mapGrid, world, cell, 0, nullptr);
         RelVec(rel, world, ox, oy);
     };
@@ -346,8 +350,8 @@ void Impl_b930(HighlightComponent* hc) {
     const WorldGeometry* hf = GameUpdateLoop::_singleton->m_worldGeometry;
     IdxArray    fillIdx;   // local_1f0 / local_1e8 (short indices)
     TriVtxArray fillVtx;   // local_268 / local_260 (8-byte TriangleVertex)
-    uint8_t box[24];
-    RtVolume_Box_Ctor(reinterpret_cast<struct Box*>(box));
+    struct Box box;
+    RtVolume_Box_Ctor(&box);
 
     int bottomRow = ry + rh;
     int rightCol  = rx + rw;
@@ -361,20 +365,16 @@ void Impl_b930(HighlightComponent* hc) {
                 int16_t idxVal = (int16_t)fillVtx._size;
                 fillIdx.SetSize(fillIdx._size + 1, idxVal);
                 // 2. build corner Vector3 + TriangleVertex (8 bytes)
-                float cv[3];
-                *reinterpret_cast<Math::Vector3*>(cv) = Math::Vector3(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
+                Math::Vector3 cv(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
                 uint8_t tvtx[8];
-                RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvtx, cv);   // 0x1800a2f50
+                RtGraphics_EdgeMesh_TriangleVertex_Ctor(tvtx, &cv);   // 0x1800a2f50
                 // 3. append the TriangleVertex
                 fillVtx.SetSizeFill(fillVtx._size + 1, tvtx);
                 // 4. extend bounding box by the corner
                 {
-                    uint8_t tmp[24];
-                    RtVolume_Box_Extend(reinterpret_cast<const struct Box*>(box),
-                                        reinterpret_cast<struct Box*>(tmp),
-                                        reinterpret_cast<const Math::Vector3*>(cv));
-                    RtVolume_Box_Assign(reinterpret_cast<struct Box*>(box),
-                                        reinterpret_cast<const struct Box*>(tmp));
+                    struct Box tmp;
+                    RtVolume_Box_Extend(&box, &tmp, &cv);
+                    RtVolume_Box_Assign(&box, &tmp);
                 }
                 pf += 3;
             }
@@ -423,7 +423,7 @@ void Impl_b930(HighlightComponent* hc) {
             edgeIdx._size, reinterpret_cast<uint16_t*>(edgeIdx._data),
             edgeVtx._size, edgeVtx._data, 0x10,
             0, nullptr, 0, nullptr, 0,
-            *reinterpret_cast<const ::Box*>(box));   // B.3.5 bridge
+            box);
     }
 
     // Materials from the HighlightDescription (self+0x18): +0x30, +0x38 (yellow).
@@ -545,11 +545,11 @@ void Impl_c4a0(HighlightComponent* hc) {
                           nullptr);   // B.3.5 bridge
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
                 ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x100));   // B.3.5 bridge
-            uint8_t time[8];
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
+            System::Time time;
+            RtSystem_Time_Ctor(&time, 0.0f);
             void* inst = reinterpret_cast<void*>(self + 0x28);
             reinterpret_cast<Graphics::Geometry*>(inst)->Update(
-                *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
+                time);   // slot 1
             hc->highlightId = static_cast<int32_t>(
                 scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge
             return;
@@ -624,11 +624,11 @@ add_prebuilt:
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
                 ->SetTransform(charComp->transform);
         }
-        uint8_t time[8];
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
+        System::Time time;
+        RtSystem_Time_Ctor(&time, 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
         reinterpret_cast<Graphics::Geometry*>(inst)->Update(
-            *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
+            time);   // slot 1
         uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
         uint32_t f0 = hc->_flags;
         hc->highlightId = static_cast<int32_t>(id);
@@ -878,12 +878,12 @@ void Impl_HighlightFollow(EditTool* self) {
     void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance
     if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip
 
-    uint8_t time[8];
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
+    System::Time time;
+    RtSystem_Time_Ctor(&time, 0.0f);
     // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
     reinterpret_cast<Graphics::Geometry*>(inst)->Update(
-        *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
+        time);   // slot 1
 
 }
 
