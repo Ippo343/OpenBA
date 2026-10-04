@@ -38,7 +38,6 @@ void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0
 
 // ---- buildcomponent.cpp
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);  // 0x140017550
-void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf);  // 0x140026a30
 
 // ---- cemeterycomponent.cpp
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0
