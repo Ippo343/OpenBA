@@ -57,18 +57,15 @@ public:
     // [4]-[7]: retail's actionStack is the ActionStack at CharacterComponent +0x48 (the
     // executor 0x1400c4c50 passes RDX = its stack to [4] 0x1400c4ced, [5] 0x1400c4d57 and
     // [7] 0x1400c4ddc; 0x1400c4f80 to [6]); `time` is the System::Time* Component::Tick /
-    // Update receive. [4] / [5] are typed (wave X). [6] / [7] stay void*, LEFT: their
-    // callers (Character_UpdateAnimation_Reimpl, work_act_clear.cpp, work_act_consume.cpp)
-    // hold CharacterComponent +0x48, which CharacterComponent.h declares as separate fields,
-    // not an ActionStack.
+    // Update receive. All four take the embedded CharacterComponent::actionStack (wave X).
     virtual int  AbstractImpl(ActionStack* actionStack) = 0;             // [4] _purecall
     virtual int  Execute(ActionStack* actionStack, const System::Time* time);          // [5] 0x1400c4a90 ret 0
     // [6] args from retail's only caller, Character_UpdateAnimation 0x1400c4f80:
     // RDX = the action stack (CharacterComponent+0x48, `MOV RDX,RSI` 0x1400c4fc4),
     // R8 = the Time* CharacterComponent::Update got in RDX (`MOV R8,RDI` 0x1400c4fbe)
     // before `CALL [RAX+0x30]` 0x1400c4fc7. The bodies read neither.
-    virtual void Enter(void* actionStack, const System::Time* time);            // [6] 0x1400c4b90 RET
-    virtual void Exit(void* actionStack);                         // [7] 0x1400c4ba0 RET
+    virtual void Enter(ActionStack* actionStack, const System::Time* time);            // [6] 0x1400c4b90 RET
+    virtual void Exit(ActionStack* actionStack);                         // [7] 0x1400c4ba0 RET
     virtual void CheckEntity();                                   // [8] 0x1400c4a30 RET
     // [9] "does this action reference the entity?": RDX = an InternalPtr<ComponentEntity>
     // (CompleteTask 0x1400c5a50 CheckPtrs RDX and compares [RDX] with its +0x28 entity

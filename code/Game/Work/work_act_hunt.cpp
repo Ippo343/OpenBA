@@ -64,10 +64,9 @@ static inline float WAH_RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, 
 static inline void* WAH_Alloc(uint64_t size, uint32_t align) {
     return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
-// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
-// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
-static inline void  WAH_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction), so the callers hand the stack as void*
+// 0x1400c54e0 ActionStackPush (Action.h) on CharacterComponent::actionStack (+0x48).
+static inline void  WAH_Append(ActionStack* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(list, ibp);
 }
 
 // The SendComponentMessage action goes into the character's +0x58 slot, the
@@ -99,7 +98,7 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
     CitizenComponent* citizen = *citizenIBP;
     // --- the action stack = character + 0x48 ---  (disasm 0x1400bbbf3..0x1400bbc17)
     CharacterComponent* character = citizen->character;
-    WorkBase_TaskListCleanup_c5400(&character->actions);
+    WorkBase_TaskListCleanup_c5400(&character->actionStack);
 
     ::Object::InternalPtr<Action> ibpA;
     ::Object::InternalPtr<Action> ibpB;
@@ -116,9 +115,9 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA;       // [RDI+0x10] = character+0x58
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA;       // [RDI+0x10] = character+0x58
 
     // --- CompleteTask action --- disasm 0x1400bbcad..0x1400bbd0f (alloc 0x38,8)
     obj = WAH_Alloc(0x38, 8);
@@ -129,7 +128,7 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
         ct = new (obj) CompleteTask(workId, &entityInner, &innerIbp, 0);
     }
     ibpB = ct;
-    WAH_Append(&character->actions, &ibpB);
+    WAH_Append(&character->actionStack, &ibpB);
 
     // --- selector: param_6 != 0 -> MoveTo (0x480) ; else PerformWork_Ctor7 (0x48) ---
     // disasm 0x1400bbd14 (CMP byte [RBP+0x58],0)
@@ -158,7 +157,7 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
         }
     }
     ibpA = mainAction;
-    WAH_Append(&character->actions, &ibpA);
+    WAH_Append(&character->actionStack, &ibpA);
 
     // --- HuntAnimal action -> stored as the running action's chain link ---
     // disasm 0x1400bbe12..0x1400bbe73 (alloc 0x40,8). NOTE: NOT a c54e0 append; the
@@ -172,7 +171,7 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
     }
     ibpC = hunt;
     // plVar8 = &actions[currentAction] ; CheckPtr(plVar8) ; (*plVar8)->+0x10 = ibpC
-    Action* running = character->actions[character->currentAction];
+    Action* running = character->actionStack.actions[character->actionStack.current].Get();
     running->_next = ibpC;   // Action::_next (+0x10): the InternalBasePtr ctor over it (no DeletePtr)
     (void)ibpB;
 }
@@ -208,7 +207,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
     CitizenComponent* citizen = *citizenRef;
     // --- the action stack = character + 0x48 ---  (disasm 0x1400bdd55..0x1400bdd79)
     CharacterComponent* character = citizen->character;
-    WorkBase_TaskListCleanup_c5400(&character->actions);
+    WorkBase_TaskListCleanup_c5400(&character->actionStack);
 
     ::Object::InternalPtr<Action> ibpA;
     ::Object::InternalPtr<Action> ibpB;
@@ -224,9 +223,9 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA;
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA;
 
     // --- CompleteTask action (param_5 = param_8) --- disasm 0x1400bde13..0x1400bde72 (alloc 0x38,8)
     obj = WAH_Alloc(0x38, 8);
@@ -237,7 +236,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         ct = new (obj) CompleteTask(workId, &entityInner, &innerIbp, completeParam8);
     }
     ibpB = ct;
-    WAH_Append(&character->actions, &ibpB);
+    WAH_Append(&character->actionStack, &ibpB);
 
     // --- ShowTool (~Hoe = -1) --- disasm 0x1400bde77..0x1400bdec3 (alloc 0x30,8; OR R8D,0xffffffff)
     obj = WAH_Alloc(0x30, 8);
@@ -247,7 +246,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         st = new (obj) ShowTool(&entityInner, -1 /* ~Hoe; disasm OR R8D,0xFFFFFFFF */);
     }
     ibpA = st;
-    WAH_Append(&character->actions, &ibpA);
+    WAH_Append(&character->actionStack, &ibpA);
 
     // --- per-element loop: loopCount iterations over `cells` (and `messageArgs`) ---
     // disasm 0x1400bdec3..0x1400be1cc.
@@ -268,7 +267,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
                     sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, p6);
                 }
                 ibpB = sm2;
-                WAH_Append(&character->actions, &ibpB);  // inlined grow-and-append in disasm (== FUN_1400c54e0)
+                WAH_Append(&character->actionStack, &ibpB);  // inlined grow-and-append in disasm (== FUN_1400c54e0)
             }
 
             // --- inline CreateNaturalResource action --- (alloc 0x38,8) disasm 0x1400be01c..0x1400be075
@@ -282,7 +281,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
                 cnr = new (obj) CreateNaturalResource(plantType, &gateVal, baseVal);
             }
             ibpA = cnr;
-            WAH_Append(&character->actions, &ibpA);  // inlined grow-and-append in disasm (== FUN_1400c54e0)
+            WAH_Append(&character->actionStack, &ibpA);  // inlined grow-and-append in disasm (== FUN_1400c54e0)
 
             iteration = iteration + 1;     // param_7 += 1 (dword, i.e. +4 bytes)
             remaining = remaining - 1;
@@ -302,7 +301,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         pw7 = new (obj) PerformWork(&entityInner, heading, 0xC, timeVal._ticks, 1, -1);
     }
     ibpA = pw7;
-    WAH_Append(&character->actions, &ibpA);  // inlined grow-and-append in disasm
+    WAH_Append(&character->actionStack, &ibpA);  // inlined grow-and-append in disasm
 
     // --- MoveTo (Fastest=3, destination=param_5) --- disasm 0x1400be38d..0x1400be40e (alloc 0x480,8)
     obj = WAH_Alloc(0x480, 8);
@@ -315,7 +314,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         mv = new (obj) MoveTo(&family, 3 /*Fastest; disasm LEA R8D,[R9+3]*/, 0, destination, 0xe1f, 0, speed);
     }
     ibpA = mv;
-    WAH_Append(&character->actions, &ibpA);  // inlined grow-and-append in disasm
+    WAH_Append(&character->actionStack, &ibpA);  // inlined grow-and-append in disasm
 
     // --- inline ShowTool (Shovel = 3) action --- disasm 0x1400be55d..0x1400be5a4
     // alloc 0x30,8 (disasm 0x1400be55d MOV EDX,0x8 / LEA ECX,[RDX+0x28] => 0x30)
@@ -327,6 +326,6 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         st2 = new (obj) ShowTool(&entityInner, 3);
     }
     ibpA = st2;
-    WAH_Append(&character->actions, &ibpA);  // inlined grow-and-append in disasm
+    WAH_Append(&character->actionStack, &ibpA);  // inlined grow-and-append in disasm
     (void)ibpB;
 }

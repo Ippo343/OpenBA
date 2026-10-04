@@ -73,13 +73,13 @@ static inline uint32_t WorldToCell(float x, float z, int gridSize) {
 int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     // Find components on the entity (+0x10) through the guarded finders (typed locals)
     BuildComponent* positionComp = nullptr;          // fn_FindComponent_Position: BuildComponent's cell
-    fn_FindComponent_Position(field_10, &positionComp);
+    fn_FindComponent_Position(field_10.Get(), &positionComp);
 
     StorageLocationComponent* unknownComp = nullptr; // cell 0x1401c7ee8
-    fn_FindComponent_Unknown7ee8(field_10, &unknownComp);
+    fn_FindComponent_Unknown7ee8(field_10.Get(), &unknownComp);
 
     StorageComponent* storage = nullptr;
-    fn_FindComponent_Storage(field_10, &storage);
+    fn_FindComponent_Storage(field_10.Get(), &storage);
 
     // Get game world grid data
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
@@ -168,7 +168,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         }
 
         // Set up search for destination storage
-        ComponentEntity* entityIBP = field_10;
+        Object::InternalPtr<ComponentEntity> entityIBP = field_10;
 
         float searchPos[3] = {0.0f, 0.0f, 0.0f};
         uint32_t resourceTypeId = (uint32_t)field_28;
@@ -221,7 +221,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         }
 
         // Set up pathfinding
-        ComponentEntity* workEntity = field_10;
+        ComponentEntity* workEntity = field_10.Get();
         int pathType = field_20;
         ComponentEntity* destEntityCopy = destEntity;
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
@@ -463,7 +463,7 @@ int ClearStorage::Cleanup() {
 
         // The node's citizen; cancel its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = leftmost->element;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
 }

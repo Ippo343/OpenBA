@@ -90,7 +90,7 @@ inline void* Alloc(uint64_t sz)          { return System::MemoryAllocator::MemAl
 } // namespace
 
 extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority,
-                    ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim) {
+                    const Object::InternalPtr<ComponentEntity>* building, float* position, uint32_t taskParam, uint32_t altAnim) {
     EnsureInit();
     if (!citizenRef) return;
 
@@ -99,10 +99,10 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     CharacterComponent* character = citizen->character;
     if (!character) return;
     // The action stack (base +0x48, top +0x60), as the stack ops take it.
-    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: CharacterComponent::actions is raw fields (CharacterComponent.h, WORK-3); SIG Pf_ActStackPush_54e0
+    ActionStack* stack = &character->actionStack;
 
     // heading = Entity_impl_29a0(position, &buildingEntityValue) — used as PerformWork anim.
-    ComponentEntity* buildingEntity = building ? *building : nullptr;
+    ComponentEntity* buildingEntity = building ? building->Get() : nullptr;
     float heading = 0.0f;
     heading = ActChild_Entity29a0_c29a0(position, &buildingEntity);
 
@@ -119,9 +119,9 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
             ComponentEntity* targetEntity = citizen->_entity;
             act = ::new (mem) SendComponentMessage(&targetEntity, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
-        if (character->field_0x58 != nullptr)
-            character->field_0x58.DeletePtr();
-        character->field_0x58 = act;
+        if (character->actionStack.field_0x10 != nullptr)
+            character->actionStack.field_0x10.DeletePtr();
+        character->actionStack.field_0x10 = act;
     }
 
     // uVar2 = Random::Rand(*(gw+0xd8), 2) — tool/anim variant (0 or 1).
@@ -152,7 +152,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         if (mem) {
             ComponentEntity* outIBP = nullptr;
             uint32_t msgId = (altAnim & 0xff) ? s_msg75f0 : s_msg7008;
-            ComponentEntity* bldg = building ? *building : nullptr;   // building entity
+            ComponentEntity* bldg = building ? building->Get() : nullptr;   // building entity
             act = ::new (mem) SendComponentMessage(&bldg, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         void* ibp = act;

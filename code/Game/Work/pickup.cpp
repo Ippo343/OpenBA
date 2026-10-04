@@ -313,7 +313,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
         return 0;
 
     // --- is there anywhere to drop it off? --------------------------------------
-    ComponentEntity* dropIBP = nullptr;
+    Object::InternalPtr<ComponentEntity> dropIBP = nullptr;
     ComponentEntity* storeOut = nullptr;
     amount = rawMatIBP->quantity;
     PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(townMgr),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
@@ -332,7 +332,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     cand.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
                                    static_cast<uint32_t>(selfCell));
     cand.typeId     = field_20;
-    cand.entity     = field_10;
+    cand.entity     = field_10.Get();
     cand.rawMat     = rawMatIBP;
 
     int count = 1;
@@ -504,7 +504,7 @@ int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
         // Citizen changed workplace -- cancel old work and re-target
         CitizenComponent* oldCitizen = citizenIBP;
 
-        WorkBase_TaskListCleanup_c5400(&oldCitizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&oldCitizen->character->actionStack);
 
         // Re-run Slot4 with the new citizen
         CitizenComponent* local_buf[1] = { *citizenSlot };
@@ -563,7 +563,7 @@ int Pickup::Cleanup() {
     if (status == 1) {
         CitizenComponent* citizenEntity = citizenIBP;
 
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
     }
     return 0;
 }

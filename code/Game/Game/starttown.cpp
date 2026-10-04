@@ -2253,8 +2253,8 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                          ? GameUpdateLoop::_singleton : nullptr;
                 WorldGeometry* worldGeom = gw ? gw->m_worldGeometry : nullptr;
                 const int mapSize = game ? game->size : 0;
-                const int pathCount = worldGeom ? worldGeom->ContourOutlines().size : 0;
-                RawArray<Math::Vector2>* pathArr = worldGeom ? worldGeom->ContourOutlines().data : nullptr;
+                const int pathCount = worldGeom ? worldGeom->_contourOutlines.size : 0;
+                RawArray<Math::Vector2>* pathArr = worldGeom ? worldGeom->_contourOutlines.data : nullptr;
 
                 if (!worldGeom || !pathArr || pathCount <= 0 || mapSize <= 0) {
                     fprintf(stderr, "[startTown::tradingpost] no river geometry "
@@ -5220,8 +5220,8 @@ static int StartTown_SpawnEnvironment(MapGenerator* startConfig, GameUpdateLoop*
     ComponentDescription* emitterTmpl = StartTown_ResolveTemplate(&startConfig->descRef1);
     const float spacing = startConfig->terrainAmplitude;
     if (emitterTmpl && worldGeom && spacing > 0.0f) {
-        const int pathCount = worldGeom->ContourOutlines().size;
-        RawArray<Math::Vector2>* pathArr = worldGeom->ContourOutlines().data;
+        const int pathCount = worldGeom->_contourOutlines.size;
+        RawArray<Math::Vector2>* pathArr = worldGeom->_contourOutlines.data;
         if (pathArr) {
             for (int i = 0; i < pathCount && n1 < ENV_PASS_CAP; ++i) {
                 RawArray<Math::Vector2>* entry = &pathArr[i];
@@ -5264,7 +5264,7 @@ static int StartTown_SpawnEnvironment(MapGenerator* startConfig, GameUpdateLoop*
     fprintf(stderr, "[startTown::env] emitters=%d ambient=%d(chunk=%d) global=%d "
             "(paths=%d, emitterTmpl=%p ambTmpl=%p envTmpl=%p)\n",
             n1, n2, chunk, n3,
-            worldGeom ? worldGeom->ContourOutlines().size : -1,
+            worldGeom ? worldGeom->_contourOutlines.size : -1,
             emitterTmpl, ambTmpl, envTmpl);
     fflush(stderr);
     return n1 + n2 + n3;

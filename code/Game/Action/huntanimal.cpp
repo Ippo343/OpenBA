@@ -149,7 +149,7 @@ int  HuntAnimal::Execute(ActionStack* actionStack, const System::Time* time) {
 //    c. Build the removal actions (0x1400bbea0)
 //    d. Find the WildAnimalComponent and start its herd's migration
 
-void HuntAnimal::Enter(void*, const System::Time*) {
+void HuntAnimal::Enter(ActionStack*, const System::Time*) {
 
     // If hunt already started, return early
     if (_field38) {

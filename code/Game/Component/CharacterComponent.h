@@ -28,6 +28,7 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 #include "math/Math.h"
+#include "Action/Action.h"   // ActionStack (+0x48)
 
 class Action;
 class ModelComponent;
@@ -70,18 +71,18 @@ public:
     int32_t  characterIndex;      // +0x40 int, ctor -1; the index the character manager
                                   //       (GameUpdateLoop+0x88, 0x1400183f0) returns on load
     uint8_t  _pad44[4];           // +0x44
-    // +0x48..+0x63: one retail sub-object (the ctor takes its address for unwinding and
-    // the dtor releases it through 0x1400c5150): the action list.
-    Action** actions;             // +0x48 Collection::Array<InternalPtr<Action>> data (cell 0x1401c5da8);
-                                  //       0x1400c5150 DeletePtr's every element, then MemFree
-    int32_t  actionCount;         // +0x50 Array count (serialized)
-    int32_t  actionCapacity;      // +0x54 Array capacity
-    ::Object::InternalPtr<Action> field_0x58;   // +0x58 InternalPtr<Action> (cell 0x1401c5da8); DeletePtr'd
-                                  //       by 0x1400c5150; the Work action builders DeletePtr it
-                                  //       (IAT 0x140151ab8) before storing the lead
-                                  //       SendComponentMessage (e.g. 0x1400bb89b MOV [RSI+0x10],RAX)
-    int32_t  currentAction;       // +0x60 int, ctor -1: the index into `actions` Update runs (>= 0)
-    uint8_t  _pad64[4];           // +0x64
+    // +0x48..+0x67: one retail sub-object (the ctor takes its address for unwinding and
+    // the dtor releases it through 0x1400c5150): the action stack (Action/Action.h).
+    //   +0x00 actions  Collection::Array<InternalPtr<Action>> data (cell 0x1401c5da8; the
+    //                  push 0x1400c54e0 stores 8-byte elements and hands the old top to
+    //                  0x1400c4f10 as an InternalBasePtr); 0x1400c5150 DeletePtr's every
+    //                  element, then MemFree
+    //   +0x08 count    Array count (serialized)   +0x0C capacity
+    //   +0x10 field_0x10  InternalPtr<Action>, DeletePtr'd by 0x1400c5150; the Work action
+    //                  builders DeletePtr it (IAT 0x140151ab8) before storing the lead
+    //                  SendComponentMessage (e.g. 0x1400bb89b MOV [RSI+0x10],RAX)
+    //   +0x18 current  int, ctor -1: the index into `actions` Update runs (>= 0)
+    ActionStack actionStack;      // +0x48
     ModelComponent*   modelComponent;   // +0x68 InternalPtr (cell 0x1401c7a50)
     PickingComponent* pickingComponent; // +0x70 InternalPtr (cell 0x1401c7c10)
     CharacterDescription* characterDescription; // +0x78 not serialized: _description when it is a
@@ -97,12 +98,11 @@ static_assert(offsetof(CharacterComponent, field_0x38)           == 0x38, "");
 static_assert(offsetof(CharacterComponent, field_0x3C)           == 0x3C, "");
 static_assert(offsetof(CharacterComponent, characterIndex)       == 0x40, "");
 static_assert(offsetof(CharacterComponent, _pad44)               == 0x44, "");
-static_assert(offsetof(CharacterComponent, actions)              == 0x48, "");
-static_assert(offsetof(CharacterComponent, actionCount)          == 0x50, "");
-static_assert(offsetof(CharacterComponent, actionCapacity)       == 0x54, "");
-static_assert(offsetof(CharacterComponent, field_0x58)           == 0x58, "");
-static_assert(offsetof(CharacterComponent, currentAction)        == 0x60, "");
-static_assert(offsetof(CharacterComponent, _pad64)               == 0x64, "");
+static_assert(offsetof(CharacterComponent, actionStack)          == 0x48, "");
+static_assert(offsetof(CharacterComponent, actionStack.count)    == 0x50, "");
+static_assert(offsetof(CharacterComponent, actionStack.capacity) == 0x54, "");
+static_assert(offsetof(CharacterComponent, actionStack.field_0x10) == 0x58, "");
+static_assert(offsetof(CharacterComponent, actionStack.current)  == 0x60, "");
 static_assert(offsetof(CharacterComponent, modelComponent)       == 0x68, "");
 static_assert(offsetof(CharacterComponent, pickingComponent)     == 0x70, "");
 static_assert(offsetof(CharacterComponent, characterDescription) == 0x78, "");

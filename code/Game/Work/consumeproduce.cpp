@@ -272,7 +272,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) on work entity ---
     ConsumeProduceComponent* smComp = nullptr;
-    fn_FindComponent_ConsumeProduce(field_10, &smComp);
+    fn_FindComponent_ConsumeProduce(field_10.Get(), &smComp);
 
     // --- Get ConsumeProduceDescription from the component's description (+0x18) ---
     Description* descBase = smComp->_description;
@@ -281,7 +281,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
     // --- Find StorageLocationComponent (for storage slot lookup) ---
     StorageLocationComponent* storageLoc = nullptr;
-    fn_FindComponent_Unknown7ee8(field_10, &storageLoc);
+    fn_FindComponent_Unknown7ee8(field_10.Get(), &storageLoc);
 
     // --- Check resource depletion (bVar6) ---
     // Get active product index from ConsumeProduce component
@@ -485,7 +485,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 float searchPos[3] = { 0.0f, 0.0f, 0.0f };
 
                 // Get entity ref for pathfinding
-                ComponentEntity* entityRef = field_10;
+                ComponentEntity* entityRef = field_10.Get();
 
                 uintptr_t foundEntity = 0;
                 PickBestDropTarget(
@@ -614,7 +614,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                         float fetchPos[4] = {};
                                         InteractNodePosition(posComp, fetchPos, 0, slot, nullptr);   // 0x140122e20
 
-                                        ComponentEntity* pathSrc = field_10;
+                                        ComponentEntity* pathSrc = field_10.Get();
 
                                         // arg2 is the CITIZEN entity IBP, not the world entity
                                         // list. FindPath immediately does *(*arg2 + 0x278) to
@@ -722,7 +722,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             ComponentEntity* structEntity = structBase2[checkCell].occupant;   // +0x08
 
             if (structEntity != nullptr) {
-                if (structEntity != field_10) {
+                if (structEntity != field_10.Get()) {
                     // Found a different entity at this position -- its WorkComponent
                     WorkComponent* locComp = structEntity->FindComponent<WorkComponent>();
 
@@ -795,7 +795,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 // Create work action chain
                 CitizenComponent* citizenRef4 = *citizenIBP;
-                ComponentEntity* workEntityRef = field_10;
+                ComponentEntity* workEntityRef = field_10.Get();
                 // The tree's read of the qword at +0x50, truncated to int: field_50
                 int actionPriority = field_50;
 
@@ -891,7 +891,7 @@ int ConsumeProduce::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** 
                 "[WILDWRITE] ConsumeProduce::OnComplete OUT OF RANGE: work=%p entity=%p "
                 "workId=%d param4=0x%x -> posIdx=%u (count %d, cap %d, array %p) "
                 "slotIdx=%u (count %d)\n",
-                (void*)this, field_10, field_20, param4, intIdx,
+                (void*)this, field_10.Get(), field_20, param4, intIdx,
                 field_70, field_74, (void*)intArray, slotIdx, field_60);
             RedzoneAlloc_PrintBacktrace("ConsumeProduce::OnComplete");
         }
@@ -938,7 +938,7 @@ int ConsumeProduce::Cleanup() {
         CharacterComponent* character = ibpArray[i]->character;
 
         // Call task list cleanup on the character's action list (+0x48)
-        WorkBase_TaskListCleanup_c5400(&character->actions);
+        WorkBase_TaskListCleanup_c5400(&character->actionStack);
     }
     return 0;
 }

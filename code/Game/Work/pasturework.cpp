@@ -384,7 +384,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 Reimpl_MapGetTerrainPos(map, &local_50.x, &local_70_pos.x, '\0', nullptr);
 
                 // Create grazing work action (FUN_1400bb0a0)
-                ComponentEntity* workEntity = field_10;
+                ComponentEntity* workEntity = field_10.Get();
                 CitizenComponent* local_90_val = *citizenIBP;
                 WorkAct_GrazingWorkCtor_bb0a0(
                     &local_90_val,          // citizenIBP value
@@ -513,7 +513,7 @@ int PastureWork::Cleanup() {
 
         CitizenComponent* citizenEntity = leftmost->element;
 
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         count = _citizens._count;
     }

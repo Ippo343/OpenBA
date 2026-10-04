@@ -322,7 +322,7 @@ UNIT_TEST(loop_geometry_subclasses) {
     CHECK_EQ(sizeof(WorldGeometry), (size_t)0x230);            // MemAlloc(0x230)
     CHECK_EQ(sizeof(WeatherParticleGeometry), (size_t)0xf0);   // MemAlloc(0xf0)
     CHECK_EQ(offsetof(WorldGeometry, _heightImage), (size_t)0x148);
-    CHECK_EQ(offsetof(WorldGeometry, _arrays), (size_t)0x1a0);
+    CHECK_EQ(offsetof(WorldGeometry, _contourVertices), (size_t)0x1a0);
     CHECK_EQ(offsetof(WeatherParticleGeometry, _particles), (size_t)0xe0);
     CheckGeometryShape<WorldGeometry>();
     CheckGeometryShape<WeatherParticleGeometry>();

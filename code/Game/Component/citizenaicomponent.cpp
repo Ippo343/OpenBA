@@ -59,7 +59,7 @@ extern ComponentEntity* g_pForceWorkBuilding;
 // ResourceProduceComponent controller) so the executor ticks ForesterWork::Execute ->
 // real tree harvest -> production. Returns true if it owns the citizen this tick (the
 // caller then skips the competing AI state machine). Self-gated; no-op when env unset.
-extern "C" bool StartTown_ForcePushForesterWork(void* citizen);
+extern "C" bool StartTown_ForcePushForesterWork(CitizenComponent* citizen);
 // Organic-construction test driver (construction_force_harness.cpp, env
 // BANISHED_FORCE_CONSTRUCT). Same contract: drives ONE citizen's construction Work
 // (gather -> build) at the demo foundation; owns the citizen when active; no-op when unset.
@@ -201,7 +201,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 8: an action is running -> nothing more to decide ---
-    if (citizen->character->currentAction + 1 > 0) {
+    if (citizen->character->actionStack.current + 1 > 0) {
         return;
     }
 
@@ -403,7 +403,7 @@ void CitizenAIComponent::TransitionState(char param) {
         if (0 < n) {
             do {
                 ValidateAndEnterState(p->id);
-                if (0 < citizen->character->currentAction + 1) {
+                if (0 < citizen->character->actionStack.current + 1) {
                     state = arr[idx].id;
                     break;
                 }

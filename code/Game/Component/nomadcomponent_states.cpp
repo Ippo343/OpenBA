@@ -85,7 +85,7 @@ bool Idle(NomadComponent* nomad) {
     ComponentEntity* entity = nomad->_entity;
     CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return false;
-    return chr->currentAction + 1 < 1;
+    return chr->actionStack.current + 1 < 1;
 }
 
 }  // namespace
@@ -110,7 +110,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
     ComponentEntity* entity = _entity;
     CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return;
-    WorkBase_TaskListCleanup_c5400(&chr->actions);   // 0x1400c5400
+    WorkBase_TaskListCleanup_c5400(&chr->actionStack);   // 0x1400c5400
     void* mem = System::MemoryAllocator::MemAlloc(0x480, 8);
     void* act = nullptr;
     if (mem) {
@@ -118,7 +118,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
         act = ::new (mem) ::MoveTo(&ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);   // 0x1400c9170
     }
     void* actIBP = act;
-    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0   // LEFT: SIG Pf_ActStackPush_54e0 (Action/exe_bodies.h, WORK's) takes the stack as int64_t*; CharacterComponent +0x48 is not an embedded ActionStack (ActionStack::actions is InternalPtr<Action>*, the readers use Action**)
+    Pf_ActStackPush_54e0(&chr->actionStack, &actIBP);   // 0x1400c54e0
 }
 
 // ============================================================

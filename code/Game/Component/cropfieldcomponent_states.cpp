@@ -205,7 +205,7 @@ Work* CF_MakePlantArea(CropFieldComponent* comp) {
     work->field_60 = 0;
     work->_pad64[0] = work->_pad64[1] = work->_pad64[2] = work->_pad64[3] = 0;
     work->field_68 = comp->cropDescription;
-    CF_FillPerSlotArray(&work->field_58, work->field_10);
+    CF_FillPerSlotArray(&work->field_58, work->field_10.Get());
     return work;
 }
 
@@ -221,7 +221,7 @@ Work* CF_MakeHarvestArea(CropFieldComponent* comp) {
     work->_field58 = nullptr;
     work->_field60 = 0;
     work->_field64 = 0;
-    CF_FillPerSlotArray(&work->_field58, work->field_10);
+    CF_FillPerSlotArray(&work->_field58, work->field_10.Get());
     return work;
 }
 

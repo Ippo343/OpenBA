@@ -75,7 +75,7 @@
 #include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Game/exe_bodies.h"
-#include "graphics/Camera.h"            // RtGraphics_Camera_Ctor / Renderer_Ctor
+#include "graphics/Camera.h"            // Graphics::Camera, RtGraphics_Renderer_Ctor
 #include "graphics/Animation.h"         // RtGraphics_AnimationManager_Ctor
 #include "picking/Scene.h"              // RtPicking_Scene_Ctor
 #include "ui/UserInterface.h"           // RtUi_UserInterface_Ctor
@@ -437,22 +437,17 @@ Math::Transform PlayerController::CalcTransform() {
     return lookAt;
 }
 
-// 0x1400985b0 — the PlayerController ctor (+0xE0, 0x10c).
-PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_) {
-    // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
-    // +0x00 is the Math::Transform member (GAME-b): constructed, then this store.
-    transform = Math::Transform();
-    targetX = 0.0f;                           // +0x1c / +0x20: retail's qword 0 (H7: two stores)
-    targetY = 0.0f;
-    targetZ = 0.0f;                           // +0x24: dword 0
-    yaw = yaw_;
-    pitch = pitch_;
-    distance = distance_;
-    Math::Transform localTransform = CalcTransform();
-    Math::Transform3 t3 = localTransform.AsTransform3();
-    // LEFT: +0x34 is raw storage (H5: Camera's default ctor is protected); the
-    // ctor door takes the POD mirror.
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &t3, true);  // LEFT: POD RtGraphics::Camera: the runtime view-setup door takes the mirror (runtime/types/graphics, outside this set)
+// 0x1400985b0 — the PlayerController ctor (+0xE0, 0x10c). Retail's sequence:
+// Transform::Transform(+0x00) (0x1400985d6), qword 0 at +0x1c and dword 0 at
+// +0x24 (H7: three named stores), yaw / pitch / distance (0x1400985f3..fd),
+// CalcTransform 0x1400983f0, AsTransform3 (0x140098612), and LAST
+// Camera::Camera(+0x34, frustum, t3, true) (0x140098625): the init list in
+// member order, the camera its last entry.
+PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_)
+    : transform(),
+      targetX(0.0f), targetY(0.0f), targetZ(0.0f),
+      yaw(yaw_), pitch(pitch_), distance(distance_),
+      camera(frustum, CalcTransform().AsTransform3(), true) {
 }
 
 // (0x1400c3f90, the EntityList ctor, is EntityList::EntityList since B.4
@@ -598,9 +593,8 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
     uint8_t frustum[0xC0];
     void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
         &nearS, &farS, &fovXS, &fovYS);
-    // LEFT: +0x34 is raw storage (H5).
-    reinterpret_cast<Graphics::Camera*>(camera)->SetFrustum(  // LEFT: H5 the camera at +0x34 is raw storage (its Graphics::Camera ctor runs by door; header outside this set)
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge  // LEFT: H5 the camera at +0x34 is raw storage (its Graphics::Camera ctor runs by door; outside this set)
+    camera.SetFrustum(
+        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge  // LEFT: SIG RtVolume_Frustum_Ctor_Perspective returns void* here and fills a 0xC0 stack buffer wider than ::Frustum (0x64)
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs

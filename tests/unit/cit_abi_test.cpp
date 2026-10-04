@@ -82,7 +82,7 @@ UNIT_TEST(cit_component_member_offsets) {
     CHECK_EQ(offsetof(AnimalComponent, age),                   (size_t)0x44);
     CHECK_EQ(offsetof(AnimalComponent, grazeTimer),            (size_t)0x50);
     CHECK_EQ(offsetof(CharacterComponent, characterIndex),     (size_t)0x40);   // char index
-    CHECK_EQ(offsetof(CharacterComponent, currentAction),      (size_t)0x60);   // action index
+    CHECK_EQ(offsetof(CharacterComponent, actionStack.current), (size_t)0x60);   // action index
     CHECK_EQ(offsetof(CharacterComponent, characterDescription), (size_t)0x78);
     CHECK_EQ(offsetof(CitizenAIComponent, timers),             (size_t)0x40);
     CHECK_EQ(offsetof(CitizenAIComponent, dataC8),             (size_t)0xc8);

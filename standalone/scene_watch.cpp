@@ -434,7 +434,7 @@ struct MeshInfo {
 
 } // namespace
 
-void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int variantIdx) {
+void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera, int variantIdx) {
     if (!LodEnabled() || !scene || !camera) return;
 
     static long s_frame = 0;
@@ -444,13 +444,11 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int varian
     const int count = scene->_nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
-    // LEFT: the camera is PlayerController::camera, raw H5 storage (uint8_t[0xD8]) in
-    // GAME's header, handed in as const void*; the eye is Camera::_cameraToWorld's
+    // The camera is PlayerController::camera; the eye is Camera::_cameraToWorld's
     // translation (+0x64 + 0x24).
-    const uintptr_t c = reinterpret_cast<uintptr_t>(camera);   // LEFT: H5 PlayerController::camera is raw uint8_t[0xD8] storage (Game/PlayerController.h) handed in as const void*; typed once RT defines Graphics::Camera's (Frustum, Transform3, bool) ctor, then this is camera->_cameraToWorld's translation
-    const float camX = *reinterpret_cast<const float*>(c + 0x88);   // LEFT: H5 PlayerController::camera is raw uint8_t[0xD8] storage (Game/PlayerController.h) handed in as const void*; typed once RT defines Graphics::Camera's (Frustum, Transform3, bool) ctor, then this is camera->_cameraToWorld's translation
-    const float camY = *reinterpret_cast<const float*>(c + 0x8c);   // LEFT: H5 PlayerController::camera is raw uint8_t[0xD8] storage (Game/PlayerController.h) handed in as const void*; typed once RT defines Graphics::Camera's (Frustum, Transform3, bool) ctor, then this is camera->_cameraToWorld's translation
-    const float camZ = *reinterpret_cast<const float*>(c + 0x90);   // LEFT: H5 PlayerController::camera is raw uint8_t[0xD8] storage (Game/PlayerController.h) handed in as const void*; typed once RT defines Graphics::Camera's (Frustum, Transform3, bool) ctor, then this is camera->_cameraToWorld's translation
+    const float camX = camera->_cameraToWorld.translation.x;
+    const float camY = camera->_cameraToWorld.translation.y;
+    const float camZ = camera->_cameraToWorld.translation.z;
 
     static std::unordered_map<void*, float> s_scale;   // geometry -> last visualScale.x
     struct MeshVariants { int n; int16_t vi[12]; int16_t mv[12]; int count[12]; };

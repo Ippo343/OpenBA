@@ -693,10 +693,9 @@ static uint32_t Helper_86e0(const Object::External* ext) {
 uint32_t StatGoal::ReadSubTypeEntry() const {
     int idx = statSubType;
     WorldGeometry* pc = GameUpdateLoop::_singleton->m_worldGeometry;
-    // LEFT: WorldGeometry +0x220 is an untyped {data, count|cap} Header (GAME-c).
-    const WorldGeometry::Header& ints = pc->_arrays[8];
-    if (idx >= 0 && idx < (int)ints.sizeCap) {
-        return reinterpret_cast<const uint32_t*>(ints.data)[idx];   // LEFT: WorldGeometry +0x220 is an untyped {data, count|cap} Header (GAME-c).
+    const RawArray<int32_t>& ints = pc->_batchCounters;   // +0x220
+    if (idx >= 0 && idx < ints.size) {
+        return static_cast<uint32_t>(ints.data[idx]);
     }
     return 0;
 }

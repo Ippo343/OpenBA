@@ -48,6 +48,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_*, WorkPlaceComponent_SetMaxWorkers, fn_StorageCountQuery
+#include "Game/PlayerToolManager.h"   // CenterOnEntity 0x140103040
 
 namespace {
 
@@ -265,7 +266,7 @@ void WorkPlaceUI::CycleWorkplace() {
     ComponentEntity* workerEntity = worker->_entity;
 
     UI::DialogInstance* dialogInst = _dialog;
-    Toolbar_CenterOnEntity_Impl(GameUpdateLoop::_singleton->m_toolManager, &dialogInst, &workerEntity);   // 0x140103040
+    GameUpdateLoop::_singleton->m_toolManager->CenterOnEntity(&dialogInst, &workerEntity);   // 0x140103040
 }
 
 // ============================================================

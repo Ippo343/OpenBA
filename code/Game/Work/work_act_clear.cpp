@@ -83,52 +83,52 @@ static inline void* WAC_Alloc(uint64_t size, uint32_t align) {
 // capacity, +0x60 top). Faithful to disasm @0x1400c17ad..0x1400c18ec (RemoveNaturalResource
 // append) and the identical blocks for PerformWork / inline ShowTool.
 static void WAC_AppendInline(CharacterComponent* character, Action* actionIbpVal) {
-    int iVar16 = character->actionCount;
+    int iVar16 = character->actionStack.count;
     if (iVar16 == 0) {
         // First append: initialize to capacity 0x10, copy any prior contents.
-        Action** pvVar11 = character->actions;
-        character->actionCount = 0x10;
-        if (character->actionCapacity < 0x10) {
-            character->actionCapacity = 0x10;
-            character->actions = static_cast<Action**>(
-                System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(character->actionCapacity) << 3, 8));
+        ::Object::InternalPtr<Action>* pvVar11 = character->actionStack.actions;
+        character->actionStack.count = 0x10;
+        if (character->actionStack.capacity < 0x10) {
+            character->actionStack.capacity = 0x10;
+            character->actionStack.actions = static_cast<::Object::InternalPtr<Action>*>(
+                System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(character->actionStack.capacity) << 3, 8));
         }
         // The original copies index 0 (iVar16==0 ⇒ start = 0), zeroing the rest.
         // Disasm: start = (RDI==data) ? old-count(EBX) : 0; here EBX(old count)=0.
         int64_t start = 0;
-        if (pvVar11 == character->actions) start = iVar16; // ==0 here
+        if (pvVar11 == character->actionStack.actions) start = iVar16; // ==0 here
         for (int64_t i = start; i < 0x10; ++i) {
-            Action** slot = &character->actions[i];
+            ::Object::InternalPtr<Action>* slot = &character->actionStack.actions[i];
             if (i < static_cast<int64_t>(iVar16)) {
                 if (slot) { *slot = nullptr; *slot = pvVar11[i]; }
             } else if (slot) {
                 *slot = nullptr;
             }
         }
-        if (pvVar11 != character->actions) System::MemoryAllocator::MemFree(pvVar11);
-    } else if (character->currentAction + 1 == iVar16) {
+        if (pvVar11 != character->actionStack.actions) System::MemoryAllocator::MemFree(pvVar11);
+    } else if (character->actionStack.current + 1 == iVar16) {
         // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize on the
         // array header at +0x48 (data, count +0x50, capacity +0x54).
-        GameColl::AsArray<GameColl::Ptr8>(&character->actions).SetSize(iVar16 * 2);
+        GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(iVar16 * 2);
     }
 
     // Drain any pending nodes from the current index slot (cancel/detach chain).
-    if (character->currentAction >= 0) {
+    if (character->actionStack.current >= 0) {
         // The step: Action::_next (+0x10), the chained action.
-        for (Action* node = character->actions[character->currentAction];
+        for (Action* node = character->actionStack.actions[character->actionStack.current].Get();
              node != nullptr;
              node = node->_next.Get()) {
             if (node->_status) {
                 node->_status = false;
                 // slot 7 (vtable +0x38) Action::Exit(list): the node is an action on the
                 // citizen's action stack (+0x10 next, +0x18 _status, as the walk 0x1400c4f10)
-                node->Exit(&character->actions);
+                node->Exit(&character->actionStack);
             }
         }
     }
 
-    character->currentAction += 1;
-    character->actions[character->currentAction] = actionIbpVal;
+    character->actionStack.current += 1;
+    character->actionStack.actions[character->actionStack.current] = actionIbpVal;
 }
 
 // ============================================================
@@ -159,7 +159,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
 
     // --- the action stack = character + 0x48 ; cleanup (0x1400c15ba..0x1400c15e2) ---
     CharacterComponent* character = (*citizenRef)->character;
-    void* plVar15 = &character->actions;
+    ActionStack* plVar15 = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(plVar15);
 
     ::Object::InternalPtr<Action> ibpA; // local_68 / local_res20 scratch IBP
@@ -176,9 +176,9 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
         }
         ibpA = sm;
-        if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-            character->field_0x58.DeletePtr();
-        character->field_0x58 = ibpA;
+        if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+            character->actionStack.field_0x10.DeletePtr();
+        character->actionStack.field_0x10 = ibpA;
     }
 
     // --- CompleteTask action; append via FUN_1400c54e0 (0x1400c1677..0x1400c16dc) ---
@@ -193,7 +193,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             ct = new (obj) CompleteTask(param_2, &entityInner, &innerIbp, param_6);
         }
         ibpB = ct;
-        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpB);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)
+        ActionStackPush(plVar15, &ibpB);
     }
 
     // --- ShowTool (~Hoe = -1; disasm OR R8D,0xffffffff) action; append via FUN_1400c54e0 (0x1400c16dc..0x1400c1729) ---
@@ -205,7 +205,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             st = new (obj) ShowTool(&entityInner, ~0); // OR R8D,0xffffffff @0x1400c16fb
         }
         ibpA = st;
-        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpA);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)
+        ActionStackPush(plVar15, &ibpA);
     }
 
     // --- LOOP: for i in [0, param_3): inline RemoveNaturalResource action per param_4[i]

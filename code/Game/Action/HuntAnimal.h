@@ -30,7 +30,7 @@ public:
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c8260
     int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c8250
     int  Execute(ActionStack* actionStack, const System::Time* time) override;      // [5] 0x1400c8240
-    void Enter(void* actionStack, const System::Time* time) override;        // [6] 0x1400c7de0
+    void Enter(ActionStack* actionStack, const System::Time* time) override;        // [6] 0x1400c7de0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c7d60
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----

@@ -87,7 +87,7 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
         CharacterComponent* ch = c->character;           // +0x278
         if (Readable(ch)) {
             ++hasChar;
-            if (ch->currentAction >= 0) ++busy;          // +0x60
+            if (ch->actionStack.current >= 0) ++busy;          // +0x60
         }
         if (c->home) ++has238;                           // +0x238
         if (c->workplace) ++has248;                      // +0x248

@@ -537,7 +537,8 @@ void GameLoadDialogLoopT::Draw(float alpha) {
     }
 }
 
-extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr);
+extern "C" Object::InternalPtr<UI::DialogInstance>* LoaderDialog_FromSplashDLT(
+        Engine::DialogLoaderLoopT* loop, Object::InternalPtr<UI::DialogInstance>* retInternalBasePtr);   // loaderdialog.cpp
 
 Object::InternalPtr<UI::DialogInstance>* GameLoadDialogLoopT::CreateLoopDialog(
         Object::InternalPtr<UI::DialogInstance>* retPtr) {

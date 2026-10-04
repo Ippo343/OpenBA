@@ -67,10 +67,9 @@
 static inline void* WAR_Alloc(uint64_t size, uint32_t align) {
     return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
-// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
-// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
-static inline void WAR_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);  // LEFT: CharacterComponent.h declares the +0x48 action stack as separate fields, not an ActionStack (ledger: a later round)
+// 0x1400c54e0 ActionStackPush (Action.h) on CharacterComponent::actionStack (+0x48).
+static inline void WAR_Append(ActionStack* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(list, ibp);
 }
 
 // Bit-exact float constants (read_memory). Used where the disasm loads an immediate
@@ -100,7 +99,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
 
     // the action stack = character + 0x48 (disasm 0x1400bb7eb..0x1400bb802)
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     void* obj;
@@ -119,9 +118,9 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     }
     ibpA = sm;              // [RBP-0x19]
     // disasm 0x1400bb886: CMP [RSI+0x10],0 ; RSI = character+0x48 -> +0x10 = character+0x58.
-    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA; // disasm 0x1400bb89b: MOV [RSI+0x10],RAX
+    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA; // disasm 0x1400bb89b: MOV [RSI+0x10],RAX
 
     // --- CompleteTask action (0x1400bb89f..0x1400bb904) ---
     obj = WAR_Alloc(0x38, 8);
@@ -216,7 +215,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
 
     // the action stack = character + 0x48 (disasm 0x1400beb18..0x1400beb2f)
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     void* obj;
@@ -235,9 +234,9 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     }
     ibpA = sm;              // [RBP-0x18]
     // disasm 0x1400bebb3: CMP [RSI+0x10],0 ; RSI = character+0x48 -> +0x10 = character+0x58.
-    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA; // disasm 0x1400bebc8: MOV [RSI+0x10],RAX
+    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA; // disasm 0x1400bebc8: MOV [RSI+0x10],RAX
 
     // --- ShowTool (~Hoe = -1) action (0x1400bebcc..0x1400bec13) ---
     obj = WAR_Alloc(0x30, 8);

@@ -19,8 +19,8 @@ void Action::Persist(IO::Stream& stream) {
 
 // [5]-[9]: retail's shared trivial bodies.
 int  Action::Execute(ActionStack*, const System::Time*) { return 0; }   // 0x1400c4a90 XOR EAX,EAX
-void Action::Enter(void*, const System::Time*) {}                 // 0x1400c4b90 RET 0
-void Action::Exit(void*) {}                         // 0x1400c4ba0 RET 0
+void Action::Enter(ActionStack*, const System::Time*) {}                 // 0x1400c4b90 RET 0
+void Action::Exit(ActionStack*) {}                         // 0x1400c4ba0 RET 0
 void Action::CheckEntity() {}                       // 0x1400c4a30 RET 0
 bool Action::GetTarget(ComponentEntity**) { return false; }     // 0x1400c4a40 XOR AL,AL
 

@@ -112,8 +112,8 @@ void Pf_SetFlagRefreshUpdate_107260(Component* self) {
         NotifyEntityChanged(self->_entity);   // 0x1400c3470
     }
     CharacterComponent* character = self->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
-    if (0 < character->currentAction + 1) {
-        WorkBase_TaskListCleanup_c5400(&character->actions);   // 0x1400c5400
+    if (0 < character->actionStack.current + 1) {
+        WorkBase_TaskListCleanup_c5400(&character->actionStack);   // 0x1400c5400
         System::Time time = {};
         RtSystem_Time_Ctor(&time, 0.0f);
         self->Update(&time);   // slot 9
@@ -194,9 +194,9 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // B4 FORWARD: outside callers in animalcomponent, citizenai_actionctors, citizenai_handlers,
 // nomadcomponent_states, build_actions, work_act_clear, work_act_consume, work_act_hunt,
 // work_act_path, work_act_perform, work_act_rawmat, work_base_actionctor
-void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
-    ActionStackPush(reinterpret_cast<ActionStack*>(param_1),   // LEFT: SIG Pf_ActStackPush_54e0: its callers hold &CharacterComponent::actions (CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)) as int64_t*
-                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0: its 10 callers hold the action as void* / int64_t / Action* locals, not InternalPtr<Action>
+void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_) {
+    ActionStackPush(stack,
+                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0: its callers (animalcomponent.cpp, citizenai_handlers.cpp, nomadcomponent_states.cpp, build_actions.cpp) hold the action as int64_t / Action* / void* locals built by placement or by void*-returning ctors, not as an InternalPtr<Action>
 }
 
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Entity, Game, Player, Work)

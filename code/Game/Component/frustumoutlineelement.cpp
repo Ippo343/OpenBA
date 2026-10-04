@@ -52,7 +52,7 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!gw) return;
     PlayerController* pc = gw->m_playerController;
     if (!pc) return;
-    const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(pc->camera);   // LEFT: PlayerController::camera is raw storage (PlayerController.h, H5)
+    const Graphics::Camera* camera = &pc->camera;
 
     // Camera Transform3 (rotation + translation, 0x30 bytes) at camera +0x64 (the
     // controller's +0x98); its translation at +0x24 (the controller's +0xbc). Copy the

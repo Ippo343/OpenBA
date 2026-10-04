@@ -207,9 +207,8 @@ extern "C" void TownMgr_AbortCitizenActionsFor_89e30(CitizenBehavior* townMgr, C
         if (!citizen) continue;
         CharacterComponent* ai = citizen->character;
         if (!ai) continue;
-        // CharacterComponent +0x48..+0x67 is retail's ActionStack sub-object, declared
-        // as separate fields (CharacterComponent.h, WORK-3).
-        ActionStack_AbortForEntity_c52c0(reinterpret_cast<ActionStack*>(&ai->actions), &entityCopy);   // LEFT: CharacterComponent.h (WORK-3) +0x48 is not an ActionStack
+        // CharacterComponent +0x48..+0x67 is retail's ActionStack sub-object (actionStack).
+        ActionStack_AbortForEntity_c52c0(&ai->actionStack, &entityCopy);
     }
 }
 

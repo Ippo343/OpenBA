@@ -15,7 +15,7 @@
 #pragma once
 #include <cstdint>
 
-namespace Graphics { class Scene; class Renderer; }   // runtime/types/graphics
+namespace Graphics { class Scene; class Renderer; class Camera; }   // runtime/types/graphics
 
 void SceneWatch_Note(uint32_t sceneId, void* geometry, const char* who);
 void SceneWatch_Check(Graphics::Scene* scene);
@@ -65,7 +65,7 @@ void SceneWatch_Census(Graphics::Scene* scene);
 // variantIdx is the shader-variant index the main pass will use (renderer+0x3c):
 // Graphics::Renderer::AddDrawItem drops, with no diagnostic, any item whose material
 // has no variant there, which is a model that is simply never drawn.
-void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int variantIdx);
+void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera, int variantIdx);
 
 // BANISHED_LOD_CENSUS also enables this: what the frame ACTUALLY drew.
 //
