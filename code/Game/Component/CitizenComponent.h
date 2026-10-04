@@ -158,7 +158,8 @@ public:
     void  LongTermPlan();                                         // 0x140115e60 (AI state 0xd)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint64_t name;                 // +0x28 System::String (H5 raw storage): the citizen's name;
+    System::String name;           // +0x28 the citizen's name (ctor 0x140114770 stores its null
+                                   //       data inline; dtor 0x1401146f0 runs ~String at 0x14011473f);
                                    //       serialized first (0x140151238), handed to the event log
                                    //       by PostLifeEvent (EventLog_AddCitizenEvent's name
                                    //       argument), ~String in the dtor

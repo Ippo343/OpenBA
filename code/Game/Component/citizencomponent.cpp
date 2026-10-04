@@ -541,7 +541,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                         dk = td->terrainType; dr = td->zone;
                     }
                 }
-                const char* nm = *reinterpret_cast<const char**>(&name);   // LEFT: H5 CitizenComponent::name (System::String raw storage)
+                const char* nm = name._data;
                 fprintf(stderr, "[HomeInvalid] citizen=%p name=%s pos=(%.2f,%.2f) cell=%u(%d,%d) kind=%u region=%u"
                                 " | home=%p cell=%d(%d,%d) kind=%u region=%u | age=%.2f hunger=%.1f\n",
                         (void*)this, nm ? nm : "?", cx, cy, czCell, tx, ty, sk, sr,
@@ -2368,7 +2368,7 @@ static Component* CitizenComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, 
 // PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
 // on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
 CitizenComponent::CitizenComponent()
-    : name(0), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
+    : name(), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
       coldness(0), pregnancyTimer(0), health(0), statusFlags(0), foodTimer{0},
       field_0x60{0}, disease(nullptr), field_0x70{0}, field_0x78{0}, happiness(0),
       field_0x84(0), happinessFlags(0), _pad8C{}, happinessTimer{0},

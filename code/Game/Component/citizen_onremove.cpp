@@ -224,7 +224,7 @@ void CitizenComponent::OnRemove() {
                 target = this; eventType = 0x10; name = nullptr;   // nobody to take the job
             } else {
                 // the deceased's name (+0x28, H5 raw System::String: its data pointer)
-                name = *reinterpret_cast<const char**>(&this->name);   // LEFT: H5 CitizenComponent::name (CitizenComponent.h, CIT-4)
+                name = this->name._data;
                 target = replacement;
                 eventType = 0xf;                                    // replacement found
             }

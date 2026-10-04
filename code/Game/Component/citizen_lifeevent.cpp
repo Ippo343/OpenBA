@@ -80,5 +80,5 @@ void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* st
     // --- Post (null entity IBP: citizen life events carry no map location) ---
     Object::InternalBasePtr nullIBP(nullptr);
     EventLog_AddCitizenEvent(eventLog, eventType, severity, &nullIBP,
-                             &name /* citizen name String (H5 raw) */, &titleStr, &paramStr);
+                             &name /* the citizen name String */, &titleStr, &paramStr);
 }

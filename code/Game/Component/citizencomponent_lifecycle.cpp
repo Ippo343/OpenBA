@@ -204,7 +204,7 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
     if (rng) GenerateCitizenName(rng, gender == 0, nameBuf, static_cast<int>(sizeof(nameBuf)));
     {
         System::String tmpStr(nameBuf);
-        *reinterpret_cast<System::String*>(&name) = tmpStr;   // B.3.1 bridge  // LEFT: H5 CitizenComponent::name (System::String raw storage)
+        name = tmpStr;
     }
 
     // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)
