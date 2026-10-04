@@ -70,7 +70,8 @@ extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64
 extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 
 // ---- citizen_updatehealth.cpp
-extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float* radius, int typeId, void* outArr);  // 0x140092990
+class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;
+extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius, int typeId, RawArray<CharacterComponent*>* outArr);  // 0x140092990
 extern "C" void CitizenComp_Infect(void* self, void* disease);  // 0x140116b90
 
 // ---- citizenai_actionctors.cpp
@@ -179,7 +180,8 @@ extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h
 extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
-extern "C" void MapComponent_DetachOccupancy_4750(void* selfV);  // 0x140124750
+class MapComponent;
+extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140124750 (keeps the tree's null test)
 
 // ---- modelcomponent.cpp
 extern "C" void ModelComponentNotify_Reimpl(void* entity, int param);  // 0x1400c2b70

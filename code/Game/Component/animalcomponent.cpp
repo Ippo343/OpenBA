@@ -54,6 +54,7 @@
 #include "Component/animalcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
+#include "Action/MoveTo.h"   // 0x1400c9170, by name
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
@@ -389,7 +390,6 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/AnimalComponent.h"
-#include "Action/MoveTo.h"   // 0x1400c9170, by name
 
 
 // 0x140106fc0. Component() is the CALL 0x1401188b0; the 0x140162110 stamp is

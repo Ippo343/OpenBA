@@ -358,8 +358,7 @@ char ClearAreaComponent::State0Enter(StateMachine* sm) {
     uint8_t f2 = desc ? desc->_clearBuildings : 1;
     uint8_t f3 = desc ? desc->_priority : 0;
     void* ownerIBP = _entity;   // retail: local_res10 = *param_2 (the entity IBP)
-    // ClearArea's ctor (WORK-a) takes the ExternalPtr as a raw uint64_t: LEFT.
-    ClearArea* work = ::new (mem) ClearArea(&ownerIBP, reinterpret_cast<uint64_t>(target), f0, f1, f2);   // LEFT: SIG ClearArea ctor (Work/ClearArea.h, WORK-1)
+    ClearArea* work = ::new (mem) ClearArea(&ownerIBP, target, f0, f1, f2);
 
     ::Object::InternalPtr<Work> workIBP(work);
     CitizenAI_WorkScheduler_Post(workComp, kind, static_cast<char>(f3), &workIBP);
@@ -448,9 +447,9 @@ void ClearAreaComponent::FinishClear() {
 }
 
 // B4 FORWARD: buildcomponent_state1.cpp.
-void ClearArea_Finalize8270(void* comp) {
+void ClearArea_Finalize8270(ClearAreaComponent* comp) {
     if (!comp) return;
-    reinterpret_cast<ClearAreaComponent*>(comp)->FinishClear();   // LEFT: B4 FORWARD (buildcomponent_state1.cpp)
+    comp->FinishClear();
 }
 
 // ============================================================
@@ -535,15 +534,15 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
 // Re-porting either one into orchardcomponent_states.cpp would fork two copies of the
 // grid-scan semantics, so they are exported here instead of duplicated.
 // ============================================================
-// B4 FORWARD: orchardcomponent_states.cpp. The tree answers true for a null component.
-extern "C" bool ClearAreaCtrl_IsDone(void* comp) {
+// orchardcomponent_states.cpp. The tree answers true for a null component.
+extern "C" bool ClearAreaCtrl_IsDone(ClearAreaComponent* comp) {
     if (!comp) return true;
-    return reinterpret_cast<ClearAreaComponent*>(comp)->IsDone();   // LEFT: B4 FORWARD (orchardcomponent_states.cpp)
+    return comp->IsDone();
 }
 
-extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
-                                         uint8_t clearTrees, uint8_t clearGround,
-                                         uint8_t clearBuildings) {
+extern "C" ClearArea* ClearAreaCtrl_BuildWork(void* work, ComponentEntity* ownerEnt, ComponentDescription* desc,
+                                              uint8_t clearTrees, uint8_t clearGround,
+                                              uint8_t clearBuildings) {
     void* ownerIBP = ownerEnt;   // retail: local_res10 = *param_2 (the entity IBP)
-    return ::new (work) ClearArea(&ownerIBP, descRef, clearTrees, clearGround, clearBuildings);
+    return ::new (work) ClearArea(&ownerIBP, desc, clearTrees, clearGround, clearBuildings);
 }

@@ -4,6 +4,13 @@
 #include "ClearAreaComponent.h"
 #include <cstdint>
 
-// B4 FORWARD: ClearAreaComponent::FinishClear (0x140118270) for the outside caller
-// buildcomponent_state1.cpp (BuildComponent::State1Enter's construction-site reset).
-void ClearArea_Finalize8270(void* comp);
+// ClearAreaComponent::FinishClear (0x140118270) for buildcomponent_state1.cpp
+// (BuildComponent::State1Enter's construction-site reset); keeps the tree's null test.
+void ClearArea_Finalize8270(ClearAreaComponent* comp);
+
+// The two orchardcomponent_states.cpp reaches (its state 20 / 21 handlers).
+class ClearArea; class ComponentEntity; class ComponentDescription;
+extern "C" bool ClearAreaCtrl_IsDone(ClearAreaComponent* comp);   // keeps the tree's null test (true)
+extern "C" ClearArea* ClearAreaCtrl_BuildWork(void* work, ComponentEntity* ownerEnt, ComponentDescription* desc,
+                                              uint8_t clearTrees, uint8_t clearGround,
+                                              uint8_t clearBuildings);

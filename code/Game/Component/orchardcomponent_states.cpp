@@ -87,6 +87,8 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/clearareacomponent_funcs.h"   // ClearAreaCtrl_IsDone / _BuildWork
+#include "Work/ClearArea.h"
 
 // OrchardCtrlTag lives in OrchardComponent.h (the member type needs it).
 using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
@@ -725,10 +727,6 @@ char OrchardComponent::TickHarvesting(StateMachine* sm) {
 // 20 calls the same two functions the ClearAreaComponent controller does), so they are
 // used through the exports rather than forked.
 // ============================================================
-extern "C" bool  ClearAreaCtrl_IsDone(void* comp);
-extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
-                                         uint8_t clearTrees, uint8_t clearGround,
-                                         uint8_t clearBuildings);
 
 namespace {
 
@@ -774,13 +772,11 @@ char OrchardComponent::EnterClearing() {
     ComponentEntity* entity = _entity;
     ClearAreaDescription* caDesc = FindClearAreaDescription(entity);
 
-    void* work = nullptr;
+    ClearArea* work = nullptr;
     if (caDesc) {
         void* mem = System::MemoryAllocator::MemAlloc(0x78, 8);
         if (mem) {
-            work = ClearAreaCtrl_BuildWork(
-                mem, entity, reinterpret_cast<uint64_t>(caDesc->_target),   // LEFT: SIG ClearAreaCtrl_BuildWork
-                1, 0, 1);
+            work = ClearAreaCtrl_BuildWork(mem, entity, caDesc->_target, 1, 0, 1);
         }
     }
     {   // The whole point of porting this state is to make "cut" observable. Retail derefs
@@ -791,7 +787,7 @@ char OrchardComponent::EnterClearing() {
         static int s_n = 0;
         if (s_n++ < 4) {
             std::fprintf(stderr, "[Orchard20] enter: caDesc=%p work=%p slots=%d -> %s\n",
-                         static_cast<void*>(caDesc), work, slotCount,
+                         static_cast<void*>(caDesc), static_cast<void*>(work), slotCount,
                          caDesc ? "post ClearArea (prio 0x401)"
                                 : "NO ClearAreaDescription on this entity — retail would "
                                   "fault here; nothing posted, the cut will not progress");
@@ -800,8 +796,8 @@ char OrchardComponent::EnterClearing() {
     }
     if (!work) return 1;
 
-    void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
-    CitizenAI_WorkScheduler_Post(wc, 0x401, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG ClearAreaCtrl_BuildWork returns void*
+    Object::InternalPtr<Work> workIBP(work);   // the ctor is a plain store
+    CitizenAI_WorkScheduler_Post(wc, 0x401, 0, &workIBP);
     return 1;
 }
 
