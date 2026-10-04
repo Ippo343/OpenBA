@@ -31,6 +31,7 @@
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
+#include "Game/WorldGeometryElements.h"   // GeometryBatch (the _decals element)
 #include <cstring>
 #include "Player/exe_bodies.h"   // AddDecal 0x1400b0d80
 
@@ -59,19 +60,18 @@
 // If slot[decalId].id (+0x28) still equals decalId, mark it free (-1), clear
 // the slot's owner ptr (+0), and shrink the two sub-lists embedded at +8 and
 // +0x18 to zero length. 1:1 port of the exe body.
-// WorldGeometry::RemoveDecal. The 0x60-byte decal element is untyped (WorldGeometry's
-// `_arrays[5]`, GAME-c): its reads below are LEFT.
+// WorldGeometry::RemoveDecal: the decals are WorldGeometry::_decals (+0x1F0),
+// 0x60-byte GeometryBatch records (WorldGeometryElements.h).
 void WorldGeometry::RemoveDecal(int decalId) {
-    uintptr_t base = reinterpret_cast<uintptr_t>(_arrays[5].data);   // +0x1F0   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, not this set's)
-    uintptr_t slot = base + static_cast<uintptr_t>(decalId) * 0x60;
-    if (*reinterpret_cast<int*>(slot + 0x28) == decalId) {   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, X3-GAME's): the slot's +0x28 id
-        *reinterpret_cast<uint32_t*>(slot + 0x28) = 0xffffffff;   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, X3-GAME's): the slot's +0x28 id
-        *reinterpret_cast<uint64_t*>(slot) = 0;   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, X3-GAME's): the slot's first qword
+    GeometryBatch* slot = _decals.data + decalId;   // +0x1F0
+    if (slot->slot == decalId) {   // +0x28 id
+        slot->slot = -1;           // +0x28 = 0xffffffff
+        slot->material = nullptr;  // +0x00 qword
         // B.3.2 bridge: exe 0x14001ee40 / 0x14001c890 ARE
         // Collection::Array<T>::SetSize(0) — see the note above the (removed)
         // typedefs for why the init-policy mismatch never fires at count 0.
-        GameColl::AsArray<GameColl::Bytes<0x14, 2>>(slot + 8).SetSize(0);
-        GameColl::AsArray<GameColl::U16>(slot + 0x18).SetSize(0);
+        GameColl::AsArray<GameColl::Bytes<0x14, 2>>(&slot->vertices).SetSize(0);   // +0x08
+        GameColl::AsArray<GameColl::U16>(&slot->indices).SetSize(0);               // +0x18
     }
 }
 

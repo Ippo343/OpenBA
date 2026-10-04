@@ -524,10 +524,10 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         ComponentEntity* homeEntity = ai->home;
         if (homeEntity == nullptr) return;
 
-        void* targetRef = homeEntity;
-        void* dialogRef = _dialog;
+        ComponentEntity* targetRef = homeEntity;
+        UI::DialogInstance* dialogRef = _dialog;
         PlayerToolManager* gameSubsys = GameUpdateLoop::_singleton->m_toolManager;
-        Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
+        gameSubsys->CenterOnEntity(&dialogRef, &targetRef);   // 0x140103040
     }
     else if (param4 == 0x228) {
         // --- buttonFollow: open follow dialog ---

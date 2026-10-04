@@ -112,8 +112,8 @@ void SerializeBatches(IO::Serializer& serializer, RawArray<GeometryBatch>& batch
 // material table +0x210 sized to the road batches, each entry the batch's
 // material, and each batch's box reset to {0, 0, grid, grid}.
 void BackfillBatchMaterials(WorldGeometry& geometry) {
-    RawArray<GeometryBatch>& roads = geometry.RoadBatches();
-    RawArray<Object::External*>& materials = geometry.BatchMaterials();
+    RawArray<GeometryBatch>& roads = geometry._roadBatches;
+    RawArray<Object::External*>& materials = geometry._batchMaterials;
     Reimpl_Array_Resize_Stride08(&materials, roads.size);   // FUN_140001bb0
     int32_t dstCount = materials.size;
     int32_t grid = geometry._gridSize;
@@ -206,8 +206,8 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 after step5 (sub_c1e0 mesh build + heightBuf)");
 
     // ---- Step 6: version-gated contour vertex / index arrays. ----
-    RawArray<TerrainVertex>& contourVertices = ContourVertices();   // +0x1A0
-    RawArray<uint16_t>&      contourIndices  = ContourIndices();    // +0x1B0
+    RawArray<TerrainVertex>& contourVertices = _contourVertices;   // +0x1A0
+    RawArray<uint16_t>&      contourIndices  = _contourIndices;    // +0x1B0
     int version = serializer.GetVersion();
     if (version < 3) {
         // OLD format: bool + byte count + raw bytes for both arrays.
@@ -252,14 +252,14 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_waterMaterialB, &serializer);
 
     // ---- Step 8: the two draw-range arrays at +0x1C0 and +0x1D0. ----
-    SerializeDrawRanges(serializer, ContourRangesA());
-    SerializeDrawRanges(serializer, ContourRangesB());
+    SerializeDrawRanges(serializer, _contourRangesA);
+    SerializeDrawRanges(serializer, _contourRangesB);
 
     RZ_CHECK("geom 04d0 after step8 (int4 arrays +0x1C0/+0x1D0)");
 
     // ---- Step 9: the outlines at +0x1E0 (an array of Vector2 arrays). ----
     {
-        RawArray<RawArray<Math::Vector2>>& outlines = ContourOutlines();
+        RawArray<RawArray<Math::Vector2>>& outlines = _contourOutlines;
         int32_t outerCount = outlines.size;
         serializer.Serialize(outerCount, nullptr);
         if (IsLoading(serializer)) {
@@ -284,14 +284,14 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 after step9 (array-of-arrays +0x1E0)");
 
     // ---- Step 10: the road batches at +0x200. ----
-    SerializeBatches(serializer, RoadBatches());
+    SerializeBatches(serializer, _roadBatches);
 
     RZ_CHECK("geom 04d0 after step10 (Struct60B array +0x200)");
 
     // ---- Step 11: version 4+: the batch counters at +0x220 (stride 4). ----
     // Original at 0x1400b0a55 calls slot 0x140151278: Serialize(int count, int* data, name).
     if (version >= 4) {
-        RawArray<int32_t>& counters = BatchCounters();
+        RawArray<int32_t>& counters = _batchCounters;
         int32_t c = counters.size;
         serializer.Serialize(c, nullptr);
         if (IsLoading(serializer)) {
@@ -307,7 +307,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
 
     // ---- Step 13: version 6+: the material table at +0x210. ----
     if (version >= 6) {
-        SerializeBatchMaterials(serializer, BatchMaterials());
+        SerializeBatchMaterials(serializer, _batchMaterials);
     }
 
     // ---- Step 14: on load only. ----
@@ -320,10 +320,10 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         _waterVertexBuffer.Create(contourVertices.size * 0x10, false, contourVertices.data);
         UploadHeightImage();   // 0x1400ac780
 
-        int32_t materialCount = BatchMaterials().size;
-        int32_t counterCount  = BatchCounters().size;
+        int32_t materialCount = _batchMaterials.size;
+        int32_t counterCount  = _batchCounters.size;
         if (materialCount != counterCount) {
-            Reimpl_Array_Resize_Stride08(&BatchMaterials(), counterCount);
+            Reimpl_Array_Resize_Stride08(&_batchMaterials, counterCount);
         }
     }
 
@@ -343,8 +343,8 @@ void WorldGeometry::SerializeLegacyBatches(IO::Stream& stream) {
 
     IO::Serializer serializer(stream, 4);
 
-    SerializeBatches(serializer, Decals());        // +0x1F0
-    SerializeBatches(serializer, RoadBatches());   // +0x200
+    SerializeBatches(serializer, _decals);        // +0x1F0
+    SerializeBatches(serializer, _roadBatches);   // +0x200
 
     // Version 0-2, on load: backfill +0x210 from the road batches.
     int version = serializer.GetVersion();
@@ -354,7 +354,7 @@ void WorldGeometry::SerializeLegacyBatches(IO::Stream& stream) {
 
     // Version 3+: the material table at +0x210.
     if (version >= 3) {
-        SerializeBatchMaterials(serializer, BatchMaterials());
+        SerializeBatchMaterials(serializer, _batchMaterials);
     }
 
     RZ_CHECK("geom f1a0 before dtor");

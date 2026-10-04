@@ -993,14 +993,9 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // AsTransform3 on the result, then SetCameraToWorld
             Math::Transform3 t3 = transform.AsTransform3();
             // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-            // `playerCtrl` is `m_playerController` (+0xE0) and its ctor
-            // (gameupdateloop_load.cpp) constructs a `Graphics::Camera` in its +0x34
-            // raw storage -- the receiver is proved by the writer. There was no
-            // readiness guard here.
-            // LEFT: PlayerController::camera is raw storage (H5: Camera's default
-            // ctor is protected).
-            reinterpret_cast<Graphics::Camera*>(playerCtrl->camera)  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
-                ->SetCameraToWorld(t3);   // B.3.5 bridge
+            // `playerCtrl` is `m_playerController` (+0xE0); its +0x34 is the
+            // Graphics::Camera member. There was no readiness guard here.
+            playerCtrl->camera.SetCameraToWorld(t3);
         }
         TRACE("[GameUpdateLoop::Update] camera transform done\n");
     }
@@ -1096,8 +1091,7 @@ post_simulation:
         PlayerController* playerCtrl = m_playerController;
         // Build listener position from PlayerController camera data: the camera's
         // cameraToWorld (Transform3) at playerCtrl+0x34+0x64 = +0x98.
-        // LEFT: PlayerController::camera is raw storage (H5).
-        const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera);  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
+        const Graphics::Camera* camera = &playerCtrl->camera;
         float tx = camera->_cameraToWorld.axisX.x;   // +0x98
         float ty = camera->_cameraToWorld.axisX.y;   // +0x9c
         float tz = camera->_cameraToWorld.axisX.z;   // +0xa0
@@ -1198,9 +1192,7 @@ post_simulation:
     // Normalize CALL and the Scene::Clean CALL. This appears to be dead code in
     // the original binary — possibly a removed/vestigial lighting update.
     {
-        // LEFT: PlayerController::camera is raw storage (H5).
-        const Math::Transform3& view =
-            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera)->_cameraToWorld;  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
+        const Math::Transform3& view = m_playerController->camera._cameraToWorld;
         float dirX = view.axisY.x + view.axisX.x + 0.0f;   // +0xa4 + +0x98
         float dirY = view.axisY.y + view.axisX.y + 0.0f;   // +0xa8 + +0x9c
         float dirZ = (view.axisY.z + view.axisX.z) - kRdata_14017214c;   // +0xac + +0xa0
@@ -1461,7 +1453,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // different set (the union with the PREVIOUS world box, and the mesh's own
     // distance table), so it needs its own measurement.
     SceneWatch_LodCensus(m_graphicsScene,
-                         m_playerController->camera,   // the Graphics::Camera at +0x34
+                         &m_playerController->camera,   // the Graphics::Camera at +0x34
                          // The MAIN scene pass's variant index, measured not guessed:
                          // Renderer::Draw hands BeginDrawGroup the scene entry's +0xec,
                          // which is AddScene's param_6 and is a literal 0 there. (The
@@ -1477,7 +1469,7 @@ void GameUpdateLoop::Draw(float alpha) {
         m_renderer->Draw(
             *videoCtx, alpha,
             *m_graphicsScene,
-            *reinterpret_cast<const Graphics::Camera*>(m_playerController->camera));   // B.3.5 bridge  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
+            m_playerController->camera);
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
 
@@ -1507,9 +1499,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] setting camera matrices...\n");
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
-        // LEFT: PlayerController::camera is raw storage (H5).
-        const Graphics::Camera* camera =
-            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera);  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
+        const Graphics::Camera* camera = &m_playerController->camera;
 
         // Original copies Transform3 (12 floats at +0x98..+0xC4 = 48 bytes) and projection
         // matrix (16 floats at +0xC8) from PlayerController onto the stack, then calls
@@ -2191,9 +2181,7 @@ static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
     if (!playerCtrl) return 0.0f;
 
     // The camera's position: its cameraToWorld translation (+0x34 + 0x88).
-    // LEFT: PlayerController::camera is raw storage (H5).
-    const Math::Vector3& camPos =
-        reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera)->_cameraToWorld.translation;  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
+    const Math::Vector3& camPos = playerCtrl->camera._cameraToWorld.translation;
     float dx = camPos.x - playerCtrl->targetX;
     float dy = camPos.y - playerCtrl->targetY;
     float dz = camPos.z - playerCtrl->targetZ;
@@ -2348,7 +2336,7 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIb
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;
-    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor's scenario parameter is the IBP's raw bits (GameUpdateLoop.h ctor, W0 header outside this set)
+    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor takes the scenario IBP's 8 bytes by value where retail takes a const InternalPtr<AchievementInstance>& (0x140098085; known_port_issues row 663)
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }
