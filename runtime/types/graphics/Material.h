@@ -428,8 +428,13 @@ public:
     // there is NO hidden return slot and no reference to dereference. Neither
     // touches a refcount on the handle itself (`AddTexture` refcounts the NAME).
     void    SetMaterial(Object::ExternalPtr<Material> material);   // 0x180103340  renderer
-    void    AddTexture(const RtSystem::String& name,
+    // ?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z
+    void    AddTexture(const System::String& name,
                        Object::ExternalPtr<Video::ImageBuffer> image);  // 0x180103350  renderer
+    // B4 FORWARD: code/Game/Dialog/mapui.cpp, moddialog.cpp, noiseui.cpp and
+    // saveloaddialog.cpp still call this with the RtSystem::String view.
+    void    AddTexture(const RtSystem::String& name,
+                       Object::ExternalPtr<Video::ImageBuffer> image);
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     int32_t GetType() const;                               // 0x180002b60  reads _shaderClass
