@@ -174,32 +174,9 @@ extern "C" void* RtUi_SpriteSheet_OperatorNew(uint64_t bytes) {
 // `Object::External::~External` after are the compiler's.
 // ============================================================================
 UI::SpriteSheet::~SpriteSheet() {
-    auto release = [](char*& slot) {
-        char* str = slot;
-        if (!str) return;
-        int32_t* rc = &RtSystem::StringRefCount(str);
-        if (--*rc == 0) {
-            char* blk = str - 8;
-            slot = blk;
-            if (blk) MemFree(blk);
-        } else {
-            slot = nullptr;
-        }
-    };
-    release(m_groupName);     // +0x40
-    release(m_textureName);   // +0x38
-
-    // ENDGAME B.3.2 step 2 — left as a free-function call, deliberately. This
-    // is array_destroy.cpp's J2_ENTRY(180004f50, ReleaseStringsCounted,
-    // kD_Str2_38) — an already-ported, but NOT `rtcoll::ArraySpec`-shaped,
-    // destroy: it drives `ReleaseStringsCounted` off a `DestroySpec`
-    // (`kD_Str2_38`), a different type and dispatch from the
-    // `rtcoll::ArraySpec::destroy` that `Collection::Array<T>::~Array()`'s
-    // template body calls. There is no `kSpec_*` row for this address the
-    // class could take as an `ExplicitSpec`, so per the batch rule that a
-    // "DtorElem" helper may not be convertible at all, `m_sprites`
-    // (SpriteSheet.h +0x20, `Collection::Array<SpriteInfo>`) stays reached
-    // as a free-function call, by name, rather than forced onto `.~Array()`.
-    rtcoll::RtColl_ArrayDtorElem_180004f50(&m_sprites);   // +0x20, Array<SpriteInfo>
+    // B4 X7-RT: empty. The two String releases (+0x40, then +0x38) and
+    // ~Array<SpriteInfo> on +0x20 (0x18011d6e8 CALL 0x180004f50: each entry's
+    // two Strings through kSpec_Sprite38's destroy, 0x1800059e0, then the
+    // buffer) are the members' destructors, in reverse declaration order.
 }
 

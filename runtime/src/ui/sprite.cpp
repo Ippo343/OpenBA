@@ -159,14 +159,14 @@ Object::ExternalPtr<SpriteSheet> Sprite::GetSpriteSheet() const {
 int32_t Sprite::Width() const {
     if (spriteIndex < 0) return 0;
     const auto* sheet = spriteSheet;
-    return sheet->m_sprites[spriteIndex].width;
+    return sheet->m_sprites._data[spriteIndex].width;
 }
 
 // Sprite::Height() const — retail 0x180030c10. Same no-bound-check note.
 int32_t Sprite::Height() const {
     if (spriteIndex < 0) return 0;
     const auto* sheet = spriteSheet;
-    return sheet->m_sprites[spriteIndex].height;
+    return sheet->m_sprites._data[spriteIndex].height;
 }
 
 }  // namespace UI
@@ -183,11 +183,11 @@ int32_t Sprite::Height() const {
 namespace UI {
 
 // SpriteSheet::GetSpriteCount() const — retail 0x180003190.
-int32_t SpriteSheet::GetSpriteCount() const { return m_spriteCount; }
+int32_t SpriteSheet::GetSpriteCount() const { return m_sprites._size; }
 
 // SpriteSheet::GetSpriteIndexFromName(String const&) const — retail 0x1800031f0.
 int32_t SpriteSheet::GetSpriteIndexFromName(const System::String& name) const {
-    return SpriteIndexFromName(m_sprites, m_spriteCount, name._data);
+    return SpriteIndexFromName(m_sprites._data, m_sprites._size, name._data);
 }
 
 // SpriteSheet::GetSpriteNameFromIndex(int) const — retail 0x1800032d0.
@@ -201,7 +201,7 @@ int32_t SpriteSheet::GetSpriteIndexFromName(const System::String& name) const {
 // placement-news this member's prvalue into the slot.
 System::String SpriteSheet::GetSpriteNameFromIndex(int32_t index) const {
     System::String out;                        // 0x1800032f4, null before the load
-    char* name = m_sprites[index].name;
+    char* name = m_sprites._data[index].name;
     if (name) {
         RtSystem::StringRefCount(name) += 1;   // 0x180003302
         out._data = name;
@@ -215,7 +215,7 @@ System::String SpriteSheet::GetSpriteNameFromIndex(int32_t index) const {
 void SpriteSheet::GetUVs(int32_t index, float& u0, float& v0, float& u1, float& v1) const {
     float ou0 = 0.0f, ov0 = 0.0f, ou1 = 0.0f, ov1 = 0.0f;
     if (index >= 0) {
-        const SpriteInfo& e = m_sprites[index];
+        const SpriteInfo& e = m_sprites._data[index];
         ou0 = e.u0; ov0 = e.v0; ou1 = e.u1; ov1 = e.v1;
     }
     u0 = ou0; v0 = ov0; u1 = ou1; v1 = ov1;
@@ -226,7 +226,7 @@ void SpriteSheet::GetUVs(int32_t index, float& u0, float& v0, float& u1, float& 
 // no refcounted field touched. No bound check on `index`, matching retail.
 void SpriteSheet::SetSpriteInfo(int32_t index, int32_t width, int32_t height,
                                 float u0, float v0, float u1, float v1) {
-    SpriteInfo& e = m_sprites[index];
+    SpriteInfo& e = m_sprites._data[index];
     e.width = width; e.height = height;
     e.u0 = u0; e.v0 = v0; e.u1 = u1; e.v1 = v1;
 }
@@ -239,7 +239,7 @@ void SpriteSheet::SetSpriteInfo(int32_t index, int32_t width, int32_t height,
 // decompile of both 0x180003390 and its internal helper 0x180004e30).
 void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String& group,
                                 int32_t x, int32_t y, int32_t width, int32_t height) {
-    const int32_t oldCount = m_spriteCount;
+    const int32_t oldCount = m_sprites._size;
 
     SpriteInfo newEntry{};
     newEntry.name        = name._data;
@@ -254,13 +254,12 @@ void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String
 
     // The array mechanics (grow-if-needed, copy-construct with refcount bump,
     // free the old buffer) are Collection::Array<SpriteInfo>'s append-by-one
-    // body. `m_sprites` + `m_spriteCount` + `m_spriteCapacity` (+0x20/+0x28/
+    // body. `m_sprites` + `m_sprites._size` + `m_spriteCapacity` (+0x20/+0x28/
     // +0x2C) are the {data,size,capacity} triple `Collection::Array<SpriteInfo>`
     // would use, so the call bridges at the use site. `kSpec_Sprite38`
     // (0x180004e30) is NON-TRIVIAL — a String refcount bump in its element
     // assign — so it stays the hand-derived `ExplicitSpec`.
-    rtcoll::AsArray<&rtcoll::kSpec_Sprite38>(&m_sprites)
-        ->SetSizeFill(oldCount + 1, &newEntry);
+    m_sprites.SetSizeFill(oldCount + 1, &newEntry);
 }
 
 }  // namespace UI
@@ -473,37 +472,20 @@ String::operator System::String() const {
 // (0x1800C7AD0, confirmed by pefile against the export directory), which this
 // file already reaches through its existing MemFree door. No other call.
 // ---------------------------------------------------------------------------
-namespace {
-
-// Retail's member-assign, written once and used twice so the two call sites
-// cannot drift apart. `slot` is the MEMBER, taken by reference on purpose -
-// see "the free goes through the member" above.
-inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
-    char* old = slot;
-    if (old == *src) return;                 // pointer identity short-circuit
-    if (old) {
-        if (--RtSystem::StringRefCount(old) == 0) {
-            slot -= 8;                       // the member is adjusted...
-            // ...and then freed THROUGH the member, by
-            // ?MemFree@MemoryAllocator@System@@ (0x1800c7ad0).
-            System::MemoryAllocator::MemFree(slot);
-        } else {
-            slot = nullptr;                  // dead store, faithful - see banner
-        }
-    }
-    slot = *src;
-    if (slot) ++RtSystem::StringRefCount(slot);
-}
-
-}  // namespace
+// B4 X7-RT: both behaviours above are exactly `System::String::operator=`
+// (string.cpp: the buffer guard, Release() storing `data - 8` into the member
+// before MemFree or nulling it, the adopt and AddRef), so with the two members
+// typed the two call sites below are plain assignments.
 
 namespace UI {
 
 void SpriteSheet::Set(int32_t p1, int32_t p2, const System::String& p3,
                       const System::String& p4, bool p5) {
     // p4 -> +0x40 FIRST, then p3 -> +0x38. Retail's order, not source order.
-    RtUi_SpriteSheetAssignString(m_groupName,   &p4._data);
-    RtUi_SpriteSheetAssignString(m_textureName, &p3._data);
+    // Both are `String::operator=` (0x1800c9810) inlined: the guard on the
+    // buffer, the release through the member, the adopt and AddRef.
+    m_groupName   = p4;
+    m_textureName = p3;
 
     // The three scalars, in retail's store order: +0x4C, then +0x50, then +0x48.
     m_field4C = p2;

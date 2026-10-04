@@ -310,7 +310,7 @@ UNIT_TEST(ui_spritesheet_layout) {
     CHECK_EQ((int)sizeof(UI::SpriteSheet), 0x58);
     CHECK_EQ((int)alignof(UI::SpriteSheet), 8);
     CHECK_EQ((int)offsetof(UI::SpriteSheet, m_sprites),     0x20);
-    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_spriteCount), 0x28);
+    CHECK_EQ((int)(offsetof(UI::SpriteSheet, m_sprites) + 8), 0x28);   // the sprite count
     CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field30),     0x30);
     CHECK_EQ((int)offsetof(UI::SpriteSheet, m_textureName), 0x38);
     CHECK_EQ((int)offsetof(UI::SpriteSheet, m_groupName),   0x40);

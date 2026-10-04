@@ -277,11 +277,9 @@ void SaveLoadDialog::PopulateFileList() {
             int imgWidth = imageBuffer->Width();
 
             // Set spritesheet dimensions
-            // LEFT: m_textureName / m_groupName are declared as the Strings' data
-            // pointers (runtime/types/ui/SpriteSheet.h, H5).
             System::String emptyStr1(""), emptyStr2("");
-            *reinterpret_cast<System::String*>(&sheetFinal->m_groupName) = emptyStr1;  // LEFT: H5 SpriteSheet::m_groupName (R-UI)
-            *reinterpret_cast<System::String*>(&sheetFinal->m_textureName) = emptyStr2;  // LEFT: H5 SpriteSheet::m_textureName (R-UI)
+            sheetFinal->m_groupName = emptyStr1;
+            sheetFinal->m_textureName = emptyStr2;
             sheetFinal->m_field48 = imgWidth;
             sheetFinal->m_field4C = imgHeight;
             sheetFinal->m_field50 = false;   // the tree's qword zero at +0x50 (the flag and its pad)

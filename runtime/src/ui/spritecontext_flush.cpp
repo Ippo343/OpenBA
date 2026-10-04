@@ -402,7 +402,7 @@ void SpriteContext::Flush() {
             float u0 = kZero, v0 = kZero, u1 = kZero, v1 = kZero;
             const int32_t idx = d->spriteIndex;
             if (idx >= 0) {
-                const SpriteInfo& info = sheet->m_sprites[idx];
+                const SpriteInfo& info = sheet->m_sprites._data[idx];
                 u0 = info.u0; v0 = info.v0; u1 = info.u1; v1 = info.v1;
             }
 

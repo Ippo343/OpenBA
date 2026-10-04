@@ -174,7 +174,7 @@ struct SpriteExtent { int32_t width; int32_t height; };
 inline SpriteExtent ExtentOf(SpriteSheet* sheet, int32_t spriteIndex) {
     SpriteExtent e = { 0, 0 };
     if (spriteIndex < 0) return e;
-    const SpriteInfo* table = sheet->m_sprites;
+    const SpriteInfo* table = sheet->m_sprites._data;
     const SpriteInfo& info = table[static_cast<int64_t>(spriteIndex)];
     e.width  = info.width;    // entry +0x1c
     e.height = info.height;   // entry +0x20

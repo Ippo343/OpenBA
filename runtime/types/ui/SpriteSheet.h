@@ -44,6 +44,15 @@
 
 #include "../object/External.h"
 #include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
+#include "../collection/Collection.h" // B4 X7-RT: the sprite array member
+#include "../system/String.h"         // B4 X7-RT: the two String members
+
+// The hand-derived row of `Array<SpriteInfo>` (array.cpp, 0x180004e30). Its
+// destroy is Destroy38 -> 0x1800059e0 (the two Strings of each 0x38 entry,
+// kD_Str2_38), which is what retail's ~Array 0x180004f50 runs before its free.
+namespace rtcoll {
+extern const ArraySpec kSpec_Sprite38;
+}
 
 namespace System   { class Filename; class String; }
 namespace Graphics { class MaterialInstance; }
@@ -236,13 +245,11 @@ public:
     // `??0SpriteSheet@UI@@QEAA@XZ` 0x18011d600 — the REAL constructor, PUBLIC:
     // External() and the stamps are the compiler's, then the stores below;
     // +0x51..+0x57 are never written.
-    SpriteSheet() {
-        m_sprites = nullptr;                  // +0x20
-        m_spriteCount = 0;                    // +0x28 } one qword
-        m_spriteCapacity = 0;                 //       }
-        m_field30 = nullptr;                  // +0x30
-        m_textureName = nullptr;              // +0x38
-        m_groupName = nullptr;                // +0x40
+    // B4 X7-RT: the Array and the two Strings are members; m_field30 joins
+    // them in the init list so the stores keep retail's order (+0x20/+0x28,
+    // +0x30, +0x38, +0x40, then the body's +0x48 / +0x50).
+    SpriteSheet()
+        : m_sprites(), m_field30(nullptr), m_textureName(), m_groupName() {
         m_field48 = 0;                        // +0x48 } one qword
         m_field4C = 0;                        //       }
         m_field50 = false;                    // +0x50 (BYTE)
@@ -250,12 +257,16 @@ public:
 
 public:
     // ---- the 0x38 bytes SpriteSheet adds after Object::External ------------
-    SpriteInfo* m_sprites;          // +0x20  Collection::Array<SpriteInfo>._data
-    int32_t     m_spriteCount;      // +0x28  Collection::Array<SpriteInfo>._size  (GetSpriteCount)
-    int32_t     m_spriteCapacity;   // +0x2C  Collection::Array<SpriteInfo>._capacity
+    // B4 X7-RT (`behaviour:`): typed members. Retail's ~SpriteSheet
+    // 0x18011d670 releases +0x40, then +0x38, then calls ~Array<SpriteInfo>
+    // 0x180004f50 on +0x20 (each entry's two Strings, then the buffer), then
+    // ~External: reverse declaration order after the (empty) body.
+    Collection::Array<SpriteInfo, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_Sprite38>>
+                m_sprites;          // +0x20  {data, size +0x28 (GetSpriteCount), capacity +0x2c}
     Graphics::MaterialInstance* m_field30; // +0x30  ExternalPtr<Graphics::MaterialInstance> (banner; B4 P2 H4: typed, serializer 0x180014520)
-    char*       m_textureName;      // +0x38  System::String data ptr — Set's p3
-    char*       m_groupName;        // +0x40  System::String data ptr — Set's p4
+    System::String m_textureName;   // +0x38  Set's p3
+    System::String m_groupName;     // +0x40  Set's p4
     int32_t     m_field48;          // +0x48  Set's p1
     int32_t     m_field4C;          // +0x4C  Set's p2
     bool        m_field50;          // +0x50  Set's p5; Serialize(bool&) 0x18011d7ba
@@ -268,8 +279,8 @@ static_assert(sizeof(SpriteSheet) == 0x58,
               "UI::SpriteSheet is 0x58 bytes (MOV EDX,0x58 in slot 0, 0x1800037b0)");
 static_assert(alignof(SpriteSheet) == 8, "UI::SpriteSheet aligns to 8 (the vptr)");
 static_assert(offsetof(SpriteSheet, m_sprites) == 0x20, "m_sprites at +0x20");
-static_assert(offsetof(SpriteSheet, m_spriteCount) == 0x28, "m_spriteCount at +0x28");
-static_assert(offsetof(SpriteSheet, m_spriteCapacity) == 0x2C, "m_spriteCapacity at +0x2C");
+static_assert(offsetof(SpriteSheet, m_sprites) + 0x08 == 0x28, "the sprite count at +0x28");
+static_assert(offsetof(SpriteSheet, m_sprites) + 0x0c == 0x2C, "the sprite capacity at +0x2C");
 static_assert(offsetof(SpriteSheet, m_field30) == 0x30, "m_field30 at +0x30");
 static_assert(offsetof(SpriteSheet, m_textureName) == 0x38, "m_textureName at +0x38");
 static_assert(offsetof(SpriteSheet, m_groupName) == 0x40, "m_groupName at +0x40");
