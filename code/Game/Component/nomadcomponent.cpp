@@ -97,7 +97,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
                         s_hits, static_cast<void*>(this));
                 fflush(stderr);
             }
-            Toolbar_ShowGroup_Impl(this, 0);   // 0x140102b60
+            SelectTool(nullptr);   // 0x140102b60
         }
     }
 

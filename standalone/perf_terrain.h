@@ -19,25 +19,27 @@
 #pragma once
 #include <cstdint>
 
+struct MapCell;   // Game/Map.h: the 0x30-byte cell record, terrain type at +0x29
+
 namespace PerfX {
 
 extern uint8_t*       g_terrainSC;        // mirror, count bytes (null = off / not built)
-extern const uint8_t* g_terrainSCBase;    // cell array the mirror was built from
+extern const MapCell* g_terrainSCBase;    // cell array the mirror was built from
 extern int            g_terrainSCCount;
 extern int            g_terrainVerify;    // BANISHED_PERF_TERRAIN_VERIFY
 
 // Slow path: (re)build for a new grid, verify, or plain raw read when the knob is off.
-uint8_t TerrainGetSlow(const uint8_t* cells, int count, int idx);
+uint8_t TerrainGetSlow(const MapCell* cells, int count, int idx);
 
 // Hot read of cells[idx].type. `cells`/`count` = the {data,count} header at Game+0x80.
-inline uint8_t TerrainGet(const uint8_t* cells, int count, int idx) {
+inline uint8_t TerrainGet(const MapCell* cells, int count, int idx) {
     if (cells == g_terrainSCBase && (unsigned)idx < (unsigned)g_terrainSCCount && !g_terrainVerify)
         return g_terrainSC[idx];
     return TerrainGetSlow(cells, count, idx);
 }
 
-// Call right AFTER storing cellPtr[0x29]; copies the new byte into the mirror.
-void TerrainNoteWrite(const uint8_t* cellPtr);
+// Call right AFTER storing cellPtr->terrainType; copies the new byte into the mirror.
+void TerrainNoteWrite(const MapCell* cellPtr);
 // Bulk rewrite / grid freed: forget the mirror (rebuilt lazily on the next read).
 void TerrainInvalidate();
 // End-of-run report (verify mode); safe to call any time.

@@ -156,9 +156,9 @@ extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum)
                     // The four trailing arguments (0 / 0 / 0 / nullptr, as the
                     // old raw call already passed) are the harness's choice:
                     // retail has no such caller.
-                    void* nullElem = nullptr;
+                    Object::InternalPtr<UI::Element> nullElem;   // null; InternalPtr's ctor / dtor are trivial
                     static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // through the base slot (an upcast)
-                        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),   // LEFT: OTHER a raw null Element* local handed where OnElementEvent takes InternalPtr<Element>* (an InternalPtr local would construct / destroy a handle)
+                        &nullElem,
                         0x12, id, 0, 0, 0, nullptr);
                 }
             }

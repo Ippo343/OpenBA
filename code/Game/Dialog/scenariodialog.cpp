@@ -286,9 +286,9 @@ void ScenarioDialog::LoadSelected() {
         // 0x1400b4540 stores args 6/7/8 into GameUpdateLoop +0x40/+0x48/+0x50, which
         // Load reads as mapGen / terrainGen / climateGen. The positional order passed
         // below is unchanged and already matched retail - only the names were wrong.
-        void* mapGen = scenario->mapGenerator;
-        void* terrainGen = scenario->terrainGenerator;
-        void* climateGen = scenario->climateGenerator;
+        MapGenerator*     mapGen     = scenario->mapGenerator;
+        TerrainGenerator* terrainGen = scenario->terrainGenerator;
+        ClimateGenerator* climateGen = scenario->climateGenerator;
 
         // The scenario's index in the ScenarioList
         uint32_t scenarioResIdx = static_cast<uint32_t>(selectedEntry.resourceIndex);
@@ -302,7 +302,8 @@ void ScenarioDialog::LoadSelected() {
         printf("[ScenarioDialog::LoadSelected] NEW SCENARIO: seed=%u, terrainSize=%u, disasterOff=%d, scenarioResIdx=%u\n",
                seedVal, terrainSizeVal, (int)disasterOff, scenarioResIdx);
         printf("[ScenarioDialog::LoadSelected] mapGen=%p, terrainGen=%p, climateGen=%p, parentCtrl=%p\n",
-               mapGen, terrainGen, climateGen, static_cast<void*>(parentCtrl));
+               static_cast<void*>(mapGen), static_cast<void*>(terrainGen), static_cast<void*>(climateGen),
+               static_cast<void*>(parentCtrl));
 
         // 0x1400b4540 MainMenuDialog::StartNewGame — constructs GameUpdateLoop ->
         // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop. Retail hands

@@ -40,8 +40,8 @@
 namespace {
 constexpr float    kDAT_140172260 =  4096.0f;    // 0x45800000  (UV tile-size const)
 constexpr float    kDAT_140172280 = -1.0f;       // 0xbf800000
-constexpr uint32_t kDAT_140172114 = 0x3f000000;  // 0.5f packed bits (uVar8 seed)
-constexpr uint32_t kDAT_1401722c0 = 0x80000000;  // XORPS sign-flip mask (the negate)
+constexpr float    kDAT_140172114 =  0.5f;       // 0x3f000000  (the rotation seed)
+// 0x1401722c0 (0x80000000) is the XORPS sign mask retail negates the seed with: a float negate.
 constexpr uint8_t  kDAT_1401c23cf = 0x2e;        // base index byte (iVar13 seed = 46)
 }  // namespace
 
@@ -58,32 +58,10 @@ namespace {
 // System::MemoryAllocator::MemAlloc / MemFree.
 //
 // ---- engine Transform2/Vector2 ops (.rdata dispatch slots), called as the members of
-// Math::Transform2 / Math::Vector2 exactly as their C doors (RtMath_*) did:
-//   0x140151e58 Vector2::Vector2()            -> *p = Math::Vector2()
-//   0x140152648 Transform2(Scalar&, Vector2&)  -> *self = Math::Transform2(s, v)
-//   0x140152650 Transform2::FromYawOffset      -> *ret = Transform2::FromYawOffset(s, v)
-//   0x140152640 Transform2::operator*(T2)      -> *ret = lhs * rhs   (RCX=lhs, RDX=ret, R8=rhs)
-//   0x140152658 Transform2::operator*(Vector2) -> *ret = self * v    (RCX=self, RDX=ret, R8=v)
-inline void* T2Ctor(void* self, const void* s, const void* v) {   // B.3.x bridge
-    *static_cast<Math::Transform2*>(self) = Math::Transform2(   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        *static_cast<const Math::Scalar*>(s), *static_cast<const Math::Vector2*>(v));   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-    return self;
-}
-inline void* T2FromYawOffset(void* ret, const void* s, const void* v) {   // B.3.x bridge
-    *static_cast<Math::Transform2*>(ret) = Math::Transform2::FromYawOffset(   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        *static_cast<const Math::Scalar*>(s), *static_cast<const Math::Vector2*>(v));   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-    return ret;
-}
-inline void* T2MulT2(const void* lhs, void* ret, const void* rhs) {   // B.3.x bridge
-    *static_cast<Math::Transform2*>(ret) =   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        *static_cast<const Math::Transform2*>(lhs) * *static_cast<const Math::Transform2*>(rhs);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-    return ret;
-}
-inline void* T2MulVec(const void* self, void* ret, const void* v) {   // B.3.x bridge
-    *static_cast<Math::Vector2*>(ret) =   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        *static_cast<const Math::Transform2*>(self) * *static_cast<const Math::Vector2*>(v);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-    return ret;
-}
+// Math::Transform2 / Math::Vector2, each constructing / returning into its stack block:
+//   0x140151e58 Vector2::Vector2()            0x140152648 Transform2(Scalar&, Vector2&)
+//   0x140152650 Transform2::FromYawOffset     0x140152640 Transform2::operator*(Transform2)
+//   0x140152658 Transform2::operator*(Vector2)
 
 // The two growable lists inside a highlight slot (GeometryBatch::vertices / indices):
 //   +0x08 {data, size, cap}  GeometryBatchVertex records, 0x14 bytes each (the pool ->
@@ -103,10 +81,18 @@ inline void* T2MulVec(const void* self, void* ret, const void* v) {   // B.3.x b
 using TessVertexArray = Collection::Array<GeometryBatchVertex>;
 using TessIndexArray  = Collection::Array<uint16_t>;
 
+// cc10's output: retail's 0x60-byte stack block, the four 0x14-byte corner records
+// first. No constructor: retail does not initialise it.
+struct TessCornerBlock {
+    GeometryBatchVertex corner[4];    // +0x00 / +0x14 / +0x28 / +0x3C
+    uint8_t             _tail[0x10];  // +0x50
+};
+static_assert(sizeof(TessCornerBlock) == 0x60, "the ace40 corner block is 0x60 bytes");
+
 // AppendIndex — inlined "append one short index to the growable index buffer at
 // slot+0x18/+0x20/+0x24" block (orig emits it verbatim per triangle vertex).
 inline void AppendIndex(GeometryBatch* batch, uint16_t idx) {
-    TessIndexArray* a = reinterpret_cast<TessIndexArray*>(&batch->indices);   // LEFT: GeometryBatch::indices is a RawArray, not a Collection::Array (Game/WorldGeometryElements.h, not PLAYER's)
+    TessIndexArray* a = reinterpret_cast<TessIndexArray*>(&batch->indices);   // LEFT: GeometryBatch::indices is a RawArray, not a Collection::Array (Game/WorldGeometryElements.h, X6-GAME-A partition; typing it is an H5 member change of GeometryBatch)
     a->SetSize(a->_size + 1, idx);
 }
 
@@ -114,18 +100,15 @@ inline void AppendIndex(GeometryBatch* batch, uint16_t idx) {
 // then append that index to the index buffer.
 inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
                        RawArray<GeometryBatchVertex>* pool,
-                       uint32_t* desc, DecalVertexNode** outNode) {
-    // LEFT: the corner records are raw dwords of this body's 0x60-byte stack block
-    // (cc10 writes them through an int64_t); the set reads their first 0x14 bytes as
-    // the key.
-    DecalVertexNode* node = DecalVertexSetFind(set, reinterpret_cast<const DecalVertexKey*>(desc));   // 0x14001fc00   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
+                       const GeometryBatchVertex* desc, DecalVertexNode** outNode) {
+    // The set is searched with the corner record itself (its 0x14 bytes are the key).
+    DecalVertexNode* node = DecalVertexSetFind(set, desc);   // 0x14001fc00
     uint16_t idx;
     if (node == nullptr) {
         int curCount = pool->size;
-        uint32_t rec[6];
-        rec[0] = desc[0]; rec[1] = desc[1]; rec[2] = desc[2];
-        rec[3] = desc[3]; rec[4] = desc[4];
-        rec[5] = (uint32_t)curCount;          // CONCAT44((int)local_2c8, local_268)
+        DecalVertexKey rec;
+        rec.vertex = *desc;
+        rec.index  = curCount;                // CONCAT44((int)local_2c8, local_268)
         idx = (uint16_t)curCount;
         // CRITICAL argument split (matches ace40 disasm exactly): the BST insert stores
         // `rec` — the 6-int key whose +0x14 slot is the vertex INDEX — so that a later
@@ -133,8 +116,8 @@ inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
         // raw `desc` (position + UVs). Passing these swapped makes node+0x14 hold garbage
         // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
         // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
-        DecalVertexSetInsert(set, outNode, reinterpret_cast<const DecalVertexKey*>(rec));   // 0x14001f6b0 (key = rec) LEFT: as above   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        Pf_VectorResize14Fill_f8d0(pool, curCount + 1, reinterpret_cast<const GeometryBatchVertex*>(desc));   // 0x14001f8d0 (vertex = desc) LEFT: the corner record is raw dwords (above)   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
+        DecalVertexSetInsert(set, outNode, &rec);               // 0x14001f6b0 (key = rec)
+        Pf_VectorResize14Fill_f8d0(pool, curCount + 1, desc);   // 0x14001f8d0 (vertex = desc)
     } else {
         idx = (uint16_t)node->key.index;   // the low word (retail reads a word at node+0x14)
     }
@@ -154,17 +137,13 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     int iVar24 = (batch->maxX - batch->minX) + 1; // width
     int iVar28 = (batch->maxY - batch->minY) + 1; // height
 
-    // four scratch Vector2 (local_1d8..local_1c0); ctor x4.
-    uint8_t cornerBuf[0x20];
-    {
-        uint8_t* p = cornerBuf;
-        for (int i = 3; i >= 0; --i) { *reinterpret_cast<Math::Vector2*>(p) = Math::Vector2(); p += 8; }   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-    }
+    // four scratch Vector2 (local_1d8..local_1c0); ctor (0x140151e58) x4.
+    Math::Vector2 corner[4];
 
     float fVar3 = fUV;
     char  cVar1 = batch->field_0x44;   // modeFlag
 
-    uint32_t uVar8 = 0;
+    float fVar8 = 0.0f;   // the rotation seed (uVar8)
     float fVar33 = 0.0f;
     float fVar31, fVar32, fVar34, fVar35, fVar36;
     float local_288, fStack_284;
@@ -181,7 +160,7 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
         fStack_284 = fUV;
         local_290_hi = kDAT_140172280;
         fVar36 = fUV;
-        uVar8 = kDAT_140172114;
+        fVar8 = kDAT_140172114;
     } else {
         fVar36 = (float)iVar24;
         local_290_hi = (float)iVar28;
@@ -193,9 +172,9 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
         fVar35 = fUV;
     }
 
-    int   local_2a0 = 0;
-    float local_29c = (float)batch->field_0x40;
-    int   local_2b0_0 = 0;
+    Math::Scalar local_2a0;                                // 0.0f
+    Math::Scalar local_29c((float)batch->field_0x40);     // yawDeg
+    Math::Scalar local_2b0_0;                              // 0.0f
 
     uint64_t local_208 = (uint64_t)(uint32_t&)fVar35;  // CAST-OK: float_bits
     uint64_t local_200 = (uint64_t)(uint32_t&)fVar35 << 0x20;  // CAST-OK: float_bits
@@ -205,12 +184,11 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     uint64_t local_220 = local_280;
     uint64_t local_218 = (uint64_t)(uint32_t&)fVar32 << 0x20;  // CAST-OK: float_bits
     uint64_t local_210 = ((uint64_t)(uint32_t&)fVar34 << 32) | (uint32_t&)fVar33;  // CAST-OK: float_bits
-    uint64_t local_228 = ((uint64_t)uVar8 << 32) | uVar8;
+    Math::Vector2 local_228(fVar8, fVar8);
 
-    float local_298[2] = {0.0f, 0.0f};
+    Math::Vector2 local_298;
 
-    uint32_t negSeed = uVar8 ^ kDAT_1401722c0;
-    uint64_t local_2a8 = ((uint64_t)negSeed << 32) | negSeed;
+    Math::Vector2 local_2a8(-fVar8, -fVar8);   // XORPS with the sign mask at 0x1401722c0
 
     uint32_t local_290_lo = 0;
     local_280 = (uint64_t)(uint32_t&)fVar36;  // CAST-OK: float_bits
@@ -220,8 +198,6 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
 
     // Transform2 chain (orig slots 0x140152648/650/640). Each Transform2 is 0x18 bytes
     // (6 floats: [m00, m01, m10, m11, tx, ty]).
-    uint8_t T_138[0x18], T_168[0x18], T_108[0x18];
-    uint8_t T_160[0x18], T_148[0x18], T_118[0x18], T_e8[0x18], T_1f0[0x18];
 
     // The three "raw data" operands of the operator* chain. CRITICAL: these MUST be
     // contiguous 0x18-byte Transform2 buffers. The prior port built them from separate,
@@ -235,9 +211,13 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     //   T_1f0 = ((((flip * r108) * r168) * r138) * uvRect) * scale
     // Layout confirmed from the disasm store pattern (e.g. RBP+0x18 = [fVar31,0,0,fVar32,
     // fVar33,fVar34] = uvRect; RBP+0x30 = [fVar35,0,0,fVar35,0,0] = scale; RSP+0x50 = flip).
-    float TF_flip[6]   = { fVar36, 0.0f, 0.0f, local_290_hi, local_288, fStack_284 };
-    float TF_uvRect[6] = { fVar31, 0.0f, 0.0f, fVar32,       fVar33,    fVar34    };
-    float TF_scale[6]  = { fVar35, 0.0f, 0.0f, fVar35,       0.0f,      0.0f      };
+    Math::Transform2 TF_flip, TF_uvRect, TF_scale;
+    TF_flip.rotX   = Math::Vector2(fVar36, 0.0f);   TF_flip.rotY   = Math::Vector2(0.0f, local_290_hi);
+    TF_flip.translation   = Math::Vector2(local_288, fStack_284);
+    TF_uvRect.rotX = Math::Vector2(fVar31, 0.0f);   TF_uvRect.rotY = Math::Vector2(0.0f, fVar32);
+    TF_uvRect.translation = Math::Vector2(fVar33, fVar34);
+    TF_scale.rotX  = Math::Vector2(fVar35, 0.0f);   TF_scale.rotY  = Math::Vector2(0.0f, fVar35);
+    TF_scale.translation  = Math::Vector2(0.0f, 0.0f);
 
     // FromYawOffset (0x140152650) reads an 8-byte (Vector2) OFFSET from R8. The disasm
     // passes a dedicated zeroed slot ([RBP-0x60] = MOV qword,0 → {0,0}); we must give it a
@@ -247,34 +227,28 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     // (v0=0.844 → 0.688, still positive) but top-row cells (v0=0) folded NEGATIVE → sampled
     // off-atlas → transparent → houses/stockpiles invisible. Verified via [ace40::op] trace:
     // with {0,0} r168 offset, decal V now maps positive/in-atlas (barn f5=3456=0.84375·4096).
-    float yawOffset[2] = { 0.0f, 0.0f };   // disasm [RBP-0x60] clean {0,0}
-    void* r138 = nullptr; void* r168 = nullptr; void* r108 = nullptr;
-    r138 = T2Ctor(T_138, &local_2a0, &local_228);                             // 0x140152648 (ctor1)
-    r168 = T2FromYawOffset(T_168, &local_29c, yawOffset);                     // 0x140152650 (yawOff)
-    r108 = T2Ctor(T_108, &local_2b0_0, &local_2a8);                           // 0x140152648 (ctor3)
+    Math::Vector2 yawOffset;   // disasm [RBP-0x60] clean {0,0}
+    const Math::Transform2 T_138(local_2a0, local_228);                                     // 0x140152648 (ctor1)
+    const Math::Transform2 T_168 = Math::Transform2::FromYawOffset(local_29c, yawOffset);   // 0x140152650 (yawOff)
+    const Math::Transform2 T_108(local_2b0_0, local_2a8);                                   // 0x140152648 (ctor3)
 
-    {
-        void* acc;
-        acc = T2MulT2(TF_flip, T_160, r108);   // 0x140152640  flip   * ctor3(r108)
-        acc = T2MulT2(acc, T_148, r168);        //              (..)   * yawOff(r168)
-        acc = T2MulT2(acc, T_118, r138);        //              (..)   * ctor1(r138)
-        acc = T2MulT2(acc, T_e8,  TF_uvRect);   //              (..)   * uvRect
-        acc = T2MulT2(acc, T_1f0, TF_scale);    //              (..)   * scale  -> T_1f0
-        (void)acc;
-    }
+    const Math::Transform2 T_160 = TF_flip * T_108;     // 0x140152640  flip   * ctor3
+    const Math::Transform2 T_148 = T_160 * T_168;       //              (..)   * yawOff
+    const Math::Transform2 T_118 = T_148 * T_138;       //              (..)   * ctor1
+    const Math::Transform2 T_e8  = T_118 * TF_uvRect;   //              (..)   * uvRect
+    const Math::Transform2 T_1f0 = T_e8 * TF_scale;     //              (..)   * scale
 
 
-    // 4 unit-quad corners via operator*(Vector2). Packed corner cycles {0,0},{1,0},{1,1},{0,1}.
-    uint64_t* corner = reinterpret_cast<uint64_t*>(cornerBuf);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-    auto mulVec = [&](uint64_t packedCorner) -> uint64_t {
-        local_2a8 = packedCorner;
-        uint64_t* r = reinterpret_cast<uint64_t*>(T2MulVec(T_1f0, local_298, &local_2a8));   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        return *r;
+    // 4 unit-quad corners via operator*(Vector2) (0x140152658): {0,0},{1,0},{1,1},{0,1}.
+    auto mulVec = [&](const Math::Vector2& unitCorner) -> Math::Vector2 {
+        local_2a8 = unitCorner;
+        local_298 = T_1f0 * local_2a8;
+        return local_298;
     };
-    corner[0] = mulVec(0x0);                   // {0,0}
-    corner[1] = mulVec(0x3f800000ULL);         // {1,0}
-    corner[2] = mulVec(0x3f8000003f800000ULL); // {1,1}
-    corner[3] = mulVec(0x3f80000000000000ULL); // {0,1}
+    corner[0] = mulVec(Math::Vector2(0.0f, 0.0f));
+    corner[1] = mulVec(Math::Vector2(1.0f, 0.0f));
+    corner[2] = mulVec(Math::Vector2(1.0f, 1.0f));
+    corner[3] = mulVec(Math::Vector2(0.0f, 1.0f));
 
     // dedup pool + BST.
     RawArray<GeometryBatchVertex> pool = {nullptr, 0, 0};
@@ -283,12 +257,9 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     int iVar13 = (int)kDAT_1401c23cf;
     fVar33 = (float)((batch->maxX + batch->minX) >> 1);
     int iVar25 = (batch->maxY + batch->minY) >> 1;
-    int64_t* plVar30 = reinterpret_cast<int64_t*>(&batch->vertices);   // LEFT: the 8+8+4 record copy below reads the vertex buffer through it
-    local_2b0_0 = iVar13;
-    local_2a0   = iVar25;
-    local_29c   = fVar33;
-    // (retail spills plVar30 to the local_228 slot here and reloads it at the end of
-    // each row; the round trip computes nothing and is not modelled.)
+    // (retail reuses the local_2b0 / local_2a0 / local_29c slots for iVar13 / iVar25 /
+    // fVar33 here, and spills plVar30 to the local_228 slot and reloads it at the end of
+    // each row; nothing reads them back, and they are not modelled.)
 
     // free + reset the slot's vertex and index buffers.
     // ENDGAME B.3.2 step 2: both WERE inlined Collection::Array<T>::~Array bodies
@@ -297,8 +268,8 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     // ppvVar9 keeps the pre-free index pointer because the fnE180 call below still
     // feeds its upper bytes through a register-passthrough byte argument.
     uint16_t* ppvVar9 = batch->indices.data;
-    reinterpret_cast<TessVertexArray*>(&batch->vertices)->~Array();   // LEFT: GeometryBatch's lists are RawArray, not Collection::Array (Game/WorldGeometryElements.h)
-    reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();     // LEFT: GeometryBatch's lists are RawArray, not Collection::Array (Game/WorldGeometryElements.h)
+    reinterpret_cast<TessVertexArray*>(&batch->vertices)->~Array();   // LEFT: GeometryBatch::vertices / indices are RawArray, not Collection::Array (Game/WorldGeometryElements.h, X6-GAME-A partition; typing them is an H5 member change of GeometryBatch)
+    reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();     // LEFT: GeometryBatch::vertices / indices are RawArray, not Collection::Array (Game/WorldGeometryElements.h, X6-GAME-A partition; typing them is an H5 member change of GeometryBatch)
 
     DecalVertexNode* outNode;
 
@@ -335,12 +306,11 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
                                 (char)(iVar25b <= iVar13b), (char)(iVar14 <= iVar11),
                                 (char)(batch->minY <= iVar18 - 1),
                                 (char)bVar2, cVar12, cVar17, cVar23, cVar26);
-                            local_2b0_0 = iVar13;
                         }
 
                         // cc10: emit the 4 corner descriptors into descBlock.
-                        uint8_t descBlock[0x60];
-                        Pf_RoadQuad_cc10(reinterpret_cast<int64_t>(param_1), iVar22, iVar18, (int64_t)descBlock, iVar13,   // LEFT: SIG Pf_RoadQuad_cc10 (Action/exe_bodies.h, WORK's B4 FORWARD) takes the geometry and descBlock (retail's 0x60-byte stack buffer of 0x14-byte vertices, read by offset below) as int64_t
+                        TessCornerBlock descBlock;
+                        Pf_RoadQuad_cc10(reinterpret_cast<int64_t>(param_1), iVar22, iVar18, (int64_t)&descBlock, iVar13,   // LEFT: SIG Pf_RoadQuad_cc10 (Action/exe_bodies.h, defined in X6-CW's action_pf_road.cpp) takes the geometry and the corner block as int64_t
                                          batch->field_0x3C);
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.
@@ -351,26 +321,24 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
                             xOff[2] = 1; xOff[3] = 0;   // {1,0}
                             yOff[0] = 0; yOff[1] = 0;   // {0,0}
                             yOff[2] = 1; yOff[3] = 1;   // {1,1}
-                            int16_t* puVar19 = reinterpret_cast<int16_t*>(descBlock + 0xA);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
                             for (int64_t k = 0; k < 4; ++k) {
                                 float u = (float)((xOff[k] - batch->minX) + iVar22)
                                           * (fVar3 / (float)iVar24);
                                 float v = (float)((yOff[k] - batch->minY) + iVar18)
                                           * (fVar3 / (float)iVar28);
-                                local_2a8 = ((uint64_t)(uint32_t&)v << 32) | (uint32_t&)u;  // CAST-OK: float_bits
-                                T2MulVec(T_1f0, local_298, &local_2a8);
-                                puVar19[-1] = (int16_t)(int)local_298[0];
-                                puVar19[0]  = (int16_t)(int)local_298[1];
-                                puVar19 += 10;
+                                local_2a8 = Math::Vector2(u, v);
+                                local_298 = T_1f0 * local_2a8;   // 0x140152658
+                                descBlock.corner[k].uv[0] = (int16_t)(int)local_298.x;   // +0x08
+                                descBlock.corner[k].uv[1] = (int16_t)(int)local_298.y;   // +0x0A
                             }
                         }
 
-                        uint32_t* c0 = reinterpret_cast<uint32_t*>(descBlock + 0x00);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-                        uint32_t* c1 = reinterpret_cast<uint32_t*>(descBlock + 0x14);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-                        uint32_t* c2 = reinterpret_cast<uint32_t*>(descBlock + 0x28);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-                        uint32_t* c3 = reinterpret_cast<uint32_t*>(descBlock + 0x3c);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
+                        const GeometryBatchVertex* c0 = &descBlock.corner[0];   // +0x00
+                        const GeometryBatchVertex* c1 = &descBlock.corner[1];   // +0x14
+                        const GeometryBatchVertex* c2 = &descBlock.corner[2];   // +0x28
+                        const GeometryBatchVertex* c3 = &descBlock.corner[3];   // +0x3c
 
-                        auto emit = [&](uint32_t* desc) {
+                        auto emit = [&](const GeometryBatchVertex* desc) {
                             EmitVertex(batch, &bst, &pool, desc, &outNode);
                         };
 
@@ -397,12 +365,12 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     // finalize: copy pooled vertices into the slot's vertex buffer.
     Pf_VectorResize14_ee40(&batch->vertices, pool.size);
     int     total   = pool.size;
-    int64_t vbBase  = *plVar30;
-    int64_t srcBase = reinterpret_cast<int64_t>(pool.data);   // LEFT: the 8+8+4 record copy below is retail's (0x1400ace40); a GeometryBatchVertex assignment would change its store widths
+    int64_t vbBase  = reinterpret_cast<int64_t>(batch->vertices.data);   // LEFT: the 8 + 8 + 4 vertex copy below (see srcBase)
+    int64_t srcBase = reinterpret_cast<int64_t>(pool.data);   // LEFT: the record copy below moves each 0x14-byte vertex as 8 + 8 + 4 bytes; a GeometryBatchVertex assignment compiles to one 16-byte + one 4-byte move (B11 -O2), a store-width change
     for (int64_t off = 0, i = 0; i < total; ++i, off += 0x14) {
-        *reinterpret_cast<int64_t*>(off + vbBase)        = *reinterpret_cast<int64_t*>(off + srcBase);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        *reinterpret_cast<int64_t*>(off + 8 + vbBase)    = *reinterpret_cast<int64_t*>(off + 8 + srcBase);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
-        *reinterpret_cast<int32_t*>(off + 0x10 + vbBase) = *reinterpret_cast<int32_t*>(off + 0x10 + srcBase);   // LEFT: TradeWork_impl_ace40 (0x1400ace40) works on retail's raw stack blocks (cornerBuf, descBlock, the packed T2 qwords) and int64_t bases: typing them is a rewrite of the body, not a cast removal
+        *reinterpret_cast<int64_t*>(off + vbBase)        = *reinterpret_cast<int64_t*>(off + srcBase);   // LEFT: 8-byte move of the 8 + 8 + 4 vertex copy (see srcBase above)
+        *reinterpret_cast<int64_t*>(off + 8 + vbBase)    = *reinterpret_cast<int64_t*>(off + 8 + srcBase);   // LEFT: 8-byte move of the 8 + 8 + 4 vertex copy (see srcBase above)
+        *reinterpret_cast<int32_t*>(off + 0x10 + vbBase) = *reinterpret_cast<int32_t*>(off + 0x10 + srcBase);   // LEFT: 4-byte move of the 8 + 8 + 4 vertex copy (see srcBase above)
     }
 
     // free the BST + vertex pool.
@@ -417,5 +385,5 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
 
     (void)local_208; (void)local_200; (void)local_1f8; (void)local_280; (void)local_220;
     (void)local_218; (void)local_210; (void)local_290_lo; (void)local_2e8; (void)uStack_2e0;
-    (void)local_2d8; (void)corner; (void)r138; (void)r168; (void)r108;
+    (void)local_2d8; (void)corner;
 }

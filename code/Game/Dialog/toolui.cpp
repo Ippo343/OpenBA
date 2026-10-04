@@ -550,8 +550,8 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
                         // selection highlight (reads the entity from the tool's
                         // selection, so call it BEFORE nulling), then drop both the
                         // dialog ref and the selected-entity ref.
-                        HighlightClear_Impl(activeTool);   // 0x1400fcb40
                         EditTool* editTool = static_cast<EditTool*>(activeTool);
+                        HighlightClear_Impl(editTool);   // 0x1400fcb40
                         editTool->entityRef = 0;
                         editTool->lastEntityRef = 0;
                     }
