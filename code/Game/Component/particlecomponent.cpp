@@ -205,7 +205,7 @@ void ParticleComponent::Place(int index) {
             if (*reinterpret_cast<const System::String*>(&arr[j].name) == em.name) {
                 const float zero = 0.0f;
                 const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
-                    zero, zero, *reinterpret_cast<const Math::Vector3*>(arr[j].pos));
+                    zero, zero, arr[j].pos);
                 // Math::Transform::operator*(const Transform&) — slot 0x140151430.
                 const Math::Transform prod = ypo * tf;
                 pos = prod.translation;
@@ -708,9 +708,8 @@ void ParticleComponent::Tick(void* time) {
                         const Math::Transform modelTf =
                             model->transform;
                         const float zero = 0.0f;
-                        // LEFT: PointList::Point keeps its position raw (runtime header).
                         const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
-                            zero, zero, *reinterpret_cast<const Math::Vector3*>(arr[ge->nodeIndex].pos));
+                            zero, zero, arr[ge->nodeIndex].pos);
                         // Math::Transform::operator*(const Transform&) — slot 0x140151430.
                         tf = ypo * modelTf;
                         have = true;

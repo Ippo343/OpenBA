@@ -93,10 +93,9 @@ using Point = Pathfinding::PointList::Point;
 // both reach it by rel32, and at cutover that rel32 will not exist.
 void ReleasePointsRange(Point* data, int count) {
     for (int i = 0; i < count; ++i) {
-        // The release idiom IS `~String` (0x180006c80). `Point::name` keeps its
-        // raw-pointer type (PointList.h), so the destructor is spelled out
-        // over the same eight bytes.
-        reinterpret_cast<System::String*>(&data[i].name)->~String();  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+        // The release idiom IS `~String` (0x180006c80), run on the element's
+        // String in place: the element itself is raw storage (PointList.h).
+        data[i].name.~String();
     }
 }
 
@@ -129,21 +128,21 @@ void PointArraySetSize(Collection::Array<Point>* a, int32_t newSize) {
             // could free a String the new buffer still points at. Fixed while
             // registering the address (batch D2, 2026-09-12).
             const Point* src = &oldData[i];
-            dst->name = nullptr;
-            if (char* s = src->name) {
-                dst->name = s;
+            dst->name._data = nullptr;
+            if (char* s = src->name._data) {
+                dst->name._data = s;
                 ++RtSystem::StringRefCount(s);
             }
-            dst->pos[0] = src->pos[0];
-            dst->pos[1] = src->pos[1];
-            dst->pos[2] = src->pos[2];
+            dst->pos.x = src->pos.x;
+            dst->pos.y = src->pos.y;
+            dst->pos.z = src->pos.z;
             dst->radius = src->radius;
         } else {
             // retail's else arm: THREE zero qwords over the whole 0x18 stride
-            dst->name   = nullptr;                // +0x00
-            dst->pos[0] = 0.0f;                   // +0x08 qword (pos[0], pos[1]), H7
-            dst->pos[1] = 0.0f;
-            dst->pos[2] = 0.0f;                   // +0x10 qword (pos[2], radius), H7
+            dst->name._data = nullptr;            // +0x00
+            dst->pos.x  = 0.0f;                   // +0x08 qword (pos.x, pos.y), H7
+            dst->pos.y  = 0.0f;
+            dst->pos.z  = 0.0f;                   // +0x10 qword (pos.z, radius), H7
             dst->radius = 0.0f;
         }
     }
@@ -250,10 +249,8 @@ bool PointList::Serialize(IO::Stream& streamv) {
         if (stream->direction == 0) PointArraySetSize(arr, n);
         for (int32_t i = 0; i < n; ++i) {
             Point* p = &arr->_data[i];
-            // `Point::name` keeps its raw-pointer type (PointList.h), so the
-            // member call is spelled over the same eight bytes.
-            reinterpret_cast<System::String*>(&p->name)->Serialize(&ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
-            rwc->SerializeFloatArray(3, p->pos, nullptr);
+            p->name.Serialize(&ser);
+            rwc->SerializeFloatArray(3, &p->pos.x, nullptr);   // Vector3::Serialize 0x1800150e0, inlined
             rwc->SerializeFloat(p->radius, nullptr);
         }
     };

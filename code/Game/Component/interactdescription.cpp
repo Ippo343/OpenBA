@@ -121,7 +121,7 @@ bool InteractDescription::Serialize(IO::Stream& stream) {
             float pitch = 0.0f;
             // node = {offset.xyz, dir.xyz}
             InteractDescription::Node node;
-            node.offset = Math::Vector3(child.pos[0], child.pos[1], child.pos[2]);
+            node.offset = Math::Vector3(child.pos.x, child.pos.y, child.pos.z);
             node.direction = Math::Vector3::FromYawPitch(yaw, pitch);
 
             // LEFT: PointList::Point keeps its name raw (runtime header).
