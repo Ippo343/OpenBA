@@ -193,3 +193,54 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 ### Separate task (retail differences), found this round
 - Row 260: consumeproduce's first input pass writes 12 bytes into an 8-byte local (retail uses 16 and jumps to
   the action setup). Rows 220-221: `ClearArea::Validate` / `BuildStructure::Validate`.
+
+## Round 4 hand-ins (CAI-1, WORK-3, CIT-2, CIT-1, R-IO)
+### Coordinator: `System::Time` members — exact expressions (do after ACT / COMP blocks, one commit, gated)
+- `CitizenComponent` +0x60 / +0x70 / +0x78 / `clothingTimer`: citizen_updatehealth.cpp :785 (cast disappears),
+  :780 / :786 / :727 `= 0` -> `._ticks = 0`, :479 / :833 / :763 / :829 compares on `._ticks`, :762 / :827 / :828
+  `-= *dt` -> `._ticks -= dt->_ticks`, :522 / :524 / :728 / :831 `= TimeFromSeconds(...)`, log lines :482 / :536 /
+  :735; citizen_needsupdate.cpp :114 `field_0x70._ticks -= t._ticks`, :203 `clothingTimer = t`.
+- `CitizenAIComponent` `timers[16]`, `leisureTimer`, `dataC8`: candidatelist.cpp :454 / :464 / :471 and the sites
+  listed in round 3.
+### Facts for every later block (from R-IO, merged)
+- `IO::Encoding::CreateReader(Serializer&, int)` (+0x18) / `CreateWriter` (+0x20) are typed virtuals: a raw
+  `MakeReaderWriter` slot read becomes `IO::Serializer ser(stream, v)` or `s._encoding->CreateReader(ser, v)`.
+- `IO::Stream` exposes `_direction`, `_encoding`, `GetDirection()`: the nine file-local `Stream` copies
+  (collisionmesh, surface, pointlist, pickingmesh, external_list, dialog_vtable, elementdescription_serialize,
+  page / radio description) can use the real class; the `RtIo::` mirror casts in `runtime/src/object/` can use
+  `IO::CompressedMemoryStream` / `MemoryStream`.
+- Serializer internals by name: `*(void**)&ser` -> `ser._stream`; `+0x8C` ->
+  `CompressedMemoryStream::_memoryStream._cursor`; `+0x24` -> `MemoryStream::_cursor`; `+8` ->
+  `ser._stream->_direction` (ENT's Persist walk, COMP-7).
+- `IO::PackageFile::_priority` (+0x70) for introsort.cpp:104.
+### R-COLL second visit, additions
+- Stale declarations `PortedRotateLeft8` / `Right8` at Collection.h:1198-1199 (bodies deleted by R-IO).
+### R-SYS
+- `RtSystem_ConfigMap_Find(void*, RtSystem::String*)` (Configuration.h; 8 casts in R-IO files);
+  `Configuration` +0x20 is declared `void*` but retail reads a dword (filesystem_setupdirs_win.cpp:397); the
+  `RtSystem::String` / `Filename` / `WideString` PODs (about 25 lines in io).
+### Other owners
+- ACT (Action.h): `ActionStack::field_0x10` (asked of ACT-1). `CharacterComponent` +0x48 is still separate
+  fields, not an `ActionStack` (about 45 reader files): wave X.
+- GAME-1: `Disease::_stringTable`, `_name` (citizen_updatehealth.cpp:507). DLG-1 (Map.h): `Map::field_0xA2`
+  is `bool` but is ORed as a byte (row 311). COMP-2: `CemeteryDescription::_ref20` is `void*`.
+- WORK-3 edited `charactercomponent_serialize.cpp` (COMP-2's file): one value-identical overload of
+  `SerializeValidatedIBP`.
+### Wave X additions
+- `SIG_WORK.tsv` (50 rows): the typed signature each cross-file Work body should get.
+- CAI-1: the nine action builders' parameters (0x1400c1070, bd070, bd420, bd790, bccb0, bc790, bda50, bb490,
+  ba6b0), `BuildCandidateStateList(int64_t*)`, the `int64_t` storage helpers.
+- No caller left (delete): `ActChild_RemoveNRCopyCtor_cadf0`, `_AnimateNRCopyCtor_c57d0`,
+  `_CreateNRCopyCtor_c6a20`, `_HuntAnimalCopyCtor_c8400`, `_ConsumeRawCtor3_c6440`,
+  `_CompleteRoadCopyCtor_c59d0`, `Pf_CreateRawMaterialCopyCtor_71a0`, `Entity_ConsumeListAppend_64b0`,
+  `WeightedRandomIndex_119470`, `WorkLeaf_FindComp_63d0` (a real body, no caller), `Pf_QuadtreeInit_18dd0` /
+  `Subdivide_18880` (action_pf_geom.cpp:526-540).
+- CIT-1: `CitizenEmploy_Strat_*`, `c3d0`, `SeatWorkers`, `SeatWorkersAt` (callers: professionui, townhallui,
+  workplaceui, starttown, buildcomponent_state8, harnesses), `NomadComp_FUN_140103480`,
+  `Component::OnMessage`'s `void*` data.
+- R-IO: the `void*` Array cores in modification.cpp, the `RtSerializer_*` forwarders, the four
+  `RtIo_Persistence_*` forwarders (callers in `input/` declare them locally), `ExistsInPackfile` / `CreatePath`.
+### Close
+- `byte_io` markers: R-IO added 10 (ceiling 17); `cast_ok` total rises with every runtime block: compare all
+  categories against FLOOR.md at the close and re-cut the ceilings in writing.
+- CAI-1 row 290: `SortByPriority` is a stable insertion sort where the banner says retail is an introsort.
