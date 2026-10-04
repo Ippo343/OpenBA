@@ -19,6 +19,7 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array
 
 namespace UI { class Element; class TextElement; class NumberElement; class DialogInstance; }
 
@@ -28,10 +29,9 @@ class CitizenUI final : public UI::DialogController {
 public:
     CitizenUI() = default;                               // 0x140010f80 (ctor inlined in the factory)
 
-    // 0x140010fd0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail (0x140065990) frees the Array/String members at +0xd0,
-    // +0xc0, +0xb0, +0xa0; the tree never did (leak kept).
+    // 0x140010fd0 minus the free. The compiler runs the four icon Arrays' dtors
+    // (+0xd0, +0xc0, +0xb0, +0xa0, as retail 0x140065990) and chains
+    // ~DialogController (and so ~Internal: RemoveObject).
     ~CitizenUI() override = default;                              // [0] 0x140010fd0
     void OnCreated() override;   // [4] 0x1400651a0
     void OnClosed() override;   // [6] 0x140065130
@@ -59,9 +59,15 @@ public:
     UI::TextElement*   textAction = nullptr;         // +0x98 "textAction" (SetText)
     // +0xA0 / +0xC0: the "groupHearts" / "groupStars" icon groups, each two
     // Collection::Array<InternalPtr<UI::Element>> (whole icons, half icons).
-    // H5 raw storage: retail's dtor (0x140065990) frees them, the tree's does not.
-    uint64_t heartIcons[4] = {};                     // +0xA0
-    uint64_t starIcons[4] = {};                      // +0xC0
+    // B.4 P2 DLG-1 (behaviour: H5): Array members. Retail's ctor 0x140065a40
+    // zeroes the four qwords of each group (0x140065ab9..0x140065adf): Array's
+    // default ctor. Retail's dtor 0x140065990 frees +0xD0, +0xC0, +0xB0, +0xA0
+    // (MemFree data, then qword 0 over data and count|capacity): the members'
+    // ~Array in reverse declaration order.
+    Collection::Array<UI::Element*> heartsWhole;     // +0xA0
+    Collection::Array<UI::Element*> heartsHalf;      // +0xB0
+    Collection::Array<UI::Element*> starsWhole;      // +0xC0
+    Collection::Array<UI::Element*> starsHalf;       // +0xD0
     Object::InternalPtr<UI::DialogInstance> followDialog;   // +0xE0 the open FollowDialog (null)
 };
 
@@ -81,6 +87,8 @@ static_assert(offsetof(CitizenUI, buttonHome) == 0x80, "CitizenUI::buttonHome @ 
 static_assert(offsetof(CitizenUI, buttonFollow) == 0x88, "CitizenUI::buttonFollow @ +0x88");
 static_assert(offsetof(CitizenUI, textNameIs) == 0x90, "CitizenUI::textNameIs @ +0x90");
 static_assert(offsetof(CitizenUI, textAction) == 0x98, "CitizenUI::textAction @ +0x98");
-static_assert(offsetof(CitizenUI, heartIcons) == 0xA0, "CitizenUI::heartIcons @ +0xA0");
-static_assert(offsetof(CitizenUI, starIcons) == 0xC0, "CitizenUI::starIcons @ +0xC0");
+static_assert(offsetof(CitizenUI, heartsWhole) == 0xA0, "CitizenUI::heartsWhole @ +0xA0");
+static_assert(offsetof(CitizenUI, heartsHalf) == 0xB0, "CitizenUI::heartsHalf @ +0xB0");
+static_assert(offsetof(CitizenUI, starsWhole) == 0xC0, "CitizenUI::starsWhole @ +0xC0");
+static_assert(offsetof(CitizenUI, starsHalf) == 0xD0, "CitizenUI::starsHalf @ +0xD0");
 static_assert(offsetof(CitizenUI, followDialog) == 0xE0, "CitizenUI::followDialog @ +0xE0");

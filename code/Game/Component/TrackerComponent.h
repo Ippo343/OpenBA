@@ -43,6 +43,16 @@ public:
         uint8_t _pad0C[4];                 // +0x0C
     };
 
+    // One Array<Entry>'s three fields as a POD (no ctor, no dtor): the record
+    // the array copy 0x14000d9d0 reads and writes through its two pointer
+    // arguments (data +0x00, count +0x08, capacity +0x0C), the shape of the
+    // displayed / produced triples below. (B.4 P2 DLG-1)
+    struct EntryArray {
+        Entry*  data;       // +0x00
+        int32_t count;      // +0x08
+        int32_t capacity;   // +0x0C
+    };
+
     // Two Array<Entry> (H5: raw triples). ProductionUI 0x140075a50 moves the produced
     // list into the displayed one when the world's generation changes.
     Entry*   displayed;           // +0x28 the list the production panel shows (freed by the retail dtor)
@@ -58,6 +68,11 @@ public:
 static_assert(sizeof(TrackerComponent) == 0x50, "TrackerComponent is 0x50 (create 0x14000d7a0)");
 static_assert(alignof(TrackerComponent) == 8, "TrackerComponent alignment");
 static_assert(sizeof(TrackerComponent::Entry) == 0x10, "tracker entry stride 0x10 (0x14000da70)");
+static_assert(sizeof(TrackerComponent::EntryArray) == 0x10, "Array<Entry> is {data, count, capacity}");
+static_assert(offsetof(TrackerComponent::EntryArray, count) == 0x08, "EntryArray::count @ +0x08");
+static_assert(offsetof(TrackerComponent::EntryArray, capacity) == 0x0C, "EntryArray::capacity @ +0x0C");
+static_assert(offsetof(TrackerComponent, displayedCapacity) == 0x34, "");
+static_assert(offsetof(TrackerComponent, producedCapacity) == 0x44, "");
 static_assert(offsetof(TrackerComponent, displayed) == 0x28, "");
 static_assert(offsetof(TrackerComponent, displayedCount) == 0x30, "");
 static_assert(offsetof(TrackerComponent, produced) == 0x38, "");

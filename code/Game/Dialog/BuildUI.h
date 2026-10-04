@@ -17,6 +17,7 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array
 
 namespace UI { class LabelElement; class TextElement; class ProgressElement; }
 
@@ -28,8 +29,7 @@ public:
 
     // 0x140020a90 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
-    // (leak kept).
+    // The Array member at +0x30 is freed by its own dtor, as retail.
     ~BuildUI() override = default;                                // [0] 0x140020a90
     void OnCreated() override;   // [4] 0x1400b1f40
     void OnUpdateLayout() override;   // [7] 0x1400b1a50
@@ -44,11 +44,12 @@ public:
     };
 
     // ---- fields (B4 DLG-a: named from the element strings OnCreated finds) ----
-    // +0x30 Collection::Array<StorageRow>, declared as its three raw members
-    // (H5: retail's dtor frees the data, the tree's does not).
-    StorageRow* rowData = nullptr;             // +0x30 Array data
-    int32_t     rowCount = 0;                  // +0x38 Array count
-    int32_t     rowCapacity = 0;               // +0x3C Array capacity
+    // +0x30 Collection::Array<StorageRow> (B.4 P2 DLG-1, behaviour: H5).
+    // Retail's create 0x1400209e0 zeroes +0x30 / +0x38 (0x140020a20 /
+    // 0x140020a24): Array's default ctor. Retail's dtor 0x140020a90 MemFrees
+    // +0x30 and zeroes +0x30 / +0x38 (0x140020ab7..0x140020ac7) before
+    // ~DialogController: the member's ~Array.
+    Collection::Array<StorageRow> rows;        // +0x30
     UI::ProgressElement* progress = nullptr;   // +0x40 "progress"
     UI::TextElement*     textTotal = nullptr;  // +0x48 the header row's "textTotal"
 };
@@ -57,8 +58,7 @@ static_assert(sizeof(BuildUI) == 0x50, "BuildUI is 0x50 (create 0x1400209e0 MemA
 static_assert(alignof(BuildUI) == 8, "qword-aligned (the vptr)");
 static_assert(sizeof(BuildUI::StorageRow) == 0x10, "BuildUI::StorageRow stride 0x10");
 static_assert(offsetof(BuildUI::StorageRow, total) == 0x08, "BuildUI::StorageRow::total @ +0x08");
-static_assert(offsetof(BuildUI, rowData) == 0x30, "BuildUI::rowData @ +0x30");
-static_assert(offsetof(BuildUI, rowCount) == 0x38, "BuildUI::rowCount @ +0x38");
-static_assert(offsetof(BuildUI, rowCapacity) == 0x3C, "BuildUI::rowCapacity @ +0x3C");
+static_assert(offsetof(BuildUI, rows) == 0x30, "BuildUI::rows @ +0x30");
+static_assert(sizeof(Collection::Array<BuildUI::StorageRow>) == 0x10, "Array is {data, count, capacity}");
 static_assert(offsetof(BuildUI, progress) == 0x40, "BuildUI::progress @ +0x40");
 static_assert(offsetof(BuildUI, textTotal) == 0x48, "BuildUI::textTotal @ +0x48");
