@@ -175,7 +175,7 @@ inline int Cell(int row, int col) { return 256 * row + col; }
 void FireRemovalTool(PlayerToolManager* entityUI) {
     fprintf(stderr, "[ToolHarness] constructing RemovalTool (entityUI=%p)...\n", entityUI);
     // RemovalTool_Factory_SA is RemovalTool::CreateNewObject: the receiver is proved.
-    RemovalTool* rt = static_cast<RemovalTool*>(RemovalTool_Factory_SA());   // LEFT: removaltool.cpp's void* return (owner: Player)
+    RemovalTool* rt = RemovalTool_Factory_SA();
     if (!rt) {
         fprintf(stderr, "[ToolHarness] ERROR: RemovalTool_Factory_SA returned null\n");
         return;
@@ -263,7 +263,7 @@ void FirePlacementTool() {
     }
 
     // PlacementTool_Factory_SA is PlacementTool::CreateNewObject.
-    PlacementTool* tool = static_cast<PlacementTool*>(PlacementTool_Factory_SA());   // LEFT: placementtool.cpp's void* return (owner: Player)
+    PlacementTool* tool = PlacementTool_Factory_SA();
     if (!tool) {
         fprintf(stderr, "[ToolHarness] ERROR: PlacementTool_Factory_SA returned null\n");
         return;
@@ -2111,7 +2111,7 @@ void FireClearPlaceOver() {
 
     ComponentDescription* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
     if (!tmpl) { fprintf(stderr, "[ClearPlaceOver] ERROR: WoodHouse template null\n"); return; }
-    PlacementTool* tool = static_cast<PlacementTool*>(PlacementTool_Factory_SA());   // LEFT: placementtool.cpp's void* return (owner: Player)
+    PlacementTool* tool = PlacementTool_Factory_SA();
     if (!tool) { fprintf(stderr, "[ClearPlaceOver] ERROR: tool factory null\n"); return; }
     tool->descriptionPtr = tmpl;
     if (!PlacementTool_HarnessStartupProbe(tool)) {

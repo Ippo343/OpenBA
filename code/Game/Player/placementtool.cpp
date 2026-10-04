@@ -20,6 +20,7 @@
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Scene.h"
+#include "Player/edittool_funcs.h"   // PlacementTool_Factory_SA
 #include "graphics/Mesh.h"
 #include <new>
 #include "Player/PlacementTool.h"
@@ -743,9 +744,7 @@ Object::Type* PlacementTool::GetSettingType(Object::Type* ret) const {
 
 // create 0x14002dc40: MemAlloc(0x70, 8), then the ctor 0x1400fe850.
 void* PlacementTool::CreateNewObject() {
-    void* p = Object::detail::InternalMemAlloc(sizeof(PlacementTool), 8);
-    if (!p) return nullptr;
-    return static_cast<Object::Base*>(new (p) PlacementTool());
+    return static_cast<Object::Base*>(PlacementTool_Factory_SA());
 }
 // createInPlace 0x14002dc80: `if (storage) ctor(storage)`.
 void* PlacementTool::CreateInPlaceObject(void* storage) {
@@ -755,7 +754,11 @@ void* PlacementTool::CreateInPlaceObject(void* storage) {
 
 // Kept for standalone/tool_harness.cpp (outside this block's files): the
 // reflected create, by its old name.
-extern "C" void* PlacementTool_Factory_SA(void) { return PlacementTool::CreateNewObject(); }
+extern "C" PlacementTool* PlacementTool_Factory_SA(void) {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PlacementTool), 8);
+    if (!p) return nullptr;
+    return new (p) PlacementTool();
+}
 
 DEFINE_EXE_TYPE(PlacementTool, "Tool")
 

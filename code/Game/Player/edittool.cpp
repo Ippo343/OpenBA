@@ -178,7 +178,7 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
 // EditTool per-frame deactivate vtable slot, which would wipe the selection
 // outline every frame (see standalone/reg_player_render.cpp). Direct callers
 // only: the per-frame tick's dead-entity branch in EditTool::Update.
-void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
+void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog) {
     // (1) clear selection highlight (0x1400fcb40, registered unconditionally by
     // RegisterPlayerRenderBatch).
     HighlightClear_Impl(self);
@@ -188,7 +188,7 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // Retail cc90 runs cb40 UNCONDITIONALLY (above), then gates everything below on
     // tool+0x28 being non-null. Returning here still clears the outline, which is
     // the whole point of the right-click path.
-    if (!dialogPtr) return;
+    if (!dialog) return;
 
     self->entityRef = nullptr;
     self->lastEntityRef = nullptr;
@@ -197,10 +197,6 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
     // caller had already done this check, so it was omitted here -- but slot 5 (tool
     // teardown) has NOT, and without it a right-click would close pinned panels too.
-    // LEFT: EditTool::entityRef (+0x28) holds the dialog's InternalPtr as an integer
-    // (Dialog/edittool_select.cpp, Dialog/toolui.cpp and standalone/orchard_force_start.cpp
-    // read it so).
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(dialogPtr);
     {
         const uint32_t tidToolUI = ToolUI::TypeId();
         Object::InternalPtr<UI::DialogController> ctrl = dialog->GetController(tidToolUI);
@@ -215,7 +211,8 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // we are only reached from the unpinned branch). CloseDialog takes the
     // UserInterface (dialog+0x10) and an InternalPtr<DialogInstance>& — pass a
     // stack copy, matching the toolui.cpp close-button path.
-    if (!dialogPtr) return;
+    if (!dialog) return;
+    const uintptr_t dialogPtr = reinterpret_cast<uintptr_t>(dialog);   // LEFT: the tree's address-range test below (retail 0x1400fcc90 has none)
     if (dialogPtr < 0x10000 || dialogPtr > 0x00007FFFFFFFFFFFULL) return;
     void* userInterface = dialog->_ui;
     if (!userInterface) return;
@@ -331,7 +328,7 @@ void EditTool::Update(void*, char) {
     // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
     // backstop for PINNED panels, which retail also leaves open).
     if (!SA_DialogEntityAlive(pageToggle)) {
-        EditTool_CloseInfoDialog(this, reinterpret_cast<uintptr_t>(entityRef));   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t; standalone callers)
+        EditTool_CloseInfoDialog(this, entityRef);
         return;
     }
 
@@ -665,7 +662,7 @@ char EditTool::OnKey(char param2) {
 // (0x1401ee710), and registering it made cc90 run every frame
 // (reg_player_render.cpp records the measurement). Retail reads the dialog IBP
 // from +0x28 itself.
-void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, reinterpret_cast<uintptr_t>(entityRef)); }   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t; standalone callers)
+void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, entityRef); }   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t; standalone callers)
 
 // [6] OnKey (0x1400fd030), [7] Update (0x1400fcda0) and [10] IsSelected
 // (0x1400fd290: "is *ref the entity I have selected?" — callers MUST pass the
