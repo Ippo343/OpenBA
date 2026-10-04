@@ -119,7 +119,7 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
                 uint64_t ok = WorkBase_ValidateCell_a00f0(map, 0xe07, srcCell, static_cast<int>(uVar7));
                 if (static_cast<char>(ok) != '\0') {
                     int iVar2;
-                    iVar2 = Pf_IsDstReachable_f810(&map->size, srcCell, uVar7, '\x01');
+                    iVar2 = map->PathDistance(srcCell, uVar7, '\x01');   // 0x14009f810 (was its Pf_IsDstReachable_f810 forwarder)
                     if (iVar2 < 0) {
                         // Unreachable by road -> fall back to euclidean (in cells) + bias.
                         int W2  = map->size;

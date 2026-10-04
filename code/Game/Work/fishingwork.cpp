@@ -493,7 +493,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             }
 
             // Try assignment via FUN_1400f8620 (GameUpdateLoop +0x118, the WorkScheduler)
-            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
+            WorkScheduler* assignMgr = gameWorld->m_tutorial;
             CitizenComponent* citizenRef = *citizenIBP;
             int spotRadius = workplaceComp->workId;
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, spotRadius, '\x01');

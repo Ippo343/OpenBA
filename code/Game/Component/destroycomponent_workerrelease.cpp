@@ -62,6 +62,7 @@
 #include <cstdio>
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "Component/InteractComponent.h"   // B4 X4-WORK: FindComponent<InteractComponent> (0x140002ed0)
 #include "Dialog/dialog_exe_helpers.h"
 #include "Tutorial/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -230,12 +231,10 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     if (buildComp == nullptr) {
         if (workComp) capacity = WorkComponent_CalcMaxWorkers(workComp);
     } else {
-        // 0x140002ed0's component class is not settled here: the finder stays (LEFT).
-        int64_t posComp = 0;
-        WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(_entity), &posComp);   // LEFT: SIG WorkBase_FindComponent_2ed0 / Pf_RecursiveChildSum_123070 (int64_t)
+        InteractComponent* posComp = _entity->FindComponent<InteractComponent>();   // 0x140002ed0
         // [STANDALONE GUARD] Retail derefs the finder's out-IBP unconditionally; a partial
         // entity can lack the component, and 0x140123070 walks node+0x18/+0x30 from it.
-        if (posComp) capacity = Pf_RecursiveChildSum_123070(posComp, 1);
+        if (posComp) capacity = InteractNodeCount(posComp, 1);   // 0x140123070
     }
 
     // 7. Publish the capacity + evict the excess (dead after step 1, see fb00's note).

@@ -149,7 +149,7 @@ public:
     // when the entity's AutoPickupComponent is enabled, offer the citizen each work id
     // it lists (the scheduler's TryAssignWorkplace 0x1400f8620), dropping ids the
     // scheduler no longer knows. Returns 2 when one took the citizen, else 0.
-    int TryAutoPickup(void* citizenRef);
+    int TryAutoPickup(CitizenComponent** citizenRef);
 
     // 0x1400f6ef0: the build-progress / time-budget step (reads and updates +0x30,
     // +0x38 and +0x40). The low byte of the result is "keep going"; the tree's callers

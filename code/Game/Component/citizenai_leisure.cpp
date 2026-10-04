@@ -391,8 +391,8 @@ uint64_t CitizenAIComponent::State_Leisure() {
         char cVar12 = CitizenAI_helper_a720(*pIVar17);
         if (cVar12 == '\0') goto LAB_14010a7e0;
 
-        void* posIBP = nullptr;
-        void** pp = reinterpret_cast<void**>(WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(local_res20), &posIBP));   // LEFT: SIG WorkBase_FindComponent_2ed0
+        InteractComponent* posIBP = local_res20->FindComponent<InteractComponent>();   // 0x140002ed0
+        InteractComponent** pp = &posIBP;
         float dpos[4] = {0, 0, 0, 0};
         if (pp) Pf_EntityResolvePos_2e20(*pp, dpos, 0, 0, nullptr);
         int w = piVar5->size;

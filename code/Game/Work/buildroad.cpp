@@ -321,7 +321,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             int workId = workComp->workId;
             CitizenComponent* citizenRef = *entityIBP;
 
-            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;  // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)
+            WorkScheduler* assignMgr = gameWorld->m_tutorial;
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
@@ -438,7 +438,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             // 0x140006330 — scans the RawMaterialDescription list for field_50's
             // entry. This is NOT the entity component finder (0x1400223c0) used above;
             // both were called fn_FindComponent_RawMaterialC before the rename.
-            WorkAcc_FindComponent_6330((int64_t)field_50, &foundStorageIBP);   // LEFT: SIG WorkAcc_FindComponent_6330
+            WorkAcc_FindComponent_6330(field_50, (RawMaterialDescription**)&foundStorageIBP);   // LEFT: the scratch slot is reused for three types (the exclude entity, this out, the source entity)
 
             if (foundEntity == nullptr) {
                 return 1;

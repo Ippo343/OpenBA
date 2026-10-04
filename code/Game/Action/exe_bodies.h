@@ -122,7 +122,6 @@ class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
 int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
-int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2);  // 0x140123070 B4 FORWARD -> InteractNodeCount
 bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
 void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count);  // 0x140116760
 int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material);  // 0x1401167c0
@@ -151,7 +150,7 @@ float* InteractNodePosition(const InteractComponent* self, float* out, int kind,
 int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
-int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
+int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
 // ---- action_pf_roots_drop.cpp
 class AnimalDescription;      // Component/AnimalDescription.h

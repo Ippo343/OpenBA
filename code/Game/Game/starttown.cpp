@@ -1445,7 +1445,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
         // Learn (first instance) or verify (later ones) the template's door cell, and keep
         // the door notch walkable in occ so every later pocket test sees it as ground.
         {
-            void* entIBP = ent;
+            ComponentEntity* entIBP = ent;
             const int cell = Pf_EntityAnchorCell_7fb0(&entIBP, nullptr);   // 0x140087fb0
             if (cell >= 0) {
                 const int ddx = cell % mapW - bestX, ddy = cell / mapW - bestY;
