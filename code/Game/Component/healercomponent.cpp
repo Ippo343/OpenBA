@@ -61,11 +61,10 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0
 // This is the whole reason a built hospital was invisible to the town: with the
 // component inert nothing ever entered state 2, so the healer array at townMgr+0x70
 // stayed empty for the life of the save and the sick had nowhere to be sent.
-// GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a); the town manager it
-// points at is the CitizenBehavior (WORK-a), whose healer list is read by name. The one
-// bridge from the untyped member is LEFT.
+// GameUpdateLoop::m_citizenList (+0xF0): the town manager, the CitizenBehavior, whose
+// healer list is read by name.
 static CitizenBehavior* TownManager() {
-    return reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    return GameUpdateLoop::_singleton->m_citizenList;
 }
 
 char HealerComponent::StateBuiltEnter() {

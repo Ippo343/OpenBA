@@ -403,7 +403,7 @@ UI::DialogInstance::DialogInstance(UserInterface* ui, Object::InternalPtr<Elemen
     if (UI::DialogInstance* const parentDlg = _parent.Get()) {
         // 0x1801147af: `LEA EDX,[RBP+0x18] / LEA R8D,[RBP+0x8]` with RBP == 0,
         // wrapped in Enter/Allocate/Leave — i.e. exactly ?MemAlloc@…(0x18, 8).
-        ChildNode* node = static_cast<ChildNode*>(Object::detail::InternalMemAlloc(0x18, 8));
+        ChildNode* node = static_cast<ChildNode*>(Object::detail::InternalMemAlloc(0x18, 8));   // LEFT: InternalMemAlloc result (tier-I alloc shape not recognised for Object::detail::InternalMemAlloc; metric)
         if (node) {
             node->element = Object::InternalPtr<DialogInstance>(this);
             node->prev    = nullptr;

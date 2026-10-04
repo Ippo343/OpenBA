@@ -116,7 +116,7 @@ void ClipRegionElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h
 // into `rect` (now dead) and takes the saved one back. Reproduced with the same
 // two buffers rather than one, because SetScissor writes through its out slot.
 void ClipRegionElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    const Element* border = static_cast<const Element*>(_border);
+    const Element* border = _border;
     if (border != nullptr) border->Draw(context, alpha);
 
     alpha = DimAlpha(this, alpha);

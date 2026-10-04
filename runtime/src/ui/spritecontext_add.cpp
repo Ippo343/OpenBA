@@ -154,7 +154,7 @@ using UI::SpriteDraw;
 // 0x18011cb44). Flushing only happens when a DIFFERENT non-null sheet is bound.
 // (`SetSpriteSheet` 0x18011c740 is retail's out-of-line copy; these bodies
 // inline it.)
-inline void BindSheet(SpriteContext* self, void* sheet) {
+inline void BindSheet(SpriteContext* self, SpriteSheet* sheet) {
     if (self->_currentSheet == sheet) return;
     if (self->_currentSheet == nullptr) {
         self->_currentSheet = sheet;
@@ -171,10 +171,10 @@ inline void BindSheet(SpriteContext* self, void* sheet) {
 // value, reading the table only when it is non-negative.
 struct SpriteExtent { int32_t width; int32_t height; };
 
-inline SpriteExtent ExtentOf(void* sheetRaw, int32_t spriteIndex) {
+inline SpriteExtent ExtentOf(SpriteSheet* sheet, int32_t spriteIndex) {
     SpriteExtent e = { 0, 0 };
     if (spriteIndex < 0) return e;
-    const SpriteInfo* table = static_cast<SpriteSheet*>(sheetRaw)->m_sprites;
+    const SpriteInfo* table = sheet->m_sprites;
     const SpriteInfo& info = table[static_cast<int64_t>(spriteIndex)];
     e.width  = info.width;    // entry +0x1c
     e.height = info.height;   // entry +0x20
@@ -208,7 +208,7 @@ namespace UI {
 void SpriteContext::AddSprite(const Sprite& sprite, int32_t x, int32_t y, uint32_t color) {
     // 0x18011cf29 / 0x18011cf32: two independent early returns, the second a
     // SIGNED `< 0` on the index.
-    void* sheet = sprite.spriteSheet;
+    SpriteSheet* sheet = sprite.spriteSheet;
     if (sheet == nullptr) return;
     if (sprite.spriteIndex < 0) return;
 
@@ -237,7 +237,7 @@ void SpriteContext::AddSprite(const Sprite& sprite, int32_t x, int32_t y, uint32
 // all. Identical to the point overload in every other respect.
 void SpriteContext::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
                               int32_t x2, int32_t y2, uint32_t color) {
-    void* sheet = sprite.spriteSheet;
+    SpriteSheet* sheet = sprite.spriteSheet;
     if (sheet == nullptr) return;
     if (sprite.spriteIndex < 0) return;
 
@@ -270,7 +270,7 @@ void SpriteContext::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 // what selects Flush's rotated path for a NaN.
 void SpriteContext::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
                               int32_t x2, int32_t y2, uint32_t color, float rotation) {
-    void* sheet = sprite.spriteSheet;
+    SpriteSheet* sheet = sprite.spriteSheet;
     if (sheet == nullptr) return;
     if (sprite.spriteIndex < 0) return;
 
@@ -327,7 +327,7 @@ void SpriteContext::AddFont(Object::ExternalPtr<Font> font, const System::String
     // --- the second vertical cull, 0x18011cd69..0x18011cd98 -----------------
     // The font pointer is reloaded from its home slot; the sheet is read out of
     // it BEFORE the compare and is what every glyph below is drawn from.
-    void*         sheet  = f->_spriteSheet.Get();
+    SpriteSheet*  sheet  = f->_spriteSheet.Get();
     const int32_t bottom = (outAscent - f->_lineHeight) + y;
     const float   scissorTop = static_cast<float>(_scissorY) * _scale;
     if (scissorTop > static_cast<float>(bottom)) return;

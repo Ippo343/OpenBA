@@ -51,7 +51,7 @@ CreateBridgeDescription::CreateBridgeDescription()
       _u2c(0),
       _u30(0),
       _i34(0) {
-    for (void*& r : _refs) r = nullptr;
+    for (auto& r : _refs) r = nullptr;
 }
 
 // [5] 0x1401195d0: stream order as retail.

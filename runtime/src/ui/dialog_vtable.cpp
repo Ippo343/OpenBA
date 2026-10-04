@@ -201,6 +201,7 @@
 #include <new>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"       // IO::Stream::_direction
 #include "../../types/ui/Dialog.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
@@ -330,10 +331,10 @@ using rt::io::Stream;
 // ElementDescription, 0x180004590 SpriteSheet, 0x1800756d0
 // DialogControllerConfig, 0x1800493d0 / 0x18002f170 the two array walks).
 RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 void StringSerialize(void* field, Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge
+    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ENDGAME B.3.2 step 2 — the four by-address SetSize forwarders that used to
@@ -358,39 +359,6 @@ void StringSerialize(void* field, Serializer* ser) {
 //                Array<ExternalPtr<Object::External>>
 //
 // Every one of the four is the TWO-argument `SetSize(int)` member (no fill).
-
-// The inlined ctor at 0x1801130e3..0x18011310b and the inlined dtor at
-// 0x1801132eb. Spelled out here rather than shared with the two other files
-// that carry an identical pair: they are separate INLINED copies in the DLL,
-// and keeping them separate means a correction to one cannot silently change
-// the other's meaning.
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    rt::io::Encoding* enc = stream->encoding;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using FactoryFn = ReaderWriter* (*)(rt::io::Encoding*, Serializer*, int);
-    ReaderWriter* rw =
-        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-void RecUInt(ReaderWriter* rw, uint32_t* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(*v, nullptr);   // B.3.x bridge
-}
-
-void RecInt(ReaderWriter* rw, int32_t* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(*v, nullptr);   // B.3.x bridge
-}
 
 }  // namespace
 }  // namespace RtUiDlgV
@@ -423,24 +391,24 @@ Object::External* Dialog::Reconstruct() {                      // [6] 0x1800386b
 
 bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x1801130c0
     using namespace RtUiDlgV;
-    void* const streamvRaw = &streamv;
-    Stream* const stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
+    // ??0Serializer@IO@@ 0x1800b9960 / ??1Serializer@IO@@ 0x1800b99b0, the
+    // pair inlined at 0x1801130e3..0x18011310b and 0x1801132eb (version 0).
+    IO::Serializer serializer(streamv, 0);
+    IO::ReaderWriter* const rw = serializer._readerWriter;
+    Serializer& ser = *reinterpret_cast<Serializer*>(&serializer);   // LEFT: SIG the ExternalPtr<T>::Serialize thunks take rt::io::Serializer* (External.h, R-OBJ; wave X)
 
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
-
-    RecUInt(rw, &_defaultFlags);                               // +0x40
+    rw->SerializeUInt(_defaultFlags, nullptr);                               // +0x40
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_rootDescription), &ser);        // +0x38
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), &ser);            // +0x20
     StringSerialize(&_spriteName, &ser);                     // +0x28
-    RecUInt(rw, &_backgroundColor);                            // +0x30
+    rw->SerializeUInt(_backgroundColor, nullptr);                            // +0x30
 
-    const bool reading = (ser.stream->direction == rt::io::kDirectionReading);
+    const bool reading = (streamv._direction == 0);              // rt::io::kDirectionReading
 
     // -- array 1: _namedTemplates (+0x58), count +0x60, stride 0x10 ---------
     {
         int32_t count = _namedTemplateCount;   // a STACK COPY, per 0x18011315e
-        RecInt(rw, &count);
+        rw->SerializeInt(count, nullptr);
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_ExtStr10at08>(&_namedTemplates)
                 ->SetSize(count);          // retail 0x180075d20
@@ -455,7 +423,7 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
     // -- array 2: _templates (+0x68), count +0x70, stride 0x08 --------------
     {
         int32_t count = _templateCount;
-        RecInt(rw, &count);
+        rw->SerializeInt(count, nullptr);
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_templates)
                 ->SetSize(count);          // retail 0x1800492d0
@@ -466,13 +434,13 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
     // -- array 3: _controllerConfigs (+0x48), count +0x50, stride 0x20 ------
     {
         int32_t count = _controllerCount;
-        RecInt(rw, &count);
+        rw->SerializeInt(count, nullptr);
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_CfgEntry20>(&_controllerConfigs)
                 ->SetSize(count);          // retail 0x180075b20
         ElementController* e = _controllerConfigs;                      // stride 0x20
         for (int32_t i = 0; i < count; ++i, ++e) {
-            RecUInt(rw, &e->_typeId);                     // entry+0x00 _typeId
+            rw->SerializeUInt(e->_typeId, nullptr);                     // entry+0x00 _typeId
             RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&e->_elementDesc), &ser);   // entry+0x08 _elementDesc
             RtObject_ExternalPtrSerialize_DialogControllerConfig(ExtField(&e->_config), &ser);    // entry+0x10 _config
             StringSerialize(&e->_name, &ser);             // entry+0x18 _name
@@ -482,7 +450,7 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
     // -- array 4: _references (+0x78), count +0x80, stride 0x08 -------------
     {
         int32_t count = _referenceCount;
-        RecInt(rw, &count);
+        rw->SerializeInt(count, nullptr);
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_references)
                 ->SetSize(count);          // retail 0x18002f070
@@ -490,10 +458,9 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
             &ser, count, ExtField(_references));
     }
 
-    RecInt(rw, &_drawLevel);    // +0x34 — the FIELD, not a copy. LAST.
+    rw->SerializeInt(_drawLevel, nullptr);    // +0x34 — the FIELD, not a copy. LAST.
 
-    DestroyCodec(rw);
-    return true;
+    return true;                    // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 // ??1Dialog@UI@@UEAA@XZ 0x180112e40 is in dialog_ctor_dtor.cpp.

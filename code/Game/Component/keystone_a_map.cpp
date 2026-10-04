@@ -30,10 +30,8 @@
 //   0x14009f3e0  GridToWorld terrain query  (mapquery, reg)
 //   g_pGameWorldSingleton (+0xe8 / +0xd0 / +0xd8 / +0xf8 / +0x148)
 //
-// LEFT (B.4 COMP-d): the Map (GameUpdateLoop::m_game) is reached as the int* the
-// Map functions take (class name not settled, GAME-b) and its 0x30-byte cell record
-// has no type yet: the cell reads stay by offset. GameUpdateLoop m_entityList /
-// m_imageCapture are void* (W0 header).
+// B.4 P2 COMP-45: dc20 / dee0 take the Map and read its MapCell records by name;
+// e2c0 keeps the int* receiver its caller in Game/gamegrid_serialize.cpp passes (wave X).
 
 #include <new>
 #include "object/TypeInfo.h"
@@ -45,6 +43,7 @@
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"
+#include "Game/Map.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
 #include "Component/exe_bodies.h"
 
@@ -144,7 +143,7 @@ int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
 // char stamp (footprint) at the rotated coordinate; '#'/'_' => set, '.' => leave,
 // '_' => value 2. Write the resulting road/cost value via 0x14009f2f0 and store the
 // owner / null IBP into the cell.
-void MapComponent_overlay_dc20(int* param_1, ComponentEntity* const* owner, uint8_t param_3,
+void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint8_t param_3,
                                int param_4, int param_5, int param_6, int param_7,
                                const System::String* footprint, int param_9) {
     int iVar18 = 0;
@@ -157,20 +156,15 @@ void MapComponent_overlay_dc20(int* param_1, ComponentEntity* const* owner, uint
             if (0 < param_6) {
                 do {
                     iVar5 = iVar5 + -1;     // descending inner (col)
-                    int iVar15 = (param_5 + iVar18) * *param_1 + iVar13 + param_4;
-                    // LEFT: the Map's 0x30-byte cell record (array at +0x80) has no type yet (GAME-b).
-                    uint8_t* cell = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(param_1) + 0x80) +
-                                    static_cast<int64_t>(iVar15) * 0x30;
-                    // LEFT: cell +0x08 is the occupant's InternalPtr<ComponentEntity> (no cell type yet).
-                    ComponentEntity** occupant = reinterpret_cast<ComponentEntity**>(cell + 8);
+                    int iVar15 = (param_5 + iVar18) * param_1->size + iVar13 + param_4;
+                    MapCell* cell = &param_1->cells[static_cast<int64_t>(iVar15)];   // +0x80, stride 0x30
+                    ComponentEntity** occupant = &cell->occupant;   // +0x08 InternalPtr<ComponentEntity>
 
                     // Evict any stale entity occupying this cell.
                     if ((*owner != nullptr) && (*occupant != nullptr)) {
                         ComponentEntity* lVar2 = *occupant;
                         if (*owner != lVar2) {
-                            // LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
-                            EntityList* entityList =
-                                reinterpret_cast<EntityList*>(GameUpdateLoop::_singleton->m_entityList);
+                            EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;   // +0xE8
                             ComponentEntity* local_68 = lVar2;
                             if (lVar2 != nullptr) {
                                 if ((local_68->_entityFlags >> 10 & 1) == 0) {
@@ -255,11 +249,11 @@ void MapComponent_overlay_dc20(int* param_1, ComponentEntity* const* owner, uint
                         }
                     }
 
-                    uint8_t bVar10 = cell[0x29];
+                    uint8_t bVar10 = cell->terrainType;   // +0x29
                     if (bVar7) {
                         bVar10 = bVar16;
                     }
-                    Pf_SetTileRoadFlag_9f2f0(param_1, iVar15, (uint32_t)bVar10);
+                    param_1->SetTerrainType(iVar15, (uint32_t)bVar10);   // 0x14009f2f0
 
                     iVar13 = iVar13 + 1;
                     *occupant = bVar19 ? *owner : nullptr;   // the owner / a null InternalBasePtr
@@ -278,7 +272,7 @@ void MapComponent_overlay_dc20(int* param_1, ComponentEntity* const* owner, uint
 // 0x14009e2c0; if the classification bit is in mask 0x1e0 AND the cell already holds
 // an entity that differs from the owner, force class 2; write the class via
 // 0x14009f2f0. Always (re)initialise the cell's +8 IBP slot to null.
-void CreateNaturalResource_impl_dee0(int* param_1, ComponentEntity* const* owner, int param_3,
+void CreateNaturalResource_impl_dee0(Map* param_1, ComponentEntity* const* owner, int param_3,
                                      int param_4, int param_5, int param_6,
                                      const System::String* footprint, int param_8) {
     int iVar16 = 0;
@@ -292,7 +286,7 @@ void CreateNaturalResource_impl_dee0(int* param_1, ComponentEntity* const* owner
                 do {
                     iVar4 = iVar4 + -1;    // descending inner (col)
                     const char* lVar2 = footprint->_data;
-                    int iVar14 = (iVar16 + param_4) * *param_1 + iVar12 + param_3;
+                    int iVar14 = (iVar16 + param_4) * param_1->size + iVar12 + param_3;
 
                     bool bVar6;
                     if ((lVar2 == nullptr) || (footprint->GetLength() == 0)) {
@@ -322,23 +316,20 @@ void CreateNaturalResource_impl_dee0(int* param_1, ComponentEntity* const* owner
                         }
                     }
 
-                    // LEFT: cell +0x00 / +0x08 are InternalPtr<ComponentEntity> (no cell type yet).
-                    ComponentEntity** plVar11 = reinterpret_cast<ComponentEntity**>(
-                        *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(param_1) + 0x80) +
-                        static_cast<int64_t>(iVar14) * 0x30);
+                    MapCell* plVar11 = &param_1->cells[static_cast<int64_t>(iVar14)];   // +0x80, stride 0x30
                     if (bVar6) {
-                        int cls = CreateNaturalResource_helper_e2c0(param_1, iVar14);
+                        int cls = CreateNaturalResource_helper_e2c0(reinterpret_cast<int*>(param_1), iVar14);   // LEFT: SIG CreateNaturalResource_helper_e2c0
                         uint8_t bVar13 = (uint8_t)cls;
-                        if (((1 << (bVar13 & 0x1f) & 0x1e0u) != 0) && (*plVar11 != nullptr)) {
-                            if (*plVar11 != *owner) {
+                        if (((1 << (bVar13 & 0x1f) & 0x1e0u) != 0) && (plVar11->blocker != nullptr)) {   // +0x00
+                            if (plVar11->blocker != *owner) {
                                 bVar13 = 2;
                             }
                         }
-                        Pf_SetTileRoadFlag_9f2f0(param_1, iVar14, (uint32_t)bVar13);
+                        param_1->SetTerrainType(iVar14, (uint32_t)bVar13);   // 0x14009f2f0
                     }
 
                     iVar12 = iVar12 + 1;
-                    plVar11[1] = nullptr;   // a null InternalBasePtr
+                    plVar11->occupant = nullptr;   // +0x08, a null InternalBasePtr
                 } while (iVar12 < param_5);
             }
             iVar16 = iVar16 + 1;
@@ -358,8 +349,7 @@ void MapComponent::AddToMap() {
     if ((_flags >> 0x14 & 1) != 0) return;
 
     Description* obj = _description;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
-    int* piVar2 = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* piVar2 = GameUpdateLoop::_singleton->m_game;   // +0xF8
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
     MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
@@ -407,8 +397,7 @@ void CreateNaturalResource_impl_4750(MapComponent* self) {
     if ((self->_flags >> 0x14 & 1) == 0) return;
 
     Description* obj = self->_description;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
-    int* piVar2 = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* piVar2 = GameUpdateLoop::_singleton->m_game;   // +0xF8
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
     ComponentEntity* local_res8 = self->_entity;

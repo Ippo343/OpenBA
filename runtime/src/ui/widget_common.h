@@ -39,17 +39,6 @@
 
 namespace rtui {
 
-// ---------------------------------------------------------------------------
-// Byte accessors. B.4 LEFT: their one remaining caller is listelement.cpp
-// (block R-UI-a: the grid view's extents / spacing / vertical byte); they go
-// with it.
-// ---------------------------------------------------------------------------
-inline uint8_t*  B(void* p, int off)       { return static_cast<uint8_t*>(p) + off; }
-
-inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(B(p, off)); }
-inline uint8_t&  U8 (void* p, int off) { return *reinterpret_cast<uint8_t*>(B(p, off)); }
-inline void*&    PTR(void* p, int off) { return *reinterpret_cast<void**>(B(p, off)); }
-
 // Element::_flags bits used by these bodies (names from Element.h).
 constexpr uint32_t kFlagHidden        = 0x00000001;
 constexpr uint32_t kFlagStretchX      = 0x00000004;
@@ -110,14 +99,12 @@ inline int32_t ScreenWidth()  { return ::Video::Device::_singleton->backBufferWi
 inline int32_t ScreenHeight() { return ::Video::Device::_singleton->backBufferHeight; }  // +8
 
 // The UI scale of the element's ROOT dialog: walk _parent to the top, then
-// root->_dialogParent->_ui->_uiScale (+0x90, +0x10, +0xdc). B.4 LEFT:
-// Element::_dialogParent and DialogInstance::_ui are `void*` in block R-UI-a's
-// headers.
+// root->_dialogParent->_ui->_uiScale (+0x90, +0x10, +0xdc).
 inline float RootUiScale(const ::UI::Element* e) {
     const ::UI::Element* n = e;
     while (n->_parent != nullptr) n = n->_parent;
-    const auto* dialog = static_cast<const ::UI::DialogInstance*>(n->_dialogParent);
-    return static_cast<const ::UI::UserInterface*>(dialog->_ui)->_uiScale;
+    const ::UI::DialogInstance* dialog = n->_dialogParent;
+    return dialog->_ui->_uiScale;
 }
 
 // ---------------------------------------------------------------------------

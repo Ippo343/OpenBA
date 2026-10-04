@@ -105,7 +105,7 @@ bool NumberDescription::Serialize(IO::Stream& streamv) {
     rw->SerializeUInt(_u70, nullptr);
     rw->SerializeInt(_i74, nullptr);
     rw->SerializeFloat(_f78, nullptr);
-    rw->SerializeBool(reinterpret_cast<bool&>(_b7c), nullptr);
+    rw->SerializeBool(reinterpret_cast<bool&>(_b7c), nullptr);   // LEFT: H8 a uint8_t flag through retail's bool overload (bool would normalise the byte)
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                                       // 180118ee7
     return true;

@@ -104,7 +104,7 @@ void ImageElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // BEFORE the colour maths runs (0x18011888b / 0x18011889d); that ordering is
 // invisible and is not reproduced.
 void ImageElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    const Element* border = static_cast<const Element*>(_border);
+    const Element* border = _border;
     if (border != nullptr)
         border->Draw(context, alpha);
 

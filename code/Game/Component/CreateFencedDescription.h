@@ -38,7 +38,7 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     uint32_t _u20;                              // +0x20 enum (serialized through the uint door)
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
-    void* _refs[6];                             // +0x28 ExternalPtr[6], inline
+    class ComponentDescription* _refs[6];       // +0x28 ExternalPtr[6], inline (B4 PLAYER H4: the section templates FencedTool::CalcPath clones, [0] the shelter)
     int32_t _i58;                               // +0x58
     int32_t _i5c;                               // +0x5c
     int32_t _i60;                               // +0x60

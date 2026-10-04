@@ -198,7 +198,7 @@ class Font;
 // coordinate of each axis.
 // ============================================================
 struct SpriteDraw {
-    void*    sheet;         // +0x00  ExternalPtr<SpriteSheet>, the batch key
+    SpriteSheet* sheet;     // +0x00  ExternalPtr<SpriteSheet>, the batch key (B4 P2 H4: typed)
     int32_t  spriteIndex;   // +0x08  -1 is the empty sprite, never 0
     int32_t  x1;            // +0x0c
     int32_t  y1;            // +0x10
@@ -311,7 +311,7 @@ public:
     // ---- the 0x88 bytes (PUBLIC: the two stack builders write them) --------
     float   _scale;                              // +0x00
     uint8_t _pad04[4];                           // +0x04
-    void*   _currentSheet;                       // +0x08  ExternalPtr<SpriteSheet>
+    SpriteSheet* _currentSheet;                  // +0x08  ExternalPtr<SpriteSheet> (B4 P2 H4: typed)
 
     // The batch being accumulated for `_currentSheet`. Flush drains it.
     Collection::Array<SpriteDraw> _draws;        // +0x10, 0x10 bytes

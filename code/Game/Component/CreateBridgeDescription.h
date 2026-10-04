@@ -42,7 +42,7 @@ public:
     uint32_t _u2c;                              // +0x2c enum (serialized through the uint door)
     uint32_t _u30;                              // +0x30 enum (serialized through the uint door)
     int32_t _i34;                               // +0x34
-    void* _refs[5];                             // +0x38 ExternalPtr[5], inline
+    class ComponentDescription* _refs[5];       // +0x38 ExternalPtr[5], inline (B4 PLAYER H4: the segment templates BridgeTool::CalcPath clones: end piece, 1/2/4/8 cells)
 };
 
 static_assert(sizeof(CreateBridgeDescription) == 0x60, "CreateBridgeDescription is 0x60 (create 0x140032880 MemAlloc(0x60))");

@@ -45,9 +45,8 @@
 using MarketLocationCtrlDispatch = ::ControllerLive::Dispatcher<MarketLocationCtrlTag>;
 
 // The town manager at GameUpdateLoop+0xf0; its +0x10 array is the market-location list.
-// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
 static CitizenBehavior* MarketTown() {
-    return reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    return GameUpdateLoop::_singleton->m_citizenList;   // +0xF0
 }
 
 // state-2 ENTER — retail 0x14004ef20. REGISTER the market: append the owner entity to

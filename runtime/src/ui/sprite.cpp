@@ -136,7 +136,7 @@ namespace UI {
 Sprite::Sprite(Object::ExternalPtr<SpriteSheet> sheet, const System::String& name)
     : spriteSheet(sheet.Get()) {
     if (spriteSheet != nullptr) {
-        spriteIndex = static_cast<const SpriteSheet*>(spriteSheet)->GetSpriteIndexFromName(name);
+        spriteIndex = spriteSheet->GetSpriteIndexFromName(name);
     } else {
         spriteIndex = -1;
     }
@@ -149,7 +149,7 @@ Sprite::Sprite(Object::ExternalPtr<SpriteSheet> sheet, int32_t index)
 
 // ?GetSpriteSheet@Sprite@UI@@ — retail 0x180030ca0 (`MOV RAX,[RCX]; MOV [RDX],RAX`).
 Object::ExternalPtr<SpriteSheet> Sprite::GetSpriteSheet() const {
-    return Object::ExternalPtr<SpriteSheet>(static_cast<SpriteSheet*>(spriteSheet));
+    return Object::ExternalPtr<SpriteSheet>(spriteSheet);
 }
 
 // Sprite::Width() const — retail 0x180030bf0. NO upper-bound check on
@@ -158,14 +158,14 @@ Object::ExternalPtr<SpriteSheet> Sprite::GetSpriteSheet() const {
 // guard retail lacks.
 int32_t Sprite::Width() const {
     if (spriteIndex < 0) return 0;
-    const auto* sheet = static_cast<const SpriteSheet*>(spriteSheet);
+    const auto* sheet = spriteSheet;
     return sheet->m_sprites[spriteIndex].width;
 }
 
 // Sprite::Height() const — retail 0x180030c10. Same no-bound-check note.
 int32_t Sprite::Height() const {
     if (spriteIndex < 0) return 0;
-    const auto* sheet = static_cast<const SpriteSheet*>(spriteSheet);
+    const auto* sheet = spriteSheet;
     return sheet->m_sprites[spriteIndex].height;
 }
 
@@ -370,7 +370,7 @@ namespace UI {
 String::String(Object::ExternalPtr<StringTable> t, const System::String& name)
     : table(t.Get()) {
     if (table != nullptr) {
-        index = static_cast<const StringTable*>(table)->GetIndexFromName(name);
+        index = table->GetIndexFromName(name);
     } else {
         index = -1;
     }
@@ -383,7 +383,7 @@ String::String(Object::ExternalPtr<StringTable> t, int32_t i)
 
 // ?GetStringTable@String@UI@@ — retail 0x180035080 (`MOV RAX,[RCX]; MOV [RDX],RAX`).
 Object::ExternalPtr<StringTable> String::GetStringTable() const {
-    return Object::ExternalPtr<StringTable>(static_cast<StringTable*>(table));
+    return Object::ExternalPtr<StringTable>(table);
 }
 
 // UI::String::operator System::String() const — retail 0x180035020. A
@@ -393,7 +393,7 @@ Object::ExternalPtr<StringTable> String::GetStringTable() const {
 // WAVE 10 LANE UIORACLE note on RtUi_StringTable_GetText_Index). No null check
 // retail lacks (CLAUDE.md).
 String::operator System::String() const {
-    return static_cast<const StringTable*>(table)->GetText(index);
+    return table->GetText(index);
 }
 
 }  // namespace UI

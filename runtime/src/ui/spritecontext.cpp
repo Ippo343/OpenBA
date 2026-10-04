@@ -174,7 +174,7 @@ namespace UI {
 // `Video::Context::SetTransform`; and finally store `_scale`.
 void SpriteContext::Begin(float scale, SpriteCapture* capture, Video::Viewport* clipRegion) {
     Video::Context* const ctx = _context;
-    const auto* rb = static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
+    const auto* rb = static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);   // LEFT: FIELD Video::Context::_renderBuffer is void* (Context.h, R-GFX-1)
     const int32_t w = rb->width;
     const int32_t h = rb->height;
 
@@ -273,7 +273,7 @@ void SpriteContext::FlushDeferredFonts() {
 
     for (int i = 0; i < _deferred.GetSize(); ++i) {
         SpriteDraw* rec   = &_deferred.GetData()[i];
-        void*       sheet = rec->sheet;
+        SpriteSheet* sheet = rec->sheet;
         if (_currentSheet != sheet) {
             if (_currentSheet != nullptr) Flush();
             _currentSheet = sheet;
@@ -296,7 +296,7 @@ void SpriteContext::AddLine(const Sprite& sprite, int32_t x1, int32_t y1,
                             int32_t x2, int32_t y2, uint32_t color) {
     // 0x18011cc09 / 0x18011cc0e: two independent early returns. Note the index
     // test is `< 0`, not `== -1` — `JL`, a SIGNED branch.
-    void* sheet = sprite.spriteSheet;
+    SpriteSheet* sheet = sprite.spriteSheet;
     if (sheet == nullptr || sprite.spriteIndex < 0) return;
 
     if (_currentSheet != sheet) {
@@ -369,7 +369,7 @@ Video::Viewport SpriteContext::SetScissor(const Video::Viewport& v) {
     // new scissor covers the whole target.
     if (SpriteCapture* capture = _spriteCapture) {
         const auto* target =
-            static_cast<const RtVideo::RenderBufferPrefix*>(_context->_renderBuffer);
+            static_cast<const RtVideo::RenderBufferPrefix*>(_context->_renderBuffer);   // LEFT: FIELD Video::Context::_renderBuffer is void* (Context.h, R-GFX-1)
         const int tw = target->width;
         const int th = target->height;
         const bool fullScreen = (nw == tw && nh == th);

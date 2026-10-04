@@ -112,8 +112,7 @@ void MapUI::SetupImage(Video::ImageBuffer* imageBuffer, UI::SpriteSheet** sprite
     *spriteSheetOut = spriteSheet;
 
     // The sheet's material instance (+0x30).
-    // LEFT: SpriteSheet::m_field30 is uint64_t (R-UI's header).
-    spriteSheet->m_field30 = reinterpret_cast<uint64_t>(*materialOut);
+    spriteSheet->m_field30 = *materialOut;
 
     // Get image dimensions
     int imgW = imageBuffer->Width();
