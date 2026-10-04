@@ -26,6 +26,7 @@
 #include "Component/StatusIconComponent.h"
 #include "Component/WorkComponent.h"
 #include "Component/ModelComponent.h"
+#include "Component/AmbientEmitterComponent.h"   // what Entity::FindAudioComponent (0x140002280) returns
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"   // CitizenBehavior::field_0x20 (the residence list)
 #include "Component/coll_bridge.h"
@@ -179,13 +180,6 @@ void ResidenceComponent::SetFamilyCount(int newCount) {
     }
 }
 
-// B4 FORWARD: 1 outside caller (Game/starttown.cpp), which passes &residentSlots.
-void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
-    ResidenceComponent* self = reinterpret_cast<ResidenceComponent*>(   // B4 FORWARD receiver
-        reinterpret_cast<uint8_t*>(arrayFieldPtr) - offsetof(ResidenceComponent, residentSlots));
-    self->SetFamilyCount(newCount);
-}
-
 // ============================================================
 // ResidenceComponent::SerializeFamilies (0x140037c50, ResidenceComponent_helper_7c50):
 //   serialize the nested resident IBP arrays
@@ -241,11 +235,6 @@ void ResidenceComponent::EvictResidents() {
     }
 }
 
-// B4 FORWARD: 1 outside caller (Game/starttown.cpp)
-void ResidenceComponent_ResidenceInit(void* selfP) {
-    reinterpret_cast<ResidenceComponent*>(selfP)->EvictResidents();
-}
-
 // ============================================================
 // The family roster (moved from Component/citizencomponent.cpp and
 // Component/citizen_assignworkplace.cpp; COMP-b left them free)
@@ -265,16 +254,11 @@ bool ResidenceComponent::IsFamilyFull(int family) const {
     return eduLevel <= cap;
 }
 
-// B4 FORWARD: 1 outside caller (standalone/death_harness.cpp)
-bool CitizenComp_helper_a4f0(int64_t self, int param2) {
-    return reinterpret_cast<ResidenceComponent*>(self)->IsFamilyFull(param2);
-}
-
 namespace {
 
 // The live Audio::Scene lives at gameWorld+0x78 (disasm: MOV RAX,[0x1401c3dd8];
 // MOV RDI,[RAX+0x78]). Null in standalone unless the audio scene was built.
-inline void* AudioScene() {
+inline Audio::Scene* AudioScene() {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
     return GameUpdateLoop::_singleton->m_audioScene;
 }
@@ -288,8 +272,8 @@ inline void* AudioScene() {
 // ------------------------------------------------------------
 int RosterCompare_9e20(const void* pa, const void* pb) {
     // qsort's element pointers: each element is a CitizenComponent pointer.
-    const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);
-    const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);
+    const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);   // CAST-OK: crt
+    const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);   // CAST-OK: crt
 
     const CitizenComponent* a258 = ea->_parent;   // +0x258 parent
     int a38 = ea->gender;                         // +0x38 gender
@@ -374,22 +358,19 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
         ModelComponentNotify_Reimpl(_entity, 3);
         // 3D positional audio teardown.
         {
-            int64_t emIBP[2] = {0, 0};
             // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
-            // here (entity, emIBP). The null arm leaves emIBP null, so the teardown below
-            // does not run.
-            int64_t emData = emIBP[0];
-            void* scene = AudioScene();
-            if (emData && scene) {
-                // LEFT: the emitter component's class is not settled (its finder is a PORT GAP).
-                int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
-                uint32_t id = *reinterpret_cast<uint32_t*>(desc + 0x10);
-                const void* pos = reinterpret_cast<const void*>(emData + 0x28);
-                reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
-                    id, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
-                int remaining = reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(id);   // B.3.7 bridge
-                if (remaining == 0) reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(id);   // B.3.7 bridge
-                *reinterpret_cast<uint32_t*>(desc + 0x10) = 0;
+            // here (entity, &em). It returns the entity's AmbientEmitterComponent (type id
+            // 0x1401c3e60). The null arm leaves `em` null, so the teardown below does not run.
+            AmbientEmitterComponent* em = nullptr;
+            Audio::Scene* scene = AudioScene();
+            if (em && scene) {
+                // Retail 0x14012a550 reads slot [1] ([slots+0x10]) of the emitter array.
+                AmbientEmitterSlot* slot = &em->slots[1];
+                uint32_t id = slot->handle;
+                scene->RemoveEmitter(id, em->position);
+                int remaining = scene->GetEmitterCount(id);
+                if (remaining == 0) scene->StopEffect3D(id);
+                slot->handle = 0;
             }
         }
     }
@@ -411,57 +392,51 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 
     // --- Inert: house was empty -> move emitter to model position + set volume. ---
     if (CountResidents() == 0) {
-        int64_t emIBP[2] = {0, 0};
         // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
-        // here (entity, emIBP). The null arm leaves emIBP null, so the emitter block
-        // below does not run.
+        // here (entity, &em). It returns the entity's AmbientEmitterComponent (type id
+        // 0x1401c3e60). The null arm leaves `em` null, so the emitter block below does
+        // not run.
+        AmbientEmitterComponent* em = nullptr;
         // Model/transform position (guarded; component may be absent).
-        float pos[3] = {0.0f, 0.0f, 0.0f};
+        Vector3 pos(0.0f, 0.0f, 0.0f);
         {
             ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
             if (model) {
-                pos[0] = model->transform.translation.x;
-                pos[1] = model->transform.translation.y;
-                pos[2] = model->transform.translation.z;
+                pos.x = model->transform.translation.x;
+                pos.y = model->transform.translation.y;
+                pos.z = model->transform.translation.z;
             }
         }
-        int64_t emData = emIBP[0];
-        void* scene = AudioScene();
-        if (emData) {
-            // LEFT: the emitter component's class is not settled (its finder is a PORT GAP).
-            const void* emPos = reinterpret_cast<const void*>(emData + 0x28);
-            (void)emPos;
+        Audio::Scene* scene = AudioScene();
+        if (em) {
             // PORT GAP 0x140152a70 Math::Vector3::operator==: not ported; retail calls it
-            // here (pos, emPos). The null arm answers "equal".
+            // here (pos, em->position). The null arm answers "equal".
             char same = 1;
             if (!same) {
                 if (scene) {
-                    int nEm = *reinterpret_cast<int*>(emData + 0x40);
-                    int64_t emArr = *reinterpret_cast<int64_t*>(emData + 0x38);
+                    int nEm = em->slotCount;
+                    AmbientEmitterSlot* emArr = em->slots;
                     for (int i = 0; i < nEm; ++i) {
-                        uint32_t id = *reinterpret_cast<uint32_t*>(emArr + static_cast<int64_t>(i) * 0x10);
+                        uint32_t id = emArr[i].handle;
                         if (id != 0)
-                            reinterpret_cast<Audio::Scene*>(scene)->MoveEmitter(
-                                id, *reinterpret_cast<const Vector3*>(emPos),
-                                *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
+                            scene->MoveEmitter(id, em->position, pos);
                     }
                 }
-                *reinterpret_cast<float*>(emData + 0x28) = pos[0];
-                *reinterpret_cast<float*>(emData + 0x2c) = pos[1];
-                *reinterpret_cast<float*>(emData + 0x30) = pos[2];
+                em->position.x = pos.x;
+                em->position.y = pos.y;
+                em->position.z = pos.z;
             }
-            FireComp_StartAudioEmitter_42c60(reinterpret_cast<void*>(emData), 1);
-            int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
-            if (*reinterpret_cast<uint32_t*>(desc + 0x10) == 0) {
-                *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
+            FireComp_StartAudioEmitter_42c60(em, 1);
+            // Retail 0x14012a710 reads slot [1] ([slots+0x10] / [slots+0x14]).
+            AmbientEmitterSlot* slot = &em->slots[1];
+            if (static_cast<uint32_t>(slot->handle) == 0) {
+                slot->volume = 1.0f;   // retail stores 0x3f800000
             } else {
                 float uv = kRdata_14017214c;   // g_fUVScale 0x14017214c
-                if (*reinterpret_cast<float*>(desc + 0x14) != uv) {
-                    *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
+                if (slot->volume != uv) {
+                    slot->volume = 1.0f;   // retail stores 0x3f800000
                     if (scene)
-                        reinterpret_cast<Audio::Scene*>(scene)->SetEmitterVolume(
-                            *reinterpret_cast<uint32_t*>(desc + 0x10),
-                            *reinterpret_cast<const Vector3*>(emData + 0x28), uv);   // B.3.7 bridge
+                        scene->SetEmitterVolume(slot->handle, em->position, uv);
                 }
             }
         }
@@ -523,7 +498,7 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP);
 // the SM Enter walk continues past this node (Build's state-2 has no enter) — keep
 // that return value.
 char ResidenceComponent::EnterBuilt() {
-    int64_t ibp = reinterpret_cast<int64_t>(_entity);   // LEFT: TownRegistry_RegisterResidence takes the IBP value as int64_t (COMP-b's declaration)
+    int64_t ibp = reinterpret_cast<int64_t>(_entity);   // LEFT: SIG TownRegistry_RegisterResidence (takes the IBP value as int64_t; citizen_employ_cascade.cpp)
     TownRegistry_RegisterResidence(ibp);
     {
         static int n = 0;
@@ -574,7 +549,7 @@ static void ResidenceComponent_PopulateStateTable() {
     auto& t = ResidenceCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
     TableRegisterState(t, 2, &ResidenceEnterBuilt,
-                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<ResidenceComponent>::Tick>(&ResidenceHeatTick),   // LEFT: its time is System::Time*; Controller::Tick / StateMachine::Tick carry it as void* (ControllerComponent.h, statemachinecomponent.cpp)
+                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<ResidenceComponent>::Tick>(&ResidenceHeatTick),   // LEFT: controller_state_table.h / StateMachineComponent.h (COMP-2+3): its time is System::Time*, the table's Tick carries it as void*
                        nullptr);
     TableAddTransition(t, 3, nullptr);
     TableRegisterState(t, 3, &ResidenceEnterDemolish,

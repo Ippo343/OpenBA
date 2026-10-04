@@ -107,6 +107,10 @@
 #include "Component/RawMaterialComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
+#include "Game/WorkScheduler.h"
+#include "Game/PlayerToolManager.h"
 
 // ============================================================
 // Helpers, called directly
@@ -198,17 +202,15 @@ bool DestroyComponent::StorageEmpty() {
 static char Destroy_ReclaimPending_ea20(WorkComponent* yard) {
     if (!yard) return 0;
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    int64_t mgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_tutorial);   // +0x118
+    WorkScheduler* mgr = GameUpdateLoop::_singleton->m_tutorial;   // +0x118
     if (!mgr) return 0;
     int key = yard->workId;
-    void* node = nullptr;
-    RemovalCalc_helper_8d50(mgr, &node, key);
+    Work* node = mgr->FindWorkAtCell(key);   // 0x1400f8d50 (the RemovalCalc_helper_8d50 forwarder's member)
     if (!node) return 0;
-    void** vt = *reinterpret_cast<void***>(node);
-    if (!vt) return 0;
+    if (!*reinterpret_cast<void* const*>(node)) return 0;   // LEFT: the tree's vptr guard (retail has none: known_port_issues row 391)
     // `node` is the gw+0x118 scheduler's work (id map filled by CitizenAI_impl_88a0
     // 0x1400f88a0 with the posted Work leaves); retail reads AL.
-    return static_cast<char>(reinterpret_cast<Work*>(node)->GetPriority());   // B.3.x bridge (slot 11)
+    return static_cast<char>(node->GetPriority());   // slot 11
 }
 
 // ============================================================
@@ -305,18 +307,18 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
     std::vector<Pair> list;
 
     if (delivered < required) {
-        // Partially built: spill the real Storage contents. StorageComponent's item
-        // array (+0x28, 0x10-byte items) is `void*` in COMP-e's header: LEFT.
+        // Partially built: spill the real Storage contents (StorageComponent::Item,
+        // 0x10 bytes: resource, count, reserve).
         StorageComponent* storage = entity->FindComponent<StorageComponent>();
         if (storage) {
             int nStacks = storage->slotCount;
-            uintptr_t stacks = reinterpret_cast<uintptr_t>(storage->storageSlots);
+            const StorageComponent::Item* stacks = storage->storageSlots;
             int divisor = (delivered > 0) ? 2 : 1;
             for (int i = 0; i < nStacks; i++) {
-                uintptr_t s = stacks + static_cast<uintptr_t>(i) * 0x10;
-                int f8 = *reinterpret_cast<int*>(s + 8);
-                int fc = *reinterpret_cast<int*>(s + 0xc);
-                list.push_back({*reinterpret_cast<ComponentDescription**>(s), (f8 - fc) / divisor});
+                const StorageComponent::Item& s = stacks[i];
+                int f8 = s._count;
+                int fc = s._reserve;
+                list.push_back({s._resource, (f8 - fc) / divisor});
             }
         }
     } else {
@@ -330,15 +332,13 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
     if (list.empty()) return;
 
     // ---- Phase 2: place piles on empty walkable footprint tiles ----
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a) and Map's cells are
-    // untyped: the width and cell reads are LEFT.
-    int* grid = reinterpret_cast<int*>(gw->m_game);
+    Map* grid = gw->m_game;   // +0xf8
     if (!grid) return;
-    int gw_width = *grid;
+    int gw_width = grid->size;
     if (gw_width <= 0) return;
-    int64_t cellArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(grid) + 0x80);
+    MapCell* cellArr = grid->cells;
     System::Random* random = gw->m_random;
-    void* entityList = gw->m_entityList;
+    EntityList* entityList = gw->m_entityList;
 
     const float kHalfCell  = 0.5f;   // DAT_140172114
     const float kMaxHeight = 0.2f;   // DAT_1401720fc
@@ -362,10 +362,9 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
             float w0[3] = {0, 0, 0}, w1[3] = {0, 0, 0};
             Reimpl_MapGetTerrainPos(grid, w0, in2, 0, nullptr);
             Reimpl_MapGetTerrainPos(grid, w1, w0, 0, nullptr);
-            uintptr_t cp = static_cast<uintptr_t>(cellArr) +
-                           static_cast<uintptr_t>(cell) * 0x30;
-            bool valid = (*reinterpret_cast<int64_t*>(cp) == 0) &&
-                         (*reinterpret_cast<int8_t*>(cp + 0x29) == 2) &&
+            const MapCell* cp = &cellArr[static_cast<uintptr_t>(cell)];
+            bool valid = (cp->blocker == nullptr) &&
+                         (static_cast<int8_t>(cp->terrainType) == 2) &&
                          (0.0f <= w1[2]) && (w1[2] < kMaxHeight);
             if (valid) {
                 RawMaterialDescription* rmDesc = FindRawMatDescInTemplate(tmpl);
@@ -386,7 +385,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                         RawMaterialComponent* rm = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
                         if (rm) {
                             int yaw = random ? random->RandTol(2) : 0;
-                            ActRm_PositionEntity_9760(reinterpret_cast<int64_t>(rm), cell, static_cast<float>(yaw) * kYawScale);
+                            PositionRawMaterial(rm, cell, static_cast<float>(yaw) * kYawScale);   // 0x140129760
                             rm->quantity = per;
                             rm->profession = nullptr;
                         }
@@ -422,15 +421,14 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
 static void Destroy_MarkAndPushRemoval(ComponentEntity* entity) {
     if (!entity) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // GameUpdateLoop::m_entityList (+0xe8) is still void* (GAME-a): the removal
-    // array at +0xd0 / +0xd8 is LEFT.
-    uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
+    // GameUpdateLoop::m_entityList (+0xe8): the removal array is its removalList (+0xd0).
+    EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
     if (!entityList) return;
     if (((entity->_entityFlags >> 10) & 1) != 0) return;
     ActHunt_MarkEntityRemoval_c2ea0(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(entityList + 0xd0)
-        .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
+    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+        .SetSizeFill(entityList->removalList.count + 1, &entity);
 }
 
 // BuildComponent material math: delivered (+0x48), required = the BuildDescription's
@@ -523,7 +521,7 @@ char DestroyComponent::State4Enter(void* sm) {
             ComponentEntity* entityTmp = entity;
             ClearStorage* work = ::new (mem) ClearStorage(&entityTmp);
             ::Object::InternalPtr<ClearStorage> workIBP(work);
-            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 1, 0, &workIBP);
+            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 1, 0, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -577,8 +575,8 @@ char DestroyComponent::State5Enter() {
                 BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
                 int64_t workIBP = 0;
                 new (&workIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-                CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 0x2001, 0, &workIBP);
+                    reinterpret_cast<RtObject::Internal*>(mem));   // LEFT: SIG BuildStructure_CreateInPlaceFull (Work/exe_bodies.h) builds into void*
+                CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 0x2001, 0, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
             }
         }
     } else {
@@ -593,9 +591,9 @@ char DestroyComponent::State5Enter() {
         }
         if (GameUpdateLoop::_singleton != nullptr) {
             // +0x120 (the tree's "trade manager"; GameUpdateLoop names it m_toolManager).
-            int64_t tradeMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_toolManager);
+            PlayerToolManager* tradeMgr = GameUpdateLoop::_singleton->m_toolManager;
             ComponentEntity* entityIBP = entity;
-            if (tradeMgr) NomadComp_FUN_140103480(tradeMgr, &entityIBP);
+            if (tradeMgr) tradeMgr->OnEntityRemoved(&entityIBP);   // 0x140103480
         }
         Destroy_ReleaseDemoSite(prod);   // nothing replaces it on this branch
         Destroy_MarkAndPushRemoval(entity);
@@ -657,14 +655,14 @@ char DestroyComponent::State5Tick() {
         rot = fp->extraField;
     }
     ModelComponent* pq = FindOn<ModelComponent>(entity);
-    float tf[3] = {0, 0, 0};
+    Math::Vector3 tf;   // (0, 0, 0)
     float yaw = 0.0f;
     uint16_t orient = 0;
     if (pq) {
         // ModelComponent's transform (+0x148): its translation (+0x10 / +0x14 / +0x18).
-        tf[0] = pq->transform.translation.x;
-        tf[1] = pq->transform.translation.y;
-        tf[2] = pq->transform.translation.z;
+        tf.x = pq->transform.translation.x;
+        tf.y = pq->transform.translation.y;
+        tf.z = pq->transform.translation.z;
         orient = static_cast<uint16_t>(pq->meshGroup);
         yaw = pq->yaw;
     }
@@ -680,9 +678,9 @@ char DestroyComponent::State5Tick() {
 
     // 3) Trade notify + mark the old entity for removal.
     if (GameUpdateLoop::_singleton != nullptr) {
-        int64_t tradeMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_toolManager);
+        PlayerToolManager* tradeMgr = GameUpdateLoop::_singleton->m_toolManager;
         ComponentEntity* entityIBP = entity;
-        if (tradeMgr) NomadComp_FUN_140103480(tradeMgr, &entityIBP);
+        if (tradeMgr) tradeMgr->OnEntityRemoved(&entityIBP);   // 0x140103480
     }
     Destroy_MarkAndPushRemoval(entity);
 
@@ -724,11 +722,11 @@ char DestroyComponent::State5Tick() {
                     }
                     ModelComponent* npq = FindOn<ModelComponent>(newEntity);
                     if (npq) {
-                        ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(npq), tf, yaw);
-                        ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(npq), orient, 0);
+                        npq->SetTransformFromYaw(&tf, yaw);   // 0x140003870
+                        ModelSelectMesh(npq, orient, 0);       // 0x1401253d0
                     }
 
-                    void* entityList = GameUpdateLoop::_singleton->m_entityList;
+                    EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
                     int category = upgradeTarget->_category;
                     if (entityList) EntityList_RegisterEntity_Impl(entityList, &hold, category);
 
@@ -888,7 +886,7 @@ char DestroyComponent::CancelDemolition(void* sm) {
     // StatusIconComponent state flag 5 off (the "under construction/demolition"
     // overlay) and stop the production yard's worker.
     StatusIconComponent* mesh = FindOn<StatusIconComponent>(entity);
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 5, 0);
+    mesh->SetFlag(5, 0);   // 0x14012c3f0
     WorkComponent* yard = FindOn<WorkComponent>(entity);
     WorkComponent_RegisterWorkSlot(yard);
 
@@ -923,12 +921,10 @@ char DestroyComponent::CancelDemolition(void* sm) {
         if (modelVariant < 0) {
             next = 0;                       // no mesh chosen yet — back to the start
         } else {
-            // group[variantIdx] is 0x18 bytes; +0x10 is the mesh COUNT (+0x08 is the
-            // mesh array — the same layout destroycomponent_state6.cpp walks). The
-            // group array is `void*` in COMP-d's ModelDescription.h: LEFT.
-            int64_t groups = reinterpret_cast<int64_t>(modelDesc->_meshGroups);
-            int meshCount = *reinterpret_cast<int*>(
-                groups + 0x10 + static_cast<int64_t>(variantIdx) * 0x18);
+            // group[variantIdx] is a ModelMeshGroup (0x18 bytes); +0x10 is its mesh
+            // COUNT (+0x08 the mesh array destroycomponent_state6.cpp walks).
+            const ModelMeshGroup* groups = modelDesc->_meshGroups;
+            int meshCount = groups[variantIdx].meshCount;
             next = (modelVariant == meshCount - 1) ? 2 : 8;
         }
     }

@@ -81,10 +81,9 @@ namespace {
 // The element: EventLogEntry (EventLog.h), stride 0x28, align 8.
 // +0x04..+0x07 is padding retail's assign never writes. This is a fill-only
 // instantiation (init == nullptr): retail 0x140019b70 has no default arm.
-// LEFT: the ArraySpec hooks take the element as uint8_t*.
-void AssignEventEntry(uint8_t* d, const uint8_t* s) {
-    EventLogEntry* dst = reinterpret_cast<EventLogEntry*>(d);
-    const EventLogEntry* src = reinterpret_cast<const EventLogEntry*>(s);
+// The element ops are written on EventLogEntry and reach the erased core
+// through Collection.h's element adapters (B4 P2 GAME-1).
+void CopyEventEntry(EventLogEntry* dst, const EventLogEntry* src) {
     dst->color = src->color;
     new (&dst->text) System::String(src->text);
     dst->eventType = src->eventType;
@@ -94,10 +93,15 @@ void AssignEventEntry(uint8_t* d, const uint8_t* s) {
     dst->popup = src->popup;
 }
 
-void DestroyEventEntry(void* /*ignoredThis*/, uint8_t* base, int count) {
-    EventLogEntry* entries = reinterpret_cast<EventLogEntry*>(base);
+void DestroyEventEntries(EventLogEntry* entries, int count) {
     for (int i = 0; i < count; ++i)
         entries[i].text.~String();
+}
+void AssignEventEntry(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<EventLogEntry, &CopyEventEntry>(d, s);
+}
+void DestroyEventEntry(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<EventLogEntry, &DestroyEventEntries>(ignoredThis, base, count);
 }
 
 // stays explicit: byteCopy=false with a String copy-ctor `assign`, a real
@@ -118,7 +122,7 @@ using EventArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // `arrBase` is the log's {entries, entryCount, entryCapacity} header.
 static void EventArray_Grow(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry) {
     // B.3.2 bridge: EventLog +0x18 is declared as the Array's three fields.
-    reinterpret_cast<EventArray*>(arrBase)->SetSizeFill(newCount, newEntry);
+    reinterpret_cast<EventArray*>(arrBase)->SetSizeFill(newCount, newEntry);   // LEFT: EventLog.h H5: entries is the Array's three raw fields (gameupdateloop_load.cpp asserts EventLog trivially constructible)
 }
 
 // The matching destructor, FUN_14000a8a0 (retail's EventNotifier cleanup): ~String
@@ -126,7 +130,7 @@ static void EventArray_Grow(EventLogEntry** arrBase, int newCount, const EventLo
 // game_leaf_helpers.cpp's Game_EventNotifierCleanup so the element row lives in
 // exactly one place.
 extern "C" void EventLog_EventArray_Destroy(void* arrBase) {
-    reinterpret_cast<EventArray*>(arrBase)->~Array();   // B.3.2 bridge, as above
+    reinterpret_cast<EventArray*>(arrBase)->~Array();   // LEFT: SIG EventLog_EventArray_Destroy (Game_EventNotifierCleanup's void* from gameupdateloop.cpp); EventLog.h H5 as above
 }
 
 // ============================================================
@@ -295,7 +299,8 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
     // stack entry is.
     alignas(8) uint8_t entryBuf[sizeof(EventLogEntry)];
     // LEFT: the entry is raw stack storage (H5: EventLogEntry holds a String).
-    EventLogEntry* entry = reinterpret_cast<EventLogEntry*>(entryBuf);
+    EventLogEntry* entry = reinterpret_cast<EventLogEntry*>(entryBuf);   // LEFT: H5 raw stack entry (a real EventLogEntry local would run String's ctor / dtor)
+
     entry->color = color;
     new (&entry->text) System::String(formatted);
     entry->eventType = eventType;

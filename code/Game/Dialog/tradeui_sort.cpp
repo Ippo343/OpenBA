@@ -56,21 +56,22 @@
 #include "Dialog/exe_bodies.h"
 #include "Dialog/TradeUI.h"
 #include "Component/RawMaterialDescription.h"
+#include "Component/TradeComponent.h"
 
 namespace {
 
-constexpr int kStride = 0x18;               // bytes per element
-typedef uint8_t* Elem;
+typedef TradeUI::StorageItem* Elem;          // stride 0x18
+typedef TradeComponent* const* SortCtx;      // the ByComponent context: the caller's TradeComponent*
 
-inline Elem At(Elem base, int64_t i) { return base + i * kStride; }
-inline int64_t Count(Elem first, Elem last) { return (last - first) / kStride; }
+inline Elem At(Elem base, int64_t i) { return base + i; }
+inline int64_t Count(Elem first, Elem last) { return last - first; }
 
-inline void Swap24(Elem a, Elem b) {
-    uint64_t* x = reinterpret_cast<uint64_t*>(a);
-    uint64_t* y = reinterpret_cast<uint64_t*>(b);
-    uint64_t t0 = x[0], t1 = x[1], t2 = x[2];
-    x[0] = y[0]; x[1] = y[1]; x[2] = y[2];
-    y[0] = t0;   y[1] = t1;   y[2] = t2;
+inline void Swap24(Elem x, Elem y) {
+    ComponentDescription* const t0 = x->resource;
+    RawMaterialDescription* const t1 = x->rawMaterial;
+    ValueDescription* const t2 = x->value;
+    x->resource = y->resource; x->rawMaterial = y->rawMaterial; x->value = y->value;
+    y->resource = t0;          y->rawMaterial = t1;             y->value = t2;
 }
 
 // ── The name key ─────────────────────────────────────────────────────────────
@@ -87,24 +88,23 @@ inline void Swap24(Elem a, Elem b) {
 // Note retail never destroys the UIString itself — only the System::String temps.
 // That is reproduced rather than "fixed": adding a dtor call retail does not make
 // would be a behaviour change smuggled in under the heading of correctness.
-bool BuildNameKey(const void* elem, System::String* outString) {
-    // The elements are TradeUI::StorageItem rows (_storageItems, +0x30); P is
+bool BuildNameKey(const TradeUI::StorageItem* elem, System::String* outString) {
+    // The elements are TradeUI::StorageItem rows (_storageItems, +0x50); P is
     // the row's RawMaterialDescription.
-    const RawMaterialDescription* p =
-        reinterpret_cast<const TradeUI::StorageItem*>(elem)->rawMaterial;   // LEFT: the introsort is byte-generic (retail's shared body)
+    const RawMaterialDescription* p = elem->rawMaterial;
     if (!p) { return false; }
 
     alignas(8) uint8_t uiBuf[64];
-    UI::String* ui = ::new (static_cast<void*>(uiBuf)) UI::String(
+    UI::String* ui = ::new (uiBuf) UI::String(
         ::Object::ExternalPtr<UI::StringTable>(p->_stringTable), p->_name);
     System::String tmp;
-    ::new (static_cast<void*>(&tmp)) System::String(ui->operator System::String());
+    ::new (&tmp) System::String(ui->operator System::String());
     *outString = tmp;
     return true;
 }
 
 // 0x1400845d0 — ByName comparator. `ctx` is the ignored functor `this`.
-bool NameLess(void* /*ctx*/, const void* a, const void* b) {
+bool NameLess(SortCtx /*ctx*/, const TradeUI::StorageItem* a, const TradeUI::StorageItem* b) {
     System::String sa, sb;
     const bool okA = BuildNameKey(a, &sa);
     const bool okB = BuildNameKey(b, &sb);
@@ -113,19 +113,20 @@ bool NameLess(void* /*ctx*/, const void* a, const void* b) {
     return result;
 }
 
-// The BST lookup both halves of the ByComponent comparator perform. Same node
-// layout as the storage AVL ported in tradeui_leaves.cpp (+0x00 key, +0x08 value,
-// +0x18 left, +0x20 right) and, importantly, the same UNSIGNED key comparison.
+// The BST lookup both halves of the ByComponent comparator perform: the
+// TradeComponent's stock tree (stockRoot +0x60, TradeResourceNode: +0x00 key,
+// +0x08 value, +0x18 left, +0x20 right), the same storage AVL ported in
+// tradeui_leaves.cpp, and the same UNSIGNED key comparison (pointer order).
 // Returns the low 32 bits of the node's value, or 0 when the key is absent.
-int32_t TreeCountFor(void* ctx, uint64_t key) {
+int32_t TreeCountFor(SortCtx ctx, const ComponentDescription* key) {
     if (!ctx) return 0;
-    const uint8_t* obj = *reinterpret_cast<const uint8_t* const*>(ctx);
+    const TradeComponent* obj = *ctx;
     if (!obj) return 0;
-    const uint64_t* node = *reinterpret_cast<const uint64_t* const*>(obj + 0x60);
+    const TradeResourceNode* node = obj->stockRoot;
     while (node) {
-        if (key < node[0])      node = reinterpret_cast<const uint64_t*>(node[3]);
-        else if (node[0] < key) node = reinterpret_cast<const uint64_t*>(node[4]);
-        else                    return static_cast<int32_t>(node[1]);
+        if (key < node->resource)      node = node->left;
+        else if (node->resource < key) node = node->right;
+        else                           return node->quantity;
     }
     return 0;
 }
@@ -137,15 +138,15 @@ int32_t TreeCountFor(void* ctx, uint64_t key) {
 // and falls back to name order only when the counts tie. Reading it as a plain
 // component-identity compare would produce a table sorted by something else
 // entirely while still looking sorted.
-bool ComponentLess(void* ctx, const void* a, const void* b) {
-    const int32_t ca = TreeCountFor(ctx, *reinterpret_cast<const uint64_t*>(a));
-    const int32_t cb = TreeCountFor(ctx, *reinterpret_cast<const uint64_t*>(b));
+bool ComponentLess(SortCtx ctx, const TradeUI::StorageItem* a, const TradeUI::StorageItem* b) {
+    const int32_t ca = TreeCountFor(ctx, a->resource);
+    const int32_t cb = TreeCountFor(ctx, b->resource);
     if (cb < ca) return true;                // higher count sorts first
     if (ca < cb) return false;
     return NameLess(nullptr, a, b);          // tie -> name ascending
 }
 
-typedef bool (*LessFn)(void* ctx, const void* a, const void* b);
+typedef bool (*LessFn)(SortCtx ctx, const TradeUI::StorageItem* a, const TradeUI::StorageItem* b);
 
 // ── The small-range sort (0x140015ad0 / 0x140016920) ─────────────────────────
 // Both are the SAME max-selection sort; 0x140016920 is merely 109 lines instead of
@@ -155,12 +156,12 @@ typedef bool (*LessFn)(void* ctx, const void* a, const void* b);
 // The comparison is `less(runningMax, candidate)` — strict — so a candidate EQUAL to
 // the running maximum does not displace it. That detail decides where equal elements
 // land, so it is transcribed rather than tidied.
-void SmallSort(Elem first, Elem last, void* ctx, LessFn less) {
+void SmallSort(Elem first, Elem last, SortCtx ctx, LessFn less) {
     if (last <= first) return;               // retail: `CMP RDX,RCX ; JBE ret`
-    for (; first < last; last -= kStride) {
+    for (; first < last; --last) {
         Elem best = first;
         Elem cur  = first;
-        for (Elem next = cur + kStride; next <= last; next = cur + kStride) {
+        for (Elem next = cur + 1; next <= last; next = cur + 1) {
             if (less(ctx, best, next)) best = next;
             cur = next;
         }
@@ -169,8 +170,8 @@ void SmallSort(Elem first, Elem last, void* ctx, LessFn less) {
 }
 
 // ── The introsort driver (0x1400162d0 / 0x1400165d0) ─────────────────────────
-void IntroSort(Elem array, int count, void* ctx, LessFn less,
-               void (*smallSort)(Elem, Elem, void*, LessFn)) {
+void IntroSort(Elem array, int count, SortCtx ctx, LessFn less,
+               void (*smallSort)(Elem, Elem, SortCtx, LessFn)) {
     if (count < 2) return;
 
     // Retail's explicit recursion stack: 62 entries, NO overflow check. Depth is
@@ -210,14 +211,14 @@ void IntroSort(Elem array, int count, void* ctx, LessFn less,
                 if (lo < mid) {
                     unbounded = false;
                     for (;;) {
-                        lo += kStride;
+                        ++lo;
                         if (mid <= lo)          { unbounded = true; break; }
                         if (less(ctx, mid, lo)) { break; }
                     }
                 }
                 if (unbounded) {
                     for (;;) {
-                        lo += kStride;
+                        ++lo;
                         if (last < lo)          break;
                         if (less(ctx, mid, lo)) break;
                     }
@@ -227,7 +228,7 @@ void IntroSort(Elem array, int count, void* ctx, LessFn less,
                 Elem hiPrev = hi;
                 for (;;) {
                     hiPrev = hi;
-                    hi -= kStride;
+                    --hi;
                     if (hi <= mid)           break;
                     if (!less(ctx, mid, hi)) break;
                 }
@@ -244,14 +245,14 @@ void IntroSort(Elem array, int count, void* ctx, LessFn less,
                 if (mid < hiPrev) {
                     unbounded2 = false;
                     for (;;) {
-                        hiPrev -= kStride;
+                        --hiPrev;
                         if (hiPrev <= mid) { unbounded2 = true; break; }
                         if (less(ctx, hiPrev, mid) || less(ctx, mid, hiPrev)) break;
                     }
                 }
                 if (unbounded2) {
                     for (;;) {
-                        hiPrev -= kStride;
+                        --hiPrev;
                         if (hiPrev <= first)            break;
                         if (less(ctx, hiPrev, mid))     break;
                         if (less(ctx, mid, hiPrev))     break;
@@ -293,16 +294,16 @@ void IntroSort(Elem array, int count, void* ctx, LessFn less,
 
 // 0x1400162d0 — sort the trade table by name. RCX=array, EDX=count: retail
 // never reads R8/R9 (the two "phantom" parameters the caller used to pass are gone).
-extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count) {
+extern "C" void TradeUI_IntroSort_ByName_162d0(TradeUI::StorageItem* array, int count) {
     if (!array || count < 2) return;
-    IntroSort(static_cast<Elem>(array), count, nullptr, &NameLess, &SmallSort);
+    IntroSort(array, count, nullptr, &NameLess, &SmallSort);
 }
 
 // 0x1400165d0 — sort the trade table by stocked count (descending), name on ties.
-extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count,
-                                                    void* ctx) {
+extern "C" void TradeUI_IntroSort_ByComponent_165d0(TradeUI::StorageItem* array, int count,
+                                                    TradeComponent* const* ctx) {
     if (!array || count < 2) return;         // retail: `CMP EDX,1 ; JLE ret`
-    IntroSort(static_cast<Elem>(array), count, ctx, &ComponentLess, &SmallSort);
+    IntroSort(array, count, ctx, &ComponentLess, &SmallSort);
 }
 
 // The BANISHED_TRADE_SORT_SELFTEST introsort self-test was deleted with the flag

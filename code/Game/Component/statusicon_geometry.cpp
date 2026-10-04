@@ -104,7 +104,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
     // LEFT: Graphics::Geometry declares the pair as two Transforms (+0x84 / +0xa0), not
     // as the InterpolatedState<Transform> retail's Lerp reads (R-GFX's header).
     const Math::Transform xf =        // .translation is the billboard origin
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: graphics/Geometry.h (R-GFX-1)
             ->Lerp(Math::Scalar(t));
     {
         Math::Matrix mat = xf.AsMatrix();
@@ -205,7 +205,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
 
         // 6 indices: base, base+1, base+2, base, base+2, base+3.
         // LEFT: Video::Context +0x20f0 (the index cursor) is declared uint64_t (R-VIDEO's header).
-        short* ip = reinterpret_cast<short*>(context._unknown20f0);
+        short* ip = reinterpret_cast<short*>(context._unknown20f0);   // LEFT: video/Context.h (R-GFX-1)
         ip[0] = base;
         ip[1] = static_cast<short>(base + 1);
         ip[2] = static_cast<short>(base + 2);
@@ -239,10 +239,9 @@ void StatusIconGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     if (!settings || settings->statusIconEnable == 0) return;
 
     const UI::SpriteSheet* sheet = spriteSheet;
-    // LEFT: UI::SpriteSheet +0x30 (its ExternalPtr<MaterialInstance>) is declared uint64_t
-    // (R-UI's header).
+    // UI::SpriteSheet +0x30 is its ExternalPtr<MaterialInstance>.
     const Graphics::MaterialInstance* material =
-        sheet ? reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30) : nullptr;
+        sheet ? sheet->m_field30 : nullptr;
     if (material) {
         // AddDrawItem(geom, material, 0x8000, 0, 0.0, uvScale, 1, null, 0)
         rendererRef.AddDrawItem(this, material, 0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);

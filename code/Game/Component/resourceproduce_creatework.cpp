@@ -37,7 +37,7 @@
 #include "Work/ConsumeProduce.h"
 #include "Component/MarketComponent.h"
 #include <new>
-#include "Action/exe_bodies.h"   // Pf_RecursiveChildSum_123070
+#include "Action/exe_bodies.h"   // InteractNodeCount (0x140123070)
 #include "Component/FishingComponent.h"
 #include "Component/HuntComponent.h"
 #include "Component/HerbalistComponent.h"
@@ -90,7 +90,7 @@ uintptr_t* WrapIBP(uintptr_t* out, Work* obj) {
 // fishing spots the citizen cycles through, so an unsized pair means a fisherman with
 // nowhere to stand.
 extern "C" uintptr_t* FishingComponent_CreateWork(void* selfV, uintptr_t* out) {
-    FishingComponent* self = reinterpret_cast<FishingComponent*>(selfV);   // B4 FORWARD receiver
+    FishingComponent* self = reinterpret_cast<FishingComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
     FishingWork* work = AllocWork<FishingWork>(0x70);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -103,8 +103,8 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* selfV, uintptr_t* out) {
     {
         InteractComponent* pos = entity->FindComponent<InteractComponent>();   // 0x140002ed0
         if (pos) {
-            const int n0 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 0);
-            const int n2 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 2);
+            const int n0 = InteractNodeCount(pos, 0);
+            const int n2 = InteractNodeCount(pos, 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
             // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). I32NoInit:
             // 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop right below
@@ -124,7 +124,7 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* selfV, uintptr_t* out) {
 // Retail writes vtable_AutoPickupWork then immediately vtable_HuntWork over it (a
 // compiler artefact of the two-level ctor); only the final store is observable.
 extern "C" uintptr_t* HuntComponent_CreateWork(void* selfV, uintptr_t* out) {
-    HuntComponent* self = reinterpret_cast<HuntComponent*>(selfV);   // B4 FORWARD receiver
+    HuntComponent* self = reinterpret_cast<HuntComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
     HuntWork* work = AllocWork<HuntWork>(0x58);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -140,7 +140,7 @@ extern "C" uintptr_t* HuntComponent_CreateWork(void* selfV, uintptr_t* out) {
 // ── HerbalistComponent::CreateWork — retail 0x14004b160 ───────────────────────────
 // This is the Gatherer's Hut work (GathererShelter.rsc carries HerbalistDescription).
 extern "C" uintptr_t* HerbalistComponent_CreateWork(void* selfV, uintptr_t* out) {
-    HerbalistComponent* self = reinterpret_cast<HerbalistComponent*>(selfV);   // B4 FORWARD receiver
+    HerbalistComponent* self = reinterpret_cast<HerbalistComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
     HerbalistWork* work = AllocWork<HerbalistWork>(0x60);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -175,7 +175,7 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* selfV, uintptr_t* out)
 // sm+0x52 is the pending state id and sm+0x50 the current one; the sign test is
 // retail's "no pending transition" check.
 extern "C" uintptr_t* ForesterComponent_CreateWork(void* selfV, uintptr_t* out) {
-    ForesterComponent* self = reinterpret_cast<ForesterComponent*>(selfV);   // B4 FORWARD receiver
+    ForesterComponent* self = reinterpret_cast<ForesterComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
     ComponentEntity* entity = self->_entity;
 
     {
@@ -286,8 +286,8 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
     {
         InteractComponent* pos = (*entity)->FindComponent<InteractComponent>();   // 0x140002ed0
         if (pos) {
-            const int n0 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 0);
-            const int n2 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 2);
+            const int n0 = InteractNodeCount(pos, 0);
+            const int n2 = InteractNodeCount(pos, 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
             // (retail ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3).
             // I32NoInit: 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop
@@ -306,7 +306,7 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
 extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
 
 extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* selfV, uintptr_t* out) {
-    ConsumeProduceComponent* self = reinterpret_cast<ConsumeProduceComponent*>(selfV);   // B4 FORWARD receiver
+    ConsumeProduceComponent* self = reinterpret_cast<ConsumeProduceComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
 
     ComponentEntity* entity = self->_entity;
     if (!entity) return WrapIBP(out, nullptr);

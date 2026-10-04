@@ -44,14 +44,15 @@
 
 namespace {
 // {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
-void* AllocArray(void* header, int count, int stride) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    *(int32_t*)(h + 8) = count;
-    *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && ::System::MemoryAllocator::_singleton)
-                ? ::System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
-                : nullptr;
-    *(void**)h = buf;
+// Stores in the old order: count (+8), capacity (+0xc), then data (+0).
+template <class T>
+T* AllocArray(T*& data, int32_t& countField, int32_t& capField, int count, int stride) {
+    countField = count;
+    capField = count;
+    T* buf = (count > 0 && ::System::MemoryAllocator::_singleton)
+             ? static_cast<T*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8))
+             : nullptr;
+    data = buf;
     return buf;
 }
 }  // namespace
@@ -91,7 +92,7 @@ bool DecalDescription::Serialize(IO::Stream& stream) {
     int refCount = _materialCount;
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     if (loading) {
-        AllocArray(&_materials, refCount, 8);
+        AllocArray(_materials, _materialCount, _materialCap, refCount, 8);
         for (int j = 0; j < refCount; ++j) _materials[j] = nullptr;
     }
     Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, _materials);
@@ -102,7 +103,7 @@ bool DecalDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_uvRectCount, nullptr);   // quadCount
     int quadCount = _uvRectCount;
     if (loading) {
-        AllocArray(&_uvRects, quadCount, 0x10);
+        AllocArray(_uvRects, _uvRectCount, _uvRectCap, quadCount, 0x10);
         for (int i = 0; i < quadCount; ++i)
             _uvRects[i] = DecalUVRect{0.0f, 0.0f, 1.0f, 1.0f};   // default quad
     }

@@ -100,6 +100,9 @@ using CropFieldDispatch = ::ControllerLive::Dispatcher<CropFieldCtrlTag>;
 #include "Component/MapComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
+#include "Game/Calendar.h"
+#include "Game/WeatherSimulation.h"
 
 namespace {
 
@@ -116,7 +119,7 @@ const float kYearMonths  = BitsF(kRdata_1401721b8);        // 12.0f
 void CropFieldComponent::PushAccepting() {
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     if (!wpc) return;
-    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), workEnabled);
+    wpc->SetAccepting(workEnabled);   // 0x14012fc00
 }
 
 // ── Slot array layout (self+0x58, stride 0x20, count self+0x60): CropSlot ─────────
@@ -245,7 +248,7 @@ void CF_PostWork(CropFieldComponent* comp, Work* work) {
     if (!workComp) {
         return;
     }
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, 0, &workIbp);
+    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, 0, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
 }
 
@@ -295,7 +298,7 @@ float CropFieldComponent::Maturity() {
 // Retail 0x14011b410 — B4 FORWARD: 1 outside caller file (Dialog/cropui_promote.cpp);
 // the closing wave rewires it. The null test is the tree's.
 extern "C" float CropFieldComponent_Maturity(void* comp) {
-    return comp ? reinterpret_cast<CropFieldComponent*>(comp)->Maturity() : 0.0f;
+    return comp ? reinterpret_cast<CropFieldComponent*>(comp)->Maturity() : 0.0f;   // LEFT: B4 FORWARD (cropui_promote.cpp)
 }
 
 // ── state 2 enter — 0x14011a920 ───────────────────────────────────────────────────
@@ -327,19 +330,19 @@ char CropFieldComponent::Event3Plant(void* sm) {
 // at either end of the year, not mid-season. Writing it as a signed `v - 3 > 8` would
 // silently drop the entire v < 3 arm and the field would only ever plant late in the
 // year. Kept as an explicit unsigned cast so the behaviour cannot drift.
-// GameUpdateLoop::m_dayCounter / m_weather are still void* (GAME-a): LEFT.
+// The year clock is GameUpdateLoop::m_dayCounter (Calendar), the temperature m_weather's.
 char CropFieldComponent::State2PerFrame(void* sm) {
     if (!workEnabled) return 1;
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    const uintptr_t seasonMgr = reinterpret_cast<uintptr_t>(gw->m_dayCounter);
-    const uintptr_t weather   = reinterpret_cast<uintptr_t>(gw->m_weather);
+    const Calendar* const seasonMgr = gw->m_dayCounter;
+    const WeatherSimulation* const weather = gw->m_weather;
     if (!seasonMgr || !weather) return 1;
 
-    if (*reinterpret_cast<float*>(weather + 0x18) < kTempMin) return 1;
+    if (weather->temperature < kTempMin) return 1;   // +0x18
 
-    const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(seasonMgr + 8))->AsSeconds();   // B.3.4b bridge
+    const float secs = seasonMgr->yearTime.AsSeconds();   // +0x08
     const int v = static_cast<int>((secs / kYearSeconds) * kYearMonths);
     if (v < 0) return 1;
     if (static_cast<uint32_t>(v - 3) > 8u)
@@ -368,10 +371,9 @@ char CropFieldComponent::State9Enter() {
 
     if (GameUpdateLoop::_singleton == nullptr) return 1;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the map width is LEFT.
-    int* mapGrid = reinterpret_cast<int*>(gw->m_game);
+    const Map* mapGrid = gw->m_game;   // +0xf8
     if (!mapGrid) return 1;
-    const int mapW = *mapGrid;
+    const int mapW = mapGrid->size;
 
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
@@ -386,9 +388,8 @@ char CropFieldComponent::State9Enter() {
 
     const int count = slots.count;
     if (count <= 0) return 1;
-    uint8_t* marks = reinterpret_cast<uint8_t*>(
-        (::System::MemoryAllocator::_singleton)
-            ? ::System::MemoryAllocator::MemAlloc(count, 1) : nullptr);
+    uint8_t* marks = (::System::MemoryAllocator::_singleton)
+        ? static_cast<uint8_t*>(::System::MemoryAllocator::MemAlloc(count, 1)) : nullptr;
     if (!marks) return 1;
 
     // Crop type: ENDGAME B.3.9 C1 (D5) -- 0x1401c7b68 is NaturalResourceDescription
@@ -491,7 +492,7 @@ static char CropField_Event4Harvest(CropFieldComponent* /*self*/, void* sm) {
 //                                                             (mean maturity > 0.99)
 // The (unsigned)(month - 6) > 5 test is again retail's "outside [6,11]" idiom — true
 // for month < 6 via underflow as well as for month > 11.
-// GameUpdateLoop::m_dayCounter / m_weather are still void* (GAME-a): LEFT.
+// The year clock is GameUpdateLoop::m_dayCounter (Calendar), the temperature m_weather's.
 char CropFieldComponent::State10PerFrame(void* sm) {
     ValidateEntityRefs();
 
@@ -504,15 +505,15 @@ char CropFieldComponent::State10PerFrame(void* sm) {
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    const uintptr_t weather   = reinterpret_cast<uintptr_t>(gw->m_weather);
-    const uintptr_t seasonMgr = reinterpret_cast<uintptr_t>(gw->m_dayCounter);
+    const WeatherSimulation* const weather = gw->m_weather;
+    const Calendar* const seasonMgr = gw->m_dayCounter;
     if (!weather || !seasonMgr) return 1;
 
     bool harvestNow = false;
     int  monthDbg = -1;
-    const float temp = *reinterpret_cast<float*>(weather + 0x18);
+    const float temp = weather->temperature;   // +0x18
     if (temp >= kTempMin) {
-        const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(seasonMgr + 8))->AsSeconds();   // B.3.4b bridge
+        const float secs = seasonMgr->yearTime.AsSeconds();   // +0x08
         monthDbg = static_cast<int>((secs / kYearSeconds) * kYearMonths);
         if (static_cast<uint32_t>(monthDbg - 6) <= 5u) { harvestNow = true; }
     }

@@ -34,12 +34,9 @@
 // ClimateGenerator::ClimateGenerator (0x1400930c0)
 // ============================================================
 // External() and the 0x14015e140 stamp are the compiler's; then the defaults.
-ClimateGenerator::ClimateGenerator() {
-    // ExternalPtr at +0x20 = null
-    _field20 = nullptr;
-    // String at +0x28 = null (8-byte COW string)
-    _field28 = nullptr;
-
+// ExternalPtr at +0x20 = null; String at +0x28 = the empty String (qword 0),
+// in address order as retail stores them.
+ClimateGenerator::ClimateGenerator() : _field20(nullptr), _field28() {
     // Climate parameters
     _field30 = 1;              // enabled
     temperatureBase = 50.0f;   // base temperature
@@ -59,11 +56,9 @@ ClimateGenerator::ClimateGenerator() {
 // ============================================================
 // ClimateGenerator::~ClimateGenerator / DeletingDtor (vtable +0x00)
 // ============================================================
-// Original: 0x140018f60. Destroys the String at +0x28; External::~External is
-// the compiler's chain; MemFree if flags & 1.
-ClimateGenerator::~ClimateGenerator() {
-    reinterpret_cast<System::String*>(&_field28)->~String();   // B.3.1 bridge: the COW pointer
-}
+// Original: 0x140018f60. Destroys the String at +0x28 (the member's ~String);
+// External::~External is the compiler's chain; MemFree if flags & 1.
+ClimateGenerator::~ClimateGenerator() {}
 
 // ============================================================
 // ClimateGenerator::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
@@ -86,18 +81,16 @@ void ClimateGenerator::Destruct() { this->~ClimateGenerator(); }
 // version 0. Returns 1 (success) -- original returns AL=1.
 bool ClimateGenerator::Serialize(IO::Stream& stream) {
     // Create Serializer on stack (24 bytes)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(stream, 0);
-    IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
+    IO::Serializer s(stream, 0);
 
     // Serialize ExternalPtr at +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, &s);
 
     // Serialize String at +0x28
-    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);
+    _field28.Serialize(&s);
 
     // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
-    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);
+    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8: retail serializes the raw byte as bool (a bool field would let the compiler normalise it)
 
     // Serialize float fields: temperatureBase(+0x34), tempVariation(+0x38),
     // precipitation(+0x3C), windSpeed(+0x40)
@@ -108,16 +101,15 @@ bool ClimateGenerator::Serialize(IO::Stream& stream) {
 
     // Serialize climate data block: 0x30 (48) floats = 0xC0 bytes at +0x44 — declared
     // uint8_t[0xC0]: reinterpret to float* per the float-array door
-    s.Serialize(0x30, reinterpret_cast<float*>(_climateData), nullptr);
+    s.Serialize(0x30, reinterpret_cast<float*>(_climateData), nullptr);   // LEFT: ClimateGenerator.h _climateData stays uint8_t[0xC0]: weather_sim.cpp:173 indexes it as bytes
 
     // Serialize float fields at end: field104(+0x104), field108(+0x108), field10C(+0x10C)
     s.Serialize(_field104, nullptr);
     s.Serialize(_field108, nullptr);
     s.Serialize(_field10C, nullptr);
 
-    // Destroy serializer
-    s.~Serializer();
-    return true;
+    return true;   // ~Serializer runs here, after the last field, as before
+
 }
 
 // ============================================================

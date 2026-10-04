@@ -147,7 +147,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
 
 void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count) {
     // LEFT: the debug UI (Dialog/debugui.cpp) hands the citizen list as void*.
-    CitizenBehavior* citizenList = reinterpret_cast<CitizenBehavior*>(citizenListPtr);
+    CitizenBehavior* citizenList = reinterpret_cast<CitizenBehavior*>(citizenListPtr);   // LEFT: SIG Game_SpawnResources_Impl (caller Dialog/debugui.cpp)
 
     // Dynamic array for matching entities
     // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)
@@ -163,7 +163,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
             ComponentDescription* entityDesc = citizenList->field_0x110[entityIdx];
             // The match array carries the description as the int64 the storage
             // helpers take (Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000).
-            int64_t entity = reinterpret_cast<int64_t>(entityDesc);
+            int64_t entity = reinterpret_cast<int64_t>(entityDesc);   // LEFT: SIG Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 take the description as int64_t (wave X)
 
             // Find the RawMaterialDescription among its sub-descriptions (+0x28/+0x30)
             const RawMaterialDescription* natResComp = nullptr;
@@ -286,7 +286,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                     {
                         // Wrap found storage component in an InternalBasePtr: the
                         // storage helpers take its value as an int64.
-                        int64_t storageIBP = reinterpret_cast<int64_t>(storageComp);
+                        int64_t storageIBP = reinterpret_cast<int64_t>(storageComp);   // LEFT: SIG Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 take the component as int64_t (wave X)
 
                         // Try to add one item via round-robin
                         if (spawned < count) {

@@ -61,6 +61,7 @@
 #include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/TradeComponent.h"
 #include <cstdint>
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
@@ -70,7 +71,7 @@ namespace {
 // The 8-byte-stride dynamic array header the out-param uses:
 //   +0x00 void** data   +0x08 int32 count   +0x0c int32 capacity
 struct PtrArray {
-    void**  data;
+    const void** data;
     int32_t count;
     int32_t cap;
 };
@@ -86,17 +87,17 @@ struct PtrArray {
 // commits the new size before allocating, exactly as retail does. That guard is
 // standalone-only (retail never checks) and dropping it to fit the template
 // would trade a bail-out for a wild write.
-void AppendPtr(PtrArray* a, void* value) {
+void AppendPtr(PtrArray* a, const void* value) {
     if (!a) return;
     const int32_t oldCount = a->count;
     const int32_t oldCap   = a->cap;
     const int32_t newCount = oldCount + 1;
-    void** oldData = a->data;
+    const void** oldData = a->data;
     a->count = newCount;
     if (a->cap < newCount) {
         a->cap = newCount;
         if (oldCount != 0) a->cap = newCount * 3;
-        void** grown = static_cast<void**>(System::MemoryAllocator::MemAlloc(
+        const void** grown = static_cast<const void**>(System::MemoryAllocator::MemAlloc(
                   static_cast<uint64_t>(a->cap) * 8, 8));
         if (!grown) {                        // standalone-only; retail never checks
             a->count = oldCount;
@@ -115,16 +116,15 @@ void AppendPtr(PtrArray* a, void* value) {
 // Entity layout: component pointer array at +0x28, count at +0x30; type id from
 // vtable slot +0x10. Retail stops at the FIRST id match and yields null if the
 // confirmation fails, rather than continuing the scan.
-void* FindComp(const void* entity, uint32_t typeId) {
+Description* FindComp(const ComponentDescription* entity, uint32_t typeId) {
     if (!entity) return nullptr;
-    const uint8_t* e = reinterpret_cast<const uint8_t*>(entity);
-    const int32_t count = *reinterpret_cast<const int32_t*>(e + 0x30);
-    void* const* arr = *reinterpret_cast<void* const* const*>(e + 0x28);
+    const int32_t count = entity->_subDescCount;
+    Description* const* arr = entity->_subDescs;
     if (!arr || count <= 0) return nullptr;
     for (int32_t i = 0; i < count; ++i) {
-        void* comp = arr[i];
+        Description* comp = arr[i];
         if (!comp) continue;
-        if (reinterpret_cast<Object::Base*>(comp)->Type() != typeId) continue;  // B.3.8 bridge
+        if (comp->Type() != typeId) continue;
         if (!::Object::IsDerivedFromNullSafe(comp, typeId)) return nullptr;
         return comp;
     }
@@ -134,7 +134,7 @@ void* FindComp(const void* entity, uint32_t typeId) {
 } // namespace
 
 extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
-    PtrArray* out = static_cast<PtrArray*>(outArray);
+    PtrArray* out = static_cast<PtrArray*>(outArray);   // LEFT: SIG TradeUI_GetBuyEntries_59670 (the out array is TradeUI::_purchaseItems / a StackArray<ComponentDescription*> by caller)
     if (!out) return;
 
     // Retail opens with FUN_140001bb0(out, 0) — the stride-8 resize-to-zero. Its only
@@ -142,50 +142,46 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
     out->count = 0;
     if (!tradeState) return;
 
-    const uint8_t* ts = reinterpret_cast<const uint8_t*>(tradeState);
-    void* tradeDesc = *reinterpret_cast<void* const*>(ts + 0x18);
-    if (tradeDesc && !::Object::IsDerivedFromNullSafe(tradeDesc, TradeDescription::TypeId())) {
-        tradeDesc = nullptr;
+    const TradeComponent* ts = reinterpret_cast<const TradeComponent*>(tradeState);   // LEFT: SIG TradeUI_GetBuyEntries_59670 (Dialog/exe_bodies.h; caller tradecomponent_dock.cpp)
+    Description* tradeDescBase = ts->_description;
+    if (tradeDescBase && !::Object::IsDerivedFromNullSafe(tradeDescBase, TradeDescription::TypeId())) {
+        tradeDescBase = nullptr;
     }
-    if (!tradeDesc) return;                  // retail would deref null
+    if (!tradeDescBase) return;              // retail would deref null
+    const TradeDescription* tradeDesc = static_cast<const TradeDescription*>(tradeDescBase);
 
-    const int32_t merchantIdx = *reinterpret_cast<const int32_t*>(ts + 0x2c);
-    const uintptr_t merchants = *reinterpret_cast<const uintptr_t*>(
-        reinterpret_cast<uint8_t*>(tradeDesc) + 0x48);
+    const int32_t merchantIdx = ts->tradeId;
+    const TradeMerchant* merchants = tradeDesc->_merchants;
     if (!merchants || merchantIdx < 0) return;
-    const uint8_t* M = reinterpret_cast<const uint8_t*>(
-        merchants + static_cast<uintptr_t>(merchantIdx) * 0x48);
+    const TradeMerchant& M = merchants[merchantIdx];
 
     // ── 1. Everything in the merchant's own goods list ────────────────────────
-    void* const* goods    = *reinterpret_cast<void* const* const*>(M + 0x20);
-    const int32_t goodsN  = *reinterpret_cast<const int32_t*>(M + 0x28);
+    ComponentDescription* const* goods = M.goods;
+    const int32_t goodsN  = M.goodsCount;
     if (goods) {
         for (int32_t i = 0; i < goodsN; ++i) AppendPtr(out, goods[i]);
     }
 
     // ── 2 & 3. Walk every ComponentDescription the ExternalFactory knows ──────
     if (!::Object::ExternalFactory::_singleton) return;
-    void* factory = ::Object::ExternalFactory::_singleton;
+    const ::Object::ExternalFactory* ebuyFactory = ::Object::ExternalFactory::_singleton;
     const uint32_t tidComponentDesc = ComponentDescription::TypeId();
 
-    const uint32_t rawMatMask = *reinterpret_cast<const uint32_t*>(M + 0x10);
-    const int32_t* selectIds  = *reinterpret_cast<const int32_t* const*>(M + 0x30);
-    const int32_t  selectN    = *reinterpret_cast<const int32_t*>(M + 0x38);
+    const uint32_t rawMatMask = M.field_0x10;
+    const uint32_t* selectIds = M.field_0x30;
+    const int32_t  selectN    = M.field_0x30Count;
 
-    const ::Object::ExternalFactory* ebuyFactory =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-    void* cur = const_cast<::Object::External*>(
-        ebuyFactory->FindNext(tidComponentDesc, nullptr));              // B.3.3 bridge
+    const ::Object::External* cur = ebuyFactory->FindNext(tidComponentDesc, nullptr);
     while (cur) {
-        void* desc = cur;
+        const ComponentDescription* desc = static_cast<const ComponentDescription*>(cur);
         if (!::Object::IsDerivedFromNullSafe(cur, tidComponentDesc)) desc = nullptr;
 
         if (desc) {
             // 2. Raw-material category match against the merchant's M+0x10 mask.
-            void* rawMat = FindComp(desc, RawMaterialDescription::TypeId());
+            const RawMaterialDescription* rawMat = static_cast<const RawMaterialDescription*>(
+                FindComp(desc, RawMaterialDescription::TypeId()));
             if (rawMat) {
-                const uint32_t flags = *reinterpret_cast<const uint32_t*>(
-                    reinterpret_cast<uint8_t*>(rawMat) + 0x5c);
+                const uint32_t flags = rawMat->_flags;
                 if ((rawMatMask & flags) != 0) AppendPtr(out, desc);
             }
         }
@@ -194,18 +190,16 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
         // uses it at the bottom of the loop. Order preserved: FindNext is an engine
         // call and moving it could change what the iterator observes if the pass
         // below ever mutates the factory.
-        void* next = const_cast<::Object::External*>(
-            ebuyFactory->FindNext(tidComponentDesc,
-                                  reinterpret_cast<const ::Object::External*>(cur)));  // B.3.3 bridge
+        const ::Object::External* next = ebuyFactory->FindNext(tidComponentDesc, cur);
 
         if (desc && selectIds) {
             // 3. Select-type id match. Note the append is INSIDE the id loop, so an
             // entity whose id appears more than once in the merchant's list is added
             // more than once — retail behaviour, deliberately not de-duplicated.
-            void* sel = FindComp(desc, SelectDescription::TypeId());
+            const SelectDescription* sel = static_cast<const SelectDescription*>(
+                FindComp(desc, SelectDescription::TypeId()));
             if (sel) {
-                const int32_t selId = *reinterpret_cast<const int32_t*>(
-                    reinterpret_cast<uint8_t*>(sel) + 0x40);
+                const uint32_t selId = sel->_u40;
                 for (int32_t k = 0; k < selectN; ++k) {
                     if (selId == selectIds[k]) AppendPtr(out, desc);
                 }

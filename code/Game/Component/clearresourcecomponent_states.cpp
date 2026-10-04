@@ -66,6 +66,7 @@
 // Faithful offset-by-offset port.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/EntityList.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
@@ -103,10 +104,9 @@ char ClearResourceComponent::State2Enter() {
     if (entity == nullptr) return 1;
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
-    // GameUpdateLoop::m_entityList (+0xe8) is still void* (GAME-a): the removal array at
-    // +0xd0 / +0xd8 is LEFT.
-    uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
-    if (entityList == 0) return 1;
+    // GameUpdateLoop::m_entityList (+0xe8): the removal array is its removalList (+0xd0).
+    EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
+    if (entityList == nullptr) return 1;
 
     // Idempotence guard (bit 0x400 of the entity flags) — see the header note: this is
     // what keeps the sibling `destroy` controller from double-pushing the entity.
@@ -116,8 +116,8 @@ char ClearResourceComponent::State2Enter() {
 
     ActHunt_MarkEntityRemoval_c2ea0(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(entityList + 0xd0)
-        .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
+    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+        .SetSizeFill(entityList->removalList.count + 1, &entity);
 
     return 1;
 }

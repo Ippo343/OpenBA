@@ -130,9 +130,9 @@ void CharacterComponent::Persist(IO::Stream& stream) {
         characterDescription = isDesc ? static_cast<CharacterDescription*>(owner) : nullptr;
 
         {
-            // LEFT: GameUpdateLoop::m_characterGrid is void* (W0 header)
+            // GameUpdateLoop::m_characterGrid (+0x88)
             CharacterGrid* charMgr = GameUpdateLoop::_singleton
-                                         ? reinterpret_cast<CharacterGrid*>(GameUpdateLoop::_singleton->m_characterGrid)
+                                         ? GameUpdateLoop::_singleton->m_characterGrid
                                          : nullptr;
             if (charMgr) {
                 Object::InternalPtr<CharacterComponent> ibpArg(this);

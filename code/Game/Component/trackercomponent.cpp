@@ -59,7 +59,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
 
     // If loading, resize the array
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        // LEFT: 0x14000da70 takes the array header as int64_t* (Action block).
+        // LEFT: SIG ActRm_ArrayResize16_da70 (takes the array header as int64_t*; TrackerComponent.h, DLG-1, holds a raw triple).
         ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&displayed), localCount1);   // 0x14000da70
     }
 
@@ -78,7 +78,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     ser.Serialize(localCount2, nullptr);
 
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&produced), localCount2);   // 0x14000da70
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&produced), localCount2);   // 0x14000da70  LEFT: SIG ActRm_ArrayResize16_da70 (TrackerComponent.h holds a raw triple, DLG-1)
     }
 
     if (localCount2 > 0) {

@@ -21,6 +21,8 @@
 #include "runtime/types/ui/DialogControllerConfig.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class UpgradeUIConfig final : public UI::DialogControllerConfig {
     DECLARE_EXE_TYPE(UpgradeUIConfig)
 
@@ -36,9 +38,9 @@ public:
 
     // +0x20 the target template. Retail's Serialize (0x140086fb0)
     // validates it as an ExternalPtr<ComponentDescription> (cell 0x1401c7318),
-    // and UpgradeUI reads its _subDescs. B4: stays void* because the serializer
-    // body the tree calls (ExternalPtrSerializeGeneric) takes a void**.
-    void* _target = nullptr;                                       // +0x20
+    // and UpgradeUI reads its _subDescs (the serializer body the tree calls,
+    // ExternalPtrSerializeGeneric, takes a void**: one cast there).
+    ComponentDescription* _target = nullptr;                       // +0x20
 };
 
 static_assert(sizeof(UpgradeUIConfig) == 0x28, "UpgradeUIConfig is 0x28 (create 0x140016c00)");

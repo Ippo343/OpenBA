@@ -54,6 +54,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/ControllerComponent.h"   // ControllerComponent::Controller (the node)
+#include "Component/StateMachineComponent.h" // StateMachine (the machine the handlers receive)
 
 // Our port of StateMachine::Tick (retail 0x1400a9660), defined in
 // statemachinecomponent.cpp and registered for that address. RequestStateTransition
@@ -343,20 +344,19 @@ template <class Tag> StateTable<typename Dispatcher<Tag>::Owner> Dispatcher<Tag>
 // dispatcher bounds-rejects the request exactly as before.
 inline void RequestStateTransition(void* sm, int desiredStateId) {
     if (!sm) return;
-    uint8_t* s = reinterpret_cast<uint8_t*>(sm);
-    if (*reinterpret_cast<int8_t*>(s + 0x09) < 0)
-        ::StateMachine_TickReimpl(sm, 0, 0, 0);
-    // The SM's current node (+0x00) is a ControllerComponent::Controller; the StateMachine
-    // bytes are untyped (COMP-e): LEFT.
-    ::ControllerComponent::Controller* node =
-        *reinterpret_cast<::ControllerComponent::Controller**>(s + 0x00);   // re-read after the nested tick
+    // The handlers receive the machine as the `void* stateMachine` the Controller slots
+    // carry (ControllerComponent.h, COMP-7): one cast, LEFT.
+    ::StateMachine* m = reinterpret_cast<::StateMachine*>(sm);   // LEFT: ControllerComponent.h (COMP-7) passes void*
+    if (m->activeState < 0)
+        m->Tick(nullptr, 0, 0);   // 0x1400a9660; the old forwarder's integer time 0 was this null
+    ::ControllerComponent::Controller* node = m->current;   // re-read after the nested tick
     if (!node) return;
-    int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);  // re-read after the nested tick
+    int curIdx = m->activeState;  // re-read after the nested tick
     int desired = desiredStateId;
     int idx = node->FindTransition(curIdx, &desired);   // node slot 1 (+0x08)
     if (idx >= 0) {
-        *reinterpret_cast<int8_t*>(s + 0x0b) = static_cast<int8_t>(idx);
-        *reinterpret_cast<int8_t*>(s + 0x0a) = static_cast<int8_t>(desired);
+        m->transitionState = static_cast<int8_t>(idx);
+        m->pendingState = static_cast<int8_t>(desired);
     }
 }
 

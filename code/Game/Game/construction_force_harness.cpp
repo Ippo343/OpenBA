@@ -39,6 +39,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/BuildComponent.h"   // caller batch CB6: TypeId()
+#include "Component/BuildDescription.h"   // the build cost +0x30 (B4 P2 GAME-1)
+#include "Entity/ComponentEntity.h"
 #include "force_work.h"
 #include <cstdint>
 #include <cstdio>
@@ -78,15 +80,16 @@ static bool ForceConstructEnvOn() {
 // (buildcomponent_state8.cpp) reads +0x48 vs target = matComp[0x30]·bc[0x4c], advances the mesh
 // frames, and requests 8 -> 2 once progress >= target. Ramp paced over BANISHED_BUILD_DEMO_FRAMES
 // (default 600 ≈ 10s) so the rise is watchable.
-static void CreditBuildProgress(void* bc) {
+static void CreditBuildProgress(BuildComponent* bc) {
     if (!bc || !ForceWork::Readable(bc, 0x50)) return;
     // target = base build effort (matComp = bc+0x18, +0x30) * build multiplier (bc+0x4c,
     // clamp to retail default 1). Same formula BC8_Target uses. Probe-guarded; fall back to a
     // nominal 60 if the description read looks bogus so a garbage target can't 1-shot complete.
-    void* matComp = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bc) + 0x18);
+    // matComp is the component's description (Component +0x18), a BuildDescription.
+    const Description* matComp = bc->_description;
     int base = ForceWork::Readable(matComp, 0x34)
-                   ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(matComp) + 0x30) : 0;
-    int mult = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x4c);
+                   ? static_cast<const BuildDescription*>(matComp)->_i30 : 0;   // +0x30
+    int mult = bc->costMultiplier;   // +0x4c
     if (mult <= 0) mult = 1;
     int target = base * mult;
     if (target <= 0 || target > 1000000) target = 60;
@@ -99,7 +102,7 @@ static void CreditBuildProgress(void* bc) {
     }
     int inc = target / rampFrames;
     if (inc < 1) inc = 1;
-    int* prog = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x48);
+    int* prog = &bc->laborProgress;   // +0x48
     int before = *prog;
     int p = before + inc;
     if (p > target) p = target;
@@ -111,7 +114,7 @@ static void CreditBuildProgress(void* bc) {
 // skips the competing AI state machine so the construction work keeps the idle stack).
 extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     if (!ForceConstructEnvOn()) return false;
-    void* site = g_pConstructionDemoEntity;
+    ComponentEntity* site = reinterpret_cast<ComponentEntity*>(g_pConstructionDemoEntity);   // LEFT: g_pConstructionDemoEntity is void* (GAME-3 / GAME-4)
     if (!site || !citizen) return false;
     if (GameUpdateLoop::_singleton == nullptr) return false;
     if (!System::MemoryAllocator::_singleton) return false;
@@ -129,10 +132,12 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     // storage reconfigure (which flips HaveAllMaterials back to false on completion) can't
     // bounce us back to gather on a finished building.
     // ============================================================================
-    static void* s_buildComp = nullptr;
+    static BuildComponent* s_buildComp = nullptr;
     if (!s_buildComp) {
         const uint32_t tidBuild = BuildComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
-        s_buildComp = ForceWork::FindComp(site, tidBuild);
+        Component* found = ForceWork::FindComp(site, tidBuild);
+        s_buildComp = static_cast<BuildComponent*>(found);   // matched by type id
+
     }
     static int s_buildPhase = 0;
     if (!s_buildPhase && s_buildComp) {
@@ -143,7 +148,8 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
         // workplace is even configured). Gating on mult>0 makes HaveAllMaterials reflect the
         // real per-material requirement, so the switch fires only after the gather delivers.
         int mult = ForceWork::Readable(s_buildComp, 0x50)
-                       ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_buildComp) + 0x4c) : 0;
+                       ? s_buildComp->costMultiplier : 0;   // +0x4c
+
         if (mult > 0 && BuildComponent_HaveAllMaterials(s_buildComp)) {
             s_buildPhase = 1;
         }
@@ -168,7 +174,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
         static void* s_gather = nullptr;
         if (!s_gather) {
             int64_t siteIBP = 0;
-            new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge
+            new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge   // LEFT: POD:RtObject::Internal (object/Internal.h)
             s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
             if (!s_gather) return true;   // own it, retry construction next tick
             fprintf(stderr, "[ForceConstruct] constructed GatherRawMaterials=%p for site=%p\n",
@@ -201,11 +207,11 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     static void* s_build = nullptr;
     if (!s_build) {
         int64_t siteIBP = 0;
-        new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge
+        new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge   // LEFT: POD:RtObject::Internal (object/Internal.h)
         s_build = BuildStructure_ConstructForSite(&siteIBP);
         if (!s_build) return true;   // own it, retry construction next tick
         fprintf(stderr, "[ForceBuild] constructed BuildStructure=%p for site=%p (buildPositions=%d)\n",
-                s_build, site, *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_build) + 0x58));
+                s_build, site, *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_build) + 0x58));   // LEFT: SIG BuildStructure_ConstructForSite returns void* (Work/exe_bodies.h)
         fflush(stderr);
     }
 

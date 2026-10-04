@@ -242,9 +242,9 @@ void CharacterComponent::Startup() {
         }
 
         ModelComponent* model = modelComponent;
-        // LEFT: GameUpdateLoop::m_characterGrid is void* (W0 header)
+        // GameUpdateLoop::m_characterGrid (+0x88)
         CharacterGrid* charMgr = GameUpdateLoop::_singleton
-                                     ? reinterpret_cast<CharacterGrid*>(GameUpdateLoop::_singleton->m_characterGrid)
+                                     ? GameUpdateLoop::_singleton->m_characterGrid
                                      : nullptr;
         if (model && charMgr) {
             // facing init: CharacterComponent+0x3c = ModelComponent+0x168.
@@ -279,9 +279,9 @@ void CharacterComponent::OnAdded() {}
 void CharacterComponent::OnRemove() {
     WorkBase_TaskListCleanup_c5400(&actions);   // 0x1400c5400, the action-stack clear
 
-    // LEFT: GameUpdateLoop::m_characterGrid is void* (W0 header)
+    // GameUpdateLoop::m_characterGrid (+0x88)
     CharacterGrid* charMgr = GameUpdateLoop::_singleton
-                                 ? reinterpret_cast<CharacterGrid*>(GameUpdateLoop::_singleton->m_characterGrid)
+                                 ? GameUpdateLoop::_singleton->m_characterGrid
                                  : nullptr;
     int idx = characterIndex;
     // DEVIATION (ours, not retail'this): retail passes +0x40 through unguarded, and
@@ -299,7 +299,7 @@ void CharacterComponent::OnRemove() {
 // [8] 0x1401094c0 — the move-tick, EVERY FRAME from the EntityList tree walk
 // (flag bit 2; 0x1400c2e5d passes the update's time pointer through).
 void CharacterComponent::Tick(void* time) {
-    CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(this), time);
+    CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(this), time);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (defined in citizenai_executor.cpp, CAI-2)
 }
 
 // [9] 0x140109480 — the bucket-rate Update. Retail forwards the Time operand RAW:

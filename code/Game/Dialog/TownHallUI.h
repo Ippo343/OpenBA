@@ -36,7 +36,9 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
 class ComponentEntity;
+class Profession;
 namespace UI {
 class ButtonElement;
 class ComboElement;
@@ -92,7 +94,7 @@ public:
     };
     // +0x50: the profession tree node (0x30; key = the Profession, value = its row).
     struct ProfessionNode {
-        uint64_t        key;       // +0x00
+        Profession*     key;       // +0x00 compared by address (unsigned)
         uint64_t        index;     // +0x08
         ProfessionNode* parent;    // +0x10
         ProfessionNode* left;      // +0x18
@@ -102,7 +104,7 @@ public:
     };
     // +0x138: the inventory tree node (0x38; key = the raw material's description).
     struct InventoryNode {
-        uint64_t       key;        // +0x00
+        ComponentDescription* key; // +0x00 compared by address (unsigned)
         int32_t        counts[3];  // +0x08 used / produced / storage (UpdateAll 0x14007d590)
         int32_t        _pad14;     // +0x14
         InventoryNode* parent;     // +0x18
@@ -113,7 +115,7 @@ public:
     };
     // +0x1D8: the agriculture tree node (0x28; key = the building's description).
     struct AgricultureNode {
-        uint64_t         key;      // +0x00
+        const ComponentDescription* key;   // +0x00 compared by address (unsigned)
         AgricultureNode* parent;   // +0x08
         AgricultureNode* left;     // +0x10
         AgricultureNode* right;    // +0x18

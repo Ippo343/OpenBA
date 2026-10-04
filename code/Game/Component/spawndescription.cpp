@@ -23,6 +23,7 @@
 #include "Component/SpawnComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
+#include "io/Stream.h"   // IO::Stream::_direction
 #include "Object/factory_registration.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
@@ -35,8 +36,7 @@ namespace {
 // serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
 // (0 == ok on the read leg). The tree's check before it allocates an array.
 inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
+    return ser._stream->_direction;
 }
 }  // namespace
 

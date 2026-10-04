@@ -52,6 +52,7 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
+#include "Action/PathAvl.h"        // AvlNode28, the +0xE8 tree's node (B4 P2 GAME-1)
 #include "perf_terrain.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -101,31 +102,51 @@ namespace {
 // (the `assign unwritten` pair below names the trailing hole; +0x25 is the
 // second, non-contiguous one). Partial copy, so byteCopy=false; trivially
 // destructible.
-void AssignMapCell(uint8_t* dst, const uint8_t* src) {
-    *reinterpret_cast<uint64_t*>(dst + 0x00) = *reinterpret_cast<const uint64_t*>(src + 0x00);
-    *reinterpret_cast<uint64_t*>(dst + 0x08) = *reinterpret_cast<const uint64_t*>(src + 0x08);
-    *reinterpret_cast<uint64_t*>(dst + 0x10) = *reinterpret_cast<const uint64_t*>(src + 0x10);
-    *reinterpret_cast<uint32_t*>(dst + 0x18) = *reinterpret_cast<const uint32_t*>(src + 0x18);
-    *reinterpret_cast<uint64_t*>(dst + 0x1c) = *reinterpret_cast<const uint64_t*>(src + 0x1c);
-    dst[0x24] = src[0x24];
-    *reinterpret_cast<uint16_t*>(dst + 0x26) = *reinterpret_cast<const uint16_t*>(src + 0x26);
-    dst[0x28] = src[0x28];
-    dst[0x29] = src[0x29];
-    dst[0x2a] = src[0x2a];
-    dst[0x2b] = src[0x2b];
-    dst[0x2c] = src[0x2c];
-    dst[0x2d] = src[0x2d];
+//
+// B4 P2 GAME-1: the element is MapCell (Game/Map.h), reached through
+// Collection.h's element adapters; every field by name. The tree's merged
+// stores (one dword over +0x26..+0x29, one dword over +0x2A..+0x2D; the qword
+// over +0x1C..+0x23 stays one qword) are the named fields' stores, in address order (H7): the
+// same bytes, +0x25 and +0x2E..+0x2F still unwritten.
+void CopyMapCell(MapCell* d, const MapCell* s) {
+    d->blocker = s->blocker;            // +0x00
+    d->occupant = s->occupant;          // +0x08
+    d->field_0x10 = s->field_0x10;      // +0x10
+    d->regionId = s->regionId;          // +0x18
+    // +0x1C..+0x24, the 9-byte block: one qword and one byte, as retail moves it
+    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = *reinterpret_cast<const uint64_t*>(&s->field_0x1C[0]);   // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]; the copy is a qword + a byte
+    d->field_0x1C[8] = s->field_0x1C[8];
+
+    d->zone = s->zone;                  // +0x26
+
+    d->footprintCount = s->footprintCount;   // +0x28
+    d->terrainType = s->terrainType;    // +0x29
+    d->field_0x2A = s->field_0x2A;      // +0x2A
+    d->field_0x2B = s->field_0x2B;      // +0x2B
+    d->field_0x2C = s->field_0x2C;      // +0x2C
+    d->floorCount = s->floorCount;      // +0x2D
 }
 // Brand-new element: zero the refs/raw block, sentinel the flag bytes.
+void ZeroMapCell(MapCell* d) {
+    d->blocker = nullptr;               // +0x00
+    d->occupant = nullptr;              // +0x08
+    d->field_0x10 = nullptr;            // +0x10
+    d->regionId = -1;                   // +0x18 0xffffffff
+    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = 0;   // +0x1C..+0x23 one qword 0  // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]
+    d->field_0x1C[8] = 0;               // +0x24
+    d->zone = 0;                        // +0x26..+0x29 zero
+    d->footprintCount = 0;
+    d->terrainType = 0;
+    d->field_0x2A = 0xff;               // +0x2A = 0xff
+    d->field_0x2B = 0;                  // +0x2B..+0x2D = 0
+    d->field_0x2C = 0;
+    d->floorCount = 0;
+}
+void AssignMapCell(uint8_t* dst, const uint8_t* src) {
+    rtcoll::AssignAs<MapCell, &CopyMapCell>(dst, src);
+}
 void InitMapCell(uint8_t* dst) {
-    *reinterpret_cast<uint64_t*>(dst + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(dst + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(dst + 0x10) = 0;
-    *reinterpret_cast<uint32_t*>(dst + 0x18) = 0xffffffffu;
-    *reinterpret_cast<uint64_t*>(dst + 0x1c) = 0;
-    dst[0x24] = 0;
-    *reinterpret_cast<uint32_t*>(dst + 0x26) = 0;         // zeroes +0x26..+0x29
-    *reinterpret_cast<uint32_t*>(dst + 0x2a) = 0x000000ffu; // +0x2a=0xff, +0x2b..+0x2d=0
+    rtcoll::InitAs<MapCell, &ZeroMapCell>(dst);
 }
 // stays explicit: `init` is a patterned fill (0xffffffff at +0x18, 0xff at
 // +0x2a), `assign` is partial (byteCopy=false), and both arms carry unwritten
@@ -144,7 +165,8 @@ using MapCellArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 static void GameGrid_ResizeCellArray_aa90(MapCell** header, int32_t newCount) {
     // B.3.2 bridge: Map+0x80 is the Array<MapCell> header {cells, cellCount,
     // cellCapacity}, declared as three fields (the Array's explicit spec above).
-    reinterpret_cast<MapCellArray*>(header)->SetSize(newCount);
+    reinterpret_cast<MapCellArray*>(header)->SetSize(newCount);   // LEFT: Map.h (DLG-1 / GAME-3): the cell array is three raw fields, not a Collection::Array (H5)
+
 }
 
 // ============================================================
@@ -161,13 +183,13 @@ static void GameGrid_SerializeCellArray_ac10(IO::Serializer* serializer, int32_t
     MapCell* elem = cells;
     for (int32_t i = 0; i < count; ++i) {
         // LEFT: the two refs are InternalBasePtr slots (an IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(&elem->blocker)->Serialize(*serializer);   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(&elem->blocker)->Serialize(*serializer);   // LEFT: Map.h (DLG-1 / GAME-3): the cell's refs are raw ComponentEntity* slots of an InternalBasePtr (H5)
         ComponentEntity* refA = elem->blocker;
         if (refA != nullptr && !::Object::IsDerivedFromNullSafe(refA, ComponentEntity::TypeId())) {
             elem->blocker = nullptr;
         }
 
-        reinterpret_cast<Object::InternalBasePtr*>(&elem->occupant)->Serialize(*serializer);   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(&elem->occupant)->Serialize(*serializer);   // LEFT: Map.h (DLG-1 / GAME-3): the cell's refs are raw ComponentEntity* slots of an InternalBasePtr (H5)
         ComponentEntity* refB = elem->occupant;
         if (refB != nullptr && !::Object::IsDerivedFromNullSafe(refB, ComponentEntity::TypeId())) {
             elem->occupant = nullptr;
@@ -237,7 +259,7 @@ void Map::Serialize(IO::Stream& stream) {
                     if (!occupied) {
                         // LEFT: the classify helper takes the map as int* (Component/exe_bodies.h).
                         int cls = CreateNaturalResource_helper_e2c0(
-                            reinterpret_cast<int*>(this), i);
+                            reinterpret_cast<int*>(this), i);   // LEFT: SIG the classify helper takes the map as int* (Component/exe_bodies.h, wave X)
                         e->terrainType = static_cast<uint8_t>(cls);
                     }
                 }
@@ -261,19 +283,19 @@ void Map::Serialize(IO::Stream& stream) {
                 if (e->footprintCount == 0) {
                     uint8_t mask = static_cast<uint8_t>(1u << (e->terrainType & 0x1f));
                     if ((mask & 2) == 0 && (mask & 1) == 0 && e->field_0x2A == 0xff) {
-                        // Walk the AVL tree rooted at +0xe8 for key == i.
-                        // LEFT: the +0xE8 tree's node has no declared type (int key +0,
-                        // left +0x10, right +0x18; its size is not settled).
-                        uint8_t* node = reinterpret_cast<uint8_t*>(field_0xE8);
+                        // Walk the AVL tree rooted at +0xe8 for key == i (the
+                        // 0x28 AvlNode28 of Action/PathAvl.h: key +0, left +0x10,
+                        // right +0x18).
+                        const AvlNode28* node = field_0xE8;
                         while (node != nullptr) {
-                            int32_t key = *reinterpret_cast<int32_t*>(node);
+                            int32_t key = node->key;
                             if (i < key) {
-                                node = *reinterpret_cast<uint8_t**>(node + 0x10);  // left
+                                node = node->left;
                             } else if (key >= i) {
                                 e->footprintCount = 1;
                                 break;
                             } else {
-                                node = *reinterpret_cast<uint8_t**>(node + 0x18);  // right
+                                node = node->right;
                             }
                         }
                     } else {
@@ -293,7 +315,7 @@ void Map::Serialize(IO::Stream& stream) {
         // (0x14009c365 / 0x14009c3e8) and overwrites R9D at 0x14009c26f. The body takes
         // this one argument.
         // LEFT: the zone refresh takes the map as int* (Action/exe_bodies.h).
-        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(this));
+        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(this));   // LEFT: SIG Pf_ZoneRefresh_9c480(int*) (Action/exe_bodies.h, wave X)
 
         // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
         // (0x14009f2a6, RCX = this grid). The null arm is: nothing.
@@ -303,7 +325,7 @@ void Map::Serialize(IO::Stream& stream) {
             WorldGeometry* worldGeometry = gameWorld->m_worldGeometry;
             // LEFT: the road mesh rebuild takes (int64_t, uint32_t*) (Action/exe_bodies.h).
             Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(worldGeometry),
-                                     reinterpret_cast<uint32_t*>(this));
+                                     reinterpret_cast<uint32_t*>(this));   // LEFT: SIG Pf_RoadMeshRebuild_f370 (Action/exe_bodies.h, wave X)
         }
     }
 }

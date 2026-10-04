@@ -71,9 +71,9 @@ bool TileCentre(const FishingComponent* comp, int* cx, int* cy) {
     return true;
 }
 
-// GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the one bridge is LEFT.
+// GameUpdateLoop::m_game (+0xf8).
 Map* TheMap() {
-    return reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+    return GameUpdateLoop::_singleton->m_game;
 }
 
 // retail 0x14011eed0 — FishingComponent_helper_eed0(self, delta)
@@ -126,8 +126,7 @@ char FishingComponent::ProduceTick(void* /*time*/) {
     const Map* map = TheMap();
     if (!map) return 0;
     const int width = map->size;
-    // Map's cells are raw 0x30-byte records (GAME-b): LEFT.
-    const uint8_t* grid = reinterpret_cast<const uint8_t*>(map->cells);
+    const MapCell* grid = map->cells;
     if (!grid || width <= 0) return 0;
 
     // The accepted-terrain mask lives on the component's description, but only if it
@@ -145,7 +144,7 @@ char FishingComponent::ProduceTick(void* /*time*/) {
             const int x = cx + dx, y = cy + dy;
             if (x < 0 || y < 0 || x >= width || y >= width) continue;
             ++total;
-            const uint8_t terrain = grid[(uintptr_t)(y * width + x) * 0x30 + 0x29];
+            const uint8_t terrain = grid[(uintptr_t)(y * width + x)].terrainType;   // +0x29
             if ((mask >> (terrain & 0x1f)) & 1) ++matching;
         }
     }

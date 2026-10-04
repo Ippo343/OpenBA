@@ -89,6 +89,9 @@
 #include "Component/StorageComponent.h"
 #include "Component/PickingComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
 
 // ============================================================
 // Tracing
@@ -127,20 +130,6 @@ static T* FindOn(ComponentEntity* entity) {
 }
 
 // ============================================================
-// FUN_14000b630 — Entity::FindComponent<DecalComponent>
-// ============================================================
-// ComponentEntity::FindComponent<DecalComponent>(). 0x1401c7580 is "DecalComponent"
-// (the registration at 0x14014edd0 passes name="Decal", suffix="Component").
-// B4 FORWARD: 1 outside caller file (Component/quarrycomponent_deform.cpp); the
-// closing wave rewires it. The tree's null-entity test is kept (B9).
-extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP) {
-    DecalComponent* found = entity
-        ? reinterpret_cast<ComponentEntity*>(entity)->FindComponent<DecalComponent>() : nullptr;
-    new (retIBP) ::Object::InternalPtr<DecalComponent>(found);
-    return retIBP;
-}
-
-// ============================================================
 // FUN_1400c52c0 — abort every action on one action stack that targets an entity
 // ============================================================
 // (stack, &entityIBP). Stack layout: +0x00 items (IBP array), +0x08 count,
@@ -151,50 +140,44 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
 // (child at action+0x10) calling `vtable+0x40` (abort) on each, release the slot's
 // IBP and store a null IBP; finally reset the current index to -1 and release the
 // current-action IBP. That is what stops citizens walking into a collapsing building.
-extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, ComponentEntity** pEntityIbp) {
+// The stack is the ActionStack (Action.h); its only caller is in this file.
+extern "C" void ActionStack_AbortForEntity_c52c0(ActionStack* stack, ComponentEntity** pEntityIbp) {
     if (!stack || !pEntityIbp) return;
-    uintptr_t st = reinterpret_cast<uintptr_t>(stack);
-    int count = *reinterpret_cast<int*>(st + 8);
+    int count = stack->count;
     if (count <= 0) return;
 
     // Action slots 9 (GetTarget, +0x48) and 8 (CheckEntity, +0x40) by name: every
     // Action has a compiler table (Action.h bodies 0x1400c4a40 / 0x1400c4a30), so the
     // old null-slot skip of the partially-filled standalone arrays is gone.
-    void** items = *reinterpret_cast<void***>(st);
+    ::Object::InternalPtr<Action>* items = stack->actions;
     if (!items) return;
 
     bool hit = false;
     for (int i = 0; i < count && !hit; ++i) {
-        void* act = items[i];
+        Action* act = items[i].Get();
         if (!act) continue;
-        act = items[i];
+        act = items[i].Get();
         if (!act) continue;
         ComponentEntity* entityCopy = *pEntityIbp;  // retail copies the raw ptr to a local
-        hit = reinterpret_cast<Action*>(act)->GetTarget(&entityCopy);   // B.3.x bridge (slot 9)
+        hit = act->GetTarget(&entityCopy);   // slot 9
     }
     if (!hit) return;
 
     for (int i = 0; i < count; ++i) {
-        void* cur = items[i];
+        Action* cur = items[i].Get();
         if (!cur) continue;
-        for (void* p = cur; p != nullptr; ) {
-            reinterpret_cast<Action*>(p)->CheckEntity();   // B.3.x bridge (slot 8, the file's "Abort")
-            p = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(p) + 0x10);
+        for (Action* p = cur; p != nullptr; ) {
+            p->CheckEntity();   // slot 8, the file's "Abort"
+            p = p->_next.Get();   // +0x10, the chain's next node
         }
-        reinterpret_cast< ::Object::InternalBasePtr*>(&items[i])->DeletePtr(
-            );   // B.3.3 bridge
-        void* nullIbp = nullptr;
-        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        items[i] = nullIbp;
+        items[i].DeletePtr();
+        items[i] = ::Object::InternalPtr<Action>();   // a null IBP
     }
 
-    *reinterpret_cast<int*>(st + 0x18) = -1;
-    if (*reinterpret_cast<void**>(st + 0x10) != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(st + 0x10))->DeletePtr(
-            );   // B.3.3 bridge
-        void* nullIbp = nullptr;
-        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<void**>(st + 0x10) = nullIbp;
+    stack->current = -1;
+    if (stack->field_0x10.Get() != nullptr) {
+        stack->field_0x10.DeletePtr();
+        stack->field_0x10 = ::Object::InternalPtr<Action>();   // a null IBP
     }
 
     if (Milestone()) {
@@ -213,19 +196,20 @@ extern "C" void ActionStack_AbortForEntity_c52c0(void* stack, ComponentEntity** 
 // (citizen+0x278, list at +0x48).
 extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, ComponentEntity** pEntityIbp) {
     if (!townMgr || !pEntityIbp) return;
-    uintptr_t tm = reinterpret_cast<uintptr_t>(townMgr);
-    int n = *reinterpret_cast<int*>(tm + 0xa8);
+    CitizenBehavior* tm = reinterpret_cast<CitizenBehavior*>(townMgr);   // LEFT: SIG TownMgr_AbortCitizenActionsFor_89e30 (componententity.cpp declares it with void*)
+    int n = tm->citizenCount;
     if (n <= 0) return;
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(tm + 0xa0);
+    CitizenComponent** base = tm->citizens;
     if (!base) return;
     for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
         ComponentEntity* entityCopy = *pEntityIbp;
-        uintptr_t citizen = reinterpret_cast<uintptr_t>(*slot);
+        CitizenComponent* citizen = base[i];
         if (!citizen) continue;
-        uintptr_t ai = *reinterpret_cast<uintptr_t*>(citizen + 0x278);
+        CharacterComponent* ai = citizen->character;
         if (!ai) continue;
-        ActionStack_AbortForEntity_c52c0(reinterpret_cast<void*>(ai + 0x48), &entityCopy);
+        // CharacterComponent +0x48..+0x67 is retail's ActionStack sub-object, declared
+        // as separate fields (CharacterComponent.h, WORK-3).
+        ActionStack_AbortForEntity_c52c0(reinterpret_cast<ActionStack*>(&ai->actions), &entityCopy);   // LEFT: CharacterComponent.h (WORK-3) +0x48 is not an ActionStack
     }
 }
 
@@ -236,14 +220,14 @@ extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, ComponentEnt
 // per-model-variant mesh array. Same math as modelcomponent.cpp's
 // GetMeshFromDescription (there: `groupArray + 8 + variantIdx*0x18`; here the
 // disassembly's `groups + (variantIdx*3)*8 + 8` — identical).
-// ModelDescription's group array is `void*` in COMP-d's header: the group reads are LEFT.
-static void* MeshFromModelDesc(ModelDescription* modelDesc, int16_t variantIdx, int16_t modelVariant) {
+// The groups are ModelMeshGroup (ModelDescription.h), their +0x08 the mesh array.
+static Graphics::GraphicsMesh* MeshFromModelDesc(ModelDescription* modelDesc, int16_t variantIdx, int16_t modelVariant) {
     if (!modelDesc || variantIdx < 0 || modelVariant < 0) return nullptr;
-    uintptr_t groups = reinterpret_cast<uintptr_t>(modelDesc->_meshGroups);
+    const ModelMeshGroup* groups = modelDesc->_meshGroups;
     if (!groups) return nullptr;
-    uintptr_t group = *reinterpret_cast<uintptr_t*>(groups + 8 + static_cast<int64_t>(variantIdx) * 0x18);
+    Graphics::GraphicsMesh* const* group = groups[variantIdx].meshes;
     if (!group) return nullptr;
-    return *reinterpret_cast<void**>(group + static_cast<int64_t>(modelVariant) * 8);
+    return group[modelVariant];
 }
 
 // ============================================================
@@ -262,7 +246,7 @@ void ModelComponent::SetMaterialSet(int materialSetIdx) {
     if (variantIdx < 0 || modelVariant < 0) return;
 
     ModelDescription* modelDesc = AsType<ModelDescription>(_description);
-    void* mesh = MeshFromModelDesc(modelDesc, variantIdx, modelVariant);
+    const Graphics::GraphicsMesh* mesh = MeshFromModelDesc(modelDesc, variantIdx, modelVariant);
     if (!mesh) return;
 
     // The two doors this used to go through are `GraphicsMesh::GetMaterialList`
@@ -271,14 +255,14 @@ void ModelComponent::SetMaterialSet(int materialSetIdx) {
     // has nothing left to test. The Array header is still read raw, exactly as
     // retail does: GetMaterialList returns `*(mesh+0x70) + skin*0x10`, which is
     // formed from a possibly-null buffer pointer, so the `!list` test stays.
-    const void* list = &reinterpret_cast<const Graphics::GraphicsMesh*>(mesh)
-                            ->GetMaterialList(materialSetIdx);   // B.3.5 bridge
+    const Collection::Array<Object::ExternalPtr<Graphics::MaterialInstance> >* list =
+        &mesh->GetMaterialList(materialSetIdx);
     if (!list) return;
-    void* const* data = *reinterpret_cast<void* const* const*>(list);
-    int    n    = *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(list) + 8);
+    const Object::ExternalPtr<Graphics::MaterialInstance>* data = list->_data;
+    int    n    = list->_size;
     if (!data || n <= 0) return;
     for (int i = 0; i < n; ++i)
-        meshInstance.SetMaterialInstance(i, Graphics::ExternalPtrHandle{data[i]});
+        meshInstance.SetMaterialInstance(i, Graphics::ExternalPtrHandle{data[i].Get()});
 }
 
 // ============================================================
@@ -334,7 +318,7 @@ void DestroyComponent::RubbleStep() {
         modelComp->meshIndex = static_cast<int16_t>(next);
         if (next >= 0) {
             ModelDescription* modelDesc = AsType<ModelDescription>(modelComp->_description);
-            void* mesh = MeshFromModelDesc(modelDesc, modelComp->meshGroup,
+            Graphics::GraphicsMesh* mesh = MeshFromModelDesc(modelDesc, modelComp->meshGroup,
                                            static_cast<int16_t>(next));
             modelComp->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
             model->OnAdded();

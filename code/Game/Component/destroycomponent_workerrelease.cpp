@@ -94,7 +94,7 @@
 extern bool g_wpcRosterOnly;
 
 static bool Plausible(const void* p) {
-    return reinterpret_cast<uintptr_t>(p) >= 0x10000;
+    return reinterpret_cast<uintptr_t>(p) >= 0x10000;   // CAST-OK: ptr_int
 }
 
 // ============================================================
@@ -150,9 +150,9 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
         int64_t targetIBP = 0;
         if (profession) {
             if (!profession->field4C) {
-                CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(citizen), &targetIBP);
+                CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(citizen), &targetIBP);   // LEFT: SIG CitizenComp_sub_ffc0 (the int64_t IBP CitizenComp_AssignHousing takes)
             } else {
-                CitizenComp_sub_0470(reinterpret_cast<int64_t>(citizen), &targetIBP);
+                CitizenComp_sub_0470(reinterpret_cast<int64_t>(citizen), &targetIBP);   // LEFT: SIG CitizenComp_sub_0470 (as above)
             }
         }
 
@@ -203,11 +203,10 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     //    to Builder, so a task already in flight when demolition starts is offered to
     //    builders rather than to the building's former profession.
     if (workComp && workComp->workId >= 0) {
-        // GameUpdateLoop +0x118 is still void* (GAME-a): the scheduler handle is LEFT.
-        const uintptr_t sched = reinterpret_cast<uintptr_t>(gw->m_tutorial);
+        const uintptr_t sched = reinterpret_cast<uintptr_t>(gw->m_tutorial);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey (uintptr_t scheduler)
         if (sched) {
             CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
-                    reinterpret_cast<uint64_t>(profession), reinterpret_cast<uint64_t>(builderKey));
+                    reinterpret_cast<uint64_t>(profession), reinterpret_cast<uint64_t>(builderKey));   // LEFT: SIG CitizenAI_WorkScheduler_Rekey (uint64_t keys)
         }
     }
 
@@ -216,12 +215,11 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     //      argument, so the order only matters for anything re-entering meanwhile).
     ComponentEntity* const ownerRef = _entity;
     profession = builderKey;
-    // GameUpdateLoop +0xf0 is still void* (GAME-a): the town manager handle is LEFT.
-    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(gw->m_citizenList);
+    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(gw->m_citizenList);   // LEFT: SIG ResidenceComponent_impl_95a0 (int64_t town manager)
     if (townMgr) {
         ComponentEntity* ownerLocal = ownerRef;      // the insert takes an InternalBasePtr*
         ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerLocal,
-                                     reinterpret_cast<uint64_t>(builderKey));
+                                     reinterpret_cast<uint64_t>(builderKey));   // LEFT: SIG ResidenceComponent_impl_95a0 (uint64_t key)
     }
 
     // 6. Worker capacity for the demolition site. No BuildComponent on the owner entity ->
@@ -231,11 +229,11 @@ void WorkPlaceComponent::EnterBuilderProfession() {
 
     int capacity = 0;
     if (buildComp == nullptr) {
-        if (workComp) capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
+        if (workComp) capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: SIG WorkComponent_CalcMaxWorkers
     } else {
         // 0x140002ed0's component class is not settled here: the finder stays (LEFT).
         int64_t posComp = 0;
-        WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(_entity), &posComp);
+        WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(_entity), &posComp);   // LEFT: SIG WorkBase_FindComponent_2ed0 / Pf_RecursiveChildSum_123070 (int64_t)
         // [STANDALONE GUARD] Retail derefs the finder's out-IBP unconditionally; a partial
         // entity can lack the component, and 0x140123070 walks node+0x18/+0x30 from it.
         if (posComp) capacity = Pf_RecursiveChildSum_123070(posComp, 1);
@@ -245,7 +243,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     SetMaxWorkers(capacity);
 
     // 8. SetAccepting(true) — the site now takes builders.
-    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(this), true);
+    SetAccepting(true);   // 0x14012fc00
 
     std::fprintf(stderr, "[DestroyWorkers] f520 re-seat wpc=%p: builderKey=%p capacity=%d "
                  "roster=%d (buildComp=%p) workComp=%p workId(+0x28)=%d%s\n",
@@ -261,9 +259,9 @@ void WorkPlaceComponent::EnterBuilderProfession() {
 // Component/workplacecomponent.cpp and standalone/tool_harness.cpp
 // (EnterBuilderProfession); the closing wave rewires them. The null test is the tree's.
 extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
-    reinterpret_cast<WorkPlaceComponent*>(wpc)->SetMaxWorkers(newMax);
+    reinterpret_cast<WorkPlaceComponent*>(wpc)->SetMaxWorkers(newMax);   // LEFT: B4 FORWARD (workplaceui.cpp)
 }
 extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
     if (!wpc) return;
-    reinterpret_cast<WorkPlaceComponent*>(wpc)->EnterBuilderProfession();
+    reinterpret_cast<WorkPlaceComponent*>(wpc)->EnterBuilderProfession();   // LEFT: B4 FORWARD (workplacecomponent.cpp, tool_harness.cpp)
 }

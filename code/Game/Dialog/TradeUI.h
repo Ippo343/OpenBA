@@ -224,3 +224,31 @@ static_assert(offsetof(TradeUI, _textNotEnough)   == 0x120, "TradeUI +0x120");
 static_assert(offsetof(TradeUI, field_0x128)      == 0x128, "TradeUI +0x128 (dtor 0x140086a75)");
 static_assert(offsetof(TradeUI, _comboPurchase)   == 0x138, "TradeUI +0x138");
 static_assert(offsetof(TradeUI, _sortCombo)       == 0x140, "TradeUI +0x140");
+
+// ---- tradeui_sort.cpp: the _storageItems introsorts (RefreshDisplay 0x1400846b0)
+// ByName: RCX = array, EDX = count. ByComponent: R8 = the address of the
+// caller's TradeComponent* (its stockRoot tree gives the counts).
+extern "C" void TradeUI_IntroSort_ByName_162d0(TradeUI::StorageItem* array, int count);  // 0x1400162d0
+extern "C" void TradeUI_IntroSort_ByComponent_165d0(TradeUI::StorageItem* array, int count,
+                                                    TradeComponent* const* ctx);  // 0x1400165d0
+
+// ---- tradeui_leaves.cpp: the stock-tree insert (OnStorageSpinner 0x140081ab0)
+// The (key, value) pair the insert copies into a new node's first 16 bytes
+// (0x14000e1c0 / 0x14000e2c0: two qword loads from the entry, two qword stores
+// at node +0x00 / +0x08). The caller (OnStorageSpinner) builds it with the value
+// zero-extended, so the pad dword is zero.
+struct TradeStockEntry {
+    ComponentDescription* resource;   // +0x00 the key (TradeResourceNode::resource)
+    int32_t               quantity;   // +0x08 the value (TradeResourceNode::quantity)
+    uint8_t               _pad0C[4];  // +0x0c copied with the value's qword
+};
+static_assert(sizeof(TradeStockEntry) == 0x10, "TradeStockEntry is two qwords (0x14000e1c0)");
+static_assert(offsetof(TradeStockEntry, quantity) == 0x08, "TradeStockEntry +0x08");
+static_assert(offsetof(TradeStockEntry, _pad0C) == 0x0c, "TradeStockEntry +0x0c");
+
+struct TradeResourceNode;   // Component/TradeComponent.h
+// tree = &TradeComponent::stockRoot (the root; the node count follows at +0x08).
+// Returns `out`; *out is the inserted node, or the existing node of that key.
+extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(TradeResourceNode** tree,
+                                                               TradeResourceNode** out,
+                                                               const TradeStockEntry* entry);  // 0x14000e1c0

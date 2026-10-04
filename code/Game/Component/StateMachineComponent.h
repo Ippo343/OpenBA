@@ -62,6 +62,8 @@ public:
 };
 
 static_assert(sizeof(StateMachine) == 0x10, "StateMachine spans component +0x48..+0x57");
+static_assert(offsetof(StateMachine, current) == 0x00, "current node (component +0x48, ctor 0x14012ba86 MOV [RBX+0x48],RAX)");
+static_assert(offsetof(StateMachine, _pad0C) == 0x0C, "tail padding (component +0x54..+0x57: retail's ctor 0x14012ba30 never writes it)");
 static_assert(offsetof(StateMachine, currentInput) == 0x08, "input byte (component +0x50, 0x14012ba8a)");
 static_assert(offsetof(StateMachine, activeState) == 0x09, "active state (component +0x51, Persist 0x14012b983)");
 static_assert(offsetof(StateMachine, pendingState) == 0x0A, "pending state (component +0x52, Persist 0x14012b995)");

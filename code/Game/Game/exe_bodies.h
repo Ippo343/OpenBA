@@ -216,15 +216,14 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState, void
 // REPLACED: was fn_SetEngineNextLoop (ResolveAddr(Module::Exe, 0x140097fb0))
 // Now inline C++ — calls runtime UI functions (SetCursor, SetFullscreenFade).
 inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
-    void* ui = *(void**)(enginePtr + 0x98);
-    // Set cursor to default (cursor ptr from KeyMap singleton+0x38)
-    uint64_t cursorVal = *(uint64_t*)((uintptr_t)(g_gameContainer) + 0x38);
-    reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
-        ::Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
+    void* ui = *(void**)(enginePtr + 0x98);   // LEFT: SIG SetEngineNextLoop(uintptr_t enginePtr) (callers in other blocks' files)
+    // Set the cursor: GameContainer +0x38, "Cursor/Hourglass.rsc:cursor"
+    reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge   // LEFT: the engine's +0x98 UI read through the uintptr_t above
+        ::Object::ExternalPtr<UI::Cursor>(g_gameContainer->cursorHourglass.Get()));
     // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)
-    reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
+    reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge   // LEFT: as above
     // Store next loop pointer at engine+0xC8
-    *(void**)(enginePtr + 0xC8) = loaderLoop;
+    *(void**)(enginePtr + 0xC8) = loaderLoop;   // LEFT: SIG SetEngineNextLoop(uintptr_t enginePtr)
 }
 
 // SetDialogLoaderNextLoop — FUN_14009a8f0 — NOW REIMPLEMENTED INLINE
@@ -233,9 +232,9 @@ inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
 // typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
 // extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
 inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop) {
-    reinterpret_cast<UI::UserInterface*>(dialogLoaderLoop + 0x40)->SetFullscreenFade(  // B.3.6 bridge
+    reinterpret_cast<UI::UserInterface*>(dialogLoaderLoop + 0x40)->SetFullscreenFade(  // B.3.6 bridge   // LEFT: SIG SetDialogLoaderNextLoop(uintptr_t) (callers in other blocks' files)
         true, 0xFF000000, false);
-    *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;
+    *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;   // LEFT: SIG SetDialogLoaderNextLoop(uintptr_t)
 }
 
 // GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
@@ -247,11 +246,12 @@ inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop
 inline void* GetLoadingSoundString(void* retStr) {
     uint8_t rng[2520];  // System::Random is large (~2512 bytes)
     // ??0Random@System@@QEAA@XZ 0x1800c7f20, called by name (B3R Leftovers).
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng));
+    System::Random* random = reinterpret_cast<System::Random*>(rng);   // LEFT: H5 the Random lives in raw stack storage (retail runs its ctor and no dtor)
+    RtSystem_Random_Ctor(random);
     // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
     // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
     // Rand(int,int).
-    uint32_t variant = reinterpret_cast<System::Random*>(rng)->Rand(12u);
+    uint32_t variant = random->Rand(12u);
     // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
     // the loading image it selects stays resident and is numbered into the
     // save's reference table, so an unpinned pick shifts every reference id
@@ -259,7 +259,8 @@ inline void* GetLoadingSoundString(void* retStr) {
     if (Opt().menuScene >= 0)
         variant = static_cast<unsigned>(Opt().menuScene) % 12u;
     // ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730
-    *reinterpret_cast<System::String*>(retStr) =
+    *reinterpret_cast<System::String*>(retStr) =   // LEFT: SIG GetLoadingSoundString(void* retStr) (callers in other blocks' files)
+
         System::String::Format("Dialog/Loading.rsc:gameLoad%i", variant);
     return retStr;
 }
