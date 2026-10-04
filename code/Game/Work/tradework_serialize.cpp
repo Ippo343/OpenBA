@@ -17,7 +17,7 @@
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Game/exe_bodies.h"        // B3R: 0x140002340
-#include "Player/exe_bodies.h"      // PlayerTrade_Retrace_25920 (0x140025920)
+#include "Player/exe_bodies.h"      // Avl38Retrace (0x140025920)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
@@ -94,11 +94,8 @@ TradeWork::Node* TradeWork::InsertAssignment(const Assignment& rec) {
         }
         // Rebalance from the descent node (parent of the new node) up to the root.
         // Matches the disasm: retrace cursor = &local_res8 (the parent), not the new node.
-        // LEFT: the retrace (PLAYER's tool_base_trade.cpp) takes the root and the
-        // cursor as int64_t*.
         Node* retraceCursor = cursor;
-        PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(&bstRoot),
-                                  reinterpret_cast<int64_t*>(&retraceCursor));
+        Avl38Retrace(&bstRoot, &retraceCursor);   // 0x140025920
     }
 
     workerCount = workerCount + 1;

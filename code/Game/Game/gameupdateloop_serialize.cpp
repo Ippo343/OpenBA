@@ -82,7 +82,7 @@
 #include "Game/exe_bodies.h"
 #include "Action/exe_bodies.h"         // ActHunt_DynArraySetCount_3110
 #include "Dialog/exe_bodies.h"         // ToolbarUtility_BstInsert_4890
-#include "Player/exe_bodies.h"         // PlayerTrade_Retrace_25920
+#include "Player/exe_bodies.h"         // Avl38Retrace (0x140025920)
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 
@@ -109,7 +109,7 @@ namespace {
 //   0x140003110 ActHunt_DynArraySetCount_3110                  (Action/exe_bodies.h)
 //   0x1400021d0 Reimpl_Array_Resize_Stride04, 0x140002340 Reimpl_ExternalPtr_Serialize_StringTable
 //   0x140014890 ToolbarUtility_BstInsert_4890                  (Dialog/exe_bodies.h)
-//   0x140025920 PlayerTrade_Retrace_25920                      (Player/exe_bodies.h)
+//   0x140025920 Avl38Retrace                                   (Player/exe_bodies.h)
 // The "[GUL::Serialize] resolved:" stderr line went with the caches.
 //
 // ENDGAME B.3.9 IO (W2): the six IO::CompressedMemoryStream door typedefs and
@@ -469,10 +469,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
             }
             if (duplicate) continue;
             TrackedEntityNode* fixupNode = newNode;
-            // LEFT: the shared AVL retrace takes the header and the node slot as
-            // int64_t* (Player/exe_bodies.h, not GAME-a's).
-            PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(root),
-                                      reinterpret_cast<int64_t*>(&fixupNode));   // 0x140025920
+            Avl38Retrace(root, &fixupNode);   // 0x140025920
             *countField += 1;
         }
     } else {

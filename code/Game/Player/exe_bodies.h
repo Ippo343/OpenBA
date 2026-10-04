@@ -142,7 +142,6 @@ extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, V
 extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner, UI::DialogInstance** ret, ComponentDescription* description);  // 0x1400ff9e0
 
 // ---- tool_base_trade.cpp
-extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor);  // 0x140025920 B4 FORWARD -> Avl38Retrace<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg);  // 0x140025740 B4 FORWARD -> Avl38Remove<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP);  // 0x14002c690 B4 FORWARD -> Avl38FindRemove<TrackedEntityNode>
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1);  // 0x1400666b0 B4 FORWARD -> EntityUI::SyncPin
