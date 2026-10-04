@@ -673,11 +673,17 @@ void Save::SaveLoad::Draw(Video::Context& context,
     sc._context   = ctx;
     sc._deferring = 0;
     sc._deferred._data = nullptr; sc._deferred._size = 0; sc._deferred._capacity = 0;
-    // +0x58 and +0x68 are two more Collection::Array<T> members inside the
-    // header's `_opaque50` blob — pinned HERE by this constructor zeroing both
-    // halves of each and by the destructor at the bottom freeing exactly those
-    // two pointers. +0x50 is deliberately left alone.
-    std::memset(reinterpret_cast<uint8_t*>(&sc) + 0x58, 0, 0x20);
+    // +0x58 and +0x68 are the two Collection::Array<T> members of `_layout`
+    // (RtUI::FontLayout) — pinned HERE by this constructor zeroing both halves
+    // of each and by the destructor at the bottom freeing exactly those two
+    // pointers. +0x50 is deliberately left alone. Retail's 0x20 zero bytes are
+    // the six named stores below, in address order (H7).
+    sc._layout._entries._data        = nullptr;     // +0x58
+    sc._layout._entries._size        = 0;           // +0x60
+    sc._layout._entries._capacity    = 0;           // +0x64
+    sc._layout._lineWidths._data     = nullptr;     // +0x68
+    sc._layout._lineWidths._size     = 0;           // +0x70
+    sc._layout._lineWidths._capacity = 0;           // +0x74
     sc._clipRegion     = nullptr;
     sc._spriteCapture  = nullptr;
 
