@@ -1962,11 +1962,10 @@ void GameUpdateLoop::Shutdown() {
                 Profession* citProfession = citizen->profession;
                 ComponentEntity* citWorkplace = citizen->workplace;
 
-                int64_t nullRef[1] = {0};
-                new (nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                ComponentEntity* nullRef = nullptr;   // the null InternalPtr<ComponentEntity> retail passes
 
                 if (citProfession != defaultProfession || citWorkplace != nullptr) {
-                    CitizenComp_AssignHousing(citizen, nullRef);   // 0x140111ee0
+                    citizen->SetWorkplace(nullRef);   // 0x140111ee0
                     citizen->profession = defaultProfession;
                 }
             }

@@ -616,8 +616,8 @@ char WorkPlaceComponent::EnterDemolish() {
 
 // ---- B4 FORWARD: the C spellings callers still use. SetAccepting: its address is taken
 // by Dialog/buildui.cpp:488 (a function-pointer table). LeaveBuilderProfession:
-// destroycomponent_states (the null test is the tree's). ApplyOccupiedVisual:
-// Game/starttown.cpp (its deferred list holds the components as int64_t).
+// destroycomponent_states (the null test is the tree's). (ApplyOccupiedVisual's forwarder:
+// deleted by X4-COMP, starttown.cpp's deferred list holds the components typed.)
 // (WorkPlaceComponent_OnCreateInit 0x14012ee60: its one caller calls ReleaseWorkers; deleted.)
 void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting) {
     comp->SetAccepting(accepting);
@@ -625,9 +625,6 @@ void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting) {
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP) {
     if (!selfP) return;
     selfP->LeaveBuilderProfession();
-}
-void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
-    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD   // LEFT: SIG WorkplaceComponent_ApplyOccupiedVisual: starttown.cpp's g_pendingOccupiedVisuals holds the components as int64_t (X3-GAME's file)
 }
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====

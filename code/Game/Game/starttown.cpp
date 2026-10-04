@@ -413,7 +413,6 @@ extern bool g_wpcRosterOnly;
 
 // Apply the occupied end-state visual for a rostered house (ModelKick mode 2 + StatusIcon
 // toggle). MUST run at gameplay time (live scene). See its definition in workplacecomponent.cpp.
-extern void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp);
 
 // ---------------------------------------------------------------------------
 // Shared "activate a pre-built workplace" replay (open E consolidation — was two
@@ -458,7 +457,7 @@ static Profession* StartTown_ActivateWorkplace(ComponentEntity* entity, bool reg
 // WorkPlaceComponent pointers of the founding houses rostered in roster-only mode, whose
 // occupied visual was deferred to gameplay time. Drained once by
 // StartTown_ApplyPendingOccupiedVisuals on an early GameUpdateLoop tick (scene live).
-static std::vector<int64_t> g_pendingOccupiedVisuals;
+static std::vector<WorkPlaceComponent*> g_pendingOccupiedVisuals;
 // One-shot guard for the deferred occupied-visual pass, reset per town spawn.
 static bool g_occupiedVisualsApplied = false;
 
@@ -4006,8 +4005,8 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
     fprintf(stderr, "[startTown::housing] applying %zu deferred occupied visuals at frame %d\n",
             g_pendingOccupiedVisuals.size(), frameNum);
     fflush(stderr);
-    for (int64_t wp : g_pendingOccupiedVisuals) {
-        if (wp) WorkplaceComponent_ApplyOccupiedVisual(wp);
+    for (WorkPlaceComponent* wp : g_pendingOccupiedVisuals) {
+        if (wp) wp->ApplyOccupiedVisual();
     }
     g_pendingOccupiedVisuals.clear();
     g_occupiedVisualsApplied = true;
