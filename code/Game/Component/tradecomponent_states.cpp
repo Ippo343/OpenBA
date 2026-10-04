@@ -259,7 +259,7 @@ char TradeComponent::EnterInbound() { return 1; }
 // Counts the merchant's stay down. When it expires and the post is not mid-trade
 // (+0x71), request state 2. +0x71 is what stops a merchant vanishing out from under an
 // open checkout. The null delta test is the tree's.
-char TradeComponent::TickDocked(void* sm, const System::Time* deltaTime) {
+char TradeComponent::TickDocked(StateMachine* sm, const System::Time* deltaTime) {
     const int64_t dt = deltaTime ? deltaTime->_ticks : 0;
     merchantTimer._ticks -= dt;
     if (merchantTimer._ticks < 1 && !tradeFlag) {
@@ -289,7 +289,7 @@ char TradeComponent::TickDocked(void* sm, const System::Time* deltaTime) {
 // so reusing AddEvent reproduces the inlined body exactly instead of duplicating it.
 //
 // The event log lives at gameWorld+0x138 (GameUpdateLoop::m_eventNotifier).
-char TradeComponent::OnMerchantDocked(void* sm) {
+char TradeComponent::OnMerchantDocked(StateMachine* sm) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
         // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
@@ -310,7 +310,7 @@ char TradeComponent::OnMerchantDocked(void* sm) {
 // ============================================================
 // The inbound boat went away without docking: clear the merchant reference at +0x80
 // and go back to idle.
-char TradeComponent::OnMerchantLost(void* sm) {
+char TradeComponent::OnMerchantLost(StateMachine* sm) {
     merchant = nullptr;
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
@@ -338,7 +338,7 @@ char TradeComponent::OnMerchantLost(void* sm) {
 // only thing this handler adds over its 0xb sibling is the immediate tick — which
 // is the point: dismissing a merchant has to take effect on the click, not on the
 // next simulation frame. Retail ignores param_1 entirely, so the handler stays free.
-static char TradeCtrl_Event0A_Dismissed(TradeComponent* /*self*/, void* smV) {
+static char TradeCtrl_Event0A_Dismissed(TradeComponent* /*self*/, StateMachine* smV) {
     if (!smV) return 1;
     ::ControllerLive::RequestStateTransition(smV, 2);
     ::StateMachine_TickReimpl(smV, /*time*/ 0, /*param3*/ 0, /*param4*/ 1);
@@ -356,7 +356,7 @@ static char TradeCtrl_Event0A_Dismissed(TradeComponent* /*self*/, void* smV) {
 // branch returns the delta-time with the low byte masked off, and the fired branch masks
 // the transition result the same way. So: 0, on every path. The null delta test is the
 // tree's.
-char TradeComponent::TickIdle(void* smV, const System::Time* deltaTime) {
+char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) {
     const int64_t dt = deltaTime ? deltaTime->_ticks : 0;
     merchantTimer._ticks -= dt;
     if (merchantTimer._ticks >= 1) return 0;
@@ -406,9 +406,7 @@ char TradeComponent::TickIdle(void* smV, const System::Time* deltaTime) {
 
     // Retail ticks the machine once first when it has no current state yet
     // (`if (*(char*)(sm+9) < 0)` at 14005ab6a), then requests 0x12.
-    // LEFT: the StateMachine bytes are untyped (Component/StateMachineComponent.h, COMP-3).
-    uint8_t* sm = reinterpret_cast<uint8_t*>(smV);   // LEFT: StateMachineComponent.h (COMP-3)
-    if (sm && static_cast<int8_t>(sm[9]) < 0) {
+    if (smV && smV->activeState < 0) {   // +0x09, signed
         System::Time zeroTime = {0};
         RtSystem_Time_Ctor(&zeroTime, 0.0f);
         // The door typed `time` as a pointer and passed &zeroTime; the body takes the
@@ -460,18 +458,18 @@ char TradeComponent::Teardown() {
 // Table build — replicates 0x14005c650
 // ============================================================
 // The handlers the dispatcher calls with (owner, sm[, delta]); RCX is the component.
-static char TradeCtrl_State2_Enter(TradeComponent* c, void* /*sm*/)       { return c->EnterIdle(); }         // 0x14005abd0
-static char TradeCtrl_State2_Tick(TradeComponent* c, void* sm, void* dt) {                    // 0x14005aa60
+static char TradeCtrl_State2_Enter(TradeComponent* c, StateMachine* /*sm*/)       { return c->EnterIdle(); }         // 0x14005abd0
+static char TradeCtrl_State2_Tick(TradeComponent* c, StateMachine* sm, void* dt) {                    // 0x14005aa60
     return c->TickIdle(sm, static_cast<const System::Time*>(dt));
 }
-static char TradeCtrl_State12_Enter(TradeComponent* c, void* /*sm*/)      { return c->EnterInbound(); }      // 0x14005aa50
-static char TradeCtrl_Event09_MerchantDocked(TradeComponent* c, void* sm) { return c->OnMerchantDocked(sm); }   // 0x14005a850
-static char TradeCtrl_Event0B_MerchantLost(TradeComponent* c, void* sm)   { return c->OnMerchantLost(sm); }     // 0x14005a9c0
-static char TradeCtrl_State13_Enter(TradeComponent* c, void* /*sm*/)      { return c->EnterDocked(); }       // 0x14005a800
-static char TradeCtrl_State13_Tick(TradeComponent* c, void* sm, void* dt) {                   // 0x14005a780
+static char TradeCtrl_State12_Enter(TradeComponent* c, StateMachine* /*sm*/)      { return c->EnterInbound(); }      // 0x14005aa50
+static char TradeCtrl_Event09_MerchantDocked(TradeComponent* c, StateMachine* sm) { return c->OnMerchantDocked(sm); }   // 0x14005a850
+static char TradeCtrl_Event0B_MerchantLost(TradeComponent* c, StateMachine* sm)   { return c->OnMerchantLost(sm); }     // 0x14005a9c0
+static char TradeCtrl_State13_Enter(TradeComponent* c, StateMachine* /*sm*/)      { return c->EnterDocked(); }       // 0x14005a800
+static char TradeCtrl_State13_Tick(TradeComponent* c, StateMachine* sm, void* dt) {                   // 0x14005a780
     return c->TickDocked(sm, static_cast<const System::Time*>(dt));
 }
-static char TradeCtrl_State13_Update(TradeComponent* c, void* /*sm*/)     { return c->LeaveDocked(); }       // 0x14005a6d0
+static char TradeCtrl_State13_Update(TradeComponent* c, StateMachine* /*sm*/)     { return c->LeaveDocked(); }       // 0x14005a6d0
 static void TradeCtrl_Teardown(TradeComponent* c)           { c->Teardown(); }          // 0x14005b160
 
 // Built ONCE at static-init time, as retail's 0x14005c650 does (B38 D6/D7).

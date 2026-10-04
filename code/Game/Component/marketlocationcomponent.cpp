@@ -55,7 +55,7 @@ static CitizenBehavior* MarketTown() {
 //   Array<void*>::SetSize(list, list.count + 1, &local)       (0x140003110)
 // — then `XOR AL,AL` (0: the Tick's enter walk continues past this node). The slot-7
 // removal hook (0x14004ef60) and the state-3 enter below are the matching erase.
-static char MarketLoc_State2Enter(MarketLocationComponent* self, void* /*sm*/) {
+static char MarketLoc_State2Enter(MarketLocationComponent* self, StateMachine* /*sm*/) {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
     ComponentEntity* entityPtr = self->_entity;
     CitizenBehavior* town = MarketTown();
@@ -69,7 +69,7 @@ static char MarketLoc_State2Enter(MarketLocationComponent* self, void* /*sm*/) {
 // state-3 ENTER — retail 0x14004eee0: `local = _entity;
 // DynArray8_EraseByValue(town +0x10, &local)` (0x140002cc0), then `XOR AL,AL`.
 // Byte-for-byte the slot-7 removal hook's body (retail: an identical body, not a dispatch).
-static char MarketLoc_State3Enter(MarketLocationComponent* self, void* /*sm*/) {
+static char MarketLoc_State3Enter(MarketLocationComponent* self, StateMachine* /*sm*/) {
     self->MarketLocationComponent::OnRemove();
     return 0;
 }

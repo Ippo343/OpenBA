@@ -39,6 +39,10 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
+// The machine every slot receives (StateMachineComponent.h): StateMachine::Tick
+// (0x1400a9660) passes RDX = its `this`, StateMachineComponent +0x48.
+class StateMachine;
+
 class ControllerComponent : public Component {
     DECLARE_EXE_TYPE(ControllerComponent)
 
@@ -52,17 +56,17 @@ public:
         // [1] the index of the current state's transition to *desiredStateId, -1 if none
         virtual int  FindTransition(int stateIndex, int* desiredStateId) = 0;
         // [2] run the current state's handler for eventId (0 on a miss)
-        virtual char PostEvent(void* stateMachine, int stateIndex, int eventId) = 0;
+        virtual char PostEvent(StateMachine* stateMachine, int stateIndex, int eventId) = 0;
         // [3] state enter handler
-        virtual char Enter(void* stateMachine, int stateIndex) = 0;
+        virtual char Enter(StateMachine* stateMachine, int stateIndex) = 0;
         // [4] state update handler (runs when a transition is pending)
-        virtual char Update(void* stateMachine, int stateIndex) = 0;
+        virtual char Update(StateMachine* stateMachine, int stateIndex) = 0;
         // [5] transition action
-        virtual void OnTransition(void* stateMachine, int stateIndex, int transitionIndex) = 0;
+        virtual void OnTransition(StateMachine* stateMachine, int stateIndex, int transitionIndex) = 0;
         // [6] per-frame handler, StateMachine::Tick useAlt == 0 (column +0x10)
-        virtual char Tick(void* stateMachine, void* time, int stateIndex) = 0;
+        virtual char Tick(StateMachine* stateMachine, void* time, int stateIndex) = 0;
         // [7] per-frame handler, StateMachine::Tick useAlt == 1 (column +0x18)
-        virtual char TickAlt(void* stateMachine, void* time, int stateIndex) = 0;
+        virtual char TickAlt(StateMachine* stateMachine, void* time, int stateIndex) = 0;
         // [8] retail (Well 0x140010260): `XOR EAX,EAX; CMP [count],EAX; SETNZ AL`
         virtual char HasStates() = 0;
 

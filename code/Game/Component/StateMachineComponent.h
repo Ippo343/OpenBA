@@ -87,13 +87,13 @@ public:
 
         int  FindState(int stateId) override;                                    // [0] 0x140038630
         int  FindTransition(int stateIndex, int* desiredStateId) override;       // [1] 0x140038660
-        char PostEvent(void* stateMachine, int stateIndex, int eventId) override; // [2] 0x1400386c0
-        char Enter(void* stateMachine, int stateIndex) override;                 // [3] 0x140038710
-        char Update(void* stateMachine, int stateIndex) override;                // [4] 0x140038740
-        void OnTransition(void* stateMachine, int stateIndex,
+        char PostEvent(StateMachine* stateMachine, int stateIndex, int eventId) override; // [2] 0x1400386c0
+        char Enter(StateMachine* stateMachine, int stateIndex) override;                 // [3] 0x140038710
+        char Update(StateMachine* stateMachine, int stateIndex) override;                // [4] 0x140038740
+        void OnTransition(StateMachine* stateMachine, int stateIndex,
                           int transitionIndex) override;                         // [5] 0x140038770
-        char Tick(void* stateMachine, void* time, int stateIndex) override;      // [6] 0x1400387a0
-        char TickAlt(void* stateMachine, void* time, int stateIndex) override;   // [7] 0x1400387d0
+        char Tick(StateMachine* stateMachine, void* time, int stateIndex) override;      // [6] 0x1400387a0
+        char TickAlt(StateMachine* stateMachine, void* time, int stateIndex) override;   // [7] 0x1400387d0
         char HasStates() override;                                               // [8] 0x140038800
     };
 

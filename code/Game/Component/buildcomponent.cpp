@@ -295,11 +295,11 @@ using BuildCtrlDispatch = ::ControllerLive::Dispatcher<BuildCtrlTag>;
 // controller's back-pointer, this component, so each entry is a one-line
 // adapter that calls the member on it. The null-receiver returns are the tree's
 // (retail's handlers have none); kept, not extended.
-static char BuildState1Enter(BuildComponent* bc, void* sm)   { return bc ? bc->State1Enter(sm) : 1; }    // sub_8290 (slot +0x18)
-static char BuildState1Update(BuildComponent* bc, void* sm, void* /*time*/)  { return bc ? bc->State1Update(sm) : 1; }   // sub_81e0 (slot +0x38, per-frame)
-static char BuildState8Enter(BuildComponent* bc, void* sm)   { return bc ? bc->State8Enter(sm) : 1; }    // sub_7ae0 (slot +0x18)
-static char BuildState8Update(BuildComponent* bc, void* sm, void* /*time*/)  { return bc ? bc->State8Update(sm) : 1; }   // sub_76e0 (slot +0x38, per-frame)
-static char BuildState8OneShot(BuildComponent* bc, void* sm) { return bc ? bc->State8OneShot(sm) : 1; }  // sub_7600 (slot +0x20, exit-transition)
+static char BuildState1Enter(BuildComponent* bc, StateMachine* sm)   { return bc ? bc->State1Enter(sm) : 1; }    // sub_8290 (slot +0x18)
+static char BuildState1Update(BuildComponent* bc, StateMachine* sm, void* /*time*/)  { return bc ? bc->State1Update(sm) : 1; }   // sub_81e0 (slot +0x38, per-frame)
+static char BuildState8Enter(BuildComponent* bc, StateMachine* sm)   { return bc ? bc->State8Enter(sm) : 1; }    // sub_7ae0 (slot +0x18)
+static char BuildState8Update(BuildComponent* bc, StateMachine* sm, void* /*time*/)  { return bc ? bc->State8Update(sm) : 1; }   // sub_76e0 (slot +0x38, per-frame)
+static char BuildState8OneShot(BuildComponent* bc, StateMachine* sm) { return bc ? bc->State8OneShot(sm) : 1; }  // sub_7600 (slot +0x20, exit-transition)
 static void BuildState8To2Action(BuildComponent* bc)         { if (bc) bc->State8To2Action(); }  // sub_75e0 (slot +0x28, 8->2 action)
 
 // Table field->node-slot mapping (see controller_state_table.h + buildcomponent_state8.cpp):

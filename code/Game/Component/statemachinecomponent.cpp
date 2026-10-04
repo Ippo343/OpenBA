@@ -246,8 +246,8 @@ void StateMachine::Tick(void* time, char useAlt, char run) {
 // tradecomponent_states; Player: keystone_a_removalcalcpath; Work: work_leaf_hunt).
 // `time` is the Time* the node's Tick / TickAlt receive, carried as an integer by
 // the old signature (controller_state_table.h).
-void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) {
-    reinterpret_cast<StateMachine*>(smP)->Tick(reinterpret_cast<void*>(time), param3, param4);   // LEFT: SIG StateMachine_TickReimpl (controller_state_table.h, COMP-2+3)
+void StateMachine_TickReimpl(StateMachine* smP, int64_t time, char param3, char param4) {
+    smP->Tick(reinterpret_cast<void*>(time), param3, param4);   // LEFT: SIG StateMachine_TickReimpl (controller_state_table.h, COMP-2+3)
 }
 
 // ============================================================================
@@ -638,12 +638,12 @@ void StateMachineComponent::Slot11() {}
 // every slot answers 0, as the tree's stub table did.
 int  StateMachineComponent::RootController::FindState(int) { return 0; }
 int  StateMachineComponent::RootController::FindTransition(int, int*) { return 0; }
-char StateMachineComponent::RootController::PostEvent(void*, int, int) { return 0; }
-char StateMachineComponent::RootController::Enter(void*, int) { return 0; }
-char StateMachineComponent::RootController::Update(void*, int) { return 0; }
-void StateMachineComponent::RootController::OnTransition(void*, int, int) {}
-char StateMachineComponent::RootController::Tick(void*, void*, int) { return 0; }
-char StateMachineComponent::RootController::TickAlt(void*, void*, int) { return 0; }
+char StateMachineComponent::RootController::PostEvent(StateMachine*, int, int) { return 0; }
+char StateMachineComponent::RootController::Enter(StateMachine*, int) { return 0; }
+char StateMachineComponent::RootController::Update(StateMachine*, int) { return 0; }
+void StateMachineComponent::RootController::OnTransition(StateMachine*, int, int) {}
+char StateMachineComponent::RootController::Tick(StateMachine*, void*, int) { return 0; }
+char StateMachineComponent::RootController::TickAlt(StateMachine*, void*, int) { return 0; }
 char StateMachineComponent::RootController::HasStates() { return 0; }
 
 // create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.

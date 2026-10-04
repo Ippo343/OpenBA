@@ -52,10 +52,10 @@ public:
     int   CountRemaining();                                       // 0x140118330
     void  FinishClear();                                          // 0x140118270
     // state handlers (the controller hands them its owner, node+0x18)
-    char  State0Enter(void* sm);                                  // 0x140117960
-    char  State0PerFrame(void* sm);                               // 0x1401178f0
+    char  State0Enter(StateMachine* sm);                                  // 0x140117960
+    char  State0PerFrame(StateMachine* sm);                               // 0x1401178f0
     char  State0Update();                                         // 0x140117890
-    char  State1Enter(void* sm);                                  // 0x140117820
+    char  State1Enter(StateMachine* sm);                                  // 0x140117820
     char  State2Enter();                                          // 0x1401177f0
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).

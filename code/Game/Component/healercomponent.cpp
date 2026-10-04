@@ -100,8 +100,8 @@ char HealerComponent::StateDemolishEnter() {
 
 // The state table's handler adapters: the controller hands each one its owner
 // (node+0x18), the HealerComponent.
-static char Healer_StateBuiltEnter(HealerComponent* c, void* /*sm*/)    { return c->StateBuiltEnter(); }      // 0x14004ae30
-static char Healer_StateDemolishEnter(HealerComponent* c, void* /*sm*/) { return c->StateDemolishEnter(); }   // 0x14004adf0
+static char Healer_StateBuiltEnter(HealerComponent* c, StateMachine* /*sm*/)    { return c->StateBuiltEnter(); }      // 0x14004ae30
+static char Healer_StateDemolishEnter(HealerComponent* c, StateMachine* /*sm*/) { return c->StateDemolishEnter(); }   // 0x14004adf0
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — HealerComponent as a REAL class (HealerComponent.h).

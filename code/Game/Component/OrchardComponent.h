@@ -81,23 +81,23 @@ public:
     float GetGrowth() const;                            // 0x140051640
     // The state table's handlers (the controller hands them this component).
     char EnterIdle();                                   // 0x140051530 state 2
-    char TickIdle(void* sm);                            // 0x1400514c0
-    char OnPlantEvent(void* sm);                        // 0x140051450 event 3
+    char TickIdle(StateMachine* sm);                            // 0x1400514c0
+    char OnPlantEvent(StateMachine* sm);                        // 0x140051450 event 3
     char EnterPlanting();                               // 0x140051070 state 9
-    char TickPlanting(void* sm);                        // 0x140050f90
-    char OnHarvestEvent(void* sm);                      // 0x140050900 event 4
-    char OnClearEvent(void* sm);                        // 0x1400513e0 event 5
-    char TryHarvest(void* sm);                          // 0x140051580
-    char EnterTending(void* sm);                        // 0x140050e30 state 10
+    char TickPlanting(StateMachine* sm);                        // 0x140050f90
+    char OnHarvestEvent(StateMachine* sm);                      // 0x140050900 event 4
+    char OnClearEvent(StateMachine* sm);                        // 0x1400513e0 event 5
+    char TryHarvest(StateMachine* sm);                          // 0x140051580
+    char EnterTending(StateMachine* sm);                        // 0x140050e30 state 10
     char UpdateTending();                               // 0x140050ba0 (state 12's 0x1400509b0 is the same body)
-    char TickTending(void* sm);                         // 0x140050c00
+    char TickTending(StateMachine* sm);                         // 0x140050c00
     char EnterReplanting();                             // 0x140050ae0 state 12
-    char TickReplanting(void* sm);                      // 0x140050a10
+    char TickReplanting(StateMachine* sm);                      // 0x140050a10
     char EnterHarvesting();                             // 0x140050800 state 11
-    char TickHarvesting(void* sm);                      // 0x140050650
+    char TickHarvesting(StateMachine* sm);                      // 0x140050650
     char EnterClearing();                               // 0x1400504e0 state 20
     char UpdateClearing();                              // 0x1400503e0
-    char TickClearing(void* sm);                        // 0x140050430
+    char TickClearing(StateMachine* sm);                        // 0x140050430
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x140051de0 (bool +0x48, int +0x4c, the slot array, ExternalPtr +0x60).

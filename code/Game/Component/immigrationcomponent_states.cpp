@@ -516,11 +516,11 @@ void ImmigrationComponent::Accept() {
 // ============================================================
 
 // state 2 IDLE — enter 0x14004d290 (returns 0), tick 0x14004d220 (returns 1)
-char ImmigrationComponent::EnterIdle(void* sm) {
+char ImmigrationComponent::EnterIdle(StateMachine* sm) {
     if (CanAccept()) ::ControllerLive::RequestStateTransition(sm, 0xf);
     return 0;
 }
-char ImmigrationComponent::TickIdle(void* sm) {
+char ImmigrationComponent::TickIdle(StateMachine* sm) {
     if (CanAccept()) ::ControllerLive::RequestStateTransition(sm, 0xf);
     return 1;
 }
@@ -540,7 +540,7 @@ char ImmigrationComponent::EnterWaiting() {
     return 0;
 }
 // tick 0x14004d0d0: countdown; in season -> 0x10 if CanAccept else 2
-char ImmigrationComponent::TickWaiting(void* sm, void* time) {
+char ImmigrationComponent::TickWaiting(StateMachine* sm, void* time) {
     GameUpdateLoop* gw = GW();
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return 1;
@@ -571,7 +571,7 @@ char ImmigrationComponent::TickArriving() {
     return 1;
 }
 // event 6 0x14004cff0: a nomad reached the hall
-char ImmigrationComponent::OnArrived(void* sm) {
+char ImmigrationComponent::OnArrived(StateMachine* sm) {
     int32_t arrived = ++arrivedCount;
     if (arrived == groupCount) ::ControllerLive::RequestStateTransition(sm, 0x11);
     return 1;
@@ -591,7 +591,7 @@ char ImmigrationComponent::EnterAnswer() {
     return 1;
 }
 // tick 0x14004ce00: past the leave month -> dismiss -> 2
-char ImmigrationComponent::TickAnswer(void* sm) {
+char ImmigrationComponent::TickAnswer(StateMachine* sm) {
     GameUpdateLoop* gw = GW();
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return 1;
@@ -602,20 +602,20 @@ char ImmigrationComponent::TickAnswer(void* sm) {
     return 1;
 }
 // event 7 0x14004cd90: ALLOW
-char ImmigrationComponent::OnAllow(void* sm) {
+char ImmigrationComponent::OnAllow(StateMachine* sm) {
     Accept();   // 0x14004d450
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
 }
 // event 8 0x14004cd20: DENY
-char ImmigrationComponent::OnDeny(void* sm) {
+char ImmigrationComponent::OnDeny(StateMachine* sm) {
     Dismiss();   // 0x14004d300
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
 }
 
 // 0x1400a9ac0 — request a transition on a StateMachine (shared idiom).
-extern "C" void Imm_RequestStateTransition_9ac0(void* sm, int stateId) {
+extern "C" void Imm_RequestStateTransition_9ac0(StateMachine* sm, int stateId) {
     ::ControllerLive::RequestStateTransition(sm, stateId);
 }
 
@@ -631,18 +631,18 @@ using ImmigrationDispatch = ::ControllerLive::Dispatcher<ImmigrationCtrlTag>;
 // handler([node+0x18], sm[, time]): [node+0x18] is the controller's back-pointer, this
 // component, so each entry is a one-line adapter that calls the member.
 namespace {
-char ImmEnterIdle(ImmigrationComponent* c, void* sm)                { return c->EnterIdle(sm); }        // 0x14004d290
-char ImmTickIdle(ImmigrationComponent* c, void* sm, void*)          { return c->TickIdle(sm); }         // 0x14004d220
-char ImmEnterWaiting(ImmigrationComponent* c, void*)                { return c->EnterWaiting(); }       // 0x14004d1a0
-char ImmTickWaiting(ImmigrationComponent* c, void* sm, void* time)  { return c->TickWaiting(sm, time); } // 0x14004d0d0
-char ImmEnterArriving(ImmigrationComponent* c, void*)               { return c->EnterArriving(); }      // 0x14004d090
-char ImmTickArriving(ImmigrationComponent* c, void*, void*)         { return c->TickArriving(); }       // 0x14004d070
-char ImmOnArrived(ImmigrationComponent* c, void* sm)                { return c->OnArrived(sm); }        // 0x14004cff0
+char ImmEnterIdle(ImmigrationComponent* c, StateMachine* sm)                { return c->EnterIdle(sm); }        // 0x14004d290
+char ImmTickIdle(ImmigrationComponent* c, StateMachine* sm, void*)          { return c->TickIdle(sm); }         // 0x14004d220
+char ImmEnterWaiting(ImmigrationComponent* c, StateMachine*)                { return c->EnterWaiting(); }       // 0x14004d1a0
+char ImmTickWaiting(ImmigrationComponent* c, StateMachine* sm, void* time)  { return c->TickWaiting(sm, time); } // 0x14004d0d0
+char ImmEnterArriving(ImmigrationComponent* c, StateMachine*)               { return c->EnterArriving(); }      // 0x14004d090
+char ImmTickArriving(ImmigrationComponent* c, StateMachine*, void*)         { return c->TickArriving(); }       // 0x14004d070
+char ImmOnArrived(ImmigrationComponent* c, StateMachine* sm)                { return c->OnArrived(sm); }        // 0x14004cff0
 void ImmOnLeaveGroup(ImmigrationComponent* c)                       { c->OnLeaveGroup(); }              // 0x14004cd00
-char ImmEnterAnswer(ImmigrationComponent* c, void*)                 { return c->EnterAnswer(); }        // 0x14004ceb0
-char ImmTickAnswer(ImmigrationComponent* c, void* sm, void*)        { return c->TickAnswer(sm); }       // 0x14004ce00
-char ImmOnAllow(ImmigrationComponent* c, void* sm)                  { return c->OnAllow(sm); }          // 0x14004cd90
-char ImmOnDeny(ImmigrationComponent* c, void* sm)                   { return c->OnDeny(sm); }           // 0x14004cd20
+char ImmEnterAnswer(ImmigrationComponent* c, StateMachine*)                 { return c->EnterAnswer(); }        // 0x14004ceb0
+char ImmTickAnswer(ImmigrationComponent* c, StateMachine* sm, void*)        { return c->TickAnswer(sm); }       // 0x14004ce00
+char ImmOnAllow(ImmigrationComponent* c, StateMachine* sm)                  { return c->OnAllow(sm); }          // 0x14004cd90
+char ImmOnDeny(ImmigrationComponent* c, StateMachine* sm)                   { return c->OnDeny(sm); }           // 0x14004cd20
 }  // namespace
 
 extern "C" void ImmigrationCtrl_PopulateTable() {

@@ -56,18 +56,18 @@ public:
     void Dismiss();                                       // 0x14004d300
     void Accept();                                        // 0x14004d450
     // The state table's handlers (the controller hands them this component).
-    char EnterIdle(void* sm);                             // 0x14004d290 state 2
-    char TickIdle(void* sm);                              // 0x14004d220
+    char EnterIdle(StateMachine* sm);                             // 0x14004d290 state 2
+    char TickIdle(StateMachine* sm);                              // 0x14004d220
     char EnterWaiting();                                  // 0x14004d1a0 state 0xf
-    char TickWaiting(void* sm, void* time);               // 0x14004d0d0
+    char TickWaiting(StateMachine* sm, void* time);               // 0x14004d0d0
     char EnterArriving();                                 // 0x14004d090 state 0x10
     char TickArriving();                                  // 0x14004d070
-    char OnArrived(void* sm);                             // 0x14004cff0 event 6
+    char OnArrived(StateMachine* sm);                             // 0x14004cff0 event 6
     void OnLeaveGroup();                                  // 0x14004cd00 transition to 3
     char EnterAnswer();                                   // 0x14004ceb0 state 0x11
-    char TickAnswer(void* sm);                            // 0x14004ce00
-    char OnAllow(void* sm);                               // 0x14004cd90 event 7
-    char OnDeny(void* sm);                                // 0x14004cd20 event 8
+    char TickAnswer(StateMachine* sm);                            // 0x14004ce00
+    char OnAllow(StateMachine* sm);                               // 0x14004cd90 event 7
+    char OnDeny(StateMachine* sm);                                // 0x14004cd20 event 8
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x14004e4b0 (int +0x50; int count +0x60 with the +0x58 IBP array, each

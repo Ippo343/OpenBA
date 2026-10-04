@@ -131,7 +131,7 @@ char NomadComponent::EnterWalkIn() {
     return 1;
 }
 // state 0 tick 0x14004f9c0: arrived -> tell the hall (event 6) -> state 1
-char NomadComponent::TickWalkIn(void* sm) {
+char NomadComponent::TickWalkIn(StateMachine* sm) {
     if (!Idle(this)) return 1;
     GameUpdateLoop* gw = GW();
     if (hall == nullptr) {
@@ -152,7 +152,7 @@ char NomadComponent::TickWalkIn(void* sm) {
     return 1;
 }
 // event 1 0x14004f4a0: LEAVE -> state 2, forget the hall
-char NomadComponent::OnLeave(void* sm) {
+char NomadComponent::OnLeave(StateMachine* sm) {
     ::ControllerLive::RequestStateTransition(sm, 2);
     hall = nullptr;   // a null InternalBasePtr
     return 1;
@@ -242,14 +242,14 @@ using NomadDispatch = ::ControllerLive::Dispatcher<NomadCtrlTag>;
 // handler([node+0x18], sm[, time]): [node+0x18] is the controller's back-pointer, this
 // component, so each entry is a one-line adapter that calls the member.
 namespace {
-char NomadEnterWalkIn(NomadComponent* c, void*)                { return c->EnterWalkIn(); }     // 0x14004faf0
-char NomadTickWalkIn(NomadComponent* c, void* sm, void*)       { return c->TickWalkIn(sm); }    // 0x14004f9c0
-char NomadOnLeave(NomadComponent* c, void* sm)                 { return c->OnLeave(sm); }       // 0x14004f4a0
-char NomadEnterLoiter(NomadComponent*, void*)                  { return 1; }                    // LAB_14004f9b0 `mov al,1; ret`
-char NomadTickLoiter(NomadComponent* c, void*, void* time)     { return c->TickLoiter(time); }  // 0x14004f600
-char NomadOnDestroy(NomadComponent* c, void*)                  { return c->OnDestroy(); }       // 0x14004f420
-char NomadEnterWalkOut(NomadComponent* c, void*)               { return c->EnterWalkOut(); }    // 0x14004f5e0
-char NomadTickWalkOut(NomadComponent* c, void*, void*)         { return c->TickWalkOut(); }     // 0x14004f530
+char NomadEnterWalkIn(NomadComponent* c, StateMachine*)                { return c->EnterWalkIn(); }     // 0x14004faf0
+char NomadTickWalkIn(NomadComponent* c, StateMachine* sm, void*)       { return c->TickWalkIn(sm); }    // 0x14004f9c0
+char NomadOnLeave(NomadComponent* c, StateMachine* sm)                 { return c->OnLeave(sm); }       // 0x14004f4a0
+char NomadEnterLoiter(NomadComponent*, StateMachine*)                  { return 1; }                    // LAB_14004f9b0 `mov al,1; ret`
+char NomadTickLoiter(NomadComponent* c, StateMachine*, void* time)     { return c->TickLoiter(time); }  // 0x14004f600
+char NomadOnDestroy(NomadComponent* c, StateMachine*)                  { return c->OnDestroy(); }       // 0x14004f420
+char NomadEnterWalkOut(NomadComponent* c, StateMachine*)               { return c->EnterWalkOut(); }    // 0x14004f5e0
+char NomadTickWalkOut(NomadComponent* c, StateMachine*, void*)         { return c->TickWalkOut(); }     // 0x14004f530
 }  // namespace
 
 extern "C" void NomadCtrl_PopulateTable() {

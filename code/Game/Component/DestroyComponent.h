@@ -68,17 +68,17 @@ public:
     void PostDestroyEvent();                                      // 0x14011e4d0 event 1 on the current node (B4 PLAYER; same file)
     // The state handlers of the controller's table (RCX = [node+0x18] = this,
     // RDX = the state machine, R8 = the elapsed Time for the per-frame column).
-    char State3Enter(void* sm);                                   // 0x14011d7b0
-    char State4Enter(void* sm);                                   // 0x14011cfd0
-    char State4Tick(void* sm);                                    // 0x14011cec0
+    char State3Enter(StateMachine* sm);                                   // 0x14011d7b0
+    char State4Enter(StateMachine* sm);                                   // 0x14011cfd0
+    char State4Tick(StateMachine* sm);                                    // 0x14011cec0
     char State5Enter();                                           // 0x14011cc70
     char State5Tick();                                            // 0x14011c120
     char State6Enter();                                           // 0x14011d4d0
     char State6Update();                                          // 0x14011d400
     char State6Tick(System::Time* elapsed);                       // 0x14011d490
-    char State7Rebuild(void* sm);                                 // 0x14011d2a0 state 7 event 0
-    char State7Remove(void* sm);                                  // 0x14011d1a0 state 7 event 1
-    char CancelDemolition(void* sm);                              // 0x14011bcc0 states 4/5 event 0
+    char State7Rebuild(StateMachine* sm);                                 // 0x14011d2a0 state 7 event 0
+    char State7Remove(StateMachine* sm);                                  // 0x14011d1a0 state 7 event 1
+    char CancelDemolition(StateMachine* sm);                              // 0x14011bcc0 states 4/5 event 0
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     // Types from Persist 0x14011db50: +0x54 / +0x58 Serialize(int&) (IAT 0x140152ac8),

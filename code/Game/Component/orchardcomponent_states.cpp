@@ -123,9 +123,8 @@ uint32_t OrchardDescTypeId() { return OrchardDescription::TypeId(); }   // ti ce
 // real local, never a constant. sm+0x09 is the CURRENT state id (signed; < 0 means the
 // machine has not started, hence the priming Tick).
 // `sm` is the StateMachine (StateMachineComponent+0x48) the handler received.
-void OrchardRequestState(void* sm, int wantId) {
-    if (!sm) return;
-    StateMachine* machine = reinterpret_cast<StateMachine*>(sm);   // LEFT: controller_state_table.h (COMP-2+3): the handlers receive the StateMachine as void*
+void OrchardRequestState(StateMachine* machine, int wantId) {
+    if (!machine) return;
     int want = wantId;
     if (machine->activeState < 0) {
         System::Time timeBuf[2] = {};      // Time is 8 bytes; 16 is deliberate headroom
@@ -167,7 +166,7 @@ char OrchardComponent::EnterIdle() {
 // hasType (treeType != 0) by CanCommand. So an untyped orchard is correctly and
 // permanently idle, which is exactly what the runtime diagnostic shows.
 // ============================================================
-char OrchardComponent::TickIdle(void* sm) {
+char OrchardComponent::TickIdle(StateMachine* sm) {
     if (enabled)
         OrchardRequestState(sm, 9);
     return 1;
@@ -310,7 +309,7 @@ char OrchardComponent::EnterPlanting() {
 // 0 == 0, so a zero-area orchard falls straight through to state 10 on its first frame
 // having planted nothing, and looks healthy. Retail does this; do not "fix" it here.
 // ============================================================
-char OrchardComponent::TickPlanting(void* sm) {
+char OrchardComponent::TickPlanting(StateMachine* sm) {
     ValidateRefs();
 
     const int count = slotCount;
@@ -411,7 +410,7 @@ bool OrchardHasWork(ComponentEntity* entity) {
 // current year into lastHarvestYear so TryHarvest cannot fire twice in one year.
 // TryHarvest calls it directly as well, as retail's per-frame does.
 // ============================================================
-char OrchardComponent::OnHarvestEvent(void* sm) {
+char OrchardComponent::OnHarvestEvent(StateMachine* sm) {
     OrchardRequestState(sm, 11);
 
     const int count = slotCount;
@@ -428,7 +427,7 @@ char OrchardComponent::OnHarvestEvent(void* sm) {
 // Command slot (idx14) maps button id 0 to node event 3, and this bypasses the
 // enabled-switch gate that state 2's per-frame tests.
 // ============================================================
-char OrchardComponent::OnPlantEvent(void* sm) {
+char OrchardComponent::OnPlantEvent(StateMachine* sm) {
     OrchardRequestState(sm, 9);
     return 1;
 }
@@ -437,7 +436,7 @@ char OrchardComponent::OnPlantEvent(void* sm) {
 // event-5 handler — retail 0x1400513e0 (wired on states 9, 10, 11 and 12)
 // Unconditionally request state 20 (0x14) — the clear/replace path, button id 3.
 // ============================================================
-char OrchardComponent::OnClearEvent(void* sm) {
+char OrchardComponent::OnClearEvent(StateMachine* sm) {
     {   // The panel proved it POSTS event 5 (the [OrchardCmd] Command(3) line), but nothing
         // showed whether the event reached a handler — and with state 20's handlers null,
         // "the event never arrived" and "it arrived and did nothing" looked identical.
@@ -447,7 +446,7 @@ char OrchardComponent::OnClearEvent(void* sm) {
         // the requested STATE id — the two must not be printed under the same word.
         static int s_n = 0;
         if (s_n++ < 8) {
-            StateMachine* machine = reinterpret_cast<StateMachine*>(sm);   // LEFT: controller_state_table.h (COMP-2+3): the handlers receive the StateMachine as void*
+            StateMachine* machine = sm;
             const int beforeIdx = sm ? static_cast<int>(machine->activeState) : -99;
             OrchardRequestState(sm, 20);
             std::fprintf(stderr, "[Orchard20] event 5 (cut): from table idx %d -> requested "
@@ -474,7 +473,7 @@ char OrchardComponent::OnClearEvent(void* sm) {
 // The first arm is the "frost is coming, take what is there" rule; the second is the
 // ordinary ripeness one. Returning 1 makes the per-frame body return immediately.
 // ============================================================
-char OrchardComponent::TryHarvest(void* sm) {
+char OrchardComponent::TryHarvest(StateMachine* sm) {
     if (!enabled) return 0;
     if (OrchardCurrentYear() == lastHarvestYear) return 0;
 
@@ -495,7 +494,7 @@ char OrchardComponent::TryHarvest(void* sm) {
 // ValidateRefs; if ANY slot is a hole, go replant (state 12) and post nothing.
 // Otherwise post one TendArea work item. Returns AL = 1 on both paths.
 // ============================================================
-char OrchardComponent::EnterTending(void* sm) {
+char OrchardComponent::EnterTending(StateMachine* sm) {
     ValidateRefs();
     const int holes = OrchardHoleCount(this);
     {   // both arms are silent otherwise, and "posted a TendArea" vs "bounced to replant"
@@ -539,7 +538,7 @@ char OrchardComponent::UpdateTending() {
 // i.e. [1..11] minus [9..11]. Out of season the tending work is dropped rather than
 // left queued; in season a fresh TendArea is posted only when none is outstanding.
 // ============================================================
-char OrchardComponent::TickTending(void* sm) {
+char OrchardComponent::TickTending(StateMachine* sm) {
     ValidateRefs();
     if (TryHarvest(sm) != 0) return 1;
 
@@ -622,7 +621,7 @@ char OrchardComponent::EnterReplanting() {
 // loop entirely and falls straight through to requesting state 10 — a slot-less orchard
 // leaves replant on its first frame. Do not "fix" it.
 // ============================================================
-char OrchardComponent::TickReplanting(void* sm) {
+char OrchardComponent::TickReplanting(StateMachine* sm) {
     ValidateRefs();
     if (TryHarvest(sm) != 0) return 1;
 
@@ -688,7 +687,7 @@ char OrchardComponent::EnterHarvesting() {
 // ⚠ FAITHFUL zero-degenerate: with no slots 0 <= 0 holds, so a slot-less orchard exits to
 // state 10 on its first frame.
 // ============================================================
-char OrchardComponent::TickHarvesting(void* sm) {
+char OrchardComponent::TickHarvesting(StateMachine* sm) {
     const int count = slotCount;
     int liveCount = 0, doneCount = 0;
     for (int i = 0; slots && i < count; ++i) {
@@ -827,7 +826,7 @@ char OrchardComponent::UpdateClearing() {
 // itself with whatever tree type is now selected. That round trip through state 9 is
 // what makes "cut" the REPLACE command in the panel.
 // ============================================================
-char OrchardComponent::TickClearing(void* sm) {
+char OrchardComponent::TickClearing(StateMachine* sm) {
     ClearAreaComponent* ca = _entity->FindComponent<ClearAreaComponent>();   // 0x14000a170
 
     // SA: retail derefs the finder result unguarded (caComp+0x18 is the description). A
@@ -863,23 +862,23 @@ char OrchardComponent::TickClearing(void* sm) {
 // component, so each entry is a one-line adapter that calls the member. The tree's
 // null-component guards stay in the adapters.
 namespace {
-char OrchEnterIdle(OrchardComponent* c, void*)                { return c ? c->EnterIdle() : 0; }         // 0x140051530
-char OrchTickIdle(OrchardComponent* c, void* sm, void*)       { return c ? c->TickIdle(sm) : 1; }        // 0x1400514c0
-char OrchOnPlant(OrchardComponent* c, void* sm)               { return c ? c->OnPlantEvent(sm) : 1; }    // 0x140051450
-char OrchEnterPlanting(OrchardComponent* c, void*)            { return c ? c->EnterPlanting() : 1; }     // 0x140051070
-char OrchTickPlanting(OrchardComponent* c, void* sm, void*)   { return c ? c->TickPlanting(sm) : 1; }    // 0x140050f90
-char OrchOnHarvest(OrchardComponent* c, void* sm)             { return c ? c->OnHarvestEvent(sm) : 1; }  // 0x140050900
-char OrchOnClear(OrchardComponent* c, void* sm)               { return c ? c->OnClearEvent(sm) : 1; }    // 0x1400513e0
-char OrchEnterTending(OrchardComponent* c, void* sm)          { return c ? c->EnterTending(sm) : 1; }    // 0x140050e30
-char OrchUpdateTending(OrchardComponent* c, void*)     { return c ? c->UpdateTending() : 1; }     // 0x140050ba0 / 0x1400509b0
-char OrchTickTending(OrchardComponent* c, void* sm, void*)    { return c ? c->TickTending(sm) : 1; }     // 0x140050c00
-char OrchEnterReplanting(OrchardComponent* c, void*)          { return c ? c->EnterReplanting() : 1; }   // 0x140050ae0
-char OrchTickReplanting(OrchardComponent* c, void* sm, void*) { return c ? c->TickReplanting(sm) : 1; }  // 0x140050a10
-char OrchEnterHarvesting(OrchardComponent* c, void*)          { return c ? c->EnterHarvesting() : 1; }   // 0x140050800
-char OrchTickHarvesting(OrchardComponent* c, void* sm, void*) { return c ? c->TickHarvesting(sm) : 1; }  // 0x140050650
-char OrchEnterClearing(OrchardComponent* c, void*)            { return c ? c->EnterClearing() : 1; }     // 0x1400504e0
-char OrchUpdateClearing(OrchardComponent* c, void*)    { return c ? c->UpdateClearing() : 1; }    // 0x1400503e0
-char OrchTickClearing(OrchardComponent* c, void* sm, void*)   { return c ? c->TickClearing(sm) : 1; }    // 0x140050430
+char OrchEnterIdle(OrchardComponent* c, StateMachine*)                { return c ? c->EnterIdle() : 0; }         // 0x140051530
+char OrchTickIdle(OrchardComponent* c, StateMachine* sm, void*)       { return c ? c->TickIdle(sm) : 1; }        // 0x1400514c0
+char OrchOnPlant(OrchardComponent* c, StateMachine* sm)               { return c ? c->OnPlantEvent(sm) : 1; }    // 0x140051450
+char OrchEnterPlanting(OrchardComponent* c, StateMachine*)            { return c ? c->EnterPlanting() : 1; }     // 0x140051070
+char OrchTickPlanting(OrchardComponent* c, StateMachine* sm, void*)   { return c ? c->TickPlanting(sm) : 1; }    // 0x140050f90
+char OrchOnHarvest(OrchardComponent* c, StateMachine* sm)             { return c ? c->OnHarvestEvent(sm) : 1; }  // 0x140050900
+char OrchOnClear(OrchardComponent* c, StateMachine* sm)               { return c ? c->OnClearEvent(sm) : 1; }    // 0x1400513e0
+char OrchEnterTending(OrchardComponent* c, StateMachine* sm)          { return c ? c->EnterTending(sm) : 1; }    // 0x140050e30
+char OrchUpdateTending(OrchardComponent* c, StateMachine*)     { return c ? c->UpdateTending() : 1; }     // 0x140050ba0 / 0x1400509b0
+char OrchTickTending(OrchardComponent* c, StateMachine* sm, void*)    { return c ? c->TickTending(sm) : 1; }     // 0x140050c00
+char OrchEnterReplanting(OrchardComponent* c, StateMachine*)          { return c ? c->EnterReplanting() : 1; }   // 0x140050ae0
+char OrchTickReplanting(OrchardComponent* c, StateMachine* sm, void*) { return c ? c->TickReplanting(sm) : 1; }  // 0x140050a10
+char OrchEnterHarvesting(OrchardComponent* c, StateMachine*)          { return c ? c->EnterHarvesting() : 1; }   // 0x140050800
+char OrchTickHarvesting(OrchardComponent* c, StateMachine* sm, void*) { return c ? c->TickHarvesting(sm) : 1; }  // 0x140050650
+char OrchEnterClearing(OrchardComponent* c, StateMachine*)            { return c ? c->EnterClearing() : 1; }     // 0x1400504e0
+char OrchUpdateClearing(OrchardComponent* c, StateMachine*)    { return c ? c->UpdateClearing() : 1; }    // 0x1400503e0
+char OrchTickClearing(OrchardComponent* c, StateMachine* sm, void*)   { return c ? c->TickClearing(sm) : 1; }    // 0x140050430
 }  // namespace
 
 // Replica of OrchardDescription_helper_20f0 (0x1400520f0), in registration order.

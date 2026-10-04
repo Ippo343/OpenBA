@@ -282,8 +282,8 @@ using CemeteryCtrlDispatch = ::ControllerLive::Dispatcher<CemeteryCtrlTag>;
 // The table (controller_state_table.h) holds plain handler addresses called as
 // handler([node+0x18], sm): [node+0x18] is the controller's back-pointer, this
 // component, so each entry is a one-line adapter that calls the member.
-static char CemeteryEnterBuilt(CemeteryComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }      // 0x140046fc0
-static char CemeteryEnterDemolish(CemeteryComponent* c, void* /*sm*/) { return c->EnterDemolish(); }   // 0x140046f80
+static char CemeteryEnterBuilt(CemeteryComponent* c, StateMachine* /*sm*/)    { return c->EnterBuilt(); }      // 0x140046fc0
+static char CemeteryEnterDemolish(CemeteryComponent* c, StateMachine* /*sm*/) { return c->EnterDemolish(); }   // 0x140046f80
 
 // The retail table, transcribed from 0x1400477a0 call for call. Its RegisterState
 // instantiation (0x140004250) zero-fills the trans30/trans38/update columns, so every

@@ -534,9 +534,9 @@ char ResidenceComponent::EnterDemolish() {
 }
 
 // The table's handler thunks: the dispatcher calls (component, sm[, time]).
-static char ResidenceEnterBuilt(ResidenceComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }      // 0x140129de0
-static char ResidenceEnterDemolish(ResidenceComponent* c, void* /*sm*/) { return c->EnterDemolish(); }   // 0x140129920
-static char ResidenceHeatTick(ResidenceComponent* c, void* /*sm*/, System::Time* dt) {
+static char ResidenceEnterBuilt(ResidenceComponent* c, StateMachine* /*sm*/)    { return c->EnterBuilt(); }      // 0x140129de0
+static char ResidenceEnterDemolish(ResidenceComponent* c, StateMachine* /*sm*/) { return c->EnterDemolish(); }   // 0x140129920
+static char ResidenceHeatTick(ResidenceComponent* c, StateMachine* /*sm*/, System::Time* dt) {
     if (!c) return 1;   // a guard of the tree's
     return c->HeatTick(dt);                                                                             // 0x140129970
 }
