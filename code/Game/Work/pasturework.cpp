@@ -221,11 +221,8 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 if (natResIBP != nullptr) {
                     // Check if not flagged for removal (bit 20 of the component flags)
                     if (((natResIBP->_flags >> 0x14) & 1) == 0) {
-                        // The animal entity's CharacterComponent (the guarded finder
-                        // 0x1400012d0 takes the entity as an integer: LEFT)
-                        CharacterComponent* familyIBP[2] = {nullptr, nullptr};
-                        ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(natResIBP->_entity), familyIBP);  // Entity_FindComponent_Family @ 0x1400012d0   // LEFT: SIG ActMv_FindComponentFamily_12d0
-                        CharacterComponent* familyComp = familyIBP[0];
+                        // The animal entity's CharacterComponent (the guarded finder 0x1400012d0)
+                        CharacterComponent* familyComp = FindCharacterComponent(natResIBP->_entity);
                         const Math::Vector3& animalPos = familyComp->modelComponent->transform.translation;
 
                         // Get animal position as cell index

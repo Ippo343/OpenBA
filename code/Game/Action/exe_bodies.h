@@ -70,7 +70,6 @@ class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
 namespace IO { class Serializer; }
-void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP);  // 0x1400012d0 B4 FORWARD: code/Game/Work/pasturework.cpp still calls this -> FindCharacterComponent
 void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970
 void ActMv_UpdateFacing_c8d20(MoveTo* self);  // 0x1400c8d20
 void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4);  // 0x14010a1f0 B4 FORWARD: code/Game/Component/citizencomponent_lifecycle.cpp still calls this -> SetAnimation

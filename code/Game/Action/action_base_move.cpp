@@ -80,12 +80,6 @@ CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
     return found;
 }
 
-// B4 FORWARD: code/Game/Work/pasturework.cpp still calls this (X-G1-1's file)
-void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<CharacterComponent>(
-        FindCharacterComponent(reinterpret_cast<const ComponentEntity*>(entity)));   // LEFT: SIG ActMv_FindComponentFamily_12d0
-}
-
 // ============================================================
 // FUN_140022970 — ExternalPtr::Serialize (path description External slot)
 // ============================================================
