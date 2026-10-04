@@ -91,13 +91,11 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, ::Object::External* external);
-// external_reftable.cpp:192 — C++ linkage inside `namespace RtObject`. Its
-// second parameter is spelled `rt::io::Stream` THERE (the file has a
-// `using rt::io::Stream;`), so it must be spelled the same way here or the
-// declaration names a different overload and the link fails. That POD is the
-// lane-A duplicate `IO::Stream` replaces; see the forwarder below.
+// external_reftable.cpp — C++ linkage inside `namespace RtObject`. Its second
+// parameter is the real `IO::Stream` (B.4 wave X: the body builds the real
+// IO::Serializer over it); both spellings must agree or the link fails.
 void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
-                                                      rt::io::Stream* stream);
+                                                      ::IO::Stream* stream);
 }  // namespace RtObject
 
 namespace Object {
@@ -273,7 +271,7 @@ void ExternalFactory::ForceUnload(const System::Filename& path) {
 void ExternalFactory::SerializeReferenceTable(IO::Stream& stream) {
     RtObject::RtObject_ExternalFactory_SerializeReferenceTable(
         this,
-        reinterpret_cast<rt::io::Stream*>(&stream));                 // B.3.4 bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+        &stream);
 }
 
 // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z

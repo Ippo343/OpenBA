@@ -945,11 +945,6 @@ int Utf8EncodeOne(int32_t cp, char* dst) {
 }  // namespace
 
 // ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c9930
-// B4 FORWARD (see String.h): the rt::io POD Serializer views' entry.
-void String::Serialize(void* serializer) {
-    Serialize(*static_cast<::IO::Serializer*>(serializer));   // LEFT: SIG external_load.cpp / external_reftable.cpp build an rt::io POD Serializer (R-IO view)
-}
-
 void String::Serialize(::IO::Serializer& serializer) {
     ::IO::ReaderWriter* const rw = serializer._readerWriter;   // +0x08
 
