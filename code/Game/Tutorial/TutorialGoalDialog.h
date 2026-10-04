@@ -23,6 +23,7 @@
 #include <cstdint>
 #include "Tutorial/TutorialGoal.h"
 #include "Object/exe_type.h"
+#include "system/String.h"   // the String member (B4 X7-GAME-A)
 #include "Goal/goal_exe_helpers.h"   // NamedExternalRef
 
 namespace System { class String; }
@@ -42,13 +43,13 @@ public:
     virtual Object::External* Construct();                         // [9] 0x1400274b0
 
 public:
-    uint64_t dialogName;         // +0x20: System::String — the dialog resource to wait for
+    System::String dialogName;   // +0x20: the dialog resource to wait for (B4 X7-GAME-A, H5: the member; destroyed after the body, retail [0] 0x140027590)
     // +0x28..+0x3f: the building description, by name: String, factory
     //   generation (-1 = unresolved), cached External* (null = any); resolved
     //   by 0x14001b1d0
     NamedExternalRef target;
 
-    // The +0x20 String (H5 raw storage). Defined in tutorialgoaldialog.cpp.
+    // The +0x20 String. Defined in tutorialgoaldialog.cpp.
     System::String& DialogName();
 };
 

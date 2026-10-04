@@ -36,14 +36,15 @@
 // +0x68 = 0, +0x70 = 0.
 TutorialSetupDialog::TutorialSetupDialog()
     : shownPaths(), dialogNames(),
-      highlightPath(0), arrowRotation(0), _pad4C{}, highlightDialog(nullptr),
+      highlightPath(), arrowRotation(0), _pad4C{}, highlightDialog(nullptr),
       toolbarRef{{}, -1, {}, nullptr},
       toolbarIndex(0), _pad74{} {}
 
-// LEFT H5: the +0x40 String is raw storage (the ctor stores 0 inline, the dtor
-// destroys it by hand).
+// B4 X7-GAME-A (H5): the +0x40 String is a member: String() is the qword 0 the
+// ctor stored; its ~String runs after the dtor body (retail 0x1400e2bf0:
+// ~String +0x58, ~String +0x40, then the Arrays +0x30 / +0x20).
 System::String& TutorialSetupDialog::HighlightPath() {
-    return *reinterpret_cast<System::String*>(&highlightPath);   // LEFT: H5: the +0x40 String is raw storage (the ctor stores 0 inline, the dtor destroys it by hand).
+    return highlightPath;
 }
 
 // The dtor 0x1400e2bf0: ~String +0x58, ~String +0x40, then the two String
@@ -53,7 +54,7 @@ System::String& TutorialSetupDialog::HighlightPath() {
 // ~Internal instead).
 TutorialSetupDialog::~TutorialSetupDialog() {
     toolbarRef.Name().~String();
-    HighlightPath().~String();
+    // +0x40: the member's ~String, after this body
 }
 
 // ============================================================

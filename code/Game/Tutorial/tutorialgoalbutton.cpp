@@ -37,19 +37,17 @@
 // ctor 0x1400dee90 (inlined in create 0x140027290 / createInPlace 0x140027300):
 // External(), the TutorialGoal and TutorialGoalButton stamps (the compiler's),
 // then the two fields zeroed.
-TutorialGoalButton::TutorialGoalButton() : elementPath(0), invertCheck(false), _pad29{} {}
+TutorialGoalButton::TutorialGoalButton() : elementPath(), invertCheck(false), _pad29{} {}
 
-// LEFT H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor
-// destroys it by hand).
+// B4 X7-GAME-A (H5): the +0x20 String is a member: String() is the qword 0 the
+// ctor stored; its ~String runs after the dtor body (retail 0x1400273b0).
 System::String& TutorialGoalButton::ElementPath() {
-    return *reinterpret_cast<System::String*>(&elementPath);   // LEFT: H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor destroys it by hand).
+    return elementPath;
 }
 
 // The dtor inside [0] 0x1400273b0: ~String on +0x20; the compiler re-stamps
 // TutorialGoal and runs ~External.
-TutorialGoalButton::~TutorialGoalButton() {
-    ElementPath().~String();
-}
+TutorialGoalButton::~TutorialGoalButton() {}   // ~String +0x20: the member's
 
 // ============================================================
 // TutorialGoalButton::Serialize (vtable +0x28, 0x1400deda0)

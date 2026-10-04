@@ -22,6 +22,7 @@
 #include <cstdint>
 #include "Tutorial/TutorialGoal.h"
 #include "Object/exe_type.h"
+#include "system/String.h"   // the String member (B4 X7-GAME-A)
 
 namespace System { class String; }
 
@@ -39,11 +40,11 @@ public:
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400dece0
     virtual Object::External* Construct();                         // [9] 0x140027300
 
-    // The +0x20 String (H5 raw storage). Defined in tutorialgoalbutton.cpp.
+    // The +0x20 String. Defined in tutorialgoalbutton.cpp.
     System::String& ElementPath();
 
 public:
-    uint64_t elementPath;        // +0x20: System::String — UI element path to find
+    System::String elementPath;  // +0x20: UI element path to find (B4 X7-GAME-A, H5: the member; retail [0] 0x1400273b0 runs ~String +0x20 alone)
     bool     invertCheck;        // +0x28: true: bit 23 clear; false: bit 22 set (Serialize(bool&))
     uint8_t  _pad29[7];          // +0x29: padding
 };

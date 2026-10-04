@@ -63,7 +63,7 @@ public:
     void OpenHighlightDialog(char checkExisting);                  // 0x1400e2700
     void ShowListedElements();                                     // 0x1400e29f0
 
-    // The +0x40 String (H5 raw storage). Defined in tutorialsetupdialog.cpp.
+    // The +0x40 String. Defined in tutorialsetupdialog.cpp.
     System::String& HighlightPath();
 
 public:
@@ -74,7 +74,7 @@ public:
     Collection::Array<System::String> shownPaths;    // +0x20
     // Dialog names Begin() walks.
     Collection::Array<System::String> dialogNames;   // +0x30
-    uint64_t highlightPath;      // +0x40: System::String — the element to highlight
+    System::String highlightPath; // +0x40: the element to highlight (B4 X7-GAME-A, H5: the member; destroyed after the body, before the two Arrays: retail 0x1400e2bf0)
     int32_t  arrowRotation;      // +0x48: degrees, lands at highlight +0xD8
     uint8_t  _pad4C[4];          // +0x4C: padding
     const UI::Dialog* highlightDialog; // +0x50: ExternalPtr<UI::Dialog> — the highlight .rsc
