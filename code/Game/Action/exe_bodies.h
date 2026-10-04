@@ -196,13 +196,9 @@ class PopulationComponent;    // Component/PopulationComponent.h
 int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
-void Pf_BstFreeRecursive_d400(uintptr_t param_1, uint64_t* param_2);  // 0x14001d400
-void Pf_ArrayResize18_d830(int64_t* param_1, int param_2);  // 0x14001d830
-void Pf_FreeArray30_e490(uint64_t param_1, uintptr_t param_2, int param_3);  // 0x14001e490
 void Pf_VectorResize14_ee40(int64_t* param_1, int param_2);  // 0x14001ee40
 void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001f8d0
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001fa80
-int64_t* Pf_IntArrayClone_f9e0(int64_t* param_1, int64_t* param_2);  // 0x14000f9e0
 
 // ---- action_pf_region.cpp
 void Pf_FlushDirtyChunks_8a90(int64_t param_1);  // 0x1400a8a90 (local extern in code/Game/Game/region_seed.cpp (reg_pf_region.cpp prototype registers nothing))
