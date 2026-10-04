@@ -90,26 +90,26 @@ DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalV
         DecalVertexNode* newNode = nullptr;
         // ---- first comparison loop: descend-left / break(equal-or-greater) ----
         for (;;) {
-            int16_t sVar3 = cur->key.column0[i];
-            if (key->column0[i] < sVar3) {        // LAB_14001f7dd: go left or insert-left
+            int16_t sVar3 = cur->key.vertex.position[i];
+            if (key->vertex.position[i] < sVar3) {        // LAB_14001f7dd: go left or insert-left
                 DecalVertexNode* l = cur->left;
                 if (l != nullptr) { node = l; descend = true; break; }
                 newNode = DecalVertexNodeAlloc(key, cur);
                 cur->left = newNode;
                 inserted = true; break;           // LAB_14001f813
             }
-            if (sVar3 < key->column0[i]) break;
-            if (key->column8[i] < cur->key.column8[i]) {
+            if (sVar3 < key->vertex.position[i]) break;
+            if (key->vertex.uv[i] < cur->key.vertex.uv[i]) {
                 DecalVertexNode* l = cur->left;
                 if (l != nullptr) { node = l; descend = true; break; }
                 newNode = DecalVertexNodeAlloc(key, cur);
                 cur->left = newNode;
                 inserted = true; break;
             }
-            if (cur->key.column8[i] < key->column8[i]) break;
+            if (cur->key.vertex.uv[i] < key->vertex.uv[i]) break;
             {
-                uint8_t b1 = key->column10[i];
-                uint8_t b2 = cur->key.column10[i];
+                uint8_t b1 = key->vertex.normal[i];
+                uint8_t b2 = cur->key.vertex.normal[i];
                 if (b1 < b2) {
                     DecalVertexNode* l = cur->left;
                     if (l != nullptr) { node = l; descend = true; break; }
@@ -133,14 +133,14 @@ DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalV
         i = 0;
         bool found = false;
         for (;;) {
-            int16_t sVar3 = cur->key.column0[i];
-            if (sVar3 < key->column0[i]) break;
-            if (key->column0[i] < sVar3) { found = true; break; }   // LAB_14001f7c2
-            int16_t nodeS = cur->key.column8[i];
-            if (nodeS < key->column8[i]) break;
-            if (key->column8[i] < nodeS) { found = true; break; }
-            uint8_t b1 = cur->key.column10[i];
-            uint8_t b2 = key->column10[i];
+            int16_t sVar3 = cur->key.vertex.position[i];
+            if (sVar3 < key->vertex.position[i]) break;
+            if (key->vertex.position[i] < sVar3) { found = true; break; }   // LAB_14001f7c2
+            int16_t nodeS = cur->key.vertex.uv[i];
+            if (nodeS < key->vertex.uv[i]) break;
+            if (key->vertex.uv[i] < nodeS) { found = true; break; }
+            uint8_t b1 = cur->key.vertex.normal[i];
+            uint8_t b2 = key->vertex.normal[i];
             if (b1 < b2) break;
             if (b1 != b2) { found = true; break; }
             i++;
@@ -165,23 +165,23 @@ DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalV
 // 0x14001fc00 — AVL find keyed by the vertex record. Returns the matching node
 // or null. 1:1 port of FUN_14001fc00.
 // ============================================================
-DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key) {
+DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const GeometryBatchVertex* key) {
     DecalVertexNode* node = set->root;
     for (;;) {
         if (node == nullptr) return nullptr;
         int  i = 0;
         bool descendedLeft = false;
         for (;;) {                                 // first loop
-            int16_t sVar3 = node->key.column0[i];
-            if (key->column0[i] < sVar3) { node = node->left; descendedLeft = true; break; }
-            if (sVar3 < key->column0[i]) break;
-            if (key->column8[i] < node->key.column8[i]) {
+            int16_t sVar3 = node->key.vertex.position[i];
+            if (key->position[i] < sVar3) { node = node->left; descendedLeft = true; break; }
+            if (sVar3 < key->position[i]) break;
+            if (key->uv[i] < node->key.vertex.uv[i]) {
                 node = node->left; descendedLeft = true; break;
             }
-            if (node->key.column8[i] < key->column8[i]) break;
+            if (node->key.vertex.uv[i] < key->uv[i]) break;
             {
-                uint8_t b1 = key->column10[i];
-                uint8_t b2 = node->key.column10[i];
+                uint8_t b1 = key->normal[i];
+                uint8_t b2 = node->key.vertex.normal[i];
                 if (b1 < b2) { node = node->left; descendedLeft = true; break; }
                 if (b1 != b2) break;
             }
@@ -191,14 +191,14 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
         if (descendedLeft) continue;
         i = 0;
         for (;;) {                                 // second loop
-            int16_t sVar3 = node->key.column0[i];
-            if (sVar3 < key->column0[i]) break;
-            if (key->column0[i] < sVar3) return node;
-            int16_t nodeS = node->key.column8[i];
-            if (nodeS < key->column8[i]) break;
-            if (key->column8[i] < nodeS) return node;
-            uint8_t b1 = node->key.column10[i];
-            uint8_t b2 = key->column10[i];
+            int16_t sVar3 = node->key.vertex.position[i];
+            if (sVar3 < key->position[i]) break;
+            if (key->position[i] < sVar3) return node;
+            int16_t nodeS = node->key.vertex.uv[i];
+            if (nodeS < key->uv[i]) break;
+            if (key->uv[i] < nodeS) return node;
+            uint8_t b1 = node->key.vertex.normal[i];
+            uint8_t b2 = key->normal[i];
             if (b1 < b2) break;
             if (b1 != b2) return node;
             i++;
