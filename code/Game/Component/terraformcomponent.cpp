@@ -232,7 +232,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
         // Transform::operator*(const Vector3&) — slot 0x140151470. LEFT: the picking
         // mesh's element is the global engine Vector3, Math::Vector3's layout twin.
         const Math::Vector3 world =
-            xform * *reinterpret_cast<const Math::Vector3*>(&localVtx);   // LEFT: POD ::Vector3 (PickingMesh.h) vs Math::Vector3 (wave X)
+            xform * *reinterpret_cast<const Math::Vector3*>(&localVtx);   // LEFT: POD the vertex is runtime PickingMesh.h's ::Vector3, a separate struct from Math::Vector3 (RT's header)
 
         // p = transformed vertex, nudged a quarter cell so it lands inside a cell
         // rather than exactly on the shared corner.

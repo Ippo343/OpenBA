@@ -617,9 +617,13 @@ void ComponentEntity::Persist(IO::Stream& stream) {
 
 // The 0x1400c3720 door: fn_EntityFactory_CreateEntity resolves here by address
 // (standalone/address_registry.cpp). Placement-constructs on the caller's block.
+ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, ComponentDescription* description) {
+    return new (static_cast<void*>(self)) ComponentEntity(description);
+}
+// B4 FORWARD: Game/founding_spawn.cpp:262 and Player/bridgetool_calcpath.cpp:207 still call this (they hold the template as void*).
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
-    return new (static_cast<void*>(self))
-        ComponentEntity(static_cast<ComponentDescription*>(descriptionPtr));   // B.3.8 bridge   // LEFT: SIG ComponentEntity_CtorFromDescription: founding_spawn.cpp:262 / bridgetool_calcpath.cpp:207 pass the template as void* and disaster_harness.cpp:417 prints the function's address (a typed overload makes that ambiguous); X3-GAME's files
+    return ComponentEntity_CtorFromDescription(self,
+        static_cast<ComponentDescription*>(descriptionPtr));   // LEFT: SIG ComponentEntity_CtorFromDescription(void*): the forwarder for founding_spawn.cpp:262 / bridgetool_calcpath.cpp:207, which hold the template as void* (GAME files)
 }
 
 // ============================================================
@@ -735,7 +739,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 // 0x1400c48a0 has none); kept here, not extended into the member.
 void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
     if (!entityListV || !entityIBP) return;
-    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: SIG EntityList_RegisterEntity_Impl (38 outside callers, wave X)
+    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: SIG EntityList_RegisterEntity_Impl (B4 FORWARD): its callers in 24 files across Action, Component, Game, Work, Player and standalone pass the list and the IBP slot as void*
 }
 
 // ============================================================

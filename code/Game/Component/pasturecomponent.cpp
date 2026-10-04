@@ -277,7 +277,7 @@ void PastureComponent::Persist(IO::Stream& stream) {
     int64_t count = (int64_t)countBuf;
     if (count > 0 && entry) {
         for (int64_t i = 0; i < count; i++, entry++) {
-            reinterpret_cast<Object::InternalBasePtr*>(entry)->Serialize(ser);   // LEFT: InternalPtr slot held as T* (wave X)
+            reinterpret_cast<Object::InternalBasePtr*>(entry)->Serialize(ser);   // LEFT: the array's InternalPtr<LivestockComponent> slots are held as LivestockComponent* (PastureComponent.h); InternalBasePtr::Serialize needs the slot
             LivestockComponent* obj = *entry;
             if (obj != nullptr) {
                 if (!obj->IsDerivedFrom(LivestockComponent::TypeId())) {

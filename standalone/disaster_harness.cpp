@@ -412,9 +412,11 @@ void ForceTornado(int frameNum, int want) {
     // Preconditions, named individually — "nothing appeared" has three distinct causes
     // and they must not look alike in the log.
     EntityList* entityList = gw->m_entityList;                  // +0xe8
+    ComponentEntity* (*createEntity)(ComponentEntity*, ComponentDescription*) =
+        &ComponentEntity_CtorFromDescription;                   // the typed overload
     DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
          "RegisterEntity=%p entityList=%p\n", frameNum,
-         reinterpret_cast<void*>(&ComponentEntity_CtorFromDescription),
+         reinterpret_cast<void*>(createEntity),
          reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl), static_cast<void*>(entityList));
     if (!entityList) {
         DLOG("Tornado", "entityList null. Nothing spawned.\n");

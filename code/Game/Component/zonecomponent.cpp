@@ -96,7 +96,7 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
         int64_t scratch[3] = {0, 0, 0};
         void** ret = static_cast<void**>(ResidenceComponent_impl_7230(   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
             reinterpret_cast<int64_t*>(&field_0x160),   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
-            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230 LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
+            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
         if (ret) found = reinterpret_cast<TemplateBucket*>(*ret);   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
         System::MemoryAllocator::MemFree(nullptr);
     }
