@@ -28,6 +28,7 @@
 #include "Action/exe_bodies.h"   // ZoneComponent_sub_d360 (0x14009d360)
 #include "system/MemoryAllocator.h"
 #include "Component/MapComponent.h"
+#include "Component/MapDescription.h"   // MapDescription::_footprint (+0x28)
 #include "Entity/CitizenBehavior.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
@@ -50,12 +51,12 @@
 // `entity` is an InternalBasePtr*; key = the entity's description (+0x28). Walk the
 // red-black tree at +0x160 for that key; if no node matches, insert one via TreeInsert;
 // then append the entity ref to the node's child list (node+8, count = node[2]+1).
-// LEFT: the +0x160 tree (CitizenBehavior::field_0x160) is untyped in WORK-a's header;
-// its node reads stay by offset.
+// The +0x160 tree's nodes are TemplateBucket (Entity/CitizenBehavior.h), the key
+// compared by address.
 void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity) {
     void* entityPtr = entity;
 
-    uint64_t key = reinterpret_cast<uint64_t>(entity->Get()->_description);
+    ComponentDescription* key = entity->Get()->_description;
 
     // Retail (0x140088e20) is `while (puVar3 = 0, puVar1 != 0)` — the reset is part
     // of the loop CONDITION, so it runs before every test including the one that
@@ -76,34 +77,34 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
     // depends on the ordering of heap description pointers — which differs run to
     // run. Reached step 18 by a jump and the tree was small enough to work; reached
     // it organically, with WoodHouse and Clear already registered, and it did not.
-    uint64_t* node = reinterpret_cast<uint64_t*>(field_0x160);
-    uint64_t* found = nullptr;
+    TemplateBucket* node = field_0x160;
+    TemplateBucket* found = nullptr;
     for (;;) {
         found = nullptr;
         if (node == nullptr) break;
-        if (key < *node) {
-            node = reinterpret_cast<uint64_t*>(node[4]);
+        if (key < node->key) {
+            node = node->left;    // +0x20
         } else {
             found = node;
-            if (key <= *node) break;   // equal key => exact match, stop
-            node = reinterpret_cast<uint64_t*>(node[5]);
+            if (key <= node->key) break;   // equal key => exact match, stop
+            node = node->right;   // +0x28
         }
     }
 
     if (found == nullptr) {
-        int64_t outNode[2] = {0, 0};
+        void* outNode[2] = {nullptr, nullptr};
         int64_t scratch[3] = {0, 0, 0};
-        void** ret = static_cast<void**>(ResidenceComponent_impl_7230(
-            reinterpret_cast<int64_t*>(&field_0x160),
-            reinterpret_cast<void**>(outNode), &key, scratch));   // 0x140017230
-        if (ret) found = reinterpret_cast<uint64_t*>(*ret);
+        void** ret = static_cast<void**>(ResidenceComponent_impl_7230(   // LEFT: SIG ResidenceComponent_impl_7230
+            reinterpret_cast<int64_t*>(&field_0x160),   // LEFT: SIG ResidenceComponent_impl_7230
+            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230 LEFT: SIG ResidenceComponent_impl_7230
+        if (ret) found = reinterpret_cast<TemplateBucket*>(*ret);   // LEFT: SIG ResidenceComponent_impl_7230 (returns the node slot as void**)
         System::MemoryAllocator::MemFree(nullptr);
     }
 
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     if (found)
-        GameColl::AsArray<GameColl::Ptr8>((void*)(found + 1))
-            .SetSizeFill(static_cast<int>(found[2]) + 1, entityPtr);
+        GameColl::AsArray<GameColl::Ptr8>(&found->entities)   // the bucket's Array (+0x08)
+            .SetSizeFill(found->count + 1, entityPtr);
 }
 
 // ============================================================================
@@ -154,8 +155,7 @@ void ZoneComponent::Persist(IO::Stream& stream) {
     if (version == 0 && static_cast<int>(str.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         Object::InternalPtr<ComponentEntity> entityPtr(_entity);
         if (GameUpdateLoop::_singleton != nullptr) {
-            // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-            CitizenBehavior* zoneMap = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+            CitizenBehavior* zoneMap = GameUpdateLoop::_singleton->m_citizenList;
             zoneMap->AddZoneEntity(&entityPtr);   // 0x140088e20
         }
     }
@@ -195,17 +195,18 @@ void ZoneComponent::OnAdded() {
     }
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
 
-    // LEFT: 0x14009d360 takes the Map (GameUpdateLoop::m_game, void*, GAME-a) as int*,
-    // the entity ref as int64_t* and the zone description's +0x28 as an address
-    // (Action block's declaration).
+    // 0x14009d360 takes the Map as int*, the entity ref as int64_t* and the map
+    // description's footprint stamp (+0x28) as int64_t* (Action/exe_bodies.h, wave X).
+    // The MapComponent's description is a MapDescription (retail's IsDerivedFrom
+    // 0x1401c7a18 above, skipped by the tree).
+    MapDescription* mapDesc = static_cast<MapDescription*>(desc);
     Object::InternalPtr<ComponentEntity> entityRef(_entity);
-    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),
+    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),   // LEFT: SIG ZoneComponent_sub_d360
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
-        reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);   // 0x14009d360
+        reinterpret_cast<int64_t*>(&mapDesc->_footprint), kind);   // 0x14009d360 LEFT: SIG ZoneComponent_sub_d360
 
     entityRef = _entity;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    reinterpret_cast<CitizenBehavior*>(world->m_citizenList)->AddZoneEntity(&entityRef);   // 0x140088e20
+    world->m_citizenList->AddZoneEntity(&entityRef);   // 0x140088e20
 
     // BANISHED_REGENTITY_TRACE — this call is the ONLY writer of the
     // per-description zone registry at (world+0xf0)+0x160, which is what
@@ -240,31 +241,31 @@ void ZoneComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
 
-    // LEFT: 0x14009d360's untyped parameters (see OnAdded).
+    // 0x14009d360's untyped parameters (see OnAdded).
+    MapDescription* mapDesc = static_cast<MapDescription*>(desc);
     Object::InternalPtr<ComponentEntity> entityRef(nullptr);
-    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),
+    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),   // LEFT: SIG ZoneComponent_sub_d360
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
-        reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);   // 0x14009d360
+        reinterpret_cast<int64_t*>(&mapDesc->_footprint), kind);   // 0x14009d360 LEFT: SIG ZoneComponent_sub_d360
 
-    // Walk the zone-map tree for the owner's description (the entity's +0x28).
-    // LEFT: the town manager (GameUpdateLoop::m_citizenList, void*, GAME-a) and its
-    // untyped +0x160 tree.
+    // Walk the zone-map tree (CitizenBehavior +0x160, TemplateBucket nodes) for the
+    // owner's description (the entity's +0x28).
     Object::InternalPtr<ComponentEntity> ownerRef(_entity);
-    CitizenBehavior* zoneMap = reinterpret_cast<CitizenBehavior*>(world->m_citizenList);
-    uint64_t key = reinterpret_cast<uint64_t>(_entity->_description);
+    CitizenBehavior* zoneMap = world->m_citizenList;
+    ComponentDescription* key = _entity->_description;
 
-    uint64_t* node = reinterpret_cast<uint64_t*>(zoneMap->field_0x160);
-    uint64_t* found = nullptr;
+    TemplateBucket* node = zoneMap->field_0x160;
+    TemplateBucket* found = nullptr;
     while (node != nullptr) {
-        if (key < *node) {
-            node = reinterpret_cast<uint64_t*>(node[4]);
+        if (key < node->key) {
+            node = node->left;    // +0x20
         } else {
-            if (key <= *node) { found = node; break; }
-            node = reinterpret_cast<uint64_t*>(node[5]);
+            if (key <= node->key) { found = node; break; }
+            node = node->right;   // +0x28
         }
     }
     if (found)
-        CemeteryListErase_Reimpl(found + 1, &ownerRef);   // 0x140002cc0
+        CemeteryListErase_Reimpl(&found->entities, &ownerRef);   // 0x140002cc0 (the bucket's Array, +0x08)
 }
 
 // create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.
