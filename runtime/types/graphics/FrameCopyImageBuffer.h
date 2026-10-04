@@ -172,7 +172,7 @@ public:
     void Generate(void* context, int32_t generation) const override;
     // [11] 0x1800a3b10 — `RET`. One byte in the shipped build, ported as an
     // empty body (reference_retail_ships_empty_bodies.md).
-    void Render(void* renderer, const void* scene, const void* camera,
+    void Render(Renderer& renderer, const Scene& scene, const Camera& camera,
                 int32_t generation) const override;
 
     // ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ 0x1800a3d10 — the REAL

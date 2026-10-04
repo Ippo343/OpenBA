@@ -33,6 +33,7 @@
 #include "../video/ImageBuffer.h"
 
 namespace Video { class RenderBuffer; }   // B.4: ReflectionImageBuffer::_target (Device.h)
+namespace Graphics { class Renderer; class Scene; class Camera; }   // slot [11] Render's references
 
 namespace RtGraphics {
 
@@ -189,7 +190,7 @@ public:
     // generation counter is compared against, and hiding the cast in the
     // declaration would hide that retail's signature and retail's body disagree.
     virtual void Generate(void* context, int32_t generation) const = 0;   // [10]
-    virtual void Render(void* renderer, const void* scene, const void* camera,
+    virtual void Render(Renderer& renderer, const Scene& scene, const Camera& camera,
                         int32_t generation) const = 0;                    // [11]
 
 protected:
@@ -293,7 +294,7 @@ public:
     // (reference_retail_ships_empty_bodies.md).
     void Generate(void* context, int32_t generation) const override;
     // [11] 0x1800a6b80 — the one body in this family that does real work.
-    void Render(void* renderer, const void* scene, const void* camera,
+    void Render(Renderer& renderer, const Scene& scene, const Camera& camera,
                 int32_t generation) const override;
 
 public:

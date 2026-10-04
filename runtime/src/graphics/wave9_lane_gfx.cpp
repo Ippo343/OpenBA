@@ -316,7 +316,7 @@ void MaterialInstance::RenderTextures(Renderer& renderer, const Scene& scene,
         // Slot 11 (0x58/8) — a virtual call on the real class; the derivation
         // test above licenses the downcast.
         static_cast<const GeneratedImageBuffer*>(obj)
-            ->Render(&renderer, &scene, &camera, arg);
+            ->Render(renderer, scene, camera, arg);
     }
 }
 

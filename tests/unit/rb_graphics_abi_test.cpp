@@ -596,7 +596,7 @@ Object::External* ReflectionImageBuffer::Reconstruct() { return this; }
 void              ReflectionImageBuffer::Destruct() {}
 Object::External* ReflectionImageBuffer::Construct() { return this; }
 void ReflectionImageBuffer::Generate(void*, int32_t) const {}
-void ReflectionImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+void ReflectionImageBuffer::Render(Graphics::Renderer&, const Graphics::Scene&, const Graphics::Camera&, int32_t) const {}
 ReflectionImageBuffer::~ReflectionImageBuffer() {
     if (g_riRel < 4) g_riRelOrder[g_riRel] = this;
     ++g_riRel; g_riRelVptr = RiVptrOf(this);
@@ -669,7 +669,7 @@ bool FrameCopyImageBuffer::Create(ImageType, Usage, Format, uint32_t, int32_t, i
     return false;
 }
 void FrameCopyImageBuffer::Generate(void*, int32_t) const {}
-void FrameCopyImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+void FrameCopyImageBuffer::Render(Graphics::Renderer&, const Graphics::Scene&, const Graphics::Camera&, int32_t) const {}
 FrameCopyImageBuffer::FrameCopyImageBuffer() {
     ++g_fcCtor; g_fcCtorVptr = FcVptrOf(this); g_fcGenSeen = _generation;
     _backBufferImage = nullptr; _sourceTarget = nullptr; _destTarget = nullptr;
@@ -686,7 +686,7 @@ struct RbGeneratedLeaf final : Graphics::GeneratedImageBuffer {   // slot 0 NOT 
     ~RbGeneratedLeaf() override { NoteArr(this); }
     DTOR_CHECK_RECORDING_DELETE
     void Generate(void*, int32_t) const override {}
-    void Render(void*, const void*, const void*, int32_t) const override {}
+    void Render(Graphics::Renderer&, const Graphics::Scene&, const Graphics::Camera&, int32_t) const override {}
 };
 
 UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
