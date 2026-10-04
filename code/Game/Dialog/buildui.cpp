@@ -231,8 +231,8 @@ void BuildUI::OnCreated() {
             static_cast<UI::TextElement*>(BuildUI_FindChildElem(rowElem, "textTotal"));
 
         // Push {labelStorage, textTotal} into the row array at +0x30.
-        // B.3.2 bridge: the Array is raw storage in the class (H5), reached as one.
-        auto& rows = GameColl::ArrayAt<StorageRow>(&rowData, 0);
+
+        // (BuildUI::rows, the +0x30 Array)
         rows.SetSize(rows.GetSize() + 1, StorageRow{labelStorage, rowTextTotal});
 
         // Populate row content based on resource index
@@ -395,7 +395,7 @@ void BuildUI::OnUpdateLayout() {
 
         // Iterate resource rows, query the storage for delivered counts
         int resourceCount = resourceComp->_costCount;
-        int rowTotal = rowCount;
+        int rowTotal = rows._size;
         if (rowTotal > resourceCount) rowTotal = resourceCount;
 
         int sumDelivered = 0;
@@ -428,7 +428,7 @@ void BuildUI::OnUpdateLayout() {
             // Update row textTotal param 0 with delivered count
             {
                 System::String delStr = System::String::Format("%d", delivered);
-                rowData[i].total->SetParameter(0, delStr);
+                rows[i].total->SetParameter(0, delStr);
             }
 
             sumDelivered += (int)delivered;
@@ -441,7 +441,7 @@ void BuildUI::OnUpdateLayout() {
         {
             System::String rowStr =
                 System::String::Format("%d", (uint64_t)(uint32_t)posComp->laborProgress);
-            rowData[rowTotal].total->SetParameter(0, rowStr);
+            rows[rowTotal].total->SetParameter(0, rowStr);
         }
 
         // Calculate totals for progress
