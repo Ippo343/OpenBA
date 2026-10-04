@@ -20,6 +20,10 @@ if ! git merge --no-ff --no-commit "$BR" > "$HERE/merge_$LABEL.log" 2>&1; then
         git checkout --theirs -- "$f"; git add "$f";;
       # (B.3.9 close: runtime/src/object/deleting_dtor.cpp and the cutover manifest are
       # deleted; their conflict branch and the manifest regeneration went with them.)
+      docs/known_port_issues.md)
+        # B4 P2: blocks append rows to the same tables; keep both sides (keepboth.py matches
+        # the markers as whole lines).
+        python "$HERE/keepboth.py" "$f" && git add "$f" || { echo "UNRESOLVED CONFLICT in $f"; exit 3; };;
       *) echo "UNRESOLVED CONFLICT in $f — merge left in progress (pre-merge HEAD $PRE)"; exit 3;;
     esac
   done
