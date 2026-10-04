@@ -54,14 +54,14 @@
 #include "Entity/CitizenBehavior.h"     // CitizenBehavior (0x1C0), PathGraph (0x28)
 #include "Game/PlayerToolManager.h"     // PlayerToolManager (0xB0), TrackedEntityNode
 #include "Game/WorkSchedulerNodes.h"    // WorkScheduler (0x138) and its three node types
+#include "Dialog/ToolRegistryNode.h"    // the tool registry node (PlayerToolManager +0x10)
 
 // B.4 P2 GAME-2: the five teardown bodies take their object typed and read it by
 // name. What still goes through the offset helpers below is LEFT, each site with
 // its reason: the arrays EntityList.h / CitizenBehavior.h / PlayerToolManager.h
 // declare as three raw fields (not a Collection::Array, so `~Array` is reached
 // through a cast; H5 in headers owned by ENT / PLAYER), the trees whose root is
-// a `void*` there (WorkScheduler +0x20), and the tool registry whose node is defined in
-// Dialog/toolbardialog.cpp.
+// a `void*` there (WorkScheduler +0x20), and the tool registry's {root, count} header.
 namespace {
 
 inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }
@@ -194,31 +194,30 @@ extern "C" void TreeNodeFree_2ce60(void* hdrV, WorkSchedulerBucketNode* node) {
 // ============================================================
 // 0x14002df90 — recursive node free (children +0x20/+0x28), IBP payload at +0x10
 // ============================================================
-// (PlayerToolManager +0x10's tool registry: ToolRegistryNode is defined in
-// Dialog/toolbardialog.cpp, not in a header this file can read.)
-extern "C" void TreeNodeFree_2df90(void* hdrV, void* nodeV) {
-    if (!nodeV) return;
-    TreeNodeFree_2df90(hdrV, P(nodeV, 0x20));   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-    TreeNodeFree_2df90(hdrV, P(nodeV, 0x28));   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-    if (P(nodeV, 0x10) != nullptr)   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-        reinterpret_cast< ::Object::InternalBasePtr*>(B(nodeV) + 0x10)->DeletePtr();   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-    MemFree(nodeV);
+// (PlayerToolManager +0x10's tool registry: the node is Dialog/ToolRegistryNode.h.)
+extern "C" void TreeNodeFree_2df90(void* hdrV, ToolRegistryNode* node) {
+    if (!node) return;
+    TreeNodeFree_2df90(hdrV, node->left);
+    TreeNodeFree_2df90(hdrV, node->right);
+    if (node->toolSetting != nullptr)
+        reinterpret_cast< ::Object::InternalBasePtr*>(&node->toolSetting)->DeletePtr();   // LEFT: ToolRegistryNode::toolSetting is an InternalPtr<ToolSetting> held as T* (H5, as Tool::toolSetting)
+    MemFree(node);
 }
 
 // ============================================================
 // 0x14002de90 — clear a {root,count} tree of IBP-payload nodes
 // ============================================================
-extern "C" void IbpTree_Clear_2de90(void* hdrV) {
-    void* root = P(hdrV, 0x00);   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
+extern "C" void IbpTree_Clear_2de90(ToolRegistryNode** hdrV) {
+    ToolRegistryNode* root = *hdrV;
     if (root) {
-        TreeNodeFree_2df90(hdrV, P(root, 0x20));   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-        TreeNodeFree_2df90(hdrV, P(root, 0x28));   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-        if (P(root, 0x10) != nullptr)   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-            reinterpret_cast< ::Object::InternalBasePtr*>(B(root) + 0x10)->DeletePtr();   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
+        TreeNodeFree_2df90(hdrV, root->left);
+        TreeNodeFree_2df90(hdrV, root->right);
+        if (root->toolSetting != nullptr)
+            reinterpret_cast< ::Object::InternalBasePtr*>(&root->toolSetting)->DeletePtr();   // LEFT: ToolRegistryNode::toolSetting is an InternalPtr<ToolSetting> held as T* (H5, as Tool::toolSetting)
         MemFree(root);
     }
-    P(hdrV, 0x00) = nullptr;   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
-    I32(hdrV, 0x08) = 0;   // LEFT: ToolRegistryNode is file-local to Dialog/toolbardialog.cpp (DLG)
+    *hdrV = nullptr;
+    I32(hdrV, 0x08) = 0;   // LEFT: the registry header is two raw fields (PlayerToolManager +0x10 root / +0x18 count, PlayerToolManager.h): the count is reached from the root slot
 }
 
 // ============================================================
