@@ -48,7 +48,8 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 // fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
 // FUN_140102e30: BST insert/update for entity tracking
-void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
+class PlayerToolManager; class ComponentEntity;
+void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEntity* const* entityPtr,
                                  uint32_t x, uint32_t y);
 
 // ---- eventnotifydialog.cpp

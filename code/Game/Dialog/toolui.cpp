@@ -58,8 +58,6 @@
 
 // Forward declaration — defined in entityui.cpp
 extern "C" bool EditTool_IsEditTool(void* tool);   // code/Game/Player/edittool.cpp
-extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
-                                        uint32_t x, uint32_t y);
 
 // ============================================================
 // UIDescription::AddControllers (0x14012e100; the tree's UIDesc_AddControllers_Impl)
