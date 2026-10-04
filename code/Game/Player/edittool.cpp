@@ -114,7 +114,7 @@ bool EditTool::IsSelected(uint64_t* ref) {
 // Per-frame selection-outline follow re-sync (tool_base_render.cpp). Keeps a
 // moving selected entity's yellow outline glued to it as it walks. Self-gates on
 // BANISHED_SELECTION_OUTLINE, so it is a no-op on the shipping default path.
-extern "C" void HighlightFollow_Impl(void* self);
+extern "C" void HighlightFollow_Impl(EditTool* self);
 
 // Resolve the ModelComponent class type-id: prefer the raw .rdata DWORD; in the
 // standalone exe that constant is null, so fall back to the live factory tree by

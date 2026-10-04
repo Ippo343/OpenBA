@@ -795,9 +795,9 @@ void Impl_c9e0(EditTool* self) {
 // the registered 0x1400fcc90 under BANISHED_SELECTION_OUTLINE; the original exe cc90
 // runs the full teardown unmodified.)
 // ===========================================================================
-void Impl_cc90(EditTool* self) {
-    Impl_cb40(self);   // clear the previous entity's outline; leave dialog/refs alone
-}
+// B4 P2 PLAYER: the body (`Impl_cb40(self)`, nothing else) and its forwarder
+// HighlightDeselect_Impl had no caller anywhere and are deleted; the deselect paths
+// call HighlightClear_Impl (0x1400fcb40) directly.
 
 // ===========================================================================
 // HighlightFollow — per-frame transform re-sync so a MOVING selected entity's
@@ -895,10 +895,9 @@ void Impl_HighlightFollow(EditTool* self) {
 // Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
 extern "C" void HighlightSelect_Impl(void* self)   { Impl_c9e0(reinterpret_cast<EditTool*>(self)); }  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcb40
-extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast<HighlightComponent*>(self)); }  // 0x14004c4a0
-extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcc90
+extern "C" void HighlightRepaint_Impl(HighlightComponent* self) { Impl_c4a0(self); }  // 0x14004c4a0 (callers: Player/pathtool_setselected.cpp)
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
 // EditTool::Update (edittool.cpp) every frame; self-gates on
 // BANISHED_SELECTION_OUTLINE so it is a no-op unless the outline is enabled.
-extern "C" void HighlightFollow_Impl(void* self)    { Impl_HighlightFollow(reinterpret_cast<EditTool*>(self)); }
+extern "C" void HighlightFollow_Impl(EditTool* self) { Impl_HighlightFollow(self); }
