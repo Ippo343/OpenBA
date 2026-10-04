@@ -51,10 +51,7 @@ namespace {
 // (runtime/src/collection/avl_trees.cpp). The node each hands back IS
 // `RtIo::SettingsMapNode` (Persistence.h).
 const SettingsMapNode* CallMapFind(const IO::Persistence* self, const System::String& key) {
-    return static_cast<const SettingsMapNode*>(                       // LEFT: R-CORE's void* result
-        RtSystem_ConfigMap_Find(                                      // Map_Find, retail 0x18002ace0
-            const_cast<IO::Persistence*>(self),                       // LEFT: R-CORE's non-const map
-            reinterpret_cast<const RtSystem::String*>(&key)));        // LEFT: R-CORE's POD key
+    return RtSystem_ConfigMap_Find(&self->_settingsMapRoot, &key);   // Map_Find, retail 0x18002ace0
 }
 SettingsMapNode* CallMapInsert(void* map, const System::String& key,
                                const System::String& value) {

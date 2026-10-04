@@ -611,8 +611,8 @@ UNIT_TEST(system_configuration_is_0x30_bytes_at_the_ctors_literal_offsets) {
     CHECK_EQ(offsetof(System::Configuration, _mapRoot),     static_cast<size_t>(0x10));
     CHECK_EQ(offsetof(System::Configuration, _mapCount),    static_cast<size_t>(0x18));
     CHECK_EQ(offsetof(System::Configuration, _pad1c),       static_cast<size_t>(0x1c));
-    CHECK_EQ(offsetof(System::Configuration, _unusedData),  static_cast<size_t>(0x20));
-    CHECK_EQ(offsetof(System::Configuration, _unusedCount), static_cast<size_t>(0x28));
+    CHECK_EQ(offsetof(System::Configuration, _currentPlatform), static_cast<size_t>(0x20));
+    CHECK_EQ(offsetof(System::Configuration, _currentBuild),    static_cast<size_t>(0x28));
     CHECK_EQ(offsetof(System::Configuration, _pad2c),       static_cast<size_t>(0x2c));
     CHECK(!std::is_polymorphic<System::Configuration>::value);
     CHECK(std::is_standard_layout<System::Configuration>::value);

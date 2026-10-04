@@ -96,6 +96,8 @@
 // every namespace block, never inside an `#if` (B31 hygiene / B34_BRIEFS §A.8).
 #include "String.h"
 
+namespace RtIo { struct SettingsMapNode; }   // io/Persistence.h: the map's node
+
 namespace System {
 
 class Configuration {
@@ -167,11 +169,27 @@ public:
     void*    _entries;       // +0x00  the Array sub-object's data pointer
     int32_t  _entryCount;    // +0x08  ~Array (0x180010ab0) reads the count here
     uint32_t _pad0c;         // +0x0c  inside the ctor's qword zero; unread
-    void*    _mapRoot;       // +0x10  the string->string map's root node
+    // The string->string map's root node. B.4 R-SYS: typed as the node every
+    // `Set<Pair<String,String>>` in this DLL shares (Map_Find 0x18002ace0 and
+    // Map_Insert 0x18002a090 serve this map and IO::Persistence's alike): two
+    // Strings, then parent / left / right (io/Persistence.h).
+    RtIo::SettingsMapNode* _mapRoot;  // +0x10
     int32_t  _mapCount;      // +0x18
     uint32_t _pad1c;         // +0x1c  ⚠ NEVER WRITTEN by the constructor
-    void*    _unusedData;    // +0x20  ⚠ the sub-object ~Configuration LEAKS
-    int32_t  _unusedCount;   // +0x28
+    // B.4 R-SYS: +0x20..+0x2b are THREE DWORDS, not a {ptr,int} sub-object.
+    // Named by the exported one-line accessors (Runtime-x64.dll):
+    //   ?SetCurrentPlatform@ 0x1800c4c20  MOV dword [RCX+0x20],EDX
+    //   ?GetCurrentPlatform@ 0x1800c5270  MOV EAX,dword [RCX+0x20]
+    //   ?GetCurrentLanguage@ 0x1800c4c30  MOV EAX,dword [RCX+0x24]
+    //   ?GetCurrentBuild@    0x1800c52f0  MOV EAX,dword [RCX+0x28]
+    // and FileSystem::SetupDirectories reads +0x20 / +0x28 as dwords
+    // (0x1800ac06a..8b). The ctor's qword zero at +0x20 is the platform AND
+    // the language (two named stores, H7). Nothing here is an allocation, so
+    // the dtor leaving +0x20 alone is not a leak: the "sub-object" reading in
+    // the banner above is corrected by these four accessors.
+    int32_t  _currentPlatform;  // +0x20
+    int32_t  _currentLanguage;  // +0x24
+    int32_t  _currentBuild;     // +0x28
     uint32_t _pad2c;         // +0x2c  ⚠ NEVER WRITTEN by the constructor
 };
 
@@ -181,8 +199,9 @@ static_assert(offsetof(Configuration, _entryCount)  == 0x08, "0x180010ab0 reads 
 static_assert(offsetof(Configuration, _mapRoot)     == 0x10, "LEA RAX,[RCX+0x10]");
 static_assert(offsetof(Configuration, _mapCount)    == 0x18, "MOV dword [RAX+0x08],EDX");
 static_assert(offsetof(Configuration, _pad1c)       == 0x1c, "never written -- keep it named");
-static_assert(offsetof(Configuration, _unusedData)  == 0x20, "MOV [RCX+0x20],RDX");
-static_assert(offsetof(Configuration, _unusedCount) == 0x28, "MOV dword [RCX+0x28],EDX");
+static_assert(offsetof(Configuration, _currentPlatform) == 0x20, "GetCurrentPlatform 0x1800c5270 MOV EAX,[RCX+0x20]");
+static_assert(offsetof(Configuration, _currentLanguage) == 0x24, "GetCurrentLanguage 0x1800c4c30 MOV EAX,[RCX+0x24]");
+static_assert(offsetof(Configuration, _currentBuild)    == 0x28, "GetCurrentBuild 0x1800c52f0 MOV EAX,[RCX+0x28]");
 static_assert(offsetof(Configuration, _pad2c)       == 0x2c, "never written -- keep it named");
 static_assert(!std::is_polymorphic<Configuration>::value,
               "System::Configuration must never acquire a vtable: retail has "
@@ -271,7 +290,12 @@ namespace RtSystem { struct String; }   // system/String.h
 namespace System { class String; }       // system/String.h
 
 // ---- system/configuration.cpp
-extern "C" void* RtSystem_ConfigMap_Find(void* map, const RtSystem::String* wanted);  // 0x18002ace0
+// B.4 R-SYS: typed. `root` is the map's first qword (Configuration::_mapRoot,
+// IO::Persistence::_settingsMapRoot): retail loads `node = [RCX]`. The key is
+// the real String (`MOV R9,[RDX]` reads its data pointer); the result is the
+// node or null.
+extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(
+    RtIo::SettingsMapNode* const* root, const System::String* wanted);  // 0x18002ace0
 // ---- system/value_types.cpp
 System::String* RtSystem_Configuration_CurrentBuildId(System::String* ret);  // 0x1800c4c60
 // ==== end B3R W0-P0c ====

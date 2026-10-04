@@ -227,9 +227,9 @@ void MemoryAllocator::LinkFreeTag(MemoryTag* tagp) {
 
     uint8_t* node = tag + 8;
     int bin = GetBinForSize(bytes);
-    uint64_t* head = &freeLists[bin];
+    FreeTag** head = &freeLists[bin];
 
-    if (*head == 0) {
+    if (*head == nullptr) {
         Node(node) = 0;
         Tag(tag) &= 0x00003fffffffffffull;          // clear the prev-link high bits
         if (bin < minBin) minBin = bin;
@@ -244,7 +244,7 @@ void MemoryAllocator::LinkFreeTag(MemoryTag* tagp) {
         Tag(oldHead - 8) &= 0x00003fffffffffffull;
         Tag(oldHead - 8) |= (back & 0xffffffffff800000ull) << 23;
     }
-    *head = reinterpret_cast<uint64_t>(node);  // CAST-OK: alloc_header
+    *head = AsNode(node);
     freeTagCount++;
 }
 
@@ -267,9 +267,9 @@ void MemoryAllocator::UnlinkFreeTag(FreeTag* nodep, FreeTag* /*unused*/) {
 
     if (prev == nullptr) {
         if (next == nullptr) {
-            freeLists[bin] = 0;
+            freeLists[bin] = nullptr;
         } else {
-            freeLists[bin] = reinterpret_cast<uint64_t>(next);  // CAST-OK: alloc_header
+            freeLists[bin] = AsNode(next);
             Node(next) &= kTagSizeMask;
             Tag(next - 8) &= 0x00003fffffffffffull;
         }
@@ -289,8 +289,8 @@ void MemoryAllocator::UnlinkFreeTag(FreeTag* nodep, FreeTag* /*unused*/) {
     Tag(node - 8) &= 0x00003fffffffffffull;
 
     int cursor = minBin;
-    if (bin == cursor && freeLists[bin] == 0) {
-        while (cursor < 0xc0 && freeLists[minBin] == 0) {
+    if (bin == cursor && freeLists[bin] == nullptr) {
+        while (cursor < 0xc0 && freeLists[minBin] == nullptr) {
             cursor = minBin + 1;
             minBin = cursor;
         }

@@ -191,11 +191,9 @@ bool ConfigHasKey(::System::Configuration* cfg, const char* key) {
     // that reason is gone now that `?_singleton@Configuration@System@@` is the
     // class static, so retail's genuinely-unguarded dereference is restored.
     System::String k(key);
-    void* map = &cfg->_mapRoot;                     // Configuration + 0x10
-    // Unexported (no name in either build): 0x18002ace0 is
-    // RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
-    return RtSystem_ConfigMap_Find(
-        map, reinterpret_cast<const RtSystem::String*>(&k)) != nullptr;   // B.3.x bridge  // LEFT: SIG RtSystem_ConfigMap_Find takes void* map / the RtSystem::String POD (system/Configuration.h, R-SYS-1)
+    // Configuration + 0x10. Unexported (no name in either build): 0x18002ace0
+    // is RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
+    return RtSystem_ConfigMap_Find(&cfg->_mapRoot, &k) != nullptr;
 }
 
 // The `-pathres` / `-pathdat` / `-pathpkg` override, which retail emits three
@@ -394,8 +392,8 @@ void FileSystem::SetupDirectories() {
     // (`MOV R8D,dword [R13+0x20]` / `[R13+0x28]`). Both are zero on every boot
     // of this project — the constructor zeroes them and nothing writes them
     // before Engine::Startup step 3 — giving "Win" and "Data".
-    const int platformId = cfg ? *reinterpret_cast<const int32_t*>(&cfg->_unusedData) : 0;  // LEFT: Configuration.h declares +0x20 `void* _unusedData`; retail reads a dword here (R-SYS-1)
-    const int buildId    = cfg ? cfg->_unusedCount : 0;                    // +0x28
+    const int platformId = cfg ? cfg->_currentPlatform : 0;                // +0x20
+    const int buildId    = cfg ? cfg->_currentBuild : 0;                   // +0x28
     // Both are hidden-return-slot entry points owned by another file and still
     // POD-shaped, so the value lands in a POD and is stolen into the class.
     RtSystem::String platformPod{nullptr};
