@@ -14,6 +14,3 @@
 
 
 
-// B4 FORWARD to AnimalComponent::UpdateBehavior: 2 outside callers
-// (pasturecomponent_spawn.cpp, tradecomponent_livestock.cpp).
-void AnimalComponent_UpdateBehavior(AnimalComponent* self);         // 0x140107320

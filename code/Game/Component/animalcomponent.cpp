@@ -288,12 +288,6 @@ void AnimalComponent::UpdateBehavior() {
     mesh->_color[3] = vec4.w;
 }
 
-// B4 FORWARD: 2 outside callers (pasturecomponent_spawn.cpp, tradecomponent_livestock.cpp)
-void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
-    if (!self) return;
-    self->UpdateBehavior();
-}
-
 // ============================================================
 // AnimalComponent::SetWanderTimer (0x140106250)
 // ------------------------------------------------------------
