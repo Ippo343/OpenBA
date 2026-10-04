@@ -149,7 +149,6 @@
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
 #include "../../types/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
 #include "../../types/collection/Collection.h"
-#include "../../funcs/runtime_funcs.h"   // RtGraphics_Camera_Ctor
 
 
 namespace {
@@ -165,7 +164,7 @@ using UI::SpriteDraw;
 // exports all the same (reference_aeaa_is_private_not_unexported.md).
 // B3R RT-UI: all called by name -- the Camera ctor body
 // (`??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`,
-// 0x1800fe960, still a free body: RtGraphics_Camera_Ctor), the SpriteContext /
+// 0x1800fe960, the Graphics::Camera ctor, constructed directly), the SpriteContext /
 // SpriteCapture members, MemoryAllocator::MemFree (0x1800c7ad0) and
 // 0x1800783d0, `Collection::Array<UI::SpriteDraw>::SetSize(0)`, the deferred
 // batch's clear (not exported: rtcoll::RtColl_ArraySetSize_1800783d0).
@@ -249,18 +248,15 @@ void UI::UserInterface::Draw(Video::Context& context) {
 
     // Uninitialised, exactly like retail's `RBP+0x80` local: the ctor fills
     // 0x00..0xd4 and `SetFrustum` fills the projection.
-    RtGraphics::Camera cam;
-
-    // `Graphics::Camera`'s ctor stays a free body (B4b-2, B35_RULES leave
-    // list), called by name.
-    RtGraphics_Camera_Ctor(&cam, &fr, &t3, false);          // 0x1800fe960
+    // `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`.
+    ::Graphics::Camera cam(fr, t3, false);          // 0x1800fe960
 
     // ---- 0x180121b00: Transform3::AsMatrix, inlined -----------------------
     // Rows from the three basis vectors and the translation, w = 0/0/0/1.
     // The 1.0f in m[15] is the SAME XMM14 as the frustum's, not a fresh
     // constant load — noted because it is why the constant appears once.
     {
-        const Transform3& ctw = cam.cameraToWorld;
+        const Transform3& ctw = cam._cameraToWorld;
         Matrix view;
         view.m[0]  = ctw.axisX.x;        view.m[1]  = ctw.axisX.y;        view.m[2]  = ctw.axisX.z;        view.m[3]  = 0.0f;
         view.m[4]  = ctw.axisY.x;        view.m[5]  = ctw.axisY.y;        view.m[6]  = ctw.axisY.z;        view.m[7]  = 0.0f;
@@ -269,7 +265,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
 
         // Retail copies the projection into its own scratch and passes THAT,
         // so the argument is a copy, not a pointer into the camera.
-        Matrix proj = cam.projection;
+        Matrix proj = cam._projection;
 
         // `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z` (0x18001a150).
         context.SetCamera(view, proj);

@@ -116,12 +116,12 @@ float NegateBySignMask(float v) {
     float r; std::memcpy(&r, &b, 4); return r;
 }
 
-// `_pixelConstantStaging` stays one undivided byte block (engine/loops.cpp and
-// graphics/wave21_lane_gfxbody.cpp index it by byte). `off` is the Context
-// offset retail's listing spells; the block starts at +0x200.
-inline uint8_t* PixelStagingAt(Context* self, uint32_t off) {
-    return self->_pixelConstantStaging + (off - offsetof(Context, _pixelConstantStaging));
-}
+// The three publish windows are rows of Context::PixelConstantStaging::pixel.
+constexpr uint32_t kPixelRow0 = offsetof(Context, _pixelConstantStaging) +
+                                offsetof(Context::PixelConstantStaging, pixel);
+static_assert(kPixelRow0 + 0 * 0x10 == kPixelShadow,   "shadow   = pixel[0] (+0x248)");
+static_assert(kPixelRow0 + 2 * 0x10 == kPixelColour,   "colour   = pixel[2] (+0x268)");
+static_assert(kPixelRow0 + 3 * 0x10 == kPixelPosition, "position = pixel[3] (+0x278)");
 
 }  // namespace
 
@@ -186,11 +186,11 @@ void Video::Context::SetLight(const void* directionRaw, const void* attenuationR
     // colour + position (+0x1dd8, 8 dwords) to +0x268, shadow (+0x1e28, 4
     // dwords) to +0x248.
     for (uint32_t k = 0; k < 4; ++k)
-        std::memcpy(PixelStagingAt(self, kPixelColour + k * 4), &L.colour[k], 4);
+        std::memcpy(&self->_pixelConstantStaging.pixel[2][k], &L.colour[k], 4);
     for (uint32_t k = 0; k < 4; ++k)
-        std::memcpy(PixelStagingAt(self, kPixelPosition + k * 4), &L.position[k], 4);
+        std::memcpy(&self->_pixelConstantStaging.pixel[3][k], &L.position[k], 4);
     for (uint32_t k = 0; k < 4; ++k)
-        std::memcpy(PixelStagingAt(self, kPixelShadow + k * 4), &L.shadow[k], 4);
+        std::memcpy(&self->_pixelConstantStaging.pixel[0][k], &L.shadow[k], 4);
 
     _dirty |= kDirtyBits;
 }

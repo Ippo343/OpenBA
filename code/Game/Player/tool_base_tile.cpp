@@ -210,7 +210,7 @@ static void ToolTile_SetPlacedModel(ModelComponent* model, bool foundation) {
     Graphics::GraphicsMesh** subArr = group->meshes;
     if (subArr) mesh = subArr[modelVariant];
     if (mesh) {
-        model->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
+        model->meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
         // Re-apply the placement yaw after the mesh swap: ModelComponent::Draw
         // re-applies +0x148 only when the model is not yet in the scene, and the
         // copy-constructed entity's +0x16c can be a stale scene id. +0x148 already

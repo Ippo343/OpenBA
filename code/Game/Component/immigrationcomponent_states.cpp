@@ -260,7 +260,7 @@ void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector
     if (ndesc) {
         Graphics::MaterialInstance* mat = (gender == 0) ? ndesc->_materialGender0 : ndesc->_materialGender1;
         model->meshInstance
-            .SetMaterialInstance(0, Graphics::ExternalPtrHandle{mat});
+            .SetMaterialInstance(0, Object::ExternalPtr<Graphics::MaterialInstance>(mat));
     }
 }
 

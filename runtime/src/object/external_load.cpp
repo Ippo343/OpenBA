@@ -96,6 +96,7 @@
 #include <cstdlib>
 
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // RtSystem::Sys: ExternalArrayElement::owned (the Filename POD)
 #include "../../types/object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
 #include "../../types/object/External.h"
 #include "../../types/io/Stream.h"
@@ -113,7 +114,8 @@ namespace {
 
 // The magic that opens every compiled resource. 0x1800bc6e5 compares against it
 // verbatim; it is not derived from anything.
-constexpr uint32_t kCompiledMagic = 0x5412a91fu;
+// Read through SerializeInt (+0xa0), so the local and the constant are int32.
+constexpr int32_t kCompiledMagic = 0x5412a91f;
 
 // B3R RT-Core: CompressedStream::Open / Commit, FileSystem::CloseFile,
 // Base::IsDerivedFrom and String::Serialize are called by name; the Encoding's
@@ -159,19 +161,15 @@ void CloseIfOpen(RtIO::FileInfo* fi) {
     ::IO::FileSystem::_singleton->CloseFile(*fi);                 // 0x1800accc0
 }
 
-// The two Serializer-implementation entry points this body drives, named once.
-// B3X W0: called by name, FOLLOWING THE RETAIL OFFSET, not these helpers' old
-// names. `SerU32` calls +0xa0, which is `SerializeInt`; `SerI32` calls +0x98,
-// which is `SerializeUInt` (Serializer.h:504-505). The helper names were
-// swapped against their slots; the offsets are retail's and are what stays.
-// Both pass the third argument (the name) as zero, as retail does.
-void SerU32(::IO::ReaderWriter* rw, uint32_t* v) {
-    rw->SerializeInt(                                              // +0xa0
-        *reinterpret_cast<int32_t*>(v), nullptr);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail's slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
+// The two Serializer-implementation entry points this body drives, named once
+// by their retail slot: `SerInt` calls +0xa0 (`SerializeInt`), `SerUInt` calls
+// +0x98 (`SerializeUInt`). Each local is declared with the signedness of the
+// slot retail hands it to. Both pass the name as zero, as retail does.
+void SerInt(::IO::ReaderWriter* rw, int32_t* v) {
+    rw->SerializeInt(*v, nullptr);                                 // +0xa0
 }
-void SerI32(::IO::ReaderWriter* rw, int32_t* v) {
-    rw->SerializeUInt(                                             // +0x98
-        *reinterpret_cast<uint32_t*>(v), nullptr);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
+void SerUInt(::IO::ReaderWriter* rw, uint32_t* v) {
+    rw->SerializeUInt(*v, nullptr);                                // +0x98
 }
 
 }  // namespace
@@ -274,15 +272,15 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
         // Retail does NOT initialise this slot before the call: on a read the
         // serializer fills it, on a write it emits whatever is there. Left
         // uninitialised for the same reason the stream is.
-        uint32_t magic;
-        SerU32(rw, &magic);
+        int32_t magic;
+        SerInt(rw, &magic);
         if (magic != kCompiledMagic) {
             ++g_lc.badMagic;
             bad = true;
         } else {
             // ---- 1800bc6f3..1800bc70e -------------------------------------
-            int32_t typeId = 0;                                   // 1800bc6f3
-            SerI32(rw, &typeId);
+            uint32_t typeId = 0;                                  // 1800bc6f3
+            SerUInt(rw, &typeId);
 
             if (obj != nullptr) {
                 ++g_lc.reusedExisting;                            // 1800bc70e
@@ -294,7 +292,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 const ::Object::Factory* f =
                     ::Object::Factory::_singleton;   // class static (B.3.9 OBJ, D7)
                 const ::Object::Factory::TypeSet::Node* n = f->_types._root;
-                const uint32_t want = static_cast<uint32_t>(typeId);
+                const uint32_t want = typeId;
                 while (n != nullptr) {
                     if (want < n->element.typeId)      n = n->left;    // 1800bc732, +0x38
                     else if (n->element.typeId < want) n = n->right;   // 1800bc72c, +0x40
@@ -329,11 +327,11 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
 
             if (!bad) {
                 // ---- 1800bc767..1800bc78a -----------------------------------
-                uint32_t version;
-                SerU32(rw, &version);
+                int32_t version;
+                SerInt(rw, &version);
                 const int32_t objVersion =          // slot 3 +0x18 (B.3.x bridge)
                     obj->GetFileVersion();
-                if (static_cast<int32_t>(version) != objVersion) {
+                if (version != objVersion) {
                     ++g_lc.badVersion;
                     bad = true;
                 }
@@ -345,23 +343,21 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 // object's CURRENT size and then serializes it, so the same
                 // instruction reads on a load and writes on a save.
                 int32_t depCount = obj->_refs._size;              // 1800bc790
-                SerU32(rw, reinterpret_cast<uint32_t*>(&depCount));  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
+                SerInt(rw, &depCount);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 
                 if (ser._stream->_direction == 0) {               // 1800bc7b0
                     ++g_lc.sizedArray;
                     ArraySetSize(&obj->_refs, depCount);          // 1800bc7bd
                 }
 
-                // Each element is 0x10 bytes: a String at +0x00 and TWO int32s
-                // at +0x08 and +0x0c. External.h calls the tail one opaque
-                // `uint64_t`; this body is the writer that splits it, and it
-                // splits it in two, not one.
-                uint8_t* elem = reinterpret_cast<uint8_t*>(obj->_refs._data);  // LEFT: External.h ExternalArrayElement {char* owned; uint64_t opaque}: splitting `opaque` into its two int32s (0x1800bc7fc / 0x1800bc811) breaks array.cpp:854's one-qword copy (R-COLL); `owned` is retail's Filename (H5)
-                for (int32_t i = 0; i < depCount; ++i, elem += 0x10) {
+                // Each element is 0x10 bytes: a Filename at +0x00, serialized
+                // as a String, and TWO uint32s at +0x08 and +0x0c.
+                ::RtObject::ExternalArrayElement* elem = obj->_refs._data;
+                for (int32_t i = 0; i < depCount; ++i, ++elem) {
                     ++g_lc.deps;
-                    reinterpret_cast<::System::String*>(elem)->Serialize(ser);    // 1800bc7e9  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-                    SerI32(rw, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-                    SerI32(rw, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                    ::RtSystem::Sys(elem->owned).AsString().Serialize(ser);   // 1800bc7e9
+                    SerUInt(rw, &elem->field_0x08);                          // 1800bc7fc
+                    SerUInt(rw, &elem->field_0x0c);                          // 1800bc811
                 }
 
                 // ---- 1800bc820..1800bc82b -------------------------------

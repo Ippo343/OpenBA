@@ -184,7 +184,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
 
 
     // --- Assign the mesh to the citizen's held-item MeshInstance (+0xb8). ---
-    held->SetMesh(Graphics::ExternalPtrHandle{mesh});
+    held->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
 
     // Scale Vector4 (splat carryScale) -> MeshInstance::_color (+0x10c..+0x118).
     Math::Vector4 scaleVec((Math::Scalar(carryScale)));

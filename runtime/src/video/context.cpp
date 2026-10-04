@@ -301,7 +301,7 @@ void Context::SetFog(float nearZ, float farZ, const Math::Vector4& color) {
     _fogColor = color;
 
     // The +0x258 duplicate, inside the pixel-constant staging block.
-    std::memcpy(_pixelConstantStaging + (0x258 - 0x200), &color, sizeof(Math::Vector4));
+    std::memcpy(_pixelConstantStaging.pixel[1], &color, sizeof(Math::Vector4));   // +0x258
 
     _dirty |= (RtVideo::kDirtyGlobalConstants | RtVideo::kDirtyPixelConstants);
 
@@ -487,8 +487,8 @@ void Context::Reset() {
     // and stop short of _materialConstants at +0x298, which Reset does not
     // clear; the third covers +0x328..+0x3f7, _viewProjection through _fogColor.
     // B.4 (R-VIDEO): each is spelled from the member it starts in.
-    std::memset(_pixelConstantStaging + (0x208 - 0x200), 0, 0x40);
-    std::memset(_pixelConstantStaging + (0x248 - 0x200), 0, 0x50);
+    std::memset(_pixelConstantStaging.material, 0, 0x40);   // +0x208
+    std::memset(_pixelConstantStaging.pixel, 0, 0x50);      // +0x248
     static_assert(offsetof(Context, _inverseScale) - offsetof(Context, _viewProjection) == 0xd0,
                   "Reset's third memset ends where _inverseScale begins");
     std::memset(static_cast<void*>(&_viewProjection), 0, 0xd0);

@@ -69,7 +69,7 @@ void PlacementTool::FlipVariant() {
 
     Graphics::MeshInstance* instance = meshInstance;
     if (instance) {
-        instance->SetMesh(Graphics::ExternalPtrHandle{mesh});
+        instance->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
         instance->UpdateHierarchy();
     }
     if (scene && instance) {

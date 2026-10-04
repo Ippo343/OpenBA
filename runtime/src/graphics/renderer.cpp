@@ -235,17 +235,6 @@ const Matrix kZUpToYUp = {{
 // ABI, and delegates with a QUALIFIED non-virtual call.
 // ============================================================================
 
-// ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
-// — retail 0x1800fe960. Returns `this` in RAX like every MSVC constructor.
-// The body is the member constructor `Graphics::Camera::Camera(const Frustum&,
-// const Transform3&, bool)` below; this extern "C" entry keeps the POD-typed
-// signature for its callers in code/Game and forwards.
-extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
-                                          const Transform3* cameraToWorld, bool swapZUpToYUp) {
-    new (static_cast<void*>(self)) ::Graphics::Camera(*frustum, *cameraToWorld, swapZUpToYUp);
-    return self;
-}
-
 // ??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z — retail 0x180017c40.
 //
 // ALREADY PORTED, and NOT IN BLOCK F'S FILE SET: the body is

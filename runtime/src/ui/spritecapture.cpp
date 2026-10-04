@@ -317,7 +317,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     e.x2 = x2; e.y2 = y2;                 // 0x1800d8e4b
 
     // ---- (c) append ---------------------------------------------------------
-    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)   // LEFT: H5 SpriteCapture::_sprites: see line 185 (dtor order)
+    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)  // LEFT: H5 SpriteCapture::_sprites (+0x40): ~SpriteCapture destroys it FIRST (1800d91d4), then _entries, _sheets; a typed member would be destroyed last
         .SetSizeFill(_sprites.size + 1, &sprite);             // 0x18004bfc0
     rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
         ->SetSizeFill(_entries.size + 1, &e);                 // 0x18004bde0

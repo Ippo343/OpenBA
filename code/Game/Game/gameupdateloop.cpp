@@ -1416,9 +1416,8 @@ void GameUpdateLoop::Draw(float alpha) {
                 }
                 if (s_forceSnow) params.x = s_snowVal;
                 videoCtx->_unknown03b8 = params;                  // ctx+0x3b8
-                // LEFT: ctx+0x288 lies in the Context's undivided pixel-constant
-                // staging bytes (Video/Context.h, 0x200..0x297).
-                *reinterpret_cast<Math::Vector4*>(&videoCtx->_pixelConstantStaging[0x88]) = params;   // ctx+0x288  // LEFT: FIELD Context::_pixelConstantStaging stays one byte block (X-RL left it: engine/loops.cpp and wave21_lane_gfxbody.cpp index it by byte)
+                // ctx+0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
+                *reinterpret_cast<Math::Vector4*>(videoCtx->_pixelConstantStaging.pixel[4]) = params;   // ctx+0x288  // LEFT: the row is float[4] (Context.h: a Math::Vector4 member would run its zeroing ctor in Context's ctor); the Vector4 store keeps the one 16-byte MOVUPS a memcpy splits into two qword stores at -O2
                 videoCtx->_dirty |= 0x10800;                      // ctx+0x10
             }
         }

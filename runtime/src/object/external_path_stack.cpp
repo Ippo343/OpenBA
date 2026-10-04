@@ -387,9 +387,9 @@ extern "C" RtObject::PathStackEntry* RtObject_PathStackRemoveLast_18002ccb0(
 
     const int32_t idx = a->_size - 1;
     const RtObject::PathStackElement* e =
-        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;   // LEFT: H10 as RemoveAt's
+        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;  // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
     RtObject::PathStackElement* o =
-        reinterpret_cast<RtObject::PathStackElement*>(out);                    // LEFT: H10 as RemoveAt's
+        reinterpret_cast<RtObject::PathStackElement*>(out);  // LEFT: H10 the out slot is a PathStackEntry whose halves are the RtSystem::Filename POD (External.h)
     new (&o->directory) System::Filename(e->directory);
     new (&o->filename)  System::Filename(e->filename);
     RtObject_PathStackRemoveAt_18002de30(a, idx);

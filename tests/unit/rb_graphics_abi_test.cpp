@@ -87,7 +87,7 @@ void ParticleInstance::Draw(Video::Context&, const Camera&, ExternalPtrHandle,
                             float, int, int, int) const {}
 void ParticleInstance::AddDrawItems(const Scene&, Renderer&) const {}
 Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* ret, int, float) const { return ret; }
-void ParticleInstance::SetParticle(ExternalPtrHandle) {}
+void ParticleInstance::SetParticle(Object::ExternalPtr<Particle>) {}
 void ParticleInstance::RemoveState() { Log(kPiRemoveState, this); }
 
 int32_t     Particle::GetFileVersion() const { return 0x1000; }
@@ -781,7 +781,7 @@ const void* g_psiDtorOrder[4] = {};
 }  // namespace
 namespace Graphics {
 void ParticleSystemInstance::Update(const System::Time&) {}
-void ParticleSystemInstance::SetParticle(ExternalPtrHandle) {}
+void ParticleSystemInstance::SetParticle(Object::ExternalPtr<Particle>) {}
 ParticleSystemInstance::~ParticleSystemInstance() {
     if (g_psiDtor < 4) g_psiDtorOrder[g_psiDtor] = this;
     ++g_psiDtor; g_psiDtorVptr = *static_cast<const void* const*>(static_cast<const void*>(this));

@@ -37,8 +37,6 @@ using State = Input::Device::State;
 // Already-ported Wave 4 IO::Persistence entry points (runtime/src/io/
 // persistence.cpp). Not declared in any header there; redeclared here with
 // the exact signature, same pattern rt_port.h's own Module/ResolveAddr use.
-extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out);
-extern void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value);
 
 namespace {
 
@@ -430,11 +428,11 @@ void Configuration::Save() {
     _keyMap->Save();
 
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    void* persistence = ::IO::Persistence::_singleton;
+    ::IO::Persistence* const persistence = ::IO::Persistence::_singleton;
 
-    RtIo_Persistence_SetBool(persistence, "Input", "MouseClipping", _mouseClipping);
-    RtIo_Persistence_SetBool(persistence, "Input", "Legacy", _legacy);
-    RtIo_Persistence_SetBool(persistence, "Input", "MouseDisplay", _mouseDisplay);
+    persistence->Set("Input", "MouseClipping", _mouseClipping);
+    persistence->Set("Input", "Legacy", _legacy);
+    persistence->Set("Input", "MouseDisplay", _mouseDisplay);
 }
 
 }  // namespace Input

@@ -391,7 +391,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
     // attach the tool geometry to the model's "tool" node
     // LEFT: MeshInstance::_mesh (Runtime) is an untyped ExternalPtr handle.
-    const Graphics::GraphicsMesh* graphicsMesh = static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);  // LEFT: FIELD MeshInstance::_mesh is an ExternalPtrHandle (X-RL left it: readers in three sets)
+    const Graphics::GraphicsMesh* graphicsMesh = model->meshInstance._mesh.Get();
     int nodeIdx = graphicsMesh ? graphicsMesh->GetNodeIndexFromName("tool") : -1;
     model->meshInstance.Attach(tool, nodeIdx);
 

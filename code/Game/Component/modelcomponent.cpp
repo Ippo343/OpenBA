@@ -164,7 +164,7 @@ void ModelComponent::Persist(IO::Stream& stream) {
             ModelDescription* desc = LinkedModelDescription(this);
             Graphics::GraphicsMesh* meshResource = GetMeshFromDescription(desc, meshGroup, meshIndex);
             if (meshResource) {
-                mesh->SetMesh(Graphics::ExternalPtrHandle{meshResource});
+                mesh->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshResource));
             }
         }
     }
@@ -211,7 +211,7 @@ void ModelComponent::Startup() {
     if (index >= 0) {
         Graphics::GraphicsMesh* meshResource = GetMeshFromDescription(desc, meshGroup, index);
         if (meshResource) {
-            meshInstance.SetMesh(Graphics::ExternalPtrHandle{meshResource});
+            meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshResource));
         }
     }
 

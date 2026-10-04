@@ -907,8 +907,8 @@ void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
     ctx->_unknown03b8.x = secs;  ctx->_unknown03b8.y = 0.0f;
     ctx->_unknown03b8.z = 0.0f;  ctx->_unknown03b8.w = 0.0f;
 
-    // LEFT: `_pixelConstantStaging` is raw bytes (Context.h, R-VIDEO).
-    float* staging = reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);   // LEFT: Context::_pixelConstantStaging is one 0x98-byte block (+0x200 videoProgram, +0x208 material, +0x248 pixel constants); ~10 readers in runtime/video and code/ index it by byte: splitting it is its own sweep
+    // ctx +0x288: Context::PixelConstantStaging::pixel[4].
+    float* staging = ctx->_pixelConstantStaging.pixel[4];   // LEFT: Context::_pixelConstantStaging is one 0x98-byte block (+0x200 videoProgram, +0x208 material, +0x248 pixel constants); ~10 readers in runtime/video and code/ index it by byte: splitting it is its own sweep
     staging[0] = secs; staging[1] = 0.0f; staging[2] = 0.0f; staging[3] = 0.0f;
     ctx->_dirty |= 0x10800u;
 

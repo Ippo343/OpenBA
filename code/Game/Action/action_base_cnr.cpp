@@ -207,7 +207,7 @@ void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant
         int16_t sub = model->meshIndex;
         int16_t var = model->meshGroup;
         Graphics::GraphicsMesh* mesh = d->_meshGroups[var].meshes[sub];
-        model->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
+        model->meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
         model->OnAdded();   // slot 6
     }
     model->_entity->SendEvent(0);   // 0x1400c2b70
