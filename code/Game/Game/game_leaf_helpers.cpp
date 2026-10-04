@@ -197,13 +197,12 @@ void Game_WeatherDtor(WeatherSimulation* self) {
 // fn_Filename_CtorString = ??0Filename@System@@QEAA@AEBVString@1@@Z), Find via
 // ::Object::ExternalFactory::Find. Cascade-safe: if the type slot is unresolved, load
 // without IsDerivedFrom validation rather than dereferencing a null BaseTypeInfo.
-void Game_TerrainResolveMaterial(void* refTriple) {
-    if (!refTriple) return;
+void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref) {
+    if (!ref) return;
     if (!::Object::ExternalFactory::_singleton) return;
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    // The triple is the {String, generation, External*} record MapGenerator.h
-    // names ExternalRef (TerrainGenerator's material ref has the same layout).
-    MapGenerator::ExternalRef* ref = reinterpret_cast<MapGenerator::ExternalRef*>(refTriple);   // LEFT: SIG Game_TerrainResolveMaterial (its caller terraingenerator.cpp SerializeFilenameString holds the record's leading String*, not the record)
+    // The record is TerrainGenerator's material ref (+0x38 / +0x50 / +0x68), a
+    // MapGenerator::ExternalRef {String, generation, External*}.
     int factoryGen = efactory->_generation;   // factory+8
     if (ref->factoryGen == factoryGen) return;
 

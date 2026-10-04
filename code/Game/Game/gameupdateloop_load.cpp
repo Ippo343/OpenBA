@@ -1156,7 +1156,7 @@ void GameUpdateLoop::Load() {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
             // Map dimension from the terrain size-table row (sizeRow[0]).
-            const TerrainSizeRow* sizeTable = terrainGen->_field80;   // +0x80, 0x44-byte rows
+            const TerrainSizeRow* sizeTable = terrainGen->sizeRows._data;   // +0x80, 0x44-byte rows
             uint32_t dim = sizeTable ? sizeTable[sizeIdx].mapSize : 0;
 
             // Retail call site 0x1400975c7, immediately after the map dimension is

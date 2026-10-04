@@ -21,10 +21,17 @@
 #include "object/External.h"
 #include "system/String.h"   // System::String members
 #include "Object/exe_type.h"
+#include "collection/Collection.h"
+#include "Game/MapGenerator.h"   // MapGenerator::ExternalRef, the {String, generation, External*} record
 
 namespace UI { class StringTable; }
 
 struct TerrainSizeRow;   // Game/TerrainHeightfield.h
+
+// The size table's element row: the grow body 0x1400206b0 (terraingenerator.cpp).
+namespace TerrainGeneratorRows {
+extern const rtcoll::ArraySpec kSpec_TerrainSizeRow;   // exe 0x1400206b0
+}  // namespace TerrainGeneratorRows
 
 class TerrainGenerator final : public Object::External {
     DECLARE_EXE_TYPE(TerrainGenerator)
@@ -45,25 +52,18 @@ public:
     System::String _field28;     // +0x28: String (ctor 0x1400b1810 stores 0; dtor 0x140020630 ~String)
     uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
     uint8_t  _pad31[7];          // +0x31: padding
-    // Noise layer 1
-    System::String _field38;     // +0x38: String (filename, resolved to External on load)
-    int32_t  _field40;           // +0x40: -1 sentinel (ExternalFactory generation counter)
-    uint8_t  _pad44[4];          // +0x44: padding
-    void*    _field48;           // +0x48: resolved External ptr for noise layer 1
-    // Noise layer 2
-    System::String _field50;     // +0x50: String (filename)
-    int32_t  _field58;           // +0x58: -1 sentinel
-    uint8_t  _pad5C[4];          // +0x5C: padding
-    void*    _field60;           // +0x60: resolved External ptr for noise layer 2
-    // Noise layer 3
-    System::String _field68;     // +0x68: String (filename)
-    int32_t  _field70;           // +0x70: -1 sentinel
-    uint8_t  _pad74[4];          // +0x74: padding
-    void*    _field78;           // +0x78: resolved External ptr for noise layer 3
-    // Dynamic terrain data array
-    TerrainSizeRow* _field80;    // +0x80: the size table (TerrainSizeRow, 0x44 per entry, freed in dtor)
-    int32_t  _sizeRowCount;      // +0x88: the size table's count (Serialize: the int overload; Array::_size)
-    int32_t  _sizeRowCapacity;   // +0x8C: the size table's capacity (Array::_capacity)
+    // The three material refs, each {String filename, int32 generation (-1 =
+    // unresolved), External* resolved} (B4 X7-GAME-A: MapGenerator's ExternalRef;
+    // the ctor 0x1400b1810 stores 0 / -1 / 0, the dtor ~String of each name).
+    MapGenerator::ExternalRef _field38;   // +0x38: noise layer 1 (the terrain material)
+    MapGenerator::ExternalRef _field50;   // +0x50: noise layer 2 (water material A)
+    MapGenerator::ExternalRef _field68;   // +0x68: noise layer 3 (water material B)
+    // +0x80: the size table (TerrainSizeRow, 0x44 per entry). B4 X7-GAME-A (H5):
+    // an Array member; retail's dtor body 0x140020630 frees it FIRST (MemFree
+    // [+0x80], zero +0x80 / +0x88) and then runs ~String on +0x68 / +0x50 / +0x38
+    // / +0x28: exactly reverse member order with this as the last member.
+    Collection::Array<TerrainSizeRow, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&TerrainGeneratorRows::kSpec_TerrainSizeRow>> sizeRows;
 };
 
 static_assert(sizeof(TerrainGenerator) == 0x90, "TerrainGenerator is 0x90");
@@ -73,6 +73,5 @@ static_assert(offsetof(TerrainGenerator, _field30) == 0x30, "+0x30");
 static_assert(offsetof(TerrainGenerator, _field38) == 0x38, "+0x38");
 static_assert(offsetof(TerrainGenerator, _field50) == 0x50, "+0x50");
 static_assert(offsetof(TerrainGenerator, _field68) == 0x68, "+0x68");
-static_assert(offsetof(TerrainGenerator, _field80) == 0x80, "+0x80");
-static_assert(offsetof(TerrainGenerator, _sizeRowCount) == 0x88, "+0x88");
-static_assert(offsetof(TerrainGenerator, _sizeRowCapacity) == 0x8C, "+0x8C");
+static_assert(offsetof(TerrainGenerator, sizeRows) == 0x80, "+0x80");
+static_assert(offsetof(TerrainGenerator, sizeRows) + offsetof(decltype(TerrainGenerator::sizeRows), _size) == 0x88, "+0x88 count");
