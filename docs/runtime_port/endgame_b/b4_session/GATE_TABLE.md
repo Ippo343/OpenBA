@@ -311,3 +311,7 @@ Metric at `bc8b7989`: **2,868** to remove.
 | 91 | X-R2 | `6f9dbc5d` | the External / ExternalFactory / resource-set entry points and `FileSystem::Exists` / `CreatePath` / `ExistsInPackfile` take `System::Filename`, eleven WideString holders are scoped `System::WideString` objects, `MaterialInstance::AddTexture` takes `System::String`; three callerless doors deleted (rows 580-582): 118 -> 72 in 42 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
 
 Metric at `6f9dbc5d`: **2,475** to remove.
+
+| 92 | X-G1-1 | `1b134ba9` | the citizen find / target helpers, the nine CitizenAI action builders, the work action constructors, WorkLeaf helpers and WalkablePos, the StateCandidate list, dialog ctor entries, TradeUI price functions typed; about 25 forwarders and 7 callerless functions deleted; `FishingDescription::_fish`, `ForesterDescription::_ref20` typed (rows 550-551): 702 -> 398 in 90 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `1b134ba9`: **2,163** to remove.

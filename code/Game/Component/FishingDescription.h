@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 class FishingDescription final : public Description {
     DECLARE_EXE_TYPE(FishingDescription)
 
@@ -36,7 +38,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140034430
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _fish;                                // +0x20 ExternalPtr (fish material)
+    ComponentDescription* _fish;                // +0x20 ExternalPtr (fish material: FishWork hands it to 0x1400beae0 as the material)
     uint32_t _u28;                              // +0x28 enum (serialized through the uint door)
     uint32_t _terrainMask;                      // +0x2c accepted terrain bits (cell +0x29), ProduceTick 0x14011ec10
 };

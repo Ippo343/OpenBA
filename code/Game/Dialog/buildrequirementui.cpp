@@ -50,7 +50,7 @@
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
-extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+#include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void* Debug_Sprite_DefaultCtor(void* retval);
 extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
 extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
@@ -229,7 +229,7 @@ void BuildRequirementUI::OnCreated() {
             // The icon: sprite sheet (+0x20) and sprite name (+0x28)
 #ifdef _DEBUG
             uint8_t sprite[16];
-            Debug_Sprite_Ctor(sprite, (uint64_t)buildReqComp->_spriteSheet, &buildReqComp->_name);
+            Debug_Sprite_Ctor(sprite, buildReqComp->_spriteSheet, &buildReqComp->_name);
             Debug_ImageElement_SetSprite(imagePtr, sprite);
 #else
             UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(buildReqComp->_spriteSheet),
@@ -333,10 +333,9 @@ void BuildRequirementUI::OnCreated() {
             UI::LabelElement* label = static_cast<UI::LabelElement*>(labelData[i]);
             if (SaneHeapPtr(resType)) {
                 // The small sprite: sheet (+0x20) and _nameSmall (+0x38)
-                // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
-#ifdef _DEBUG
+                #ifdef _DEBUG
                 uint8_t sprite[24];
-                Debug_Sprite_Ctor(sprite, (uint64_t)resType->_spriteSheet, &resType->_nameSmall);
+                Debug_Sprite_Ctor(sprite, resType->_spriteSheet, &resType->_nameSmall);
                 Debug_LabelElement_SetSprite(label, sprite);
 #else
                 UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resType->_spriteSheet),

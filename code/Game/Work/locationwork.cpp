@@ -101,7 +101,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    int itemCount = CitizenComp_StorageComponent_QueryCount(storage);
     if (itemCount > 0) {
         (*citizenIBP)->LongTermPlan();
     }
@@ -133,10 +133,9 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     float bestPos[3] = {0.0f, 0.0f, 0.0f};
     float srcPosArr[3] = {srcX, srcY, srcZ};
 
-    // Check main position (the component and the description's use nodes, +0x28;
-    // 0x140122be0 / 0x140122b00 take them as integers: LEFT)
+    // Check main position (the component and the description's use nodes, +0x28)
     uint8_t found = WorkImpl_WalkablePos_122be0(
-        reinterpret_cast<uintptr_t>(interact), reinterpret_cast<uintptr_t>(&interactDesc->_useNodes),   // LEFT: SIG WorkImpl_WalkablePos_122be0
+        interact, &interactDesc->_useNodes,
         srcPosArr, bestPos, &bestDist);
 
     // Also check the parts' use locations
@@ -145,7 +144,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         InteractComponent** subArray = interact->useLocations;
         for (int i = 0; i < subCount; i++) {
             uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
-                reinterpret_cast<uintptr_t>(subArray[i]), 0, srcPosArr, bestPos, &bestDist);   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00
+                subArray[i], 0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
         }
     }
@@ -159,11 +158,10 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
     // The Ghidra decompilation shows the last two params come from stack;
     // the pattern is: (citizenIBP, priority, position, 0, g_fUVScale, flag&0xffffff00)
-    // (0x1400bb490 takes the position as uint32_t*: LEFT)
     CitizenAI_Pathfinding_WalkTowards_bb490(
         &citizenIBPLocal,
         field_20,                // priority from self+0x20
-        reinterpret_cast<uint32_t*>(bestPos),   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490
+        bestPos,
         0,                       // flag1
         kRdata_14017214c,            // UV scale constant
         0);                      // flag2 (cleared upper bits)

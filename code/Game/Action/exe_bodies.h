@@ -17,7 +17,6 @@
 #include <cstdint>
 
 // ---- action_base_cnr.cpp
-void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP);  // 0x140003f60
 class Map;                    // Game/Map.h
 class GrowthComponent;        // Component/GrowthComponent.h
 class ModelComponent;         // Component/ModelComponent.h
@@ -32,12 +31,8 @@ void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animId
 uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
 void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
 uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex);  // 0x14009cb00
-void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // 0x140120db0
 uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant);  // 0x140125320
 void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant);  // 0x1401253d0
-void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx);  // 0x140126440
-uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex);  // 0x140126540
-void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag);  // 0x1401260f0
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
@@ -82,8 +77,6 @@ class ModelComponent;         // Component/ModelComponent.h
 namespace System { class Time; class Random; }
 bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290
 void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
-bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng);  // 0x1400a9290
-void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 
 // ---- action_base_rawmat.cpp
 class AutoPickupComponent;    // Component/AutoPickupComponent.h
@@ -113,7 +106,6 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
-void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);  // 0x1400ca230
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
@@ -144,8 +136,6 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
-void Pf_QuadtreeSubdivide_18880(uintptr_t param_1);  // 0x140018880 B4 FORWARD -> CharacterGridWalker::Subdivide
-uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4);  // 0x140018dd0 B4 FORWARD -> CharacterGridWalker::Init
 class PopulationComponent;    // Component/PopulationComponent.h
 int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
@@ -195,7 +185,6 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
 // B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80 -> StorageCanAdd
-int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3, uint64_t param_4, int param_5, char param_6, uint32_t* param_7, void* param_8);  // 0x14008d590 -> PickBestDropTarget
 
 // ---- keystone_a_zone.cpp
 class PathfinderThread;       // Game/PathfinderThread.h

@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 class ForesterDescription final : public Description {
     DECLARE_EXE_TYPE(ForesterDescription)
 
@@ -36,7 +38,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140034950
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (tree/sapling material)
+    ComponentDescription* _ref20;               // +0x20 ExternalPtr (tree/sapling material: ForesterWork scans its sub-descriptions, 0x14000c3c0)
     uint32_t _type;                             // +0x28 enum (serialized through the uint door)
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
 };

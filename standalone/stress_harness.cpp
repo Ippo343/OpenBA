@@ -568,7 +568,7 @@ static void CompProf_WatchBegin(void* comp, uint32_t tid) {
     }
 }
 
-extern "C" int CompProf_BeginKind(void* comp, int kind) {
+extern "C" int CompProf_BeginKind(Object::Base* comp, int kind) {
     void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: the profiler keys its table on the vtable word (no floor category names it: coordinator)
     uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);  // CAST-OK: hash
     for (int probe = 0; probe < kCompSlots; ++probe) {
@@ -577,7 +577,7 @@ extern "C" int CompProf_BeginKind(void* comp, int kind) {
         if (s.vtbl == vtbl && s.kind == kind) { if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId); return idx; }
         if (!s.vtbl) {
             s.vtbl = vtbl; s.kind = kind;
-            s.typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge  // LEFT: SIG CompProf_BeginKind (void* comp: stress_harness.h and entitylist.cpp's local declaration, ENT)
+            s.typeId = comp->Type();
             s.ticks = 0; s.calls = 0;
             if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId);
             return idx;
@@ -586,7 +586,7 @@ extern "C" int CompProf_BeginKind(void* comp, int kind) {
     return -1;
 }
 
-extern "C" int CompProf_Begin(void* comp) { return CompProf_BeginKind(comp, 0); }
+extern "C" int CompProf_Begin(Object::Base* comp) { return CompProf_BeginKind(comp, 0); }
 
 extern "C" void CompProf_End(int slot, long long qpcTicks) {
     if (s_homeWatch && s_curCitizen && s_curHome && Readable(s_curCitizen) &&

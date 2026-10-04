@@ -268,14 +268,14 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
 
                 int capacity = citizenStorage->capacity;
                 // (0x14012cf10 takes the storage as an integer: LEFT.)
-                int currentStored = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(citizenStorage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+                int currentStored = CitizenComp_StorageComponent_QueryCount(citizenStorage);
 
 
                 int carryWeight = rawMatComp->_weight;
                 if (capacity - currentStored < carryWeight * remaining) {
                     // Not enough carry capacity -- recalculate (0x140116540 takes the
                     // citizen as an integer: LEFT)
-                    int remCapacity = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(*entityIBP));   // LEFT: SIG WorkLeaf_FreeStorageCapacity_116540
+                    int remCapacity = WorkLeaf_FreeStorageCapacity_116540(*entityIBP);
                     remaining = remCapacity / carryWeight;
                 }
 
@@ -317,18 +317,17 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
 
                 // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell -- the
                 // registered cell's own class, not the legacy healing fallback which used
-                // to read MapDescription::TypeId()). (0x140122be0 / 0x140122b00 take the
-                // component and the node array as integers: LEFT.)
+                // to read MapDescription::TypeId()).
                 bool isDerivedPos = Object::IsDerivedFromNullSafe(posDescBase, InteractDescription::TypeId());
                 InteractDescription* posDesc = isDerivedPos ? static_cast<InteractDescription*>(posDescBase) : nullptr;
-                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp),   // LEFT: SIG WorkImpl_WalkablePos_122be0
-                    reinterpret_cast<uintptr_t>(&posDesc->_buildNodes), searchPos, targetPos, &bestDist) : 0;   // LEFT: SIG WorkImpl_WalkablePos_122be0
+                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posComp,
+                    &posDesc->_buildNodes, searchPos, targetPos, &bestDist) : 0;
 
                 if (posComp->useLocationCount > 0) {
                     int childCount = 0;
                     do {
                         uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(
-                            reinterpret_cast<uintptr_t>(posComp->useLocations[childCount]), 1,   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00
+                            posComp->useLocations[childCount], 1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;
@@ -355,33 +354,34 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 if (tgtCellY >= mapSz) tgtCellY = mapSz - 1;
                 int targetCell = tgtCellY * mapSz + tgtCellX;
 
-                // --- Validate work assignment (0x1400f6ef0 takes the work as an integer; the
-                // Time slot is the reused param3 scratch that holds the WorkPlaceComponent) ---
+                // --- Validate work assignment: Work::StepProgress 0x1400f6ef0 (was its
+                // WorkImpl_BuildStructureStep_6ef0 forwarder). The Time slot is the reused
+                // param3 scratch that holds the WorkPlaceComponent ---
                 CitizenComponent* citizenRef = *entityIBP;
-                uint64_t validated = WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &citizenRef,   // LEFT: SIG WorkImpl_BuildStructureStep_6ef0 (param3 is not a System::Time)
-                    targetCell, citizenCell, param3);
+                uint64_t validated = StepProgress(&citizenRef, targetCell, citizenCell,
+                    reinterpret_cast<const System::Time*>(param3));   // LEFT: retail hands the reused param3 slot (it holds the WorkPlaceComponent) as the Time
 
                 if ((char)validated == '\0') {
                     return 0;
                 }
 
                 // --- Find path and assign work ---
-                // Original uses a 3-qword stack buffer; [0]=worldEntityList
-                // (0x1400bf790 takes the locations and the material as integers: LEFT.)
-                void* pathBuf[3] = { worldEntityList, nullptr, nullptr };
+                // The hidden return slot (original: local_58, which held worldEntityList
+                // before the call; that value and the slot's two other qwords are never read).
+                ::Object::InternalPtr<Action> pathBuf;
                 ComponentEntity* destEntity = foundEntity;
                 ComponentEntity* srcEntity = field_10;  // Reread from self
                 CitizenComponent* citizenPtr = *entityIBP;
 
                 WorkAct_GatherRawMatCtor_bf790(
-                    pathBuf,            // stack buffer (original: local_58[3])
+                    &pathBuf,           // the hidden return slot
                     &citizenPtr,        // citizenPtr
                     field_20,           // pathType (priority/workplaceId)
-                    reinterpret_cast<uint64_t*>(&srcEntity),        // the work entity  // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                    &srcEntity,         // the work entity
                     targetPos,          // targetPos
-                    reinterpret_cast<void**>(&destEntity),        // destEntityPtr  // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                    &destEntity,        // destEntityPtr
                     searchPos,          // srcPos
-                    reinterpret_cast<int64_t>(cost->material),  // materialType  // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                    cost->material,     // materialType
                     remaining,          // amount
                     (remaining << 8) | slotIdx,  // packed slot info
                     0, '\0', 0, 0);

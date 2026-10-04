@@ -78,11 +78,11 @@ char ResidenceComponent::HeatTick(const System::Time* dt) {
     //    (no-food); while it HAS firewood, clear bit 7 (no-firewood / cold).
     //    Faithful to the decompile: FUN_14012c3f0(*finder2f90(owner), bit, 0).
     {
-        if (CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(this)) > 0) {   // LEFT: SIG CitizenComp_Storage_GetResourceCount (int64_t self)
+        if (CitizenComp_Storage_GetResourceCount(this) > 0) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
             if (icon) icon->SetFlag(6, 0);   // 0x14012c3f0
         }
-        if (Storage_GetResourceCount2(reinterpret_cast<int64_t>(this)) > 0) {   // LEFT: SIG Storage_GetResourceCount2 (int64_t self)
+        if (Storage_GetResourceCount2(this) > 0) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
             if (icon) icon->SetFlag(7, 0);   // 0x14012c3f0
         }

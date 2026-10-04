@@ -96,9 +96,3 @@ bool BuildComponent::HaveAllMaterials() {
 
     return true;   // every material satisfied (or matCount <= 0)
 }
-
-// B4 FORWARD: 1 outside caller (code/Game/Game/construction_force_harness.cpp)
-extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
-    if (!buildComp) return false;
-    return reinterpret_cast<BuildComponent*>(buildComp)->HaveAllMaterials();   // LEFT: FWD (wave X: its caller holds void*)
-}

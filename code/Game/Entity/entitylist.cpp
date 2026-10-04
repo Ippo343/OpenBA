@@ -72,7 +72,6 @@
 // stress harness's COMPPROF report. Only touched when g_compProfOn.
 long long g_elProfDrainTicks = 0, g_elProfPreTicks = 0, g_elProfTreeTicks = 0, g_elProfBucketTicks = 0;
 long long g_elProfTreeNodes = 0, g_elProfBucketVisits = 0, g_elProfBucketTicked = 0;
-extern "C" int  CompProf_BeginKind(void* comp, int kind);
 extern "C" void CompProf_End(int slot, long long qpcTicks);
 
 void ComponentEntity::TickComponents(const System::Time* time) {
@@ -694,7 +693,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
     auto& dialogs = ui->_dialogs;
     for (auto it = dialogs.GetFirst(); it && nClose < 16; ++it) {
         // node[0] = DialogInstance*
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(*it);   // LEFT: UserInterface.h DialogInstancePtr is void* (R-UI-4)
+        UI::DialogInstance* dialog = *it;
         if (dialog) {
             Object::InternalPtr<UI::DialogController> ctrlRef = dialog->GetController(s_tidEntityUI);
             UI::DialogController* ctrl = ctrlRef.Get();
@@ -746,7 +745,7 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
     if (tool->lastEntityRef == 0) return;
     uintptr_t ent = reinterpret_cast<uintptr_t>(tool->lastEntityRef);   // CAST-OK: ptr_int (the tree's address-range probe below)
     if (ent < 0x10000 || ent > 0x00007FFFFFFFFFFFULL) return;
-    if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;   // LEFT: EditTool.h lastEntityRef is uint64_t (SA)
+    if (((tool->lastEntityRef->_entityFlags >> 10) & 1) == 0) return;   // ComponentEntity +0x40
 
     // Drop both the dialog ref (+0x28) and the selected-entity ref (+0x30), exactly as
     // EditTool_CloseInfoDialog does — leaving +0x30 set would keep the follow chasing it.
@@ -1250,11 +1249,3 @@ void EntityList::Serialize(IO::Stream& stream) {
     // Step 9: the Serializer's destructor runs here
 }
 
-// ============================================================
-// B4 FORWARD: the C entry point of the one member with callers outside this
-// block's files (entitylist_funcs.h). The closing wave rewires the callers and
-// deletes it.
-// ============================================================
-void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
-    self->RemoveEntity(reinterpret_cast<ComponentEntity**>(entityIBP));   // LEFT: forwarder for gameupdateloop_teardown.cpp (wave X)
-}

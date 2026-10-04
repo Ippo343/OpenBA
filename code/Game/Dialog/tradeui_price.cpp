@@ -97,13 +97,8 @@ constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
 
 
 // ── 0x14005a520 ──────────────────────────────────────────────────────────────
-// B4 FORWARD: the C signature stays for tradecomponent_dock.cpp, which takes its
-// address and calls it with untyped arguments.
-extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity) {
-    if (!tradeState || !resourceEntity) return 0;
-    const TradeComponent* trade = reinterpret_cast<const TradeComponent*>(tradeState);   // LEFT: the C signature
-    const ComponentDescription* resource =
-        reinterpret_cast<const ComponentDescription*>(resourceEntity);   // LEFT: the C signature
+extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource) {
+    if (!trade || !resource) return 0;
     const int32_t merchantIdx = trade->tradeId;
 
     // ── No merchant docked: the base value, straight out of ValueDescription.

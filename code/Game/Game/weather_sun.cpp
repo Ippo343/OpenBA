@@ -109,12 +109,12 @@ inline void LerpColor(uint32_t a, uint32_t b, float t, float out[4]) {
 //   ctx  = Video::Context*.
 // Called once per rendered frame from GameUpdateLoop::Draw (step 5).
 // ============================================================
-extern "C" void Weather_SunUpdate(void* self, void* ctx) {
+extern "C" void Weather_SunUpdate(GameUpdateLoop* self, Video::Context* ctx) {
     if (!self) return;
 
     // Caller batch CB6: `self` is the GameUpdateLoop (its one caller is Draw's
     // `this`); its fields are read by name.
-    GameUpdateLoop* const gul = static_cast<GameUpdateLoop*>(self);   // LEFT: SIG Weather_SunUpdate (gameupdateloop.cpp)
+    GameUpdateLoop* const gul = self;
     Graphics::SunLight* sun = gul->m_sunLight;   // +0x100
     // B.3.5: the `!fn_Graphics_SunLight_Set` term is gone with the door call;
     // the `!sun` object test is retail's and stays.
@@ -225,8 +225,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // Fog (day-cycle distances + color, effect-blended above).
     if (ctx) {
         // ?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z.
-        // LEFT: ctx is the caller's void* (gameupdateloop.cpp declares this entry untyped).
-        reinterpret_cast<Video::Context*>(ctx)->SetFog(   // LEFT: SIG Weather_SunUpdate
+        ctx->SetFog(
             fogNear, fogFar, Math::Vector4(fogCol[0], fogCol[1], fogCol[2], fogCol[3]));
     }
 }

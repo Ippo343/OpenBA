@@ -115,13 +115,11 @@ static PerformWork* WAP_BuildInlinePerformWork(void* o, CitizenComponent* entity
 //   pos4       = float*                      (R9, param_4: Vector3 subtrahend)
 //   pos5       = float*                      (stack, param_5: Entity_impl_29a0 worldPos + 1st MoveTo dest)
 //   srcEntity6 = longlong*                   (stack, param_6: 2nd SendComponentMessage entity inner)
-void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
+void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint32_t workId,
                                        float* pos3, float* pos4, float* pos5,
-                                       int64_t* srcEntity6) {
+                                       ComponentEntity* const* srcRef6) {
 
     // the action stack = character + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PerformWorkCopyCtor_ba9f0
-    ComponentEntity* const* srcRef6 = reinterpret_cast<ComponentEntity* const*>(srcEntity6);   // LEFT: SIG WorkAct_PerformWorkCopyCtor_ba9f0 (param_6 is an entity reference)
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
@@ -484,7 +482,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
             StorageComponent* storage = entObj->_entity->FindComponent<StorageComponent>();   // 0x140006270 (local_78)
             int count = 0;
             // LEFT: 0x14012cf10's C signature (COMP-b) takes the component as an integer.
-            count = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage)); // 0x14012cf10
+            count = CitizenComp_StorageComponent_QueryCount(storage); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
             ComponentEntity* entityInner = (*citizenRef)->_entity;

@@ -187,9 +187,8 @@ PlayerToolManager* Manager(void* entityUI) {
 // (Game/PlayerToolManager.h): +0x00 key, +0x08 int x, +0x0C int y, +0x10 byte wanted,
 // +0x18 parent, +0x20 left, +0x28 right. Retail walks it in order (leftmost, then
 // successor). An empty tree — every non-scenario game — makes this a no-op.
-extern "C" void EntityUI_OpenRegisteredDialogs_SA(void* entityUI) {
-    if (!entityUI) return;
-    PlayerToolManager* mgr = Manager(entityUI);
+extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr) {
+    if (!mgr) return;
     TrackedEntityNode* node = mgr->field_0x50;
     if (!node) return;
 
@@ -198,11 +197,10 @@ extern "C" void EntityUI_OpenRegisteredDialogs_SA(void* entityUI) {
     int opened = 0;
     while (node) {
         if (node->active != 0) {
-            uint64_t outIbp = 0;
-            // LEFT: the node's key is declared ComponentEntity* (GAME-a's
-            // TrackedEntityNode); 0x1401001f0 stores the dialog's description
-            // there, which the toggle 0x140101a80 takes.
-            Toolbar_Utility_Reg(entityUI, &outIbp, reinterpret_cast<uint64_t>(node->key));
+            // The toggle 0x140101a80 (was its Toolbar_Utility_Reg forwarder; the returned
+            // InternalPtr was discarded). LEFT: the node's key is declared ComponentEntity*
+            // (GAME-a's TrackedEntityNode); 0x1401001f0 stores the dialog's description there.
+            mgr->ToggleUtilityDialog(reinterpret_cast<ComponentDescription*>(node->key));   // LEFT: Game/PlayerToolManager.h TrackedEntityNode::key
             ++opened;
         }
         // successor: leftmost of the right subtree, else up until we come from a left child
