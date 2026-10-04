@@ -139,7 +139,7 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  //
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2);  // 0x140111840
 
 // ---- citizencomponent_lifecycle.cpp
-void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V);  // 0x1401168a0
+
 void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
 

@@ -280,9 +280,7 @@ void ResizeStride0x20(void* hdr, int n);  // 0x1400177c0
 // prototypes in geometry_serialize.cpp / worldgen.cpp); not registered.
 // serialize_struct60b_serialize.cpp
 // serialize_heightmap_mesh.cpp
-extern "C" void Reimpl_TradeWork_sub_c1e0(void* self);
 // serialize_image_upload.cpp
-extern "C" void Reimpl_TradeWork_sub_c780(void* self);
 // serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);
 extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount);

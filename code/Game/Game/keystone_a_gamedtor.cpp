@@ -277,9 +277,7 @@ Map::~Map() {
     }
 
     if (regionPairCache != nullptr) {
-        // LEFT: Map::regionPairCache is int64_t* (gameupdateloop.cpp, GAME-a,
-        // hands it to 0x1400a5d10's int64_t* parameter).
-        RegionPairCache* cache = reinterpret_cast<RegionPairCache*>(regionPairCache);
+        RegionPairCache* cache = regionPairCache;
         // 0x14001a450: the index tree (children +0x18 / +0x20 through 0x14000e320),
         // its root / count zeroed, then the ring array freed.
         AvlNode30* root = cache->index.root;

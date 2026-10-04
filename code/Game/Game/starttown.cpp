@@ -3817,7 +3817,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 
 // CitizenComponent_helper_68a0 (0x1401168a0) — splice `member` into `host`'s family
 // ring (host +0x260 head, member +0x268/+0x270 links, member +0x258 host back-ref).
-// Ported as CitizenComp_JoinRoster_68a0 (Component/exe_bodies.h), called by name.
+// Ported as CitizenComponent::AddChild (0x1401168a0), called by name.
 
 // ---- Founding-family housing (BANISHED_LIVE_HOUSING) ------------------------
 // Vanilla has NO dedicated founding-family→house placement: the founding spawner
@@ -4369,7 +4369,7 @@ static int StartTown_SpawnCitizens(MapGenerator* startConfig, EntityList* entity
             if (adultB && kid) {
                 {
                     CitizenComponent* node = kid;
-                    CitizenComp_JoinRoster_68a0(adultB, &node);   // 0x1401168a0
+                    adultB->AddChild(node);   // 0x1401168a0
                     ++linkedKids;
                 }
             }

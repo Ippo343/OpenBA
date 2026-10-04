@@ -213,9 +213,5 @@ void WorldGeometry::UploadHeightImage() {
 // ============================================================
 // The C entry point
 // ============================================================
-// B4 FORWARD: 1 outside caller (worldgen.cpp, GAME-c, holds the geometry as
-// void*). LEFT: that void*.
-extern "C" void Reimpl_TradeWork_sub_c780(void* self) {
-    if (!self) return;
-    reinterpret_cast<WorldGeometry*>(self)->UploadHeightImage();
-}
+// B4 X-G2-3: Reimpl_TradeWork_sub_c780 (the C entry of WorldGeometry::UploadHeightImage) had
+// no caller left: deleted.

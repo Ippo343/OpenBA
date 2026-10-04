@@ -319,7 +319,5 @@ void CitizenComponent::Slot11() {
     // description lookup is fixed.
 }
 
-// B4 FORWARD: 1 outside caller(s) (Game/starttown.cpp)
-void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
-    reinterpret_cast<CitizenComponent*>(selfV)->AddChild(*reinterpret_cast<CitizenComponent**>(param2V));   // LEFT: B4 FORWARD C signature (wave X)
-}
+// B4 X-G2-3: CitizenComp_JoinRoster_68a0 (the forwarder to CitizenComponent::AddChild) deleted:
+// its one caller (starttown.cpp) calls the member.
