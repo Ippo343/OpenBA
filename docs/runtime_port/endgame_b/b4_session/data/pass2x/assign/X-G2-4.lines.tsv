@@ -1,0 +1,390 @@
+file	line	kind	left_tag	snippet
+code/Game/Action/action_pf_avl.cpp	462	reinterpret	SIG CitizenAI_Reg_helper_e360 (CAI-4)	reinterpret_cast<int64_t*>(&tree->root),
+code/Game/Action/action_pf_avl.cpp	463	reinterpret	SIG CitizenAI_Reg_helper_e360 (CAI-4)	reinterpret_cast<int64_t*>(&local_res8));
+code/Game/Action/action_pf_avl.cpp	476	reinterpret	SIG Pf_AvlRebalanceA_a8c0	reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28**>(node));
+code/Game/Action/action_pf_avl.cpp	476	reinterpret	SIG Pf_AvlRebalanceA_a8c0	reinterpret_cast<AvlNode28**>(node));
+code/Game/Action/action_pf_avl.cpp	480	reinterpret	SIG Pf_AvlInsertA_a4f0	reinterpret_cast<uint64_t*>(AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1)
+code/Game/Action/action_pf_avl.cpp	480	reinterpret	SIG Pf_AvlInsertA_a4f0	reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1), reinterpret_cast<AvlNode28**>(param_2)
+code/Game/Action/action_pf_avl.cpp	480	reinterpret	SIG Pf_AvlInsertA_a4f0	reinterpret_cast<AvlNode28**>(param_2), reinterpret_cast<const int32_t*>(param_3)));
+code/Game/Action/action_pf_avl.cpp	480	reinterpret	SIG Pf_AvlInsertA_a4f0	reinterpret_cast<const int32_t*>(param_3)));
+code/Game/Action/action_pf_pools.cpp	466	reinterpret	SIG Pf_VectorResize60_fa80	reinterpret_cast<RawArray<GeometryBatch>*>(param_1);
+code/Game/Action/action_pf_pools.cpp	467	reinterpret	SIG Pf_VectorResize60_fa80	reinterpret_cast<const GeometryBatch*>(param_3);
+code/Game/Action/action_pf_road.cpp	422	reinterpret	Game/WorldGeometry.h _dirtyTreeRoot raw (GAME-2); SIG Pf_AvlInsertA_a4f0	reinterpret_cast<int64_t*>(&_dirtyTreeRoot);
+code/Game/Action/action_pf_road.cpp	807	reinterpret	Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)	reinterpret_cast<RawArray<RoadBatch>*>(&_arrays[6]);
+code/Game/Action/action_pf_road.cpp	808	reinterpret	Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)	reinterpret_cast<const RawArray<int64_t>*>(&_arrays[7]);
+code/Game/Action/action_pf_road.cpp	809	reinterpret	Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)	reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);
+code/Game/Action/action_pf_road.cpp	969	reinterpret	SIG Pf_VectorResize60_fa80	reinterpret_cast<int64_t*>(meshBatches), meshBatches->size + 1,
+code/Game/Action/action_pf_road.cpp	970	reinterpret	SIG Pf_VectorResize60_fa80	reinterpret_cast<uint64_t*>(&rec));
+code/Game/Action/action_pf_road.cpp	1005	reinterpret	SIG Pf_RoadQuad_cc10	reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirI
+code/Game/Action/action_pf_road.cpp	1005	reinterpret	SIG Pf_RoadQuad_cc10	reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);
+code/Game/Action/action_pf_road.cpp	1021	reinterpret	SIG Pf_EntityResolvePos_2e20	reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);
+code/Game/Action/action_pf_road.cpp	1027	reinterpret	SIG Pf_EntityAnchorCell_7fb0	reinterpret_cast<ComponentEntity* const*>(param_1IBP), param_2);
+code/Game/Action/moveto.cpp	431	reinterpret		reinterpret_cast<const uint8_t*>(map->cells),
+code/Game/Component/citizen_updatehealth.cpp	546	cstyle_ptr	SIG CitizenComp_Infect (void* self / disease: 2 outside callers)	(CitizenComponent*)self)->Infect((Disease*)disease);
+code/Game/Component/citizen_updatehealth.cpp	546	cstyle_ptr	SIG CitizenComp_Infect (void* self / disease: 2 outside callers)	(Disease*)disease);
+code/Game/Component/citizen_updatehealth.cpp	777	reinterpret	CitizenComponent.h (CIT-4) field_0x60 is int64_t ticks, retail System::Time	reinterpret_cast<const System::Time*>(&field_0x60)->AsSeconds();
+code/Game/Component/citizenai_executor.cpp	364	reinterpret	CharacterComponent.h declares +0x48 as separate fields, not an ActionStack	reinterpret_cast<ActionStack*>(&self->actions), time);
+code/Game/Component/citizenai_executor.cpp	455	reinterpret	SIG PerfX::TerrainGet (standalone/perf_terrain.h, SA)	reinterpret_cast<const uint8_t*>(cellBase), gameWorld->cellCount,
+code/Game/Component/citizenai_housing_idle.cpp	823	reinterpret	SIG CitizenAI_Reg_helper_e360 (wave X: callers in citizenlist_serialize / action_pf_avl / tradeui_leaves pass their own node types)	reinterpret_cast<WorkCandidateNode**>(a), reinterpret_cast<WorkCandidateNode**>(b));
+code/Game/Component/citizenai_housing_idle.cpp	823	reinterpret	SIG CitizenAI_Reg_helper_e360 (wave X: callers in citizenlist_serialize / action_pf_avl / tradeui_leaves pass their own node types)	reinterpret_cast<WorkCandidateNode**>(b));
+code/Game/Component/destroycomponent_workerrelease.cpp	153	reinterpret	SIG CitizenComp_sub_ffc0 (the int64_t IBP CitizenComp_AssignHousing takes)	reinterpret_cast<int64_t>(citizen), &targetIBP);
+code/Game/Component/destroycomponent_workerrelease.cpp	155	reinterpret	SIG CitizenComp_sub_0470 (as above)	reinterpret_cast<int64_t>(citizen), &targetIBP);
+code/Game/Component/destroycomponent_workerrelease.cpp	218	reinterpret	SIG ResidenceComponent_impl_95a0 (int64_t town manager)	reinterpret_cast<uintptr_t>(gw->m_citizenList);
+code/Game/Component/destroycomponent_workerrelease.cpp	222	reinterpret	SIG ResidenceComponent_impl_95a0 (uint64_t key)	reinterpret_cast<uint64_t>(builderKey));
+code/Game/Component/destroycomponent_workerrelease.cpp	232	reinterpret	SIG WorkComponent_CalcMaxWorkers	reinterpret_cast<uintptr_t>(workComp));
+code/Game/Component/destroycomponent_workerrelease.cpp	236	reinterpret	SIG WorkBase_FindComponent_2ed0 / Pf_RecursiveChildSum_123070 (int64_t)	reinterpret_cast<uintptr_t>(_entity), &posComp);
+code/Game/Component/destroycomponent_workerrelease.cpp	262	reinterpret	B4 FORWARD (workplaceui.cpp)	reinterpret_cast<WorkPlaceComponent*>(wpc)->SetMaxWorkers(newMax);
+code/Game/Component/destroycomponent_workerrelease.cpp	266	reinterpret	B4 FORWARD (workplacecomponent.cpp, tool_harness.cpp)	reinterpret_cast<WorkPlaceComponent*>(wpc)->EnterBuilderProfession();
+code/Game/Component/firecomponent_ignite.cpp	226	reinterpret	Audio::Scene takes the engine POD ::Vector3	reinterpret_cast<const Vector3*>(&ac->position), entry.volume);
+code/Game/Component/firecomponent_ignite.cpp	497	reinterpret	B4 FORWARD (debugui.cpp)	reinterpret_cast<FireComponent*>(self)->Ignite();
+code/Game/Component/keystone_a_restree.cpp	226	reinterpret	the caller (zonecomponent.cpp) hands the tree / out / array as untyped words.	reinterpret_cast<RecordTree*>(param_1);
+code/Game/Component/keystone_a_restree.cpp	227	reinterpret		reinterpret_cast<RecordNode**>(param_2);
+code/Game/Component/keystone_a_restree.cpp	228	reinterpret		reinterpret_cast<const RecordArray*>(param_4);
+code/Game/Component/resourceproduce_creatework.cpp	147	reinterpret	B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)	reinterpret_cast<HerbalistComponent*>(selfV);
+code/Game/Component/resourceproduce_creatework.cpp	182	reinterpret	B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)	reinterpret_cast<ForesterComponent*>(selfV);
+code/Game/Component/resourceproduce_creatework.cpp	313	reinterpret	B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)	reinterpret_cast<ConsumeProduceComponent*>(selfV);
+code/Game/Component/resourceproducecomponent_states.cpp	117	reinterpret	SIG ResourceProduceComponent::CreateWork (slot 18) hands the work back as uintptr_t	reinterpret_cast<Object::InternalPtr<Work>*>(&workIbp));
+code/Game/Component/terraformcomponent.cpp	75	reinterpret	SIG Pf_AvlInsertA_a4f0 (takes the root slot as int64_t*)	reinterpret_cast<int64_t*>(&terrain->_dirtyTreeRoot);
+code/Game/Component/terraformcomponent.cpp	234	reinterpret	POD ::Vector3 (PickingMesh.h) vs Math::Vector3 (wave X)	reinterpret_cast<const Math::Vector3*>(&localVtx);
+code/Game/Component/terraformcomponent.cpp	242	const_cast		const_cast<float*>(p), '  ', nullptr);
+code/Game/Component/workplacecomponent.cpp	524	reinterpret	SIG WorkComponent_CalcMaxWorkers	reinterpret_cast<uintptr_t>(workComp));
+code/Game/Component/workplacecomponent.cpp	596	cstyle_ptr	SIG ResidenceComponent_impl_95a0	(uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
+code/Game/Component/workplacecomponent.cpp	599	cstyle_ptr	SIG ResidenceComponent_impl_95a0	(uint64_t)key);
+code/Game/Component/workplacecomponent.cpp	627	cstyle_ptr		(WorkPlaceComponent*)comp)->SetAccepting(accepting);
+code/Game/Component/workplacecomponent.cpp	630	cstyle_ptr		(WorkPlaceComponent*)selfP)->ReleaseWorkers();
+code/Game/Component/workplacecomponent.cpp	634	cstyle_ptr		(WorkPlaceComponent*)selfP)->LeaveBuilderProfession();
+code/Game/Component/workplacecomponent.cpp	637	cstyle_ptr		(WorkPlaceComponent*)comp)->ApplyOccupiedVisual();
+code/Game/Component/zonecomponent.cpp	97	static_void	SIG ResidenceComponent_impl_7230	static_cast<void**>(ResidenceComponent_impl_7230(
+code/Game/Component/zonecomponent.cpp	98	reinterpret	SIG ResidenceComponent_impl_7230	reinterpret_cast<int64_t*>(&field_0x160),
+code/Game/Component/zonecomponent.cpp	99	reinterpret	SIG ResidenceComponent_impl_7230	reinterpret_cast<uint64_t*>(&key), scratch));
+code/Game/Component/zonecomponent.cpp	100	reinterpret	SIG ResidenceComponent_impl_7230 (returns the node slot as void**)	reinterpret_cast<TemplateBucket*>(*ret);
+code/Game/Dialog/achievementdialog.cpp	142	accessor		ArrayAt<Entry>(&entryData, 0);
+code/Game/Dialog/buildrequirementui.cpp	288	accessor		ArrayAt<UI::Element*>(&labelData, 0).SetSize((int)newCount);
+code/Game/Dialog/buildrequirementui.cpp	323	accessor		ArrayAt<int32_t>(&countData, 0).SetSize(countCount + 1, entry.quantity);
+code/Game/Dialog/citizenui.cpp	335	reinterpret		reinterpret_cast<const System::String*>(&ai->name));
+code/Game/Dialog/citizenui.cpp	400	reinterpret		reinterpret_cast<const System::String*>(&titled->stringName));
+code/Game/Dialog/controlui.cpp	84	cstyle_ptr		(void*)self->button : nullptr,
+code/Game/Dialog/debugui.cpp	338	const_cast		const_cast<ComponentDescription*>(buildEntity));
+code/Game/Dialog/debugui.cpp	490	const_cast	SIG ComponentEntity_CtorFromDescription (void*)	const_cast<ComponentDescription*>(entityDesc));
+code/Game/Dialog/debugui.cpp	515	reinterpret	the body takes int64_t for its receiver and key (COMP-b's declaration).	reinterpret_cast<int64_t>(citizen), spawnPos,
+code/Game/Dialog/debugui.cpp	518	reinterpret		reinterpret_cast<int64_t>(profList));
+code/Game/Dialog/debugui.cpp	629	const_cast	SIG ComponentEntity_CtorFromDescription (void*)	const_cast<ComponentDescription*>(entityDesc));
+code/Game/Dialog/debugui.cpp	695	cstyle_ptr	MainLoop::_context is void* (the Video::Context, R-VIDEO's).	(uintptr_t)engineObj->_context;
+code/Game/Dialog/debugui.cpp	699	cstyle_ptr		(int*)(engineState + 0x2158)));
+code/Game/Dialog/debugui.cpp	700	cstyle_ptr		(int*)(engineState + 0x215C)));
+code/Game/Dialog/debugui.cpp	701	cstyle_ptr		(int*)(engineState + 0x2150)));
+code/Game/Dialog/debugui.cpp	702	cstyle_ptr		(int*)(engineState + 0x2154)));
+code/Game/Dialog/dialog_exe_helpers.cpp	46	reinterpret		reinterpret_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());
+code/Game/Dialog/dialog_exe_helpers.cpp	54	reinterpret		reinterpret_cast<AutoSaveDialog*>(self)->Autosave(); }
+code/Game/Dialog/dialog_exe_helpers.cpp	103	const_cast		const_cast<::Object::External*>(
+code/Game/Dialog/entityui.cpp	65	reinterpret	the shared AVL helper takes the root as int64_t* (PLAYER's declaration).	reinterpret_cast<int64_t*>(root), node);
+code/Game/Dialog/eventlogui.cpp	201	reinterpret		reinterpret_cast<uint8_t*>(&eventLog->field_0x10[btnIdx]) = btnElem->_checked;
+code/Game/Dialog/exe_bodies.h	169	reinterpret		reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);
+code/Game/Dialog/exe_bodies.h	170	reinterpret		reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);
+code/Game/Dialog/followdialog.cpp	118	reinterpret		reinterpret_cast<const System::String*>(&entity->name));
+code/Game/Dialog/followdialog.cpp	182	reinterpret		reinterpret_cast<const System::String*>(&profEntry->stringName));
+code/Game/Dialog/loaderdialog.cpp	85	reinterpret		reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;
+code/Game/Dialog/loaderdialog.cpp	86	reinterpret		reinterpret_cast<uint64_t*>(retInternalBasePtr) + 1) = 0;
+code/Game/Dialog/loaderdialog.cpp	92	reinterpret	the C entry's `loop` is the GameLoadDialogLoopT (a DialogLoaderLoopT).	reinterpret_cast<Engine::DialogLoaderLoopT*>(loop);
+code/Game/Dialog/loaderdialog.cpp	95	static_void		static_cast<const UI::Dialog*>(dlt->_dialogExternal),
+code/Game/Dialog/mainmenudialog.cpp	91	const_cast		const_cast<::Object::External*>(
+code/Game/Dialog/mainmenudialog.cpp	860	static_void		static_cast<MenuDialogLoopT*>(loop);
+code/Game/Dialog/mapparamsdialog.cpp	192	reinterpret	EditElement::_text is the String's raw char* (H5, runtime UI header).	reinterpret_cast<const System::String*>(&editName->_text);
+code/Game/Dialog/mapparamsdialog.cpp	273	reinterpret	EditElement::_text is the String's raw char* (H5, runtime UI header).	reinterpret_cast<const System::String*>(&editName->_text)->GetLength();
+code/Game/Dialog/mapui.cpp	93	const_cast		const_cast<Graphics::Material*>(material)));
+code/Game/Dialog/mapui.cpp	100	reinterpret		reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+code/Game/Dialog/mapui.cpp	126	reinterpret	SpriteSheet holds them as char* (H5, R-UI's header).	reinterpret_cast<System::String*>(&ss->m_groupName) = emptyStr1;
+code/Game/Dialog/mapui.cpp	127	reinterpret		reinterpret_cast<System::String*>(&ss->m_textureName) = emptyStr2;
+code/Game/Dialog/moddetailsdialog.cpp	114	reinterpret	RtSystem::Filename is the POD mirror of System::Filename (R-IO's node).	reinterpret_cast<const System::Filename*>(&filename->key);
+code/Game/Dialog/moddetailsdialog.cpp	117	reinterpret		reinterpret_cast<const System::Filename*>(&node->key);
+code/Game/Dialog/moddetailsdialog.cpp	176	reinterpret		reinterpret_cast<const System::String*>(&mod.name));
+code/Game/Dialog/moddetailsdialog.cpp	178	reinterpret		reinterpret_cast<const System::String*>(&mod.author));
+code/Game/Dialog/moddetailsdialog.cpp	196	reinterpret		reinterpret_cast<const System::String*>(&mod.description));
+code/Game/Dialog/moddetailsdialog.cpp	203	static_void	RtIO::ModArray::data is void* (R-IO's POD).	static_cast<const RtSystem::Filename*>(mod.files.data);
+code/Game/Dialog/moddialog.cpp	142	static_void	RtIO::ModArray::data is void* (R-IO's POD).	static_cast<const RtSystem::Filename*>(mod.files.data);
+code/Game/Dialog/moddialog.cpp	156	reinterpret	RtIO::Mod holds the three Strings as char* (R-IO's POD).	reinterpret_cast<const System::String*>(&mod.name));
+code/Game/Dialog/moddialog.cpp	158	reinterpret		reinterpret_cast<const System::String*>(&mod.author));
+code/Game/Dialog/moddialog.cpp	160	reinterpret		reinterpret_cast<const System::String*>(&mod.description));
+code/Game/Dialog/moddialog.cpp	353	const_cast		const_cast<Graphics::Material*>(material)));
+code/Game/Dialog/moddialog.cpp	361	reinterpret		reinterpret_cast<const RtSystem::String*>(&strBuf),
+code/Game/Dialog/moddialog.cpp	381	reinterpret		reinterpret_cast<System::String*>(&sprSheet->m_groupName) = emptyStr1;
+code/Game/Dialog/moddialog.cpp	382	reinterpret		reinterpret_cast<System::String*>(&sprSheet->m_textureName) = emptyStr2;
+code/Game/Dialog/moddialog.cpp	425	const_cast		const_cast<UI::ElementDescription*>(static_cast<const UI::ElementDescription*>(ext));
+code/Game/Dialog/moddialog.cpp	616	cstyle_ptr		(void*)(uintptr_t)-1, &nullRef2);
+code/Game/Dialog/moddialog.cpp	616	cstyle_ptr		(uintptr_t)-1, &nullRef2);
+code/Game/Dialog/noiseui.cpp	81	const_cast		const_cast<Graphics::Material*>(material)));
+code/Game/Dialog/noiseui.cpp	87	reinterpret		reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+code/Game/Dialog/noiseui.cpp	112	reinterpret	SpriteSheet holds them as char* (H5, R-UI's header).	reinterpret_cast<System::String*>(&ss->m_groupName) = emptyStr1;
+code/Game/Dialog/noiseui.cpp	113	reinterpret		reinterpret_cast<System::String*>(&ss->m_textureName) = emptyStr2;
+code/Game/Dialog/optionsdialog.cpp	492	reinterpret		reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);
+code/Game/Dialog/optionsdialog.cpp	520	reinterpret		reinterpret_cast<const System::String*>(&gfxIface.name), itemData);
+code/Game/Dialog/radiusui.cpp	115	reinterpret	SIG Player_HighlightAdd_55430	reinterpret_cast<int64_t>(radiusComp), tileIndex);
+code/Game/Dialog/residenceui.cpp	319	reinterpret	H5 CitizenComponent::name (CIT-4)	reinterpret_cast<const System::String*>(&citizen->name));
+code/Game/Dialog/residenceui.cpp	465	cstyle_ptr	retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)	(int*)(storageComp + 0x58);
+code/Game/Dialog/residenceui.cpp	468	cstyle_ptr	retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)	(uintptr_t*)(storageComp + 0x50);
+code/Game/Dialog/residenceui.cpp	469	cstyle_ptr	retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)	(int*)(groupArrayBase + 8 + (uintptr_t)g * 0x10);
+code/Game/Dialog/residenceui.cpp	474	cstyle_ptr		(uintptr_t*)(
+code/Game/Dialog/residenceui.cpp	475	cstyle_ptr	retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)	(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
+code/Game/Dialog/residenceui.cpp	475	cstyle_ptr	retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)	(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
+code/Game/Dialog/residenceui.cpp	479	cstyle_ptr	retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)	(uint64_t*)(citizenPtr + 0x10);
+code/Game/Dialog/scenariodialog.cpp	349	reinterpret		reinterpret_cast<System::String*>(&persistence->_savePath);
+code/Game/Dialog/titledesctooltipui.cpp	53	reinterpret	UI::Element's user data is Object::Base* (R-UI); the producer is not ported	reinterpret_cast<const TitleDescToolTipData*>(userData);
+code/Game/Dialog/toolbar_utility_helpers.cpp	126	reinterpret	SIG (B4 FORWARD, wave X)	reinterpret_cast<SetHeader*>(rootHolder);
+code/Game/Dialog/toolbar_utility_helpers.cpp	178	reinterpret	0x140014b40's declaration (Player/exe_bodies.h) takes int64_t*.	reinterpret_cast<int64_t*>(&node));
+code/Game/Dialog/toolbardialog.cpp	446	reinterpret		reinterpret_cast<PlayerToolManager*>(gameSubsys)->SelectTool(
+code/Game/Dialog/toolbardialog.cpp	447	reinterpret		reinterpret_cast<ComponentDescription*>(groupId));
+code/Game/Dialog/toolbardialog.cpp	570	reinterpret		reinterpret_cast<int64_t*>(&field_0x50), &retNode, insertBuf);
+code/Game/Dialog/toolbardialog.cpp	571	reinterpret		reinterpret_cast<TrackedEntityNode*>(retNode);
+code/Game/Dialog/toolbardialog.cpp	613	reinterpret		reinterpret_cast<PlayerToolManager*>(gameSubsys)->ToggleUtilityDialog(
+code/Game/Dialog/toolbardialog.cpp	614	reinterpret		reinterpret_cast<ComponentDescription*>(param));
+code/Game/Dialog/toolbardialog.cpp	745	reinterpret	PlayerController::camera is raw storage (B.4 H5, the Game block's).	reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);
+code/Game/Dialog/toolbardialog.cpp	779	reinterpret		reinterpret_cast<PlayerToolManager*>(gameSubsys)->OpenPauseMenu();
+code/Game/Dialog/toolbardialog.cpp	990	reinterpret		reinterpret_cast<const System::String*>(&item->_field30));
+code/Game/Dialog/toolbardialog.cpp	993	reinterpret	H5 the String is raw storage, as on the release arm	reinterpret_cast<const System::String*>(&item->_field38));
+code/Game/Dialog/toolbardialog.cpp	996	reinterpret		reinterpret_cast<const System::String*>(&item->_field38));
+code/Game/Dialog/toolbardialog.cpp	1562	reinterpret	0x1400666b0's declaration takes the EntityUI as int64_t (PLAYER's header).	reinterpret_cast<int64_t>(panelController));
+code/Game/Dialog/toolbardialog.cpp	1653	reinterpret	PlayerController::camera is raw storage (B.4 H5, the Game block's).	reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);
+code/Game/Dialog/toolbardialog.cpp	1688	reinterpret		reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(
+code/Game/Dialog/toolbardialog.cpp	1689	reinterpret		reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),
+code/Game/Dialog/toolbardialog.cpp	1690	reinterpret		reinterpret_cast<ComponentEntity* const*>(entityPtr));
+code/Game/Dialog/tradeui_leaves.cpp	260	reinterpret	TradeComponent.h (the +0x60 tree header is two members stockRoot / stockCount, COMP-8)	reinterpret_cast<int32_t*>(tree + 1);
+code/Game/Dialog/tradeui_leaves.cpp	317	reinterpret	SIG CitizenAI_Reg_helper_e360 (retail 0x14000e360 serves several node types)	reinterpret_cast<int64_t>(node);
+code/Game/Dialog/tradeui_leaves.cpp	318	reinterpret	SIG CitizenAI_Reg_helper_e360 (retail 0x14000e360 serves several node types)	reinterpret_cast<int64_t*>(tree), &walk);
+code/Game/Dialog/upgradeui.cpp	155	reinterpret		reinterpret_cast<int64_t>(destroyComp));
+code/Game/Entity/entity_findcomponent.cpp	60	cstyle_ptr	SIG fn_FindComponent_* (void* out; callers in other blocks, wave X)	(Component**)retval;
+code/Game/Entity/entity_findcomponent.cpp	65	cstyle_ptr	SIG fn_FindComponent_* (void* entity; wave X)	(ComponentEntity*)entity;
+code/Game/Game/citizenlist_serialize.cpp	209	reinterpret	an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)	reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);
+code/Game/Game/citizenlist_serialize.cpp	373	reinterpret	CitizenBehavior.h +0x140 / +0x150 (and the v5 clamp's +0x160) are raw {data, count, cap} triples (H5): the one erased core through the header view	reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);
+code/Game/Game/citizenlist_serialize.cpp	383	reinterpret	CitizenBehavior.h +0x170 is a raw {data, count, cap} triple (H5): the one erased core through the header view	reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);
+code/Game/Game/citizenlist_serialize.cpp	394	reinterpret	CitizenBehavior.h (ENT): +0x130 is a raw header (H5)	reinterpret_cast<IntPairArray*>(hdr)->SetSize(newCount);
+code/Game/Game/citizenlist_serialize.cpp	505	static_void	CitizenBehavior.h CitizenBucketNode::balance (int32, retail int16 + int16)	static_cast<CompRefNode**>(rootField);
+code/Game/Game/citizenlist_serialize.cpp	616	static_void	+0x160 read as a second node type (legacy path)	static_cast<LegacyNode**>(rootField);
+code/Game/Game/citizenlist_serialize.cpp	652	reinterpret	SIG CitizenAI_Reg_helper_e360(int64_t*)	reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));
+code/Game/Game/citizenlist_serialize.cpp	652	reinterpret	SIG CitizenAI_Reg_helper_e360(int64_t*)	reinterpret_cast<int64_t*>(&insertedNode));
+code/Game/Game/citizenlist_serialize.cpp	726	reinterpret	CitizenBehavior.h (ENT): the clocks are int64_t, retail System::Time	reinterpret_cast<System::Time*>(&field_0x190)->Serialize(*ser);
+code/Game/Game/citizenlist_serialize.cpp	727	reinterpret	CitizenBehavior.h (ENT): the clocks are int64_t, retail System::Time	reinterpret_cast<System::Time*>(&field_0x198)->Serialize(*ser);
+code/Game/Game/citizenlist_serialize.cpp	791	reinterpret	CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time	reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);
+code/Game/Game/citizenlist_serialize.cpp	809	reinterpret	CitizenBehavior.h (ENT): ProfessionResourceEntry::timer is int64_t, retail System::Time	reinterpret_cast<System::Time*>(&entry->timer)->Serialize(*ser);
+code/Game/Game/citizenlist_serialize.cpp	816	reinterpret	CitizenBehavior.h (ENT): the clock is int64_t, retail System::Time	reinterpret_cast<System::Time*>(&field_0x1A0)->Serialize(*ser);
+code/Game/Game/town_workplace_registry.cpp	101	reinterpret	int64_t town parameter of outside callers	reinterpret_cast<CitizenBehavior*>(townMgr);
+code/Game/Game/town_workplace_registry.cpp	104	reinterpret	CitizenBehavior::field_0x100 is void* (no node type in the header)	reinterpret_cast<ProfessionTreeNode*>(town->field_0x100);
+code/Game/Game/town_workplace_registry.cpp	139	reinterpret	0x140017230's int64_t* root parameter (Component block's declaration)	reinterpret_cast<int64_t*>(&town->field_0x100),
+code/Game/Game/town_workplace_registry.cpp	141	reinterpret	0x140017230 returns the node as void*	reinterpret_cast<ProfessionTreeNode*>(out);
+code/Game/Game/town_workplace_registry.cpp	149	reinterpret	void* parameter of outside callers	reinterpret_cast<ComponentEntity* const*>(param_2);
+code/Game/Game/town_workplace_registry.cpp	168	reinterpret	void* parameter of outside callers	reinterpret_cast<const WorkPlaceComponent*>(workplaceComp);
+code/Game/Game/town_workplace_registry.cpp	301	reinterpret	the forwarder's uintptr_t receiver (TUT block)	reinterpret_cast<uintptr_t>(wcPtr));
+code/Game/Player/edittool.cpp	215	reinterpret	the tree's address-range test below (retail 0x1400fcc90 has none)	reinterpret_cast<uintptr_t>(dialog);
+code/Game/Player/edittool.cpp	221	reinterpret	DialogInstance::_ui is `void*` (runtime/types/ui/DialogInstance.h, R-UI).	reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(&dialogRef);
+code/Game/Player/edittool.cpp	413	reinterpret	DialogInstance::_ui is `void*` (runtime/types/ui/DialogInstance.h, R-UI).	reinterpret_cast<const UI::UserInterface*>(dialog->_ui)->_uiScale;
+code/Game/Player/edittool.cpp	589	reinterpret		reinterpret_cast<ComponentEntity*>(
+code/Game/Player/edittool.cpp	763	reinterpret	Picking::Scene's user data is `void*` (block R-GFX).	reinterpret_cast<ComponentEntity*>(userData));
+code/Game/Player/tool_activation_standalone.cpp	121	reinterpret		reinterpret_cast<int64_t>(node);
+code/Game/Player/tool_activation_standalone.cpp	122	reinterpret		reinterpret_cast<int64_t*>(&tree->root), &nn);
+code/Game/Player/tool_activation_standalone.cpp	169	reinterpret		reinterpret_cast<PlayerToolManager*>(entityUI);
+code/Game/Player/tool_activation_standalone.cpp	203	reinterpret	Game/PlayerToolManager.h TrackedEntityNode::key	reinterpret_cast<ComponentDescription*>(node->key));
+code/Game/Player/tool_activation_standalone.cpp	237	reinterpret		reinterpret_cast<ToolModeTree*>(&mgr->field_0x10);
+code/Game/Player/tool_base_highlight.cpp	74	reinterpret	B4 FORWARD	reinterpret_cast<Avl38Node**>(param_1), reinterpret_cast<Avl38Node**>(param_2));
+code/Game/Player/tool_base_highlight.cpp	74	reinterpret	B4 FORWARD	reinterpret_cast<Avl38Node**>(param_2));
+code/Game/Player/tool_base_highlight.cpp	255	reinterpret		reinterpret_cast<int64_t*>(&decals),
+code/Game/Player/tool_base_highlight.cpp	257	reinterpret		reinterpret_cast<uint64_t*>(&tmpl));
+code/Game/Player/tool_base_highlight.cpp	277	reinterpret	+0x48..+0x58 are floats; retail stores the caller's raw 32-bit words	reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;
+code/Game/Player/tool_base_highlight.cpp	286	reinterpret	as +0x44	reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;
+code/Game/Player/tool_base_highlight.cpp	288	reinterpret	0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.	reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);
+code/Game/Player/tool_base_highlight.cpp	325	reinterpret		reinterpret_cast<const RadiusDescription*>(param_1), param_2);
+code/Game/Player/tool_base_highlight_tess.cpp	67	static_void		static_cast<Math::Transform2*>(self) = Math::Transform2(
+code/Game/Player/tool_base_highlight_tess.cpp	68	static_void		static_cast<const Math::Scalar*>(s), *static_cast<const Math::Vector2*>(v));
+code/Game/Player/tool_base_highlight_tess.cpp	68	static_void		static_cast<const Math::Vector2*>(v));
+code/Game/Player/tool_base_highlight_tess.cpp	72	static_void		static_cast<Math::Transform2*>(ret) = Math::Transform2::FromYawOffset(
+code/Game/Player/tool_base_highlight_tess.cpp	73	static_void		static_cast<const Math::Scalar*>(s), *static_cast<const Math::Vector2*>(v));
+code/Game/Player/tool_base_highlight_tess.cpp	73	static_void		static_cast<const Math::Vector2*>(v));
+code/Game/Player/tool_base_highlight_tess.cpp	77	static_void		static_cast<Math::Transform2*>(ret) =
+code/Game/Player/tool_base_highlight_tess.cpp	78	static_void		static_cast<const Math::Transform2*>(lhs) * *static_cast<const Math::Transform2*>(rhs);
+code/Game/Player/tool_base_highlight_tess.cpp	78	static_void		static_cast<const Math::Transform2*>(rhs);
+code/Game/Player/tool_base_highlight_tess.cpp	82	static_void		static_cast<Math::Vector2*>(ret) =
+code/Game/Player/tool_base_highlight_tess.cpp	83	static_void		static_cast<const Math::Transform2*>(self) * *static_cast<const Math::Vector2*>(v);
+code/Game/Player/tool_base_highlight_tess.cpp	83	static_void		static_cast<const Math::Vector2*>(v);
+code/Game/Player/tool_base_highlight_tess.cpp	108	reinterpret	GeometryBatch::indices is a RawArray, not a Collection::Array (Game/WorldGeometryElements.h, not PLAYER's)	reinterpret_cast<TessIndexArray*>(&batch->indices);
+code/Game/Player/tool_base_highlight_tess.cpp	120	reinterpret		reinterpret_cast<const DecalVertexKey*>(desc));
+code/Game/Player/tool_base_highlight_tess.cpp	135	reinterpret		reinterpret_cast<const DecalVertexKey*>(rec));
+code/Game/Player/tool_base_highlight_tess.cpp	136	reinterpret		reinterpret_cast<const GeometryBatchVertex*>(desc));
+code/Game/Player/tool_base_highlight_tess.cpp	152	reinterpret	WorldGeometry::_arrays (GAME-2, H5): the decals' data pointer	reinterpret_cast<GeometryBatch**>(param_1 + 0x1f0) + param_2;
+code/Game/Player/tool_base_highlight_tess.cpp	160	reinterpret		reinterpret_cast<Math::Vector2*>(p) = Math::Vector2(); p += 8; }
+code/Game/Player/tool_base_highlight_tess.cpp	267	reinterpret		reinterpret_cast<uint64_t*>(cornerBuf);
+code/Game/Player/tool_base_highlight_tess.cpp	270	reinterpret		reinterpret_cast<uint64_t*>(T2MulVec(T_1f0, local_298, &local_2a8));
+code/Game/Player/tool_base_highlight_tess.cpp	285	reinterpret	the 8+8+4 record copy below reads the vertex buffer through it	reinterpret_cast<int64_t*>(&batch->vertices);
+code/Game/Player/tool_base_highlight_tess.cpp	299	reinterpret	GeometryBatch's lists are RawArray, not Collection::Array (Game/WorldGeometryElements.h)	reinterpret_cast<TessVertexArray*>(&batch->vertices)->~Array();
+code/Game/Player/tool_base_highlight_tess.cpp	300	reinterpret	as above	reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();
+code/Game/Player/tool_base_highlight_tess.cpp	342	cstyle_ptr		(int64_t)descBlock, iVar13,
+code/Game/Player/tool_base_highlight_tess.cpp	348	reinterpret		reinterpret_cast<uint64_t*>(&xOff[0]) = 0x100000000ULL;
+code/Game/Player/tool_base_highlight_tess.cpp	349	reinterpret		reinterpret_cast<uint64_t*>(&xOff[2]) = 0x1ULL;
+code/Game/Player/tool_base_highlight_tess.cpp	350	reinterpret		reinterpret_cast<uint64_t*>(&yOff[0]) = 0x0ULL;
+code/Game/Player/tool_base_highlight_tess.cpp	351	reinterpret		reinterpret_cast<uint64_t*>(&yOff[2]) = 0x100000001ULL;
+code/Game/Player/tool_base_highlight_tess.cpp	352	reinterpret		reinterpret_cast<int16_t*>(descBlock + 0xA);
+code/Game/Player/tool_base_highlight_tess.cpp	358	cstyle_ptr		(uint32_t&)v << 32) | (uint32_t&)u;
+code/Game/Player/tool_base_highlight_tess.cpp	358	cstyle_ptr		(uint32_t&)u;
+code/Game/Player/tool_base_highlight_tess.cpp	366	reinterpret		reinterpret_cast<uint32_t*>(descBlock + 0x00);
+code/Game/Player/tool_base_highlight_tess.cpp	367	reinterpret		reinterpret_cast<uint32_t*>(descBlock + 0x14);
+code/Game/Player/tool_base_highlight_tess.cpp	368	reinterpret		reinterpret_cast<uint32_t*>(descBlock + 0x28);
+code/Game/Player/tool_base_highlight_tess.cpp	369	reinterpret		reinterpret_cast<uint32_t*>(descBlock + 0x3c);
+code/Game/Player/tool_base_highlight_tess.cpp	399	reinterpret	the 8+8+4 record copy below is retail's (0x1400ace40); a GeometryBatchVertex assignment would change its store widths	reinterpret_cast<int64_t>(pool.data);
+code/Game/Player/tool_base_highlight_tess.cpp	401	reinterpret		reinterpret_cast<int64_t*>(off + vbBase)        = *reinterpret_cast<int64_t*>(off + srcBas
+code/Game/Player/tool_base_highlight_tess.cpp	401	reinterpret		reinterpret_cast<int64_t*>(off + srcBase);
+code/Game/Player/tool_base_highlight_tess.cpp	402	reinterpret		reinterpret_cast<int64_t*>(off + 8 + vbBase)    = *reinterpret_cast<int64_t*>(off + 8 + sr
+code/Game/Player/tool_base_highlight_tess.cpp	402	reinterpret		reinterpret_cast<int64_t*>(off + 8 + srcBase);
+code/Game/Player/tool_base_highlight_tess.cpp	403	reinterpret		reinterpret_cast<int32_t*>(off + 0x10 + vbBase) = *reinterpret_cast<int32_t*>(off + 0x10 +
+code/Game/Player/tool_base_highlight_tess.cpp	403	reinterpret		reinterpret_cast<int32_t*>(off + 0x10 + srcBase);
+code/Game/Tutorial/tutorialgoalcount.cpp	135	reinterpret		reinterpret_cast<System::String*>(&elementName);
+code/Game/Work/consumeproduce.cpp	150	reinterpret	H5 field_58 holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (a typed Array would run its dtor)	reinterpret_cast<Object::InternalBasePtr*>(&ibpArray[i])->Serialize(serializer);
+code/Game/Work/consumeproduce.cpp	195	reinterpret	H8 (the byte stays uint8_t; Persist's bool& overload)	reinterpret_cast<bool*>(&field_48), nullptr);
+code/Game/Work/consumeproduce.cpp	243	static_void	the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)	static_cast<Profession**>(actionIBP));
+code/Game/Work/consumeproduce.cpp	492	reinterpret	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),
+code/Game/Work/consumeproduce.cpp	493	reinterpret	the slot doubles as the position out below (8 bytes, 12 written: known_port_issues row 260)	reinterpret_cast<ComponentEntity**>(&foundEntity),
+code/Game/Work/consumeproduce.cpp	509	reinterpret	the 8-byte slot reused as a float[3] out (row 260)	reinterpret_cast<float*>(&foundEntity), 0, 0, nullptr);
+code/Game/Work/consumeproduce.cpp	510	cstyle_ptr	row 260	(float*)&foundEntity;
+code/Game/Work/consumeproduce.cpp	511	cstyle_ptr	row 260	(float*)&foundEntity)[1];
+code/Game/Work/consumeproduce.cpp	512	cstyle_ptr	row 260	(float*)&foundEntity)[2];
+code/Game/Work/consumeproduce.cpp	537	reinterpret	row 260 (the 8-byte slot doubles as the float[3] position out)	reinterpret_cast<ComponentEntity* const*>(&destEntity),
+code/Game/Work/consumeproduce.cpp	591	reinterpret	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList), &foundStorage,
+code/Game/Work/consumeproduce.cpp	731	cstyle_ptr	SIG WorkGrid_TryAssignWorkplace_f8620	(uintptr_t)gameWorld->m_tutorial;
+code/Game/Work/work_base_reimpl.cpp	60	reinterpret		reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>());
+code/Game/Work/work_base_reimpl.cpp	85	reinterpret		reinterpret_cast<ComponentEntity* const*>(pEntityIBP);
+code/Game/Work/work_base_reimpl.cpp	145	reinterpret	SIG WorkBase_TreeNodeFree_14c30	reinterpret_cast<const FreeNodeLinks10*>(node);
+code/Game/Work/work_base_reimpl.cpp	155	reinterpret	SIG WorkBase_TreeNodeFree_e320	reinterpret_cast<const FreeNodeLinks18*>(node);
+code/Game/Work/work_base_reimpl.cpp	178	reinterpret	SIG WorkBase_TaskListCleanup_c5400 (the callers hand the stack as void*).	reinterpret_cast<ActionStack*>(self);
+code/Game/Work/work_base_reimpl.cpp	225	reinterpret		reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);
+code/Game/Work/work_base_reimpl.cpp	230	reinterpret		reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);
+runtime/src/audio/audio.cpp	217	static_void		static_cast<Scene*>(selfPtr);
+runtime/src/audio/audio.cpp	249	reinterpret		reinterpret_cast<Audio::Scene*>(selfPtr)->~Scene();
+runtime/src/audio/audio.cpp	680	static_void		static_cast<IO::Serializer*>(serializer);
+runtime/src/audio/audio_stream_win.cpp	322	reinterpret		reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));
+runtime/src/audio/wave29_lane_avbody.cpp	325	static_void		static_cast<Scene*>(userData);
+runtime/src/collection/avl_trees.cpp	268	static_void	void* door (the Array<T*> operator= / dtor pair; outside callers hold void*)	static_cast<PtrArrayHdr*>(self);
+runtime/src/collection/avl_trees.cpp	296	reinterpret	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x48);
+runtime/src/collection/avl_trees.cpp	296	reinterpret	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<uint8_t*>(n) + 0x48);
+runtime/src/collection/avl_trees.cpp	299	reinterpret	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x4a);
+runtime/src/collection/avl_trees.cpp	299	reinterpret	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<uint8_t*>(n) + 0x4a);
+runtime/src/collection/avl_trees.cpp	701	reinterpret	SIG StringMapInsert (outside callers hold the erased rtsetavl::Set / Node: configuration.cpp, persistence.cpp, persistence_registry_win.cpp)	reinterpret_cast<KeyedSet<StringPairNode>*>(map), reinterpret_cast<StringPairNode**>(outSl
+runtime/src/collection/avl_trees.cpp	701	reinterpret	SIG StringMapInsert (outside callers hold the erased rtsetavl::Set / Node: configuration.cpp, persistence.cpp, persistence_registry_win.cpp)	reinterpret_cast<StringPairNode**>(outSlot), &temp);
+runtime/src/collection/avl_trees.cpp	830	static_void	SIG FilenameSetInsert (the key arrives as const void*: filesystem_packages.cpp)	static_cast<const RtSystem::Filename*>(key));
+runtime/src/collection/avl_trees.cpp	834	reinterpret	SIG FilenameSetInsert (outside callers hold the erased rtsetavl::Set / Node: filesystem_packages.cpp)	reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(o
+runtime/src/collection/avl_trees.cpp	834	reinterpret	SIG FilenameSetInsert (outside callers hold the erased rtsetavl::Set / Node: filesystem_packages.cpp)	reinterpret_cast<FilenamePairNode**>(outSlot), &temp);
+runtime/src/collection/avl_trees.cpp	883	reinterpret	SIG SubtreeFree (outside caller holds the erased rtsetavl::Node: filesystem_createfile_win.cpp)	reinterpret_cast<FilenamePairNode*>(node);
+runtime/src/engine/engine_platform.cpp	192	static_void		static_cast<rtsetavl::Set*>(ps));
+runtime/src/engine/loops.cpp	911	reinterpret	`_pixelConstantStaging` is raw bytes (Context.h, R-VIDEO).	reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);
+runtime/src/engine/loops.cpp	1105	reinterpret		reinterpret_cast<PostDrawFunc>(e._func)(*_context, e._context);
+runtime/src/engine/mainloop_frame.cpp	449	reinterpret		reinterpret_cast<PostUpdateFunc>(_postUpdate._data[i]._func);
+runtime/src/engine/mainloop_video.cpp	345	reinterpret		reinterpret_cast<VideoResourceEntry*>(dst);
+runtime/src/engine/mainloop_video.cpp	346	reinterpret		reinterpret_cast<const VideoResourceEntry*>(src);
+runtime/src/engine/mainloop_video.cpp	489	const_cast		const_cast< ::Object::External*>(e);
+runtime/src/engine/mainloop_video.cpp	667	reinterpret		reinterpret_cast<void (*)(void*)>(node->element.record.info->inPlaceFactoryFn)(r->_object)
+runtime/src/engine/mainloop_video.cpp	704	reinterpret		reinterpret_cast<RtObject::External*>(r->_object));
+runtime/src/engine/mainloop_video.cpp	711	reinterpret		reinterpret_cast<uint8_t*>(arr._data), arr._size);
+runtime/src/engine/singleton_ctors.cpp	271	reinterpret		reinterpret_cast<System::Random*>(&self->_random));
+runtime/src/engine/singleton_ctors.cpp	363	reinterpret		reinterpret_cast<uint8_t*>(self) + offsetof(IO::Persistence, _workerVtable)) IO::Persisten
+runtime/src/graphics/animation.cpp	223	reinterpret	POD the ctor door builds the RtGraphics view (wave X)	reinterpret_cast<Graphics::AnimationManager*>(self);
+runtime/src/graphics/animationstate.cpp	152	static_void		static_cast<const GraphicsMesh::Node*>(srcv));
+runtime/src/graphics/animationstate.cpp	168	static_void		static_cast<AnimationState*>(dstv);
+runtime/src/graphics/animationstate.cpp	169	static_void		static_cast<const AnimationState*>(srcv);
+runtime/src/graphics/animationstate.cpp	201	static_void	SIG element op of a collection spec row takes void* (collection core, wave X)	static_cast<AnimationManager::Instance*>(dstv);
+runtime/src/graphics/animationstate.cpp	203	static_void	SIG element op of a collection spec row takes void* (collection core, wave X)	static_cast<const AnimationManager::Instance*>(srcv);
+runtime/src/graphics/animationstate.cpp	278	reinterpret	(H5): `_name` is the RtSystem::String POD (GraphicsMesh.h's note).	reinterpret_cast<System::String*>(&p->_name)->Serialize(&ser);
+runtime/src/graphics/closure_batch2b.cpp	252	static_void	SIG element op of a collection spec row takes void* (collection core, wave X)	static_cast<Graphics::RendererDrawGroup*>(self);
+runtime/src/graphics/closure_batch2b.cpp	253	static_void	SIG element op of a collection spec row takes void* (collection core, wave X)	static_cast<const Graphics::RendererDrawGroup*>(src);
+runtime/src/graphics/edgemesh_vtable.cpp	173	reinterpret	Mesh.h (X-RL) declares EdgeMesh::_reserved20 as void*	reinterpret_cast<Graphics::GraphicsMesh*&>(slot));
+runtime/src/graphics/graphicsmesh_vtable.cpp	94	static_void		static_cast<System::String*>(str)->Serialize(&ser);
+runtime/src/graphics/graphicsmesh_vtable.cpp	539	reinterpret	`_nodes` stays a raw header (GraphicsMesh.h's `Node` note).	reinterpret_cast<Node*>(_nodes._data));
+runtime/src/graphics/imagebuffer_derived.cpp	459	static_void	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::ImageBuffer*>(ImageBufferOperatorNew(0x68));
+runtime/src/graphics/imagebuffer_derived.cpp	487	static_void	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::RenderBuffer*>(RenderBufferOperatorNew(0x30));
+runtime/src/graphics/imagebuffer_derived.cpp	617	const_cast	retail's const (UEBA) slot writes _generation (see above)	const_cast<ReflectionImageBuffer*>(this);
+runtime/src/graphics/imagebuffer_derived.cpp	622	static_void		static_cast<Graphics::Renderer*>(renderer);
+runtime/src/graphics/imagebuffer_derived.cpp	623	static_void		static_cast<const Graphics::Camera*>(camera);
+runtime/src/graphics/imagebuffer_derived.cpp	655	static_void	SIG slot takes void* (GeneratedImageBuffer.h + rb_graphics_abi_test)	static_cast<const Graphics::Scene*>(scene);
+runtime/src/graphics/material.cpp	128	reinterpret		reinterpret_cast<uint32_t*>(&_type), nullptr);
+runtime/src/graphics/renderer.cpp	241	reinterpret	POD the Camera ctor door is extern "C" (wave X)	reinterpret_cast<::Graphics::Camera*>(self)
+runtime/src/graphics/renderer.cpp	259	pun	retail moves 25 dwords incl. pad; a struct copy may change store widths	std::memcpy(&self->frustum, frustum, sizeof(Frustum));
+runtime/src/graphics/sun_camera.cpp	345	reinterpret		reinterpret_cast<const Camera*>(&slot);
+runtime/src/graphics/sunlight.cpp	198	static_void		static_cast<Video::RenderBuffer*>(p);
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	182	static_void		static_cast<System::String*>(str)->Serialize(&ser);
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	234	static_void		static_cast<AnimationClip*>(datav);
+runtime/src/graphics/wave21_lane_gfxbody.cpp	324	reinterpret	Context::_pixelConstantStaging stays bytes (outside indexers, Context.h)	reinterpret_cast<float*>(
+runtime/src/graphics/wave23_lane_gfxbody.cpp	620	const_cast		const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;
+runtime/src/graphics/wave24_lane_gfxmat.cpp	362	static_void		static_cast<System::String*>(field)->Serialize(&ser);
+runtime/src/graphics/wave24_lane_gfxmat.cpp	497	reinterpret		reinterpret_cast<Graphics::AnimationState*>(&_animation)
+runtime/src/graphics/wave27_lane_gfxbig.cpp	236	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<MaterialParameterSet*>(dstv);
+runtime/src/graphics/wave27_lane_gfxbig.cpp	237	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<const MaterialParameterSet*>(srcv);
+runtime/src/graphics/wave27_lane_gfxbig.cpp	252	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<MaterialParameterSet*>(dstv);
+runtime/src/graphics/wave27_lane_gfxbig.cpp	263	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<MaterialParameterSet*>(base);
+runtime/src/graphics/wave27_lane_gfxbig.cpp	1074	static_void		static_cast<const Light*>(d._object)->DrawShadowMap(
+runtime/src/graphics/wave27_lane_gfxbig.cpp	1121	static_void		static_cast<const Light*>(d._object)->DrawLight(
+runtime/src/graphics/wave27_lane_gfxpart.cpp	258	reinterpret		reinterpret_cast<bool*>(&_active), nullptr);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	505	static_void	ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)	static_cast<Particle*>(particle.p);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	615	static_void		static_cast<const Particle*>(particle.p);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	630	static_void	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());
+runtime/src/graphics/wave27_lane_gfxpart.cpp	823	reinterpret	, the one view of that qword as the uint16 cursor it is).	reinterpret_cast<uint16_t*>(context._unknown20f0);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	832	reinterpret	Context::_unknown20f0 stays uint64_t (outside readers step it as bytes and as uint16)	reinterpret_cast<uint64_t>(ip);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	913	static_void		static_cast<RtGraphics::ParticleBoundsRecord*>(recv);
+runtime/src/graphics/wave29_lane_slots.cpp	124	reinterpret	the one view of the raw storage as the Transforms it holds (above).	reinterpret_cast<Math::Transform*>(g_identityTable); }
+runtime/src/graphics/wave29_lane_slots.cpp	291	reinterpret	H5 MeshInstance::_animation raw storage	reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+runtime/src/graphics/wave9_lane_gfx.cpp	399	reinterpret		reinterpret_cast<Collection::Array<RendererDrawItem>*>(
+runtime/src/graphics/wave9_lane_gfx.cpp	400	reinterpret		reinterpret_cast<uint8_t*>(group) + 0x1c0 + pass * 0x10);
+runtime/src/graphics/wave9_lane_gfxd.cpp	269	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);
+runtime/src/graphics/wave9_lane_gfxd.cpp	271	reinterpret		reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);
+runtime/src/graphics/wave9_lane_gfxd.cpp	290	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);
+runtime/src/graphics/wave9_lane_gfxd.cpp	334	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<Graphics::RendererDrawItem*>(dstv);
+runtime/src/graphics/wave9_lane_gfxd.cpp	351	pun	SIG element op of a collection spec row takes void* (collection core, wave X)	std::memcpy(dst + 0x08, &zero, 4);
+runtime/src/graphics/wave9_lane_gfxd.cpp	581	reinterpret	SIG element op of a collection spec row takes void* (collection core, wave X)	reinterpret_cast<RendererSceneEntry*>(raw);
+runtime/src/input/input_platform_shutdown_win.cpp	207	reinterpret		reinterpret_cast<const unsigned*>(n);
+runtime/src/input/keymap_save.cpp	309	reinterpret		reinterpret_cast<rtsetavl24::Set*>(&self->_root);
+runtime/src/io/file_stream.cpp	194	reinterpret	H5 TextFileStream::_objectName / _objectType are char* raw storage of a System::String (not in X-RH's assignment)	reinterpret_cast<System::String*>(slot)->~String();
+runtime/src/io/filesystem_packages.cpp	383	static_void	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<::IO::PackageFile**>(RtMemAlloc(bytes, 8));
+runtime/src/io/filesystem_packages.cpp	654	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));
+runtime/src/io/filesystem_packages.cpp	757	reinterpret	SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70	reinterpret_cast<void**>(_packfiles), _packfileCount);
+runtime/src/io/filesystem_packages.cpp	834	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),
+runtime/src/io/filesystem_packages.cpp	835	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);
+runtime/src/io/modification_setupfilesystem.cpp	252	reinterpret	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<const ::Object::External*>(e);
+runtime/src/io/modification_setupfilesystem.cpp	255	reinterpret	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<const RtObject::External*>(e);
+runtime/src/io/modification_setupfilesystem.cpp	385	reinterpret	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
+runtime/src/io/modification_setupfilesystem.cpp	414	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Set*>(&snapshot),
+runtime/src/io/modification_setupfilesystem.cpp	415	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node**>(&outSlot),
+runtime/src/io/modification_setupfilesystem.cpp	480	reinterpret	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<const ::Object::Base*>(ext)->Type();
+runtime/src/io/modification_setupfilesystem.cpp	481	const_cast	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	const_cast<RtObject::External*>(ext);
+runtime/src/io/modification_setupfilesystem.cpp	523	reinterpret	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<::Object::External*>(ext)->Destruct();
+runtime/src/io/modification_setupfilesystem.cpp	537	reinterpret	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<void* (*)(void*)>(info->inPlaceFactoryFn)(ext);
+runtime/src/io/modification_setupfilesystem.cpp	572	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node*>(root->left));
+runtime/src/io/modification_setupfilesystem.cpp	573	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Node*>(root->right));
+runtime/src/io/persistence.cpp	60	static_void	see above	static_cast<rtsetavl::Set*>(map),
+runtime/src/io/persistence.cpp	62	reinterpret	set_avl.h's node keeps its element opaque	reinterpret_cast<SettingsMapNode*>(node);
+runtime/src/io/persistence.cpp	112	reinterpret	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+runtime/src/io/persistence.cpp	116	reinterpret	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+runtime/src/io/persistence.cpp	120	reinterpret	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+runtime/src/io/persistence.cpp	124	reinterpret	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+runtime/src/io/persistence_registry_win.cpp	234	static_void		static_cast<rtsetavl::Set*>(self));
+runtime/src/io/persistence_registry_win.cpp	241	static_void		static_cast<rtsetavl::Set*>(map),
+runtime/src/io/persistence_registry_win.cpp	243	reinterpret	set_avl.h's node keeps its element opaque	reinterpret_cast<SettingsMapNode*>(node);
+runtime/src/io/persistence_savelist_job.cpp	191	reinterpret	this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)	reinterpret_cast<RtIO::FilenameArray*>(&found));
+runtime/src/io/persistence_saves.cpp	252	reinterpret	H5 Persistence::_workerVtable is the embedded PersistenceWorker held as loose fields	reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();
+runtime/src/io/persistence_saves.cpp	253	reinterpret	the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)	reinterpret_cast<rtsetavl::Set*>(this));
+runtime/src/io/persistence_saves_win.cpp	60	reinterpret	H5 Persistence::_blockDescData (raw Array storage; behaviour commit owed)	reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->_blockDescData)->~Array();
+runtime/src/io/persistence_saves_win.cpp	63	reinterpret	H5 Persistence::_blockPtrData (as above)	reinterpret_cast<Collection::Array<void*>*>(&p->_blockPtrData)->~Array();
+runtime/src/io/persistence_worker_win.cpp	281	static_void	see above	static_cast<IO::PersistenceWorker*>(worker);
+runtime/src/io/serializer.cpp	166	reinterpret	SIG the RtSerializer_* forwarders take the rt::io::Serializer POD (the exe import-slot family, wave X)	reinterpret_cast<IO::Serializer*>(self);
+runtime/src/system/configuration.cpp	304	static_void	SIG rtavl::StringMapInsert takes the erased rtsetavl::Set (R-COLL, wave X)	static_cast<rtsetavl::Set*>(map), &node,
+runtime/src/system/configuration.cpp	571	reinterpret	SIG rtsetclear::Clear takes the erased rtsetavl::Set (R-COLL, wave X)	reinterpret_cast<rtsetavl::Set*>(&_mapRoot));
+runtime/types/graphics/AnimationGroup.h	159	reinterpret		reinterpret_cast<const Animation*>(_clips._data)[index];
+runtime/types/graphics/GraphicsMesh.h	439	reinterpret		reinterpret_cast<const Collection::Array<Node>*>(&_nodes);
+runtime/types/object/Internal.h	362	reinterpret	H10 InternalBasePtr::_ptr is the RtObject::Internal POD; `T` is not yet an Object::Internal subclass tree-wide	reinterpret_cast<RtObject::Internal*>(p)) {}
+runtime/types/object/Internal.h	371	reinterpret	as the ctor above	reinterpret_cast<T*>(InternalBasePtr::Get()); }
+runtime/types/object/Internal.h	566	reinterpret	H10 InternalBasePtr::_ptr is the RtObject::Internal POD	reinterpret_cast<Internal*>(p);
+standalone/food_panel_harness.cpp	507	reinterpret	SIG EntityUI_SetEditMode_Impl (uint64_t mode; Dialog/exe_bodies.h, wave X)	reinterpret_cast<uint64_t>(tmpl));
+standalone/orchard_force_start.cpp	139	reinterpret	the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)	reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,
+standalone/tool_harness.cpp	359	reinterpret	SetEditMode's uint64_t mode (Dialog/exe_bodies.h)	reinterpret_cast<uint64_t>(tmpl));
+standalone/tool_harness.cpp	413	reinterpret	SetEditMode's uint64_t mode (Dialog/exe_bodies.h)	reinterpret_cast<uint64_t>(tmpl));
+standalone/tool_harness.cpp	547	reinterpret	an 8-byte local behind CalcCost's int* (resizing it is not B.4's)	reinterpret_cast<int*>(&extra));
+standalone/tool_harness.cpp	597	reinterpret	SetEditMode's uint64_t mode (Dialog/exe_bodies.h)	reinterpret_cast<uint64_t>(tmpl));
+standalone/tool_harness.cpp	879	reinterpret	the harness opener's uint64_t param (Dialog)	reinterpret_cast<uint64_t>(desc));
+standalone/tool_harness.cpp	1689	reinterpret	the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)	reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,
+standalone/tool_harness.cpp	1826	reinterpret	the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)	reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,
+standalone/tool_harness.cpp	2530	static_void	g_BridgeLastMaster / g_BridgeLastSegments are void* (bridgetool, owner: Player)	static_cast<ComponentEntity*>(ent);
+standalone/tool_harness.cpp	2559	reinterpret	SetEditMode's uint64_t mode (Dialog/exe_bodies.h)	reinterpret_cast<uint64_t>(tmpl));
+standalone/tool_harness.cpp	2726	reinterpret	an 8-byte local behind CalcCost's int* (resizing it is not B.4's)	reinterpret_cast<int*>(&extra));
+standalone/tool_harness.cpp	2827	static_void	g_BridgeLastMaster is void* (bridgetool, owner: Player)	static_cast<ComponentEntity*>(g_BridgeLastMaster));

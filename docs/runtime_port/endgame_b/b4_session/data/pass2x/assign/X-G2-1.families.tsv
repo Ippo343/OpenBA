@@ -1,0 +1,21 @@
+family	casts	files
+WorkCellBST_Remove_ca60	17	code/Game/Action/action_base_complete.cpp; code/Game/Action/action_pf_region.cpp; code/Game/Action/region_paircache.cpp; code/Game/Component/citizenai_work_scheduler.cpp; code/Game/Game/goals_serialize.cpp; code/Game/Work/cleararea.cpp; code/Game/Work/harvestarea.cpp; code/Game/Work/harvestorchard.cpp; code/Game/Work/plantarea.cpp; code/Game/Work/plantorchard.cpp; code/Game/Work/work_base_cellbst.cpp; code/Game/Work/work_leaf_clear.cpp
+WorkAct_PerformWorkCtor_bffd0	10	code/Game/Work/buildroad.cpp; code/Game/Work/cleararea.cpp; code/Game/Work/work_act_perform.cpp
+WorkCellBST_Insert_9a40	9	code/Game/Component/citizenai_work_scheduler.cpp; code/Game/Work/cleararea.cpp; code/Game/Work/harvestarea.cpp; code/Game/Work/harvestorchard.cpp; code/Game/Work/plantarea.cpp; code/Game/Work/plantorchard.cpp; code/Game/Work/work_base_cellbst.cpp
+WorkCellBST_Serialize_9de0	5	code/Game/Work/cleararea.cpp; code/Game/Work/harvestarea.cpp; code/Game/Work/harvestorchard.cpp; code/Game/Work/plantarea.cpp; code/Game/Work/plantorchard.cpp; code/Game/Work/work_base_cellbst.cpp
+WorkAct_GatherWorkCtor_bb7b0	5	code/Game/Work/harvestorchard.cpp; code/Game/Work/work_act_rawmat.cpp
+RtSystem_Filename_AdjustDelimiters	3	runtime/src/io/filesystem_createfile_win.cpp; runtime/src/io/filesystem_find_win.cpp; runtime/src/io/filesystem_openfile_win.cpp; runtime/src/io/filesystem_setupdirs_win.cpp; runtime/src/io/filesystem_win.cpp; runtime/src/io/package_file_read_win.cpp; runtime/src/system/filename.cpp
+rtpickgrid::BoxTransform	2	runtime/src/graphics/scene.cpp; runtime/src/graphics/scene_grid.cpp; runtime/src/picking/scene_grid.cpp; runtime/src/picking/scene_grid.h
+PortedRetrace8	2	runtime/src/io/modification_refresh.cpp; runtime/types/collection/Collection.h
+ActCt_HideTool_1176e0	1	code/Game/Action/action_base_complete.cpp; code/Game/Action/showtool.cpp; code/Game/Component/citizen_onremove.cpp
+AttendanceComponent_ReleasePartnerSlot	1	code/Game/Component/attendancecomponent.cpp; code/Game/Component/citizen_needsupdate.cpp; code/Game/Component/citizen_onremove.cpp; code/Game/Component/citizenai_handlers2.cpp
+NameDB_PickAndGenerate	1	code/Game/Component/tradecomponent.cpp; code/Game/Game/citizen_names.cpp
+EventLog_EventArray_Destroy	1	code/Game/Game/eventlog.cpp; code/Game/Game/game_leaf_helpers.cpp
+GetLoadingSoundString	1	code/Game/Dialog/newgamedialog.cpp; code/Game/Dialog/saveloaddialog.cpp; code/Game/Game/worldsetup_reload.cpp; code/Game/Tutorial/tutorial_next_scenario.cpp
+Game_MusicPlayerDtor	1	code/Game/Game/game_leaf_helpers.cpp; code/Game/Game/gameupdateloop.cpp
+Game_MenuSceneArrayDtor	1	code/Game/Game/MenuScene.h; code/Game/Game/game_leaf_helpers.cpp; code/Game/Game/menuscene.cpp
+Game_TerrainResolveMaterial	1	code/Game/Game/game_leaf_helpers.cpp; code/Game/Game/terraingenerator.cpp
+Pf_RegionPairCacheTick_5d10	1	code/Game/Action/region_paircache.cpp; code/Game/Game/gameupdateloop.cpp
+BuildRoad_CtorParams_Impl	1	code/Game/Player/roadtool_calcpath.cpp; code/Game/Work/buildroad.cpp
+rtsetavl24::AllocNode	1	code/Game/Work/TradeWork.h; code/Game/Work/tradework_serialize.cpp; runtime/src/application/message_callbacks.cpp; runtime/src/collection/set_avl_e24.cpp; runtime/src/collection/set_avl_e24.h; runtime/src/collection/set_avl_pathid.cpp; runtime/src/input/input.cpp; runtime/src/io/modification_refresh.cpp; runtime/src/object/external_set.cpp; runtime/src/object/external_set.h; runtime/src/object/reference_set.cpp; runtime/src/object/reference_set.h; runtime/types/collection/Collection.h
+SetLight	1	code/Game/Game/gameupdateloop.cpp; code/Game/Game/gameupdateloop_load.cpp; runtime/src/graphics/batchc_gfx_leaves.cpp; runtime/src/graphics/lights_vtable.cpp; runtime/src/video/batchc_context_setlight.cpp; runtime/src/video/context.cpp; runtime/src/video/context_bind.cpp; runtime/types/graphics/Light.h; runtime/types/video/Context.h; tests/unit/video_context_abi_test.cpp

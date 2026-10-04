@@ -1,0 +1,20 @@
+family	casts	files
+WorkBST_BSTFindRemove_25520	17	code/Game/Work/buildstructure.cpp; code/Game/Work/clearstorage.cpp; code/Game/Work/firework.cpp; code/Game/Work/foresterwork.cpp; code/Game/Work/gatherrawmaterials.cpp; code/Game/Work/herbalistwork.cpp; code/Game/Work/huntwork.cpp; code/Game/Work/pasturework.cpp; code/Game/Work/tendarea.cpp; code/Game/Work/work_base_bst.cpp
+WorkBST_RegisterWork_1a30	11	code/Game/Component/citizenai_leisure.cpp; code/Game/Entity/entitylist.cpp; code/Game/Work/buildstructure.cpp; code/Game/Work/clearstorage.cpp; code/Game/Work/firework.cpp; code/Game/Work/foresterwork.cpp; code/Game/Work/gatherrawmaterials.cpp; code/Game/Work/herbalistwork.cpp; code/Game/Work/huntwork.cpp; code/Game/Work/pasturework.cpp; code/Game/Work/tendarea.cpp; code/Game/Work/work_base_bst.cpp
+WorkBST_BST_Serialize_296b0	9	code/Game/Work/buildstructure.cpp; code/Game/Work/clearstorage.cpp; code/Game/Work/firework.cpp; code/Game/Work/foresterwork.cpp; code/Game/Work/gatherrawmaterials.cpp; code/Game/Work/herbalistwork.cpp; code/Game/Work/huntwork.cpp; code/Game/Work/marketwork.cpp; code/Game/Work/pasturework.cpp; code/Game/Work/tendarea.cpp; code/Game/Work/work_base_bst.cpp
+WorkBST_	6	code/Game/Entity/entitylist.cpp
+MG_Resize	3	code/Game/Game/mapgenerator.cpp
+CullStack	3	runtime/src/graphics/cull.cpp
+RemovalCalc_helper_8d50	2	code/Game/Action/action_base_cnr.cpp; code/Game/Component/destroycomponent_states.cpp; code/Game/Player/keystone_a_removalcalcpath.cpp
+ActCNR_NR_SetVariant_1253d0	2	code/Game/Action/action_base_cnr.cpp; code/Game/Action/createnaturalresource.cpp; code/Game/Component/destroycomponent_states.cpp; code/Game/Component/growthcomponent.cpp; code/Game/Component/immigrationcomponent_states.cpp
+PlayAnimation	2	code/Game/Action/PlayAnimation.h; code/Game/Action/action_base_move.cpp; code/Game/Action/action_base_movedeps.cpp; code/Game/Action/playanimation.cpp; code/Game/Action/sendcomponentmessage.cpp; code/Game/Component/citizenai_actionctors.cpp; code/Game/Component/citizenai_handlers.cpp; code/Game/Component/citizenai_leisure.cpp; code/Game/Work/work_base_actionctor.cpp; runtime/src/collection/array_graphics_anim.cpp; runtime/src/graphics/animationstate_transforms.cpp; runtime/src/graphics/mesh.cpp; runtime/types/graphics/AnimationManager.h; runtime/types/graphics/AnimationState.h; runtime/types/graphics/Geometry.h; runtime/types/graphics/Mesh.h; standalone/perf_experimental.cpp; tests/unit/act_abi_test.cpp
+ActCNR_CheckTerrain_cb00	1	code/Game/Action/action_base_cnr.cpp; code/Game/Action/createnaturalresource.cpp; code/Game/Game/gamegrid_serialize.cpp
+ActCNR_NR_GetSubVariantCount_125320	1	code/Game/Action/action_base_cnr.cpp; code/Game/Action/createnaturalresource.cpp; code/Game/Component/growthcomponent.cpp
+GrowthComponent_ModifyFlags	1	code/Game/Component/animalcomponent.cpp; code/Game/Component/growthcomponent.cpp
+ForesterWork_Factory	1	code/Game/Game/forester_force_harness.cpp; code/Game/Work/foresterwork.cpp; code/Game/Work/gatherrawmaterials.cpp
+RtColl_ArrayI32Dtor_1800111a0	1	runtime/src/io/modification.cpp; runtime/src/io/package_file_dtor.cpp; runtime/types/io/Modification.h
+RtColl_ArrayU8Dtor_1800112a0	1	runtime/src/io/modification.cpp; runtime/src/io/package_file_dtor.cpp; runtime/src/video/vertexlayout.cpp; runtime/types/io/Modification.h
+RtColl_ArrayFilenameAssign_1800091f0	1	runtime/src/io/modification.cpp
+RtObject_Factory_Dtor	1	runtime/src/engine/engine_lifecycle.cpp; runtime/src/object/factory_dtors.cpp; runtime/types/object/TypeInfo.h
+RtObject_InternalFactory_Dtor	1	runtime/src/engine/engine_lifecycle.cpp; runtime/src/object/factory_dtors.cpp; runtime/types/object/TypeInfo.h
+RtObject_ExternalFactory_Dtor	1	runtime/src/engine/engine_lifecycle.cpp; runtime/src/object/factory_dtors.cpp; runtime/types/object/TypeInfo.h
