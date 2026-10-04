@@ -117,7 +117,8 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 // 0x1400fda00 is PlacementTool::GetPlacement (PlacementTool.h).
 
 // ---- tool_base_render.cpp
-extern "C" void HighlightSelect_Impl(void* self);  // 0x1400fc9e0
+class EditTool;
+extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void* self);  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 

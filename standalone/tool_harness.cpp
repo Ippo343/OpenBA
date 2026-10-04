@@ -2795,7 +2795,6 @@ void BridgeCommit(DragTool* tool, int startCell, int endCell) {
 //
 // Set BANISHED_BRIDGE_SELECT=1 (optionally =N for "N frames after the commit",
 // default 120) to fire it. BANISHED_OUTLINE_TRACE=1 shows where c4a0 lands per segment.
-extern "C" void HighlightSelect_Impl(void*);
 
 int BridgeSelectDelay() {
     const char* e = Opt().bridgeSelect;
