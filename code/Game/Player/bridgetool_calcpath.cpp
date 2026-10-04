@@ -214,8 +214,8 @@ ComponentEntity* CloneEntity(void* templateEntity) {
 // without having to re-derive the entities from the map grid. Diagnostic only —
 // nothing in the game path reads these.
 extern "C" {
-void* g_BridgeLastMaster = nullptr;
-void* g_BridgeLastSegments[32] = {};
+ComponentEntity* g_BridgeLastMaster = nullptr;
+ComponentEntity* g_BridgeLastSegments[32] = {};
 int   g_BridgeLastSegmentCount = 0;
 }
 

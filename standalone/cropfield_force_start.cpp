@@ -88,10 +88,10 @@ void PostNodeEvent(StateMachineComponent* smc, int eventId) {
     if (!node) return;
     // LEFT: the harness's own "slot 2 is filled" guard reads the node's vtable, so
     // the call stays a slot call (Controller::PostEvent would drop the guard).
-    void** vt = *reinterpret_cast<void***>(node);   // LEFT: the harness guard reads the vtable (above)
+    void** vt = *reinterpret_cast<void***>(node);   // LEFT: FLOOR? vtable probe: the harness reads the node's vtable word to test slot 2 before calling it
     if (!vt || !vt[2]) return;
     const int curIdx = sm->activeState;             // +0x51
-    reinterpret_cast<char (*)(void*, void*, int, int)>(vt[2])(   // LEFT: the slot call behind that guard
+    reinterpret_cast<char (*)(void*, void*, int, int)>(vt[2])(   // LEFT: FLOOR? vtable probe: calls slot 2 (PostEvent) through the word tested above; Controller::PostEvent would drop the harness's guard
         node, sm, curIdx, eventId);
     std::fprintf(stderr, "[CropStart]   posted node event %d (node=%p curIdx=%d)\n",
                  eventId, node, curIdx);

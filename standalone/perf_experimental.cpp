@@ -18,11 +18,14 @@
 #include "math/Math.h"       // -Iruntime/types
 #include "volume/Volume.h"   // B3R: RtVolume_Frustum_MulTransform3
 #include "Component/ModelComponent.h"   // B4: meshInstance / transform by name
+#include "graphics/Animation.h"         // B4: Animation::_boneCount / _frameCount / _keys
+#include "graphics/AnimationGroup.h"    // B4: AnimationGroup::_clips, GetAnimation
+#include "graphics/AnimationState.h"    // B4: AnimationState::Layer
 
 namespace PerfX {
 
 Flags g_flags = {};
-uint8_t* g_rootOnlyPtr = nullptr;
+bool* g_rootOnlyPtr = nullptr;
 
 namespace {
 
@@ -90,7 +93,7 @@ float    s_planes[6][4];
 bool     s_haveFrustum = false;
 unsigned s_frameSerial = 0;
 bool     s_simRanThisFrame = false;
-uint8_t* s_rootOnly = nullptr;
+bool* s_rootOnly = nullptr;
 bool     s_rootOnlyResolved = false;
 long     s_counts[kCntMax];
 std::vector<ModelComponent*> s_culledModels;   // models whose pose was left root-only this frame
@@ -107,9 +110,7 @@ void ResolveRootOnly() {
     s_rootOnlyResolved = true;
     // Graphics::MeshInstance::_rootOnlyUpdates (retail: import slot 0x140151f30),
     // the class static (ENDGAME B.3.9 SS2).
-    // LEFT: the class static is a bool; the flag pointer is uint8_t* because
-    // modelcomponent.cpp (COMP) holds PerfX::RootOnlyFlag() as one.
-    s_rootOnly = reinterpret_cast<uint8_t*>(&::Graphics::MeshInstance::_rootOnlyUpdates);   // LEFT: SIG PerfX::RootOnlyFlag() hands modelcomponent.cpp a uint8_t* to the bool
+    s_rootOnly = &::Graphics::MeshInstance::_rootOnlyUpdates;
     g_rootOnlyPtr = s_rootOnly;
 }
 
@@ -139,7 +140,7 @@ void RefreshFrustum(::Graphics::Renderer* renderer) {
     // LEFT: the result slot is raw caller storage the retslot body constructs into
     // (Volume.h's RtVolume_Frustum_MulTransform3, R-CORE).
     RtVolume_Frustum_MulTransform3(camF,
-                                   reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);   // LEFT: the retslot body constructs into raw caller storage (Volume.h RtVolume_Frustum_MulTransform3)
+                                   reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);   // LEFT: OTHER RtVolume_Frustum_MulTransform3 (Volume.h, RT) constructs its result into this raw zeroed caller buffer; a ::Frustum local would run its own ctor first
     std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
     float mag = 0.0f;
@@ -155,7 +156,7 @@ void RefreshFrustum(::Graphics::Renderer* renderer) {
 void FlushCulled() {
     if (s_culledModels.empty()) return;
     ResolveRootOnly();
-    uint8_t saved = s_rootOnly ? *s_rootOnly : 0;
+    bool saved = s_rootOnly ? *s_rootOnly : false;
     if (s_rootOnly) *s_rootOnly = 0;
     const System::Time zeroTime{};   // _ticks 0
     for (ModelComponent* model : s_culledModels) {
@@ -187,7 +188,7 @@ void FlushCulled() {
 void FlushReplays() {
     if (s_deferredReplays.empty()) return;
     ResolveRootOnly();
-    uint8_t saved = s_rootOnly ? *s_rootOnly : 0;
+    bool saved = s_rootOnly ? *s_rootOnly : false;
     if (s_rootOnly) *s_rootOnly = 0;
     std::vector<DeferredReplay> replays;
     replays.swap(s_deferredReplays);
@@ -252,17 +253,17 @@ BatchSlot* BatchEntry(const void* model) {
     return nullptr;   // table saturated (never at sane model counts): caller does not batch
 }
 
-bool AnimationHasRootMotion(const uint8_t* anim) {
+bool AnimationHasRootMotion(const ::Graphics::Animation* anim) {
     RootMotionSlot& e = s_rootMotionTbl[(unsigned)(((reinterpret_cast<uintptr_t>(anim) >> 4) * 2654435761u) & 4095)];  // CAST-OK: hash
     if (e.key == anim) return e.has;
-    const int nodes = *reinterpret_cast<const int*>(anim + 0x4c);   // LEFT: POD the Animation record's key table is unnamed (R-GFX)
-    const int frames = *reinterpret_cast<const int*>(anim + 0x50);   // LEFT: POD the Animation record's key table is unnamed (R-GFX)
-    const uint8_t* keys = *reinterpret_cast<const uint8_t* const*>(anim + 0x60);   // LEFT: POD the Animation record's key table is unnamed (R-GFX)
+    const int nodes = anim->_boneCount;                  // +0x4c
+    const int frames = anim->_frameCount;                // +0x50
+    const Math::Transform* keys = anim->_keys.GetData(); // +0x60, stride 0x1c
     bool has = false;
     if (keys && nodes > 0) {
         for (int f = 0; f < frames && !has; ++f) {
-            const float* pos = reinterpret_cast<const float*>(keys + (size_t)nodes * f * 0x1c + 0x10);   // LEFT: POD the Animation record's key table is unnamed (R-GFX)
-            has = pos[0] != 0.0f || pos[1] != 0.0f || pos[2] != 0.0f;
+            const Vector3& pos = keys[(size_t)nodes * f].translation;   // key +0x10
+            has = pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f;
         }
     }
     e.key = anim; e.has = has;
@@ -271,28 +272,24 @@ bool AnimationHasRootMotion(const uint8_t* anim) {
 
 // True when this model's root-motion offset would differ between one update of N ticks
 // and N updates of one tick (see above).
-// LEFT: the walk below reads the instance AnimationState's layers and the Animation
-// records through R-GFX's untyped PODs (MeshAnimationState / MeshAnimationLayer keep
-// `_group` an untyped ExternalPtr and the Animation's key table unnamed).
-bool NeedsPerTickRootUpdate(const void* model) {
-    const uint8_t* state = reinterpret_cast<const uint8_t*>(model) + 0x28 + 0xd8;   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
-    const int count = *reinterpret_cast<const int*>(state + 0x10);   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
+bool NeedsPerTickRootUpdate(const ModelComponent* model) {
+    const RtGraphics::MeshAnimationState& state = model->meshInstance._animation;   // +0x28 + 0xd8
+    const int count = state._layers.GetSize();                     // +0x10
     if (count <= 0) return false;                                   // nothing playing
-    const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(state + 0x08);   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
+    const ::Graphics::AnimationState::Layer* layers = state._layers.GetData();   // +0x08
     if (!layers) return false;
     // Instanced: RootAnimationOffset reads the pool pose -- but only once the state's
     // "instanced" byte (+0x00) is set, which the next Update does. Right after a blend
     // finished the count is 1 with the byte still clear, and the offset would be the
     // last blended +0x100 held for the frame: give that model one more per-tick update.
-    if (count == 1 && *reinterpret_cast<const int*>(layers + 0x0c) >= 0) return state[0] == 0;   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
+    if (count == 1 && layers[0]._handle >= 0) return state._instanced == 0;   // +0x0c
     for (int i = 0; i < count; ++i) {
-        const uint8_t* layer = layers + (size_t)i * 0x38;
-        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
-        const int idx = *reinterpret_cast<const int*>(layer + 0x08);   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
+        const ::Graphics::AnimationState::Layer& layer = layers[i];   // stride 0x38
+        const ::Graphics::AnimationGroup* group = layer._group;      // +0x00
+        const int idx = layer._clipIndex;                            // +0x08
         if (!group || idx < 0) continue;
-        const uint8_t* anims = *reinterpret_cast<const uint8_t* const*>(group + 0x20);   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
-        if (!anims) continue;
-        if (AnimationHasRootMotion(anims + (size_t)idx * 0x70)) return true;
+        if (!group->_clips._data) continue;                          // group +0x20
+        if (AnimationHasRootMotion(&group->GetAnimation(idx))) return true;   // stride 0x70
     }
     return false;
 }
@@ -300,7 +297,7 @@ bool NeedsPerTickRootUpdate(const void* model) {
 } // namespace
 
 
-uint8_t* RootOnlyFlag() { ResolveRootOnly(); return s_rootOnly; }
+bool* RootOnlyFlag() { ResolveRootOnly(); return s_rootOnly; }
 
 void BeginFrame(::Graphics::Renderer* renderer) {
     if (!Cfg().master) return;

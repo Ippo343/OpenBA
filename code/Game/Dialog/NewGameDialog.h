@@ -89,4 +89,4 @@ static_assert(alignof(NewGameDialog) == 8, "NewGameDialog is qword-aligned");
 
 // The dialog MainMenuDialog::OpenNewGame just built, for the auto-new-game
 // driver (defined in standalone/autostart.cpp).
-extern "C" void* g_StandaloneNewGameDialog;
+extern "C" NewGameDialog* g_StandaloneNewGameDialog;
