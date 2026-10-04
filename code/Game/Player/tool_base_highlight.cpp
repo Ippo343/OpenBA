@@ -277,11 +277,11 @@ haveSlot:
     *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;
     // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
     // (the callers pass the bits in integer registers / stack slots).
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[1]) = param_11;
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[2]) = param_12;
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // CAST-OK: float_bits
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[1]) = param_11;  // CAST-OK: float_bits
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[2]) = param_12;  // CAST-OK: float_bits
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;  // CAST-OK: float_bits
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // CAST-OK: float_bits
     entry->field_0x5C = true;
     *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: as +0x44
     // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.

@@ -106,7 +106,7 @@ namespace GameColl {
 // name for yet (`Bytes<0x14, 4>` is the 20-byte pathfinding vector element).
 // ---------------------------------------------------------------------------
 template <class X> inline uint64_t ToWord(X v)  { return static_cast<uint64_t>(v); }
-template <class X> inline uint64_t ToWord(X* p) { return reinterpret_cast<uint64_t>(p); }
+template <class X> inline uint64_t ToWord(X* p) { return reinterpret_cast<uint64_t>(p); }  // CAST-OK: ptr_int
 
 template <int N, int A>
 struct alignas(A) Bytes {

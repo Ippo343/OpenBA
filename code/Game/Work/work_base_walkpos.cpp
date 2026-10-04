@@ -153,7 +153,7 @@ uint64_t Work::StepProgress(CitizenComponent** citizen, uint32_t cellA, uint32_t
         if (target->workplace != nullptr) {
             WeatherSimulation* weather = gw->m_weather;
             // LEFT: the fall-through return carries the weather pointer's upper bytes.
-            uint64_t resDefault = reinterpret_cast<uint64_t>(weather);
+            uint64_t resDefault = reinterpret_cast<uint64_t>(weather);  // CAST-OK: ptr_int
             CitizenBehavior* mapInfo = gw->m_citizenList;
             int budget = gw->m_game->PathDistance(cellA, cellB, '\x01');   // 0x14009f810
 

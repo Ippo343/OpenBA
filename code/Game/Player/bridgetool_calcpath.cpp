@@ -84,7 +84,7 @@ struct SegNode {
 static_assert(sizeof(SegNode) == 0x18, "SegNode must match MemAlloc(0x18,8)");
 
 SegNode* SegAlloc(int size) {
-    SegNode* n = reinterpret_cast<SegNode*>(System::MemoryAllocator::MemAlloc(0x18, 8));
+    SegNode* n = static_cast<SegNode*>(System::MemoryAllocator::MemAlloc(0x18, 8));
     if (!n) return nullptr;
     n->size = size; n->_pad = 0; n->prev = nullptr; n->next = nullptr;
     return n;
