@@ -23,7 +23,10 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/External.h"
+#include "system/String.h"   // System::String (_field28)
 #include "Object/exe_type.h"
+
+namespace UI { class StringTable; }
 
 class ClimateGenerator final : public Object::External {
     DECLARE_EXE_TYPE(ClimateGenerator)
@@ -40,8 +43,9 @@ public:
     virtual Object::External* Construct();                        // [8] 0x140018f30
 
 public:
-    void*    _field20;           // +0x20: ExternalPtr (serialized via FUN_14000bf40)
-    void*    _field28;           // +0x28: System::String (8-byte COW, name/reference)
+    UI::StringTable* _field20;   // +0x20: ExternalPtr<StringTable> (serialized via FUN_14000bf40)
+    System::String _field28;     // +0x28: name (ctor 0x1400930c0 stores qword 0; dtor 0x140018f60 runs ~String first)
+
     uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
     uint8_t  _pad31[3];          // +0x31: padding
     float    temperatureBase;    // +0x34: 50.0f (base temp in F?)

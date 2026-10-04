@@ -26,6 +26,9 @@
 #include <cstdint>
 #include <cstddef>
 
+class ComponentEntity;   // Entity/ComponentEntity.h
+class Component;         // Component/Component.h
+
 namespace ForceWork {
 
 // Entity component-IBP array layout (matches starttown.cpp ENT_COMP_ARR/CNT).
@@ -49,13 +52,14 @@ void ResetReadableCache();
 uint32_t SafeGetTypeId(void* obj);
 
 // Find a component by exe type-id on an entity's IBP component list (crash-safe, null on miss).
-void* FindComp(void* entity, uint32_t tid);
+Component* FindComp(ComponentEntity* entity, uint32_t tid);
 
 // The work-area CENTER cell exactly as Work_Ctor25 computes it (+0x28 of the Work):
 //   ((mc.fpH>>1)+mc.tileY)*mapDim + ((mc.fpW>>1)+mc.tileX)
 // from the area's MapComponent (+0x28 tileX/+0x2a tileY/+0x2c fpW/+0x2e fpH). Returns -1
 // if the area has no MapComponent or the world grid is unavailable.
-int WorkAreaCenterCell(void* area);
+int WorkAreaCenterCell(ComponentEntity* area);
+
 // True when the citizen's CharacterComponent action stack is idle (ready for a new drive).
 // Returns false (not idle / not ready) if charComp or its fields aren't live yet.
 bool CitizenStackIdle(void* citizen);
