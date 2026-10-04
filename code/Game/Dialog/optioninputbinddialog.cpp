@@ -89,20 +89,5 @@ void* OptionInputBindDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) OptionInputBindDialog());
 }
 
-// The ctor DOOR, reached by address: engine_funcs.cpp resolves 0x140071d30 into
-// fn_OptionInputBindDialog_Ctor. Signature matches fn_OptionInputBindDialog_Ctor_t:
-//   (mem, userInterface, externalResource, internalBasePtrOrNull) -> void*
-void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
-                                            void* parentIBP) {
-    if (!self) return nullptr;
-    printf("[OptionInputBindDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
-                self, ui, extRes, parentIBP);
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) OptionInputBindDialog(static_cast<UI::UserInterface*>(ui),
-                                              static_cast<const UI::Dialog*>(extRes), parent);
-}
-
 // Parent "MessageDialog" — retail RegisterType_OptionInputBindDialog 0x14014c480.
 DEFINE_EXE_TYPE(OptionInputBindDialog, "MessageDialog")

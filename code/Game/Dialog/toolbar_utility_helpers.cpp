@@ -114,14 +114,6 @@ UI::DialogInstance* PlayerToolManager::FindUtilityDialog(const ComponentDescript
 
 extern "C" {
 
-// B4 FORWARD: tutorial_wave.cpp (TUT) passes the retail shape — its own object
-// in RCX (unread), the InternalPtr slot, the key as a qword.
-void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
-                                                    void* retBuf, uint64_t param) {
-    *reinterpret_cast<UI::DialogInstance**>(retBuf) =   // LEFT: SIG (B4 FORWARD, wave X)
-        PlayerToolManager::FindUtilityDialog(reinterpret_cast<const ComponentDescription*>(param));  // CAST-OK: ptr_int
-}
-
 // ---- FUN_140014890: BST_Insert_0x14 ----------------------------------------
 // (RCX=rootHolder, RDX=retNode, R8=insertData)
 //   rootHolder: the set header, root node and int32 count

@@ -57,9 +57,6 @@ extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* e
 // ---- messagedialog.cpp
 void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006d300
 
-// ---- optioninputbinddialog.cpp
-void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140071d30
-
 // ---- optionsdialog.cpp
 // Free: reads the GameContainer (Game/game.h) through its first argument.
 struct GameContainer;
@@ -81,7 +78,6 @@ extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterfac
 
 // ---- toolbar_utility_helpers.cpp
 // B.4 DLG-d: 0x140100270 is PlayerToolManager::FindUtilityDialog (Game/PlayerToolManager.h).
-extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* retBuf, uint64_t param);  // 0x140100270 B4 FORWARD: Tutorial/tutorial_wave.cpp
 extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890 B4 FORWARD: townhallui.cpp (DLG-e) and ToggleUtilityDialog
 
 // ---- toolbardialog.cpp
