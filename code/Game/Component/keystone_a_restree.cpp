@@ -223,11 +223,12 @@ rebalance:
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
                                               uint64_t* param_3, int64_t* param_4) {
     // Both callers' trees are CitizenBehavior's CitizenBucketNode<Key> trees (+0x100, +0x160);
-    // this file's Record* view stays until that node declares the two int16 fields the
-    // retrace reads: then 0x140017230 is a template over CitizenBucketNode<Key>.
-    RecordTree* tree = reinterpret_cast<RecordTree*>(param_1);   // LEFT: CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height
-    RecordNode** out = reinterpret_cast<RecordNode**>(param_2);   // LEFT: CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height
-    const RecordArray* items = reinterpret_cast<const RecordArray*>(param_4);   // LEFT: CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height
+    // the node declares the two int16 fields the retrace reads (X3-COMP). This file's
+    // Record* view stays while the tree is two CitizenBehavior fields and the record is the
+    // node's raw entity triple (H5): then 0x140017230 is a template over CitizenBucketNode<Key>.
+    RecordTree* tree = reinterpret_cast<RecordTree*>(param_1);   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
+    RecordNode** out = reinterpret_cast<RecordNode**>(param_2);   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
+    const RecordArray* items = reinterpret_cast<const RecordArray*>(param_4);   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
 
     // Stack record: local_20 (key) / local_18 (array.data) / local_10 (array.count/cap).
     Record rec;
