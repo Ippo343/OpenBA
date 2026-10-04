@@ -59,6 +59,7 @@
 #include "Component/StorageComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode / CountNode / BucketNode
 
 // ============================================================
 // CompleteTask task-manager BST helpers
@@ -73,34 +74,12 @@
 // with copies of the two ref args.
 
 namespace {
-struct WorkIdNode {
-    int32_t     key;        // +0x00
-    uint8_t     _pad04[4];  // +0x04
-    ::Object::InternalPtr<Work> work;   // +0x08 (CheckPtr'd, DeletePtr'd by 0x1400f8e30)
-    WorkIdNode* parent;     // +0x10
-    WorkIdNode* left;       // +0x18
-    WorkIdNode* right;      // +0x20
-};
-static_assert(offsetof(WorkIdNode, work) == 0x08, "WorkIdNode::work @ +0x08");
-static_assert(offsetof(WorkIdNode, left) == 0x18, "WorkIdNode::left @ +0x18");
-static_assert(offsetof(WorkIdNode, right) == 0x20, "WorkIdNode::right @ +0x20");
+// The id-tree node and the +0x120 bucket-tree node are Game/WorkSchedulerNodes.h's.
+using WorkIdNode     = WorkSchedulerIdNode;
+using WorkBucketNode = WorkSchedulerBucketNode;
 
-// A node of the +0x120 bucket tree: a 64-bit key (the Work's slot-10 target), the
-// bucket's own id tree, children at +0x20 / +0x28.
-struct WorkBucketNode {
-    Profession*     key;       // +0x00 the profession slot 10 returns (Work::GetTarget)
-    WorkSchedulerTree entries; // +0x08 {root, count}
-    WorkBucketNode* parent;    // +0x18
-    WorkBucketNode* left;      // +0x20
-    WorkBucketNode* right;     // +0x28
-};
-static_assert(offsetof(WorkBucketNode, entries) == 0x08, "WorkBucketNode::entries @ +0x08");
-static_assert(offsetof(WorkBucketNode, left) == 0x20, "WorkBucketNode::left @ +0x20");
-static_assert(offsetof(WorkBucketNode, right) == 0x28, "WorkBucketNode::right @ +0x28");
-
-// LEFT: WorkSchedulerTree::root (Game/WorkScheduler.h) is declared void*.
 static WorkIdNode* IdRoot(const WorkSchedulerTree& tree) {
-    return reinterpret_cast<WorkIdNode*>(tree.root);   // LEFT: Game/WorkScheduler.h (COMP-8)
+    return tree.root;
 }
 
 // Walk the id tree; return the node whose key == taskIdx, else null.
@@ -209,7 +188,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     {
         // The Work's queue-order key (Work::field_24, +0x24).
         int wantKey = task->work->field_24;
-        AvlNode28* n = reinterpret_cast<AvlNode28*>(sched->field_0x10);   // LEFT: Game/WorkScheduler.h field_0x10 void* (COMP-8)
+        WorkSchedulerCountNode* n = sched->field_0x10;
         while (n != nullptr) {
             int k = n->key;
             // Retail 8e30 step: `want < nodeKey -> node+0x10`, `nodeKey < want ->
@@ -232,10 +211,10 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
         Profession* keyTmp = nullptr;
         Profession** keyPtr = owner->GetTarget(&keyTmp);   // slot 10, retslot
 
-        WorkBucketNode* node = reinterpret_cast<WorkBucketNode*>(sched->field_0x120);   // LEFT: Game/WorkScheduler.h field_0x120 void* (COMP-8)
+        WorkBucketNode* node = sched->field_0x120;
         if (node != nullptr) {
             while (true) {
-                Profession* v = node->key;
+                Profession* v = node->bucket.key;
                 if (*keyPtr < v) {
                     node = node->left;    // +0x20
                 } else if (v < *keyPtr) {
@@ -249,7 +228,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 
         if (node != nullptr) {
             // the bucket's entry tree (node+0x8); key compared against taskIdx.
-            WorkIdNode* e = IdRoot(node->entries);
+            WorkIdNode* e = IdRoot(node->bucket.entries);
             while (e != nullptr) {
                 int k = e->key;
                 if (taskIdx < k) {
@@ -257,7 +236,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
                 } else if (k < taskIdx) {
                     e = e->right;
                 } else {
-                    WorkCellBST_Remove_ca60(TreeHeader(&node->entries), e);   // 0x14001ca60
+                    WorkCellBST_Remove_ca60(TreeHeader(&node->bucket.entries), e);   // 0x14001ca60
                     break;
                 }
             }

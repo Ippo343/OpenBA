@@ -210,10 +210,9 @@ void MainMenuDialog::ReturnToMenu() {
 
     if (gameWorld == nullptr) {
         // No game active: destroy the menu loop's SaveLoad.
-        // LEFT: MenuDialogLoopT::_saveLoad is void* (block GAME's header).
-        void* saveLoad = menuLoop->_saveLoad;
+        Save::SaveLoad* saveLoad = menuLoop->_saveLoad;
         if (saveLoad) {
-            RtSave_SaveLoad_Dtor(reinterpret_cast<Save::SaveLoad*>(saveLoad));   // ??1SaveLoad 0x1800c3c90
+            RtSave_SaveLoad_Dtor(saveLoad);   // ??1SaveLoad 0x1800c3c90
             System::MemoryAllocator::MemFree(saveLoad);
         }
         menuLoop->_saveLoad = nullptr;

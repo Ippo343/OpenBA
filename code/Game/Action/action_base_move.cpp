@@ -40,21 +40,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/Profession.h"
 #include "Game/WorkScheduler.h"
-
-namespace {
-// A node of the WorkScheduler id trees (key = the work id).
-struct WorkIdNode {
-    int32_t     key;        // +0x00
-    uint8_t     _pad04[4];  // +0x04
-    Work*       work;       // +0x08 InternalPtr<Work>
-    WorkIdNode* parent;     // +0x10
-    WorkIdNode* left;       // +0x18
-    WorkIdNode* right;      // +0x20
-};
-static_assert(offsetof(WorkIdNode, work) == 0x08, "WorkIdNode::work @ +0x08");
-static_assert(offsetof(WorkIdNode, left) == 0x18, "WorkIdNode::left @ +0x18");
-static_assert(offsetof(WorkIdNode, right) == 0x20, "WorkIdNode::right @ +0x20");
-}  // namespace
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode (the id trees' node)
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -344,8 +330,7 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
 
     // The scheduler's first id tree (WorkScheduler::trees[0], +0x30): int key at +0x00,
     // the Work at +0x08, children at +0x18 / +0x20.
-    // LEFT: WorkSchedulerTree::root (Game/WorkScheduler.h) is declared void*.
-    const WorkIdNode* node = reinterpret_cast<const WorkIdNode*>(gw->m_tutorial->trees[0].root);   // LEFT: Game/WorkScheduler.h (COMP-8)
+    const WorkSchedulerIdNode* node = gw->m_tutorial->trees[0].root;
     Work* value = nullptr;       // local_res10
     bool haveValue = false;
     while (node != nullptr) {
@@ -354,7 +339,7 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
         } else if (taskId > node->key) {
             node = node->right;
         } else {
-            value = node->work;
+            value = node->work.Get();
             haveValue = true;
             break;
         }
