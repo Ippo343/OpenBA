@@ -207,7 +207,6 @@ float* InteractNodePosition(const InteractComponent* self, float* out, int kind,
 int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
-int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3);  // 0x14004edb0 B4 FORWARD -> PickReachableCell
 int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);  // 0x1400af370
 
