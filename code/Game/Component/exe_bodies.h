@@ -30,7 +30,8 @@ struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.
 extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
 
 // ---- ambientenvironmentdescription.cpp
-extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount);  // 0x140002540
+struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
+extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
 
 // ---- attendancecomponent.cpp
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
