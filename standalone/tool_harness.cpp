@@ -52,7 +52,6 @@
 #include "Player/exe_bodies.h"            // UpdateCreateBar (0x1400ffc60)
 #include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, ActHunt_DynArraySetCount_3110
 #include "Dialog/exe_bodies.h"
-#include "Dialog/dialog_exe_helpers.h"    // Dialog_FindComponent_d6c0 (0x14000d6c0)
 #include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
 // B4 P2 T1: the classes the harness reaches by name.
@@ -2249,11 +2248,9 @@ int UpgradeClickDelay() {
 }
 
 // BuildComponent (0x14000d6c0 / type 0x1401c7008) on `entity`, CheckPtr'd.
-BuildComponent* UpgradeFindBuildComp(void* entity) {   // void*: the bridge globals hand theirs over untyped
+BuildComponent* UpgradeFindBuildComp(ComponentEntity* entity) {
     if (!entity) return nullptr;
-    BuildComponent* ibp = nullptr;
-    Dialog_FindComponent_d6c0(entity, &ibp);   // 0x14000d6c0
-    return ibp;
+    return entity->FindComponent<BuildComponent>();   // 0x14000d6c0
 }
 // Retail's own two reads: +0x48 = delivered build effort, required = desc(+0x18)+0x30
 // * multiplier(+0x4c) — identical to destroycomponent_states.cpp Yard_Delivered/Required.

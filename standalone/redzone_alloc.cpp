@@ -402,7 +402,7 @@ extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
     };
 
     for (int bucket = 0; bucket < 0xC0; ++bucket) {
-        uint8_t* curFT = reinterpret_cast<uint8_t*>(alloc->freeLists[bucket]);  // LEFT: freeLists is uint64_t (FreeTag*) in MemoryAllocator.h; alloc_header ceiling full
+        uint8_t* curFT = reinterpret_cast<uint8_t*>(alloc->freeLists[bucket]);  // the walk steps the FreeTag as raw block bytes  // CAST-OK: alloc_header
         uint8_t* prevFT = nullptr;
         int guard = 0;
         while (curFT && ++guard < 2000000) {
@@ -1001,7 +1001,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     };
 
     for (int bucket = 0; bucket < 0xC0 && !found; ++bucket) {
-        uint8_t* head = reinterpret_cast<uint8_t*>(alloc->freeLists[bucket]);  // LEFT: freeLists is uint64_t (FreeTag*) in MemoryAllocator.h; alloc_header ceiling full
+        uint8_t* head = reinterpret_cast<uint8_t*>(alloc->freeLists[bucket]);  // the walk steps the FreeTag as raw block bytes  // CAST-OK: alloc_header
         if (!head) continue;
         uint8_t* curFT = head;  // FreeTag = block+8
         uint8_t* prevFT = nullptr;
