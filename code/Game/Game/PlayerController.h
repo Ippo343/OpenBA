@@ -19,13 +19,18 @@
 //   +0x28 float yaw        Vector3::FromYawPitch(+0x28, +0x2C) in 0x1400983f0
 //   +0x2C float pitch
 //   +0x30 float distance   the eye's distance back from the target
-//   +0x34 Graphics::Camera Camera::Camera(+0x34, frustum, transform, true) —
-//                          raw storage (H5)
+//   +0x34 Graphics::Camera Camera::Camera(+0x34, frustum, transform, true) — a
+//                          Graphics::Camera member (B.4 X5-GAME, behaviour:): both
+//                          ctors build it LAST (0x140098625 / 0x14009889f), the
+//                          init list's last entry; no dtor (Shutdown 0x14009798d
+//                          MemFrees +0xE0 with no destructor call; Camera is
+//                          trivially destructible)
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "math/Math.h"   // Math::Transform (CalcTransform's by-value return)
+#include "graphics/Camera.h"   // Graphics::Camera (+0x34)
 #include <type_traits>
 
 struct Frustum;   // ::Frustum (volume/Volume.h)
@@ -34,7 +39,7 @@ namespace IO { class Stream; }
 class PlayerController {
 public:
     // 0x1400985b0 — the ctor Load runs in the MemAlloc(0x10c, 4) block. Builds
-    // the transform and the camera in the raw storage below (bodies in
+    // the transform, the scalars and then the camera, in member order (body in
     // gameupdateloop_load.cpp).
     PlayerController(const ::Frustum& frustum, float yaw, float pitch, float distance);
     // 0x140098800 — the default ctor (MenuScene +0x88, the menu loop's +0xbb8):
@@ -59,7 +64,7 @@ public:
     float   yaw;                 // +0x28
     float   pitch;               // +0x2C
     float   distance;            // +0x30
-    uint8_t camera[0xD8];        // +0x34 Graphics::Camera (raw, H5)
+    Graphics::Camera camera;     // +0x34 Camera(frustum, CalcTransform / Identity, true), built last
 };
 
 static_assert(std::is_trivially_destructible<PlayerController>::value,

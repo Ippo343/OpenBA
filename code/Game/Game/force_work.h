@@ -28,6 +28,7 @@
 
 class ComponentEntity;   // Entity/ComponentEntity.h
 class Component;         // Component/Component.h
+class CitizenComponent;  // Component/CitizenComponent.h
 
 namespace ForceWork {
 
@@ -62,13 +63,13 @@ int WorkAreaCenterCell(ComponentEntity* area);
 
 // True when the citizen's CharacterComponent action stack is idle (ready for a new drive).
 // Returns false (not idle / not ready) if charComp or its fields aren't live yet.
-bool CitizenStackIdle(void* citizen);
+bool CitizenStackIdle(const CitizenComponent* citizen);
 
 // Drive one Work's Execute on a citizen when its action stack is idle.
 //   driveFn ABI: int (*)(void* work, void* citizenIBP)  (the Work-driver ABI)
 // Constructs the citizen IBP, calls driveFn, and traces the first `traceMax` drives under
 // `tag`. Returns the Execute return code, or INT_MIN if the stack wasn't idle / not ready.
-int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void* work, void* citizenIBP),
+int DriveWhenIdle(CitizenComponent* citizen, void* work, int (*driveFn)(void* work, void* citizenIBP),
                   const char* tag, int* driveCount, int traceMax);
 
 }  // namespace ForceWork

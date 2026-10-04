@@ -139,22 +139,20 @@ int WorkAreaCenterCell(ComponentEntity* area) {
     return cell;
 }
 
-bool CitizenStackIdle(void* citizen) {
+bool CitizenStackIdle(const CitizenComponent* citizen) {
     if (!citizen || !Readable(citizen, kCharCompOff + 8)) return false;
-    // LEFT: the harnesses hand the citizen component as void* (probed first).
-    const CitizenComponent* c = reinterpret_cast<const CitizenComponent*>(citizen);   // LEFT: SIG the harness entries (StartTown_ForcePush*Work, outside callers) hand the citizen as void*
-    const CharacterComponent* charComp = c->character;   // +0x278
+    const CharacterComponent* charComp = citizen->character;   // +0x278
     if (!charComp || !Readable(charComp, kActionTopOff + 8)) return false;
     return charComp->actionStack.current < 0;                 // +0x60
 }
 
-int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
+int DriveWhenIdle(CitizenComponent* citizen, void* work, int (*driveFn)(void*, void*),
                   const char* tag, int* driveCount, int traceMax) {
     if (!work || !driveFn) return INT_MIN;
     if (!CitizenStackIdle(citizen)) return INT_MIN;
 
     // CitizenStackIdle proved it readable as a CitizenComponent.
-    CitizenComponent* c = reinterpret_cast<CitizenComponent*>(citizen);   // LEFT: SIG the harness entries (StartTown_ForcePush*Work, outside callers) hand the citizen as void*
+    CitizenComponent* c = citizen;
     ::Object::InternalPtr<CitizenComponent> citizenIBP(c);
     int rc = driveFn(work, &citizenIBP);
 
@@ -163,7 +161,7 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
         const CharacterComponent* charComp = c->character;               // +0x278
         int top = charComp ? charComp->actionStack.current : -999;             // +0x60
         std::fprintf(stderr, "[%s] DRIVE#%d citizen=%p ret=%d newTop+0x60=%d\n",
-                     tag ? tag : "ForceWork", *driveCount, citizen, rc, top);
+                     tag ? tag : "ForceWork", *driveCount, static_cast<void*>(citizen), rc, top);
         std::fflush(stderr);
     }
     return rc;

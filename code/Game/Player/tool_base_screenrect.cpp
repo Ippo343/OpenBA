@@ -149,8 +149,7 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(PlayerController* param
     // local_f8 = Vector4(param_2, uvScale)  ([RSP+0x70] in the original)
     Math::Vector4 v4(*param_2, uvScale);
 
-    // LEFT: PlayerController::camera (+0x34) is raw storage (H5) in block GAME-b's header.
-    const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(param_1->camera);   // LEFT: H5 PlayerController::camera (+0x34) is raw storage: retail 0x1400985b0 runs Camera(Frustum, Transform3, bool) on it, a ctor the runtime header declares and leaves undefined (X3-RT's)
+    const Graphics::Camera* camera = &param_1->camera;
 
     // The 64-byte projection Matrix ([RSP+0x20] in the original).
     Math::Matrix projMat = camera->_projection;

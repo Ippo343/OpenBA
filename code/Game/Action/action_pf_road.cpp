@@ -803,11 +803,9 @@ static void AppendIndex(RawArray<int16_t>* a, short valueForNew) {
 }
 
 void WorldGeometry::RebuildRoadMesh(Map* map) {
-    // LEFT: WorldGeometry (block GAME-c's header) keeps these arrays as raw {data, sizeCap}
-    // headers (`_arrays`).
-    RawArray<RoadBatch>* meshBatches = reinterpret_cast<RawArray<RoadBatch>*>(&_arrays[6]);    // +0x200 (local_a8)   // LEFT: Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)
-    const RawArray<int64_t>* sources = reinterpret_cast<const RawArray<int64_t>*>(&_arrays[7]); // +0x210   // LEFT: Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)
-    RawArray<int32_t>* counters = reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);           // +0x220   // LEFT: Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)
+    RawArray<RoadBatch>* meshBatches = reinterpret_cast<RawArray<RoadBatch>*>(&_roadBatches);    // +0x200 (local_a8)   // LEFT: RoadBatch (this file) is a copy of GeometryBatch, the element of WorldGeometry::_roadBatches: unify the record
+    const RawArray<int64_t>* sources = reinterpret_cast<const RawArray<int64_t>*>(&_batchMaterials); // +0x210   // LEFT: WorldGeometry::_batchMaterials holds Object::External*; RoadBatch::source (this file) keeps it as int64_t
+    RawArray<int32_t>* counters = &_batchCounters;           // +0x220
     Reimpl_Struct60B_Resize(meshBatches, 0);                                // f250(local_a8, 0)
 
     int vtxOff = (_gridSize - _fieldC4) >> 1; // iVar12

@@ -210,7 +210,7 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 
 // ============================================================
 // 0x1400b0d80 — the decal slot manager: find a free 0x60-byte GeometryBatch in
-// WorldGeometry::Decals() (+0x1F0), or grow the array by one from a zeroed
+// WorldGeometry::_decals (+0x1F0), or grow the array by one from a zeroed
 // template (slot -1); write the decal; tessellate it via 0x1400ace40. Returns the
 // slot index (or -1 if the material is null). 1:1 port (19 args; param_18 is
 // unused/dead). A WorldGeometry member in retail; LEFT free: WorldGeometry.h is
@@ -223,7 +223,7 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              char param_15, int param_16, int param_17, uint8_t param_19) {
     if (material == nullptr) return -1;
 
-    RawArray<GeometryBatch>& decals = geom->Decals();
+    RawArray<GeometryBatch>& decals = geom->_decals;
     int iVar3 = 0;
     int iVar2 = decals.size;                                     // count
     bool grew = false;
@@ -273,8 +273,7 @@ haveSlot:
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // CAST-OK: float_bits
     entry->field_0x5C = true;
     *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: OTHER H8 alternateKey is a bool field (WorldGeometryElements.h); retail stores the caller's raw byte, which a bool store would normalise
-    // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
-    TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    TradeWork_impl_ace40(geom, iVar3, param_15, param_16, param_17);
     return iVar3;
 }
 

@@ -125,8 +125,7 @@ static void MenuScene_Helper_8660(PlayerController& controller, float fovY_deg, 
     ::Frustum frustum = {};
     RtVolume_Frustum_Ctor_Perspective(&frustum, &nearS, &farS, &fovX, &fovY);
 
-    // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
-    reinterpret_cast<Graphics::Camera*>(controller.camera)->SetFrustum(frustum);   // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
+    controller.camera.SetFrustum(frustum);
 }
 
 // ============================================================
@@ -747,8 +746,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
         renderer->_shaderDetail = ::Video::Configuration::_singleton->shaderDetail;
     }
 
-    // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
-    const Graphics::Camera& camera = *reinterpret_cast<const Graphics::Camera*>(transform->camera);   // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
+    const Graphics::Camera& camera = transform->camera;
 
     renderer->Draw(*context, alpha, *gScene, camera);
 }
@@ -800,8 +798,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(MenuDialogLoopT* self, float deltaSecon
 
     // 3. Convert to Transform3 (48B = 3x4 matrix) and apply to the Camera at +0x34.
     Math::Transform3 t3Buf = lookAt.AsTransform3();
-    // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
-    reinterpret_cast<Graphics::Camera*>(transform->camera)->SetCameraToWorld(t3Buf);   // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
+    transform->camera.SetCameraToWorld(t3Buf);
 
     // Diagnostic: log the first few frames so we can verify the camera transform
     // is non-identity (the underlying bug we're fixing).

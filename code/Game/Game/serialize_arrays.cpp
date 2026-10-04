@@ -93,7 +93,17 @@ WorldGeometry::WorldGeometry() {
     Video_VertexBuffer_Ctor(&_waterVertexBuffer);   // +0x160
     Video_IndexBuffer_Ctor(&_waterIndexBuffer);     // +0x180
 
-    for (Header& h : _arrays) { h.data = nullptr; h.sizeCap = 0; }   // +0x1a0..+0x228
+    // +0x1a0..+0x228: retail zeroes each {data, size|capacity} with two qword
+    // stores (0x1400b018f..0x1400b0206); three named stores each here (H7).
+    _contourVertices.data = nullptr; _contourVertices.size = 0; _contourVertices.capacity = 0;
+    _contourIndices.data  = nullptr; _contourIndices.size  = 0; _contourIndices.capacity  = 0;
+    _contourRangesA.data  = nullptr; _contourRangesA.size  = 0; _contourRangesA.capacity  = 0;
+    _contourRangesB.data  = nullptr; _contourRangesB.size  = 0; _contourRangesB.capacity  = 0;
+    _contourOutlines.data = nullptr; _contourOutlines.size = 0; _contourOutlines.capacity = 0;
+    _decals.data          = nullptr; _decals.size          = 0; _decals.capacity          = 0;
+    _roadBatches.data     = nullptr; _roadBatches.size     = 0; _roadBatches.capacity     = 0;
+    _batchMaterials.data  = nullptr; _batchMaterials.size  = 0; _batchMaterials.capacity  = 0;
+    _batchCounters.data   = nullptr; _batchCounters.size   = 0; _batchCounters.capacity   = 0;
 
     _materialTypeFlags = 1;             // +0x30 (Graphics::Geometry's)
 }

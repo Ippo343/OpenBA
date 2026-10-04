@@ -740,8 +740,7 @@ UI::DialogInstance* PlayerToolManager::OpenPauseMenu() {
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
         Math::Transform3 transform3 = viewTransform.AsTransform3();
         // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-        // LEFT: PlayerController::camera is raw storage (B.4 H5, the Game block's).
-        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);   // LEFT: H5 PlayerController::camera is raw storage (Game/PlayerToolManager.h)
+        cameraSys->camera.SetCameraToWorld(transform3);
     }
 
     // Step 4: Load "Dialog/Pause.rsc" resource
@@ -1643,8 +1642,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
         Math::Transform3 transform3 = viewTransform.AsTransform3();
         // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-        // LEFT: PlayerController::camera is raw storage (B.4 H5, the Game block's).
-        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);   // LEFT: H5 PlayerController::camera is raw storage (Game/PlayerToolManager.h)
+        cameraSys->camera.SetCameraToWorld(transform3);
     }
 
     // === Section 4: Select entity in EditTool ===

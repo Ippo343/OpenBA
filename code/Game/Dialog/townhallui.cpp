@@ -83,6 +83,7 @@
 #include "Action/PathAvl.h"   // AvlRebalance (0x140013480)
 #include "Work/exe_bodies.h"   // B3R: WorkBase_TreeNodeFree_14c30
 #include "Game/Calendar.h"     // GameUpdateLoop::m_dayCounter (year, yearTime)
+#include "Game/PlayerToolManager.h"   // CenterOnEntity 0x140103040
 
 // ============================================================
 // Helpers
@@ -1625,7 +1626,7 @@ void TownHallUI::OnProfessionButton(int index) {
 
     ComponentEntity* entityPtr = entryBase.entities[cycleIdx];
     UI::DialogInstance* dialogInst = _dialog;
-    Toolbar_CenterOnEntity_Impl(GameUpdateLoop::_singleton->m_toolManager, &dialogInst, &entityPtr);
+    GameUpdateLoop::_singleton->m_toolManager->CenterOnEntity(&dialogInst, &entityPtr);   // 0x140103040
 }
 
 // ============================================================
