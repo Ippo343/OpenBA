@@ -54,11 +54,8 @@
 #include <cstdlib>
 #include <cstring>
 
-extern "C" int   EditTool_HarnessSelectEntity(void* editTool, void* entity);
-extern "C" void* EditTool_HarnessAcquire(void* entityUI);
-
 namespace {
-void* s_heldDialog = nullptr;
+UI::DialogInstance* s_heldDialog = nullptr;
 int   s_heldAtFrame = -1;
 
 // BANISHED_PANEL_HOLD_CLICK — see the file header.
@@ -93,15 +90,13 @@ void PanelHoldClick(int frameNum) {
     UI::UserInterface* uiSingleton =
         gw ? gw->m_userInterface : nullptr;   // +0x98
     if (!uiSingleton) return;
-    void* ctrl = nullptr;
+    UI::DialogController* ctrl = nullptr;
     int dialogs = 0;
     static bool s_listed = false;
     // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150 = `*retval =
     // this->_dialogs._head`); the iterator is the bare node pointer.
     for (auto it = uiSingleton->_dialogs.GetFirst(); it && !ctrl; ++it) {
-        // LEFT: the UI's dialog-list element is void* (ui/UserInterface.h
-        // DialogInstancePtr, R-UI): the one cast that names the dialog.
-        UI::DialogInstance* dlgInst = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dlgInst = it.node->element;   // DialogInstancePtr (UserInterface.h)
         if (!dlgInst) continue;
         ++dialogs;
         if (!s_listed) {
@@ -138,7 +133,7 @@ void PanelHoldClick(int frameNum) {
     std::fflush(stderr);
     // slot 9: the controller's OnElementEvent (GetController hands back a
     // UI::DialogController; every exe panel overrides it as a real class, ENDGAME B.3.8).
-    reinterpret_cast<UI::DialogController*>(ctrl)->OnElementEvent(   // B.3.8 bridge
+    ctrl->OnElementEvent(
         nullptr, 0x12, s_id, 0, 0, 0, nullptr);
 }
 }  // namespace
@@ -163,7 +158,9 @@ Component* FindComp(ComponentEntity* ent, uint32_t tid) {
 
 }  // namespace
 
-extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
+// The tool manager (gameupdateloop.cpp hands its `m_toolManager`; its local
+// declaration still spells the parameter void*).
+extern "C" void PanelHoldHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
     static int  s_at   = -2;
     static bool s_done = false;
     static const char* s_want = nullptr;
@@ -196,10 +193,11 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
         ComponentEntity* ent = arr[i];
         if (!ent || !FindComp(ent, tid)) continue;
 
-        void* tool = EditTool_HarnessAcquire(entityUI);
+        EditTool* tool = EditTool_HarnessAcquire(entityUI);
         if (!tool) return;                    // tool not ready yet; try again next frame
         EditTool_HarnessSelectEntity(tool, ent);
-        void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
+        UI::DialogInstance* dialog = tool->entityRef;   // +0x28
+
         s_done = true;
         s_heldDialog = dialog;
         s_heldAtFrame = frameNum;
