@@ -78,6 +78,7 @@
 #include "Component/InteractComponent.h"
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::field_0x00 / field_0x10 (PickBestDropTarget)
 
 namespace {
 
@@ -325,7 +326,7 @@ LAB_14012d744:
 //      (12d5d0, with a StorageLocationComponent) or PickReachableCell (4edb0), and on
 //      success record the entity (*best), the position and the cost.
 // Finally writes the best world position into outPos and returns `best`.
-ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best,
+ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best,
                                      uint32_t param_3, const ComponentDescription* material,
                                      int param_5, char param_6, float* outPos,
                                      const Object::InternalPtr<ComponentEntity>* exclude) {
@@ -339,12 +340,13 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
 
     int pass = 0;
     do {
-        const RawArray<ComponentEntity*>* list = &lists[pass];
+        // Retail steps the two adjacent lists +0x00 / +0x10 by their 0x10 stride.
+        const CitizenPtrList<ComponentEntity>* list = &(&lists->field_0x00)[pass];
         // Collection::Array's copy into the empty local: MemFree of its (null) buffer,
         // MemAlloc(count * 8), then each element constructed in place.
         ComponentEntity** snapshot = nullptr;
         System::MemoryAllocator::MemFree(nullptr);
-        const int n = list->size;
+        const int n = list->_size;
         if (0 < n) {
             snapshot = static_cast<ComponentEntity**>(
                 System::MemoryAllocator::MemAlloc((int64_t)n << 3, 8));
@@ -352,7 +354,7 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
             for (int i = 0; i < n; ++i, ++slot) {
                 if (slot != nullptr) {
                     *slot = nullptr;
-                    *slot = list->data[i];
+                    *slot = list->_data[i];
                 }
             }
         }

@@ -306,7 +306,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
         ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+        PickBestDropTarget(resList, &srcStorPrimary, cell,
                            resType, qty, 1, searchPos, srcStorIBP);
         if (srcStorPrimary == nullptr) { continue; }
 
@@ -348,7 +348,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
         ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+        PickBestDropTarget(resList, &srcStorage, cell,
                            resType, 1, 0, srcPos, srcIBP);
         if (srcStorage == nullptr) continue;
 

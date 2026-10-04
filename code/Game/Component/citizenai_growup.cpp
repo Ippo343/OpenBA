@@ -343,7 +343,7 @@ void CitizenComponent::LongTermPlan() {
         Object::InternalPtr<ComponentEntity> matchIBP = nullptr;   // local_a8
         ComponentEntity* outBest  = nullptr;   // local_98
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(listPair), &outBest, homeCell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+        PickBestDropTarget(listPair, &outBest, homeCell,
                            rowBase->_resource, rowBase->_count, '\x01', outVec, &matchIBP);
         if (outBest == nullptr) {
             // d590 found nothing for this row → treat as committed-with-empty (the original

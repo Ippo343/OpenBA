@@ -937,7 +937,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             float destPos[3] = {0.0f, 0.0f, 0.0f};
             Object::InternalPtr<ComponentEntity> exclude = field_10;  // this market
             ComponentEntity* found = nullptr;
-            PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(town),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
+            PickBestDropTarget(town,
                                &found,
                                static_cast<uint32_t>(cellIdx), resType, take, '\x01',
                                destPos, &exclude);   // 0x14008d590
