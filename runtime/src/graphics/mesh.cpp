@@ -2074,7 +2074,7 @@ void MeshInstance::PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int 
     // ENDGAME B.3.5 caller batch. `GetMesh()->_nodes` is the embedded
     // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
     // LEFT: the `_animation` view (see SetMesh).
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: POD as SetMesh
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: POD MeshInstance::_animation is the 0x18-byte RtGraphics::MeshAnimationState held raw (Mesh.h), viewed as Graphics::AnimationState
         ->::Graphics::AnimationState::PlayAnimation(
             group,
             index,

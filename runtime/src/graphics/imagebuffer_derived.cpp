@@ -614,7 +614,7 @@ void ReflectionImageBuffer::Render(Renderer& rend, const Scene& scene,
     // transcribed because it is what the slot's mangled name says, and the write
     // is spelled with the cast at the one site rather than by making the field
     // `mutable`, which would hide the disagreement in the declaration.
-    ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);  // LEFT: retail's const (UEBA) slot writes _generation (see above)
+    ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);  // LEFT: retail's Render slot is const (UEBA) and its body writes _generation (0x1800a6e91): the const_cast is retail's own disagreement
 
     if (p->_generation == generation) return;      // CMP [RCX+0x68],ESI / JZ
 

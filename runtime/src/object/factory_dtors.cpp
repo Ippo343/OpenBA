@@ -416,7 +416,7 @@ void ResourceSubtreeFree(void* set, RtObject::ResourceSet::Node* node) {
     ResourceSubtreeFree(set, node->left);     // +0x20
     ResourceSubtreeFree(set, node->right);    // +0x28
     // ~Filename over `ResourceEntry::path`, the key at +0x00.
-    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();   // LEFT: H10 as ReferenceSubtreeFree's
+    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();  // LEFT: H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 

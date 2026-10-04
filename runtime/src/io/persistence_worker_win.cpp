@@ -278,7 +278,7 @@ void SignalWorker(IO::PersistenceWorker* w) {
 // typed member (it has no constructor; engine/singleton_ctors.cpp
 // placement-constructs the worker). So the receiver arrives as `void*`.
 IO::PersistenceWorker* AsWorker(void* worker) {
-    return static_cast<IO::PersistenceWorker*>(worker);   // LEFT: see above
+    return static_cast<IO::PersistenceWorker*>(worker);  // LEFT: H5 the receiver is &Persistence::_workerVtable, the embedded PersistenceWorker IO::Persistence holds as loose fields (typing it is the Persistence behaviour commit: _savePath, worker, settings map together)
 }
 
 }  // namespace
