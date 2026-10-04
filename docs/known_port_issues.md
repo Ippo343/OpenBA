@@ -561,6 +561,15 @@ TUT (rows 80-84, 88-89):
   (`// LEFT`); typing it as `bool |=` is value-identical only while the byte holds 0 / 1. Retail's
   instruction not read. SUSPECTED.
 - (P2 DLG-1, row 447) `EventNotifyDialog::OnUpdate` (`eventnotifydialog.cpp`) now reads the category filter `EventLog::field_0x10[category]` by name (`bool[6]` in `Game/EventLog.h`, GAME-a's); at -O2 GCC copies that byte into the local `hasNewEvents` where the old tree stored a literal 1 (`MOV R14D,1` -> `MOV R14D,R13D`). Identical while the byte holds 0 / 1: the ctor writes {0,1,1,1,1,1} and `EventLogUI::ToggleNotification` copies `CheckElement::_checked` (0 / 1). Retail not read. SUSPECTED.
+- (X-G1-2, row 560) `TownHallUI::ProfessionNode` (`Dialog/TownHallUI.h`) declares +0x28 as ONE `int32_t balance`
+  where the shared AVL retrace 0x140013480 (`AvlRebalance`, Action/PathAvl.h) reads and writes an int16 balance at
+  +0x28 and an int16 height at +0x2a. townhallui.cpp therefore still hands the tree to the retrace as `AvlNode30`
+  (two casts, LEFT); any read of `balance` as an int32 in the dialog sees both halves. The dialog's own reads
+  were not checked against retail. SUSPECTED.
+- (X-G1-2, row 561) `PathCostNode::balance` (`Entity/CitizenBehavior.h`) is likewise one int32 at +0x28 while the
+  insert 0x140025a10 (`PathCostTreeInsert`, which runs on `AvlNode30`) and its retrace 0x14000e360 treat +0x28 /
+  +0x2a as two int16s; PathGraph's {m_bstRoot, m_bstCount} are two fields, not one Set header, so citizenbehavior.cpp
+  keeps two casts per insert (LEFT). Retail not re-read. SUSPECTED.
 
 ### 14f. Names that mislead (naming only)
 

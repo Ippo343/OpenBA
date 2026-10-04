@@ -19,6 +19,8 @@
 
 #include "Component/exe_bodies.h"      // CitizenAI_Reg_helper_e360
 #include "Entity/CitizenBehavior.h"    // PathGraph
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode, WorkCandidateNode
+#include "Work/Work.h"                 // WorkEntitySetNode
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 
@@ -219,6 +221,12 @@ template void AvlRebalance<AvlNode30>(AvlNode30**, AvlNode30**);
 template AvlNode28* AvlRotateLeft<AvlNode28>(AvlNode28**, AvlNode28*);
 template AvlNode28* AvlRotateRight<AvlNode28>(AvlNode28**, AvlNode28*);
 template void AvlRebalance<AvlNode28>(AvlNode28**, AvlNode28**);
+// The 0x30 nodes of other modules' trees (retail: the same 0x14000e450 / 0x14000e580 /
+// 0x140013480 bodies, B13).
+template void AvlRebalance<WorkSchedulerIdNode>(WorkSchedulerIdNode**, WorkSchedulerIdNode**);
+template void AvlRebalance<WorkEntitySetNode>(WorkEntitySetNode**, WorkEntitySetNode**);
+template WorkCandidateNode* AvlRotateLeft<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
+template WorkCandidateNode* AvlRotateRight<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
 
 // ===========================================================================
 // Node allocators
@@ -456,19 +464,6 @@ LAB_140025afa:
 // ===========================================================================
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
-// B4 FORWARD: 1 outside caller (Component/citizenai_housing_idle.cpp)
-extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node) {
-    return reinterpret_cast<int64_t>(AvlRotateLeft(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));   // LEFT: SIG Pf_AvlRotateB_e450
-}
-// B4 FORWARD: 1 outside caller (Component/citizenai_housing_idle.cpp)
-extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node) {
-    return reinterpret_cast<int64_t>(AvlRotateRight(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));   // LEFT: SIG Pf_AvlRotateB_e580
-}
-// B4 FORWARD: 4 outside callers (citizenai_work_scheduler.cpp, townhallui.cpp,
-// goals_serialize.cpp, work_leaf_clear.cpp)
-extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node) {
-    AvlRebalance(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30**>(node));   // LEFT: SIG Pf_AvlRebalanceB_13480
-}
 // B4 FORWARD: 4 outside callers (citizenai_leisure.cpp, citizenai_work_scheduler.cpp,
 // goals_serialize.cpp, keystone_a_removalcalcpath.cpp)
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node) {
@@ -478,10 +473,6 @@ extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node) {
 extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
     return reinterpret_cast<uint64_t*>(AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1), reinterpret_cast<AvlNode28**>(param_2), reinterpret_cast<const int32_t*>(param_3)));   // LEFT: SIG Pf_AvlInsertA_a4f0
 }
-// B4 FORWARD: 1 outside caller (Entity/citizenbehavior.cpp)
-extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
-    return reinterpret_cast<uint64_t*>(PathCostTreeInsert(reinterpret_cast<AvlTreeHead<AvlNode30>*>(param_1), reinterpret_cast<AvlNode30**>(param_2), reinterpret_cast<const int32_t*>(param_3)));   // LEFT: SIG PathBST_Insert_25a10
-}
 
 // 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
 // {data@+0, count@+8, capacity@+0xC}) count to 0. Ghidra dropped the second
@@ -490,9 +481,7 @@ extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, u
 // a single count reset — capacity (>=0) is never < newCount(0), so there is no
 // realloc/copy/free and the decompiled `< 0` growth loops are pure signedness
 // artifacts of the lost argument (intentionally NOT transcribed).
-// B4 FORWARD: 1 outside caller (Entity/citizenbehavior.cpp), which hands the PathGraph as
-// int64_t*.
-extern "C" void PathPairs_Clear_25b30(int64_t* param_1)
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg)
 {
-    reinterpret_cast<PathGraph*>(param_1)->m_pairCount = 0;   // LEFT: SIG PathPairs_Clear_25b30
+    pg->m_pairCount = 0;
 }

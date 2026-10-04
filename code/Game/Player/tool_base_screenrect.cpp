@@ -354,11 +354,3 @@ extern "C" uint8_t PlayerScreenRect_EntityRect_0380(const void* /*param_1*/,
     // FUN_1400fe960(?, cornerCount, corners, param_3)  -> fills the screen rectangle.
     return PlayerScreenRect_AccumulateRect_fe960(0, cornerCount, corners, param_3);
 }
-
-// B4 FORWARD: 1 outside caller (Tutorial/tutorialhighlightdialog.cpp, block TUT).
-extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t /*param_1*/, void* param_2,
-                                                uint64_t* param_3) {
-    return PlayerScreenRect_EntityRect_0380(nullptr,
-        reinterpret_cast<ComponentEntity* const*>(param_2),   // B4 FORWARD: the caller's spelling
-        reinterpret_cast<struct Rectangle*>(param_3));            // B4 FORWARD
-}

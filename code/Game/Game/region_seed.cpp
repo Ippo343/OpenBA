@@ -56,10 +56,7 @@ extern "C" void Region_Seed(void* gameObjV, int dim) {
     // 1) allocate + construct the region graph (e8c0: MemAlloc(0x108,4) -> 8670).
     RegionGraph* graph = static_cast<RegionGraph*>(System::MemoryAllocator::MemAlloc(0x108, 4));
     if (!graph) return;
-    // LEFT: 0x1400a8670's C declaration (Action/exe_bodies.h) takes the graph as int*
-    // and the map as an integer.
-    Pf_RegionGraphCtor_8670(reinterpret_cast<int*>(graph), reinterpret_cast<int64_t>(map),
-                            /*worker*/0, /*ctx*/0, static_cast<uint32_t>(coarseDim), coarseDim);
+    graph->Init(map, static_cast<uint32_t>(coarseDim), coarseDim);   // 0x1400a8670
 
     // 2) link the graph (Map::regionGraph) BEFORE flushing — Flush stamps regionId via graph->map.
     map->regionGraph = graph;

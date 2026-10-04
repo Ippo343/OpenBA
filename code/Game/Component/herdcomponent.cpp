@@ -169,7 +169,7 @@ void AnimalComponent::Place(const Math::Vector3* position, float yaw, bool pose)
     ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
     if (!model) return;   // the tree's guard (retail has none)
 
-    ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(model), position, yaw);   // 0x140003870  LEFT: SIG ToolTile_SetTransformFromYaw_3870
+    model->SetTransformFromYaw(position, yaw);   // 0x140003870
     canGraze = pose;
 
     if (pose) {
@@ -391,7 +391,7 @@ void HerdComponent::Populate(int count) {
     HerdDescription* herdDesc = ::Object::IsDerivedFromNullSafe(herdDescRaw, HerdDescription::TypeId())
         ? static_cast<HerdDescription*>(herdDescRaw) : nullptr;
 
-    Pf_HerdStartMigration_122340(this);   // 0x140122340
+    HerdStartMigration(this);   // 0x140122340
 
     if (GameUpdateLoop::_singleton == nullptr || !herdDesc) return;   // the tree's guards
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
@@ -706,7 +706,7 @@ void HerdComponent::Update(const System::Time* time) {
         }
 
         // Timer expired or invalid terrain -- start migration
-        Pf_HerdStartMigration_122340(this);   // 0x140122340
+        HerdStartMigration(this);   // 0x140122340
         grazeTimer._ticks = 0;
         migrating = true;  // Switch to migrating phase
     } else {
@@ -731,7 +731,7 @@ void HerdComponent::Update(const System::Time* time) {
         // Still migrating -- check terrain validity at current position
         if (!IsTileValid(this)) {
             // Tile became invalid -- restart migration
-            Pf_HerdStartMigration_122340(this);   // 0x140122340
+            HerdStartMigration(this);   // 0x140122340
         }
     }
 }

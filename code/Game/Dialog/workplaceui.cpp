@@ -139,7 +139,7 @@ void PopulateCounts(WorkPlaceUI* self) {
     {
         WorkComponent* work = workPlace->_entity->FindComponent<WorkComponent>();
         if (work) {
-            if (work->workState == 0) work->workState = fn_StorageCountQuery(work);   // 0x14012e5c0
+            if (work->workState == 0) work->workState = work->CalcMaxWorkers();   // 0x14012e5c0
             capacity = static_cast<uint32_t>(work->workState);
         }
     }
@@ -228,7 +228,7 @@ void WorkPlaceUI::AdjustJobCount(int delta) {
         fflush(stderr);
         return;
     }
-    if (work->workState == 0) work->workState = fn_StorageCountQuery(work);   // 0x14012e5c0
+    if (work->workState == 0) work->workState = work->CalcMaxWorkers();   // 0x14012e5c0
     const int cur = work->workState;
 
     // No g_wpcRosterOnly wrapper here: the ported SetMaxWorkers body holds that guard
@@ -378,7 +378,7 @@ void WorkPlaceUI::OnUpdateLayout() {
 
     // The capacity of the WorkComponent on the workplace's own entity.
     WorkComponent* siteWork = workPlace->_entity->FindComponent<WorkComponent>();
-    if (siteWork->workState == 0) siteWork->workState = fn_StorageCountQuery(siteWork);   // 0x14012e5c0
+    if (siteWork->workState == 0) siteWork->workState = siteWork->CalcMaxWorkers();   // 0x14012e5c0
     uint32_t capacity = static_cast<uint32_t>(siteWork->workState);
 
     {
@@ -430,7 +430,7 @@ void WorkPlaceUI::OnUpdateLayout() {
     workerCountDown->Enable(workplaceWorkerCount > 0);
 
     // Job arrows: the entity's own WorkComponent (not the workplace entity's).
-    if (work->workState == 0) work->workState = fn_StorageCountQuery(work);   // 0x14012e5c0
+    if (work->workState == 0) work->workState = work->CalcMaxWorkers();   // 0x14012e5c0
     int wpMaxCount = work->workState;
 
     // stderr, NOT stdout, and no longer _DEBUG-only. stdout stalls in this build, so

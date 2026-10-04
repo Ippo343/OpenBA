@@ -50,6 +50,9 @@
 #include "Component/CitizenComponent.h"
 #include "Component/CharacterComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Action/SendComponentMessage.h"   // 0x1400cb1d0, by name
+#include "Action/CompleteTask.h"           // 0x1400c5da0, by name
+#include "Action/MoveTo.h"                 // 0x1400c9170, by name
 
 namespace {
 
@@ -109,17 +112,17 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     // --- LEAD SendComponentMessage (target type-id 70e8 = CitizenAIComponent) -> stored at CharacterComponent+0x58 (NOT pushed) ---
     {
         void* mem = Alloc(0x40);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
-            uint64_t outIBP = 0;
+            ComponentEntity* outIBP = nullptr;
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             ComponentEntity* targetEntity = citizen->_entity;
-            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&targetEntity), &msgId, 0, &outIBP, 0);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0
+            act = ::new (mem) SendComponentMessage(&targetEntity, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         if (character->field_0x58 != nullptr)
             reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(   // LEFT: CharacterComponent::field_0x58 declared Action*, not InternalPtr<Action> (WORK-3)
                 );   // B.3.3 bridge
-        character->field_0x58 = reinterpret_cast<Action*>(act);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0 returns void*
+        character->field_0x58 = act;
     }
 
     // uVar2 = Random::Rand(*(gw+0xd8), 2) — tool/anim variant (0 or 1).
@@ -135,10 +138,9 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         void* mem = Alloc(0x38);
         void* act = nullptr;
         if (mem) {
-            uint64_t outIBP = 0;
+            ComponentEntity* outIBP = nullptr;
             CitizenComponent* ent = *citizenRef;   // citizen
-            act = Pf_CompleteTaskCopyCtor_5da0(mem, priority, reinterpret_cast<uint64_t*>(&ent),   // LEFT: SIG Pf_CompleteTaskCopyCtor_5da0
-                             &outIBP, taskParam);
+            act = ::new (mem) CompleteTask(priority, &ent, &outIBP, taskParam);   // 0x1400c5da0
         }
         void* ibp = act;
         Pf_ActStackPush_54e0(stack, &ibp);
@@ -149,10 +151,10 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         void* mem = Alloc(0x40);
         void* act = nullptr;
         if (mem) {
-            uint64_t outIBP = 0;
+            ComponentEntity* outIBP = nullptr;
             uint32_t msgId = (altAnim & 0xff) ? s_msg75f0 : s_msg7008;
             ComponentEntity* bldg = building ? *building : nullptr;   // building entity
-            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&bldg), &msgId, 0, &outIBP, 0);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0
+            act = ::new (mem) SendComponentMessage(&bldg, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         void* ibp = act;
         Pf_ActStackPush_54e0(stack, &ibp);
@@ -191,7 +193,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         void* act = nullptr;
         if (mem) {
             CharacterComponent* mover = citizen->_entity->FindComponent<CharacterComponent>();
-            act = Pf_MoveToCtor_9170(mem, &mover, 2 /*pathType Fast*/, 0, position, 0xe1f, 0, -1.0f /*DAT_140172280*/);
+            act = ::new (mem) MoveTo(&mover, 2 /*pathType Fast*/, 0, position, 0xe1f, 0, -1.0f /*DAT_140172280*/);   // 0x1400c9170
         }
         void* ibp = act;
         Pf_ActStackPush_54e0(stack, &ibp);

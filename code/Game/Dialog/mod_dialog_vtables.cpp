@@ -93,8 +93,8 @@
 
 // Most recently opened instances, for the unattended click driver
 // (BANISHED_AUTOMENU_CLICKS in standalone/autostart.cpp). Cleared by the dtors.
-void* g_lastModDialog  = nullptr;
-void* g_lastModDetails = nullptr;
+ModDialog*        g_lastModDialog  = nullptr;
+ModDetailsDialog* g_lastModDetails = nullptr;
 
 namespace {
 
@@ -324,8 +324,8 @@ void ModDialog::CloseAndReload() {
 // ===========================================================================
 // Address-registry entry (called from standalone/reg_mods.cpp)
 // ===========================================================================
-extern "C" void* ModDialog_LastOpened()        { return g_lastModDialog; }
-extern "C" void* ModDetailsDialog_LastOpened() { return g_lastModDetails; }
+extern "C" ModDialog*        ModDialog_LastOpened()        { return g_lastModDialog; }
+extern "C" ModDetailsDialog* ModDetailsDialog_LastOpened() { return g_lastModDetails; }
 
 DEFINE_EXE_TYPE(ModDialog,        "UI::DialogInstance")
 DEFINE_EXE_TYPE(ModDetailsDialog, "UI::DialogInstance")

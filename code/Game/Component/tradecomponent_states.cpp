@@ -226,11 +226,10 @@ char TradeComponent::EnterIdle() {
             work = new (mem) TradeWork();
             work->InitFromEntity(entityIBP);
         }
-        Object::InternalPtr<TradeWork> workIBP(work);
+        Object::InternalPtr<Work> workIBP(work);
 
         WorkComponent* sched2 = _entity->FindComponent<WorkComponent>();
-        // 0x14012ec60 takes the WorkComponent as an integer (Component/exe_bodies.h, wave X).
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched2), 1, '\0', &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+        CitizenAI_WorkScheduler_Post(sched2, 1, '\0', &workIBP);
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
         // whether the scheduler is holding one AFTER the post. "accepting was set" and
@@ -294,7 +293,7 @@ char TradeComponent::OnMerchantDocked(StateMachine* sm) {
     if (gw) {
         // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
         // helper takes an InternalBasePtr*, not the entity).
-        ComponentEntity* entityIBP = _entity;
+        Object::InternalPtr<ComponentEntity> entityIBP(_entity);
         EventLog_AddEvent(gw->m_eventNotifier, 0xd, 2, &entityIBP);
     }
 

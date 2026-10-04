@@ -35,16 +35,12 @@
 #include "Game/Profession.h"
 #include "Game/ProfessionList.h"
 
-// code/Game/Game/eventlog.cpp
-extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
-                                         void* entityIBP, void* nameStr, void* titleStr,
-                                         void* extraStr);
 
 void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* strParam) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     // [STANDALONE GUARD] partial worlds can lack the event log; retail derefs unguarded.
-    void* eventLog = gw->m_eventNotifier;
+    EventLog* eventLog = gw->m_eventNotifier;
     if (!eventLog) return;
 
     // --- Pick the title source profession ---
@@ -82,7 +78,7 @@ void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* st
     System::String paramStr(strParam ? strParam : "");
 
     // --- Post (null entity IBP: citizen life events carry no map location) ---
-    ComponentEntity* nullIBP = nullptr;
+    Object::InternalBasePtr nullIBP(nullptr);
     EventLog_AddCitizenEvent(eventLog, eventType, severity, &nullIBP,
                              &name /* citizen name String (H5 raw) */, &titleStr, &paramStr);
 }
