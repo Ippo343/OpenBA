@@ -478,8 +478,10 @@ Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
     return self;
 }
 
-void RtSystem_Filename_AdjustDelimiters(Filename* self) {
-    System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(self));
+// The package reader (0x1800b5f42 / 0x1800b5f95 / 0x1800b5f9e) runs Filename's private
+// AdjustDelimiters on a String slot: retail's Filename IS a String (Filename.h's pins).
+void RtSystem_Filename_AdjustDelimiters(String* self) {
+    System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(reinterpret_cast<Filename*>(self)));   // LEFT: retail calls Filename's private member on a String slot (Filename IS a String, one field)
 }
 
 }  // namespace RtSystem
