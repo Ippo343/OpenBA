@@ -98,19 +98,4 @@ void* MessageDialog::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) MessageDialog());
 }
 
-// The ctor DOOR, reached by address: engine_funcs.cpp resolves 0x14006d300 into
-// fn_MessageDialog_Ctor. Signature matches fn_MessageDialog_Ctor_t:
-//   (mem, userInterface, externalResource, internalBasePtrOrNull) -> void*
-void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
-                                    void* parentIBP) {
-    if (!self) return nullptr;
-    printf("[MessageDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
-                self, ui, extRes, parentIBP);
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) MessageDialog(static_cast<UI::UserInterface*>(ui),
-                                      static_cast<const UI::Dialog*>(extRes), parent);
-}
-
 DEFINE_EXE_TYPE(MessageDialog, "UI::DialogInstance")
