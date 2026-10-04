@@ -195,7 +195,8 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
 extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 0x1400a1f00
 
 // ---- town_workplace_registry.cpp
-extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3);  // 0x1400895a0
+class CitizenBehavior; class ComponentEntity; class Profession;
+extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** workplaceRef, const Profession* profession);  // 0x1400895a0
 extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey);  // 0x140089470
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);  // 0x14008d100
 extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);

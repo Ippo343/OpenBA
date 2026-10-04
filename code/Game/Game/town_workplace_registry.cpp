@@ -110,12 +110,12 @@ ProfessionTreeNode* TreeRoot(const CitizenBehavior* town) {
 //   param_1 = townMgr (*(gameWorld+0xf0))
 //   param_2 = InternalBasePtr* holding the workplace entity value (mirrors
 //             WorkPlaceComponent_OnCreate's local copy of *(WPC+0x10))
-//   param_3 = professionKey (= WorkPlaceComponent+0x48 = Profession+0x48 id)
+//   param_3 = the profession (WorkPlaceComponent+0x48); the tree key is its pointer
 // Walk the +0x100 BST by key; find-or-create the profession node; dedup the
 // workplace against the node's entity array; append if absent. Faithful 1:1.
 // ============================================================
-extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3) {
-    CitizenBehavior* town = TownOf(param_1);
+extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** param_2, const Profession* profession) {
+    const uint64_t param_3 = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int (the tree key is the pointer compared unsigned)
 
     // BST search for the key (key<node -> left[+0x20]; key>node -> right[+0x28]; == -> found).
     ProfessionTreeNode* node = TreeRoot(town);                         // root
@@ -146,9 +146,8 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uin
     // param_2 points at the caller's InternalPtr<ComponentEntity> local.
     int count = found->workplaceCount;                // +0x10 count
     ComponentEntity** arrBase = found->workplaces;    // +0x08 array data
-    ComponentEntity* const* ref = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: void* parameter of outside callers
     for (int i = 0; i < count; ++i) {
-        if (arrBase[i] == *ref) {
+        if (arrBase[i] == *param_2) {
             return;   // already registered — no duplicate
         }
     }
@@ -166,10 +165,10 @@ extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uin
 extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp) {
     if (townMgr == 0 || workplaceComp == nullptr) return;
     const WorkPlaceComponent* wpc = reinterpret_cast<const WorkPlaceComponent*>(workplaceComp);   // LEFT: void* parameter of outside callers
-    uint64_t key = reinterpret_cast<uint64_t>(wpc->profession);   // CAST-OK: ptr_int (the tree key is the pointer compared unsigned)
-    if (key == 0) return;   // no profession -> not an employer workplace
+    const Profession* key = wpc->profession;
+    if (key == nullptr) return;   // no profession -> not an employer workplace
     ComponentEntity* refLocal = wpc->_entity;
-    ResidenceComponent_impl_95a0(townMgr, &refLocal, key);
+    ResidenceComponent_impl_95a0(TownOf(townMgr), &refLocal, key);
 }
 
 // ============================================================

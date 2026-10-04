@@ -215,11 +215,10 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     //      argument, so the order only matters for anything re-entering meanwhile).
     ComponentEntity* const ownerRef = _entity;
     profession = builderKey;
-    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(gw->m_citizenList);   // LEFT: SIG ResidenceComponent_impl_95a0 (int64_t town manager)
+    CitizenBehavior* const townMgr = gw->m_citizenList;
     if (townMgr) {
         ComponentEntity* ownerLocal = ownerRef;      // the insert takes an InternalBasePtr*
-        ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerLocal,
-                                     reinterpret_cast<uint64_t>(builderKey));   // LEFT: SIG ResidenceComponent_impl_95a0 (uint64_t key)
+        ResidenceComponent_impl_95a0(townMgr, &ownerLocal, builderKey);   // 0x1400895a0
     }
 
     // 6. Worker capacity for the demolition site. No BuildComponent on the owner entity ->
