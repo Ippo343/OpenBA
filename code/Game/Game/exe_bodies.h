@@ -36,7 +36,8 @@ class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
-extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng, int minLen, int maxLen);  // 0x1400a4b30
+class NameDatabase;
+extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db, System::Random* rng, int minLen, int maxLen);  // 0x1400a4b30
 extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  // 0x1400a4c60
 
 // ---- citizenlist_serialize.cpp

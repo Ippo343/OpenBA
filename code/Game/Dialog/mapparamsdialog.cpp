@@ -17,6 +17,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
+#include "Game/NameDatabase.h"   // the Cities.ndb resource (NameDB_GenerateName)
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
 #include "system/Filename.h"
@@ -219,7 +220,7 @@ void MapParamsDialog::GenerateName() {
         System::String nameBuf;
         {
             System::Filename fnBuf("Game/Names/Cities.ndb");
-            void* nameDB = const_cast<::Object::External*>(
+            const NameDatabase* nameDB = static_cast<const NameDatabase*>(
                 ::Object::ExternalFactory::_singleton->FindOrLoad(fnBuf));
             // The IsDerivedFrom type-check retail runs here is skipped, as in
             // NewGameDialog's GenerateTownName and citizen_names.cpp: the

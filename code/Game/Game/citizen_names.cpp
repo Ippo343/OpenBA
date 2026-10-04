@@ -209,11 +209,11 @@ static NameDatabase* LoadNameDb(const char* path) {
 // Public entry: generate a citizen name for `female` into `out` (>=0x100 bytes,
 // caller owns). Returns true if a name of length >= minLen was produced. Faithful
 // minLen=3 / maxLen=10 (retail FUN_1400a4c60 passes 3, 10).
-extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap) {
+extern "C" bool GenerateCitizenName(System::Random* rng, bool female, char* out, int cap) {
     if (!out || cap < 0x100 || !rng) return false;
     NameDatabase* db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (!db) { out[0] = 0; return false; }
-    GenerateName(db, reinterpret_cast<System::Random*>(rng), 3, 10, out);   // LEFT: SIG GenerateCitizenName(void* rng) (outside callers)
+    GenerateName(db, rng, 3, 10, out);
     return std::strlen(out) >= 3;
 }
 
@@ -230,12 +230,12 @@ extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap) 
 // FindOrLoad missed; retail would walk the NULL table, so return an empty String
 // rather than faulting -- an empty name is visible in the edit box and keeps the
 // OK button's enable check honest.
-extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
-                                     int minLen, int maxLen) {
+extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db,
+                                              System::Random* rng, int minLen, int maxLen) {
     char buf[0x100];
     buf[0] = 0;
     if (db && rng)
-        GenerateName((const NameDatabase*)db, reinterpret_cast<System::Random*>(rng), minLen, maxLen, buf);   // LEFT: SIG NameDB_GenerateName(void*, void*, void*) (outside callers)
+        GenerateName(db, rng, minLen, maxLen, buf);
     // Retail constructs the result String in the caller's return slot.
     new (retStr) System::String(buf);
     return retStr;
