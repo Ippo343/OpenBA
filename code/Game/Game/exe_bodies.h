@@ -183,7 +183,6 @@ extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0
 // ---- serialize_struct60b.cpp
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);  // 0x14001f250
 extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src);  // 0x14001f5e0
-extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
 
 // ---- town_storage_seed.cpp
 class Component; class MapGenerator;

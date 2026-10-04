@@ -295,7 +295,7 @@ void TradeUI::OnTradeButton() {
             if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
                 ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),   // LEFT: SIG ActRm_StorageAdd_d000 (Action/exe_bodies.h)
                                       reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000  LEFT: SIG (same)
-                RawMaterialComponent_RegisterRawMaterial(town, bought);
+                town->RegisterRawMaterial(bought);   // 0x140091e60
             }
             // Natural resource (crop / orchard seed): availability only.
             else if (FindComponentByTypeId(bought, NaturalResourceDescription::TypeId())) {
@@ -307,7 +307,7 @@ void TradeUI::OnTradeButton() {
                 // The door was named fn_Building_AddBuyToStorage; it is bound to
                 // 0x14005ace0 TradeComponent_SpawnPurchasedLivestock (B3R: the binding
                 // decides). The never-taken "did not resolve" arm went with the door.
-                TradeComponent_SpawnPurchasedLivestock(trade, bought,
+                trade->SpawnPurchasedLivestock(bought,   // 0x14005ace0
                                                        static_cast<unsigned int>(qty));
             }
 

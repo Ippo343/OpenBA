@@ -297,8 +297,8 @@ float CropFieldComponent::Maturity() {
 
 // Retail 0x14011b410 — B4 FORWARD: 1 outside caller file (Dialog/cropui_promote.cpp);
 // the closing wave rewires it. The null test is the tree's.
-extern "C" float CropFieldComponent_Maturity(void* comp) {
-    return comp ? reinterpret_cast<CropFieldComponent*>(comp)->Maturity() : 0.0f;   // LEFT: B4 FORWARD (cropui_promote.cpp)
+extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp) {
+    return comp ? comp->Maturity() : 0.0f;   // keeps its null guard (cropui_promote.cpp)
 }
 
 // ── state 2 enter — 0x14011a920 ───────────────────────────────────────────────────

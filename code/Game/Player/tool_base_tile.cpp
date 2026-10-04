@@ -71,10 +71,6 @@ void ModelComponent::SetTransformFromYaw(const Math::Vector3* offset, float yawD
 
 // B4 FORWARD: 4 outside callers (Component/citizencomponent_lifecycle.cpp,
 // destroycomponent_states.cpp, herdcomponent.cpp, immigrationcomponent_states.cpp).
-void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float yaw) {
-    reinterpret_cast<ModelComponent*>(self)->SetTransformFromYaw(            // B4 FORWARD: the callers' spelling
-        reinterpret_cast<const Math::Vector3*>(offset), yaw);
-}
 
 // ============================================================
 // 0x14009d580 — PlacementTool footprint tile-validity over a rotated rectangle

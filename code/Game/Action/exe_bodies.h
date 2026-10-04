@@ -117,7 +117,6 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
 void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);  // 0x1400ca230
-void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
@@ -193,7 +192,6 @@ class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
 void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* point, const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude);  // 0x140092260
 void HerdStartMigration(HerdComponent* herd);  // 0x140122340
-void Pf_HerdStartMigration_122340(void* param_1);  // 0x140122340 B4 FORWARD -> HerdStartMigration
 
 // ---- action_pf_roots_road.cpp
 void Pf_ZoneRefresh_9c480(int* param_1);  // 0x14009c480
@@ -213,7 +211,6 @@ void ZoneComponent_sub_d360(int* param_1, int64_t* param_2, int param_3, int par
 int RoadTool_sub_ce00(int64_t param_1, unsigned int param_2, unsigned int param_3, uint64_t param_4, void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
-int* Pf_RegionGraphCtor_8670(int* param_1, int64_t param_2, int64_t param_3, int64_t param_4, uint32_t param_5, int param_6);  // 0x1400a8670 (local extern in code/Game/Game/region_seed.cpp (reg_region_graph.cpp prototype registers nothing))
 
 // ---- region_paircache.cpp
 extern "C" void* Pf_RegionPairCache_Build();  // no retail address (local extern in code/Game/Game/region_seed.cpp)

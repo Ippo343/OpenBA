@@ -441,7 +441,7 @@ void AnimalComponent::OnAdded() {
 
     AnimalDescription* desc = AnimalDesc(this);
     if (desc) {
-        PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+        GetWanderBox(&wanderX, &wanderY, &wanderWidth, &wanderHeight,
                                          desc->_i20);
     }
 
@@ -597,7 +597,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
             if ((cells && CellTerrain(cells, cell) != 0x02) || blocked) {
                 habitatCell = FindHabitat();
-                PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                GetWanderBox(&wanderX, &wanderY, &wanderWidth, &wanderHeight,
                                                  desc->_i20);
             }
         }
@@ -685,7 +685,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
                 if (misses > 10) {
                     habitatCell = FindHabitat();
-                    PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                    GetWanderBox(&wanderX, &wanderY, &wanderWidth, &wanderHeight,
                                                      desc->_i20);
                     misses = 0;
                 }

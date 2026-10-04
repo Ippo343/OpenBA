@@ -245,7 +245,7 @@ void FireComponent::Extinguish() {
     // ParticleComponent: fade the flames out.
     {
         ParticleComponent* part = _entity->FindComponent<ParticleComponent>();   // 0x140005200
-        Tornado_ParticleReverse_53720(part, desc->particleEmitter);
+        part->FadeOutEmitter(desc->particleEmitter);   // 0x140053720
     }
 
     // DestroyComponent: leave the BURNING state. (The tree's null test on the

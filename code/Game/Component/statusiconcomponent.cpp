@@ -297,9 +297,6 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
 // citizenai_gather, citizen_needsupdate, destroycomponent_states, workcomponent,
 // workplacecomponent; Work: consumeproduce, fishingwork, foresterwork, harvestarea,
 // harvestorchard, herbalistwork, huntwork, pasturework)
-void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
-    reinterpret_cast<StatusIconComponent*>(param_1)->SetFlag(flagIndex, value);   // LEFT: B4 FORWARD (wave X: destroycomponent_states.cpp)
-}
 
 // ============================================================
 // Standalone bring-up (Phase A): faithful construction + diagnostics

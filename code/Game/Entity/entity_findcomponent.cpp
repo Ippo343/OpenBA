@@ -213,7 +213,3 @@ void fn_FindComponent_Unknown7ee8(void* entity, void* retval) {
 // QuarryComponent slot 15 (0x140054bc7), FUN_1400bef70 (0x1400bf413), the
 // ConsumeProduceUI slots and ConsumeProduceAction::Serialize.
 // ============================================================
-void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
-    return new (param_2) ::Object::InternalPtr<ConsumeProduceComponent>(
-        reinterpret_cast<ComponentEntity*>(param_1)->FindComponent<ConsumeProduceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks  LEFT: SIG (int64_t receiver, wave X)
-}

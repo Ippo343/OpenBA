@@ -291,5 +291,5 @@ int WorkComponent::CalcMaxWorkers() const {
 // B4 FORWARD: outside callers in Dialog/townhallui.cpp, Dialog/workplaceui.cpp and the
 // inline bodies of Component/exe_bodies.h.
 int fn_StorageCountQuery(void* component) {
-    return ((WorkComponent*)component)->CalcMaxWorkers();   // B4 FORWARD: the old receiver cast
+    return ((WorkComponent*)component)->CalcMaxWorkers();   // B4 FORWARD: Component/exe_bodies.h still calls this (fn_CalcWorkerSlots, fn_CitizenComponent_HasVacancy)
 }

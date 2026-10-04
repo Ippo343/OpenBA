@@ -254,7 +254,7 @@ void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector
     ModelComponent* model = _entity->FindComponent<ModelComponent>();   // DAT_1401c7a50
     if (!model) return;
     float yaw = rng->RandFloatTol() * kYawRange;
-    ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(model), &spawnPoint, yaw);   // 0x140003870  LEFT: SIG ToolTile_SetTransformFromYaw_3870
+    model->SetTransformFromYaw(&spawnPoint, yaw);   // 0x140003870
     ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(model),   // 0x1401253d0  LEFT: SIG ActCNR_NR_SetVariant_1253d0
                                 static_cast<uint16_t>(gender), 0);
     if (ndesc) {

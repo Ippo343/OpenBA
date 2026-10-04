@@ -225,7 +225,3 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
 
 // B4 FORWARD: 1 outside caller (Dialog/tradeui_checkout.cpp) holds the post and the
 // purchased template untyped; the closing wave rewires it.
-extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty) {
-    reinterpret_cast<TradeComponent*>(selfV)->SpawnPurchasedLivestock(
-        reinterpret_cast<ComponentDescription*>(tmpl), qty);   // B4 FORWARD
-}

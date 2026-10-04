@@ -607,9 +607,6 @@ void ParticleComponent::FadeOutEmitter(int index) {
 }
 
 // B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp).
-extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
-    reinterpret_cast<ParticleComponent*>(particleComp)->FadeOutEmitter(index);   // LEFT: B4 FORWARD (wave X: firecomponent_ignite.cpp)
-}
 
 // AmbientEmitterComponent::MoveTo (0x140042960): move every live emitter to `newPos`,
 // then latch it into the component's cached position at +0x28. No-op when the position

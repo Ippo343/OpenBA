@@ -145,10 +145,6 @@ void CitizenBehavior::RegisterRawMaterial(ComponentDescription* material) {
 // B4 FORWARD: 5 outside callers (debugui.cpp, tradeui_checkout.cpp, starttown.cpp,
 // tradecomponent_dock.cpp, and this file's Startup, whose receiver comes from the
 // untyped GameUpdateLoop::m_citizenList).
-void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain) {
-    reinterpret_cast<CitizenBehavior*>(worldMgr)->RegisterRawMaterial(
-        reinterpret_cast<ComponentDescription*>(entityChain));   // LEFT: B4 FORWARD (wave X: 4 outside caller files hold void*)
-}
 
 // ============================================================
 // RawMaterialDescription::GetPickupCategory (0x140129480): the pickup work's

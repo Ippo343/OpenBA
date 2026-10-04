@@ -1445,7 +1445,7 @@ void TownHallUI::UpdateInventory() {
                 // Get max count
                 int maxCount = workComp->workState;
                 if (maxCount == 0) {
-                    maxCount = fn_StorageCountQuery(workComp);
+                    maxCount = workComp->CalcMaxWorkers();   // 0x14012e5c0
                     workComp->workState = maxCount;
                 }
 

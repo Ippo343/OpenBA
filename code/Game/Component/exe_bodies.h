@@ -142,7 +142,8 @@ void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0
 void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
 
 // ---- cropfieldcomponent_states.cpp
-extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410  B4 FORWARD: CropFieldComponent::Maturity (cropui_promote.cpp)
+class CropFieldComponent;
+extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp);  // 0x14011b410 -> CropFieldComponent::Maturity, with a null guard (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00
@@ -193,8 +194,6 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 // B.4 COMP-6: OrchardComponent_ValidateRefs had no caller left: deleted.
 
 // ---- pasturecomponent.cpp
-void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20 B4 FORWARD to AnimalComponent::GetWanderBox
-uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570 B4 FORWARD to PastureComponent::ComputeCapacity
 
 // ---- pasturecomponent_spawn.cpp
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  // 0x140128670
@@ -205,13 +204,11 @@ class Map;   // Game/Map.h
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)
 
 // ---- rawmaterialcomponent.cpp
-void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 
 // ---- residencecomponent.cpp
 // B.4 COMP-6: the three forwarders (SetFamilyCount / EvictResidents / IsFamilyFull) had no caller left: deleted.
 
 // ---- statusiconcomponent.cpp
-void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)
 
 // ---- storagecomponent.cpp
 int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
@@ -224,7 +221,6 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
 
 // ---- tradecomponent_livestock.cpp
-extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0 B4 FORWARD -> TradeComponent::SpawnPurchasedLivestock (Dialog/tradeui_checkout.cpp)
 
 // ---- wellcomponent.cpp
 // B.4 COMP-f: 0x140091ba0 is CitizenBehavior::UnregisterWell.
