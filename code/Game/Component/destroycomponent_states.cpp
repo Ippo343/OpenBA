@@ -72,6 +72,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/ClearStorage.h"   // B.3.8 CB1a (Vtable)
 #include "Work/Work.h"           // B.3.x W0: Work::GetPriority by name
+#include "Work/BuildStructure.h"   // B4 X4-WORK: BuildStructure_CreateInPlaceFull returns the typed work
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/DestroyDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7628 cell class
 #include "Component/ModelDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7a88 cell class
@@ -572,11 +573,8 @@ char DestroyComponent::State5Enter() {
             void* mem = ::System::MemoryAllocator::MemAlloc(0x70, 8);
             if (mem) {
                 ComponentEntity* entityIBP = entity;
-                BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
-                int64_t workIBP = 0;
-                new (&workIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(mem));   // LEFT: SIG BuildStructure_CreateInPlaceFull (Work/exe_bodies.h) builds into void*
-                CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG BuildStructure_CreateInPlaceFull builds into void* (the work held as int64_t)
+                Object::InternalPtr<Work> workIBP(BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1));
+                CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, &workIBP);
             }
         }
     } else {

@@ -1019,11 +1019,11 @@ float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* out
 
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Game, Player, Work)
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5) {
-    return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);   // LEFT: SIG Pf_EntityResolvePos_2e20
+    return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);   // LEFT: SIG Pf_EntityResolvePos_2e20: callers hand a Component* (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253), a void* (citizenai_leisure.cpp:397) and a BuildComponent* (clearstorage.cpp:202, known_port_issues row 643)
 }
 
 
 // B4 FORWARD: outside callers in ~20 files (Component, Entity, Game, Player, Work)
-int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
-    return EntityAnchorCell(reinterpret_cast<ComponentEntity* const*>(param_1IBP), param_2);   // LEFT: SIG Pf_EntityAnchorCell_7fb0
+int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2) {
+    return EntityAnchorCell(param_1IBP, param_2);
 }

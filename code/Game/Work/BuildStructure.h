@@ -35,7 +35,7 @@ public:
     BuildStructure();                                               // 0x1400e5a90
     BuildStructure(void* entityIBP, uint8_t altAnim);               // 0x1400e59c0
 
-    // 0x1400e5920: frees the tree and the array
+    // 0x1400e5920: the compiler's chain over the two members (set, then +0x50)
     ~BuildStructure() override;                                     // [0]  0x140029680
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e5850
     int   Execute(CitizenComponent** citizenPtr, System::Time* context) override;  // [4]  0x1400e4fc0
@@ -51,25 +51,27 @@ public:
     uint8_t  field_48;           // +0x48: bool — serialized flag (has initial setup?)
     uint8_t  _pad49[3];          // +0x49: padding
     int32_t  field_4c;           // +0x4C: current slot index (round-robin for assignment)
-    uint8_t* field_50;           // +0x50: slot availability array (byte per build point, 0=free 1=busy;
-                                 //        Persist 0x1400e5850 uses the unsigned-char array overload)
-    int32_t  field_58;           // +0x58: slot count (number of build points)
-    int32_t  field_5c;           // +0x5C: capacity of the +0x50 array (the ctors zero it)
-    // +0x60: the citizen assignment tree's root: Collection::Set<InternalPtr<CitizenComponent>>
+    // +0x50: Collection::Array<uint8_t> {data, count +0x58, capacity +0x5C}: slot
+    // availability, one byte per build point (0 = free, 1 = busy; Persist 0x1400e5850 uses
+    // the unsigned-char array overload). +0x60: Collection::Set<InternalPtr<CitizenComponent>>
     // (node 0x28: element, parent +0x08, left +0x10, right +0x18; Cleanup 0x1400e57a0 reads
-    // the element's +0x278). The container itself stays two raw fields (H5: Set has a dtor).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* field_60;
-    int32_t  field_68;           // +0x68: priority counter (GetPriority returns field_68 > 0)
-    uint8_t  _pad6c[4];          // +0x6C: padding
+    // the element's +0x278); its count +0x68 is GetPriority's (0x140029670 `> 0`). Real
+    // members: the ctors 0x1400e5a90 / 0x1400e59c0 zero +0x50 / +0x58 as two qwords and the
+    // set's root (qword) and count (dword) under an EH state; the dtor 0x1400e5920 clears the
+    // set FIRST, then frees +0x50 (data = 0, +0x58 = 0 qword): the reverse of this order. The
+    // Set's ctor also zeroes its +0x0c pad (+0x6C), which retail's leaves (row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    Collection::Array<uint8_t> _slots;   // +0x50
+    CitizenSet _citizens;                // +0x60
 };
 
 static_assert(sizeof(BuildStructure) == 0x70, "BuildStructure is 0x70 (retail create MemAlloc)");
 static_assert(alignof(BuildStructure) == 8, "BuildStructure is 8-aligned");
 static_assert(offsetof(BuildStructure, field_48) == 0x48, "BuildStructure +0x48");
 static_assert(offsetof(BuildStructure, field_4c) == 0x4c, "BuildStructure +0x4c");
-static_assert(offsetof(BuildStructure, field_50) == 0x50, "BuildStructure +0x50");
-static_assert(offsetof(BuildStructure, field_58) == 0x58, "BuildStructure +0x58");
-static_assert(offsetof(BuildStructure, field_5c) == 0x5c, "BuildStructure +0x5c");
-static_assert(offsetof(BuildStructure, field_60) == 0x60, "BuildStructure +0x60");
-static_assert(offsetof(BuildStructure, field_68) == 0x68, "BuildStructure +0x68");
+static_assert(offsetof(BuildStructure, _slots) == 0x50, "BuildStructure +0x50");
+static_assert(offsetof(BuildStructure, _slots) + offsetof(Collection::Array<uint8_t>, _size) == 0x58, "BuildStructure +0x58");
+static_assert(offsetof(BuildStructure, _slots) + offsetof(Collection::Array<uint8_t>, _capacity) == 0x5c, "BuildStructure +0x5c");
+static_assert(offsetof(BuildStructure, _citizens) == 0x60, "BuildStructure +0x60");
+static_assert(offsetof(BuildStructure, _citizens) + offsetof(BuildStructure::CitizenSet, _count) == 0x68, "BuildStructure +0x68");

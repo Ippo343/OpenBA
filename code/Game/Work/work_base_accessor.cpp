@@ -37,11 +37,9 @@
 // container offsets differ (count at +0x30, ptr-array base at +0x28) and there are
 // NO InternalBasePtr_CheckPtr calls; the match is written straight into *retOut
 // (a plain undefined8* slot, not an IBP ctor). Type-ID global DWORD_1401c7cb8.
-// Caller signature: void* fn(uintptr_t compList, void* retOut)
-// RCX is a ComponentDescription: the list is its sub-descriptions (+0x28 / +0x30).
-// LEFT: the six outside callers hand it as an integer and the out slot as void*.
-void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
-    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(compList);   // LEFT: SIG WorkAcc_FindComponent_6330 (X-G2-WAIT): its callers hand the description as an integer
+// RCX is a ComponentDescription: the list is its sub-descriptions (+0x28 / +0x30);
+// RDX the out slot, returned.
+RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut) {
     const uint32_t typeId = RawMaterialDescription::TypeId();  // 0x1401c7cb8
     RawMaterialDescription* found = nullptr;
     int n = desc->_subDescCount;
@@ -55,6 +53,6 @@ void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
             break;
         }
     }
-    *reinterpret_cast<RawMaterialDescription**>(retOut) = found;   // LEFT: SIG WorkAcc_FindComponent_6330 (X-G2-WAIT): the out slot arrives as void*
+    *retOut = found;
     return retOut;
 }

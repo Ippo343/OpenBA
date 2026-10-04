@@ -427,7 +427,7 @@ void PastureProduce(PastureComponent* self) {
     if (produced == nullptr) return;
 
     RawMaterialDescription* rawDesc = nullptr;
-    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(produced), &rawDesc);   // LEFT: SIG WorkAcc_FindComponent_6330
+    WorkAcc_FindComponent_6330(produced, &rawDesc);
     if (!rawDesc) return;
     const int perUnit = rawDesc->_lowCreateCount;
     if (perUnit <= 0) return;

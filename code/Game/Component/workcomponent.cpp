@@ -118,7 +118,7 @@ void WorkComponent::CancelWork() {
 
     workFlags = value->field_24;   // the work's +0x24 (the queue-order key)
 
-    ActCt_TaskCleanup_8e30(GameUpdateLoop::_singleton->m_tutorial, key);   // 0x1400f8e30
+    TaskCleanup(GameUpdateLoop::_singleton->m_tutorial, key);   // 0x1400f8e30
 
     // 0x140002f90 FindComponent<StatusIconComponent>; the null test is the tree's.
     if (StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>()) {

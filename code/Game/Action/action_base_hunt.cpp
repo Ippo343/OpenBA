@@ -158,16 +158,16 @@ void NotifyEntityChanged(ComponentEntity* entity) {
 
 // B4 FORWARD: outside callers in many files (the arrays arrive as void*)
 void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
-    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arrV), newCount,  // LEFT: SIG ActHunt_DynArraySetCount_3110 (wave X family across two agents)
-                      reinterpret_cast<void* const*>(valuePtr));  // LEFT: SIG ActHunt_DynArraySetCount_3110 (wave X family across two agents)
+    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arrV), newCount,  // LEFT: SIG ActHunt_DynArraySetCount_3110: 22 call sites in 15 files hand the qword array as void* (raw triples in their owners' headers)
+                      reinterpret_cast<void* const*>(valuePtr));  // LEFT: SIG ActHunt_DynArraySetCount_3110: the fill value arrives as void* from the same 22 call sites
 }
 
 // B4 FORWARD: outside callers in many files
 void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
-    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_MarkEntityRemoval_c2ea0 (wave X family across two agents)
+    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_MarkEntityRemoval_c2ea0: 17 call sites in 15 files (B4 FORWARD) still hand the entity as void*
 }
 
 // B4 FORWARD: outside callers in many files
 void ActHunt_NotifyEntityChanged_c3470(void* self) {
-    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_NotifyEntityChanged_c3470 (wave X family across two agents)
+    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_NotifyEntityChanged_c3470: 17 call sites in 11 files (B4 FORWARD) still hand the entity as void*
 }

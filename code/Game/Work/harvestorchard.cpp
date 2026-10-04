@@ -233,11 +233,10 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 FruitDescription* descComp = isDescDerived ? static_cast<FruitDescription*>(descCompObj) : nullptr;
 
                                 // Get raw material reference (FruitDescription::_ref30 is
-                                // void*; 0x140006330 and 0x1400bb7b0 take it as an integer:
-                                // LEFT)
+                                // void*; 0x1400bb7b0 takes it as an integer: LEFT)
                                 void* rawMatRef = descComp->_ref30;
-                                uintptr_t rawMatIBP = 0;
-                                WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(rawMatRef), &rawMatIBP);  // LEFT: SIG WorkAcc_FindComponent_6330 (wave X family across two agents)
+                                RawMaterialDescription* rawMatIBP = nullptr;
+                                WorkAcc_FindComponent_6330(reinterpret_cast<ComponentDescription*>(rawMatRef), &rawMatIBP);  // LEFT: FruitDescription::_ref30 is declared void* (Component/FruitDescription.h, COMP)
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the

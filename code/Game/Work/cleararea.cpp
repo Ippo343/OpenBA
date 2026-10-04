@@ -636,7 +636,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 // Create citizen IBP for gather work
                 CitizenComponent* citizenRef = *citizenIBP;
 
-                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,  // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)
+                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(gatherSys, &citizenRef,
                                                           resourceTypeId, 0));   // the door read EAX
                 if (gatherResult & 0xFF) {
                     result = 2;

@@ -44,27 +44,9 @@
 #include "Game/Map.h"                                // B4 WORK-c: Map, MapCell
 
 
-// ============================================================
-// FindComponent family
-// ============================================================
-// FUN_140002ed0 / 6270 are instances of ComponentEntity::FindComponent<T>()
-// (Entity/ComponentEntity.h). These names stay as B4 FORWARD forwarders, returning the
-// out-IBP they were handed, until their callers hold a typed entity. (2f90 / 3050 / 52c0
-// had no caller left: deleted, B4 P2 WORK-3.)
-namespace {
-// The one receiver cast of this file's B4 FORWARD finders; it takes the place of
-// the shared loop body (FindComponentByTypeId) the six names called before.
-template <class T>
-void* ForwardFindComponent(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<T>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: SIG WorkBase_FindComponent_2ed0: its callers (citizenai_growup.cpp, citizenai_leisure.cpp, destroycomponent_workerrelease.cpp: X3-COMP) hand the entity as uintptr_t
-}
-}  // namespace
-
-// Reimpl of Entity_FindComponent_Position (FUN_140002ed0, type 0x1401c7900 = InteractComponent)
-void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<InteractComponent>(entity, retIBP);
-}
+// (FUN_140002ed0 = ComponentEntity::FindComponent<InteractComponent>(): its B4 FORWARD
+// forwarder WorkBase_FindComponent_2ed0 had three callers left, which now call the
+// member: deleted, B4 X4-WORK. 2f90 / 3050 / 52c0 went in B4 P2 WORK-3.)
 
 // ============================================================
 // Work_Ctor25 (0x1400f72e0) — the shared Work base constructor.

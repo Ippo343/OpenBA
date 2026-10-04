@@ -101,7 +101,7 @@ static WorkIdNode* FindTaskNode(const WorkScheduler* sched, int taskIdx) {
 // LEFT: 0x14001ca60 / 0x14001a6e0's C declarations (Work/exe_bodies.h, WORK-a's header)
 // take the tree header as uintptr_t*.
 static uintptr_t* TreeHeader(WorkSchedulerTree* tree) {
-    return reinterpret_cast<uintptr_t*>(tree);  // LEFT: SIG WorkCellBST_Remove_ca60 (ICF over five node types) / WorkBST_BSTRemove_a6e0 (wave X family across two agents)
+    return reinterpret_cast<uintptr_t*>(tree);  // LEFT: FLOOR? the scheduler's WorkSchedulerTree {root, count} handed to the one erased WorkCellBST core (ICF over five node / header types)
 }
 } // namespace
 
@@ -198,7 +198,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             } else if (k < wantKey) {
                 n = n->right;   // greater
             } else {
-                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),  // LEFT: SIG WorkBST_BSTRemove_a6e0 (wave X family across two agents)
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),  // LEFT: SIG WorkBST_BSTRemove_a6e0: WorkScheduler +0x10 / +0x18 is a raw root + count pair (Game/WorkScheduler.h, GAME), handed to the one erased core
                                        n);   // 0x14001a6e0
                 break;
             }
@@ -416,9 +416,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: outside callers (Component, Work files)
-void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
-    TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);  // LEFT: SIG ActCt_TaskCleanup_8e30 (wave X family across two agents)
-}
+// (ActCt_TaskCleanup_8e30, the B4 FORWARD to TaskCleanup: its two callers call
+// TaskCleanup now, deleted, B4 X4-WORK.)
 
 

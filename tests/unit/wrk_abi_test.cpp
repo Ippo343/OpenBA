@@ -145,10 +145,10 @@ UNIT_TEST(wrk_leaf_buildroad) {
 UNIT_TEST(wrk_leaf_buildstructure) {
     WRK_LEAF_SHAPE(BuildStructure, Work, 0x70);   // create 0x140029630, table 0x1401610a0
     CHECK_EQ(offsetof(BuildStructure, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(BuildStructure, field_50), (size_t)0x50);
-    CHECK_EQ(offsetof(BuildStructure, field_5c), (size_t)0x5c);
-    CHECK_EQ(offsetof(BuildStructure, field_60), (size_t)0x60);
-    CHECK_EQ(offsetof(BuildStructure, field_68), (size_t)0x68);
+    CHECK_EQ(offsetof(BuildStructure, _slots), (size_t)0x50);
+    CHECK_EQ(offsetof(BuildStructure, _slots) + offsetof(Collection::Array<uint8_t>, _capacity), (size_t)0x5c);
+    CHECK_EQ(offsetof(BuildStructure, _citizens), (size_t)0x60);
+    CHECK_EQ(offsetof(BuildStructure, _citizens) + offsetof(BuildStructure::CitizenSet, _count), (size_t)0x68);
 }
 
 UNIT_TEST(wrk_leaf_cleararea) {
@@ -165,9 +165,8 @@ UNIT_TEST(wrk_leaf_cleararea) {
 UNIT_TEST(wrk_leaf_clearstorage) {
     WRK_LEAF_SHAPE(ClearStorage, Work, 0x68);
     CHECK_EQ(offsetof(ClearStorage, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(ClearStorage, _field50), (size_t)0x50);
-    CHECK_EQ(offsetof(ClearStorage, _field58), (size_t)0x58);
-    CHECK_EQ(offsetof(ClearStorage, _field60), (size_t)0x60);
+    CHECK_EQ(offsetof(ClearStorage, _citizens), (size_t)0x58);
+    CHECK_EQ(offsetof(ClearStorage, _citizens) + offsetof(ClearStorage::CitizenSet, _count), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_consumeproduce) {
@@ -209,14 +208,12 @@ UNIT_TEST(wrk_leaf_foresterwork) {
 
 UNIT_TEST(wrk_leaf_gatherrawmaterials) {
     WRK_LEAF_SHAPE(GatherRawMaterials, Work, 0x78);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_50), (size_t)0x50);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_54), (size_t)0x54);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_60), (size_t)0x60);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_64), (size_t)0x64);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_68), (size_t)0x68);
-    CHECK_EQ(offsetof(GatherRawMaterials, field_70), (size_t)0x70);
+    CHECK_EQ(offsetof(GatherRawMaterials, _present), (size_t)0x48);
+    CHECK_EQ(offsetof(GatherRawMaterials, _present) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x50);
+    CHECK_EQ(offsetof(GatherRawMaterials, _inFlight), (size_t)0x58);
+    CHECK_EQ(offsetof(GatherRawMaterials, _inFlight) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x60);
+    CHECK_EQ(offsetof(GatherRawMaterials, _citizens), (size_t)0x68);
+    CHECK_EQ(offsetof(GatherRawMaterials, _citizens) + offsetof(GatherRawMaterials::CitizenSet, _count), (size_t)0x70);
 }
 
 UNIT_TEST(wrk_leaf_harvestarea) {
