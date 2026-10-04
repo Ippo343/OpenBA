@@ -376,13 +376,13 @@ void Save::SaveLoad::UpdateLoadFromFile() {
         block = fresh->SetupLoad();
 
         ::IO::Persistence* persistence = PersistenceSingleton();
-        if ((persistence->_flags & 1) == 0) {
+        if ((persistence->_worker._runFlags & 1) == 0) {
             // GetSaveFilename's by-value Filename is born in retail's hidden
             // slot; the worker enqueue (0x1800b7460) takes the EMBEDDED
             // worker at Persistence+0x10; the Filename is released right
             // after, as its destructor.
             System::Filename filename = persistence->GetSaveFilename(_saveName);
-            RtIo_PersistenceWorker_EnqueueLoad(&persistence->_workerVtable,
+            RtIo_PersistenceWorker_EnqueueLoad(&persistence->_worker,
                                                &filename.AsString(), 1, &block);
         }
 
@@ -788,11 +788,11 @@ void Save::SaveLoad::UpdateLoad() {
 
         const SaveInfo& nameRow = _saves._data[_selectedIndex];
         ::IO::Persistence* persistence = PersistenceSingleton();
-        if ((persistence->_flags & 1) == 0) {
+        if ((persistence->_worker._runFlags & 1) == 0) {
             // THREE arguments (see note 1 in the banner): the hidden slot is
             // `filename`, the name the row's. Released as its destructor.
             System::Filename filename = persistence->GetSaveFilename(nameRow.name);
-            RtIo_PersistenceWorker_EnqueueLoad(&persistence->_workerVtable,
+            RtIo_PersistenceWorker_EnqueueLoad(&persistence->_worker,
                                                &filename.AsString(), 1, &block);
         }
 
@@ -1008,9 +1008,9 @@ void Save::SaveLoad::UpdateSave() {
         blocks[1].id   = heap->_id;
 
         ::IO::Persistence* persistence = PersistenceSingleton();
-        if ((persistence->_flags & 1) == 0) {
+        if ((persistence->_worker._runFlags & 1) == 0) {
             System::Filename filename = persistence->GetSaveFilename(_string20);
-            RtIo_PersistenceWorker_EnqueueSave(&persistence->_workerVtable,
+            RtIo_PersistenceWorker_EnqueueSave(&persistence->_worker,
                                                &filename.AsString(), 2, blocks);
         }
 
@@ -1397,12 +1397,12 @@ void Save::SaveLoad::UpdateList() {
         // registered address door.
         RtSaveDetail::ArraySaveInfoDtor(&_saves);
 
-        if ((persistence->_flags & 1) == 0) {
+        if ((persistence->_worker._runFlags & 1) == 0) {
             // retail 0x18002ac40 — see the banner on
             // `rtcoll::RtColl_ArrayDtorElem_18002ac40` above for why this is a
             // direct call by name rather than a member call. Its receiver is
             // the Array<SaveGameInfo> header at Persistence+0x80.
-            rtcoll::RtColl_ArrayDtorElem_18002ac40(&persistence->_saves);
+            rtcoll::RtColl_ArrayDtorElem_18002ac40(&persistence->_worker._saves);
             // The worker handshake, in retail's order: request code first, then
             // the result word, then the two events.
             //
@@ -1425,11 +1425,11 @@ void Save::SaveLoad::UpdateList() {
             // false red for a permanent blind spot on the one handshake this
             // state exists to perform; a reader who sees it go red on exactly
             // this label should suspect the worker before suspecting the port.
-            persistence->_command = 4;   // request: list saves
-            persistence->_status  = 0;   // result: pending
+            persistence->_worker._command = 4;   // request: list saves
+            persistence->_worker._status  = 0;   // result: pending
 
-            ResetEvent(persistence->_doneEvent);
-            SetEvent(persistence->_workEvent);
+            ResetEvent(persistence->_worker._hFinished);
+            SetEvent(persistence->_worker._hStart);
         }
 
         _progress = 1;
@@ -1568,7 +1568,7 @@ void Save::SaveLoad::UpdateList() {
     // ---- state 3 -----------------------------------------------------------
     if (progress == 3) {
         // The guard is INSIDE the state; the transition is not. See point 2.
-        if ((persistence->_flags & 1) == 0 && persistence->_status == 1) {
+        if ((persistence->_worker._runFlags & 1) == 0 && persistence->_worker._status == 1) {
             RtIo::SaveBlock block{};
             // `ADD RCX,0x28` — the EMBEDDED SavedState, not the heap one at
             // +0x40 that UpdateSave allocates. Hidden return slot in RDX.
@@ -1588,7 +1588,7 @@ void Save::SaveLoad::UpdateList() {
         SaveInfo&     row = _saves._data[at];
 
 
-        if ((persistence->_flags & 1) == 0 && persistence->_status == 1) {
+        if ((persistence->_worker._runFlags & 1) == 0 && persistence->_worker._status == 1) {
             // --- the metadata arrived ---
             void*       pixels      = nullptr;
             int         w = 0, h = 0, field44 = 0;

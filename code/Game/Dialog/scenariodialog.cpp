@@ -343,11 +343,7 @@ void ScenarioDialog::LoadSelected() {
         //   6. persistence+0x90 = RSP+0xa8 (restore from GetSavePath result)
         IO::Persistence* persistence = ::IO::Persistence::_singleton;
         System::String savePathBuf = persistence->GetSavePath();  // kept alive until after the SaveLoad::Update loop
-        // LEFT: Persistence::_savePath is the runtime's RtSystem::String POD
-        // (runtime/types/io/Persistence.h); the refcounted assignments go
-        // through it as a System::String.
-        System::String& persistenceDataDir =
-            *reinterpret_cast<System::String*>(&persistence->_savePath);   // LEFT: H5 Persistence::_savePath (examined and LEFT, see its header line)
+        System::String& persistenceDataDir = persistence->_savePath;
         {
             System::Filename dataDir = ::IO::FileSystem::_singleton->GetDataDirectory();
             persistenceDataDir = dataDir.AsString();

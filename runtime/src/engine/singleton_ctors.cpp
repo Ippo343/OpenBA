@@ -123,8 +123,6 @@ static_assert(RtInput::kMouseClippingOffset == 0x11D0,
               "Input::Device ctor 0x1800e13b0: MOV byte [RCX+0x11d0],R8B");
 static_assert(offsetof(RtAudio::Configuration, effectVolume) == 0x0C,
               "Audio::Configuration ctor 0x1800ddeb0: MOV dword [RCX+0xc],0x64");
-static_assert(offsetof(RtIo::Persistence, savePath) == 0x90,
-              "Persistence ctor 0x1800b8020: MOV qword [RDI+0x90],RSI");
 
 }  // namespace
 
@@ -309,60 +307,10 @@ IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
 // ===========================================================================
 // IO::Persistence           ??0Persistence@IO@@QEAA@XZ          0x1800b8020
 // ---------------------------------------------------------------------------
-//   MOV qword [RCX],RSI                       ; settingsMapRoot = 0
-//   MOV dword [RCX+0x8],ESI
-//   LEA RBX,[RCX+0x10] ; MOV EDX,0x10000 ; CALL 0x1800ca4e0
-//                                             ; == ??0Thread@System@@QEAA@I@Z
-//   LEA RAX,[0x180155860] ; MOV qword [RBX],RAX   ; override the base vtable
-//   MOV qword [RBX+0x30],RSI                  ; = self+0x40
-//   MOV qword [RBX+0x38],1                    ; = self+0x48
-//   MOV dword [RBX+0x40],ESI                  ; = self+0x50
-//   MOV qword [RBX+0x50..0x78],RSI            ; = self+0x60..+0x88
-//   MOV qword [RDI+0x90],RSI                  ; _savePath
-//   MOV qword ptr [0x1801fc6b8],RDI           ; _singleton
-//
-// THE BASE IS System::Thread AND IT IS ALREADY PORTED. 0x1800ca4e0 is
-// `??0Thread@System@@QEAA@I@Z` (lane B3/P, runtime/src/system/thread_win.cpp),
-// so IO::Persistence embeds a worker thread at +0x10 and the 0x10000 is its
-// stack size. This body therefore reaches it BY NAME through RT_EXPORT_ONCE —
-// the port-aware door — and not by address: tools/port_bypass_audit.py caught
-// exactly that mistake in the first draft of this file, which is the same class
-// of defect Wave 9 lane R found in graphics/scene.cpp (a port walking past a
-// port). Reaching it by name also means the thread the object gets is OURS.
-//
-// *** ORACLE DEFERRED, AND HERE IS THE BLOCKER. *** That base constructor is
-// not inert: it `_beginthreadex`s a SUSPENDED worker (thread proc 0x1800ca440,
-// arg = the object), creates three events, and RESUMES it. So
-//   (a) a scratch-buffer probe would start a real thread bound to a fake
-//       object — twice, once for the shipped body and once for ours, and
-//   (b) the four handle values differ between the two runs BY CONSTRUCTION, so
-//       a byte compare of the +0x10..+0x40 region reports a divergence that
-//       says nothing about the port.
-// The port is registered anyway: it has no caller in our tree today (so
-// registering is inert now) and at cutover it is the only thing that writes
-// `?_singleton@Persistence@IO@@`, which input.cpp:591/619, audio.cpp:640/683
-// and device.cpp:135 all read at startup.
-//
-// *** ONE RESIDUAL CUTOVER DEPENDENCY, NAMED RATHER THAN HIDDEN. *** The vtable
-// at 0x180155860 (Persistence's own, overriding Thread's) is NOT an export —
-// pefile finds no name for it — and it is NOT in lane C2's mint table. So it is
-// reached by ADDRESS and at cutover `ResolveAddr(Module::Runtime, ...)` will
-// hand back null and this field will be a null vptr. That is a row for lane C2
-// (mint the vtable) or for whoever ports IO::Persistence's virtuals; it is not
-// something this body can fix, and a silent `if (v)` here would only hide it.
+// B.4 wave X (X7-RT): the class's own constructor now (its members are typed:
+// runtime/types/io/Persistence.h quotes the retail sequence), defined in
+// runtime/src/io/persistence.cpp; Engine's startup placement-constructs it.
 // ===========================================================================
-IO::Persistence* Ctor_Persistence(IO::Persistence* self) {
-    self->_settingsMap.root  = nullptr;
-    self->_settingsMap.count = 0;
-    // ENDGAME B.3.9 IO (W2, foreign site): the embedded worker is the REAL
-    // class -- ??0Thread(0x10000), its vptr, the +0x40..+0x88 stores
-    // (runtime/types/io/PersistenceWorker.h), the same steps in the same order.
-    // It starts at +0x10, the worker's vptr (`_workerVtable`, Persistence.h).
-    ::new (reinterpret_cast<uint8_t*>(self) + offsetof(IO::Persistence, _workerVtable)) IO::PersistenceWorker();   // LEFT: H5 the embedded PersistenceWorker at +0x10 is the raw `_workerVtable` field of IO::Persistence (typed with the settings map and _savePath: ledger)
-    self->_savePath.data = nullptr;
-    IO::Persistence::_singleton = self;
-    return self;
-}
 
 // ===========================================================================
 // Video::Device   ??0Device@Video@@QEAA@W4DeviceType@01@@Z      0x1800f7160

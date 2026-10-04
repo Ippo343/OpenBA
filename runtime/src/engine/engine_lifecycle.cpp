@@ -524,7 +524,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // --- 0x1800dba5e: IO::Persistence ---------------------------------------
     IO::Persistence* persistence = static_cast<IO::Persistence*>(MemAlloc(0x98, 4));
     if (persistence)
-        rtengine::Ctor_Persistence(persistence);                    // 0x1800b8020
+        new (persistence) IO::Persistence();                        // 0x1800b8020
     _persistence = persistence;
     if (!persistence->Startup()) {
         g_startupFailAt = 4;

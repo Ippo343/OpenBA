@@ -273,14 +273,6 @@ void SignalWorker(IO::PersistenceWorker* w) {
     ::SetEvent(w->_hStart);         // tail JMP [0x18014b368]
 }
 
-// The enqueue helpers' receiver is `&Persistence::_workerVtable` -- the
-// EMBEDDED worker, which `IO::Persistence` holds as loose fields and not as a
-// typed member (it has no constructor; engine/singleton_ctors.cpp
-// placement-constructs the worker). So the receiver arrives as `void*`.
-IO::PersistenceWorker* AsWorker(void* worker) {
-    return static_cast<IO::PersistenceWorker*>(worker);  // LEFT: H5 the receiver is &Persistence::_workerVtable, the embedded PersistenceWorker IO::Persistence holds as loose fields (typing it is the Persistence behaviour commit: _savePath, worker, settings map together)
-}
-
 }  // namespace
 
 // ============================================================================
@@ -294,9 +286,7 @@ IO::PersistenceWorker* AsWorker(void* worker) {
 // `status`. Note the command is written BEFORE the status, and both before the
 // events — so the worker can never observe a fresh command with a stale status.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const System::String* filename) {
-    IO::PersistenceWorker* const w = AsWorker(worker);
-
+extern "C" void RtIo_PersistenceWorker_EnqueueDelete(IO::PersistenceWorker* w, const System::String* filename) {
     AssignPendingFilename(w, filename);
     w->_command = 2;
     w->_status  = 0;
@@ -333,10 +323,8 @@ extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const System:
 //      its slot stays the null from step 2. That is the shipped behaviour and
 //      it is the reason step 2 exists at all.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::String* filename,
+extern "C" void RtIo_PersistenceWorker_EnqueueLoad(IO::PersistenceWorker* w, const System::String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
-
-    IO::PersistenceWorker* const w = AsWorker(worker);
 
     AssignPendingFilename(w, filename);
     w->_command = 1;
@@ -416,10 +404,8 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::S
 // exactly the kind of algebraically-identical change that hides where terms
 // cancel (reference_moved_term_hides_where_terms_cancel.md).
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const System::String* filename,
+extern "C" void RtIo_PersistenceWorker_EnqueueSave(IO::PersistenceWorker* w, const System::String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
-
-    IO::PersistenceWorker* const w = AsWorker(worker);
 
     AssignPendingFilename(w, filename);
 
