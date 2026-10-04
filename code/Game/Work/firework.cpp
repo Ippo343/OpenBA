@@ -215,7 +215,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     WorkAct_PerformWorkCopyCtor_ba9f0(
         &citizenPtr,
         priority,
-        srcPos, destPos, bestPos, reinterpret_cast<int64_t*>(&workEntityIBP));   // LEFT: SIG WorkAct_PerformWorkCopyCtor_ba9f0
+        srcPos, destPos, bestPos, &workEntityIBP);
 
     // Update citizen entity state
     CitizenComponent* citizenVal = *citizenIBP;

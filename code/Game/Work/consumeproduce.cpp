@@ -805,8 +805,8 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     &workEntityRef,
                     producePos,
                     produceHeading[0],
-                    reinterpret_cast<int64_t>(field_10->_description),   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
-                    (uint64_t)recipe->product,   // +0x10  // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
+                    field_10->_description,
+                    recipe->product,   // +0x10
                     (uint32_t)canFinish,
                     &actionPriority,
                     (uint32_t)field_54,

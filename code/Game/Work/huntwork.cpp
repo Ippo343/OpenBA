@@ -318,7 +318,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
         WorkAct_HuntWorkCtor_bbbc0(
             &citizenEntRef,        // citizen entity IBP
             field_20,              // priority
-            reinterpret_cast<int64_t*>(&huntComp2),         // hunt component IBP   // LEFT: SIG WorkAct_HuntWorkCtor_bbbc0
+            &huntComp2,            // hunt component IBP
             pathPos,               // terrain position
             0.0f,                  // float param
             1);                    // char param (specific location)
@@ -336,7 +336,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
         WorkAct_HuntWorkCtor_bbbc0(
             &citizenEntRef2,       // citizen entity IBP
             field_20,              // priority
-            reinterpret_cast<int64_t*>(&huntComp3),         // hunt component IBP   // LEFT: SIG WorkAct_HuntWorkCtor_bbbc0
+            &huntComp3,            // hunt component IBP
             fallbackPos,           // fallback position (0,0,0)
             kRdata_140172198,     // float param (roaming radius)
             0);                    // char param (roaming mode)
