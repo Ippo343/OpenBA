@@ -224,3 +224,10 @@ static_assert(offsetof(TradeUI, _textNotEnough)   == 0x120, "TradeUI +0x120");
 static_assert(offsetof(TradeUI, field_0x128)      == 0x128, "TradeUI +0x128 (dtor 0x140086a75)");
 static_assert(offsetof(TradeUI, _comboPurchase)   == 0x138, "TradeUI +0x138");
 static_assert(offsetof(TradeUI, _sortCombo)       == 0x140, "TradeUI +0x140");
+
+// ---- tradeui_sort.cpp: the _storageItems introsorts (RefreshDisplay 0x1400846b0)
+// ByName: RCX = array, EDX = count. ByComponent: R8 = the address of the
+// caller's TradeComponent* (its stockRoot tree gives the counts).
+extern "C" void TradeUI_IntroSort_ByName_162d0(TradeUI::StorageItem* array, int count);  // 0x1400162d0
+extern "C" void TradeUI_IntroSort_ByComponent_165d0(TradeUI::StorageItem* array, int count,
+                                                    TradeComponent* const* ctx);  // 0x1400165d0

@@ -135,8 +135,7 @@ extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree, void** out, cons
 extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity);  // 0x14005a520
 
 // ---- tradeui_sort.cpp
-extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count);  // 0x1400162d0
-extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void* ctx);  // 0x1400165d0
+// B4 P2 DLG-3: the two introsort drivers are declared typed in Dialog/TradeUI.h.
 
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp
 extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006bd80
