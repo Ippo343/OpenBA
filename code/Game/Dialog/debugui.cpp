@@ -71,6 +71,11 @@
 #include "Component/EnvironmentDescription.h"
 #include "Game/WeatherParticleGeometry.h"
 #include "Game/ProfessionList.h"
+#include "Game/Calendar.h"              // GameUpdateLoop::m_dayCounter
+#include "Game/WeatherSimulation.h"     // GameUpdateLoop::m_weather
+#include "Game/Weather.h"               // EnvironmentDescription::WeatherChoice::weather
+#include "Component/DiseaseComponent.h" // DiseaseComponent::Infect
+#include "Component/Description.h"      // Description::Type
 
 // ============================================================
 // Static helpers (no DebugUI field is read through their first argument)
@@ -78,20 +83,18 @@
 
 // Game_GetMonthFromTime (FUN_1400932A0)
 // Converts the day counter's time to a month index 0-11.
-// param_1 = the day counter (GameUpdateLoop +0x128); its time is at +8.
-// LEFT (B4 DLG-a): the day counter has no class in the tree.
-static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
-    float seconds = reinterpret_cast<const System::Time*>((void*)((uintptr_t)weatherMgr + 8))->AsSeconds();   // B.3.4 bridge
+// param_1 = the day counter (GameUpdateLoop +0x128, the Calendar); its
+// yearTime is at +8.
+static int DebugUI_GetMonthFromTime_Impl(const Calendar* weatherMgr) {
+    float seconds = weatherMgr->yearTime.AsSeconds();
     int month = (int)((seconds / 3600.0f) * 12.0f);  // 3600s/yr (DAT_14017225c), 12 months
     if (month > 11) month = 0;
     return month;
 }
 
-// The weather simulation (GameUpdateLoop +0x130, 0x78 bytes) has no class in the
-// tree: its first qword is the ExternalPtr<EnvironmentDescription> (the
-// Environment.rsc keyframe table), +0x10 an int state, +0x50 the per-weather
-// particle geometries. LEFT (B4 DLG-a): each read below keeps one cast of
-// `m_weather`.
+// The weather simulation (GameUpdateLoop +0x130, 0x78 bytes; Game/WeatherSimulation.h):
+// +0x00 the ExternalPtr<EnvironmentDescription> (the Environment.rsc keyframe
+// table), +0x10 an int state, +0x50 the per-weather particle geometries.
 
 // DebugUI::SetDayLighting (FUN_140061780)
 // Reads one month's lighting keyframe from the environment, writes the sliders.
@@ -102,8 +105,8 @@ static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
 void DebugUI::SetDayLighting(int month) {
     // weatherTable = **(gameWorld+0x130) == envRes (null if Environment.rsc
     // failed to load; guard so the reads below don't hit a wild low address).
-    EnvironmentDescription** weatherSim = (EnvironmentDescription**)GameUpdateLoop::_singleton->m_weather;
-    EnvironmentDescription* env = weatherSim ? *weatherSim : nullptr;
+    WeatherSimulation* weatherSim = GameUpdateLoop::_singleton->m_weather;
+    EnvironmentDescription* env = weatherSim ? weatherSim->environment : nullptr;
     if (!env) return;
     const EnvironmentDescription::WeatherEntry& entry = env->_months[month];
 
@@ -130,8 +133,8 @@ void DebugUI::WriteLightingColors(int month) {
     // weatherTable == *(weatherSim+0) == envRes (Environment.rsc keyframe table).
     // Null if Environment.rsc failed to load; without this guard the per-month
     // writes below would target (0 + month*0x20) — a wild low-address store.
-    EnvironmentDescription** weatherSim = (EnvironmentDescription**)GameUpdateLoop::_singleton->m_weather;
-    EnvironmentDescription* env = weatherSim ? *weatherSim : nullptr;
+    WeatherSimulation* weatherSim = GameUpdateLoop::_singleton->m_weather;
+    EnvironmentDescription* env = weatherSim ? weatherSim->environment : nullptr;
     if (!env) return;
     EnvironmentDescription::WeatherEntry& entry = env->_months[month];
 
@@ -172,8 +175,8 @@ void DebugUI::OnDaySliderChanged() {
     System::Time time;
     RtSystem_Time_Ctor(&time, (sliderVal / 360.0f) * 3600.0f);
 
-    // Set game world time (the day counter's time at +8; LEFT: no class)
-    *(int64_t*)((uintptr_t)gameWorld->m_dayCounter + 8) = time._ticks;
+    // Set game world time (the Calendar's yearTime at +8)
+    gameWorld->m_dayCounter->yearTime._ticks = time._ticks;
 
     // Reset weather time to 0
     System::Time zeroTime;
@@ -226,13 +229,13 @@ void DebugUI::OnWeatherComboChanged() {
 
     // The weather simulation from the game world
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    uintptr_t* drawMgr = (uintptr_t*)world->m_weather;  // R14 = plVar1
+    WeatherSimulation* drawMgr = world->m_weather;  // R14 = plVar1
 
-    EnvironmentDescription* env = (EnvironmentDescription*)drawMgr[0];  // *plVar1
+    EnvironmentDescription* env = drawMgr->environment;  // *plVar1
     int drawCount = (int)env->_weatherCount;
-    void** descArray = (void**)env->_weatherArray;  // {descriptor, audio descriptor} pairs
+    EnvironmentDescription::WeatherChoice* descArray = env->_weatherArray;  // {descriptor, audio descriptor} pairs
 
-    WeatherParticleGeometry** geometryArray = (WeatherParticleGeometry**)drawMgr[10];  // R14+0x50
+    Graphics::Geometry** geometryArray = drawMgr->effects;  // R14+0x50 (WeatherParticleGeometry each)
     // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
     // PORT GAP audio branch below reads it in retail.
 
@@ -244,24 +247,25 @@ void DebugUI::OnWeatherComboChanged() {
                 void* geomMem = System::MemoryAllocator::MemAlloc(0xf0, 8);
                 WeatherParticleGeometry* geometry = nullptr;
                 if (geomMem) {
-                    geometry = (WeatherParticleGeometry*)WeatherParticle_GeoCtor(geomMem);   // 0x1400d3f10
+                    // 0x1400d3f10, the ctor (WeatherParticle_GeoCtor's body; its null
+                    // test is the `if` above)
+                    geometry = ::new (geomMem) WeatherParticleGeometry();
                 }
                 geometryArray[i] = geometry;
 
                 // Initialize with descriptor data
-                void* descPtr = descArray[i * 2];
+                Weather* descPtr = descArray[i].weather;
                 WeatherParticle_Config(geometryArray[i], descPtr);   // 0x1400d3f80
 
                 // Add to graphics scene
-                void* graphicsScene = world->m_graphicsScene;
-                reinterpret_cast<Graphics::Scene*>(graphicsScene)
-                    ->AddGlobalObject(geometryArray[i]);   // B.3.5 bridge
+                Graphics::Scene* graphicsScene = world->m_graphicsScene;
+                graphicsScene->AddGlobalObject(geometryArray[i]);
 
                 // Reset state to 0 (showing)
-                *(int*)((uintptr_t)drawMgr + 0x10) = 0;
+                drawMgr->field_0x10 = 0;
 
                 // Check if this entry has an audio descriptor
-                void* audioDescPtr = descArray[i * 2 + 1];
+                ComponentDescription* audioDescPtr = descArray[i].description;
                 // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail
                 // calls it here. Retail's audio branch for an entry with an audio
                 // descriptor (0x48-byte group built from the descriptor, registered
@@ -280,12 +284,12 @@ void DebugUI::OnWeatherComboChanged() {
             }
         } else {
             // Non-selected entry — hide geometry if it exists
-            WeatherParticleGeometry* geometry = geometryArray[i];
+            WeatherParticleGeometry* geometry = static_cast<WeatherParticleGeometry*>(geometryArray[i]);
             if (geometry != nullptr) {
                 // Fade direction -1.0f (0xbf800000) to hide
                 geometry->_fadeDirection = -1.0f;
                 // Set state to 3 (hiding)
-                *(int*)((uintptr_t)drawMgr + 0x10) = 3;
+                drawMgr->field_0x10 = 3;
             }
         }
     }
@@ -316,21 +320,22 @@ static void Game_DestroyAllRawMaterials_Impl() {
         Description** compArray = buildEntity->_subDescs;   // COMP-c typed _subDescs (merge fix)
 
         for (int i = 0; i < compCount; i++) {
-            void* comp = compArray[i];
+            Description* comp = compArray[i];
             // Get component type via vtable[2] (+0x10)
-            // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+            uint32_t typeId = comp->Type();
             if (typeId == RawMaterialDescription::TypeId()) {
                 // Re-read component pointer from array and confirm with IsDerivedFrom
-                void* rawComp = compArray[i];
+                Description* rawComp = compArray[i];
                 bool isRawMat = ::Object::IsDerivedFromNullSafe(rawComp, RawMaterialDescription::TypeId());
                 if (isRawMat && rawComp != nullptr) {
                     // Destroy the entity (re-read the list from the global each time)
                     // The door was named fn_Game_DestroyEntity; it is bound to
                     // 0x140091e60 RawMaterialComponent_RegisterRawMaterial (B3R: the
                     // binding decides, INVENTORY_E §5.8).
-                    RawMaterialComponent_RegisterRawMaterial(GameUpdateLoop::_singleton->m_citizenList,
-                                                             const_cast<ComponentDescription*>(buildEntity));
+                    // (RawMaterialComponent_RegisterRawMaterial's member.)
+                    // LEFT: the factory walk hands out const Externals; the member takes non-const.
+                    GameUpdateLoop::_singleton->m_citizenList->RegisterRawMaterial(
+                        const_cast<ComponentDescription*>(buildEntity));
                 }
                 break;
             }
@@ -342,8 +347,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
 
 // The town lists (GameUpdateLoop +0xF0).
 static CitizenBehavior* DebugUI_Town() {
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a's header).
-    return (CitizenBehavior*)GameUpdateLoop::_singleton->m_citizenList;
+    return GameUpdateLoop::_singleton->m_citizenList;
 }
 
 // ============================================================
@@ -366,9 +370,9 @@ static void Game_SpawnItemsInStorage_Impl() {
 
         for (int j = 0; j < 5; j++) {
             int currentCount = storage->animalCount;
-            // 0x140128570 PastureComponent_ComputeCapacity (door misnamed
-            // fn_StorageComponent_GetCapacity; the int the door read is the low dword).
-            int capacity = static_cast<int>(PastureComponent_ComputeCapacity(reinterpret_cast<uintptr_t>(storage)));
+            // 0x140128570 PastureComponent::ComputeCapacity (the forwarder
+            // PastureComponent_ComputeCapacity zero-extended its int; this reads the int).
+            int capacity = storage->ComputeCapacity();
             if (capacity <= currentCount) break;
 
             // Spawn one item
@@ -422,22 +426,19 @@ static void Game_SpawnCitizens_Impl() {
                             // GetOccupantCount returns values that add to this
                             int capacityAccum = resDesc->_useNodes.count;
 
-                            // Sum occupant counts from children at resComp+0x28/+0x30
-                            // LEFT: InteractComponent's +0x28/+0x30 are one raw
-                            // void* pair in its header (COMP-d's).
-                            int childCount = *(int*)((uintptr_t)resComp + 0x30);
+                            // Sum occupant counts from the use locations (+0x28 / +0x30)
+                            int childCount = resComp->useLocationCount;
                             if (childCount > 0) {
-                                uintptr_t childArrayBase = *(uintptr_t*)((uintptr_t)resComp + 0x28);
+                                InteractComponent** childArrayBase = resComp->useLocations;
                                 int si = 0;
-                                uintptr_t sOffset = 0;
                                 do {
-                                    void** pChild = (void**)(childArrayBase + sOffset);
-                                    // 0x140123070 Pf_RecursiveChildSum_123070 (door misnamed
+                                    InteractComponent* const* pChild = childArrayBase + si;
+                                    // 0x140123070 InteractNodeCount (the forwarder
+                                    // Pf_RecursiveChildSum_123070's body; door misnamed
                                     // fn_ResidenceComponent_GetOccupantCount)
-                                    int occResult = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(*pChild), 0);
+                                    int occResult = InteractNodeCount(*pChild, 0);
                                     capacityAccum += occResult;
                                     si++;
-                                    sOffset += 8;
                                 } while (si < childCount);
                             }
 
@@ -487,7 +488,7 @@ static void Game_SpawnCitizens_Impl() {
                             ComponentEntity* newEntity = nullptr;
                             if (memBlock != nullptr) {
                                 newEntity = ComponentEntity_CtorFromDescription(
-                                    memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720
+                                    memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: SIG ComponentEntity_CtorFromDescription (void*)
                             }
 
                             // Find the CitizenComponent (DAT_1401c7158) on the new entity:
@@ -626,7 +627,7 @@ static void Game_SpawnTornado_Impl() {
     ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (memBlock) {
         newEntity = ComponentEntity_CtorFromDescription(
-            memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720
+            memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: SIG ComponentEntity_CtorFromDescription (void*)
     }
 
     // Register entity with entity manager
@@ -656,7 +657,7 @@ static void Game_InfectRandomCitizen_Impl() {
     if (!citizen) return;
 
     // Infect citizen's disease component
-    DiseaseComp_Infect(citizen);   // 0x1400483a0
+    citizen->Infect();   // 0x1400483a0 (DiseaseComp_Infect's member)
 }
 
 // ENDGAME B.3.9: every global the old debugui_sa::EnsureGlobals() healed now has a
@@ -1176,13 +1177,12 @@ void DebugUI::OnCreated() {
 
             // Populate from the environment's weather list (weather sim +0x00).
             // STANDALONE: guard a null weather manager / list.
-            // LEFT: the weather simulation has no class (see SetDayLighting).
-            void** weatherListPtr = (void**)gameWorld->m_weather;
-            EnvironmentDescription* env = weatherListPtr ? (EnvironmentDescription*)weatherListPtr[0] : nullptr;
+            WeatherSimulation* weatherListPtr = gameWorld->m_weather;
+            EnvironmentDescription* env = weatherListPtr ? weatherListPtr->environment : nullptr;
             int weatherCount = env ? (int)env->_weatherCount : 0;
             int selectedIndex = 0;
             for (int i = 0; i < weatherCount; i++) {
-                const ::Object::External* entry = ((::Object::External**)env->_weatherArray)[i * 2];
+                const ::Object::External* entry = env->_weatherArray[i].weather;
                 // `GetPath` returns by value through a hidden return slot and the callee
                 // CONSTRUCTS into it; copy-initialising the local is the same store.
                 System::Filename pathBuf = entry->GetPath();
@@ -1192,7 +1192,7 @@ void DebugUI::OnCreated() {
                 this->comboWeather->AddItem(spr, filenameBuf.AsString(), (void*)(intptr_t)i);  // CAST-OK: ptr_int
 
                 // Check if this weather is currently active (its geometry fading in)
-                WeatherParticleGeometry* active = ((WeatherParticleGeometry**)weatherListPtr[10])[i];
+                WeatherParticleGeometry* active = static_cast<WeatherParticleGeometry*>(weatherListPtr->effects[i]);
                 if (active != nullptr && active->_fadeDirection > 0.0f) {
                     selectedIndex = i + 1;
                 }
@@ -1218,18 +1218,17 @@ void DebugUI::OnCreated() {
         // STANDALONE: gw+0x128 (weather time) can be null; Time_AsSeconds(null+8)
         // would fault. SetDayLighting derefs **(gw+0x130) (the weather table), also
         // null-able — only call it when that chain is live.
-        // LEFT: the day counter and the weather simulation have no class.
-        uintptr_t weatherTime = (uintptr_t)gameWorld->m_dayCounter;
-        float timeSeconds = weatherTime ? reinterpret_cast<const System::Time*>((void*)(weatherTime + 8))->AsSeconds() : 0.0f;   // B.3.4 bridge
+        const Calendar* weatherTime = gameWorld->m_dayCounter;
+        float timeSeconds = weatherTime ? weatherTime->yearTime.AsSeconds() : 0.0f;
         // Convert time to month index: (seconds / secondsPerYear) * monthsPerYear
         // DAT_14017225c = 3600.0f, DAT_1401721b8 = 12.0f
         int monthIndex = (int)(timeSeconds / 3600.0f * 12.0f);
         if (monthIndex > 11) monthIndex = 0;
 
-        void** weatherLive = (void**)gameWorld->m_weather;
+        WeatherSimulation* weatherLive = gameWorld->m_weather;
         if (this->sliderDay) {
             this->sliderDay->_value = (float)(monthIndex * 30);
-            if (weatherLive && *weatherLive) SetDayLighting(monthIndex);
+            if (weatherLive && weatherLive->environment) SetDayLighting(monthIndex);
         }
     }
 
