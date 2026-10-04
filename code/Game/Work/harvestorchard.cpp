@@ -139,7 +139,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // the component as an integer: LEFT)
     int treeCount = _field50;
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDesc);
         matDesc->workState = maxWorkers;
     }
     if (treeCount > matDesc->workState) {

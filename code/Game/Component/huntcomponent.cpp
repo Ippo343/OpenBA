@@ -72,7 +72,7 @@ void HuntComponent::Update(const System::Time* time) {
     // Lazily compute the capacity divisor if not cached
     int capacity = work->workState;
     if (capacity == 0) {
-        capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(work));   // LEFT: SIG WorkComponent_CalcMaxWorkers (Tutorial/exe_bodies.h, wave X)
+        capacity = WorkComponent_CalcMaxWorkers(work);
         work->workState = capacity;
     }
 

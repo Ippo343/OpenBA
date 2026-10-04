@@ -180,7 +180,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     int workers = workerCount;                           // param_1[10]
     WorkComponent* workComp = field_18;                  // param_1[3]
     if (workComp->workState == 0)
-        workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: C signature (GAME-a / COMP-f)
+        workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
     if (workComp->workState <= workers)
         return 1;
 

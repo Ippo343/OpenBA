@@ -297,7 +297,7 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         int capacity = capRaw;
         if (capacity == 0) {
             // The B4 FORWARD (its two guards before the member's body stay: known_port_issues row 80).
-            capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(wcPtr));   // 0x14012e5c0  // LEFT: the forwarder's uintptr_t receiver (TUT block)
+            capacity = WorkComponent_CalcMaxWorkers(wcPtr);   // 0x14012e5c0
             wcPtr->workState = capacity;
         }
 

@@ -36,7 +36,8 @@ extern "C" void TutBase_SerializeImageArray(void* serializer, int count, void* a
 extern "C" void TutBase_SerializeSetupArray(void* serializer, int count, void* arrayData, void*);  // 0x140028f40
 extern "C" void TutBase_SerializeGoalArray(void* serializer, int count, void* arrayData, void*);  // 0x140029190
 extern "C" void TutBase_SerializeImageRef(void* fieldPtr, void* serializer);  // 0x140027ad0
-extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp);  // 0x14012e5c0  B4 FORWARD: 21 outside callers
+class WorkComponent;
+extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp);  // 0x14012e5c0  (+ the tree's two guards, tutorial_base.cpp)
 
 // ---- tutorial_wave.cpp
 extern "C" void TutWave_SerializeTutorialRef(void* field, void* serializer);  // 0x1400262b0

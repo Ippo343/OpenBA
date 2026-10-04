@@ -155,7 +155,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // component as an integer: LEFT)
     // -------------------------------------------------------
     if (local_58->workState == 0) {
-        int iVar9 = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(local_58));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int iVar9 = WorkComponent_CalcMaxWorkers(local_58);
         local_58->workState = iVar9;
     }
 

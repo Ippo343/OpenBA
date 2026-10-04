@@ -1212,7 +1212,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
         if (maxSlots == 0) {
-            maxSlots = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(sloc));   // LEFT: SIG WorkComponent_CalcMaxWorkers (Tutorial/exe_bodies.h, wave X)
+            maxSlots = WorkComponent_CalcMaxWorkers(sloc);
             sloc->workState = maxSlots;
         }
 
@@ -1223,7 +1223,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
                     WorkComponent* s2 = wp->_entity->FindComponent<WorkComponent>();
                     int s2slots = s2->workState;
                     if (s2slots == 0) {
-                        s2slots = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(s2));   // LEFT: SIG WorkComponent_CalcMaxWorkers (Tutorial/exe_bodies.h, wave X)
+                        s2slots = WorkComponent_CalcMaxWorkers(s2);
                         s2->workState = s2slots;
                     }
                     int gap = s2slots - wp->workerCount;
@@ -1277,7 +1277,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
         if (maxSlots == 0) {
-            maxSlots = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(sloc));   // LEFT: SIG WorkComponent_CalcMaxWorkers (Tutorial/exe_bodies.h, wave X)
+            maxSlots = WorkComponent_CalcMaxWorkers(sloc);
             sloc->workState = maxSlots;
         }
 
@@ -1315,7 +1315,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
         if (maxSlots == 0) {
-            maxSlots = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(sloc));   // LEFT: SIG WorkComponent_CalcMaxWorkers (Tutorial/exe_bodies.h, wave X)
+            maxSlots = WorkComponent_CalcMaxWorkers(sloc);
             sloc->workState = maxSlots;
         }
         if (wp->workerCount < maxSlots) {

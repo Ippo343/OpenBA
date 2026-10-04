@@ -198,7 +198,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     int huntCount = _field50;
 
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDesc);
         matDesc->workState = maxWorkers;
     }
 

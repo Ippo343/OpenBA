@@ -254,7 +254,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // If the worker capacity cache is 0, calculate it (the tree's port of 0x14012e5c0
     // called here takes the component as an integer: LEFT)
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDesc);
         matDesc->workState = maxWorkers;
     }
 

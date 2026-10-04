@@ -278,7 +278,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
     // Calculate max builders if not yet done (WorkComponent +0x30)
     if (matDesc->workState == 0) {
-        matDesc->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        matDesc->workState = WorkComponent_CalcMaxWorkers(matDesc);
     }
 
     // If at max builders, verify this citizen is on the builder list

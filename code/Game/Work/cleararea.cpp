@@ -322,7 +322,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // Get total slot count for the entity
     if (workEntity->workState == 0) {
-        int count = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workEntity));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
+        int count = WorkComponent_CalcMaxWorkers(workEntity);
         workEntity->workState = count;
     }
 
