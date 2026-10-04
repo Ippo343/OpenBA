@@ -69,7 +69,6 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
     ModelComponent* model = interact->_entity->FindComponent<ModelComponent>();   // 0x140003f60
 
     Map* map = GameUpdateLoop::_singleton->m_game;
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees take the Map as its leading int
     int w = map->size;
     int srcCol = WalkClampCell(static_cast<int>(param_3[0] + static_cast<float>(w >> 1)), w);
     int srcRow = WalkClampCell(static_cast<int>(param_3[1] + static_cast<float>(w >> 1)), w);
@@ -89,7 +88,7 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
 
         uint64_t reach = WorkBase_ValidateCell_a00f0(map, 0xe1f, srcCell, static_cast<int>(destCell));
         if (static_cast<char>(reach) != '\0') {
-            int dist = Pf_IsDstReachable_f810(mapGrid, srcCell, destCell, '\x01');
+            int dist = map->PathDistance(srcCell, destCell, '\x01');   // 0x14009f810 (was its Pf_IsDstReachable_f810 forwarder)
             if (dist < 0) {
                 int gw = map->size;
                 int dRow = static_cast<int>(srcCell) / gw - static_cast<int>(destCell) / gw;

@@ -241,11 +241,8 @@ void StateMachine::Tick(const System::Time* time, char useAlt, char run) {
     } while (pendingState >= 0);
 }
 
-// B4 FORWARD: outside callers in 7 files (Component: boatcomponent_states,
-// controller_state_table.h, firecomponent_smstate, orchardcomponent_states,
-// tradecomponent_states; Player: keystone_a_removalcalcpath; Work: work_leaf_hunt).
-// `time` is the Time* the node's Tick / TickAlt receive, carried as an integer by
-// the old signature (controller_state_table.h).
+// B4 FORWARD: 2 outside caller files (firecomponent_smstate.cpp, tradecomponent_states.cpp),
+// both passing an integer where the machine takes a `const System::Time*`.
 void StateMachine_TickReimpl(StateMachine* smP, int64_t time, char param3, char param4) {
     // LEFT: the integer callers (firecomponent_smstate.cpp x2, tradecomponent_states.cpp x2) hand
     // the tick VALUE of a Time(0), which arrives here as a null pointer; retail passes &Time
