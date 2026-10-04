@@ -1557,8 +1557,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
                 // Pin the panel (it follows the entity)
                 panelController->checkPin->_checked = 1;
 
-                // LEFT: 0x1400666b0's declaration takes the EntityUI as int64_t (PLAYER's header).
-                PlayerTrade_EntityUI_66b0(reinterpret_cast<int64_t>(panelController));   // 0x1400666b0   // LEFT: SIG PlayerTrade_EntityUI_66b0 (int64_t; Player/exe_bodies.h)
+                panelController->SyncPin();   // 0x1400666b0
             }
         }
     }

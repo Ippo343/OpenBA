@@ -356,9 +356,10 @@ void DestroyComponent::RunStateMachine() {
     SM_RunPhase(sm, &timeOutSlot);
 }
 
-// B4 FORWARD: 1 outside caller (Dialog/upgradeui.cpp) holds the component as an integer.
-extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
-    reinterpret_cast<DestroyComponent*>(param_1)->RunStateMachine();   // LEFT: B4 FORWARD Dialog/upgradeui.cpp (another agent's) holds the component as an integer
+// Kept for Dialog/upgradeui.cpp's log line, which prints this driver's address
+// (nothing calls it).
+extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component) {
+    component->RunStateMachine();
 }
 
 // ============================================================
