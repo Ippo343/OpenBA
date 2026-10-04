@@ -116,7 +116,7 @@ void HuntAnimal::Persist(IO::Stream& stream) {
 // Slot 4: AbstractImpl (0x1400c8250) -- unhookable (9 bytes)
 // Returns 1 if hunt not started (keep running), 0 if hunt completed.
 // ============================================================
-int  HuntAnimal::AbstractImpl(void* actionStack) {
+int  HuntAnimal::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     return (!_field38) ? 1 : 0;
 }
@@ -125,7 +125,7 @@ int  HuntAnimal::AbstractImpl(void* actionStack) {
 // Slot 5: Execute (0x1400c8240) -- unhookable (9 bytes)
 // Same logic as AbstractImpl: returns 1 if hunt not started, 0 if completed.
 // ============================================================
-int  HuntAnimal::Execute(void* actionStack, const System::Time* time) {
+int  HuntAnimal::Execute(ActionStack* actionStack, const System::Time* time) {
     (void)actionStack;
     (void)time;
     return (!_field38) ? 1 : 0;

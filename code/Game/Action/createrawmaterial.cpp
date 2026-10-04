@@ -146,7 +146,7 @@ void CreateRawMaterial::Persist(IO::Stream& stream) {
 }
 
 
-int  CreateRawMaterial::AbstractImpl(void* actionStack) {
+int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 

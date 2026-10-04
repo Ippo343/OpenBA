@@ -27,7 +27,7 @@ public:
     ShowTool(CitizenComponent* const* citizen, int toolId);   // 0x140042890
     ~ShowTool() override = default;                            // [0] 0x140001420
     void Persist(IO::Stream& stream) override;                       // [3] 0x140042780
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x140042710
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x140042710
     void Exit(void* actionStack) override;                     // [7] 0x140042700 own `RET 0` (same bytes as the base body)
     void CheckEntity() override;                               // [8] 0x1400426d0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x140042680

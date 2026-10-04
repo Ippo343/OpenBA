@@ -226,7 +226,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
 // Always returns 1.
 // ============================================================
 
-int  ShowTool::AbstractImpl(void* actionStack) {
+int  ShowTool::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     uint32_t toolId = static_cast<uint32_t>(_field28);
 

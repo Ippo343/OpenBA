@@ -24,7 +24,7 @@ public:
     CompleteRoad(uint32_t roadType, uint32_t tileIndex, uint8_t direction);   // 0x1400c59d0
     ~CompleteRoad() override = default;                        // [0] 0x140021f30
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c5880
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5850
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c5850
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     int32_t   roadTileIndex;     // +0x20 terrain tile index

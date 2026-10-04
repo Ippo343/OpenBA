@@ -429,7 +429,7 @@ void CitizenComponent::LongTermPlan() {
         RtSystem_Time_Ctor(&timeStamp, 0.0f);
         CharacterComponent* ch = character;
         if (-1 < ch->currentAction) {
-            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(&ch->actions), &timeStamp);   // LEFT: SIG CitizenAI_ActionExecutor_c4c50 (int64_t* stack; Component/exe_bodies.h)
+            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<ActionStack*>(&ch->actions), &timeStamp);   // LEFT: CharacterComponent.h declares +0x48 as separate fields, not an ActionStack
         }
         (void)committed;
     }

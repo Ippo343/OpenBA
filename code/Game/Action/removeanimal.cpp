@@ -81,7 +81,7 @@ void RemoveAnimal::Persist(IO::Stream& stream) {
 // Marks the animal entity at +0x20 for removal, queues it on the removal list.
 // Returns 0 (action complete).
 // ============================================================
-int  RemoveAnimal::AbstractImpl(void* actionStack) {
+int  RemoveAnimal::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     ComponentEntity* entityRef = _field20.Get();
 

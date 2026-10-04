@@ -75,7 +75,7 @@ void CompleteTask::Persist(IO::Stream& stream) {
 // Returns 0 (action complete).
 // ============================================================
 
-int  CompleteTask::AbstractImpl(void* actionStack) {
+int  CompleteTask::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
     // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).

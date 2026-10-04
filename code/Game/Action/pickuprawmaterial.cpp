@@ -93,7 +93,7 @@ void PickupRawMaterial::Persist(IO::Stream& stream) {
 // 5. Marks the pile for removal and queues it on the EntityList's removal list
 // Returns 0 (action complete).
 // ============================================================
-int  PickupRawMaterial::AbstractImpl(void* actionStack) {
+int  PickupRawMaterial::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     // The pile's RawMaterialComponent and its quantity

@@ -142,7 +142,7 @@ void PickupStoredRawMaterial::Persist(IO::Stream& stream) {
 //   7. Move the material: SubtractItem there, AddItem into the citizen's storage
 // Returns 0 on success, 2 on insufficient materials.
 // ============================================================
-int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
+int  PickupStoredRawMaterial::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     // The storage entity's StorageComponent (+0x28)
