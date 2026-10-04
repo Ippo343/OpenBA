@@ -242,8 +242,8 @@ bool PathTool::IsSelected(ComponentEntity* const* param2) {
 }
 
 // [13] 0x140026b60 `MOV RAX,[RCX+0x28]; MOV [RDX],RAX; MOV RAX,RDX; RET`.
-uint64_t* PathTool::GetSelected(uint64_t* ret) const {
-    *ret = reinterpret_cast<uint64_t>(selectedEntity);   // LEFT: the slot's uint64_t handle, as slot 10
+ComponentEntity** PathTool::GetSelected(ComponentEntity** ret) const {
+    *ret = selectedEntity;
     return ret;
 }
 

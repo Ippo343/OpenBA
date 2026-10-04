@@ -2,7 +2,6 @@
 // Clean reimplementations of two exe-internal helpers referenced by the Dialog
 // module, ported to close the standalone Dialog code-gap.
 //
-//   0x14000d6c0  WorkplaceUI FindComponent (type 0x1401c7008) — guard check.
 //   0x14005dec0  forwarder to AutoSaveDialog::Autosave (autosavedialog.cpp).
 //   GameContainer_EnsureLists, the standalone stand-in for 0x140099db0.
 //
@@ -33,25 +32,11 @@
 
 
 // ============================================================
-// WorkplaceUI FindComponent (FUN_14000d6c0, type 0x1401c7008)
-// ============================================================
-// Member of the byte-for-byte-identical FindComponent family (cf.
-// code/Game/Work/work_base_reimpl.cpp). Scans the entity's component list
-// (ptr array at entity+0x30, count at entity+0x38), calls each component's
-// GetTypeId (vtable +0x10), and on the first type match runs an IsDerivedFrom
-// check before returning the component through an out InternalBasePtr.
-// Caller signature (workplaceui.cpp): void* fn(void* entity, void* retIBP).
-void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<BuildComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: SIG Dialog_FindComponent_d6c0 (void* entity: callers in Work/, Component/tornadocomponent.cpp, workplaceui.cpp, tool_harness.cpp)
-}
-
-// ============================================================
 // AutoSaveDialog autosave handler (FUN_14005dec0)
 // ============================================================
 // The body is AutoSaveDialog::Autosave (autosavedialog.cpp).
 // B4 FORWARD: 1 outside caller (standalone/saveload_harness.cpp)
-void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) { reinterpret_cast<AutoSaveDialog*>(self)->Autosave(); }   // LEFT: SIG Dialog_AutoSaveHandler (standalone/saveload_harness.cpp declares it locally with void*)
+void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) { reinterpret_cast<AutoSaveDialog*>(self)->Autosave(); }   // LEFT: SIG Dialog_AutoSaveHandler: its one caller (standalone/saveload_harness.cpp) hands a stack fake holding only the UserInterface* at +0x10, not an AutoSaveDialog
 
 // ============================================================
 // GameContainer_EnsureLists — standalone stand-in for GameContainer_Init (0x140099db0)

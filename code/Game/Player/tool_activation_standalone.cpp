@@ -60,52 +60,28 @@
 #include <cstdlib>
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "Game/PlayerToolManager.h"
+#include "Dialog/ToolRegistryNode.h"   // the +0x10 registry's node
 #include <cstddef>
 
 #include "Player/exe_bodies.h"   // Avl38Retrace (0x140014b40)
 
 namespace {
 
-// One node of the tool-mode registry at PlayerToolManager +0x10, as the node
-// allocator 0x14002df10 builds it (MemAlloc(0x38)): the trigger type id, the Tool
-// class's type id, the ToolSetting SetEditMode creates lazily, the AVL links and
-// the balance/height pair the shared retrace 0x140014b40 maintains.
-// (Dialog/toolbardialog.cpp declares the node SelectTool walks as
-// `ToolRegistryNode`, 0x30 bytes, without the +0x30 pair; PlayerToolManager.h's
-// +0x10 is typed with that name. LEFT: the root store below goes through it.)
-struct ToolModeNode {
-    uint32_t      key;            // +0x00 trigger type id (a sub-description's)
-    uint32_t      _pad04;         // +0x04
-    uint32_t      toolTypeId;     // +0x08 the Tool class Factory::CreateObject builds
-    uint32_t      _pad0C;         // +0x0C
-    ToolSetting*  setting;        // +0x10 InternalPtr<ToolSetting>, created lazily
-    ToolModeNode* parent;         // +0x18
-    ToolModeNode* left;           // +0x20
-    ToolModeNode* right;          // +0x28
-    int16_t       balance;        // +0x30
-    int16_t       height;         // +0x32
-    uint32_t      _pad34;         // +0x34
-};
-static_assert(sizeof(ToolModeNode) == 0x38, "0x14002df10 MemAlloc(0x38)");
-static_assert(offsetof(ToolModeNode, setting) == 0x10, "ToolModeNode::setting @ +0x10");
-static_assert(offsetof(ToolModeNode, left) == 0x20, "ToolModeNode::left @ +0x20");
-static_assert(offsetof(ToolModeNode, balance) == 0x30, "ToolModeNode::balance @ +0x30");
-
-// The root/count pair the tree lives in (PlayerToolManager +0x10 / +0x18).
-struct ToolModeTree {
-    ToolModeNode* root;    // +0x00 (manager +0x10)
-    int32_t       count;   // +0x08 (manager +0x18)
-};
+// The tool-mode registry at PlayerToolManager +0x10 (root) / +0x18 (count): the
+// nodes are ToolRegistryNode (Dialog/ToolRegistryNode.h), as the node allocator
+// 0x14002df10 builds them (MemAlloc(0x38)): the trigger type id, the Tool class's
+// type id, the ToolSetting SetEditMode creates lazily, the AVL links and the
+// balance/height pair the shared retrace 0x140014b40 maintains.
 
 // Node-alloc = FUN_140102df10: MemAlloc(0x38,8), copy key/toolTypeId, zero the rest,
 // set parent. setting (+0x10) starts 0 -> SetEditMode lazily fills it via the tool's
 // GetSettingType (+0x58) on first activation.
-ToolModeNode* TreeNode_Alloc(uint32_t key, uint32_t toolTypeId, ToolModeNode* parent) {
-    ToolModeNode* n = static_cast<ToolModeNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+ToolRegistryNode* TreeNode_Alloc(uint32_t key, uint32_t toolTypeId, ToolRegistryNode* parent) {
+    ToolRegistryNode* n = static_cast<ToolRegistryNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
-    n->key = key;
-    n->toolTypeId = toolTypeId;
-    n->setting = nullptr;
+    n->typeId = key;
+    n->factoryTypeId = toolTypeId;
+    n->toolSetting = nullptr;
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
@@ -115,42 +91,42 @@ ToolModeNode* TreeNode_Alloc(uint32_t key, uint32_t toolTypeId, ToolModeNode* pa
 }
 
 // The shared AVL retrace 0x140014b40 (Avl38Retrace, Player/exe_bodies.h).
-void Retrace(ToolModeTree* tree, ToolModeNode* node) {
-    ToolModeNode* nn = node;
-    Avl38Retrace(&tree->root, &nn);
+void Retrace(PlayerToolManager* mgr, ToolRegistryNode* node) {
+    ToolRegistryNode* nn = node;
+    Avl38Retrace(&mgr->field_0x10, &nn);
 }
 
 // helper_ddb0 (0x14002ddb0) find-or-create insert.
-void Tree_Insert(ToolModeTree* tree, uint32_t key, uint32_t toolTypeId) {
-    if (tree->root == nullptr) {
-        ToolModeNode* n = TreeNode_Alloc(key, toolTypeId, nullptr);
+void Tree_Insert(PlayerToolManager* mgr, uint32_t key, uint32_t toolTypeId) {
+    if (mgr->field_0x10 == nullptr) {
+        ToolRegistryNode* n = TreeNode_Alloc(key, toolTypeId, nullptr);
         if (!n) return;
-        tree->count = tree->count + 1;
-        tree->root = n;
+        mgr->field_0x18 = mgr->field_0x18 + 1;
+        mgr->field_0x10 = n;
         return;
     }
-    ToolModeNode* node = tree->root;
+    ToolRegistryNode* node = mgr->field_0x10;
     for (;;) {
-        uint32_t nk = node->key;
+        uint32_t nk = node->typeId;
         if (key < nk) {
-            ToolModeNode* left = node->left;
+            ToolRegistryNode* left = node->left;
             if (left == nullptr) {
-                ToolModeNode* n = TreeNode_Alloc(key, toolTypeId, node);
+                ToolRegistryNode* n = TreeNode_Alloc(key, toolTypeId, node);
                 if (!n) return;
                 node->left = n;
-                Retrace(tree, n);   // rebalance (may rotate root)
-                tree->count = tree->count + 1;
+                Retrace(mgr, n);   // rebalance (may rotate root)
+                mgr->field_0x18 = mgr->field_0x18 + 1;
                 return;
             }
             node = left;
         } else if (key > nk) {
-            ToolModeNode* right = node->right;
+            ToolRegistryNode* right = node->right;
             if (right == nullptr) {
-                ToolModeNode* n = TreeNode_Alloc(key, toolTypeId, node);
+                ToolRegistryNode* n = TreeNode_Alloc(key, toolTypeId, node);
                 if (!n) return;
                 node->right = n;
-                Retrace(tree, n);
-                tree->count = tree->count + 1;
+                Retrace(mgr, n);
+                mgr->field_0x18 = mgr->field_0x18 + 1;
                 return;
             }
             node = right;
@@ -223,10 +199,7 @@ extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr) {
 extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI) {
     if (!entityUI) return;
     PlayerToolManager* mgr = entityUI;
-    // LEFT: +0x10 / +0x18 are declared `ToolRegistryNode*` / int32 in GAME-b's header,
-    // the node type file-local to Dialog/toolbardialog.cpp; the pair is this tree.
-    ToolModeTree* tree = reinterpret_cast<ToolModeTree*>(&mgr->field_0x10);   // LEFT: OTHER PlayerToolManager +0x10 / +0x18 are declared ToolRegistryNode* root + int32 count (PlayerToolManager.h); ToolModeTree is this file's view of the same pair
-    if (tree->root != nullptr) return;  // already built
+    if (mgr->field_0x10 != nullptr) return;  // already built (the +0x10 registry root)
 
     // The "Tool" / "ToolSetting" base type ids the SetEditMode reimpls IsDerivedFrom
     // (cells 0x1401c6eb8 / 0x1401c6ef0), kept here only for the trace line below.
@@ -237,39 +210,39 @@ extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI) {
     uint32_t tid_CreatePlaced  = CreatePlacedDescription::TypeId();
     uint32_t tid_PlacementTool = PlacementTool::TypeId();
     if (tid_CreatePlaced && tid_PlacementTool)
-        Tree_Insert(tree, tid_CreatePlaced, tid_PlacementTool);
+        Tree_Insert(mgr, tid_CreatePlaced, tid_PlacementTool);
 
     // EditTool: the default world-SELECTION tool. Retail's EntityUI::Startup inserts it
     // as node key=0 (the very first insert) — SetEditMode(pc, 0) resolves this node to
     // install EditTool as the idle tool.
     uint32_t tid_EditTool = EditTool::TypeId();
     if (tid_EditTool)
-        Tree_Insert(tree, 0, tid_EditTool);
+        Tree_Insert(mgr, 0, tid_EditTool);
 
     // RemovalTool, keyed on CreateRemovalDescription (0x1401c74a0).
     uint32_t tid_CreateRemoval = CreateRemovalDescription::TypeId();
     uint32_t tid_RemovalTool   = RemovalTool::TypeId();
     if (tid_CreateRemoval && tid_RemovalTool)
-        Tree_Insert(tree, tid_CreateRemoval, tid_RemovalTool);
+        Tree_Insert(mgr, tid_CreateRemoval, tid_RemovalTool);
 
     // PathTool (the "Paths" report tool), keyed on CreatePathDescription.
     uint32_t tid_CreatePath = CreatePathDescription::TypeId();
     uint32_t tid_PathTool   = PathTool::TypeId();
     if (tid_CreatePath && tid_PathTool)
-        Tree_Insert(tree, tid_CreatePath, tid_PathTool);
+        Tree_Insert(mgr, tid_CreatePath, tid_PathTool);
 
     // RoadTool, keyed on CreateRoadDescription (0x1401c74d8) — the same type-id
     // RoadTool::Startup (0x1401056e0) scans the descriptor for.
     uint32_t tid_CreateRoad = CreateRoadDescription::TypeId();
     uint32_t tid_RoadTool   = RoadTool::TypeId();
     if (tid_CreateRoad && tid_RoadTool)
-        Tree_Insert(tree, tid_CreateRoad, tid_RoadTool);
+        Tree_Insert(mgr, tid_CreateRoad, tid_RoadTool);
 
     // BridgeTool, keyed on CreateBridgeDescription (0x1401c73f8).
     uint32_t tid_CreateBridge = CreateBridgeDescription::TypeId();
     uint32_t tid_BridgeTool   = BridgeTool::TypeId();
     if (tid_CreateBridge && tid_BridgeTool)
-        Tree_Insert(tree, tid_CreateBridge, tid_BridgeTool);
+        Tree_Insert(mgr, tid_CreateBridge, tid_BridgeTool);
     fprintf(stderr, "[Tools]   bridge node: CreateBridge=%u -> BridgeTool=%u\n",
             tid_CreateBridge, tid_BridgeTool);
 
@@ -278,7 +251,7 @@ extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI) {
     uint32_t tid_CreateFenced = CreateFencedDescription::TypeId();
     uint32_t tid_FencedTool   = FencedTool::TypeId();
     if (tid_CreateFenced && tid_FencedTool)
-        Tree_Insert(tree, tid_CreateFenced, tid_FencedTool);
+        Tree_Insert(mgr, tid_CreateFenced, tid_FencedTool);
     fprintf(stderr, "[Tools]   fenced node: CreateFenced=%u -> FencedTool=%u\n",
             tid_CreateFenced, tid_FencedTool);
 
@@ -287,7 +260,7 @@ extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI) {
     uint32_t tid_CreateDrag      = CreateDragDescription::TypeId();
     uint32_t tid_DragPlacement   = DragPlacementTool::TypeId();
     if (tid_CreateDrag && tid_DragPlacement)
-        Tree_Insert(tree, tid_CreateDrag, tid_DragPlacement);
+        Tree_Insert(mgr, tid_CreateDrag, tid_DragPlacement);
     fprintf(stderr, "[Tools]   drag node: CreateDrag=%u -> DragPlacementTool=%u\n",
             tid_CreateDrag, tid_DragPlacement);
 
@@ -298,7 +271,7 @@ extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI) {
             entityUI, s_tid_Tool, s_tid_ToolSetting, tid_CreatePlaced, tid_PlacementTool,
             tid_EditTool, tid_CreateRemoval, tid_RemovalTool, tid_CreatePath, tid_PathTool,
             tid_CreateRoad, tid_RoadTool,
-            tree->count);
+            mgr->field_0x18);
     fflush(stderr);
 }
 

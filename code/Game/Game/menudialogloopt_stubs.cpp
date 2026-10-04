@@ -781,7 +781,7 @@ bool MenuDialogLoopT::AllowsModChanges() {
     return true;
 }
 
-extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr);
+extern "C" void* MainMenuDialog_FromMenuDLT(MenuDialogLoopT* loop, void* retInternalBasePtr);
 
 Object::InternalPtr<UI::DialogInstance>* MenuDialogLoopT::CreateLoopDialog(
         Object::InternalPtr<UI::DialogInstance>* retPtr) {

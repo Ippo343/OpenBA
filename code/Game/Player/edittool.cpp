@@ -210,7 +210,7 @@ void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog) {
     // UserInterface (dialog+0x10) and an InternalPtr<DialogInstance>& — pass a
     // stack copy, matching the toolui.cpp close-button path.
     if (!dialog) return;
-    const uintptr_t dialogPtr = reinterpret_cast<uintptr_t>(dialog);   // LEFT: the tree's address-range test below (retail 0x1400fcc90 has none)
+    const uintptr_t dialogPtr = reinterpret_cast<uintptr_t>(dialog);   // the tree's address-range test below (retail 0x1400fcc90 has none: known_port_issues row 692)  // CAST-OK: ptr_int
     if (dialogPtr < 0x10000 || dialogPtr > 0x00007FFFFFFFFFFFULL) return;
     UI::UserInterface* userInterface = dialog->_ui;   // +0x10
     if (!userInterface) return;

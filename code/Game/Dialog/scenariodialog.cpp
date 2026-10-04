@@ -297,7 +297,7 @@ void ScenarioDialog::LoadSelected() {
         MainMenuDialog* parentCtrl = parentMenu;
 
         // The saved-state InternalPtr: null
-        ::Object::InternalBasePtr nullIBP(nullptr);
+        ::Object::InternalPtr<Achievement::AchievementInstance> nullIBP(nullptr);
 
         printf("[ScenarioDialog::LoadSelected] NEW SCENARIO: seed=%u, terrainSize=%u, disasterOff=%d, scenarioResIdx=%u\n",
                seedVal, terrainSizeVal, (int)disasterOff, scenarioResIdx);
