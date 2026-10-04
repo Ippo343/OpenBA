@@ -65,6 +65,7 @@
 #include "Component/ClearAreaDescription.h"
 #include "Component/OrchardDescription.h"
 #include "Component/OrchardComponent.h"
+#include "Component/StateMachineComponent.h"   // StateMachine (the handlers sm)
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -78,6 +79,8 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Game/Map.h"                // Map::size (GameUpdateLoop::m_game)
+#include "Game/Calendar.h"           // GameUpdateLoop::m_dayCounter
+#include "Game/WeatherSimulation.h"  // GameUpdateLoop::m_weather
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include "Component/ControllerComponent.h"
@@ -102,9 +105,8 @@ using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
 //     (FUN_14012ead0 — "does the work component currently hold a work slot?"; the companion
 //     of 0x14012eb50 (release). State 10 gates both its update and its seasonal re-post on it.)
 //   import slot 0x140152b00 ??0Time@System@@QEAA@M@Z = RtSystem_Time_Ctor
-// LEFT (B.4 COMP-d): GameUpdateLoop m_game / m_dayCounter / m_weather are void* (W0
-// header); the StateMachine at StateMachineComponent+0x48 has no class; the leaves above
-// take their components as uintptr_t / int64_t (other blocks' bodies).
+// LEFT (B.4 P2 COMP-6): the handlers receive the StateMachine as void* (controller_state_table.h,
+// COMP-2+3); the leaves above take their components as uintptr_t / int64_t (wave X).
 // ============================================================
 namespace {
 
@@ -120,28 +122,27 @@ uint32_t OrchardDescTypeId() { return OrchardDescription::TypeId(); }   // ti ce
 // `want` is an in/out — node vtable idx1 writes -1 into it on a miss, so it must be a
 // real local, never a constant. sm+0x09 is the CURRENT state id (signed; < 0 means the
 // machine has not started, hence the priming Tick).
-// LEFT: the StateMachine (StateMachineComponent+0x48) has no class; `sm` is its address.
+// `sm` is the StateMachine (StateMachineComponent+0x48) the handler received.
 void OrchardRequestState(void* sm, int wantId) {
     if (!sm) return;
-    uint8_t* smb = reinterpret_cast<uint8_t*>(sm);
+    StateMachine* machine = reinterpret_cast<StateMachine*>(sm);   // LEFT: controller_state_table.h (COMP-2+3): the handlers receive the StateMachine as void*
     int want = wantId;
-    if (static_cast<int8_t>(smb[9]) < 0) {
-        uint8_t timeBuf[16] = {};          // Time is 8 bytes; 16 is deliberate headroom
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);   // (see the Time-ctor 8-byte-clobber lesson)
+    if (machine->activeState < 0) {
+        System::Time timeBuf[2] = {};      // Time is 8 bytes; 16 is deliberate headroom
+        RtSystem_Time_Ctor(&timeBuf[0], 0.0f);   // (see the Time-ctor 8-byte-clobber lesson)
         // B3R: the door this replaced was typed (sm, void* time, char, char) and passed
-        // &timeBuf; the body StateMachine_TickReimpl takes the Time BY VALUE (int64_t), so
+        // &timeBuf; the body StateMachine_TickReimpl took the Time BY VALUE (int64_t), so
         // what it has always received here is the buffer's ADDRESS. That is kept bit for
         // bit (no behaviour change in this step); retail passes the Time value (0).
-        StateMachine_TickReimpl(sm, reinterpret_cast<int64_t>(timeBuf), 0, 0);   // 0x1400a9660
+        machine->Tick(timeBuf, 0, 0);   // 0x1400a9660 (StateMachine_TickReimpl's member)
     }
-    void*  chainHead = *reinterpret_cast<void**>(sm);
+    ControllerComponent::Controller* chainHead = machine->current;
     if (!chainHead) return;
     // chainHead = the first controller member the SM linked (D6); slot 1 FindTransition.
-    int idx = reinterpret_cast<ControllerComponent::Controller*>(chainHead)->FindTransition(   // B.3.8 bridge
-                  static_cast<int>(static_cast<int8_t>(smb[9])), &want);
+    int idx = chainHead->FindTransition(static_cast<int>(machine->activeState), &want);
     if (idx >= 0) {
-        smb[0x0b] = static_cast<uint8_t>(idx);
-        smb[0x0a] = static_cast<uint8_t>(want);
+        machine->transitionState = static_cast<int8_t>(idx);
+        machine->pendingState    = static_cast<int8_t>(want);
     }
 }
 
@@ -154,8 +155,7 @@ void OrchardRequestState(void* sm, int wantId) {
 // ============================================================
 char OrchardComponent::EnterIdle() {
     WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-    // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's body).
-    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wp), false);   // 0x14012fc00
+    wp->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
     return 0;
 }
 
@@ -206,8 +206,7 @@ char OrchardComponent::EnterPlanting() {
     // 1. workplace ← master switch
     O9_STEP(1, "find workplace + SetWorkplaceActive");
     WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-    // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's body).
-    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wp), enabled);   // 0x14012fc00
+    wp->SetAccepting(enabled);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
 
     // 2. footprint rect
     O9_STEP(2, "find position component (footprint rect)");
@@ -240,8 +239,7 @@ char OrchardComponent::EnterPlanting() {
 
     int mapStride = 0;
     if (GameUpdateLoop::_singleton != nullptr) {
-        // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-        const Map* map = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);
+        const Map* map = GameUpdateLoop::_singleton->m_game;
         if (map) mapStride = map->size;
     }
 
@@ -349,20 +347,19 @@ namespace {
 //   (int)(Time::AsSeconds(*(gw+0x128) + 8) / 3600.0f * 12.0f)
 // Note the Time lives at calendar+8 and the YEAR is the int at calendar+0 (see the
 // event-4 handler, which stamps it into lastHarvestYear).
-// LEFT: GameUpdateLoop::m_dayCounter is void* (W0 header; no DayCounter class yet).
 int OrchardCurrentMonth() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    void* cal = GameUpdateLoop::_singleton->m_dayCounter;
+    Calendar* cal = GameUpdateLoop::_singleton->m_dayCounter;
     if (!cal) return 0;
-    const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<const uint8_t*>(cal) + 8)->AsSeconds();
+    const float secs = cal->yearTime.AsSeconds();
     return static_cast<int>(secs / kSecondsPerYear * kMonthsPerYear);
 }
 
-// LEFT: as above; the year is the counter's first int.
+// The year is the calendar's first int.
 int OrchardCurrentYear() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    void* cal = GameUpdateLoop::_singleton->m_dayCounter;
-    return cal ? *reinterpret_cast<const int32_t*>(cal) : 0;
+    Calendar* cal = GameUpdateLoop::_singleton->m_dayCounter;
+    return cal ? cal->year : 0;
 }
 
 // Slots whose state is 2 are HOLES — a tile the planter could not use (msg 0 failed to
@@ -450,14 +447,13 @@ char OrchardComponent::OnClearEvent(void* sm) {
         // the requested STATE id — the two must not be printed under the same word.
         static int s_n = 0;
         if (s_n++ < 8) {
-            // LEFT: the StateMachine (StateMachineComponent+0x48) has no class.
-            uint8_t* smb = reinterpret_cast<uint8_t*>(sm);
-            const int beforeIdx = sm ? static_cast<int>(static_cast<int8_t>(smb[9])) : -99;
+            StateMachine* machine = reinterpret_cast<StateMachine*>(sm);   // LEFT: controller_state_table.h (COMP-2+3): the handlers receive the StateMachine as void*
+            const int beforeIdx = sm ? static_cast<int>(machine->activeState) : -99;
             OrchardRequestState(sm, 20);
             std::fprintf(stderr, "[Orchard20] event 5 (cut): from table idx %d -> requested "
                          "state %d (accepted=%d)\n", beforeIdx,
-                         sm ? static_cast<int>(smb[0x0a]) : -99,
-                         sm ? static_cast<int>(smb[0x0a] == 20) : 0);
+                         sm ? static_cast<int>(static_cast<uint8_t>(machine->pendingState)) : -99,
+                         sm ? static_cast<int>(static_cast<uint8_t>(machine->pendingState) == 20) : 0);
             std::fflush(stderr);
             return 1;
         }
@@ -483,10 +479,8 @@ char OrchardComponent::TryHarvest(void* sm) {
     if (OrchardCurrentYear() == lastHarvestYear) return 0;
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    void* weather = gw ? gw->m_weather : nullptr;
-    // LEFT: GameUpdateLoop::m_weather is void* (W0 header; no Weather class yet): +0x18 is
-    // the temperature float.
-    if (weather && *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(weather) + 0x18) >= kWeatherThreshold) {
+    WeatherSimulation* weather = gw ? gw->m_weather : nullptr;
+    if (weather && weather->temperature >= kWeatherThreshold) {
         const unsigned m = static_cast<unsigned>(OrchardCurrentMonth() - 7);
         if (m < 5 && GetGrowth() > 0.0f)
             return OnHarvestEvent(sm);
@@ -789,9 +783,8 @@ char OrchardComponent::EnterClearing() {
     if (caDesc) {
         void* mem = System::MemoryAllocator::MemAlloc(0x78, 8);
         if (mem) {
-            // LEFT: ClearAreaCtrl_BuildWork takes the description ExternalPtr as uint64_t.
             work = ClearAreaCtrl_BuildWork(
-                mem, entity, reinterpret_cast<uint64_t>(caDesc->_target),
+                mem, entity, reinterpret_cast<uint64_t>(caDesc->_target),   // LEFT: SIG ClearAreaCtrl_BuildWork
                 1, 0, 1);
         }
     }
@@ -813,8 +806,7 @@ char OrchardComponent::EnterClearing() {
     if (!work) return 1;
 
     void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
-    // LEFT: CitizenAI_WorkScheduler_Post takes the work component as uintptr_t.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(wc), 0x401, 0, &workIBP);
+    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(wc), 0x401, 0, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
     return 1;
 }
 
