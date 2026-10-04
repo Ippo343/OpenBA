@@ -221,9 +221,8 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 // template (slot -1); write the decal; tessellate it via 0x1400ace40. Returns the
 // slot index (or -1 if the material is null). 1:1 port (19 args; param_18 is
 // unused/dead). A WorldGeometry member in retail; LEFT free: WorldGeometry.h is
-// block GAME-c-2's (running).
+// block GAME-c-2's (running). Declared in Player/exe_bodies.h (DecalComponent calls it).
 // ============================================================
-namespace {
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
              uint8_t param_9, uint32_t param_10, uint32_t param_11,
@@ -288,22 +287,6 @@ haveSlot:
     // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
     TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);
     return iVar3;
-}
-}  // namespace
-
-// B4 FORWARD: 1 outside caller (Component/decalcomponent.cpp binds it by a local
-// extern "C" of this shape, the geometry and the material as integers).
-extern "C" int TradeWork_impl_0d80(int64_t param_1, int param_2, int param_3, int param_4,
-                                   int param_5, uint8_t param_6, uint32_t param_7, int64_t param_8,
-                                   uint8_t param_9, uint32_t param_10, uint32_t param_11,
-                                   uint32_t param_12, uint32_t param_13, uint32_t param_14,
-                                   char param_15, int param_16, int param_17,
-                                   uint64_t /*param_18 unused*/, uint8_t param_19) {
-    return AddDecal(reinterpret_cast<WorldGeometry*>(param_1), param_2, param_3, param_4,   // LEFT: B4 FORWARD
-                    param_5, param_6, param_7,
-                    reinterpret_cast<Graphics::MaterialInstance*>(param_8),   // LEFT: B4 FORWARD
-                    param_9, param_10, param_11, param_12, param_13, param_14,
-                    param_15, param_16, param_17, param_19);
 }
 
 // ============================================================

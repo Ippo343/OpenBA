@@ -95,6 +95,12 @@ DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalV
 DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key);  // 0x14001fc00
 
 extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2);  // 0x140014b40 B4 FORWARD -> Avl38Retrace<Avl38Node>
+namespace Graphics { class MaterialInstance; }
+int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
+             int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
+             uint8_t param_9, uint32_t param_10, uint32_t param_11,
+             uint32_t param_12, uint32_t param_13, uint32_t param_14,
+             char param_15, int param_16, int param_17, uint8_t param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
 int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 int Player_HighlightAdd_55430(int64_t param_1, int param_2);  // 0x140055430 B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp)
 
