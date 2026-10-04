@@ -456,21 +456,21 @@ static uint8_t* wg_BlendTexture_cf440(TerrainHeightfield* hf) {
 // fd10 — lazy material resolve (blueprint §5). NULL-safe; trusts Find's return
 // and skips the post-Find IsDerivedFrom check (cascade strategy — the standalone
 // factory tree is incomplete and IsDerivedFrom NULL-derefs).
-//   triple = {System::String name @+0; int cookie @+0x08; External* cache @+0x10}
+//   name = the String of a {System::String name @+0; int cookie @+0x08; External* cache @+0x10}
+//   triple (TerrainGenerator +0x38 / +0x50 / +0x68)
 // Returns the resolved External* (or null -> untextured-but-visible terrain).
 // ============================================================
-static Graphics::MaterialInstance* wg_ResolveMaterial_fd10(void* triple) {
-    if (!triple) return nullptr;
+static Graphics::MaterialInstance* wg_ResolveMaterial_fd10(const System::String* name) {
+    if (!name) return nullptr;
     const ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;
     if (!factory) return nullptr;
 
-    // String is at +0 of the triple. LEFT: TerrainGenerator's three triples are raw
-    // String storage (H5: a System::String member would run its ctor / dtor).
-    System::Filename fnbuf(*reinterpret_cast<const System::String*>(triple));
+    // String is at +0 of the triple.
+    System::Filename fnbuf(*name);
     // The tree trusts Find's result (retail checks IsDerivedFrom MaterialInstance in
     // 0x14001fd10; known_port_issues 14).
     return static_cast<Graphics::MaterialInstance*>(
-        const_cast<::Object::External*>(factory->Find(fnbuf)));
+        const_cast<::Object::External*>(factory->Find(fnbuf)));   // LEFT: CONST Find returns const External*
 }
 
 // ============================================================
@@ -769,5 +769,5 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     }
     // LEFT: the two untyped parameters (the old body's C-style casts) until the
     // closing wave rewires the caller to `m_worldGeometry->BuildTerrain(m_terrainConfig, ...)`.
-    ((WorldGeometry*)wg)->BuildTerrain((TerrainGenerator*)gen, sizeIdx, seed);
+    ((WorldGeometry*)wg)->BuildTerrain((TerrainGenerator*)gen, sizeIdx, seed);   // LEFT: SIG WorldGen_BuildTerrain (B4 FORWARD, void* caller)
 }

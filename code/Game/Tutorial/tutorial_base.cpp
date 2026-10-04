@@ -184,12 +184,12 @@ static inline uint32_t BstCountByKey(const Node* node, const Key* key) {
 
 // 0x140092010 — the entities of one template (the +0x160 tree).
 uint32_t CitizenBehavior::CountByTemplate(const ComponentDescription* key) const {
-    return BstCountByKey(TemplateTreeRoot(this), key);
+    return BstCountByKey(field_0x160, key);
 }
 
 // 0x1400910a0 — the entities of one profession (the +0x100 tree).
 uint32_t CitizenBehavior::CountByProfession(const Profession* key) const {
-    return BstCountByKey(ProfessionTreeRoot(this), key);
+    return BstCountByKey(field_0x100, key);
 }
 
 // The tree's guards around 0x14012e5c0 that retail lacks (known_port_issues

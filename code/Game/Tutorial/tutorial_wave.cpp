@@ -90,9 +90,9 @@ uint32_t HighlightTypeId() { return TutorialHighlightDialog::TypeId(); }
 // narrow fail and the step panel is never bound.
 uint32_t TutorialUITypeId() { return TutorialUI::TypeId(); }
 
-// The CitizenBehavior +0x160 template tree (Goal/goal_exe_helpers.h): key
+// The CitizenBehavior +0x160 template tree (Entity/CitizenBehavior.h): key
 // +0x00, entities +0x08, count +0x10, left +0x20, right +0x28.
-TemplateBucketNode* BstFind(TemplateBucketNode* node, const Object::External* key) {
+TemplateBucket* BstFind(TemplateBucket* node, const Object::External* key) {
     while (node) {
         const Object::External* nodeKey = node->key;
         if (key < nodeKey)      node = node->left;
@@ -226,8 +226,7 @@ void TutorialSetupDialog::SetAllDialogFlags(char show) {
     // pointer, so `it.node` is what retail hands to CheckPtr.
     int dialogs = 0;
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
         UI::Element* root = dialog->GetRoot().Get();
         if (root) {
             // Retail applies the flags to the root itself and then walks the
@@ -278,8 +277,7 @@ Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog
 
     // Same list, same order as retail's GetFirstDialog walk (see above).
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
         if (dialog->IsA(tid)) {
             return dialog;
         }
@@ -356,13 +354,13 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
     if (toolbarRef.resolved != nullptr) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
-        TemplateBucketNode* root = mgr ? TemplateTreeRoot(mgr) : nullptr;
+        TemplateBucket* root = mgr ? mgr->field_0x160 : nullptr;
 
         NamedExternalRef refCopy{};
         TutWave_ExternalRefCopy(&refCopy, &toolbarRef);
         const Object::External* key = TutWave_ExternalRefResolve(&refCopy);
 
-        TemplateBucketNode* found = BstFind(root, key);
+        TemplateBucket* found = BstFind(root, key);
         int count = found ? found->count : 0;
         int index = toolbarIndex;
 
@@ -370,7 +368,7 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
             NamedExternalRef refCopy2{};
             TutWave_ExternalRefCopy(&refCopy2, &toolbarRef);
             const Object::External* key2 = TutWave_ExternalRefResolve(&refCopy2);
-            TemplateBucketNode* found2 = BstFind(root, key2);
+            TemplateBucket* found2 = BstFind(root, key2);
             if (found2 && found2->entities) {
                 targetElem = found2->entities[index];
             }
@@ -419,10 +417,10 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
 void TutorialSetupDialog::ShowListedElements() {
     SetAllDialogFlags('\0');
 
-    int count = static_cast<int32_t>(shownPathCount);
+    int count = shownPaths.GetSize();
     if (count <= 0) return;
 
-    System::String* arr = shownPaths;
+    System::String* arr = shownPaths.GetData();
     if (!arr) return;
     for (int i = 0; i < count; ++i) {
         Object::InternalPtr<UI::Element> elem;

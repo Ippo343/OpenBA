@@ -140,9 +140,7 @@ int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
         } else if (uVar1 == uVar2) {
             iVar3 = 1;
         } else {
-            // LEFT: Map::regionPairCache (+0x78) stays int64_t*: its tick 0x1400a5d10
-            // (Action/region_paircache.cpp, block ACT-b) takes int64_t*.
-            RegionPairCache* cache = reinterpret_cast<RegionPairCache*>(regionPairCache);
+            RegionPairCache* cache = regionPairCache;
             iVar3 = (int)cache->Find((int)uVar1, (int)uVar2);   // 0x1400a5ac0
             if (iVar3 < 0) {
                 iVar3 = regionGraph->PathLength((int)uVar1, uVar2);   // 0x1400a8ba0

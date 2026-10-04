@@ -337,3 +337,40 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - DLG-3: GCC turned a typed 16-byte element-shift loop into a `memmove` call in `RemoveBuyOrder` (a call that
   appeared; same bytes moved). COMP-1's State8OneShot likewise.
 - DLG-3 M1 move: `UpgradeUIConfig::_target` typing: upgradeui.cpp -2, upgradeuiconfig.cpp +1.
+
+## Round 7 hand-ins (GAME-3, DLG-2, GAME-4, DLG-1)
+### Facts
+- `MapGenerator::ExternalRef::strPtr` is a `System::String` (field name kept), `families` is a
+  `DynArrayHeader<InitialFamily>`, `_field20` a `UI::StringTable*`; `ExternalRef::resolved` stays `void*`
+  (founding_spawn.cpp:230 takes `void**` to it).
+- `Dialog/ToolRegistryNode.h` (0x38): tool_activation_standalone.cpp and gameupdateloop_teardown.cpp
+  (0x14002df90 / 0x14002de90) can use it.
+- `Map::regionPairCache` is `RegionPairCache*`; `Map::field_0xA2` is `uint8_t`; the tree at GameUpdateLoop
+  +0x118 +0x30 is `WorkScheduler::trees[0]` of `WorkSchedulerIdNode` (the inventory's "Map tile AVL node").
+- `g_pForceWorkBuilding`, `g_pConstructionDemoEntity` are `ComponentEntity*`;
+  `StartTown_GetFoundingHouseEntity` returns `ComponentEntity*`, `StartTown_ResolveTemplateByPath`
+  `ComponentDescription*`: casts on them in tool_harness.cpp, citizenai_handlers, the force harnesses can go.
+### Wave X additions
+- GAME-3: `Loop(void*)`, `PhaseB_InitState` (caller chunked_scene_loader.cpp), `MG_Resize`, the serialize_*
+  helpers, the RtGraphics Renderer / Scene doors, the Context +0x288 staging bytes, the CriticalSection door.
+  H5 left: `MenuDialogLoopT` arrays (typing them would free them AFTER `~Audio::Scene`; retail frees before),
+  `_dlcShip` (row 120), `Toolbar.h` strings (not done by GAME-3 or GAME-4: 4 casts in toolbar.cpp).
+- DLG-2: `Player_HighlightAdd_55430`, `SetEngineNextLoop` / `SetDialogLoaderNextLoop`,
+  `PlayerTrade_EntityUI_66b0`, `Debug_Sprite_Ctor`, the `TownHall_*` parameter views,
+  `Toolbar_ShowGroup_Impl`, `ToolbarUtility_*`, `EntityUI_OpenPauseMenu`, `Toolbar_CenterOnEntity_Impl`.
+- GAME-4: `TownRegistry_RegisterWorkplace(int64)`, `impl_95a0`, `ShuffleProfessionList`,
+  `FindAvailableBuilding` (carry the profession key as `uint64_t`: town_workplace_registry.cpp keeps its local
+  node until they are typed), `WorldGen_BuildTerrain`, `WeatherParticle_Config`, `WeatherEffect_SetEnabled`,
+  `Reimpl_WeatherArray_Resize`, `Weather_SunUpdate`; local externs with no header: `CitizenEmploy_SeatWorkers`,
+  `g_wpcRosterOnly`, `WorkplaceComponent_ApplyOccupiedVisual`, `DecalComponent_MarkOwnerBuilt`,
+  `StartTown_SpawnStartingHerd`, `WorldGen_GetPath*`, `StartTown_Founding*Age`,
+  `MapComponent_ReportDc20Evictions`.
+- DLG-1: the `*_Ctor_Standalone` dialog ctor forwarders, `EntityUI_SelectEntity_Impl`,
+  `PlayerTrade_BSTRemove_25740`, `CitizenComp_DeferredInit_117080`, `ComponentEntity_CtorFromDescription`,
+  `MainMenuDialog_FromMenuDLT`, `WorldSetup_LoadFromSave`, `Pf_RegionPairCacheTick_5d10`,
+  `Pf_RegionPairCache_Build`; `Map` +0xE8 / +0xF0 set header; `BuildRequirementUI` arrays (row 441);
+  `EventLog::field_0x10` is `bool[6]`.
+### Close
+- GAME-4 changed two diagnostic log formats in starttown.cpp (`0x%llx` -> `%p` for the template / profession
+  pointer in the laborer and house-seed lines); no gate or tool greps them.
+- DLG-1 row 447: `hasNewEvents` now copies the filter byte (identical while it is 0 / 1).

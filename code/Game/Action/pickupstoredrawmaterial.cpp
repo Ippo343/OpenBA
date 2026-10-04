@@ -418,18 +418,6 @@ void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) 
 // if requested(param_5)<=0 compute it from FUN_140116540(self+0x20)/unitWeight;
 // clamp to the storage availability (count-reserved) for the material; then add.
 // ============================================================
-void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_t* param_3,
-                                          int64_t param_4, int param_5, uint8_t param_6) {
-    // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp,
-    // Work/work_act_path.cpp, Work/work_act_perform.cpp) hold the refs as uint64_t* and the
-    // material as an integer.
-    return static_cast<Object::Base*>(
-        new (self) PickupStoredRawMaterial(reinterpret_cast<CitizenComponent* const*>(param_2),
-                                           reinterpret_cast<ComponentEntity* const*>(param_3),
-                                           reinterpret_cast<ComponentDescription*>(param_4),
-                                           param_5, param_6));
-}
-
 // 0x1400ca520 — the ctor body: the field init is the initialiser list (+0x30 / +0x38 one
 // qword each in retail: data, then count + capacity); everything after it is the retail
 // body.

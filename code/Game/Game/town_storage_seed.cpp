@@ -88,6 +88,7 @@
 #include "Component/ComponentDescription.h"
 #include "Component/Description.h"
 #include "Game/MapGenerator.h"             // the start config (GameUpdateLoop::m_mapConfig)
+#include "Game/exe_bodies.h"               // the declarations of this file's bodies
 
 // ============================================================
 // Type-ids: 0x1401c7cb8/7e78/7eb0/79e0 are these four classes' cells (Table 1).
@@ -222,11 +223,9 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
 // ============================================================
 // param = any component whose +0x10 holds the building's entity IBP (retail
 // passes the BuildComponent; the StorageComponent itself works — same layout).
-extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
+extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity) {
     if (!componentWithEntity) return;
-    // LEFT: the void* parameter of the outside caller (starttown.cpp); the object
-    // is a Component (its +0x10 entity).
-    const Component* p = reinterpret_cast<const Component*>(componentWithEntity);   // LEFT: void* parameter of outside caller
+    const Component* p = componentWithEntity;
 
     ComponentEntity* entity = p->_entity;
     StorageComponent* sc = FindStorageOnEntity(entity);
@@ -359,14 +358,13 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
 // ============================================================
 // 0x1400a1f00 — StartTown_SeedStartingResources(startConfig)
 // ============================================================
-extern "C" void StartTown_SeedStartingResources(void* startConfig) {
+extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig) {
     CitizenBehavior* townMgr = TownMgr();
     if (!startConfig || !townMgr) {
         return;
     }
-    // LEFT: the void* parameter of the outside caller (starttown.cpp, which passes
-    // GameUpdateLoop::m_mapConfig): the seven counts are MapGenerator +0xFC..+0x114.
-    const MapGenerator* sc = reinterpret_cast<const MapGenerator*>(startConfig);   // LEFT: void* parameter of outside caller
+    // The seven counts are MapGenerator +0xFC..+0x114.
+    const MapGenerator* sc = startConfig;
     // Mask labels corrected 2026-07-19 (binary-verified flag values, see
     // engine/types/RawMaterialDescription.h): 0x20 = EDIBLE food, 0x40 = FUEL
     // firewood. The 0x400/0x800/0x1000/0x200/0x4000 class names below are the

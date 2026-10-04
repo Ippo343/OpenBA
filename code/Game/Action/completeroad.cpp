@@ -63,7 +63,7 @@ int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0
 CompleteRoad::CompleteRoad()
     : roadTileIndex(0), roadType(0), roadDirection(0), _pad29{} {}
 
-// 0x1400c59d0 (ActChild_CompleteRoadCopyCtor_c59d0 is its registered door):
+// 0x1400c59d0 (CompleteRoad_Action_CopyCtor):
 // +0x20 = tileIndex (R8D), +0x24 = roadType (EDX), +0x28 = direction (R9B).
 CompleteRoad::CompleteRoad(uint32_t roadTypeArg, uint32_t tileIndex, uint8_t direction)
     : roadTileIndex(static_cast<int32_t>(tileIndex)),
@@ -80,14 +80,5 @@ void* CompleteRoad::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) CompleteRoad());
 }
 
-
-// ============================================================
-// FUN_1400c59d0 — CompleteRoad_Action_CopyCtor
-//   RCX=self, EDX=p2(u32 @ +0x24), R8D=p3(u32 @ +0x20), R9B=p4(byte @ +0x28).
-// ============================================================
-void* ActChild_CompleteRoadCopyCtor_c59d0(void* self, uint32_t p2, uint32_t p3, uint8_t p4) {
-    // B4 FORWARD: 1 outside caller (Work/work_act_perform.cpp). The real ctor is CompleteRoad.h's.
-    return static_cast<Object::Base*>(new (self) CompleteRoad(p2, p3, p4));
-}
 
 DEFINE_EXE_TYPE(CompleteRoad, "Action")

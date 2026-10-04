@@ -136,8 +136,7 @@ inline Object::InternalPtr<UI::DialogInstance>* FindDialogByName_Impl(
         // CheckPtr on the iterator node (InternalBasePtr) before dereferencing.
         // Original: MOV RCX,RSI; CALL [0x140152ab0] (fn_InternalBasePtr_CheckPtr)
 
-        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
         if (dialog) {
             // Check IsA against dialogTypeId
             // ?IsA@Base@Object@@QEBA_NI@Z 0x1800491c0, the member (B3R Leftovers).

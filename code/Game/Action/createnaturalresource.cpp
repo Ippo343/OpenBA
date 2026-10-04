@@ -242,14 +242,6 @@ void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
 //   RCX=self, RDX=param_2 (raw u64 @ +0x20), R8=param_3, R9D=param_4 (int @ +0x30).
 //   +0x20 = param_2 ; +0x28 = *param_3 ; +0x30 = param_4.
 // ============================================================
-void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4) {
-    // B4 FORWARD: 1 outside caller (Work/work_base_actionctor.cpp) holds the description as
-    // an integer and the parent as uint64_t*.
-    return static_cast<Object::Base*>(new (self) CreateNaturalResource(
-        reinterpret_cast<ComponentDescription*>(param_2),
-        reinterpret_cast<ComponentEntity* const*>(param_3), param_4));
-}
-
 // 0x1400c6a20: +0x20 = param_2 (raw) ; +0x28 = *param_3 ; +0x30 = param_4.
 CreateNaturalResource::CreateNaturalResource(ComponentDescription* desc,
                                              ComponentEntity* const* parent, uint32_t cell)

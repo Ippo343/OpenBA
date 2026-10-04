@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/External.h"
+#include "system/String.h"   // System::String members
 #include "Object/exe_type.h"
 
 struct TerrainSizeRow;   // Game/TerrainHeightfield.h
@@ -39,21 +40,21 @@ public:
 
 public:
     void*    _field20;           // +0x20: ExternalPtr (serialized via FUN_14000bf40)
-    void*    _field28;           // +0x28: System::String (8-byte COW, destroyed in dtor)
+    System::String _field28;     // +0x28: String (ctor 0x1400b1810 stores 0; dtor 0x140020630 ~String)
     uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
     uint8_t  _pad31[7];          // +0x31: padding
     // Noise layer 1
-    void*    _field38;           // +0x38: System::String (filename, resolved to External on load)
+    System::String _field38;     // +0x38: String (filename, resolved to External on load)
     int32_t  _field40;           // +0x40: -1 sentinel (ExternalFactory generation counter)
     uint8_t  _pad44[4];          // +0x44: padding
     void*    _field48;           // +0x48: resolved External ptr for noise layer 1
     // Noise layer 2
-    void*    _field50;           // +0x50: System::String (filename)
+    System::String _field50;     // +0x50: String (filename)
     int32_t  _field58;           // +0x58: -1 sentinel
     uint8_t  _pad5C[4];          // +0x5C: padding
     void*    _field60;           // +0x60: resolved External ptr for noise layer 2
     // Noise layer 3
-    void*    _field68;           // +0x68: System::String (filename)
+    System::String _field68;     // +0x68: String (filename)
     int32_t  _field70;           // +0x70: -1 sentinel
     uint8_t  _pad74[4];          // +0x74: padding
     void*    _field78;           // +0x78: resolved External ptr for noise layer 3

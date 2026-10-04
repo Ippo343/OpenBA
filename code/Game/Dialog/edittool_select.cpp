@@ -61,8 +61,7 @@
 extern "C" void* g_LastSelectStore[4] = {};
 extern "C" int   g_LastSelectStoreIdx = 0;
 
-// B4 FORWARD: 5 outside callers (Player/edittool.cpp x4, Dialog/toolbardialog.cpp)
-extern "C" void EditTool_SelectEntity_Impl(void* self, void* entity) { reinterpret_cast<EditTool*>(self)->SelectEntity(reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(entity)); }
+// (B.4 P2 DLG-1: the forwarder EditTool_SelectEntity_Impl had no caller left; deleted.)
 
 // ============================================================================
 // 0x1400fd3b0 EditTool::SelectEntity(InternalPtr<ComponentEntity>* entity)
@@ -93,8 +92,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
     //    is the bare node pointer.
     const uint32_t tidEntityUI = EntityUI::TypeId();   // 0x1401c4f00
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        // LEFT: the list element is spelled void* (UserInterface.h DialogInstancePtr).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
 
         UI::DialogController* controller =
             dialog ? dialog->GetController(tidEntityUI).Get() : nullptr;
@@ -115,8 +113,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
 
         UIDescription* uiDesc = nullptr;
         for (int i = 0; i < count; i++) {
-            // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-            Object::Base* item = reinterpret_cast<Object::Base*>(description->_subDescs[i]);
+            Object::Base* item = description->_subDescs[i];
             if (item->Type() != tidUIDesc) continue;
             // Matched: require derived, else abort the whole select.
             if (!::Object::IsDerivedFromNullSafe(item, tidUIDesc)) return;
@@ -170,8 +167,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
     //     are overwritten immediately below, so nulling them would defeat the
     //     EditTool::OnKey per-frame `lastEntityRef != foundEntity` guard and re-fire
     //     the select every frame. A user-pinned panel is left open — matching retail.
-    // LEFT: entityRef is uint64_t in PLAYER's header (retail InternalPtr<DialogInstance>).
-    UI::DialogInstance* oldDialog = reinterpret_cast<UI::DialogInstance*>(entityRef);
+    UI::DialogInstance* oldDialog = entityRef;
     if (oldDialog && oldDialog != resultDialog) {
         const uint32_t tidToolUI = ToolUI::TypeId();   // 0x1401c5788
         UI::DialogController* controller = oldDialog->GetController(tidToolUI).Get();

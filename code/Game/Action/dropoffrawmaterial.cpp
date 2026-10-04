@@ -273,15 +273,6 @@ void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
 //   RCX=self, RDX=p2, R8=p3, R9=p4(u64), [stack]=p5(u32), p6(byte).
 //   +0x20=p6(byte) ; +0x24=p5(u32) ; +0x28=p4(u64) ; +0x30=*p2 ; +0x38=*p3.
 // ============================================================
-void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3,
-                                        uint64_t p4, uint32_t p5, uint8_t p6) {
-    // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp, Work/work_act_path.cpp)
-    // hold the refs as uint64_t* and the material as an integer.
-    return static_cast<Object::Base*>(new (self) DropOffRawMaterial(
-        reinterpret_cast<CitizenComponent* const*>(p2), reinterpret_cast<ComponentEntity* const*>(p3),
-        reinterpret_cast<ComponentDescription*>(p4), p5, p6));
-}
-
 // 0x1400c7cd0: +0x20 = p6 (byte) ; +0x24 = p5 ; +0x28 = p4 ; +0x30 = *p2 ; +0x38 = *p3.
 DropOffRawMaterial::DropOffRawMaterial(CitizenComponent* const* citizen, ComponentEntity* const* destination,
                                        ComponentDescription* material, uint32_t count, bool flag)

@@ -142,13 +142,6 @@ void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
 //   RCX=self, RDX=param_2, R8D=param_3 (int @ +0x28), R9B=param_4 (byte @ +0x2c).
 //   +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
 // ============================================================
-void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4) {
-    // ENDGAME B.3.8 ACT: the real ctor (AnimateNaturalResource.h). A by-address door.
-    // B4 FORWARD: 1 outside caller (Work/work_base_actionctor.cpp) holds the entity as uint64_t*.
-    return static_cast<Object::Base*>(new (self) AnimateNaturalResource(
-        reinterpret_cast<ComponentEntity* const*>(param_2), param_3, param_4));
-}
-
 // 0x1400c57d0: +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
 AnimateNaturalResource::AnimateNaturalResource(ComponentEntity* const* entity,
                                                uint32_t animIndexArg, bool wait)

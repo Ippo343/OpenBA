@@ -116,11 +116,11 @@ void MapParamsDialog::OnOpened() {
     // it were a string-table index. Always out of range, so all three rendered
     // blank while name/seed/size/disaster (which take other paths) looked fine.
     //
-    // LEFT: GameUpdateLoop's three generator configs are void* (W0 header).
+    // (GameUpdateLoop's three generator configs are typed.)
 
     // textCondition — the map generator
     {
-        const MapGenerator* desc = reinterpret_cast<const MapGenerator*>(gameWorld->m_mapConfig);
+        const MapGenerator* desc = gameWorld->m_mapConfig;
         if (desc && textCondition) {
             UI::String uiStr = GeneratorNameString(desc);
             textCondition->SetText(&uiStr);
@@ -129,7 +129,7 @@ void MapParamsDialog::OnOpened() {
 
     // textTerrain — the terrain generator
     {
-        const TerrainGenerator* desc = reinterpret_cast<const TerrainGenerator*>(gameWorld->m_terrainConfig);
+        const TerrainGenerator* desc = gameWorld->m_terrainConfig;
         if (desc && textTerrain) {
             UI::String uiStr = GeneratorNameString(desc);
             textTerrain->SetText(&uiStr);
@@ -149,7 +149,7 @@ void MapParamsDialog::OnOpened() {
 
     // textClimate — the climate generator
     {
-        const ClimateGenerator* desc = reinterpret_cast<const ClimateGenerator*>(gameWorld->m_climateConfig);
+        const ClimateGenerator* desc = gameWorld->m_climateConfig;
         if (desc && textClimate) {
             UI::String uiStr = GeneratorNameString(desc);
             textClimate->SetText(&uiStr);

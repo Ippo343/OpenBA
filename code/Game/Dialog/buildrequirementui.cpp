@@ -74,19 +74,18 @@ static Object::Base* FindCompInDesc(const ComponentDescription* desc, uint32_t t
     if (!SaneHeapPtr(array) || count <= 0 || count > 4096) return nullptr;
 
     for (int i = 0; i < count; i++) {
-        void* comp = array[i];
+        Description* comp = array[i];
         if (!SaneHeapPtr(comp)) continue;
 
         // vtable[2] returns the component's type ID. NB: vtable is a data pointer
         // (8-aligned), but vtable[2] is a *function* pointer (code address) and is
         // NOT necessarily 8-aligned — only require it be non-null, not SaneHeapPtr,
         // or every component gets skipped.
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header); the
-        // standalone sanity probe reads the vptr word.
-        void** vtable = *(void***)comp;
+        // The standalone sanity probe reads the vptr word.
+        void** vtable = *(void***)comp;  // CAST-OK: vslot
         if (!SaneHeapPtr(vtable) ||
             Object::SlotAddressOf(comp, &Object::Base::Type) == nullptr) continue;   // B.3.x: slot from the member
-        Object::Base* compBase = reinterpret_cast<Object::Base*>(comp);  // B.3.8 bridge
+        Object::Base* compBase = comp;
         int compTypeId = compBase->Type();
 
         if (compTypeId == (int)typeId) {

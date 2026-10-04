@@ -45,6 +45,7 @@
 #include "Component/ComponentDescription.h"
 #include "Game/PlayerController.h"
 #include "Game/PlayerToolManager.h"
+#include "Game/Map.h"   // GameUpdateLoop::m_game
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -85,8 +86,7 @@ static UIDescription* GetDescPage_Impl(const ComponentDescription* entityDesc)
     Description** compArray = entityDesc->_subDescs;   // COMP-c typed _subDescs (merge fix)
 
     for (int i = 0; i < count; i++) {
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-        Object::Base* comp = compArray ? reinterpret_cast<Object::Base*>(compArray[i]) : nullptr;
+        Object::Base* comp = compArray ? compArray[i] : nullptr;
         if (!comp) continue;
 
         // vtable[2] = GetTypeId (returns int typeId)
@@ -219,11 +219,11 @@ static TrackedEntityNode* NewTrackedEntityNode(ComponentEntity* key, uint32_t x,
 void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                  uint32_t x, uint32_t y)
 {
-    // LEFT: the receiver and key arrive as void* (toolui.cpp's declaration, DLG-d),
-    // and PlayerToolManager +0x60 is void* (GAME-a's header).
+    // LEFT: SIG EntityUI_SelectEntity_Impl (the receiver and key arrive as void*:
+    // toolui.cpp declares it locally).
     PlayerToolManager* manager = reinterpret_cast<PlayerToolManager*>(playerController);
     ComponentEntity* entityKey = *reinterpret_cast<ComponentEntity* const*>(entityPtr);
-    TrackedEntityNode** rootPtr = reinterpret_cast<TrackedEntityNode**>(&manager->field_0x60);
+    TrackedEntityNode** rootPtr = &manager->field_0x60;
 
     // Search the tree for an existing node with this key
     TrackedEntityNode* node = *rootPtr;
@@ -262,8 +262,8 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                     // Insert as the right child, then rebalance
                     TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
                     cur->right = newNode;
-                    // LEFT: the shared AVL retrace takes int64_t* (PLAYER's declaration).
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&newNode));   // 0x140025920
+                    // 0x140025920 (PlayerTrade_Retrace_25920's body, on the typed node)
+                    Avl38Retrace<TrackedEntityNode>(rootPtr, &newNode);
                     break;
                 }
                 cur = cur->right;
@@ -272,7 +272,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                     // Insert as the left child, then rebalance
                     TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
                     cur->left = newNode;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&newNode));   // 0x140025920
+                    Avl38Retrace<TrackedEntityNode>(rootPtr, &newNode);   // 0x140025920
                     break;
                 }
                 cur = cur->left;
@@ -368,8 +368,7 @@ void EntityUI::OnClosed() {
     // The tracking set: the tool manager (g_pGameWorldSingleton +0x120) +0x60
     PlayerToolManager* tools = GameUpdateLoop::_singleton->m_toolManager;
 
-    // LEFT: PlayerToolManager +0x60 is void* (GAME-a header).
-    EntityTrackingSet_Remove_Impl(reinterpret_cast<TrackedEntityNode**>(&tools->field_0x60), &entityKey);
+    EntityTrackingSet_Remove_Impl(&tools->field_0x60, &entityKey);
 }
 
 // ============================================================
@@ -612,9 +611,9 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         if (!gotPos) {
             MapComponent* build = entityPtr ? entityPtr->FindComponent<MapComponent>() : nullptr;  // 0x140004680
             if (build != nullptr) {
-                // LEFT: GameUpdateLoop::m_game is void* (the Map; its +0x00 is the width).
-                int* mapGrid = (int*)game->m_game;
-                int gridSize = *mapGrid;
+                // The Map; its +0x00 is the width.
+                Map* mapGrid = game->m_game;
+                int gridSize = mapGrid->size;
                 float halfGrid = (float)(gridSize >> 1);
 
                 // Retail reads the footprint with MOVSX (0x140066955..0x140066964).
@@ -675,8 +674,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            // LEFT: PlayerToolManager +0x50 is void* (GAME-a header).
-            EntityTrackingSet_Remove_Impl(reinterpret_cast<TrackedEntityNode**>(&worldObj->field_0x50), &entityKey);
+            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50, &entityKey);
             return;
         }
 
