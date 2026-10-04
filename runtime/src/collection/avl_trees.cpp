@@ -288,15 +288,13 @@ void* PtrArrayDtor(void* self) {
 // the truncation is written as retail wrote it rather than widened, because
 // "it cannot overflow" is a claim about call sites this lane does not own.
 // ---------------------------------------------------------------------------
-// The two 16-bit words live inside TypeInfo.h's `int32_t balance; int32_t
-// _pad4c;` pair, which models them as one dword. This lane MEASURED them as
-// two int16 and corrects TypeInfo.h in the same commit; the accessors below
-// are how this file reads them without depending on which spelling wins.
+// The two 16-bit words are TypeInfo.h's `int16_t balance` (+0x48) and
+// `int16_t height` (+0x4a), both asserted there.
 static inline int16_t& Balance50(TypeNode* n) {
-    return *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x48);  // LEFT: TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header
+    return n->balance;
 }
 static inline int16_t& Height50(TypeNode* n) {
-    return *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x4a);  // LEFT: TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header
+    return n->height;
 }
 
 static inline void Recompute(TypeNode* n) {
