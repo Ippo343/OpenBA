@@ -148,7 +148,7 @@ void PopulateCounts(WorkPlaceUI* self) {
     if (UI::LabelElement* label = self->workPlaceCount) {
         if (profession->spriteSheet) {
             UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(profession->spriteSheet),
-                              *reinterpret_cast<const System::String*>(&profession->stringName));   // LEFT: Profession::stringName is H5 raw storage (W0-H1)
+                              profession->stringName);
             label->SetSprite(&sprite);
         }
         System::String fmt1 = System::String::Format("%d", static_cast<uint64_t>(roster));
@@ -162,7 +162,7 @@ void PopulateCounts(WorkPlaceUI* self) {
     if (UI::TextElement* text = self->maxCount) {
         int assigned = 0;
         CitizenBehavior* town = GameUpdateLoop::_singleton
-            ? reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList)   // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header)
+            ? GameUpdateLoop::_singleton->m_citizenList
             : nullptr;
         if (town) {
             for (int i = 0; i < town->citizenCount && town->citizens; ++i) {
@@ -384,7 +384,7 @@ void WorkPlaceUI::OnUpdateLayout() {
     {
         Profession* profession = workPlace->profession;
         UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(profession->spriteSheet),
-                          *reinterpret_cast<const System::String*>(&profession->stringName));   // LEFT: Profession::stringName is H5 raw storage (W0-H1)
+                          profession->stringName);
         workPlaceCount->SetSprite(&sprite);
     }
     {
@@ -397,7 +397,7 @@ void WorkPlaceUI::OnUpdateLayout() {
     }
 
     // Count the town's adults of this profession, and its laborers.
-    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header)
+    CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
     Profession* laborer = professions->field_0x30;
 
     int workplaceWorkerCount = 0;
@@ -542,7 +542,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
     if (!profession) return;
 
     if (!GameUpdateLoop::_singleton) return;
-    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header)
+    CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
     if (!town) return;
 
     // The seat functions take the town manager and the profession as integers.
