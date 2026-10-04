@@ -71,7 +71,7 @@ bool MemoryStream::Read(int count, void* dst) {
     if (end > static_cast<int32_t>(_size)) {                     // 1800ae96a CMP/JG
         return false;                                            // 1800ae991
     }
-    std::memcpy(dst, static_cast<const uint8_t*>(_data) + cursor,
+    std::memcpy(dst, static_cast<const uint8_t*>(_data) + cursor,  // CAST-OK: byte_io
                 static_cast<size_t>(n));                         // 1800ae97c
     _cursor += static_cast<uint32_t>(n);                         // 1800ae981
     return true;
@@ -93,7 +93,7 @@ bool MemoryStream::Write(int count, const void* src) {
     if (end > static_cast<int32_t>(_size)) {                     // 1800ae90a
         return false;                                            // 1800ae92e
     }
-    std::memcpy(static_cast<uint8_t*>(_data) + cursor, src,
+    std::memcpy(static_cast<uint8_t*>(_data) + cursor, src,  // CAST-OK: byte_io
                 static_cast<size_t>(n));                         // 1800ae919
     _cursor += static_cast<uint32_t>(n);                         // 1800ae91e
     return true;

@@ -245,12 +245,10 @@ System::Filename FileSystem::GetSourceDirectory() const {
 
 }
 
-uint32_t FileSystem::GetPackfileId(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
-
+uint32_t FileSystem::GetPackfileId(const System::Filename& path) const {
     uint32_t ours = 0;
 
-    const char* pathData = path->data;
+    const char* pathData = path._data;
     const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
     const char* dataDirData = _dataDirectory.data;
     const int dataDirLen = dataDirData ? RtIO::StringLength(dataDirData) : 0;

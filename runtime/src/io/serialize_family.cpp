@@ -247,7 +247,7 @@ namespace IO {
 #define RT_RW_READER_BODY(METHOD, T)                                           \
     void BinaryReader::Serialize##METHOD(T& v, const char* name) {             \
         (void)name;                 /* CLOBBERED by retail before use */       \
-        static_cast<Stream*>(stream)->Read((int32_t)sizeof(T), &v);   /* +0x18 */ \
+        stream->Read((int32_t)sizeof(T), &v);   /* +0x18 */ \
     }                                                                          \
     void BinaryReader::Serialize##METHOD##Array(int count, T* arr,             \
                                                 const char* name) {            \
@@ -260,7 +260,7 @@ namespace IO {
 #define RT_RW_WRITER_BODY(METHOD, T)                                           \
     void BinaryWriter::Serialize##METHOD(T& v, const char* name) {             \
         (void)name;                                                            \
-        static_cast<Stream*>(stream)->Write((int32_t)sizeof(T), &v);  /* +0x10 */ \
+        stream->Write((int32_t)sizeof(T), &v);  /* +0x10 */ \
     }                                                                          \
     void BinaryWriter::Serialize##METHOD##Array(int count, T* arr,             \
                                                 const char* name) {            \
@@ -302,7 +302,7 @@ RT_RW_WRITER_BODY(SChar,  signed char)
 // Skip is "abandon the rest of this record and jump to the next".
 void BinaryReader::Skip() {
     const int32_t end = word24 + word20;
-    static_cast<Stream*>(stream)->SetCurrentPos(end);   // +0x20
+    stream->SetCurrentPos(end);   // +0x20
 }
 
 // The count comes straight through: (int, void*) already sit where
@@ -310,11 +310,11 @@ void BinaryReader::Skip() {
 // marshalling for these two.
 void BinaryReader::SerializeBytes(int count, void* buf, const char* name) {
     (void)name;
-    static_cast<Stream*>(stream)->Read(count, buf);    // +0x18
+    stream->Read(count, buf);    // +0x18
 }
 void BinaryWriter::SerializeBytes(int count, void* buf, const char* name) {
     (void)name;
-    static_cast<Stream*>(stream)->Write(count, buf);   // +0x10
+    stream->Write(count, buf);   // +0x10
 }
 
 // ENDGAME B.3.9 IO: slot 0 and the constructors/destructors of all three

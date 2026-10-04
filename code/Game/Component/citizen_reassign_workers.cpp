@@ -47,9 +47,12 @@
 //     +0x10  owner entity IBP                +0x50  occupant list {data@+0,count@+8}
 //     +0x58  capacity(int)
 //   occupant (CitizenComponent)
-//     +0x3c   health value(float)     +0x1f0 profession key
-//     +0x208  busy/action ptr         +0x248 workplace-assign IBP
-//     +0x288  health component (+0x44 threshold)
+//     +0x3c   age(float)              +0x1f0 profession
+//     +0x208  school (AttendanceComponent*)   +0x248 workplace (ComponentEntity*)
+//     +0x288  CitizenDescription (+0x44 adultAge)
+//   (B4 P2 CIT-2: read by the headers' names; the "+0x58 capacity" above is
+//    ResidenceComponent::residentSlotCount, the household count, and the occupant
+//    list is the first household, residentSlots[0].)
 //   storageComponent (type-id StorageComponent 0x1401c7e78)
 //     +0x28  item-entry array (ptr)   +0x30  item count(int)
 //     item entry (stride 0x10): +0x00 descriptor(ptr) +0x08 avail(int) +0x0c reserved(int)
@@ -81,6 +84,13 @@
 #include <vector>
 #include "Component/ResidenceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
 #include "Component/StorageComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7e78 cell class
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/InteractComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
+#include "Game/ProfessionList.h"
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
@@ -113,24 +123,25 @@ void EnsureResolved() {
 
 // Find the first component on `entity` whose exact type-id == typeId and that passes
 // IsDerivedFrom (retail's `GetTypeId()==DWORD && IsDerivedFrom` component scan).
-void* FindComponentDerived(void* entity, uint32_t typeId) {
+// The null-entity / null-slot / zero-id tests are the tree's (known_port_issues 14d).
+template <class T>
+T* FindComponentDerived(ComponentEntity* entity, uint32_t typeId) {
     if (!entity || typeId == 0) return nullptr;
-    uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    int count = entity->_componentCount;
+    Object::InternalPtr<Component>* arr = entity->_components;
     for (int i = 0; i < count; ++i) {
-        void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        Component* comp = arr[i].Get();
         if (!comp) continue;
-        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();   // vtable slot +0x10   // B.3.8 bridge (slot 2)
+        uint32_t id = comp->Type();   // vtable slot +0x10
         if (id == typeId) {
-            return Object::IsDerivedFromNullSafe(comp, typeId) ? comp : nullptr;
+            return Object::IsDerivedFromNullSafe(comp, typeId) ? static_cast<T*>(comp) : nullptr;
         }
     }
     return nullptr;
 }
 
 // Candidate key: retail tree local_98 visits IN-ORDER as (cost DESC, residence ptr ASC).
-struct CostRes { int cost; void* res; };
+struct CostRes { int cost; ResidenceComponent* res; };
 struct CostCmp {
     bool operator()(const CostRes& a, const CostRes& b) const {
         if (a.cost != b.cost) return a.cost > b.cost;   // higher cost visited first
@@ -147,23 +158,25 @@ struct CostCmp {
 //            are summed; param_3 -> residence supplying the TARGET cell (its owner
 //            entity's position). Returns the summed path distance (0 when none
 //            qualify / unreachable). param_1 is dead (retail keeps it for ABI).
-extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2, void** param_3) {
-    if (GameUpdateLoop::_singleton == nullptr) return 0;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int* pathData = *reinterpret_cast<int**>(gw + 0xf8);
-    uintptr_t reg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
-    if (!pathData || !reg) return 0;
+extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,
+                                             ResidenceComponent* const* param_2,
+                                             ResidenceComponent* const* param_3) {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    if (gw == nullptr) return 0;
+    Map* map = gw->m_game;
+    ProfessionList* reg = gw->m_professionList;
+    if (!map || !reg) return 0;
+    int* pathData = reinterpret_cast<int*>(map);   // LEFT: SIG WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830 (int* map)
 
     // --- target cell from param_3's owner-entity position ---
-    void* ownerEntity = *reinterpret_cast<void**>(
-        *reinterpret_cast<uintptr_t*>(param_3) + 0x10);
-    int64_t posIBP[1] = {0};
-    void* posComp = WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(ownerEntity), posIBP);
+    // The InteractComponent find (0x140002ed0) and the node position (0x140122e20) are
+    // called by their members; the find's InternalPtr slot was always non-null.
+    ComponentEntity* ownerEntity = (*param_3)->_entity;
+    InteractComponent* posComp = ownerEntity->FindComponent<InteractComponent>();
     float pos[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // pos[0]=x (local_48), pos[1]=y (local_44)
-    if (posComp)
-        Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(posComp), pos, 0, 0, nullptr);
+    InteractNodePosition(posComp, pos, 0, 0, nullptr);
 
-    int width = *pathData;
+    int width = map->size;
     if (width <= 0) return 0;
     int cellX = static_cast<int>(pos[0] + static_cast<float>(width >> 1));
     int cellY = static_cast<int>(pos[1] + static_cast<float>(width >> 1));
@@ -177,23 +190,20 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
     uint32_t total = 0;
     int i = 0;
     for (;;) {
-        uintptr_t comp2   = reinterpret_cast<uintptr_t>(*param_2);
-        uintptr_t occList = *reinterpret_cast<uintptr_t*>(comp2 + 0x50);
-        if (!(i < *reinterpret_cast<int*>(occList + 8))) break;
-        uintptr_t data = *reinterpret_cast<uintptr_t*>(occList);
-        uint8_t*  worker = *reinterpret_cast<uint8_t**>(data + static_cast<uintptr_t>(i) * 8);
+        // The first household of param_2's residence, re-read every pass.
+        const ResidenceComponent::Family* family = (*param_2)->residentSlots;
+        if (!(i < family->count)) break;
+        CitizenComponent* worker = family->members[i].Get();
 
-        void* healthComp = *reinterpret_cast<void**>(worker + 0x288);
-        bool healthy = healthComp &&
-            *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(healthComp) + 0x44) <=
-            *reinterpret_cast<float*>(worker + 0x3c);
-        if (healthy &&
-            *reinterpret_cast<int64_t*>(worker + 0x208) == 0 &&               // not busy
-            *reinterpret_cast<int64_t*>(worker + 0x248) != 0 &&               // has a workplace
-            *reinterpret_cast<int64_t*>(worker + 0x1f0) !=                    // profession != default
-                *reinterpret_cast<int64_t*>(reg + 0x30)) {
-            void* workplaceIBP = *reinterpret_cast<void**>(worker + 0x248);
-            uint32_t wpCell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&workplaceIBP, nullptr));
+        // An adult (desc->adultAge <= age); the null-description test is the tree's.
+        CitizenDescription* desc = worker->description;
+        bool adult = desc && desc->adultAge <= worker->age;
+        if (adult &&
+            worker->school == nullptr &&                                      // not at school
+            worker->workplace != nullptr &&                                   // has a workplace
+            worker->profession != reg->field_0x30) {                          // profession != default
+            ComponentEntity* workplaceIBP = worker->workplace;
+            uint32_t wpCell = static_cast<uint32_t>(EntityAnchorCell(&workplaceIBP, nullptr));
             // WorkBase_ValidateCell_a00f0 returns its bool in the low byte of a uint64.
             if (static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(pathData, 0xe1f, targetCell,
                                                                   static_cast<int>(wpCell)))) {
@@ -215,33 +225,32 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
         return;
     }
 
-    uintptr_t gw       = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    uintptr_t townMgr  = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
-    int       resCount = *reinterpret_cast<int*>(townMgr + 0x28);
-    uintptr_t resArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x20);
+    int               resCount = townMgr->field_0x28;
+    ComponentEntity** resArray = townMgr->field_0x20;
 
-    std::set<void*>            empties;   // retail local_b8: available (occupant==0) residences
-    std::set<CostRes, CostCmp> occupied;  // retail local_98: keyed by relocation cost
+    std::set<ResidenceComponent*> empties;   // retail local_b8: available (occupant==0) residences
+    std::set<CostRes, CostCmp>    occupied;  // retail local_98: keyed by relocation cost
 
-    // ---------- Phase 1: bucket every capacity<2 residence ----------
+    // ---------- Phase 1: bucket every residence with fewer than two households ----------
     for (int r = 0; r < resCount; ++r) {
-        void* resEntity = *reinterpret_cast<void**>(resArray + static_cast<uintptr_t>(r) * 8);
-        void* resComp = FindComponentDerived(resEntity, s_tidResidence);
+        ComponentEntity* resEntity = resArray[r];
+        ResidenceComponent* resComp = FindComponentDerived<ResidenceComponent>(resEntity, s_tidResidence);
         if (!resComp) continue;                       // retail assumes present; guard for safety
 
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(resComp) + 0x58) >= 2)
-            continue;                                 // only single-occupant residences
+        if (resComp->residentSlotCount >= 2)
+            continue;                                 // only single-household residences
 
-        uintptr_t occList  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(resComp) + 0x50);
-        int       occCount = *reinterpret_cast<int*>(occList + 8);
+        ResidenceComponent::Family* occList = resComp->residentSlots;
+        int occCount = occList->count;
         if (occCount == 0) {
             empties.insert(resComp);
         } else {
-            void* rc2 = resComp;
-            void* rc3 = resComp;
+            ResidenceComponent* rc2 = resComp;
+            ResidenceComponent* rc3 = resComp;
             uint32_t cost = static_cast<uint32_t>(
-                Entity_ReassignCost_6c60(static_cast<int64_t>(occList), &rc2, &rc3));
+                Entity_ReassignCost_6c60(occList, &rc2, &rc3));
             occupied.insert(CostRes{ static_cast<int>(cost), resComp });
         }
     }
@@ -255,60 +264,55 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
         g_wpcRosterOnly = true;
 
         for (auto it = occupied.begin(); it != occupied.end(); ++it) {
-            void* srcRes    = it->res;            // residence to (maybe) vacate (tree local_98 node)
-            int   threshold = it->cost;           // its own current cost (retail uVar13)
-            void* bestDest  = nullptr;            // retail local_res18
+            ResidenceComponent* srcRes    = it->res;   // residence to (maybe) vacate (tree local_98 node)
+            int                 threshold = it->cost;  // its own current cost (retail uVar13)
+            ResidenceComponent* bestDest  = nullptr;   // retail local_res18
 
             // nearest empty residence whose relocation cost beats `threshold`
-            for (void* destRes : empties) {       // ascending pointer == retail in-order walk
-                void* b = srcRes;
-                void* a = destRes;
-                int c = static_cast<int>(
-                    Entity_ReassignCost_6c60(reinterpret_cast<int64_t>(ctxV), &b, &a));
+            for (ResidenceComponent* destRes : empties) {   // ascending pointer == retail in-order walk
+                ResidenceComponent* b = srcRes;
+                ResidenceComponent* a = destRes;
+                int c = static_cast<int>(Entity_ReassignCost_6c60(ctxV, &b, &a));
                 if (c < threshold) { threshold = c; bestDest = destRes; }
             }
             if (!bestDest) continue;
 
             // --- re-home every occupant of srcRes into bestDest's owner entity ---
-            // Re-read the list header/count each step: AssignWorkplace may mutate the
+            // Re-read the list header/count each step: SetHome may mutate the
             // occupant roster, exactly as the retail index-by-8 loop tolerates.
             int j = 0;
             for (;;) {
-                uintptr_t occList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(srcRes) + 0x50);
-                if (!(j < *reinterpret_cast<int*>(occList + 8))) break;
-                uintptr_t data   = *reinterpret_cast<uintptr_t*>(occList);
-                void* worker     = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(j) * 8);
-                void* targetOwner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bestDest) + 0x10);
-                CitizenComponent_AssignWorkplace(worker, &targetOwner, 0);
+                const ResidenceComponent::Family* occList = srcRes->residentSlots;
+                if (!(j < occList->count)) break;
+                CitizenComponent* worker = occList->members[j].Get();
+                ComponentEntity* targetOwner = bestDest->_entity;
+                worker->SetHome(targetOwner, 0);   // 0x1401163d0 (tree: "AssignWorkplace")
                 ++j;
             }
 
             // --- migrate stored goods: srcRes owner storage -> bestDest owner storage ---
-            void* srcOwner  = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(srcRes) + 0x10);
-            void* srcStorage = FindComponentDerived(srcOwner, s_tidStorage);
-            void* dstOwner  = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bestDest) + 0x10);
-            void* dstStorage = FindComponentDerived(dstOwner, s_tidStorage);
+            ComponentEntity*  srcOwner   = srcRes->_entity;
+            StorageComponent* srcStorage = FindComponentDerived<StorageComponent>(srcOwner, s_tidStorage);
+            ComponentEntity*  dstOwner   = bestDest->_entity;
+            StorageComponent* dstStorage = FindComponentDerived<StorageComponent>(dstOwner, s_tidStorage);
 
             if (srcStorage && dstStorage) {
-                std::vector<std::pair<void*, int>> toSubtract;
-                int itemCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(srcStorage) + 0x30);
-                uintptr_t itemBase = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(srcStorage) + 0x28);
+                std::vector<std::pair<ComponentDescription*, int>> toSubtract;
+                int itemCount = srcStorage->slotCount;
+                const StorageComponent::Item* items = srcStorage->storageSlots;
                 for (int k = 0; k < itemCount; ++k) {
-                    uintptr_t entry = itemBase + static_cast<uintptr_t>(k) * 0x10;
-                    void* descriptor = *reinterpret_cast<void**>(entry + 0x00);
-                    int   avail      = *reinterpret_cast<int*>(entry + 0x08);
-                    int   reserved   = *reinterpret_cast<int*>(entry + 0x0c);
+                    const StorageComponent::Item& entry = items[k];
+                    ComponentDescription* descriptor = entry._resource;
+                    int   avail      = entry._count;
+                    int   reserved   = entry._reserve;
                     int   amount     = avail - reserved;
-                    if (Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(dstStorage),
-                                                 reinterpret_cast<int64_t>(descriptor), amount)) {
-                        ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(dstStorage),
-                                              reinterpret_cast<int64_t>(descriptor), amount);
+                    if (StorageCanAdd(dstStorage, descriptor, amount)) {   // 0x14012cd80
+                        StorageAdd(dstStorage, descriptor, amount);         // 0x14012d000
                         toSubtract.emplace_back(descriptor, amount);
                     }
                 }
                 for (auto& s : toSubtract)
-                    ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(srcStorage),
-                                               reinterpret_cast<int64_t>(s.first), s.second);
+                    StorageSubtract(srcStorage, s.first, s.second);         // 0x14012d150
             }
 
             // --- retire the now-occupied destination from the empty set ---

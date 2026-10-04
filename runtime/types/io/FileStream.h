@@ -546,10 +546,11 @@ public:
     // a failed allocation, retail's branch), the dead free of the previous
     // encoding, the store.
     BinaryFileStream() {
-        void* enc = RtSystem::RtMemAlloc(8, 4);                  // 1800a82a5
-        if (enc) ::new (enc) BinaryEncoding();                   // 1800a82bb
+        void* encMem = RtSystem::RtMemAlloc(8, 4);                  // 1800a82a5
+        Encoding* enc = nullptr;
+        if (encMem) enc = ::new (encMem) BinaryEncoding();                   // 1800a82bb
         if (_encoding) RtSystem::RtMemFree(_encoding);           // 1800a82d3
-        _encoding = static_cast<Encoding*>(enc);                 // 1800a82d8
+        _encoding = enc;                 // 1800a82d8
     }
 
     // slot 0 +0x00  0x180023d80 — the ONLY difference from FileStream's table:
@@ -673,7 +674,7 @@ public:
     char*   _objectType;       // +0x60  a System::String — ?GetObjectType@ LEAs it
     int32_t _requestedFormat;  // +0x68  ctor: 6 ("detect from the data")
     int32_t _activeEncoding;   // +0x6c  ctor: 6 — THE BOM SELECTOR
-    void*   _buffer;           // +0x70  owned, bare MemFree in the dtor door
+    uint8_t* _buffer;          // +0x70  owned, bare MemFree in the dtor door (the transcoded bytes OpenWithFormat installs)
     int32_t _bufSize;          // +0x78  bytes in _buffer — see the banner
     int32_t _bufCursor;        // +0x7c  position IN _buffer
 };
@@ -739,10 +740,11 @@ public:
     // encoding (always null here) and the store.
     VisitorStream() {
         _direction = 1;                                         // 1800bb0d3
-        void* e = RtSystem::RtMemAlloc(8, 4);                   // 1800bb107
-        if (e) ::new (e) VisitorEncoding();                     // 1800bb118
+        void* eMem = RtSystem::RtMemAlloc(8, 4);                   // 1800bb107
+        Encoding* e = nullptr;
+        if (eMem) e = ::new (eMem) VisitorEncoding();                     // 1800bb118
         if (_encoding) RtSystem::RtMemFree(_encoding);          // 1800bb127
-        _encoding = static_cast<Encoding*>(e);                  // 1800bb135
+        _encoding = e;                  // 1800bb135
     }
 
     // slot 0  +0x00  0x18002bf80 — MSVC's vector deleting dtor, stride 0x18

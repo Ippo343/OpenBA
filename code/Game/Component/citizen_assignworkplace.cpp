@@ -85,8 +85,8 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
                          "caller=%p (static 0x%llx)\n", n, selfV,
                          (void*)*pWorkplace, *pSlot, slotIndex,
                          __builtin_return_address(0),
-                         (unsigned long long)((uintptr_t)__builtin_return_address(0)
-                             - (uintptr_t)GetModuleHandleW(nullptr) + 0x140000000ULL));
+                         (unsigned long long)((uintptr_t)__builtin_return_address(0)   // CAST-OK: ptr_int
+                             - (uintptr_t)GetModuleHandleW(nullptr) + 0x140000000ULL));   // CAST-OK: ptr_int
             std::fflush(stderr);
         }
     }
@@ -128,6 +128,6 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
 // B4 FORWARD: 3 outside caller(s) (Component/residencecomponent.cpp, Game/starttown.cpp,
 // standalone/death_harness.cpp)
 extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP, int slotIndex) {
-    reinterpret_cast<CitizenComponent*>(selfV)->SetHome(
-        *reinterpret_cast<ComponentEntity**>(workplaceIBP), slotIndex);
+    reinterpret_cast<CitizenComponent*>(selfV)->SetHome(   // LEFT: B4 FORWARD (wave X)
+        *reinterpret_cast<ComponentEntity**>(workplaceIBP), slotIndex);   // LEFT: B4 FORWARD (wave X)
 }
