@@ -315,8 +315,3 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
                     uv, 0, 0, uv, uv,
                     1, r - 2, r + 2, 1);
 }
-
-// B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp) passes the description as an integer.
-int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
-    return Player_HighlightAdd_55430(reinterpret_cast<const RadiusDescription*>(param_1), param_2);   // B4 FORWARD
-}

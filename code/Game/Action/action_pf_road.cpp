@@ -1003,7 +1003,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
 // B4 FORWARD: 1 outside caller (Player/tool_base_highlight_tess.cpp)
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend) {
-    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10
+    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10 — its one caller (tool_base_highlight_tess.cpp) holds the geometry as TradeWork_impl_ace40's int64_t and the quad as a byte buffer; RoadVertex (this file) is a copy of GeometryBatchVertex
 }
 
 // The exported names of the two file-static bodies (callers: Component/quarrycomponent_deform.cpp,

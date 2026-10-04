@@ -101,7 +101,6 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              uint32_t param_12, uint32_t param_13, uint32_t param_14,
              char param_15, int param_16, int param_17, uint8_t param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
 int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
-int Player_HighlightAdd_55430(int64_t param_1, int param_2);  // 0x140055430 B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp)
 
 // ---- tool_base_highlight_tess.cpp
 extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40

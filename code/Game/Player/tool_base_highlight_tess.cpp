@@ -339,7 +339,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
 
                         // cc10: emit the 4 corner descriptors into descBlock.
                         uint8_t descBlock[0x60];
-                        Pf_RoadQuad_cc10(param_1, iVar22, iVar18, (int64_t)descBlock, iVar13,
+                        Pf_RoadQuad_cc10(param_1, iVar22, iVar18, (int64_t)descBlock, iVar13,   // LEFT: SIG Pf_RoadQuad_cc10 (descBlock is retail's 0x60-byte stack buffer of 0x14-byte vertices, read by offset below)
                                          batch->field_0x3C);
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.

@@ -111,8 +111,7 @@ void RadiusUI::OnOpened() {
     // Calculate radius and store display index
     // The door was named fn_RadiusCalc; it is bound to 0x140055430
     // Player_HighlightAdd_55430 (B3R: the binding decides, INVENTORY_E §5.8).
-    // LEFT: its first parameter is an integer (Player/exe_bodies.h, block PLAYER).
-    this->highlightIndex = Player_HighlightAdd_55430(reinterpret_cast<int64_t>(radiusComp), tileIndex);   // LEFT: SIG Player_HighlightAdd_55430
+    this->highlightIndex = Player_HighlightAdd_55430(radiusComp, tileIndex);
 
 }
 

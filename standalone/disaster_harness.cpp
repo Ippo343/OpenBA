@@ -475,7 +475,7 @@ uint32_t DiseaseExternalTypeId() {
     return Disease::TypeId();
 }
 
-void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
+Disease* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
                              uint32_t* outTypeId, bool* outListPresent) {
     *outFound = 0; *outScanned = 0;
     *outTypeId = DiseaseExternalTypeId();
@@ -492,12 +492,12 @@ void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,
     ::Object::External** arr = externalList->_resources;        // +0x20
     if (!arr) return nullptr;
 
-    void* chosen = nullptr;
+    Disease* chosen = nullptr;
     for (int i = 0; i < count; ++i) {
-        void* res = arr[i];
+        ::Object::External* res = arr[i];
         if (!res) continue;
         if (!Object::IsDerivedFromNullSafe(res, *outTypeId)) continue;
-        if (*outFound == wantIdx) chosen = res;
+        if (*outFound == wantIdx) chosen = static_cast<Disease*>(res);
         ++(*outFound);
     }
     return chosen;
@@ -507,12 +507,12 @@ void ForceSick(int frameNum, int want) {
     int found = 0, scanned = 0;
     uint32_t diseaseTid = 0;
     bool listPresent = false;
-    void* disease = FindDiseaseDescription(s_sickDiseaseIdx, &found, &scanned,
+    Disease* disease = FindDiseaseDescription(s_sickDiseaseIdx, &found, &scanned,
                                            &diseaseTid, &listPresent);
     DLOG("Sick", "frame %d: gameWorld+0xA8 list=%s scanned=%d Disease typeId=%u "
          "matches=%d chosenIdx=%d chosen=%p\n",
          frameNum, listPresent ? "present" : "ABSENT", scanned, diseaseTid,
-         found, s_sickDiseaseIdx, disease);
+         found, s_sickDiseaseIdx, static_cast<void*>(disease));
 
     if (!disease) {
         // Four distinct causes, never collapsed into one message.
@@ -560,7 +560,7 @@ void ForceSick(int frameNum, int want) {
 
     for (int i = 0; i < picked; ++i) {
         DLOG("Sick", "infecting %d/%d citizen=%p disease=%p\n",
-             i + 1, picked, static_cast<void*>(victims[i]), disease);
+             i + 1, picked, static_cast<void*>(victims[i]), static_cast<void*>(disease));
         CitizenComp_Infect(victims[i], disease);
     }
     DLOG("Sick", "done — %d infection call(s) made. Pair with the citizen-disease lane's "
