@@ -310,7 +310,7 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
 
                         // cc10: emit the 4 corner descriptors into descBlock.
                         TessCornerBlock descBlock;
-                        Pf_RoadQuad_cc10(reinterpret_cast<int64_t>(param_1), iVar22, iVar18, (int64_t)&descBlock, iVar13,   // LEFT: SIG Pf_RoadQuad_cc10 (Action/exe_bodies.h, defined in X6-CW's action_pf_road.cpp) takes the geometry and the corner block as int64_t
+                        Pf_RoadQuad_cc10(param_1, iVar22, iVar18, descBlock.corner, iVar13,
                                          batch->field_0x3C);
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.

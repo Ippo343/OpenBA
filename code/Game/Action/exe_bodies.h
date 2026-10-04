@@ -161,8 +161,8 @@ void Pf_VectorResize60_fa80(RawArray<GeometryBatch>* arr, int newSize, const Geo
 // ---- action_pf_region.cpp
 
 // ---- action_pf_road.cpp
-void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);  // 0x1400acc10 B4 FORWARD -> BuildRoadQuad
 class WorldGeometry;
+void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend);  // 0x1400acc10
 int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
 float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
 float* InteractNodePosition(const InteractComponent* self, float* out, int kind, int index, float* heading);  // 0x140122e20

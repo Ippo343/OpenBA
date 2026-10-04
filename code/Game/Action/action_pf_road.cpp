@@ -32,6 +32,8 @@
 #include "Action/PathSearch.h"   // RegionGraph
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
+#include "Game/WorldGeometryElements.h"   // GeometryBatchVertex, GeometryBatch
+#include "graphics/Material.h"            // Graphics::MaterialInstance (an Object::External)
 #include "Action/PathAvl.h"           // AvlInsert28 (0x14001a4f0), AvlTreeHead, AvlNode28
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
@@ -72,56 +74,25 @@ static_assert(offsetof(RoadVertexScratch, aoU) == 0x08, "RoadVertexScratch::aoU 
 static_assert(offsetof(RoadVertexScratch, normal) == 0x0C, "RoadVertexScratch::normal @ +0x0C");
 static_assert(offsetof(RoadVertexScratch, normalW) == 0x0F, "RoadVertexScratch::normalW @ +0x0F");
 
-// The road-mesh vertex (0x14 bytes), as cc10 scatters it and f370 pushes it.
+// The road-mesh vertex (0x14 bytes), as cc10 scatters it and f370 pushes it, is
+// Game/WorldGeometryElements.h's GeometryBatchVertex: retail's serializer 0x14001f9c0
+// reads +0x00..+0x0E as two short[4] (signed: blend +0x06, the mask-atlas corner
+// +0x0C / +0x0E) and +0x10 as uchar[4]; cc10 (0x1400acc10) and f370 only copy the
+// fields (MOVZX / MOV word, byte), so no read's value depends on the signedness.
 // B.3.2 bridge: FUN_14001ee40 / FUN_14001f8d0 are Collection::Array<T>::SetSize /
 // SetSize(n,fill) monomorphised over this 0x14-byte, align-2 element. Neither body's
-// new-tail arm touches the tail (ee40 has literally no else branch; f8d0's else
-// branch is the 3-arg fill copy), so the element must be TRIVIALLY default
+// new-tail arm touches the tail, so the element must be TRIVIALLY default
 // constructible -- rtcoll::SpecFor<T> then emits init=nullptr, matching retail's
-// uninitialised new slot exactly. Its int16 fields give the 0x14001ee40/f8d0
-// MemAlloc(.., 2) alignment.
-struct RoadVertex {
-    int16_t  x;              // +0x00
-    int16_t  y;              // +0x02
-    int16_t  height;         // +0x04
-    uint16_t blend;          // +0x06
-    int16_t  aoU;            // +0x08 (f370 overwrites with the corner's tile column)
-    int16_t  aoV;            // +0x0A (f370 overwrites with the corner's tile row)
-    uint16_t tileU;          // +0x0C mask-atlas corner (DAT_1401c23d0)
-    uint16_t tileV;          // +0x0E
-    int8_t   normal[3];      // +0x10
-    uint8_t  normalW;        // +0x13
-};
-static_assert(sizeof(RoadVertex) == 0x14, "RoadVertex stride");
-static_assert(alignof(RoadVertex) == 2, "RoadVertex align");
-static_assert(offsetof(RoadVertex, aoU) == 0x08, "RoadVertex::aoU @ +0x08");
-static_assert(offsetof(RoadVertex, tileU) == 0x0C, "RoadVertex::tileU @ +0x0C");
-static_assert(offsetof(RoadVertex, normal) == 0x10, "RoadVertex::normal @ +0x10");
-static_assert(std::is_trivially_copyable<RoadVertex>::value, "RoadVertex byteCopy");
-static_assert(std::is_trivially_destructible<RoadVertex>::value, "RoadVertex destroy-free");
-static_assert(std::is_trivially_default_constructible<RoadVertex>::value,
-              "RoadVertex must stay uninitialised on the new-tail arm (SpecFor: "
+// uninitialised new slot exactly.
+static_assert(alignof(GeometryBatchVertex) == 2, "GeometryBatchVertex align (MemAlloc(.., 2))");
+static_assert(std::is_trivially_copyable<GeometryBatchVertex>::value, "GeometryBatchVertex byteCopy");
+static_assert(std::is_trivially_destructible<GeometryBatchVertex>::value, "GeometryBatchVertex destroy-free");
+static_assert(std::is_trivially_default_constructible<GeometryBatchVertex>::value,
+              "GeometryBatchVertex must stay uninitialised on the new-tail arm (SpecFor: "
               "init = !is_trivially_default_constructible)");
 
 // The 0x60-byte mesh batch record (0x14001f250 / 0x14001fa80 stride 0x60): f370's working
-// array and the WorldGeometry +0x200 array it flushes into.
-struct RoadBatch {
-    int64_t  source;                   // +0x00 the batch's entry of the +0x210 table
-    RawArray<RoadVertex> vertices;     // +0x08 buffer B
-    RawArray<int16_t>    indices;      // +0x18 buffer A
-    int32_t  slot;                     // +0x28 slot handle (-1 = free, seeded by f250)
-    int32_t  minX;                     // +0x2C culling AABB in tile coords
-    int32_t  minY;                     // +0x30
-    int32_t  maxX;                     // +0x34
-    int32_t  maxY;                     // +0x38
-    uint8_t  _pad3C[0x24];             // +0x3C
-};
-static_assert(sizeof(RoadBatch) == 0x60, "RoadBatch stride 0x60");
-static_assert(offsetof(RoadBatch, vertices) == 0x08, "RoadBatch::vertices @ +0x08");
-static_assert(offsetof(RoadBatch, indices) == 0x18, "RoadBatch::indices @ +0x18");
-static_assert(offsetof(RoadBatch, slot) == 0x28, "RoadBatch::slot @ +0x28");
-static_assert(offsetof(RoadBatch, minX) == 0x2C, "RoadBatch::minX @ +0x2C");
-static_assert(offsetof(RoadBatch, maxY) == 0x38, "RoadBatch::maxY @ +0x38");
+// array and the WorldGeometry +0x200 array it flushes into, is GeometryBatch.
 
 // ------------------------------------------------------------
 // Exe sub-helpers + .rdata constants, called / read by name (B3R).
@@ -221,7 +192,7 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
 // The 4 corners are (x,y),(x+1,y),(x+1,y+1),(x,y+1); each filled via caa0 into a local
 // vertex, then scattered into quad[i] (the normal bytes move from +0x0C to +0x10). After the
 // 4th, the corners' mask-atlas coordinates come from the (DAT_1401c23d0 + shape*8) table.
-static void BuildRoadQuad(WorldGeometry* geo, int x, int y, RoadVertex* quad, int dirIdx, uint8_t blend) {
+void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend) {
     RoadVertexScratch localVtx;   // caa0 writes a full 0x14-byte vertex here (local_38..)
 
     int iVar5 = 0;
@@ -235,18 +206,18 @@ static void BuildRoadQuad(WorldGeometry* geo, int x, int y, RoadVertex* quad, in
         FillRoadVertex(geo, iVar2, iVar3, &localVtx, blend);   // 0x1400acaa0
 
         // Scatter the local vertex into quad[iVar5], in retail's store order.
-        RoadVertex& v = quad[iVar5];
+        GeometryBatchVertex& v = quad[iVar5];
         iVar5++;
-        v.x         = localVtx.x;     // local_38
-        v.normal[0] = localVtx.normal[0];                   // local_2c
-        v.aoU       = localVtx.aoU;                         // local_30
-        v.y         = localVtx.y;                           // local_36
-        v.normal[1] = localVtx.normal[1];                   // local_2b
-        v.aoV       = localVtx.aoV;                         // local_2e
-        v.height    = localVtx.height;                      // local_34
-        v.normal[2] = localVtx.normal[2];                   // local_2a
-        v.blend     = localVtx.blend;                       // local_32
-        v.normalW   = localVtx.normalW;                     // local_29
+        v.position[0] = localVtx.x;                         // local_38
+        v.normal[0]   = localVtx.normal[0];                 // local_2c
+        v.uv[0]       = localVtx.aoU;                       // local_30
+        v.position[1] = localVtx.y;                         // local_36
+        v.normal[1]   = localVtx.normal[1];                 // local_2b
+        v.uv[1]       = localVtx.aoV;                       // local_2e
+        v.position[2] = localVtx.height;                    // local_34
+        v.normal[2]   = localVtx.normal[2];                 // local_2a
+        v.position[3] = localVtx.blend;                     // local_32
+        v.normal[3]   = localVtx.normalW;                   // local_29
 
         if (3 < iVar5) {
             // Tiled-decal / road mask-atlas rect LUT (DAT_1401c23d0). Each of the 47
@@ -286,14 +257,14 @@ static void BuildRoadQuad(WorldGeometry* geo, int x, int y, RoadVertex* quad, in
             };
             const uint16_t* t = &kZwLut[static_cast<int64_t>(dirIdx) * 4];
             // DAT_1401c23d0=t[0], d2=t[1], d4=t[2], d6=t[3]
-            quad[0].tileU = t[0];
-            quad[0].tileV = t[1];
-            quad[1].tileU = t[2];
-            quad[1].tileV = t[1];
-            quad[2].tileU = t[2];
-            quad[2].tileV = t[3];
-            quad[3].tileU = t[0];
-            quad[3].tileV = t[3];
+            quad[0].uv[2] = t[0];
+            quad[0].uv[3] = t[1];
+            quad[1].uv[2] = t[2];
+            quad[1].uv[3] = t[1];
+            quad[2].uv[2] = t[2];
+            quad[2].uv[3] = t[3];
+            quad[3].uv[2] = t[0];
+            quad[3].uv[3] = t[3];
             return;
         }
     }
@@ -779,20 +750,20 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
 // identical across the 8 grow-blocks (they differ only by the value written to a freshly-grown
 // slot). Reads count fresh each call; new = old+1; cap rule "cap=new; if new==old+1 && old!=0
 // cap=new*3".
-static void AppendIndex(RawArray<int16_t>* a, short valueForNew) {
+static void AppendIndex(RawArray<uint16_t>* a, short valueForNew) {
     int oldN = a->size;
     int newN = oldN + 1;
     if (newN == oldN) return;
-    int16_t* oldBuf = a->data;
+    uint16_t* oldBuf = a->data;
     a->size = newN;
     if (a->capacity < newN) {
         a->capacity = newN;
         if ((newN == oldN + 1) && (oldN != 0)) a->capacity = newN * 3;
-        a->data = static_cast<int16_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(a->capacity) * 2, 2));
+        a->data = static_cast<uint16_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(a->capacity) * 2, 2));
     }
     int start = (oldBuf == a->data) ? oldN : 0;
     for (int64_t j = start; j < newN; j++) {
-        int16_t* dst = a->data + j;
+        uint16_t* dst = a->data + j;
         if (dst) {
             short v = valueForNew;
             if (j < oldN) v = oldBuf[j];
@@ -803,8 +774,8 @@ static void AppendIndex(RawArray<int16_t>* a, short valueForNew) {
 }
 
 void WorldGeometry::RebuildRoadMesh(Map* map) {
-    RawArray<RoadBatch>* meshBatches = reinterpret_cast<RawArray<RoadBatch>*>(&_roadBatches);    // +0x200 (local_a8)   // LEFT: RoadBatch (this file) is a copy of GeometryBatch, the element of WorldGeometry::_roadBatches: unify the record
-    const RawArray<int64_t>* sources = reinterpret_cast<const RawArray<int64_t>*>(&_batchMaterials); // +0x210   // LEFT: WorldGeometry::_batchMaterials holds Object::External*; RoadBatch::source (this file) keeps it as int64_t
+    RawArray<GeometryBatch>* meshBatches = &_roadBatches;    // +0x200 (local_a8)
+    const RawArray<Object::External*>* sources = &_batchMaterials; // +0x210
     RawArray<int32_t>* counters = &_batchCounters;           // +0x220
     Reimpl_Struct60B_Resize(meshBatches, 0);                                // f250(local_a8, 0)
 
@@ -825,7 +796,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
     }
 
     // Phase 2: local working batch array, sized to the batch count.
-    RawArray<RoadBatch> batches = {nullptr, 0, 0};   // local_108
+    RawArray<GeometryBatch> batches = {nullptr, 0, 0};   // local_108
     Reimpl_Struct60B_Resize(&batches, static_cast<uint32_t>(sources->size));   // 0x14001f250
 
     int batchCount = batches.size;                            // (int)local_100
@@ -845,13 +816,15 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                     int seedColMin = local_f4 + vtxOff;   // iVar26 (R15D = local_f4+vtxOff)
                     int seedRowMin = local_f8 + vtxOff;   // iVar16 (R12D = local_f8+vtxOff)
                     for (int b = 0; b < batchCount; b++) {
-                        RoadBatch& rec = batches.data[b];
-                        rec.source = sources->data[b];
+                        GeometryBatch& rec = batches.data[b];
+                        // The +0x210 table holds each batch's material (BackfillBatchMaterials copies
+                        // GeometryBatch::material into it): a qword copy in retail.
+                        rec.material = static_cast<Graphics::MaterialInstance*>(sources->data[b]);
                         // B.3.2 bridge: FUN_14001c890 == Array<uint16>::SetSize (+0x08);
                         // FUN_14001ee40 == Array<RoadVertex>::SetSize (+0x18). Both shrink
                         // to 0 here, so neither body's new-tail arm is ever exercised.
                         GameColl::AsArray<GameColl::U16>(&rec.vertices).SetSize(0);
-                        GameColl::AsArray<RoadVertex>(&rec.indices).SetSize(0);
+                        GameColl::AsArray<GeometryBatchVertex>(&rec.indices).SetSize(0);
                         // Culling AABB in tile coords, read by the TerrainGenerator cull pass
                         // (0x1400ae490 -> Volume::Frustum::Contains). `slot` (+0x28, f250
                         // seeds -1) must NOT be written here.
@@ -911,11 +884,11 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                                                local_f0[0], local_f0[2], local_f0[6], local_f0[8]);
 
                                     // build the quad (cc10) into the local scratch (local_98).
-                                    RoadVertex quad[4];
-                                    BuildRoadQuad(this, fineCol + vtxOff, fineRow + vtxOff,
+                                    GeometryBatchVertex quad[4];
+                                    Pf_RoadQuad_cc10(this, fineCol + vtxOff, fineRow + vtxOff,
                                                   quad, blendVal, blendId);   // 0x1400acc10
 
-                                    RoadBatch& rec = batches.data[batchId];
+                                    GeometryBatch& rec = batches.data[batchId];
                                     short sVar21 = static_cast<short>(rec.vertices.size);
 
                                     // ---- push the 6 corner indices (parity split on (rowSeed+vtxOff + colSeed+vtxOff)) ----
@@ -940,13 +913,13 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                     for (int vi = 0; vi < 4; vi++) {
                                         short cX = static_cast<short>(kCornerOff[8 + vi * 2] + static_cast<short>(fineCol)); // local_c8[+0x10 + i*4]
                                         short cY = static_cast<short>(kCornerOff[vi * 2]     + static_cast<short>(fineRow)); // local_c8[+0 + i*4]
-                                        quad[vi].aoU = cX;   // AO-u slot
-                                        quad[vi].aoV = cY;   // AO-v slot
+                                        quad[vi].uv[0] = cX;   // AO-u slot
+                                        quad[vi].uv[1] = cY;   // AO-v slot
                                         int curCount = rec.vertices.size;  // (int)plVar15[1]
                                         // B.3.2 bridge: FUN_14001f8d0 == Array<RoadVertex>::
                                         // SetSize(n, fill) (3-arg form) -- appends the vertex as
                                         // the new tail element.
-                                        GameColl::AsArray<RoadVertex>(&rec.vertices)
+                                        GameColl::AsArray<GeometryBatchVertex>(&rec.vertices)
                                             .SetSize(curCount + 1, quad[vi]);
                                     }
                                 }
@@ -960,13 +933,9 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                 // ---- append each batch with vertices to the mesh batches (fa80) ----
                 if (0 < batchCount) {
                     for (int b = 0; b < batchCount; b++) {
-                        RoadBatch& rec = batches.data[b];
+                        GeometryBatch& rec = batches.data[b];
                         if (0 < rec.vertices.size) {
-                            // 0x14001fa80 resizes a GeometryBatch array; this file's RoadBatch is
-                            // its own copy of that record (+0x00 a source word, not the material;
-                            // RoadVertex, int16 indices), so the two arguments stay cast.
-                            Pf_VectorResize60_fa80(reinterpret_cast<RawArray<GeometryBatch>*>(meshBatches), meshBatches->size + 1,   // LEFT: RoadBatch (this file) is a copy of GeometryBatch: unify the record
-                                                   reinterpret_cast<const GeometryBatch*>(&rec));   // 0x14001fa80   // LEFT: RoadBatch (this file) is a copy of GeometryBatch: unify the record
+                            Pf_VectorResize60_fa80(meshBatches, meshBatches->size + 1, &rec);   // 0x14001fa80
                         }
                     }
                 }
@@ -981,7 +950,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
     {
         int n = batches.size;
         for (int b = 0; b < n; b++) {
-            RoadBatch& rec = batches.data[b];
+            GeometryBatch& rec = batches.data[b];
             System::MemoryAllocator::MemFree(rec.indices.data);    // buffer A
             rec.indices.data = nullptr;
             rec.indices.size = 0;
@@ -998,11 +967,6 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 // ===========================================================================
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
-
-// B4 FORWARD: 1 outside caller (Player/tool_base_highlight_tess.cpp)
-void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend) {
-    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10 — its one caller (tool_base_highlight_tess.cpp) holds the geometry as TradeWork_impl_ace40's int64_t and the quad as a byte buffer; RoadVertex (this file) is a copy of GeometryBatchVertex
-}
 
 // The exported names of the two file-static bodies (callers: Component/quarrycomponent_deform.cpp,
 // Player/tool_base_ray.cpp; Player/tool_base_tilerender.cpp).
