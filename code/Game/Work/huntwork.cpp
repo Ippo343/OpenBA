@@ -259,7 +259,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     int citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
     // Get workplace entity's grid cell for distance check
-    ComponentEntity* entityIBPBuf[2] = { field_10, nullptr };
+    ComponentEntity* entityIBPBuf[2] = { field_10.Get(), nullptr };
     uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
 
     // -------------------------------------------------------
@@ -407,7 +407,7 @@ int HuntWork::Cleanup() {
 
         // Cancel the work item: the citizen's action list (CharacterComponent +0x48)
         CitizenComponent* citizenEntity = leftmost->element;
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         count = _citizens._count;
     }

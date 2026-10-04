@@ -107,20 +107,20 @@ void CharacterComponent::Persist(IO::Stream& stream) {
     ser.Serialize(field_0x3C, nullptr);
     ser.Serialize(field_0x38, nullptr);
     ser.Serialize(field_0x28, nullptr);
-    ser.Serialize(currentAction, nullptr);
+    ser.Serialize(actionStack.current, nullptr);
 
-    int count = actionCount;
+    int count = actionStack.count;
     ser.Serialize(count, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     const bool loading = static_cast<int>(ser.GetDirection()) == 0;   // the stream's +8 word
-    if (loading) GameColl::AsArray<GameColl::Ptr8>(&actions).SetSize(count);
+    if (loading) GameColl::AsArray<GameColl::Ptr8>(&actionStack.actions).SetSize(count);
 
     const uint32_t tidAction = Action::TypeId();   // cell 0x1401c5da8
-    Action** member = actions;
+    ::Object::InternalPtr<Action>* member = actionStack.actions;
     for (int i = 0; i < count && member; ++i)
         SerializeValidatedIBP(member[i], ser, tidAction);
 
-    SerializeValidatedIBP(field_0x58, ser, tidAction);
+    SerializeValidatedIBP(actionStack.field_0x10, ser, tidAction);
     SerializeValidatedIBP(modelComponent, ser, ModelComponent::TypeId());
     SerializeValidatedIBP(pickingComponent, ser, PickingComponent::TypeId());
 

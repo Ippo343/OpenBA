@@ -474,7 +474,7 @@ int HarvestArea::Cleanup() {
 
         // Cancel work via citizen AI
         CitizenComponent* citizenEntity = leftmost->element.citizen;
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         const int before = count;
         count = _cells._count;

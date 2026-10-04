@@ -201,7 +201,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 8: an action is running -> nothing more to decide ---
-    if (citizen->character->currentAction + 1 > 0) {
+    if (citizen->character->actionStack.current + 1 > 0) {
         return;
     }
 
@@ -403,7 +403,7 @@ void CitizenAIComponent::TransitionState(char param) {
         if (0 < n) {
             do {
                 ValidateAndEnterState(p->id);
-                if (0 < citizen->character->currentAction + 1) {
+                if (0 < citizen->character->actionStack.current + 1) {
                     state = arr[idx].id;
                     break;
                 }

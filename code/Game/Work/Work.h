@@ -122,8 +122,8 @@ public:
 
     // ---- the 0x38 bytes Work adds, retail order ------------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
-    ComponentEntity* field_10;   // +0x10 InternalPtr — the owning entity (a ComponentEntity)
-    WorkComponent* field_18;   // +0x18 InternalPtr — the entity's WorkComponent (Persist validates it)
+    Object::InternalPtr<ComponentEntity> field_10;   // +0x10 the owning entity (Persist 0x1400f7400 validates ComponentEntity)
+    Object::InternalPtr<WorkComponent>   field_18;   // +0x18 the entity's WorkComponent (Persist validates it)
     int32_t  field_20;   // +0x20 work id (-1)
     int32_t  field_24;   // +0x24 (Persist copies +0x20 into it before v1)
     int32_t  field_28;   // +0x28 target map cell (-1)

@@ -150,14 +150,9 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
 // For each populated list slot, walk the singly-linked action chain (next at node+0x10),
 // invoking each action's vtable +0x40 (cancel/abort); then DeletePtr the slot IBP and
 // re-init it to null. Finally reset the +0x18 sentinel to -1 and clear the +0x10 IBP.
-// Caller signature: void fn(void* self)
-// The receiver is the action stack embedded in CharacterComponent at +0x48 (its
-// actions / actionCount / actionCapacity / field_0x58 / currentAction): Action.h's
-// ActionStack. CharacterComponent declares +0x48 as separate fields, so the callers
-// hand the stack as void*.
-void WorkBase_TaskListCleanup_c5400(void* self) {
-    // LEFT: SIG WorkBase_TaskListCleanup_c5400 (the callers hand the stack as void*).
-    ActionStack* stack = reinterpret_cast<ActionStack*>(self);   // LEFT: SIG WorkBase_TaskListCleanup_c5400(void*): CharacterComponent declares its +0x48 ActionStack as separate fields (Component/CharacterComponent.h, X3-COMP); ~30 callers hand &character->actions
+// The receiver is the action stack embedded in CharacterComponent at +0x48
+// (CharacterComponent::actionStack, Action.h's ActionStack).
+void WorkBase_TaskListCleanup_c5400(ActionStack* stack) {
     // ⚠ Retail re-reads BOTH the array pointer (*param_1) and the capacity
     // ((int)param_1[1]) on EVERY iteration — the +0x40 Cancel vcalls below can
     // push onto this same list (FUN_1400c54e0) and grow/realloc it mid-loop.
@@ -201,17 +196,17 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 void Work::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 3);
 
-    // LEFT: +0x10 / +0x18 are InternalPtrs retail serializes through
-    // InternalBasePtr::Serialize; the members are declared T* (their readers in
-    // other blocks spell them so), so the Serialize view is a cast.
-    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);   // LEFT: H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBasePtr::Serialize
+    // +0x10 / +0x18 are InternalPtrs retail serializes through
+    // InternalBasePtr::Serialize (the typed wrapper's Serialize(ser, typeId) hides
+    // it; the tree validates with IsDerivedFromNullSafe below).
+    field_10.Object::InternalBasePtr::Serialize(ser);
     if (field_10) {
-        if (!Object::IsDerivedFromNullSafe(field_10, ComponentEntity::TypeId()))
+        if (!Object::IsDerivedFromNullSafe(field_10.Get(), ComponentEntity::TypeId()))
             field_10 = nullptr;
     }
-    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);   // LEFT: H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBasePtr::Serialize
+    field_18.Object::InternalBasePtr::Serialize(ser);
     if (field_18) {
-        if (!Object::IsDerivedFromNullSafe(field_18, WorkComponent::TypeId()))
+        if (!Object::IsDerivedFromNullSafe(field_18.Get(), WorkComponent::TypeId()))
             field_18 = nullptr;
     }
     ser.Serialize(field_20, nullptr);
@@ -241,8 +236,8 @@ bool Work::ValidateTask(void* /*unusedRdx*/, CitizenComponent** citizen, Complet
     // calling it directly is not a behaviour change (ENDGAME B.3.9 D5 note).
     uint32_t completeTaskTid = CompleteTask::TypeId();
     // The bound (+0x60 + 1) is re-read every pass, as retail (0x1400f7204).
-    for (int i = 0; i < character->currentAction + 1; i++) {
-        Action* action = character->actions[i];
+    for (int i = 0; i < character->actionStack.current + 1; i++) {
+        Action* action = character->actionStack.actions[i].Get();
         // The tid arm is the tree's guard; retail calls IsDerivedFrom directly.
         CompleteTask* task = (completeTaskTid && Object::IsDerivedFromNullSafe(action, completeTaskTid))
                                  ? static_cast<CompleteTask*>(action) : nullptr;

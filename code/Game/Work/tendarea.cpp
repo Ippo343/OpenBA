@@ -179,7 +179,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     Reimpl_MapGetTerrainPos(map, citizenTerrain, &citizenPos.x, '\0', nullptr);
 
     // Step 7: Create PerformWork action
-    ComponentEntity* workEntityRef = field_10;
+    ComponentEntity* workEntityRef = field_10.Get();
     CitizenComponent* entityBuf[2] = { *citizenRef, nullptr };
 
     WorkAct_GrazingWorkCtor_bb0a0(
@@ -254,7 +254,7 @@ int TendArea::Cleanup() {
         // Cancel the work item
         CitizenComponent* citizen = leftmost->element;
 
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
 }

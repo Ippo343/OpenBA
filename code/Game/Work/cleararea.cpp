@@ -218,7 +218,7 @@ int ClearArea::Cleanup() {
         CitizenComponent* citizen = prev->element.citizen;
 
         // Remove the pending action from the citizen's CharacterComponent action list (+0x48)
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
         // Re-read count (RemovePendingAction may have modified it indirectly)
         // The tree node gets removed by the action system
@@ -236,7 +236,7 @@ int ClearArea::Cleanup() {
 
         // The node's citizen (+0x08); remove its pending action
         CitizenComponent* citizen = prev->element.citizen;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
 }
@@ -288,7 +288,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // --- Check if work entity is valid ---
     // CheckPtr on field_18 (the WorkComponent InternalPtr at +0x18)
-    WorkComponent* workEntity = field_18;
+    WorkComponent* workEntity = field_18.Get();
 
     // Get total slot count for the entity
     if (workEntity->workState == 0) {
@@ -305,12 +305,12 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // --- Check the work entity's WorkPlaceComponent is accepting ---
     // (fn_FindComponent_WorkPlace, 0x140002e10)
     WorkPlaceComponent* workPlace = nullptr;
-    fn_FindComponent_WorkPlace(field_10, &workPlace);
+    fn_FindComponent_WorkPlace(field_10.Get(), &workPlace);
 
     if (workPlace != nullptr) {
         // Re-find and check if component is active (byte at +0x50)
         WorkPlaceComponent* workPlace2 = nullptr;
-        fn_FindComponent_WorkPlace(field_10, &workPlace2);
+        fn_FindComponent_WorkPlace(field_10.Get(), &workPlace2);
         if (workPlace2->isAccepting == 0) {
             return 1;  // component not active
         }
@@ -342,7 +342,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // Find MapComponent on the work entity (fn_FindComponent_Build: the cell is MapComponent)
     MapComponent* area = nullptr;
-    fn_FindComponent_Build(field_10, &area);
+    fn_FindComponent_Build(field_10.Get(), &area);
 
     // Read area bounds (shorts at +0x28, +0x2a, +0x2c, +0x2e)
     int16_t x1 = area->tileX0;

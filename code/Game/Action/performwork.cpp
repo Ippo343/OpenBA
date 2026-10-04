@@ -170,7 +170,7 @@ int  PerformWork::Execute(ActionStack* actionStack, const System::Time* time) {
 // PerformWork::Exit (0x1400C9370) -- slot 7
 // Resets character animation to idle (animation 0, rate 1.0, 1.0).
 // ============================================================
-void PerformWork::Exit(void* actionStack) {
+void PerformWork::Exit(ActionStack* actionStack) {
     (void)actionStack;
     SetAnimation(workTarget->character, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }

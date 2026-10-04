@@ -80,10 +80,9 @@ static inline void* WCP_Alloc(uint64_t size) {
     // disasm: MOV EDX,8 (align); ECX=size; CALL [0x140152b60].
     return System::MemoryAllocator::MemAlloc(size, 8);
 }
-// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
-// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
-static inline void WCP_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction), so the callers hand the stack as void*
+// 0x1400c54e0 ActionStackPush (Action.h) on CharacterComponent::actionStack (+0x48).
+static inline void WCP_Append(ActionStack* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(list, ibp);
 }
 
 // Search a ComponentDescription's sub-descriptions for the one whose Type() (slot 2)
@@ -116,34 +115,34 @@ static ConsumeProduceDescription* WCP_FindComponentDerived(ComponentDescription*
 static void WCP_AppendInline(CharacterComponent* character, Action* ibpVal) {
     // FUN_1400032e0 == Collection::Array<Ptr8>::SetSize; it only touches the array
     // header at +0x48..+0x58.
-    int cap = character->actionCount;                          // [RSI+0x8]
+    int cap = character->actionStack.count;                          // [RSI+0x8]
     if (cap == 0) {
         cap = 0x10;
-        GameColl::AsArray<GameColl::Ptr8>(&character->actions).SetSize(cap);
+        GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(cap);
     } else {
-        int n = character->currentAction + 1;                  // [RSI+0x18]+1
+        int n = character->actionStack.current + 1;                  // [RSI+0x18]+1
         if (n == cap) {
             cap *= 2;
-            GameColl::AsArray<GameColl::Ptr8>(&character->actions).SetSize(cap);
+            GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(cap);
         }
     }
 
     // Cleanup walk over the chain at actions[top] (clear the status byte, call Exit).
-    int top = character->currentAction;                        // [RSI+0x18] (signed)
+    int top = character->actionStack.current;                        // [RSI+0x18] (signed)
     if (top >= 0) {
-        Action* node = character->actions[top];
+        Action* node = character->actionStack.actions[top].Get();
         while (node != nullptr) {
             if (node->_status) {
                 node->_status = false;
-                node->Exit(&character->actions);               // slot 7 (vtable +0x38)
+                node->Exit(&character->actionStack);               // slot 7 (vtable +0x38)
             }
             node = node->_next.Get();   // Action::_next (+0x10), the chained action
         }
     }
 
     // top++; actions[top] = ibpVal.
-    character->currentAction += 1;                             // INC [RSI+0x18]
-    character->actions[character->currentAction] = ibpVal;
+    character->actionStack.current += 1;                             // INC [RSI+0x18]
+    character->actionStack.actions[character->actionStack.current] = ibpVal;
 }
 
 // ============================================================
@@ -172,7 +171,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
 
     // the action stack = character + 0x48  (0x1400befaf..0x1400befd1)
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;          // RSI / plVar15
+    ActionStack* list = &character->actionStack;          // RSI / plVar15
     WorkBase_TaskListCleanup_c5400(list);
 
     void* obj;
@@ -188,9 +187,9 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     }
     ::Object::InternalPtr<Action> ibpSm1;
     ibpSm1 = sm1;                // ctor(&local_60, sm1)
-    if (character->field_0x58 != nullptr)     // [lVar2+0x58]
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpSm1;
+    if (character->actionStack.field_0x10 != nullptr)     // [lVar2+0x58]
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpSm1;
 
     // --- CompleteTask action (0x1400bf06b..) ---
     obj = WCP_Alloc(0x38);                    // LEA ECX,[RDX+0x30] => 0x38

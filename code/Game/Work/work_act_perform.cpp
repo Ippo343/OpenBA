@@ -85,10 +85,9 @@ static inline float WAP_RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, 
 static inline void* WAP_Alloc(uint64_t size, uint32_t align) {
     return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
-// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
-// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
-static inline void  WAP_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);  // LEFT: CharacterComponent.h declares the +0x48 action stack as separate fields, not an ActionStack (ledger: a later round)
+// 0x1400c54e0 ActionStackPush (Action.h) on CharacterComponent::actionStack (+0x48).
+static inline void  WAP_Append(ActionStack* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(list, ibp);
 }
 
 // Build an inline PerformWork action object into 'o' (0x48 alloc, already non-null).
@@ -121,7 +120,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
 
     // the action stack = character + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     ::Object::InternalPtr<Action> ibpA;
@@ -139,9 +138,9 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     }
     ibpA = sm;
     // 0x1400baad0: CMP [R15+0x10] — R15 = character+0x48, so this is (character+0x48)+0x10 = character+0x58.
-    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA; // 0x1400baae5: MOV [R15+0x10],RAX
+    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA; // 0x1400baae5: MOV [R15+0x10],RAX
 
     // --- heading via Entity_impl_29a0(pos5, &{*param_6}) (0x1400baae9..0x1400bab02; XMM6) ---
     ComponentEntity* srcInner6 = srcRef6 ? *srcRef6 : nullptr; // 0x1400baaed: MOV RAX,[R13]; [RBP+0x7f]=RAX
@@ -305,7 +304,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
 
     // the action stack = character + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;  // RSI = character+0x48
+    ActionStack* list = &character->actionStack;  // RSI = character+0x48
     WorkBase_TaskListCleanup_c5400(list);
 
     ::Object::InternalPtr<Action> ibpA;
@@ -323,9 +322,9 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
     }
     ibpA = sm;
     // 0x1400c00b1: CMP [RSI+0x10] — RSI = character+0x48 → character+0x58.
-    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA; // 0x1400c00c6: MOV [RSI+0x10],RAX
+    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA; // 0x1400c00c6: MOV [RSI+0x10],RAX
 
     // --- CompleteTask (workId, p5=completeTaskP7) (0x1400c00ca..0x1400c012a) ---
     obj = WAP_Alloc(0x38, 8); // 0x1400c00cf: ECX=0x30+8=0x38

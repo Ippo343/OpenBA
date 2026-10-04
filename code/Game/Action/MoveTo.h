@@ -38,8 +38,8 @@ public:
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c8ec0
     int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c8ab0
     int  Execute(ActionStack* actionStack, const System::Time* time) override;      // [5] 0x1400c8570
-    void Enter(void* actionStack, const System::Time* time) override;        // [6] 0x1400c8970
-    void Exit(void* actionStack) override;                     // [7] 0x1400c8520
+    void Enter(ActionStack* actionStack, const System::Time* time) override;        // [6] 0x1400c8970
+    void Exit(ActionStack* actionStack) override;                     // [7] 0x1400c8520
     void CheckEntity() override;                               // [8] 0x1400c84d0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c8480
 

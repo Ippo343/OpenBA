@@ -188,7 +188,7 @@ void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* co
             doInsert = true;
         } else {
             Work* payload = cur->work.Get();
-            ComponentEntity* k = payload->field_10;
+            ComponentEntity* k = payload->field_10.Get();
             if (k == *param_2) doInsert = true;
         }
 
@@ -331,7 +331,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
         if (*param_3 == nullptr) {
             doInsert = true;
         } else {
-            ComponentEntity* key = cur->work->field_10;
+            ComponentEntity* key = cur->work->field_10.Get();
             if (key == *param_3) doInsert = true;
         }
 
@@ -742,7 +742,7 @@ void Helper_7830(WorkScheduler* param_1, CitizenComponent* const* param_2) {
 // (the caller reads the low byte)
 static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
     CharacterComponent* ch = citizen->character;
-    int truth = (0 < ch->currentAction + 1) ? 1 : 0;
+    int truth = (0 < ch->actionStack.current + 1) ? 1 : 0;
     return static_cast<uint64_t>(truth);
 }
 

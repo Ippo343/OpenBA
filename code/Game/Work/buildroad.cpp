@@ -178,7 +178,7 @@ int BuildRoad::Cleanup() {
     if (field_48 == nullptr) return 0;
 
     // The citizen's CharacterComponent (+0x278) action list (+0x48)
-    WorkBase_TaskListCleanup_c5400(&field_48->character->actions);
+    WorkBase_TaskListCleanup_c5400(&field_48->character->actionStack);
     return 0;
 }
 
@@ -433,7 +433,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             PickBestDropTarget(
                 reinterpret_cast<const RawArray<ComponentEntity*>*>(citizenList), &foundEntity,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
-                field_50, 1, '\0', velocity, reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));   // 0x14008d590  // LEFT: the scratch slot is reused for three types
+                field_50, 1, '\0', velocity, reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(&foundStorageIBP));   // 0x14008d590  // LEFT: the scratch slot is reused for three types
 
             // 0x140006330 — scans the RawMaterialDescription list for field_50's
             // entry. This is NOT the entity component finder (0x1400223c0) used above;

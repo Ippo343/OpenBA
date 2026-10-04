@@ -111,7 +111,8 @@ struct PathGraph;
 extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
-void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_);  // 0x1400c54e0
+struct ActionStack;
+void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_);  // 0x1400c54e0
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
 class Component;              // Component/Component.h
 class ComponentDescription;   // Component/ComponentDescription.h
@@ -174,7 +175,8 @@ void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 // ---- action_pf_roots_route.cpp
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
 int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14012d5d0
-ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, ComponentEntity* const* exclude);  // 0x14008d590
+namespace Object { template <class T> class InternalPtr; }
+ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 // B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
 

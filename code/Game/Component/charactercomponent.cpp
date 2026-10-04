@@ -63,7 +63,7 @@
 // whose enabled-flag (+0x18) is set, invokes vtable slot +0x30 (Draw/UpdateAnimation)
 // with (node, arrayBase, deltaTime); advances via node+0x10. Non-static for registration.
 // ============================================================
-void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, const System::Time* deltaTime) {
+void Character_UpdateAnimation_Reimpl(ActionStack* arrayBase, Action** ptrRef, const System::Time* deltaTime) {
     Action* node = *ptrRef;
     while (node != nullptr) {
         if ((*ptrRef)->_status) {
@@ -179,8 +179,8 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
 // still re-writes both, as it did when the inert factory zero-filled them.
 CharacterComponent::CharacterComponent()
     : field_0x28(false), _pad29{}, field_0x2C(), field_0x38(0), field_0x3C(0),
-      characterIndex(-1), _pad44{}, actions(nullptr), actionCount(0), actionCapacity(0),
-      field_0x58(nullptr), currentAction(-1), _pad64{},
+      characterIndex(-1), _pad44{},
+      actionStack{nullptr, 0, 0, nullptr, -1, {}},
       modelComponent(nullptr), pickingComponent(nullptr), characterDescription(nullptr) {
     OrFlagsInCtor(0x8f);
 }
@@ -198,7 +198,7 @@ void CharacterComponent::Startup() {
     // that path + guards it crash-safe; the move-tick/executor is still inert, so
     // -1 never drives the executor on an empty stack.)
     characterIndex = -1;
-    currentAction = -1;
+    actionStack.current = -1;
 
     // Startup (0x140109a30): find sibling components + adopt the description.
     ComponentEntity* owner = _entity;
@@ -277,7 +277,7 @@ void CharacterComponent::OnAdded() {}
 
 // [7] 0x140109980 — release the char index (the other half of the allocation).
 void CharacterComponent::OnRemove() {
-    WorkBase_TaskListCleanup_c5400(&actions);   // 0x1400c5400, the action-stack clear
+    WorkBase_TaskListCleanup_c5400(&actionStack);   // 0x1400c5400, the action-stack clear
 
     // GameUpdateLoop::m_characterGrid (+0x88)
     CharacterGrid* charMgr = GameUpdateLoop::_singleton
@@ -307,10 +307,10 @@ void CharacterComponent::Tick(const System::Time* time) {
 // same value to the action's +0x30 as param_3, so it is passed through, not
 // dereferenced.
 void CharacterComponent::Update(const System::Time* time) {
-    if (currentAction >= 0) {
+    if (actionStack.current >= 0) {
         // actions is the array of action pointers, currentAction the index into it
-        Action* localPtr = actions[currentAction];
-        Character_UpdateAnimation_Reimpl(&actions, &localPtr, time);
+        Action* localPtr = actionStack.actions[actionStack.current].Get();
+        Character_UpdateAnimation_Reimpl(&actionStack, &localPtr, time);
     }
 }
 

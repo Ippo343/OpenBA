@@ -222,7 +222,7 @@ int LocationWork::Cleanup() {
     }
 
     CitizenComponent* targetEntity = _field48;
-    WorkBase_TaskListCleanup_c5400(&targetEntity->character->actions);
+    WorkBase_TaskListCleanup_c5400(&targetEntity->character->actionStack);
     return 0;
 }
 

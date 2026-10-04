@@ -178,7 +178,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
     // ---- 0. capacity gate ----------------------------------------------------
     int workers = workerCount;                           // param_1[10]
-    WorkComponent* workComp = field_18;                  // param_1[3]
+    WorkComponent* workComp = field_18.Get();                  // param_1[3]
     if (workComp->workState == 0)
         workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
     if (workComp->workState <= workers)
@@ -280,7 +280,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         }
 
         // building storage comp -> its items, find resType:
-        StorageComponent* bldgStorComp = TW_StorageOf(field_10);   // -> local_e8
+        StorageComponent* bldgStorComp = TW_StorageOf(field_10.Get());   // -> local_e8
         // The null arm is the tree's guard.
         if (!bldgStorComp || bldgStorComp->slotCount <= 0) continue;
         StorageComponent::Item* items = bldgStorComp->storageSlots;
@@ -303,7 +303,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         int cell = mapSize * cellY + cellX;
 
         float searchPos[4] = {};                           // local_90 (out from FindStorage)
-        ComponentEntity* srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
+        Object::InternalPtr<ComponentEntity> srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
         ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
         PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
@@ -320,7 +320,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
         CitizenComponent* citizenVal = *citizenRef;                     // local_b0 = *param2
-        ComponentEntity* bldgVal = field_10;                            // local_res20 = *local_b0(old)
+        ComponentEntity* bldgVal = field_10.Get();                            // local_res20 = *local_b0(old)
         uint32_t pathType = static_cast<uint32_t>(field_20);
         WorkAct_GatherRawMatCtor_bf790(&outBuf, &citizenVal, pathType, &destStorage,
                           searchPos, &bldgVal, destPos, resType,
@@ -345,7 +345,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         int cell = mapSize * cellY + cellX;
 
         float srcPos[4] = {};                              // local_a0 (out from FindStorage)
-        ComponentEntity* srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
+        Object::InternalPtr<ComponentEntity> srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
         ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
         PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
@@ -408,7 +408,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2
-        ComponentEntity* bldgVal = field_10;                               // local_d8 = *local_b0(old)
+        ComponentEntity* bldgVal = field_10.Get();                               // local_d8 = *local_b0(old)
         ComponentEntity* srcStorVal = srcEntity;                           // local_90 = local_e8
         uint32_t pathType = static_cast<uint32_t>(field_20);
         WorkAct_GatherRawMatCtor_bf790(&outBuf, &citizenVal, pathType, &bldgVal,
@@ -461,7 +461,7 @@ int TradeWork::Cleanup() {
 
         // Cancel the work item
         CitizenComponent* citizen = leftmost->value.citizen;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
 }

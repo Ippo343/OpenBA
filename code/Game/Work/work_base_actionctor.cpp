@@ -92,10 +92,9 @@
 
 static inline float WA_RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
-// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
-// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
-static inline void WA_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent.h keeps the +0x48 ActionStack as separate fields (not this set's header)
+// 0x1400c54e0 ActionStackPush (Action.h) on CharacterComponent::actionStack (+0x48).
+static inline void WA_Append(ActionStack* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(list, ibp);
 }
 
 static inline float WA_C_172124() { return kRdata_140172124; }
@@ -145,7 +144,7 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
 
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     void* obj;
@@ -162,9 +161,9 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpA;
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpA;
 
     // --- CompleteTask action ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
@@ -356,7 +355,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
 
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     if (cancelFirst != 0) WorkBase_TaskListCleanup_c5400(list);
 
     // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
@@ -394,9 +393,9 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     }
     ::Object::InternalPtr<Action> ibpSm;
     ibpSm = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibpSm;
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibpSm;
 
     // --- path-mask byte from the pile's map cell (terrain type +0x29) ---
     // (the singleton arm is the tree's guard)
@@ -505,7 +504,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
 void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex) {
 
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     ::Object::InternalPtr<Action> ibp30;
@@ -521,9 +520,9 @@ void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibp30 = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibp30;
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibp30;
 
     // --- CompleteTask action (param_3 forwarded as param_5) ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
@@ -572,7 +571,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
                                    uint32_t typeId, uint32_t flag8, uint32_t cellIdx9) {
 
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     ::Object::InternalPtr<Action> ibp30;
@@ -589,9 +588,9 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibp30 = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibp30;
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibp30;
 
     // --- CompleteTask action ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
@@ -694,7 +693,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
                                  uint32_t* msgIdPtr9, uint64_t /*unused10*/, uint32_t smParam11) {
 
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     ::Object::InternalPtr<Action> ibp40;
@@ -710,9 +709,9 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibp40 = sm;
-    if (character->field_0x58 != nullptr)
-        character->field_0x58.DeletePtr();
-    character->field_0x58 = ibp40;
+    if (character->actionStack.field_0x10 != nullptr)
+        character->actionStack.field_0x10.DeletePtr();
+    character->actionStack.field_0x10 = ibp40;
 
     // --- CompleteTask action (param_5 = param_7) ---
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);

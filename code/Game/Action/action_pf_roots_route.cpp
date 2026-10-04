@@ -328,7 +328,7 @@ LAB_14012d744:
 ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best,
                                      uint32_t param_3, const ComponentDescription* material,
                                      int param_5, char param_6, float* outPos,
-                                     ComponentEntity* const* exclude) {
+                                     const Object::InternalPtr<ComponentEntity>* exclude) {
     Map* map = GameUpdateLoop::_singleton->m_game;
     int iVar21 = 0x7fffffff;
     *best = nullptr;
@@ -358,7 +358,7 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
         }
         for (int i = 0; i < n; ++i) {
             ComponentEntity* entity = snapshot[i];
-            if (entity == *exclude) continue;
+            if (entity == exclude->Get()) continue;
             StorageLocationComponent* location = FindComponentSkippingNull<StorageLocationComponent>(entity);
             MarketLocationComponent* market = FindComponentSkippingNull<MarketLocationComponent>(entity);
             StorageComponent* storage = FindComponentSkippingNull<StorageComponent>(entity);

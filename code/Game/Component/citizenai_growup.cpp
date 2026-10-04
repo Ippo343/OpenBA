@@ -340,7 +340,7 @@ void CitizenComponent::LongTermPlan() {
 
         // not satisfied by current set: ask d590 for a new storage candidate.
         float    outVec[3] = {0, 0, 0};      // local_80
-        ComponentEntity* matchIBP = nullptr;   // local_a8
+        Object::InternalPtr<ComponentEntity> matchIBP = nullptr;   // local_a8
         ComponentEntity* outBest  = nullptr;   // local_98
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
         PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(listPair), &outBest, homeCell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
@@ -429,8 +429,8 @@ void CitizenComponent::LongTermPlan() {
         System::Time timeStamp{};
         RtSystem_Time_Ctor(&timeStamp, 0.0f);
         CharacterComponent* ch = character;
-        if (-1 < ch->currentAction) {
-            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<ActionStack*>(&ch->actions), &timeStamp);   // LEFT: CharacterComponent.h declares +0x48 as separate fields, not an ActionStack
+        if (-1 < ch->actionStack.current) {
+            CitizenAI_ActionExecutor_c4c50(&ch->actionStack, &timeStamp);
         }
         (void)committed;
     }

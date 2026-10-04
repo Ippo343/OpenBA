@@ -65,10 +65,9 @@ static inline void* WAP2_Alloc(uint64_t size, uint32_t align) {
     return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
 
-// 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
-// action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
-static inline void  WAP2_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction), so the callers hand the stack as void*
+// 0x1400c54e0 ActionStackPush (Action.h) on CharacterComponent::actionStack (+0x48).
+static inline void  WAP2_Append(ActionStack* list, const ::Object::InternalPtr<Action>* ibp) {
+    ActionStackPush(list, ibp);
 }
 
 // Read a runtime Time qword via System::Time::Time(&buf, seconds); the original reads
@@ -106,7 +105,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
 
     // --- the action stack = character + 0x48 ; cleanup pending actions (0xbf7cf-0xbf7f3) ---
     CharacterComponent* character = (*citizenRef)->character;
-    void* list = &character->actions;
+    ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
     // Temporaries (mirror the original's stack IBP scratch slots).
@@ -130,9 +129,9 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     ibpA = sm;                                            // (0xbf86a)
     // SendComponentMessage handle slot = R14+0x10, where R14 = list = character+0x48,
     // i.e. character+0x58. DeletePtr the prior handle, then store. (0xbf870-0xbf885)
-    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        character->field_0x58.DeletePtr();   // (0xbf877-0xbf87b)
-    character->field_0x58 = ibpA;                                       // (0xbf885)
+    if (character->actionStack.field_0x10 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        character->actionStack.field_0x10.DeletePtr();   // (0xbf877-0xbf87b)
+    character->actionStack.field_0x10 = ibpA;                                       // (0xbf885)
 
     // ============================================================
     // optional SendComponentMessage #2 when (char)flags != 0  (0xbf889-0xbf914)

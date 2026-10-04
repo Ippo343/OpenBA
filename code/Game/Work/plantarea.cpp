@@ -191,7 +191,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             }
 
             uint32_t typeConstVal = CropFieldComponent::TypeId();  // DAT_1401c7510
-            ComponentEntity* entityRef = field_10;
+            ComponentEntity* entityRef = field_10.Get();
 
             // The slot indices the per-slot messages carry: primary, then paired
             uint32_t packedCells[2];
@@ -432,7 +432,7 @@ int PlantArea::Cleanup() {
 
         // Cancel work via the citizen's action stack
         CitizenComponent* citizen = leftmost->element.citizen;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
         count = _cells._count;
     }

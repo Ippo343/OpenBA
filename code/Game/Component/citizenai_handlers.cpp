@@ -76,7 +76,7 @@ namespace {
 static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1, float* dest, float animTime) {
     CitizenComponent* citizen = *param_1;
     CharacterComponent* character = citizen->character;
-    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: SIG Pf_ActStackPush_54e0 (int64_t* stack; Action/exe_bodies.h)
+    ActionStack* stack = &character->actionStack;
 
     WorkBase_TaskListCleanup_c5400(stack);
 
@@ -90,10 +90,10 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
         msgAction = ::new (mem) SendComponentMessage(&entityIBP, msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
     Action* msgIBP = msgAction;   // the InternalPtr's ctor is a plain store
-    if (character->field_0x58 != nullptr) {
-        character->field_0x58.DeletePtr();
+    if (character->actionStack.field_0x10 != nullptr) {
+        character->actionStack.field_0x10.DeletePtr();
     }
-    character->field_0x58 = msgIBP;
+    character->actionStack.field_0x10 = msgIBP;
 
     // (3) PlayAnimation action (only when animTime > 0)
     if (0.0f < animTime) {
