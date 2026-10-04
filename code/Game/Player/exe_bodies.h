@@ -127,10 +127,8 @@ extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, 
 extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(PlayerController* param_1, const Math::Vector3* param_2, float* param_3);  // 0x140098210
 extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*never read*/, uint32_t param_2, const Math::Vector3* param_3, struct Rectangle* param_4);  // 0x1400fe960
 extern "C" uint8_t PlayerScreenRect_EntityRect_0380(const void* /*never read*/, ComponentEntity* const* param_2, struct Rectangle* param_3);  // 0x140100380
-extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t , void* param_2, uint64_t* param_3);  // 0x140100380 B4 FORWARD -> PlayerScreenRect_EntityRect_0380: 1 outside caller (Tutorial/tutorialhighlightdialog.cpp)
 
 // ---- tool_base_tile.cpp
-void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float yaw);  // 0x140003870 B4 FORWARD -> ModelComponent::SetTransformFromYaw: 4 outside callers (Component/citizencomponent_lifecycle.cpp, destroycomponent_states.cpp, herdcomponent.cpp, immigrationcomponent_states.cpp)
 uint64_t ToolTile_FootprintValidity_d580(Map* param_1, int param_2, int param_3, int param_4, int param_5, unsigned int param_6, const CreatePlacedDescription* param_7, const System::String* param_8, float param_9, float param_10, float param_11, char param_12, const System::String* param_13, int param_14, const ComponentDescription* param_15);  // 0x14009d580
 // 0x1400fd650 is PlacementTool::CreateAt (PlacementTool.h).
 

@@ -39,6 +39,8 @@
 class ModelComponent;                    // Component/ModelComponent.h
 namespace System { class Time; }         // runtime/types/system/Value.h
 namespace Graphics { class Renderer; }   // runtime/types/graphics/Camera.h
+namespace Math { class Transform; }      // runtime/types/math/Math.h
+namespace Picking { class Scene; }       // runtime/types/picking/Scene.h
 
 namespace PerfX {
 
@@ -98,13 +100,13 @@ bool AnimCullSkip(ModelComponent* modelComponent);
 
 // Picking: an off-screen citizen skips its Picking::Scene::SetTransform; the deferred
 // push is replayed on pause so a click while paused still hits the right mesh.
-typedef void (*PickXfCtor_t)(void* xformOut, void* transformIn);
-typedef void (*PickSetXf_t)(void* scene, uint32_t id, void* xform);
-bool PickCullSkip(void* modelComponent, void* pickScene, uint32_t pickId,
+typedef Math::Transform* (*PickXfCtor_t)(void* xformOut, const Math::Transform* transformIn);
+typedef void (*PickSetXf_t)(Picking::Scene* scene, uint32_t id, const Math::Transform* xform);
+bool PickCullSkip(ModelComponent* modelComponent, Picking::Scene* pickScene, uint32_t pickId,
                   PickXfCtor_t xfCtor, PickSetXf_t setXf);
 // True when the model's position (model+0x158) is outside the frustum margin and the
 // anim-cull machinery is active (so a later flush will repair anything deferred).
-bool ModelCulled(void* modelComponent);
+bool ModelCulled(ModelComponent* modelComponent);
 // Generic deferral: `replay(obj)` is called with the root-only flag clear when the sim
 // goes idle (pause), so deferred presentation state catches up before a paused pan.
 void NoteDeferred(void* obj, void (*replay)(void*));

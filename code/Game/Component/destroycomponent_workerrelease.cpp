@@ -203,10 +203,10 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     //    to Builder, so a task already in flight when demolition starts is offered to
     //    builders rather than to the building's former profession.
     if (workComp && workComp->workId >= 0) {
-        const uintptr_t sched = reinterpret_cast<uintptr_t>(gw->m_tutorial);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey (uintptr_t scheduler)
+        WorkScheduler* const sched = gw->m_tutorial;
         if (sched) {
             CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
-                    reinterpret_cast<uint64_t>(profession), reinterpret_cast<uint64_t>(builderKey));   // LEFT: SIG CitizenAI_WorkScheduler_Rekey (uint64_t keys)
+                    profession, builderKey);
         }
     }
 

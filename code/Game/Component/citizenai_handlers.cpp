@@ -46,6 +46,8 @@
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Action/SendComponentMessage.h"   // 0x1400cb1d0, by name
+#include "Action/MoveTo.h"                 // 0x1400c9170, by name
 
 namespace {
 
@@ -79,18 +81,15 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     WorkBase_TaskListCleanup_c5400(stack);
 
     // (2) SendComponentMessage action -> CharacterComponent::field_0x58
-    void* msgAction = nullptr;
+    Action* msgAction = nullptr;
     void* mem = System::MemoryAllocator::MemAlloc(0x40, 8);
     if (mem) {
-        uint64_t destIBP = 0;
-        new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        ComponentEntity* destIBP = nullptr;
         uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        uint64_t entityIBP = reinterpret_cast<uint64_t>(citizen->_entity);   // LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0 (uint64_t* IBP; Action/exe_bodies.h)
-        msgAction = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, msgId, 0, &destIBP, 0);
+        ComponentEntity* entityIBP = citizen->_entity;
+        msgAction = ::new (mem) SendComponentMessage(&entityIBP, msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
-    Action* msgIBP = nullptr;
-    new (&msgIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(msgAction));   // B.3.3 bridge; LEFT: SIG Pf_SendComponentMessageCopyCtor_b1d0 returns void*
+    Action* msgIBP = msgAction;   // the InternalPtr's ctor is a plain store
     if (character->field_0x58 != nullptr) {
         reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();   // B.3.3 bridge; LEFT: CharacterComponent::field_0x58 is Action*, not an InternalPtr (CharacterComponent.h, WORK-3)
     }
@@ -131,11 +130,11 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
             familyOut = character;
         }
         float speed = kRdata_140172280;
-        moveAction = Pf_MoveToCtor_9170(mmem, &familyOut, 1 /*Slow*/, 0, dest, 0xe1f, 0, speed);
+        moveAction = ::new (mmem) MoveTo(&familyOut, 1 /*Slow*/, 0, dest, 0xe1f, 0, speed);   // 0x1400c9170
     }
     int64_t moveIBP = 0;
     new (&moveIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge; LEFT: SIG Pf_MoveToCtor_9170 returns void*
+        reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge; LEFT: H10 InternalBasePtr takes the RtObject::Internal POD
     Pf_ActStackPush_54e0(stack, &moveIBP);
 }
 

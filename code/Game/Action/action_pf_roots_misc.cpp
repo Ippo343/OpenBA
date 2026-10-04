@@ -466,6 +466,3 @@ void HerdStartMigration(HerdComponent* herd) {
 
 
 // B4 FORWARD: outside callers Component/herdcomponent.cpp, Action/huntanimal.cpp
-void Pf_HerdStartMigration_122340(void* param_1) {
-    HerdStartMigration(reinterpret_cast<HerdComponent*>(param_1));   // LEFT: SIG Pf_HerdStartMigration_122340
-}

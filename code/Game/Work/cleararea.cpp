@@ -81,14 +81,14 @@ ClearArea::ClearArea()
 // Retail: local = *param_2; Work_Ctor25(this, &local); the ClearArea stamp (the
 // compiler's); +0x48 = 0, +0x50 = 0, +0x58 = 0, +0x60 = 0, +0x68 = param_3 (a
 // raw InternalBasePtr copy), +0x70/+0x71/+0x72 = the three flag bytes.
-ClearArea::ClearArea(void* pEntityIBP, uint64_t descRef, uint8_t clearTrees,
+ClearArea::ClearArea(void* pEntityIBP, ComponentDescription* descRef, uint8_t clearTrees,
                      uint8_t clearGround, uint8_t clearBuildings)
     : Work(pEntityIBP),
       field_48(nullptr),
       field_50(0),
       field_58(nullptr),
       field_60(0),
-      field_68(reinterpret_cast<ComponentDescription*>(descRef)),   // LEFT: SIG ClearArea ctor (descRef uint64_t; callers in clearareacomponent_states.cpp, COMP-2)
+      field_68(descRef),
       field_70(clearTrees),
       field_71(clearGround),
       field_72(clearBuildings) {}

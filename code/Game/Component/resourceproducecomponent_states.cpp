@@ -114,7 +114,7 @@ static char RP_State13Enter(ResourceProduceComponent* self, StateMachine* sm) {
     // Post it to the reservation ledger so an idle citizen claims it.
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
     if (workComp != nullptr && workIbp != 0) {
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, 0, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+        CitizenAI_WorkScheduler_Post(workComp, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIbp));   // LEFT: SIG ResourceProduceComponent::CreateWork (slot 18) hands the work back as uintptr_t
     }
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers

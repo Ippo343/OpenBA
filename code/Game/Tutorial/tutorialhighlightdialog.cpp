@@ -344,10 +344,7 @@ void TutorialHighlightDialog::PlaceOnEntity() {
     alignas(16) struct Rectangle rect;
     RtVolume_Rectangle_Ctor(&rect);
     ComponentEntity* entityIBP = targetEntity;
-    // LEFT: 0x140100380's port takes the rectangle as uintptr_t / uint64_t*
-    // (Player's signature).
-    bool ok = PlayerScreenRect_Entity_0380(reinterpret_cast<uintptr_t>(&rect), &entityIBP,
-                                           reinterpret_cast<uint64_t*>(&rect)) != 0;   // 0x140100380
+    bool ok = PlayerScreenRect_EntityRect_0380(&rect, &entityIBP, &rect) != 0;   // 0x140100380
 
     // [diag] BANISHED_TUTHL_DIAG — where the arrow thinks the target is.
     //

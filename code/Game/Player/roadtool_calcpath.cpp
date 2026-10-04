@@ -194,16 +194,13 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
         return;
     }
 
-    void* workIbp = work;   // the InternalBasePtr's eight bytes
+    Object::InternalPtr<Work> workIbp(static_cast<Work*>(work));   // LEFT: SIG BuildRoad_CtorParams_Impl returns void*
 
     // Post to the work scheduler (GameUpdateLoop +0x118). code 0x2000 = the road
     // category; retail passes fromExisting='\0' and prio=-1 (the prio is dead here).
     if (GameUpdateLoop::_singleton != nullptr) {
         WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
-        // LEFT: 0x1400f88a0 is a C door in block COMP's Component/exe_bodies.h taking
-        // the scheduler as `int*`.
-        void* schedRaw = sched;
-        if (sched) CitizenAI_WorkScheduler_Insert(static_cast<int*>(schedRaw), &workIbp, 0x2000, '\0', -1);
+        if (sched) CitizenAI_WorkScheduler_Insert(sched, &workIbp, 0x2000, '\0', -1);
     }
 
     // Record the cell in the pending-road BST (0x14001a4f0; the inserted node comes

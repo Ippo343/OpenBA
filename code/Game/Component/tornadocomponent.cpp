@@ -84,6 +84,8 @@
 #include "Component/NaturalResourceComponent.h"
 #include "Component/CitizenComponent.h"
 #include "Component/AnimalComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Action/PathSearch.h"   // RawArray<T> (the radius query's result)
 #include "Component/ModelComponent.h"
 #include "Component/DestroyComponent.h"
 #include "Entity/ComponentEntity.h"
@@ -504,7 +506,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     }
 
     // --- 2. the quadtree radius query ---
-    struct { Component** data; int count; int cap; } found = { nullptr, 0, 0 };
+    RawArray<CharacterComponent*> found = { nullptr, 0, 0 };
     const char* queryState = "ran";
     {
         float radius = static_cast<float>(desc->_damageRadius);
@@ -523,15 +525,15 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         // (charmanager_seed.cpp), which early-returns unless MoveTickEnabled(). With
         // that gate off gw+0x88 is legitimately null here, so skip the query rather
         // than fault. Every other deref in this function stays unguarded.
-        void* quadtree = gw->m_characterGrid;
+        CharacterGrid* quadtree = gw->m_characterGrid;
         if (quadtree)
-            Map_RadiusQuery_92990(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);   // LEFT: SIG Map_RadiusQuery_92990 (float* map)
+            Map_RadiusQuery_92990(quadtree, &scratch, pos, &radius, 0, &found);
         else
             queryState = "SKIPPED(GameWorld+0x88 quadtree is null - "
                          "CharManager_Seed gated off by MoveTickEnabled)";
 
-        for (int i = 0; i < found.count; i++) {
-            Component** slot = &found.data[i];
+        for (int i = 0; i < found.size; i++) {
+            CharacterComponent** slot = &found.data[i];
             ComponentEntity* ownerEntity = (*slot)->_entity;
             Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: as above (dead first argument)
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
@@ -570,7 +572,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
                   position.x, position.y,
                   desc->_damageRadius, desc->_scatterRadius,
                   hitTree, hitTreeNoKnock, hitBuilding, hitBuildingNoFire, hitAnimal,
-                  hitCitizen, queryState, found.count);
+                  hitCitizen, queryState, found.size);
 }
 
 
@@ -607,9 +609,6 @@ void ParticleComponent::FadeOutEmitter(int index) {
 }
 
 // B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp).
-extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
-    reinterpret_cast<ParticleComponent*>(particleComp)->FadeOutEmitter(index);   // LEFT: B4 FORWARD (wave X: firecomponent_ignite.cpp)
-}
 
 // AmbientEmitterComponent::MoveTo (0x140042960): move every live emitter to `newPos`,
 // then latch it into the component's cached position at +0x28. No-op when the position
@@ -763,7 +762,7 @@ void TornadoComponent::Startup() {
     }
 
     // --- post the warning to the event log, and pause if the setting says so ---
-    void* eventLog = gw->m_eventNotifier;
+    EventLog* eventLog = gw->m_eventNotifier;
     Object::InternalBasePtr nullIbp(nullptr);
     EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
 

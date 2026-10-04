@@ -498,10 +498,10 @@ void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
         }
         if (old == arr->data) {
             if (param_2 < iVar1) {
-                Reimpl_Struct60B_DtorRange(nullptr, old + param_2, iVar1 - param_2);   // 0x14001fb80
+                GeometryBatch_DestroyRange(old + param_2, iVar1 - param_2);   // 0x14001fb80
             }
         } else {
-            Reimpl_Struct60B_DtorRange(nullptr, old, iVar1);   // 0x14001fb80
+            GeometryBatch_DestroyRange(old, iVar1);   // 0x14001fb80
             System::MemoryAllocator::MemFree(old);
         }
     }

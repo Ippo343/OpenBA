@@ -303,11 +303,3 @@ void RegionGraph::Init(Map* mapArg, uint32_t blocksWideArg, int blocksHighArg) {
 
 // B4 FORWARD: 1 outside caller (Game/region_seed.cpp) holds the graph as int* and the Map
 // as an integer. Returns the graph, as retail's ctor does.
-int* Pf_RegionGraphCtor_8670(int* param_1, int64_t param_2, int64_t param_3, int64_t param_4,
-                             uint32_t param_5, int param_6) {
-    (void)param_3;
-    (void)param_4;
-    // LEFT: GAME-b (Game/region_seed.cpp holds the graph as int* and the Map as an integer).
-    ((RegionGraph*)param_1)->Init((Map*)param_2, param_5, param_6);
-    return param_1;
-}

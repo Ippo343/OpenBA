@@ -300,7 +300,7 @@ void MainMenuDialog::OpenAchievement() {
 // Passes this menu as the owner and difficulty=0 for scenarios from main menu.
 void MainMenuDialog::OpenScenario() {
     UI::Dialog* extRes = LoadDialogResource("Dialog/Scenario.rsc");
-    void* dlgObj = nullptr;
+    ScenarioDialog* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0xE8, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> parentIBP(this);
@@ -310,7 +310,7 @@ void MainMenuDialog::OpenScenario() {
                                      &parentIBP,
                                      0);  // difficulty (main menu = 0)
     }
-    AddDialogToUI(this, static_cast<UI::DialogInstance*>(dlgObj));
+    AddDialogToUI(this, dlgObj);
 }
 
 // OpenGoal (0x1400B3220): "Dialog/Goal.rsc", size 0xC8 (200 decimal)
@@ -346,7 +346,7 @@ void MainMenuDialog::OpenTutorial() {
     printf("[MainMenuDialog] OpenTutorial called, self=%p\n", (void*)this);
     UI::Dialog* extRes = LoadDialogResource("Dialog/Tutorial.rsc");
     printf("[MainMenuDialog] OpenTutorial: extRes=%p\n", (const void*)extRes);
-    void* dlgObj = nullptr;
+    ScenarioDialog* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0xE8, 8);
     printf("[MainMenuDialog] OpenTutorial: dlgMem=%p\n", dlgMem);
     if (dlgMem) {
@@ -365,7 +365,7 @@ void MainMenuDialog::OpenTutorial() {
         extern void* g_StandaloneScenarioDialog;
         g_StandaloneScenarioDialog = dlgObj;
     }
-    AddDialogToUI(this, static_cast<UI::DialogInstance*>(dlgObj));
+    AddDialogToUI(this, dlgObj);
     printf("[MainMenuDialog] OpenTutorial: dialog added to UI\n");
 }
 

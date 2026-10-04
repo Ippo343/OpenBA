@@ -54,6 +54,7 @@
 #include "Component/animalcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
+#include "Action/MoveTo.h"   // 0x1400c9170, by name
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
@@ -440,7 +441,7 @@ void AnimalComponent::OnAdded() {
 
     AnimalDescription* desc = AnimalDesc(this);
     if (desc) {
-        PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+        GetWanderBox(&wanderX, &wanderY, &wanderWidth, &wanderHeight,
                                          desc->_i20);
     }
 
@@ -596,7 +597,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
             if ((cells && CellTerrain(cells, cell) != 0x02) || blocked) {
                 habitatCell = FindHabitat();
-                PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                GetWanderBox(&wanderX, &wanderY, &wanderWidth, &wanderHeight,
                                                  desc->_i20);
             }
         }
@@ -684,7 +685,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
                 if (misses > 10) {
                     habitatCell = FindHabitat();
-                    PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                    GetWanderBox(&wanderX, &wanderY, &wanderWidth, &wanderHeight,
                                                      desc->_i20);
                     misses = 0;
                 }
@@ -724,8 +725,8 @@ void AnimalComponent::Update(const System::Time* time) {
                                 : nullptr;
                 if (mem) {
                     CharacterComponent* moverIBP = character;
-                    action = Pf_MoveToCtor_9170(mem, &moverIBP, 0 /*Normal*/, 1,
-                                                dest, 0xf9f, 1, MoveSpeed());
+                    action = ::new (mem) MoveTo(&moverIBP, 0 /*Normal*/, 1,
+                                                dest, 0xf9f, 1, MoveSpeed());   // 0x1400c9170
                 }
                 // If the alloc fails, `action` stays null and we push a null IBP —
                 // the same degradation retail takes when MemAlloc fails
@@ -733,7 +734,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
                 int64_t actionIBP = 0;
                 new (&actionIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge  LEFT: SIG Pf_MoveToCtor_9170 returns void*
+                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge  LEFT: H10 InternalBasePtr takes the RtObject::Internal POD
                 Pf_ActStackPush_54e0(stack, &actionIBP);
                 moveTimer._ticks = 0;
 

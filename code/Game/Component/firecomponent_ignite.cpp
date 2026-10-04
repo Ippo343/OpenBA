@@ -189,10 +189,8 @@ void FireComponent::MarkDanger(short delta) {
 // 0x10; the sound ref is lazily copied from the AmbientEmitterDescription's
 // (+0x28) sound array. SoundType 3 = ambient looping.
 // (An AmbientEmitterComponent body, COMP-a's class; its reads stay as they were.)
-extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientCompV, int idx) {
-    if (!ambientCompV) return;
-    // B4 FORWARD: the callers (and citizen_assignworkplace.cpp) hand the component in untyped.
-    AmbientEmitterComponent* ac = reinterpret_cast<AmbientEmitterComponent*>(ambientCompV);   // LEFT: B4 FORWARD signature (void*)
+extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, int idx) {
+    if (!ac) return;
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     Audio::Scene* scene = gw->m_audioScene;   // +0x78
@@ -245,7 +243,7 @@ void FireComponent::Extinguish() {
     // ParticleComponent: fade the flames out.
     {
         ParticleComponent* part = _entity->FindComponent<ParticleComponent>();   // 0x140005200
-        Tornado_ParticleReverse_53720(part, desc->particleEmitter);
+        part->FadeOutEmitter(desc->particleEmitter);   // 0x140053720
     }
 
     // DestroyComponent: leave the BURNING state. (The tree's null test on the
@@ -297,7 +295,7 @@ void FireComponent::Ignite() {
     const float   burnSecs = burnFullTime.AsSeconds();
     const System::Time burnHalf = {MakeTime(burnSecs * kRdata_140172114)};
 
-    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf._ticks)) {
+    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
         return;
     }
 
@@ -326,10 +324,10 @@ void FireComponent::Ignite() {
         }
     }
 
-    ::Object::InternalPtr<FireWork> workIbp(work);
+    ::Object::InternalPtr<Work> workIbp(work);
 
     if (workComp) {
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x4000, 0, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+        CitizenAI_WorkScheduler_Post(workComp, 0x4000, 0, &workIbp);
     }
     if (workComp) {
         gw->m_tutorial->PrioritizeWork(workComp->workId);   // 0x1400f9ad0 (+0x118)
@@ -349,8 +347,8 @@ void FireComponent::Ignite() {
     // The Map's active-fire count is Map::field_0x90[6] (+0x9c).
     const Map* grid = gw->m_game;
     if (grid && grid->field_0x90[6] < 1) {
-        void* eventLog = gw->m_eventNotifier;   // +0x138
-        ComponentEntity* entityIbp = _entity;
+        EventLog* eventLog = gw->m_eventNotifier;   // +0x138
+        Object::InternalPtr<ComponentEntity> entityIbp(_entity);
         if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
         // The settings' auto-slow byte (+0x17). Retail 0x1400498e6:
         // MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of the settings

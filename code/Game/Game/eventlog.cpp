@@ -208,8 +208,8 @@ static int EventLog_TileIndex(const ::Object::InternalBasePtr* entityIBP) {
 // B4 FORWARD: 1 outside caller file (Component/diseasecomponent.cpp).
 // The original 0x140095030 is (unused RCX, entityIBP RDX) — the first param is
 // dead (stack-reuse artifact).
-extern "C" int EventLog_TileIndex_Reg(void* /*unused*/, void* entityIBP) {
-    return EventLog_TileIndex(reinterpret_cast<const ::Object::InternalBasePtr*>(entityIBP));
+extern "C" int EventLog_TileIndex_Reg(void* /*unused*/, const ::Object::InternalBasePtr* entityIBP) {
+    return EventLog_TileIndex(entityIBP);
 }
 
 // IconIndex (0x1400950d0): eventType -> icon index (feeds "EventIcon%i").
@@ -336,16 +336,13 @@ void EventLog::AddEvent(int eventType, int severity, const ::Object::InternalBas
     AddEventCore(eventType, severity, entityIBP, nullptr, 0);
 }
 
-// The forwarders below convert their untyped arguments with reinterpret_cast
-// (each is the pointer the old signature carried).
 // B4 FORWARD: 5 outside caller files (Component/firecomponent_ignite.cpp,
 // immigrationcomponent_states.cpp, tornadocomponent.cpp, tradecomponent_states.cpp,
 // Entity/citizenbehavior.cpp; citizen_updatehealth / citizen_lifeevent reach the
 // citizen variant below).
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP) {
+extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const ::Object::InternalBasePtr* entityIBP) {
     if (!eventLog) return;
-    reinterpret_cast<EventLog*>(eventLog)->AddEvent(eventType, severity,
-        reinterpret_cast<const ::Object::InternalBasePtr*>(entityIBP));
+    eventLog->AddEvent(eventType, severity, entityIBP);
 }
 
 // ============================================================
@@ -379,14 +376,14 @@ void EventLog::AddCitizenEvent(int eventType, int severity, const ::Object::Inte
 
 // B4 FORWARD: 2 outside caller files (Component/citizen_lifeevent.cpp,
 // Component/citizen_updatehealth.cpp).
-extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
-                                         void* entityIBP, void* nameStr, void* titleStr,
-                                         void* extraStr) {
+extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity,
+                                         const ::Object::InternalBasePtr* entityIBP,
+                                         const void* nameStr, const System::String* titleStr,
+                                         const System::String* extraStr) {
     if (!eventLog) return;
-    reinterpret_cast<EventLog*>(eventLog)->AddCitizenEvent(eventType, severity,
-        reinterpret_cast<const ::Object::InternalBasePtr*>(entityIBP),
-        reinterpret_cast<const System::String*>(nameStr), reinterpret_cast<const System::String*>(titleStr),
-        reinterpret_cast<const System::String*>(extraStr));
+    eventLog->AddCitizenEvent(eventType, severity, entityIBP,
+        reinterpret_cast<const System::String*>(nameStr),   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage
+        titleStr, extraStr);
 }
 
 // ============================================================
@@ -400,17 +397,15 @@ extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int seve
 // lets the two copies diverge (see reference_one_retail_fn_ported_twice_diverges).
 // B4 FORWARD: the three below have 1 outside caller file (Component/diseasecomponent.cpp).
 
-extern "C" void EventLog_ArrayGrow_Reg(void* arrBase, int newCount, const void* newEntry) {
-    EventArray_Grow(reinterpret_cast<EventLogEntry**>(arrBase), newCount,
-                    reinterpret_cast<const EventLogEntry*>(newEntry));
+extern "C" void EventLog_ArrayGrow_Reg(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry) {
+    EventArray_Grow(arrBase, newCount, newEntry);
 }
 
-extern "C" void EventLog_YearString_Reg(void* gameWorld, void* retStr) {
+extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr) {
     // Retail constructs the result String in the caller's return slot.
-    new (retStr) System::String(EventLog_YearString(reinterpret_cast<GameUpdateLoop*>(gameWorld)));
+    new (retStr) System::String(EventLog_YearString(gameWorld));
 }
 
-extern "C" void EventLog_SeasonString_Reg(void* gameWorld, void* eventLog, void* retStr) {
-    new (retStr) System::String(EventLog_SeasonString(reinterpret_cast<GameUpdateLoop*>(gameWorld),
-                                                      reinterpret_cast<const EventLog*>(eventLog)));
+extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr) {
+    new (retStr) System::String(EventLog_SeasonString(gameWorld, eventLog));
 }

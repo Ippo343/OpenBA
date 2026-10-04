@@ -617,15 +617,6 @@ void* MoveTo::CreateInPlaceObject(void* storage) {
 // Note: hidden float arg `speed` arrives in XMM (XMM2 per the prologue), param order
 // matches Ghidra (pathType, param_4, destination, param_6, param_7, speed).
 // ============================================================
-void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4,
-                         float* destination, int param_6, int param_7, float speed) {
-    // B4 FORWARD: 13 outside caller files (the Component
-    // citizen / animal / nomad builders, the Work action builders) hold the character
-    // reference as void*.
-    return static_cast<Object::Base*>(
-        new (self) MoveTo(static_cast<CharacterComponent* const*>(param_2), pathType, param_4,
-                          destination, static_cast<uint32_t>(param_6), param_7, speed));
-}
 
 // 0x1400c9170 — the ctor body: after Action() the retail stores, in retail order.
 MoveTo::MoveTo(CharacterComponent* const* characterRef, uint32_t moveAnim, int stopAnim,

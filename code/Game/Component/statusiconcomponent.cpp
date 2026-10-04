@@ -297,9 +297,6 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
 // citizenai_gather, citizen_needsupdate, destroycomponent_states, workcomponent,
 // workplacecomponent; Work: consumeproduce, fishingwork, foresterwork, harvestarea,
 // harvestorchard, herbalistwork, huntwork, pasturework)
-void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
-    reinterpret_cast<StatusIconComponent*>(param_1)->SetFlag(flagIndex, value);   // LEFT: B4 FORWARD (wave X: destroycomponent_states.cpp)
-}
 
 // ============================================================
 // Standalone bring-up (Phase A): faithful construction + diagnostics
@@ -704,7 +701,7 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     Component* model = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
     // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
     // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
-    if (model && PerfX::IconCull() && PerfX::ModelCulled(model)) {
+    if (model && PerfX::IconCull() && PerfX::ModelCulled(static_cast<ModelComponent*>(model))) {   // found by ModelComponent::TypeId() (B10)
         PerfX::Count(PerfX::kCntIconCulled);
         PerfX::NoteDeferred(this, [](void* o) {
             reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge  LEFT: SIG PerfX::NoteDeferred (SA: the callback takes void*)
