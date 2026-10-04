@@ -84,7 +84,6 @@ extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNod
 // B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are
 // PlayerToolManager members (SelectTool, ToggleUtilityDialog, OpenPauseMenu,
 // CenterOnEntity; Game/PlayerToolManager.h). These are their forwarders.
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60 B4 FORWARD: 6 outside caller files -> PlayerToolManager::SelectTool
 // toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
 // (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity

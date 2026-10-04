@@ -645,8 +645,7 @@ void NewGameDialog::StartGame() {
     }
 
     // The map name: the name edit box's String.
-    // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);  // LEFT: H5 EditElement::_text is the String's raw char* (EditElement.h: a String member changes the class's ctor / dtor)
+    const System::String& nameStr = editName->GetText();
 
     // Save combo selections to game settings
     GameSettings* settings = g_gameSettings;
@@ -787,8 +786,7 @@ void NewGameDialog::OnClosed() {}
 
 void NewGameDialog::OnUpdateLayout() {
     // The name edit box's text length (0 when empty).
-    // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    int len = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();  // LEFT: H5 EditElement::_text is the String's raw char* (EditElement.h: a String member changes the class's ctor / dtor)
+    int len = editName->GetText().GetLength();
 
     // Element slot 8: Enable(bool)
     buttonOk->Enable(len > 0 ? 1 : 0);
