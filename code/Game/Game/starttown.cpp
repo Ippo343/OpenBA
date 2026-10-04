@@ -573,13 +573,14 @@ static bool SpawnAndRegister(ComponentDescription* tmpl, EntityList* entityList)
 // C). Caches the result in entry+0x10.
 static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef* entry) {
     ResolveExternalByName_Impl(entry);                       // try the cheap cached path first
-    ComponentDescription* tmpl = (ComponentDescription*)entry->resolved;   // LEFT: ExternalRef::resolved is void* (MapGenerator.h, GAME-b: one ref type for every pool's element class)
+    // A pool's template is a ComponentDescription (the template pools name ComponentDescription resources).
+    ComponentDescription* tmpl = static_cast<ComponentDescription*>(entry->resolved);
     if (tmpl) return tmpl;
     if (!::Object::ExternalFactory::_singleton)
         return nullptr;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    System::Filename fname(*reinterpret_cast<const System::String*>(entry));  // String -> Filename  // LEFT: H5 ExternalRef::strPtr is a String's raw storage (MapGenerator.h); the pool's element lifecycle is hand-written
+    System::Filename fname(entry->strPtr);  // String -> Filename
     // A pool's template is a ComponentDescription (an Object::External).
     tmpl = static_cast<ComponentDescription*>(
         const_cast<::Object::External*>(efactory->FindOrLoad(fname)));    // LEFT: FindOrLoad returns const External* (retail ?FindOrLoad@...QEAAPEBV)
@@ -3806,9 +3807,9 @@ static void CitizenCarryStorageInit(ComponentEntity* ent) {
 // name / colour / age / lifespan by hand and burned a second RNG stream, is gone).
 // The family CROSS-LINKS below are part of impl_0dd0 (not of sub_1040) and are
 // unconditional in retail.
-extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate);
-extern "C" float StartTown_FoundingChildAge(void* citizenTemplate);
-extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startConfig, void* citizenTemplate,
+extern "C" float StartTown_FoundingAdultAge(const ComponentDescription* citizenTemplate);
+extern "C" float StartTown_FoundingChildAge(const ComponentDescription* citizenTemplate);
+extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startConfig, ComponentDescription* citizenTemplate,
                                                           void* entityList, const float base[3],
                                                           float age, char genderSel, char educated,
                                                           CitizenComponent** outCitizenComp);

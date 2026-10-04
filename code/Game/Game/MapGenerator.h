@@ -39,7 +39,7 @@ public:
         System::String strPtr;  // +0x00: the referenced External's name
         int32_t  factoryGen;    // +0x08: factory generation counter (-1 = unresolved)
         uint8_t  _pad0C[4];     // +0x0C: padding
-        void*    resolved;      // +0x10: resolved External* pointer
+        ::Object::External* resolved;   // +0x10: the resolved External (each pool's element class; readers downcast)
     };
     // Generic dynamic array header: data + count + capacity (0x10), typed by its
     // element (B.4 GAME-c: the element per pool is the stride retail's dtor

@@ -323,9 +323,9 @@ void Game_TerrainResolveMaterial(void* refTriple) {
     if (ref->factoryGen == factoryGen) return;
 
     System::Filename fnameBuf(ref->strPtr);  // String @ +0
-    void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge  // LEFT: const_cast ExternalFactory::Find returns a const External* (ledger S3: decide at the close)
+    ::Object::External* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge  // LEFT: const_cast ExternalFactory::Find returns a const External* (ledger S3: decide at the close)
 
-    void* result = nullptr;
+    ::Object::External* result = nullptr;
     if (obj) {
         // Retail: IsDerivedFrom against [0x140151350] (?_typeInfo@MaterialInstance@
         // Graphics@@); ENDGAME B.3.9 TI-REST: the class accessor.
