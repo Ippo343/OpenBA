@@ -178,7 +178,7 @@ void SerU32(void* impl, uint32_t* v) {
 }
 void SerI32(void* impl, int32_t* v) {
     reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeUInt(    // +0x98 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-        *reinterpret_cast<uint32_t*>(v), nullptr);  // LEFT: as SerU32 above
+        *reinterpret_cast<uint32_t*>(v), nullptr);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 }
 
 }  // namespace
@@ -356,7 +356,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 // object's CURRENT size and then serializes it, so the same
                 // instruction reads on a load and writes on a save.
                 int32_t depCount = obj->_refs._size;              // 1800bc790
-                SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));  // LEFT: as SerU32 above
+                SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 
                 if (ser.stream->direction == 0) {                 // 1800bc7b0
                     ++g_lc.sizedArray;

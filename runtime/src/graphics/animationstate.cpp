@@ -198,9 +198,9 @@ extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
 // instance table is a cache keyed by the pointer, and the reference that keeps
 // the group alive is the LAYER's, not the cache entry's.
 extern "C" void* RtGraphics_AnimInstance_CopyCtor(void* dstv, const void* srcv) {
-    AnimationManager::Instance* d = static_cast<AnimationManager::Instance*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
+    AnimationManager::Instance* d = static_cast<AnimationManager::Instance*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
     const AnimationManager::Instance* s =
-        static_cast<const AnimationManager::Instance*>(srcv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
+        static_cast<const AnimationManager::Instance*>(srcv);  // LEFT: SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
 
     d->_group     = s->_group;
     d->_animIndex = s->_animIndex;

@@ -568,7 +568,7 @@ System::Configuration::~Configuration() {
     //
     // 0x1800c518f -- the string->string map at +0x10: rtsetclear::Clear
     // (0x18000f7d0).
-    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));  // LEFT: SIG rtsetclear::Clear takes the erased rtsetavl::Set (R-COLL, wave X)
+    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));  // LEFT: SIG rtsetclear::Clear takes the erased rtsetavl::Set (R-COLL)
 
     // 0x1800c519d -- the tail call, on `this` itself:
     // rtcoll::RtColl_ArrayDtorElem_180010ab0.

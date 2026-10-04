@@ -94,7 +94,7 @@ inline uint32_t TypeNameCRC(const char* name) { return ::Object::TypeNameCRC(nam
 // lands correctly in a hand-built table at retail slot indices. It is what
 // makes the class usable before any of its subclasses convert.
 inline const ::Object::Base* AsBase(const void* self) {
-    return reinterpret_cast<const ::Object::Base*>(self);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+    return reinterpret_cast<const ::Object::Base*>(self);  // LEFT: SIG RtObject_Base_IsDerivedFrom takes const void* self (its callers hand in untyped refs)
 }
 
 

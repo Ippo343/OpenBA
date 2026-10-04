@@ -235,12 +235,6 @@ const Matrix kZUpToYUp = {{
 // ABI, and delegates with a QUALIFIED non-virtual call.
 // ============================================================================
 
-// ?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z — retail 0x1800fe5c0
-extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustum) {
-    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge  // LEFT: POD the Camera ctor door is extern "C" (wave X)
-        ->::Graphics::Camera::SetFrustum(*frustum);
-}
-
 // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
 // — retail 0x1800fe960. Returns `this` in RAX like every MSVC constructor.
 // The body is the member constructor `Graphics::Camera::Camera(const Frustum&,
