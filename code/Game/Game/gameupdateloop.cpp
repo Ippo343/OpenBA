@@ -530,10 +530,9 @@ extern "C" const char* GameUpdateLoop_SimProfName(int phase) {
 }
 
 bool GameUpdateLoop::Update(const System::Time& timeRef) {
-    // Retail's slot takes the Time by const&; the tick bodies below take a mutable
-    // Time* / int64_t* (EntityList::Update, Weather_ResetTime_Reimpl,
-    // CitizenBehavior::Update), so the body holds it through a mutable pointer.
-    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge  // LEFT: const_cast the tick bodies take a mutable Time* (EntityList::Update, Weather_ResetTime_Reimpl, CitizenBehavior::Update; headers outside this set) where retail's slot passes const&
+    // Retail's slot takes the Time by const&; the tick bodies below take it as a
+    // const Time* (CitizenBehavior::Update still as a mutable int64_t*, below).
+    const System::Time* time = &timeRef;
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
     // in-game world build) is not yet implemented, so on the new-game path
     // m_game (+0xF8) is still null when the loader chain transitions in. Every
@@ -825,7 +824,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                m_citizenList->Update(&time->_ticks);   // 0x14008c2b0
+                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -849,8 +848,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
         // Step 4: Achievement check
         TRACE("[GameUpdateLoop::Update] checking achievements (scenarioInstance=%p, completed=%d)...\n",
-               m_scenarioInstance, (int)m_scenarioCompleted);
-        if (m_scenarioInstance != nullptr && m_scenarioCompleted == 0) {
+               m_scenarioInstance.Get(), (int)m_scenarioCompleted);
+        if (m_scenarioInstance.Get() != nullptr && m_scenarioCompleted == 0) {
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
             m_scenarioInstance->Update(*time);   // B.3.7 bridge
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
@@ -1465,7 +1464,6 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
-        // LEFT: PlayerController::camera is raw storage (H5).
         m_renderer->Draw(
             *videoCtx, alpha,
             *m_graphicsScene,
@@ -1988,10 +1986,9 @@ void GameUpdateLoop::Shutdown() {
     }
 
     // Delete scenario instance
-    if (m_scenarioInstance != nullptr) {
+    if (m_scenarioInstance.Get() != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown] deleting scenario instance...\n");
-        reinterpret_cast< ::Object::InternalBasePtr*>(&m_scenarioInstance)->DeletePtr(  // LEFT: GameUpdateLoop.h declares m_scenarioInstance as a raw pointer where retail has an InternalPtr (H5, W0 header outside this set)
-            );   // B.3.3 bridge
+        m_scenarioInstance.DeletePtr();
     }
 
     // Free/destroy all subsystems
@@ -2338,7 +2335,7 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState,
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;
-    m_scenarioInstance  = scenarioIbp.Get();   // *param_3
+    m_scenarioInstance  = scenarioIbp;   // *param_3 (0x1400981c3)
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }

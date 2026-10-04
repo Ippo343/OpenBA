@@ -760,10 +760,10 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     // retail returns early here and this IBP is NOT the one that faults. Kept
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
-    reinterpret_cast<Object::InternalBasePtr*>(&m_scenarioInstance)->Serialize(ser);   // B.3.4 bridge   // LEFT: GameUpdateLoop::m_scenarioInstance is an InternalPtr held as a raw pointer (GameUpdateLoop.h, not this agent's)
-    if (m_scenarioInstance != nullptr) {
+    m_scenarioInstance.Object::InternalBasePtr::Serialize(ser);
+    if (m_scenarioInstance.Get() != nullptr) {
         uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
-        if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance, achTid))
+        if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance.Get(), achTid))
             m_scenarioInstance = nullptr;
     }
 

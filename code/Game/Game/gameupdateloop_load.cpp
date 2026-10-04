@@ -1477,7 +1477,7 @@ void GameUpdateLoop::Load() {
             if (scenario && achTypeId)
                 checked = ::Object::IsDerivedFromNullSafe(scenario, achTypeId) ? scenario : nullptr;
 
-            Achievement::AchievementInstance* inst = m_scenarioInstance;
+            Achievement::AchievementInstance* inst = m_scenarioInstance.Get();
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
                     achievementId, (void*)inst, (void*)scenario, (void*)checked,

@@ -197,7 +197,9 @@ public:
     Minimap* m_imageCapture;        // +0x148
 
     // Scenario/achievement
-    Achievement::AchievementInstance* m_scenarioInstance; // +0x150 InternalBasePtr<AchievementInstance> (ctor: *p3)
+    // +0x150 (ctor 0x140098060: the member's null store 0x1400981bc, then *p3
+    // copied in 0x1400981c3 / 0x1400981c6; no destructor: Shutdown DeletePtrs it)
+    Object::InternalPtr<Achievement::AchievementInstance> m_scenarioInstance;
     bool     m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed (Serialize bool, 0x140095a90)
     uint8_t  _pad159[3];            // +0x159
     int32_t  m_scenarioIndex;       // +0x15C index into scenario list (-1 = none)
