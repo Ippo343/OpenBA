@@ -32,6 +32,7 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Work/exe_bodies.h"
+#include "Action/PathAvl.h"        // AvlTreeHead (the version-0 migration set header)
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Player/exe_bodies.h"      // B3R: 0x140014b00 / 0x140014b40
@@ -308,17 +309,16 @@ void MarketWork::Persist(IO::Stream& stream) {
 
     if (version == 0) {
         // OLD format: deserialize into temp simple BST, then migrate
-        // (Set<InternalPtr<CitizenComponent>>, the T = 8 node; the helper takes the
-        // container as uintptr_t*: LEFT)
+        // (Set<InternalPtr<CitizenComponent>>, the T = 8 node, held as its raw header)
         using SimpleNode = Collection::Set<CitizenComponent*>::Node;
-        uintptr_t tempBST[2] = {0, 0};  // root=0, count=0
+        AvlTreeHead<SimpleNode> tempBST = {};  // root=0, count=0
 
         // Deserialize using simple BST format
-        WorkBST_BST_Serialize_296b0(tempBST, &serializer);
+        WorkBST_BST_Serialize_296b0(&tempBST, &serializer);
 
         // In-order traverse temp BST
         // For each entry, re-insert into MarketWork's BST using market insert
-        SimpleNode* tempRoot = reinterpret_cast<SimpleNode*>(tempBST[0]);   // LEFT: ERASED the WorkBST core takes the set as uintptr_t*; this local set is its raw root + count (a Collection::Set local would add a dtor)
+        SimpleNode* tempRoot = tempBST.root;
         if (tempRoot != nullptr) {
             // Find leftmost in temp
             SimpleNode* node = tempRoot;
@@ -366,8 +366,8 @@ void MarketWork::Persist(IO::Stream& stream) {
 
             // Clean up temp simple BST
             // Free left subtree, then right subtree, then root
-            WorkBase_TreeNodeFree_14c30(tempBST, tempRoot->left);
-            WorkBase_TreeNodeFree_14c30(tempBST, tempRoot->right);
+            WorkBase_TreeNodeFree_14c30(&tempBST, tempRoot->left);
+            WorkBase_TreeNodeFree_14c30(&tempBST, tempRoot->right);
             System::MemoryAllocator::MemFree(tempRoot);
         }
     } else {

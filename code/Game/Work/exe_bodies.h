@@ -121,6 +121,13 @@ template <class T>
 inline void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* serializer) {
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(set), serializer);  // CAST-OK: elem_stride
 }
+// A function-local set held as its raw {root, count} header (Action/PathAvl.h's
+// AvlTreeHead: no ctor, no dtor), e.g. MarketWork::Persist's version-0 migration set.
+template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
+template <class Node>
+inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
+}
 
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40
