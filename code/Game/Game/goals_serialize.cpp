@@ -60,7 +60,8 @@
 #include "Entity/EntityList.h"
 #include <new>
 #include "Game/exe_bodies.h"
-#include "Action/exe_bodies.h"   // Pf_AvlRebalanceA_a8c0 / B_13480
+#include "Action/exe_bodies.h"   // Pf_AvlRebalanceA_a8c0
+#include "Action/PathAvl.h"      // AvlRebalance (0x140013480)
 #include "Player/exe_bodies.h"   // TradeWork_impl_4b40
 #include "Work/exe_bodies.h"     // WorkBST / WorkCellBST removes, WorkBase_TreeNodeFree_*
 
@@ -73,7 +74,7 @@ namespace {
 // exe_bodies.h WORK-a) are not this block's.
 // ============================================================
 void RebalanceIdTree(WorkSchedulerIdNode** root, WorkSchedulerIdNode* from) {        // 0x140013480
-    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));
+    AvlRebalance(root, &from);
 }
 void RebalanceCountTree(WorkSchedulerCountNode** root, WorkSchedulerCountNode* from) { // 0x14001a8c0
     Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));

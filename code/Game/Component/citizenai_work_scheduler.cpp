@@ -33,6 +33,7 @@
 #include "Component/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Action/exe_bodies.h"
+#include "Action/PathAvl.h"   // AvlRebalance (0x140013480)
 #include "Work/exe_bodies.h"
 #include "Player/exe_bodies.h"
 
@@ -362,7 +363,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
                 }
                 if (linked) {
                     WorkSchedulerIdNode* tmp = parent;
-                    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&tree->root), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceB_13480
+                    AvlRebalance(&tree->root, &tmp);   // 0x140013480
                 }
             }
             tree->count += 1;   // sub-tree count++
@@ -466,7 +467,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
             }
             if (linked) {
                 WorkSchedulerIdNode* tmp = parent;
-                Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&innerField->root), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceB_13480
+                AvlRebalance(&innerField->root, &tmp);   // 0x140013480
             }
         }
         found->bucket.entries.count += 1;   // profession bucket count++

@@ -127,13 +127,10 @@ void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattan, 
 void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost);  // 0x1400a6a30 -> PathfinderThread::SetStepCost
 
 // ---- action_pf_avl.cpp
-extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node);  // 0x14000e450
-extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node);  // 0x14000e580
-extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node);  // 0x140013480
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
 extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x14001a4f0
-extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x140025a10
-extern "C" void PathPairs_Clear_25b30(int64_t* param_1);  // 0x140025b30
+struct PathGraph;
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_);  // 0x1400c54e0
