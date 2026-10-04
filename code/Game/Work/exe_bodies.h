@@ -54,7 +54,8 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, Compon
 extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- work_act_clear.cpp
-void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3, void** param_4, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
+class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
+void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t param_2, int param_3, NaturalResourceComponent* const* targets, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
 
 // ---- work_act_consume.cpp
 void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* param_3, float* param_4, float param_5, int64_t param_6, uint64_t param_7, uint32_t param_8, int* param_9, uint32_t param_10, uint32_t param_11, float param_12, uint32_t param_13);  // 0x1400bef70

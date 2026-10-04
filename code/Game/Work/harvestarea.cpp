@@ -306,12 +306,11 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 int harvestMode = pairedAvailable ? 2 : 1;
                                 uint32_t packedCellInfo = ((uint32_t)cellIdx2 << 16) | (uint32_t)i;
 
-                                // (0x1400c1530 takes the NaturalResource array as void**: LEFT)
                                 WorkAct_HarvestAreaCtor_c1530(
                                     actionBuf,                    // citizenIBP
                                     field_20,                     // priority
                                     harvestMode,                  // 1=single, 2=paired
-                                    reinterpret_cast<void**>(natRes),   // target NatRes array (harvestMode entries)   // LEFT: SIG WorkAct_HarvestAreaCtor_c1530
+                                    natRes,                       // target NatRes array (harvestMode entries)
                                     pathPos,                      // position
                                     packedCellInfo,               // packed cell indices
                                     0);                           // param7

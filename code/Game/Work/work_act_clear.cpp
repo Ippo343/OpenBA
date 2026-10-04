@@ -47,6 +47,7 @@
 #include "Action/CompleteTask.h"
 #include "Action/MoveTo.h"
 #include "Action/PerformWork.h"
+#include "Component/NaturalResourceComponent.h"   // the targets (0x1400c1530 param_4)
 
 // ============================================================
 // Sub-callees, called by name (B3R)
@@ -140,13 +141,9 @@ static void WAC_AppendInline(CharacterComponent* character, Action* actionIbpVal
 //   param_5 (stack, [RBP+0x60]) = float* worldPos (heading + MoveTo destination)
 //   param_6 (stack, [RBP+0x68]) = u32 (CompleteTask param_5)
 //   param_7 (stack, [RBP+0x70]) = dword (unused on entry; reloaded as SendComponentMessage msg id)
-// LEFT: the caller (HarvestArea, WORK-b) hands the citizen reference and the component
-// array as void*; the action ctors (ACT's C bodies) take their references as uint64_t*.
-void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
-                                   void** param_4, float* param_5, uint32_t param_6,
+void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t param_2, int param_3,
+                                   NaturalResourceComponent* const* targets, float* param_5, uint32_t param_6,
                                    uint32_t /*param_7*/) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG WorkAct_HarvestAreaCtor_c1530
-    Component* const* targets = reinterpret_cast<Component* const*>(param_4);   // LEFT: SIG WorkAct_HarvestAreaCtor_c1530
 
     // --- heading = Entity_impl_29a0(param_5, &{param_4[0] entity}) → XMM6 (0x1400c1563..0x1400c158b) ---
     ComponentEntity* firstEntityInner = targets[0]->_entity;
