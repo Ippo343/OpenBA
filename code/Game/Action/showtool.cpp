@@ -176,7 +176,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // same MeshInstance default-ctor the StorageDisplayComponent pile renderer uses
     // before its own SetMesh+AddObject — and store -1 at +0xb8 + 0x120 (which is the
     // citizen's toolId, +0x1D8).
-    void* heldVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
+    void* heldVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
     if (!heldVt) {
         ::new (static_cast<void*>(citizen->meshInstance)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         citizen->toolId = -1;
@@ -205,7 +205,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // and SetMesh'd as one. The `meshVt` test stays: it tests the OBJECT (a
     // never-constructed held-item slot is zeroed), not a door pointer.
     const System::Time time0{0};
-    void* meshVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
+    void* meshVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
     if (meshVt) {
         held->Update(time0);
     }

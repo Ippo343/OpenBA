@@ -50,8 +50,7 @@ extern "C" void OrchardDiag_NoteHarvestConstructed();
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
 HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
-    _field48 = nullptr;
-    _field50 = 0;
+    // +0x48 / +0x50: the `_cells` member's ctor zeroes the set (retail 0x1400ee060, under its EH state).
     _field58 = nullptr;   // byte-array base
     _field60 = 0;         // count (+0x60) + capacity (+0x64): one qword store in retail
     _field64 = 0;

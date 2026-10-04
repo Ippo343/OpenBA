@@ -69,10 +69,6 @@
 // class's table).
 ClearArea::ClearArea()
     : Work(),
-      field_48(nullptr),  // tree root
-      field_50(0),        // tree count
-      field_58(nullptr),  // cell tree root
-      field_60(0),        // cell count
       field_68(nullptr) { // map entity IBP
 }
 
@@ -85,10 +81,6 @@ ClearArea::ClearArea()
 ClearArea::ClearArea(void* pEntityIBP, ComponentDescription* descRef, uint8_t clearTrees,
                      uint8_t clearGround, uint8_t clearBuildings)
     : Work(pEntityIBP),
-      field_48(nullptr),
-      field_50(0),
-      field_58(nullptr),
-      field_60(0),
       field_68(descRef),
       field_70(clearTrees),
       field_71(clearGround),
@@ -100,29 +92,7 @@ ClearArea::ClearArea(void* pEntityIBP, ComponentDescription* descRef, uint8_t cl
 // Destroys ClearArea-specific data: frees both BST trees,
 // resets vtable to Work, then tail-calls Internal::~Internal.
 // The stamps (ClearArea, then Work) and the `~Internal` tail call are the compiler's.
-ClearArea::~ClearArea() {
-
-    // Free cell tree (+0x58)
-    WorkCellSetNode* cellRoot = field_58;
-    if (cellRoot) {
-        // Recursively free left subtree, then right subtree, then root
-        WorkBase_TreeNodeFree_e320(&field_58, cellRoot->left);
-        WorkBase_TreeNodeFree_e320(&field_58, cellRoot->right);
-        System::MemoryAllocator::MemFree(cellRoot);
-    }
-    field_58 = nullptr;
-    field_60 = 0;
-
-    // Free entity tree (+0x48)
-    WorkEntitySetNode* treeRoot = field_48;
-    if (treeRoot) {
-        WorkBase_TreeNodeFree_e320(&field_48, treeRoot->left);
-        WorkBase_TreeNodeFree_e320(&field_48, treeRoot->right);
-        System::MemoryAllocator::MemFree(treeRoot);
-    }
-    field_48 = nullptr;
-    field_50 = 0;
-}
+ClearArea::~ClearArea() = default;   // the two members' ~Set: +0x58, then +0x48 (0x1400e6810)
 
 // ============================================================
 // ClearArea::Serialize (0x1400e6740)
@@ -139,7 +109,7 @@ void ClearArea::Persist(IO::Stream& stream) {
     IO::Serializer serializer(stream, 1);
 
     // Serialize entity BST at +0x48
-    WorkLeaf_BstSerializeIBPpair_29c10(&field_48, &serializer);
+    WorkLeaf_BstSerializeIBPpair_29c10(&_entities, &serializer);
 
     // Serialize the description ExternalPtr at +0x68
     Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &serializer);
@@ -151,7 +121,7 @@ void ClearArea::Persist(IO::Stream& stream) {
     int version = serializer.GetVersion();
     if (version > 0) {
         // Serialize cell BST at +0x58
-        WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_58), &serializer);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+        WorkCellBST_Serialize_9de0(&_cells, &serializer);
 
         // Serialize clearGround bool at +0x71
         serializer.Serialize(*reinterpret_cast<bool*>(&field_71), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
@@ -174,11 +144,11 @@ int ClearArea::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** tree
     // If treeEntry is non-null, insert into entity BST at +0x48
     ComponentEntity* entryPtr = treeEntry ? *treeEntry : nullptr;
     if (entryPtr != nullptr) {
-        WorkLeaf_BstRemoveByIBP_298a0(&field_48, treeEntry);
+        WorkLeaf_BstRemoveByIBP_298a0(&_entities, treeEntry);
     }
 
     // Search cell BST (+0x58) for cellIndex and remove if found
-    WorkCellSetNode* node = field_58;
+    WorkCellSetNode* node = _cells._root;
     WorkCellSetNode* root = node;
     if (node == nullptr) return 0;
 
@@ -201,7 +171,7 @@ int ClearArea::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** tree
                     searchNode = searchNode->right;
                 } else {
                     // Remove this node from cell tree
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_58), searchNode);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                    WorkCellBST_Remove_ca60(&_cells, searchNode);
                     return 0;
                 }
             }
@@ -234,9 +204,9 @@ int ClearArea::OnCancel(CitizenComponent** citizen, ComponentEntity** treeEntry,
 int ClearArea::Cleanup() {
 
     // Clean up entity tree (+0x48)
-    while (field_50 > 0) {
+    while (_entities._count > 0) {
         // Find rightmost (last) node in BST
-        WorkEntitySetNode* node = field_48;
+        WorkEntitySetNode* node = _entities._root;
         WorkEntitySetNode* prev = node;
         while (node != nullptr) {
             prev = node;
@@ -255,9 +225,9 @@ int ClearArea::Cleanup() {
     }
 
     // Clean up cell tree (+0x58)
-    while (field_60 > 0) {
+    while (_cells._count > 0) {
         // Find leftmost node in cell BST
-        WorkCellSetNode* node = field_58;
+        WorkCellSetNode* node = _cells._root;
         WorkCellSetNode* prev = node;
         while (node != nullptr) {
             prev = node;
@@ -286,7 +256,7 @@ Profession** ClearArea::GetTarget(Profession** retbuf) {
 // ============================================================
 // Returns true (1) if tree count > 0, false (0) otherwise.
 int ClearArea::GetPriority() {
-    return (field_50 > 0) ? 1 : 0;
+    return (_entities._count > 0) ? 1 : 0;
 }
 
 // ============================================================
@@ -311,9 +281,9 @@ int ClearArea::GetPriority() {
 // ============================================================
 int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
-    // field_50 = tree count done, field_60 = ground count done
-    int treesCleared = field_50;
-    int groundCleared = field_60;
+    // _entities._count = tree count done, _cells._count = ground count done
+    int treesCleared = _entities._count;
+    int groundCleared = _cells._count;
 
 
     // --- Check if work entity is valid ---
@@ -434,7 +404,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
                 // Check if tree entity is already in our tracking BST at +0x48
                 // (the tree nodes stay raw: LEFT)
-                WorkEntitySetNode* bstNode = field_48;
+                WorkEntitySetNode* bstNode = _entities._root;
                 bool alreadyTracked = false;
                 while (bstNode != nullptr) {
                     ComponentEntity* nodeKey = bstNode->element.entity;
@@ -537,7 +507,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 WorkEntityAssignment insertPair;
                 insertPair.entity = treeEntity;
                 insertPair.citizen = *citizenIBP;
-                WorkLeaf_BstInsertByIBP_29920(&field_48, &workIBP, &insertPair);
+                WorkLeaf_BstInsertByIBP_29920(&_entities, &workIBP, &insertPair);
 
                 result = 2;
                 goto cleanup;
@@ -559,7 +529,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 if (tile->entity != nullptr) continue;
 
                 // Check if tile is already in ground tracking BST at +0x58
-                WorkCellSetNode* bstNode = field_58;
+                WorkCellSetNode* bstNode = _cells._root;
                 bool alreadyTracked = false;
                 while (bstNode != nullptr) {
                     int nodeKey = bstNode->element.cell;
@@ -633,7 +603,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 groundPair.cell = static_cast<int32_t>(tileIdx);
                 groundPair._pad04 = 0;
                 groundPair.citizen = *citizenIBP;
-                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_58), &workIBP, &groundPair);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                WorkCellBST_Insert_9a40(&_cells, &workIBP, &groundPair);
 
                 result = 0;
                 goto cleanup;
@@ -714,7 +684,7 @@ int ClearArea::Validate() {
     uint32_t removeCap = 0;
 
     // ---- Phase 1: Validate entity tree at +0x48 ----
-    WorkEntitySetNode* root48 = field_48;
+    WorkEntitySetNode* root48 = _entities._root;
     if (root48 != nullptr) {
         // Find leftmost node
         WorkEntitySetNode* node = root48;
@@ -797,7 +767,7 @@ int ClearArea::Validate() {
     }
 
     // ---- Phase 2: Validate cell tree at +0x58 ----
-    WorkCellSetNode* root58 = field_58;
+    WorkCellSetNode* root58 = _cells._root;
     if (root58 != nullptr) {
         // Find leftmost node
         WorkCellSetNode* node = root58;
@@ -843,7 +813,7 @@ int ClearArea::Validate() {
     // ---- Phase 3: Remove invalid entries from entity tree ----
     if ((int)removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            WorkEntitySetNode* bstNode = field_48;
+            WorkEntitySetNode* bstNode = _entities._root;
             while (bstNode != nullptr) {
                 uintptr_t nodeKey = reinterpret_cast<uintptr_t>(bstNode->element.entity);   // LEFT: known_port_issues row 220 (compared with the collected citizens)
                 if (removeArr[i] < nodeKey) {
@@ -851,7 +821,7 @@ int ClearArea::Validate() {
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found — remove it
-                        WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                        WorkCellBST_Remove_ca60(&_entities, bstNode);
                         break;
                     }
                     bstNode = bstNode->right;

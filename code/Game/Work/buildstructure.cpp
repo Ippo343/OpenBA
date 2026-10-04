@@ -117,7 +117,7 @@ BuildStructure::~BuildStructure() {
 // OnComplete (0x1400e4f80)
 // ============================================================
 int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
     field_50[slotIndex] = 0;
     return 0;
 }
@@ -126,7 +126,7 @@ int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** 
 // OnCancel (0x1400e4f40)
 // ============================================================
 int BuildStructure::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
     field_50[slotIndex] = 0;
     return 0;
 }
@@ -185,7 +185,7 @@ void BuildStructure::Persist(IO::Stream& stream) {
     ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
 
     // Serialize count (+0x58), resize array on load
     int count = field_58;
@@ -507,7 +507,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                     }
 
                     // Insert claimed position into BST at +0x60
-                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
 
                     // Mark build position as claimed
                     field_50[chosenIndex] = 1;
@@ -825,7 +825,7 @@ extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** bui
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
 // citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: the force harness drives it through a void* function pointer
+    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: SIG ForceWork::DriveWhenIdle (Game/force_work.h, X3-GAME) takes every driver as int (*)(void* work, void* citizenIBP)
 }
 
 // Execute-readiness gate for the force harness (no retail address). B3R: BuildStructure's

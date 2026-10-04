@@ -199,8 +199,8 @@ Work* CF_MakePlantArea(CropFieldComponent* comp) {
     ComponentEntity* entity = comp->_entity;
     PlantArea* work = new (mem) PlantArea();
     work->InitFromEntity(&entity);
-    work->field_48 = nullptr;
-    work->field_50 = 0;
+    work->_cells._root = nullptr;
+    work->_cells._count = 0;
     work->field_58 = nullptr;
     work->field_60 = 0;
     work->_pad64[0] = work->_pad64[1] = work->_pad64[2] = work->_pad64[3] = 0;
@@ -216,8 +216,8 @@ Work* CF_MakeHarvestArea(CropFieldComponent* comp) {
     ComponentEntity* entity = comp->_entity;
     HarvestArea* work = new (mem) HarvestArea();
     work->InitFromEntity(&entity);
-    work->_field48 = nullptr;
-    work->_field50 = 0;
+    work->_cells._root = nullptr;
+    work->_cells._count = 0;
     work->_field58 = nullptr;
     work->_field60 = 0;
     work->_field64 = 0;
@@ -232,8 +232,8 @@ Work* CF_MakeTendArea(CropFieldComponent* comp) {
     ComponentEntity* entity = comp->_entity;
     TendArea* work = new (mem) TendArea();
     work->InitFromEntity(&entity);
-    work->bstRoot = nullptr;
-    work->workerCount = 0;
+    work->_citizens._root = nullptr;
+    work->_citizens._count = 0;
     work->tendMode = 0;
     return work;
 }

@@ -40,7 +40,7 @@ public:
     PastureWork();                                                  // (Work_GenericCtor shape)
     explicit PastureWork(void* entityIBP);                          // 0x1400f2d80
 
-    // 0x1400f2ce0: frees the +0x48 citizen BST
+    // 0x1400f2ce0: the +0x48 citizen Set's ~Set (its Clear), then the base stamps
     ~PastureWork() override;                                        // [0]  0x14002bf70
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400f2c60
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400f2370
@@ -52,15 +52,18 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- PastureWork fields (+0x48) ---
-    // +0x48: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
-    // Cleanup 0x1400f2b90 reads the element's +0x278). The container stays raw (H5).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* _field48;    // +0x48: zeroed
-    int32_t  _field50;           // +0x50: assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node; Cleanup 0x1400f2b90
+    // reads the element's +0x278): the assigned citizens. A real member: the ctor (0x1400f2d80)
+    // zeroes root (qword) and count (dword) under an EH state, the dtor 0x1400f2ce0 runs its
+    // inlined Clear before the AutoPickupWork / Work stamps. `_citizens._count` (+0x50) is
+    // the assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`). The Set ctor also zeroes
+    // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    CitizenSet _citizens;
 };
 
 static_assert(sizeof(PastureWork) == 0x58, "PastureWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(PastureWork) == 8, "PastureWork is 8-aligned");
-static_assert(offsetof(PastureWork, _field48) == 0x48, "PastureWork +0x48");
-static_assert(offsetof(PastureWork, _field50) == 0x50, "PastureWork +0x50");
+static_assert(offsetof(PastureWork, _citizens) == 0x48, "PastureWork +0x48");
+static_assert(offsetof(PastureWork, _citizens) + offsetof(PastureWork::CitizenSet, _count) == 0x50, "PastureWork +0x50");

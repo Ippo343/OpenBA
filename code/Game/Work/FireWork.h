@@ -45,10 +45,10 @@ public:
     // `??0Internal` door + stamp in FireWork_CtorFull_e9bd0.
     FireWork(void* pEntityIBP, uint32_t capacity);
 
-    // PORT GAP (retail 0x1400e9ac0) — B38 D9: retail's dtor (reached from slot 0
-    // 0x14002a230) is its own body; the tree's slot 0 was Work_GenericScalarDtor
-    // (stamp Work, ~Internal), which is what this empty dtor + the compiler chain
-    // still does. Whether retail frees the +0x50 citizen BST here is not read.
+    // retail 0x1400e9ac0 (reached from slot 0 0x14002a230): stamp FireWork, then the
+    // +0x50 set's inlined Clear (0x140014c30 on the root's +0x10 / +0x18 children, MemFree
+    // of the root, +0x50 = 0 qword, +0x58 = 0 dword), then stamp Work and ~Internal. That
+    // is the compiler's chain over the `_citizens` member's ~Set.
     ~FireWork() override = default;                                 // [0]  0x14002a230
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e9a50
     int   Execute(CitizenComponent** citizenIBP, System::Time* time) override;  // [4]  0x1400e9620
@@ -64,17 +64,20 @@ public:
                                  //        Execute 0x1400e9620 compares it signed with +0x58)
     uint32_t _field4C;           // +0x4C: the default ctor zeroes it (a qword store with +0x48);
                                  //        the 3-argument ctor 0x1400e9bd0 leaves it
-    // +0x50: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
-    // Cleanup 0x1400e99a0 reads the element's +0x278). The container stays raw (H5).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* _field50;
-    int32_t  _field58;           // +0x58: assigned count (0x14002a220 `CMP [RCX+0x58],EAX; SETG`)
-    uint8_t  _pad5C[4];          // +0x5C: padding
+    // +0x50: Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node; Cleanup
+    // 0x1400e99a0 reads the element's +0x278): the citizens fighting this fire. A real
+    // member: the ctor 0x1400e9bd0 zeroes root (qword) and count (dword) under an EH state
+    // and the dtor 0x1400e9ac0 runs its Clear. `_citizens._count` (+0x58) is the assigned
+    // count (0x14002a220 `CMP [RCX+0x58],EAX; SETG`). The Set's own ctor also zeroes its
+    // +0x0c pad (+0x5C), which retail's leaves (known_port_issues row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    CitizenSet _citizens;
 };
 
 static_assert(sizeof(FireWork) == 0x60, "FireWork is 0x60 (retail create MemAlloc)");
 static_assert(alignof(FireWork) == 8, "FireWork is 8-aligned");
 static_assert(offsetof(FireWork, _field48) == 0x48, "FireWork +0x48");
 static_assert(offsetof(FireWork, _field4C) == 0x4c, "FireWork +0x4c");
-static_assert(offsetof(FireWork, _field50) == 0x50, "FireWork +0x50");
-static_assert(offsetof(FireWork, _field58) == 0x58, "FireWork +0x58");
+static_assert(offsetof(FireWork, _citizens) == 0x50, "FireWork +0x50");
+static_assert(offsetof(FireWork, _citizens) + offsetof(FireWork::CitizenSet, _count) == 0x58, "FireWork +0x58");

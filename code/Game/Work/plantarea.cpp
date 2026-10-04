@@ -103,7 +103,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     CropFieldComponent* crop = field_10->FindComponent<CropFieldComponent>();   // 0x140005380
 
     // Step 2: Check max workers vs current tree count
-    int treeCount = field_50;
+    int treeCount = _cells._count;
     if (workComp->workState == 0) {
         int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         workComp->workState = maxWorkers;
@@ -141,7 +141,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             }
 
             // Check if cell is already assigned (in the set)
-            if (FindCell(field_48, i) != nullptr) {
+            if (FindCell(_cells._root, i) != nullptr) {
                 continue;
             }
 
@@ -152,7 +152,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             bool pairedAvailable = false;
             int pairedIdx = i + 1;
             if (pairedIdx < fieldCellCount && validityArray[pairedIdx] != 0) {
-                if (FindCell(field_48, pairedIdx) == nullptr) {
+                if (FindCell(_cells._root, pairedIdx) == nullptr) {
                     pairedAvailable = true;
                 }
             }
@@ -251,7 +251,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             insertKey.cell = i;
             insertKey._pad04 = 0;
             insertKey.citizen = *citizenRef;
-            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Insert_9a40(&_cells, &insertResult, &insertKey);
 
             // Mark primary cell as used (not available)
             validityArray[i] = 0;
@@ -263,7 +263,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
                 insertKey2.cell = pairedIdx;
                 insertKey2._pad04 = 0;
                 insertKey2.citizen = *citizenRef;
-                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult2, &insertKey2);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                WorkCellBST_Insert_9a40(&_cells, &insertResult2, &insertKey2);
                 validityArray[pairedIdx] = 0;
             }
 
@@ -278,7 +278,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     }
 
     // If tree count is 0 and we exhausted all cells, mark the field's slots done
-    if (field_50 == 0) {
+    if (_cells._count == 0) {
         WorkLeaf_PlantArea_b390(crop);
     }
 
@@ -316,14 +316,14 @@ int PlantArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*par
     uint32_t pairedIdx = (param4 >> 16) & 0xFFFF;
 
     // Search the set for the primary cell and remove it
-    WorkCellSetNode* node = field_48;
+    WorkCellSetNode* node = _cells._root;
     while (node != nullptr) {
         if ((int)primaryIdx < node->element.cell) {
             node = node->left;
         } else if ((int)primaryIdx > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&_cells, node);
             break;
         }
     }
@@ -347,14 +347,14 @@ int PlantArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*par
     // Handle paired cell (if within bounds)
     if ((int)pairedIdx < field_60) {
         // Remove paired cell from the set
-        WorkCellSetNode* node2 = field_48;
+        WorkCellSetNode* node2 = _cells._root;
         while (node2 != nullptr) {
             if ((int)pairedIdx < node2->element.cell) {
                 node2 = node2->left;
             } else if ((int)pairedIdx > node2->element.cell) {
                 node2 = node2->right;
             } else {
-                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node2);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                WorkCellBST_Remove_ca60(&_cells, node2);
                 break;
             }
         }
@@ -376,14 +376,14 @@ int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param
     uint32_t pairedIdx = (param4 >> 16) & 0xFFFF;
 
     // Search the set for the primary cell and remove it
-    WorkCellSetNode* node = field_48;
+    WorkCellSetNode* node = _cells._root;
     while (node != nullptr) {
         if ((int)primaryIdx < node->element.cell) {
             node = node->left;
         } else if ((int)primaryIdx > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&_cells, node);
             break;
         }
     }
@@ -397,14 +397,14 @@ int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param
         validityArray[pairedIdx] = 1;
 
         // Remove paired cell from the set
-        WorkCellSetNode* node2 = field_48;
+        WorkCellSetNode* node2 = _cells._root;
         while (node2 != nullptr) {
             if ((int)pairedIdx < node2->element.cell) {
                 node2 = node2->left;
             } else if ((int)pairedIdx > node2->element.cell) {
                 node2 = node2->right;
             } else {
-                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node2);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                WorkCellBST_Remove_ca60(&_cells, node2);
                 return 0;
             }
         }
@@ -419,11 +419,11 @@ int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param
 // of its leftmost entry.
 // ============================================================
 int PlantArea::Cleanup() {
-    int count = field_50;
+    int count = _cells._count;
 
     while (count > 0) {
         // Find the leftmost node
-        WorkCellSetNode* node = field_48;
+        WorkCellSetNode* node = _cells._root;
         WorkCellSetNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -434,7 +434,7 @@ int PlantArea::Cleanup() {
         CitizenComponent* citizen = leftmost->element.citizen;
         WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
 
-        count = field_50;
+        count = _cells._count;
     }
     return 0;
 }
@@ -453,7 +453,7 @@ int PlantArea::Validate() {
     uint32_t collectCount = 0;
     uint32_t collectCapacity = 0;
 
-    WorkCellSetNode* node = field_48;
+    WorkCellSetNode* node = _cells._root;
 
     if (node == nullptr) {
         goto cleanup;
@@ -541,14 +541,14 @@ cleanup:
     // Remove collected invalid nodes from the set
     if ((int)collectCount > 0) {
         for (uint32_t k = 0; k < collectCount; k++) {
-            WorkCellSetNode* bstNode = field_48;
+            WorkCellSetNode* bstNode = _cells._root;
             while (bstNode != nullptr) {
                 if (collectArray[k] < bstNode->element.cell) {
                     bstNode = bstNode->left;
                 } else if (collectArray[k] > bstNode->element.cell) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                    WorkCellBST_Remove_ca60(&_cells, bstNode);
                     break;
                 }
             }
@@ -575,10 +575,10 @@ Profession** PlantArea::GetTarget(Profession** outPtr) {
 // ============================================================
 // PlantArea::GetPriority [11] -- 0x140029860
 // 9 bytes, shared across ClearArea/PlantArea/PlantOrchard.
-// Returns (this->field_50 > 0).
+// Returns (this->_cells._count > 0).
 // ============================================================
 int PlantArea::GetPriority() {
-    return field_50 > 0 ? 1 : 0;
+    return _cells._count > 0 ? 1 : 0;
 }
 
 
@@ -594,7 +594,7 @@ void PlantArea::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize the set at +0x48
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);  // LEFT: H5 PlantArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+    WorkCellBST_Serialize_9de0(&_cells, &ser);
 
     // Serialize field cell count at +0x60
     int cellCountBuf[2] = { field_60, 0 };
@@ -644,16 +644,7 @@ PlantArea::~PlantArea() {
     field_58 = nullptr;
     field_60 = 0;
     _pad64[0] = _pad64[1] = _pad64[2] = _pad64[3] = 0;
-
-    // Free the set at +0x48
-    WorkCellSetNode* bstRoot = field_48;
-    if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_e320(&field_48, bstRoot->left);
-        WorkBase_TreeNodeFree_e320(&field_48, bstRoot->right);
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-    field_48 = nullptr;
-    field_50 = 0;
+    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400f4600).
 
 }
 
@@ -663,7 +654,7 @@ PlantArea::~PlantArea() {
 // Ctor 0x1400f4770 (factory variant): `??0Internal`, the Work base fields, the leaf
 // fields zeroed (the two stamps are the compiler's).
 PlantArea::PlantArea()
-    : Work(), field_48(nullptr), field_50(0), field_58(nullptr), field_60(0), _pad64{},
+    : Work(), field_58(nullptr), field_60(0), _pad64{},
       field_68(nullptr) {
 }
 
