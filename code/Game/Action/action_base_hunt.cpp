@@ -30,22 +30,6 @@
 #include "Action/PathSearch.h"   // RawArray
 
 // ============================================================
-// FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
-// These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
-// ============================================================
-// Reimpl of FUN_140005500 (FindComponent, type 0x1401c6f98 -> AnimalComponent)
-void* ActHunt_FindComponent_5500(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<AnimalComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<AnimalComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// Reimpl of HuntAnimal_helper_27e0 (FindComponent, type 0x1401c8000 -> WildAnimalComponent)
-void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<WildAnimalComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WildAnimalComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// ============================================================
 // HuntAnimal_helper_2a80 (0x140122a80) — is the hunt done: the HuntComponent's
 // description, when a HuntDescription, gives the hunt time (_f20 * DAT_140172234 seconds);
 // returns whether that Time (in raw ticks) is <= the component's huntProgress.
@@ -148,8 +132,7 @@ void NotifyEntityChanged(ComponentEntity* entity) {
         }
     }
 
-    // LEFT: ComponentEntity::_entityList (block WORK-a's header) is declared void*.
-    EntityList* owner = reinterpret_cast<EntityList*>(entity->_entityList);
+    EntityList* owner = entity->_entityList;
     if (owner != nullptr) {
         uint32_t newFlags = entity->_entityFlags;
         if (((oldFlags ^ newFlags) & 4) != 0) {
@@ -172,23 +155,19 @@ void NotifyEntityChanged(ComponentEntity* entity) {
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: 1 outside caller (Action/huntanimal.cpp, block ACT-b)
-bool ActHunt_IsAnimalReady_2a80(void* self) {
-    return HuntIsReady(reinterpret_cast<const HuntComponent*>(self));
-}
 
 // B4 FORWARD: outside callers in many files (the arrays arrive as void*)
 void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
-    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arrV), newCount,
-                      reinterpret_cast<void* const*>(valuePtr));
+    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arrV), newCount,   // LEFT: SIG ActHunt_DynArraySetCount_3110
+                      reinterpret_cast<void* const*>(valuePtr));   // LEFT: SIG ActHunt_DynArraySetCount_3110
 }
 
 // B4 FORWARD: outside callers in many files
 void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
-    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));
+    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));   // LEFT: SIG ActHunt_MarkEntityRemoval_c2ea0
 }
 
 // B4 FORWARD: outside callers in many files
 void ActHunt_NotifyEntityChanged_c3470(void* self) {
-    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));
+    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));   // LEFT: SIG ActHunt_NotifyEntityChanged_c3470
 }

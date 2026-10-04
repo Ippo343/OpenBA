@@ -24,17 +24,13 @@
 #include "Action/PathSearch.h"
 
 #include "Game/exe_bodies.h"          // Reimpl_Struct60B_CopyCtor, Reimpl_Struct60B_DtorRange
+#include "Game/WorldGeometryElements.h"   // GeometryBatch, GeometryBatchVertex (the 0x60 / 0x14 elements)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>    // [POOLDIAG] diagnostic reporting
 #include <cstdlib>
 
 namespace {
-// MemAlloc helper mirroring System::MemoryAllocator::MemAlloc(size, align) (static).
-static inline void* PfMemAlloc(uint64_t size, uint64_t align) {
-    return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
-}
-
 // The chunk size every pool grow allocates: growCount * stride + 0xf (the chunk link
 // and the rounding), rounded down to 8 with retail's signed-division idiom.
 static inline uint64_t PoolChunkBytes(const PathNodePool* pool) {
@@ -296,106 +292,96 @@ void RegionNodesFree(RegionNode* first, int count) {
 }
 
 // ============================================================
-// FUN_14001ee40 — resize a vector<0x14-byte element>, copy (no element ownership).
+// FUN_14001ee40 — resize a GeometryBatch's vertex array (element 0x14), copy only.
 // ============================================================
-// arr = {ptr@+0, count@+8(int), cap@+0xc(int)}. Resize to newCount: grow (3x on +1 from
-// non-empty) via MemAlloc(cap*0x14, 2), copy existing 0x14-byte elements (16+4 bytes:
-// two qwords + a dword) from old buffer or leave new slots untouched (this variant copies
-// only the existing range; new slots are NOT written because lVar5<iVar1 guards the copy and
-// there is no else branch). MemFree old.
-// LEFT (B.4 ACT-a): the element is the Player tessellation's / DecalComponent's 0x14
-// record (align 2), declared by neither block yet; its callers are in PLAYER / COMP.
+// Resize to newCount: grow (3x on +1 from non-empty) via MemAlloc(cap*0x14, 2), copy
+// the existing elements from the old buffer; new slots are NOT written (the copy is
+// guarded by lVar5 < iVar1 and there is no else branch). MemFree old.
+// The element is GeometryBatchVertex (Game/WorldGeometryElements.h): retail's callers
+// are the vertex-array serializer 0x14001f9c0, the decal / road builders 0x1400ace40,
+// 0x1400b0d00 and 0x1400af370; the copy is retail's qword, qword, dword
+// (0x14001eec4..0x14001eed9).
 void Pf_VectorResize14_ee40(int64_t* param_1, int param_2) {
-    int iVar1 = static_cast<int>(param_1[1]);
+    RawArray<GeometryBatchVertex>* arr = reinterpret_cast<RawArray<GeometryBatchVertex>*>(param_1);   // LEFT: SIG Pf_VectorResize14_ee40
+    int iVar1 = arr->size;
     if (param_2 != iVar1) {
-        void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
-        *reinterpret_cast<int*>(param_1 + 1) = param_2;
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) < param_2) {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2;
+        GeometryBatchVertex* old = arr->data;
+        arr->size = param_2;
+        if (arr->capacity < param_2) {
+            arr->capacity = param_2;
             if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2 * 3;
+                arr->capacity = param_2 * 3;
             }
-            void* pvVar4 = PfMemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc)) * 0x14, 2);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar4);
+            arr->data = static_cast<GeometryBatchVertex*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x14, 2));
         }
         int iVar3 = 0;
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
+        if (old == arr->data) {
             iVar3 = iVar1;
         }
         int64_t lVar5 = iVar3;
         if (iVar3 < param_2) {
-            int64_t lVar6 = lVar5 * 0x14;
             do {
                 if ((lVar5 < iVar1)) {
-                    uint64_t* puVar7 = reinterpret_cast<uint64_t*>(param_1[0] + lVar6);
-                    if (puVar7 != nullptr) {
-                        puVar7[0] = *reinterpret_cast<uint64_t*>(lVar6 + reinterpret_cast<int64_t>(pvVar2));
-                        puVar7[1] = *reinterpret_cast<uint64_t*>(lVar6 + 8 + reinterpret_cast<int64_t>(pvVar2));
-                        *reinterpret_cast<uint32_t*>(puVar7 + 2) = *reinterpret_cast<uint32_t*>(lVar6 + 0x10 + reinterpret_cast<int64_t>(pvVar2));
+                    GeometryBatchVertex* dst = &arr->data[lVar5];
+                    if (dst != nullptr) {
+                        *dst = old[lVar5];
                     }
                 }
                 lVar5 = lVar5 + 1;
-                lVar6 = lVar6 + 0x14;
             } while (lVar5 < param_2);
         }
-        if (pvVar2 != reinterpret_cast<void*>(param_1[0])) {
-            System::MemoryAllocator::MemFree(pvVar2);
+        if (old != arr->data) {
+            System::MemoryAllocator::MemFree(old);
         }
     }
 }
 
 // ============================================================
-// FUN_14001f8d0 — resize a vector<0x14-byte element>, copy w/ append-fill from param_3.
+// FUN_14001f8d0 — resize a GeometryBatch's vertex array (element 0x14), fill from *param_3.
 // ============================================================
-// Variant of ee40 that fills new slots (lVar7>=iVar1) from the template element *param_3
-// (two qwords + a dword). Copy existing 0x14-byte elements from the old buffer; for slots at
-// or past the old count, copy from param_3. MemFree old. The loop counts (param_2-iVar4)
-// iterations and walks both the dst (param_1[0]+lVar6) and the old-buffer cursor
-// (puVar9 = pvVar2+lVar6) in lockstep.
-// LEFT (B.4 ACT-a): the 0x14 element is undeclared (see Pf_VectorResize14_ee40).
+// Variant of ee40 that fills new slots (lVar7>=iVar1) from the template vertex *param_3.
+// Copy existing elements from the old buffer; for slots at or past the old count, copy
+// from the template. MemFree old. The loop counts (param_2-iVar4) iterations and walks
+// the dst and the old-buffer cursor in lockstep. Callers: the decal tessellator
+// 0x1400ace40 (twelve sites) and the road mesh rebuild 0x1400af370.
 void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3) {
-    int iVar1 = static_cast<int>(param_1[1]);
+    RawArray<GeometryBatchVertex>* arr = reinterpret_cast<RawArray<GeometryBatchVertex>*>(param_1);   // LEFT: SIG Pf_VectorResize14Fill_f8d0
+    const GeometryBatchVertex* fill = reinterpret_cast<const GeometryBatchVertex*>(param_3);          // LEFT: SIG Pf_VectorResize14Fill_f8d0
+    int iVar1 = arr->size;
     if (param_2 != iVar1) {
-        void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
-        *reinterpret_cast<int*>(param_1 + 1) = param_2;
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) < param_2) {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2;
+        GeometryBatchVertex* old = arr->data;
+        arr->size = param_2;
+        if (arr->capacity < param_2) {
+            arr->capacity = param_2;
             if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2 * 3;
+                arr->capacity = param_2 * 3;
             }
-            void* pvVar3 = PfMemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc)) * 0x14, 2);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar3);
+            arr->data = static_cast<GeometryBatchVertex*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x14, 2));
         }
         int iVar4 = 0;
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
+        if (old == arr->data) {
             iVar4 = iVar1;
         }
         int64_t lVar7 = iVar4;
         if (iVar4 < param_2) {
-            int64_t lVar6 = lVar7 * 0x14;
             uint64_t uVar10 = static_cast<uint64_t>(static_cast<uint32_t>(param_2 - iVar4));
-            uint64_t* puVar9 = reinterpret_cast<uint64_t*>(lVar6 + reinterpret_cast<int64_t>(pvVar2));
+            const GeometryBatchVertex* puVar9 = old + lVar7;
             do {
-                uint64_t* puVar8 = reinterpret_cast<uint64_t*>(param_1[0] + lVar6);
-                if (puVar8 != nullptr) {
-                    uint64_t* puVar5 = param_3;
+                GeometryBatchVertex* dst = &arr->data[lVar7];
+                if (dst != nullptr) {
+                    const GeometryBatchVertex* src = fill;
                     if (lVar7 < iVar1) {
-                        puVar5 = puVar9;
+                        src = puVar9;
                     }
-                    puVar8[0] = puVar5[0];
-                    puVar8[1] = puVar5[1];
-                    *reinterpret_cast<uint32_t*>(puVar8 + 2) = *reinterpret_cast<uint32_t*>(puVar5 + 2);
+                    *dst = *src;
                 }
-                puVar9 = reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(puVar9) + 0x14);
+                puVar9 = puVar9 + 1;
                 lVar7 = lVar7 + 1;
-                lVar6 = lVar6 + 0x14;
                 uVar10 = uVar10 - 1;
             } while (uVar10 != 0);
         }
-        if (pvVar2 != reinterpret_cast<void*>(param_1[0])) {
-            System::MemoryAllocator::MemFree(pvVar2);
+        if (old != arr->data) {
+            System::MemoryAllocator::MemFree(old);
         }
     }
 }
@@ -470,57 +456,53 @@ void PathResultsResize(RawArray<PathResult>* results, int newSize, const PathRes
 }
 
 // ============================================================
-// FUN_14001fa80 — resize a vector<0x60-byte element> with element copy-ctor + dtor.
+// FUN_14001fa80 — resize a GeometryBatch array (element 0x60) with element copy-ctor + dtor.
 // ============================================================
-// 0x60-byte elements requiring a real copy-ctor (TradeWork_impl_sub_f5e0 @0x14001f5e0,
-// recurses into fdb0/fe60) and dtor (TradeWork_impl_sub_f250_sub_fb80 @0x14001fb80). Resize:
-// grow (3x on +1 from non-empty) via MemAlloc(cap*0x60, 8). For each slot, copy-construct from
-// the old buffer (or template *param_3 for appended slots). On shrink-in-place, destruct the
-// tail; on realloc, destruct the whole old buffer then MemFree it.
-// LEFT (B.4 ACT-a): the 0x60 element (the highlight tool's tile entry) and its copy / free
-// bodies belong to PLAYER / GAME; the only caller is Player/tool_base_highlight.cpp.
+// The element is GeometryBatch (Game/WorldGeometryElements.h): its copy-ctor 0x14001f5e0
+// and its range dtor 0x14001fb80 are called here. Callers: the decal slot manager
+// 0x1400b0d80 (WorldGeometry +0x1F0) and the road mesh rebuild 0x1400af370 (+0x200).
+// Resize: grow (3x on +1 from non-empty) via MemAlloc(cap*0x60, 8). For each slot,
+// copy-construct from the old buffer (or the template *param_3 for appended slots). On
+// shrink-in-place, destruct the tail; on realloc, destruct the whole old buffer then
+// MemFree it.
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
-    int iVar1 = static_cast<int>(param_1[1]);
+    RawArray<GeometryBatch>* arr = reinterpret_cast<RawArray<GeometryBatch>*>(param_1);   // LEFT: SIG Pf_VectorResize60_fa80
+    const GeometryBatch* fill = reinterpret_cast<const GeometryBatch*>(param_3);          // LEFT: SIG Pf_VectorResize60_fa80
+    int iVar1 = arr->size;
     if (param_2 != iVar1) {
-        void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
-        *reinterpret_cast<int*>(param_1 + 1) = param_2;
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) < param_2) {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2;
+        GeometryBatch* old = arr->data;
+        arr->size = param_2;
+        if (arr->capacity < param_2) {
+            arr->capacity = param_2;
             if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2 * 3;
+                arr->capacity = param_2 * 3;
             }
-            void* pvVar3 = PfMemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc)) * 0x60, 8);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar3);
+            arr->data = static_cast<GeometryBatch*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x60, 8));
         }
         int iVar6 = 0;
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
+        if (old == arr->data) {
             iVar6 = iVar1;
         }
         if (iVar6 < param_2) {
-            int64_t lVar7 = static_cast<int64_t>(iVar6) * 0x60;
             do {
-                int64_t* plVar4 = reinterpret_cast<int64_t*>(param_1[0] + lVar7);
-                if (plVar4 != nullptr) {
-                    uint64_t* puVar5 = reinterpret_cast<uint64_t*>(lVar7 + reinterpret_cast<int64_t>(pvVar2));
+                GeometryBatch* dst = &arr->data[iVar6];
+                if (dst != nullptr) {
+                    const GeometryBatch* src = old + iVar6;
                     if (iVar1 <= iVar6) {
-                        puVar5 = param_3;
+                        src = fill;
                     }
-                    Reimpl_Struct60B_CopyCtor(plVar4, puVar5);   // 0x14001f5e0
+                    Reimpl_Struct60B_CopyCtor(dst, src);   // 0x14001f5e0
                 }
                 iVar6 = iVar6 + 1;
-                lVar7 = lVar7 + 0x60;
             } while (iVar6 < param_2);
         }
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
+        if (old == arr->data) {
             if (param_2 < iVar1) {
-                Reimpl_Struct60B_DtorRange(nullptr,   // 0x14001fb80
-                                reinterpret_cast<void*>(static_cast<int64_t>(param_2) * 0x60 + reinterpret_cast<int64_t>(pvVar2)),
-                                iVar1 - param_2);
+                Reimpl_Struct60B_DtorRange(nullptr, old + param_2, iVar1 - param_2);   // 0x14001fb80
             }
         } else {
-            Reimpl_Struct60B_DtorRange(nullptr, pvVar2, iVar1);   // 0x14001fb80
-            System::MemoryAllocator::MemFree(pvVar2);
+            Reimpl_Struct60B_DtorRange(nullptr, old, iVar1);   // 0x14001fb80
+            System::MemoryAllocator::MemFree(old);
         }
     }
 }
@@ -621,25 +603,4 @@ Collection::Array<int32_t>* IntArrayAssign(Collection::Array<int32_t>* dst,
         return dst;
     }
     return dst;
-}
-
-// ===========================================================================
-// B4 FORWARD: the C spellings other blocks' files still call, one line each.
-// ===========================================================================
-// B4 FORWARD: 1 outside caller (Game/keystone_a_gamedtor.cpp)
-void Pf_BstFreeRecursive_d400(uintptr_t param_1, uint64_t* param_2) {
-    reinterpret_cast<PathOpenSet*>(param_1)->FreeSubtree(reinterpret_cast<PathOpenNode*>(param_2));
-}
-// B4 FORWARD: 1 outside caller (Game/pathfinder_seed.cpp)
-void Pf_ArrayResize18_d830(int64_t* param_1, int param_2) {
-    SearchNodesResize(reinterpret_cast<RawArray<PathSearchNode>*>(param_1), param_2);
-}
-// B4 FORWARD: 1 outside caller (Game/keystone_a_gamedtor.cpp); retail's RCX is not read.
-void Pf_FreeArray30_e490(uint64_t, uintptr_t param_2, int param_3) {
-    RegionNodesFree(reinterpret_cast<RegionNode*>(param_2), param_3);
-}
-// B4 FORWARD: 1 outside caller (Action/region_graph_build.cpp, a local extern)
-int64_t* Pf_IntArrayClone_f9e0(int64_t* param_1, int64_t* param_2) {
-    return reinterpret_cast<int64_t*>(IntArrayAssign(reinterpret_cast<Collection::Array<int32_t>*>(param_1),
-                                                     reinterpret_cast<const Collection::Array<int32_t>*>(param_2)));
 }

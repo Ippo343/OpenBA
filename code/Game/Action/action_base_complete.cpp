@@ -76,7 +76,7 @@ namespace {
 struct WorkIdNode {
     int32_t     key;        // +0x00
     uint8_t     _pad04[4];  // +0x04
-    Work*       work;       // +0x08 InternalPtr<Work>
+    ::Object::InternalPtr<Work> work;   // +0x08 (CheckPtr'd, DeletePtr'd by 0x1400f8e30)
     WorkIdNode* parent;     // +0x10
     WorkIdNode* left;       // +0x18
     WorkIdNode* right;      // +0x20
@@ -100,7 +100,7 @@ static_assert(offsetof(WorkBucketNode, right) == 0x28, "WorkBucketNode::right @ 
 
 // LEFT: WorkSchedulerTree::root (Game/WorkScheduler.h) is declared void*.
 static WorkIdNode* IdRoot(const WorkSchedulerTree& tree) {
-    return reinterpret_cast<WorkIdNode*>(tree.root);
+    return reinterpret_cast<WorkIdNode*>(tree.root);   // LEFT: Game/WorkScheduler.h (COMP-8)
 }
 
 // Walk the id tree; return the node whose key == taskIdx, else null.
@@ -122,7 +122,7 @@ static WorkIdNode* FindTaskNode(const WorkScheduler* sched, int taskIdx) {
 // LEFT: 0x14001ca60 / 0x14001a6e0's C declarations (Work/exe_bodies.h, WORK-a's header)
 // take the tree header as uintptr_t*.
 static uintptr_t* TreeHeader(WorkSchedulerTree* tree) {
-    return reinterpret_cast<uintptr_t*>(tree);
+    return reinterpret_cast<uintptr_t*>(tree);   // LEFT: SIG WorkCellBST_Remove_ca60 / WorkBST_BSTRemove_a6e0 (Work/exe_bodies.h)
 }
 } // namespace
 
@@ -135,7 +135,7 @@ bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entity
     if (node == nullptr) return false;
 
     ComponentEntity* targetCopy = *targetRef;
-    Work* owner = node->work;
+    Work* owner = node->work.Get();
     CitizenComponent* entityCopy = *entityRef;
 
     int r = owner->OnComplete(&entityCopy, &targetCopy, static_cast<int>(taskParam));   // slot 6
@@ -149,7 +149,7 @@ void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef
     if (node == nullptr) return;
 
     ComponentEntity* targetCopy = *targetRef;
-    Work* owner = node->work;
+    Work* owner = node->work.Get();
     CitizenComponent* entityCopy = *entityRef;
 
     owner->OnCancel(&entityCopy, &targetCopy, static_cast<int>(taskParam));   // slot 7
@@ -207,11 +207,9 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 
     // 3. Remove from the order tree (field_0x10) keyed on the Work's +0x24 field.
     {
-        // LEFT: the Work's +0x24 key field (Work/Work.h, WORK-c's header) is not named.
-        const uint8_t* taskObj = reinterpret_cast<const uint8_t*>(task->work);
-        int wantKey = *reinterpret_cast<const int*>(taskObj + 0x24);
-        // LEFT: WorkScheduler::field_0x10 is declared void*.
-        AvlNode28* n = reinterpret_cast<AvlNode28*>(sched->field_0x10);
+        // The Work's queue-order key (Work::field_24, +0x24).
+        int wantKey = task->work->field_24;
+        AvlNode28* n = reinterpret_cast<AvlNode28*>(sched->field_0x10);   // LEFT: Game/WorkScheduler.h field_0x10 void* (COMP-8)
         while (n != nullptr) {
             int k = n->key;
             // Retail 8e30 step: `want < nodeKey -> node+0x10`, `nodeKey < want ->
@@ -221,7 +219,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             } else if (k < wantKey) {
                 n = n->right;   // greater
             } else {
-                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),   // LEFT: SIG WorkBST_BSTRemove_a6e0
                                        n);   // 0x14001a6e0
                 break;
             }
@@ -230,12 +228,11 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 
     // 4. Work slot 10 -> key; look it up in the field_0x120 bucket tree and remove the entry.
     {
-        Work* owner = task->work;
+        Work* owner = task->work.Get();
         Profession* keyTmp = nullptr;
         Profession** keyPtr = owner->GetTarget(&keyTmp);   // slot 10, retslot
 
-        // LEFT: WorkScheduler::field_0x120 is declared void*.
-        WorkBucketNode* node = reinterpret_cast<WorkBucketNode*>(sched->field_0x120);
+        WorkBucketNode* node = reinterpret_cast<WorkBucketNode*>(sched->field_0x120);   // LEFT: Game/WorkScheduler.h field_0x120 void* (COMP-8)
         if (node != nullptr) {
             while (true) {
                 Profession* v = node->key;
@@ -270,8 +267,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     // 5. Work slots 9 then 8; DeletePtr the Work; then remove the task node.
     task->work->Validate();   // slot 9, RCX only
     task->work->Cleanup();    // slot 8
-    // LEFT: WorkIdNode::work is the InternalPtr slot; DeletePtr is InternalBasePtr's.
-    reinterpret_cast< ::Object::InternalBasePtr*>(&task->work)->DeletePtr();   // B.3.3 bridge
+    task->work.DeletePtr();
     WorkCellBST_Remove_ca60(TreeHeader(&sched->trees[0]), task);   // 0x14001ca60
 }
 
@@ -284,7 +280,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 namespace {
 // LEFT: CitizenComponent::meshInstance is raw storage (H5).
 static Graphics::MeshInstance* ToolMesh(CitizenComponent* citizen) {
-    return reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);
+    return reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);   // LEFT: H5 CitizenComponent::meshInstance (CIT-4)
 }
 } // namespace
 
@@ -367,7 +363,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
         // _meshGroupCap) as a pointer and dereferences it; retail 0x1401173b0 reads
         // _meshGroups[0].meshes[0] (one more dereference). Recorded in known_port_issues
         // entry 14; kept as the tree's (no behaviour change here).
-        meshPtr = **reinterpret_cast<void* const* const*>(&fenceComp->_meshGroupCount);
+        meshPtr = **reinterpret_cast<void* const* const*>(&fenceComp->_meshGroupCount);   // LEFT: known_port_issues entry 14 (the tree's read differs from retail 0x1401173b0)
 
         // locate the RawMaterialDescription for the UV scale
         const uint32_t tidRawMat = RawMaterialDescription::TypeId();
@@ -388,8 +384,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
         uvScale = rawComp->_carryScale;
     } else {
         // the mesh table of the citizen description (_refs, +0x138)
-        // LEFT: CitizenDescription::_refs (block COMP-b's header) is declared void*.
-        meshPtr = reinterpret_cast<void* const*>(citizen->description->_refs)[toolId];
+        meshPtr = citizen->description->_refs[toolId];
         uvScale = kRdata_14017214c;   // g_fUVScale, 0x14017214c
     }
 
@@ -399,7 +394,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     // constructed Graphics::MeshInstance; in standalone a builder/worker showing its first
     // tool has never had that slot initialized (zeroed vtable). Default-construct it in
     // place with sceneId(+0x120) = -1 — the same guard showtool.cpp uses for carried items.
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {   // LEFT: the vptr of the raw storage
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {   // LEFT: H5 CitizenComponent::meshInstance (CIT-4): the vptr of the raw storage
         ::new (citizen->meshInstance) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         citizen->toolId = -1;   // +0x1D8 = +0xb8 + 0x120: sceneId = -1
     }
@@ -417,12 +412,12 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
     // attach the tool geometry to the model's "tool" node
     // LEFT: MeshInstance::_mesh (Runtime) is an untyped ExternalPtr handle.
-    const Graphics::GraphicsMesh* graphicsMesh = static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);
+    const Graphics::GraphicsMesh* graphicsMesh = static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);   // LEFT: MeshInstance::_mesh ExternalPtrHandle (R-GFX)
     int nodeIdx = graphicsMesh ? graphicsMesh->GetNodeIndexFromName("tool") : -1;
     model->meshInstance.Attach(tool, nodeIdx);
 
     // MeshInstance::Update(time=0) via slot 1 (skip if the instance has no vtable)
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {   // LEFT: the vptr of the raw storage
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {   // LEFT: H5 CitizenComponent::meshInstance (CIT-4): the vptr of the raw storage
         System::Time timeVal;
         RtSystem_Time_Ctor(&timeVal, 0.0f);   // slot 0x140152b00
         static_cast<Graphics::Geometry*>(tool)->Update(timeVal);
@@ -444,15 +439,11 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
 // B4 FORWARD: outside callers (Component, Work files)
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
-    TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);
+    TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);   // LEFT: SIG ActCt_TaskCleanup_8e30
 }
 
 // B4 FORWARD: outside callers (Action/showtool.cpp; Component files)
 void ActCt_HideTool_1176e0(void* entityV) {
-    HideCitizenTool(reinterpret_cast<CitizenComponent*>(entityV));
+    HideCitizenTool(reinterpret_cast<CitizenComponent*>(entityV));   // LEFT: SIG ActCt_HideTool_1176e0
 }
 
-// B4 FORWARD: outside callers (Action/showtool.cpp; Component files)
-void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
-    ShowCitizenTool(reinterpret_cast<CitizenComponent*>(entityV), toolId);
-}

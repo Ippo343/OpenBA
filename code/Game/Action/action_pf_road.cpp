@@ -419,7 +419,7 @@ void WorldGeometry::MarkChunksDirty(int x, int y) {
 
     // LEFT: the dirty-chunk tree is two raw members (_dirtyTreeRoot / _dirtyTreeCount) of
     // WorldGeometry (block GAME-c); 0x14001a4f0 takes it as one Set header.
-    int64_t* tree = reinterpret_cast<int64_t*>(&_dirtyTreeRoot);
+    int64_t* tree = reinterpret_cast<int64_t*>(&_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h _dirtyTreeRoot raw (GAME-2); SIG Pf_AvlInsertA_a4f0
     uint64_t outNode = 0;     // local_res8
     uint32_t key[2] = {0, 0}; // local_res10
 
@@ -441,7 +441,7 @@ void WorldGeometry::MarkChunksDirty(int x, int y) {
 
 // B4 FORWARD: 1 outside caller (Component/terraformcomponent.cpp)
 void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
-    reinterpret_cast<WorldGeometry*>(self)->MarkChunksDirty(x, y);
+    reinterpret_cast<WorldGeometry*>(self)->MarkChunksDirty(x, y);   // LEFT: SIG Pf_RegionDirty4_b150
 }
 
 // ============================================================
@@ -511,7 +511,7 @@ void RegionGraph::MarkCellDirty(int x, int y) {
 // pasturecomponent, quarrycomponent_deform, terraformcomponent, starttown,
 // keystone_a_removalcalcpath)
 void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
-    reinterpret_cast<RegionGraph*>(self)->MarkCellDirty(x, y);
+    reinterpret_cast<RegionGraph*>(self)->MarkCellDirty(x, y);   // LEFT: SIG Pf_FineCellDirty_a8c90
 }
 
 // ============================================================
@@ -662,7 +662,7 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
 
     // LEFT: 0x1400a00f0 / 0x140008830's C declarations (Work/exe_bodies.h, WORK-a's header)
     // take the Map as int*.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830 (Map as int*)
     uint64_t ok = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_2, static_cast<int>(cell));   // 0x1400a00f0
     if (static_cast<char>(ok) == '\0') return -1;
     return WorkBase_CalcDistance_8830(mapGrid, param_2, cell);   // 0x140008830
@@ -697,7 +697,7 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
             std::fprintf(stderr, "[EmployCrash] Pf_EntityAnchorCell_7fb0 NULL entity: "
                          "IBPptr=%p raw=0x%llx resolved=0 (hit #%d) -> return -1\n",
                          static_cast<const void*>(entityIBP),
-                         static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(rawAnchorEntity)),
+                         static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(rawAnchorEntity)),   // CAST-OK: ptr_int
                          s_anchorNullHits);
             std::fflush(stderr);
         }
@@ -814,9 +814,9 @@ static void AppendIndex(RawArray<int16_t>* a, short valueForNew) {
 void WorldGeometry::RebuildRoadMesh(Map* map) {
     // LEFT: WorldGeometry (block GAME-c's header) keeps these arrays as raw {data, sizeCap}
     // headers (`_arrays`).
-    RawArray<RoadBatch>* meshBatches = reinterpret_cast<RawArray<RoadBatch>*>(&_arrays[6]);    // +0x200 (local_a8)
-    const RawArray<int64_t>* sources = reinterpret_cast<const RawArray<int64_t>*>(&_arrays[7]); // +0x210
-    RawArray<int32_t>* counters = reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);           // +0x220
+    RawArray<RoadBatch>* meshBatches = reinterpret_cast<RawArray<RoadBatch>*>(&_arrays[6]);    // +0x200 (local_a8)   // LEFT: Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)
+    const RawArray<int64_t>* sources = reinterpret_cast<const RawArray<int64_t>*>(&_arrays[7]); // +0x210   // LEFT: Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)
+    RawArray<int32_t>* counters = reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);           // +0x220   // LEFT: Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)
     Reimpl_Struct60B_Resize(meshBatches, 0);                                // f250(local_a8, 0)
 
     int vtxOff = (_gridSize - _fieldC4) >> 1; // iVar12
@@ -976,8 +976,8 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                             // LEFT: 0x14001fa80's C declaration (action_pf_pools.cpp; its other
                             // caller is Player/tool_base_highlight.cpp) takes the array and
                             // the element as integers.
-                            Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(meshBatches), meshBatches->size + 1,
-                                                   reinterpret_cast<uint64_t*>(&rec));   // 0x14001fa80
+                            Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(meshBatches), meshBatches->size + 1,   // LEFT: SIG Pf_VectorResize60_fa80
+                                                   reinterpret_cast<uint64_t*>(&rec));   // 0x14001fa80   // LEFT: SIG Pf_VectorResize60_fa80
                         }
                     }
                 }
@@ -1012,36 +1012,32 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
 // B4 FORWARD: 2 outside callers (Game/gamegrid_serialize.cpp, Player/keystone_a_removalcalcpath.cpp)
 void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
-    reinterpret_cast<WorldGeometry*>(param_1)->RebuildRoadMesh(reinterpret_cast<Map*>(param_2));
+    reinterpret_cast<WorldGeometry*>(param_1)->RebuildRoadMesh(reinterpret_cast<Map*>(param_2));   // LEFT: SIG Pf_RoadMeshRebuild_f370
 }
 
 // B4 FORWARD: 1 outside caller (Player/tool_base_highlight_tess.cpp)
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend) {
-    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);
+    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10
 }
 
 // B4 FORWARD: 2 outside callers (Component/quarrycomponent_deform.cpp, Player/tool_base_ray.cpp)
 int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6, float* p7, float* p8, uint32_t* p9) {
-    return RayTestCell(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<const float*>(p4),
-                       p5, p6, p7, p8, reinterpret_cast<float*>(p9));
+    return RayTestCell(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<const float*>(p4),   // LEFT: SIG Pf_CellQuadRay_aa20
+                       p5, p6, p7, p8, reinterpret_cast<float*>(p9));   // LEFT: SIG Pf_CellQuadRay_aa20
 }
 
 // B4 FORWARD: 1 outside caller (Player/tool_base_tilerender.cpp)
 float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
-    return TerrainHeightUnder(reinterpret_cast<WorldGeometry*>(self), param_2, reinterpret_cast<float*>(param_3));
+    return TerrainHeightUnder(reinterpret_cast<WorldGeometry*>(self), param_2, reinterpret_cast<float*>(param_3));   // LEFT: SIG Pf_CellQuadRayWrap_0f90
 }
 
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Game, Player, Work)
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5) {
-    return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);
+    return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);   // LEFT: SIG Pf_EntityResolvePos_2e20
 }
 
-// B4 FORWARD: 2 outside callers (Component/citizenai_findhelpers.cpp, citizenai_findtarget.cpp)
-int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3) {
-    return PickReachableCell(reinterpret_cast<const Component*>(param_1), param_2, param_3);
-}
 
 // B4 FORWARD: outside callers in ~20 files (Component, Entity, Game, Player, Work)
 int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
-    return EntityAnchorCell(reinterpret_cast<ComponentEntity* const*>(param_1IBP), param_2);
+    return EntityAnchorCell(reinterpret_cast<ComponentEntity* const*>(param_1IBP), param_2);   // LEFT: SIG Pf_EntityAnchorCell_7fb0
 }

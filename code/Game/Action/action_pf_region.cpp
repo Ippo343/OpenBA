@@ -833,7 +833,7 @@ LAB_1400a5c1b:
                         if ((iVar8b <= iVar2) && ((iVar8b < iVar2 || (iVar3 <= piVar6->key1)))) {
                             // LEFT: 0x14001ca60's C declaration (Work/exe_bodies.h, WORK-c,
                             // running) takes the index as uintptr_t* and the node as int*.
-                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&index), &piVar6->key0);   // 0x14001ca60
+                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&index), &piVar6->key0);   // 0x14001ca60   // LEFT: SIG WorkCellBST_Remove_ca60 (Work/exe_bodies.h)
                             break;
                         }
                     }

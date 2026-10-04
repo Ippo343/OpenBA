@@ -420,22 +420,19 @@ void TradeComponent::BuildMerchantManifest() {
 // array, and adding the purchases first would make the post pay for its new goods with
 // its new goods.
 //
-// LEFT: the town manager is one cast of GameUpdateLoop::m_citizenList (void*, GAME-a);
-// the leaves
-// 0x14012cf10 / 0x14012d000 / 0x140088f90 take their operands as integers (their owners'
+// LEFT: the leaves 0x14012cf10 / 0x14012d000 / 0x140088f90 take their operands as integers (their owners'
 // declarations).
 void TradeComponent::AutoTrade() {
     TradeDescription_ExtendMerchantStay(this);
 
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
 
-    void* const townMgrP = GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_citizenList : nullptr;
-    CitizenBehavior* const townMgr = reinterpret_cast<CitizenBehavior*>(townMgrP);
+    CitizenBehavior* const townMgr = GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_citizenList : nullptr;
 
     TradeResourceNode* treeRoot = nullptr;   // the purchase tally
     int treeCount = 0;                       // retail keeps it; nothing reads it back
 
-    int volume = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
+    int volume = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
     const int volumeCap = storage->capacity;
 
     const int orderCount = buyOrderCount;
@@ -531,7 +528,7 @@ void TradeComponent::AutoTrade() {
                     // so this is harmless — passed through rather than "corrected".
                     const int cat = ActRm_GetResourceCategory_88f90(
                         reinterpret_cast<void*>(static_cast<uintptr_t>(unit)),
-                        reinterpret_cast<uintptr_t>(resource));
+                        reinterpret_cast<uintptr_t>(resource));   // LEFT: SIG ActRm_GetResourceCategory_88f90
                     if (cat >= 0) {
                         townMgr->professionResources[cat].field_0x0C += 1;
                     }
@@ -574,8 +571,8 @@ void TradeComponent::AutoTrade() {
     for (TradeResourceNode* n = AvlLeftmost(treeRoot); n != nullptr; n = AvlNext(n)) {
         ComponentDescription* good = n->resource;
         const int units = n->quantity;
-        RawMaterialComponent_RegisterRawMaterial(townMgrP, good);
-        ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage), reinterpret_cast<int64_t>(good), units);
+        townMgr->RegisterRawMaterial(good);   // 0x140091e60
+        ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage), reinterpret_cast<int64_t>(good), units);   // LEFT: SIG ActRm_StorageAdd_d000
         delivered += units;
         ++deliveredLines;
     }

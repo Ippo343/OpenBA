@@ -24,6 +24,7 @@
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // Map::size
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -46,8 +47,8 @@
 // Import slot 0x140152a98 — Object::Base::IsDerivedFrom.
 // FUN_140004680 FindComponent<MapComponent> — the footprint finder of the remove scan.
 //
-// LEFT: the map width is the Map's first int (GameUpdateLoop::m_game is void*, GAME-a),
-// and the town manager comes from GameUpdateLoop::m_citizenList (void*, GAME-a).
+// The map width is Map::size (GameUpdateLoop::m_game),
+// and the town manager comes from GameUpdateLoop::m_citizenList.
 
 // ============================================================
 // Reimpl of FUN_1400889e0 (Component reg wave B — WELL cluster).
@@ -61,7 +62,7 @@
 void CitizenBehavior::RemoveCellEntry(int x, int y, int value) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    int width = *reinterpret_cast<int*>(world->m_game) >> 3;
+    int width = world->m_game->size >> 3;   // Map +0x00
     Collection::Array<int32_t>& cell = field_0x140[(width * (y >> 3)) + (x >> 3)];
     int count = cell._size;
     if (count <= 0) return;
@@ -156,7 +157,7 @@ void CitizenBehavior::AddCellEntry(int x, int y, int value) {
     // every residence cell on a LOAD, long before any well reaches its state-2 enter.
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    const int mapW = *reinterpret_cast<int*>(world->m_game);
+    const int mapW = world->m_game->size;   // Map +0x00
     const int64_t cellIdx = static_cast<int64_t>((mapW >> 3) * (y >> 3) + (x >> 3));
     Collection::Array<int32_t>& rec = field_0x140[cellIdx];
 
@@ -271,8 +272,7 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
 char WellComponent::EnterBuilt() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
     Object::InternalPtr<WellComponent> ibp(this);
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     townMgr->RegisterWell(&ibp);   // 0x140091cb0
     return 0;
@@ -367,8 +367,7 @@ void WellComponent::OnRemove() {
     // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
     // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
     if (GameUpdateLoop::_singleton != nullptr) {
-        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-        CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
         townMgr->UnregisterWell(&basePtr);   // 0x140091ba0
     }
 }

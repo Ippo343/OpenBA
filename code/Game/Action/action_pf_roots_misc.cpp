@@ -464,24 +464,8 @@ void HerdStartMigration(HerdComponent* herd) {
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: 1 outside caller (Action/createrawmaterial.cpp, block ACT-b)
-int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* param_4, uint32_t param_5) {
-    return reinterpret_cast<Map*>(param_1)->FindPlacementCell(
-        param_2, param_3, reinterpret_cast<ComponentEntity* const*>(param_4), param_5);
-}
-
-// B4 FORWARD: 2 outside callers (Action/huntanimal.cpp, Action/moveto.cpp, block ACT-b).
-// Returns its fourth argument, as retail's RAX does.
-int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float* param_3,
-                                         void* param_4, int param_5, void* param_6) {
-    QueryNearestCharacter(reinterpret_cast<const CharacterGrid*>(param_1),
-                          reinterpret_cast<CharacterComponent**>(param_2), param_3,
-                          reinterpret_cast<const Math::Scalar*>(param_4), param_5,
-                          reinterpret_cast<CharacterComponent* const*>(param_6));
-    return reinterpret_cast<int64_t*>(param_4);
-}
 
 // B4 FORWARD: outside callers Component/herdcomponent.cpp, Action/huntanimal.cpp
 void Pf_HerdStartMigration_122340(void* param_1) {
-    HerdStartMigration(reinterpret_cast<HerdComponent*>(param_1));
+    HerdStartMigration(reinterpret_cast<HerdComponent*>(param_1));   // LEFT: SIG Pf_HerdStartMigration_122340
 }

@@ -121,12 +121,11 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
 
     // Partial-world guard (see Attach): skip the status-icon visual toggles when the
     // standalone entity lacks the renderable StatusIconComponent (c7e08).
-    // LEFT: 0x14012c3f0 takes the icon as int64_t* (COMP-b's declaration).
     StatusIconComponent* iconA = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
-    if (iconA) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(iconA), 2, '\0');   // 0x14012c3f0
+    if (iconA) iconA->SetFlag(2, '\0');   // 0x14012c3f0
 
     StatusIconComponent* iconB = _entity->FindComponent<StatusIconComponent>();
-    if (iconB) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(iconB), 3, '\0');
+    if (iconB) iconB->SetFlag(3, '\0');
 
     if (!isAccepting) return;
 
@@ -137,10 +136,9 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
     // toggle", so skip the visual tail — same as g != 0 (entity already culled).
     DestroyComponent* destroy = _entity->FindComponent<DestroyComponent>();   // 0x140005780
     if (!destroy) return;
-    // The door read AL off 0x14011e710; the body returns uint64_t — take the same byte.
-    // LEFT: 0x14011e710 takes the component as an integer (Player block's declaration).
-    char g = (char)PlayerPath_Sub_11e710(reinterpret_cast<uintptr_t>(destroy));
-    if (g != '\0') return;
+    // 0x14011e710 DestroyComponent::InRemovalState (the tree's PlayerPath_Sub_11e710).
+    bool g = destroy->InRemovalState();
+    if (g) return;
 
     Profession* jobSlot = profession;
     if (jobSlot == nullptr) return;
@@ -175,11 +173,10 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
     //   * the set arm used to AddObject a geometry whose vtable was still 0 -- the corrupt
     //     scene node behind the `EXEC of <heap>` in Scene::Clean.
     // (The mask was just OR'ed with 0x10, so the clear arm is retail's dead arm.)
-    // LEFT: GameUpdateLoop::m_graphicsScene is void* (GAME-a).
     if (mesh->_geometry.activeMask == 0) {
         if (mesh->iconId >= 0) {
             if (GameUpdateLoop::_singleton)
-                reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
+                GameUpdateLoop::_singleton->m_graphicsScene
                     ->RemoveObject(mesh->iconId);   // B.3.5 bridge
             mesh->iconId = -1;
         }
@@ -191,7 +188,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
         if (g_gameSettings != nullptr &&
             g_gameSettings->statusIconEnable != '\0' && mesh->iconId < 0) {
             if (GameUpdateLoop::_singleton) {
-                uint32_t id = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
+                uint32_t id = GameUpdateLoop::_singleton->m_graphicsScene
                     ->AddObject(&mesh->_geometry);   // B.3.5 bridge
                 mesh->iconId = static_cast<int32_t>(id);
                 SceneWatch_Note(id, &mesh->_geometry, "WorkPlaceComponent carry-mesh");
@@ -233,7 +230,7 @@ void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
         // FUN_14012c3f0 faults reading mesh+0x10. Skip only the visual toggle when absent; the
         // occupant roster append below still runs, so the house tracks its occupants regardless.
         StatusIconComponent* mesh = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
-        if (mesh) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 4, '\0');   // 0x14012c3f0
+        if (mesh) mesh->SetFlag(4, '\0');   // 0x14012c3f0
     }
 
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -286,16 +283,15 @@ void WorkPlaceComponent::EvictRoster() {
         CitizenComponent* worker = workers[0].Get();
 
         // Pick the finder off the worker's profession record (+0x1f0 -> +0x4c).
-        // LEFT: 0x14010ffc0 / 0x140110470 take the citizen as an integer (COMP-b's).
-        int64_t newWorkplaceIbp = 0;
+        ComponentEntity* newWorkplace = nullptr;
         if (!worker->profession->field4C) {
-            CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(worker), &newWorkplaceIbp);   // 0x14010ffc0
+            newWorkplace = worker->FindWorkplace();         // 0x14010ffc0
         } else {
-            CitizenComp_sub_0470(reinterpret_cast<int64_t>(worker), &newWorkplaceIbp);   // 0x140110470
+            newWorkplace = worker->FindRankedWorkplace();   // 0x140110470
         }
 
         // Re-read the roster base — the finders above can reallocate it.
-        CitizenComp_AssignHousing(workers[0].Get(), &newWorkplaceIbp);   // 0x140111ee0
+        workers[0].Get()->SetWorkplace(newWorkplace);   // 0x140111ee0 (the tree's "AssignHousing")
 
         if (workerCount >= before || ++guard > 4096) {
             std::fprintf(stderr, "[WorkPlace] pause eviction made no progress on comp=%p "
@@ -359,8 +355,8 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
     if (accepting) {
         // Clear the "closed"/"disabled" indicator bits (1 then 0) — a now-accepting
         // workplace is no longer showing the closed sign.
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 1, '\0');   // 0x14012c3f0
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 0, '\0');
+        mesh->SetFlag(1, '\0');   // 0x14012c3f0
+        mesh->SetFlag(0, '\0');
     } else {
         // (a) raise the closed indicator, keyed on the owner's state machine state.
         StateMachineComponent* sm = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
@@ -374,15 +370,15 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
             if (sm->stateMachine.pendingState < 0) state = static_cast<uint8_t>(sm->stateMachine.currentInput);
         }
         bool normalState = ((state & 0xf6) == 0) && (state != 9);
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), normalState ? 0 : 1, '\x01');
+        mesh->SetFlag(normalState ? 0 : 1, '\x01');
     }
 
     if (!accepting) {
         // (b) clear the worker/warning icons. Each toggle re-finds the mesh in the
         // original; the finder is pure, so one lookup is equivalent.
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 2, '\0');
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 3, '\0');
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 4, '\0');
+        mesh->SetFlag(2, '\0');
+        mesh->SetFlag(3, '\0');
+        mesh->SetFlag(4, '\0');
     } else if (workerCount == 0) {
         // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on
         // its designated job (roster empty && profession == desc.profession) — the faithful raise.
@@ -391,7 +387,7 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
             // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
             // cull-guard + Scene Add + positioning + entity-notify all run inside the toggle.
             mesh = _entity->FindComponent<StatusIconComponent>();
-            if (mesh) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 4, '\x01');
+            if (mesh) mesh->SetFlag(4, '\x01');
         }
     }
 
@@ -501,32 +497,31 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     }
 
     // Remove the owner entity from the Builder bucket in the profession BST.
-    // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); its BST
-    // node reads stay by offset.
+    // The tree is CitizenBehavior +0x100 (ProfessionBucket nodes, the key compared by
+    // address).
     ComponentEntity* ownerRef = _entity;
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);
-    uint64_t* node = townMgr ? (uint64_t*)townMgr->field_0x100 : nullptr;
-    const uint64_t keyBits = (uint64_t)key;
+    CitizenBehavior* townMgr = gw->m_citizenList;
+    ProfessionBucket* node = townMgr ? townMgr->field_0x100 : nullptr;
     while (node) {
-        if (keyBits < node[0]) {
-            node = (uint64_t*)node[4];          // left
+        if (key < node->key) {
+            node = node->left;          // +0x20
         } else {
-            if (keyBits <= node[0]) {
+            if (key <= node->key) {
                 ComponentEntity* localRef[4] = { ownerRef, nullptr, nullptr, nullptr };
-                CemeteryListErase_Reimpl(node + 1, localRef);   // 0x140002cc0
+                CemeteryListErase_Reimpl(&node->entities, localRef);   // 0x140002cc0 (the bucket's Array, +0x08)
                 break;
             }
-            node = (uint64_t*)node[5];          // right
+            node = node->right;         // +0x28
         }
     }
 
     // Refresh the WorkComponent's worker capacity (+0x30 = CalcMaxWorkers).
     // 0x140003050 FindComponent<WorkComponent>; 0x14012e5c0 WorkComponent_CalcMaxWorkers
     // (the registered body — WorkComponent::CalcMaxWorkers is the other port of that
-    // address). LEFT: that body takes the component as an integer (Tutorial's).
+    // address).
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
     if (workComp)
-        workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
+        workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: SIG WorkComponent_CalcMaxWorkers
 
     // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
     // reads it through IsDerivedFrom(desc, DAT_1401c8118) — and if that check FAILS retail
@@ -553,13 +548,12 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // Hand any in-flight work item over from Builder to the natural profession, so it stops
     // being offered to builders the moment the building is finished. FUN_1400f8400 —
     // citizenai_work_scheduler.cpp CitizenAI_WorkScheduler_Rekey.
-    // LEFT: the scheduler is GameUpdateLoop::m_tutorial (void*, GAME-a) and the rekey
-    // takes its keys as integers (COMP-b's declaration).
+    // The rekey takes the scheduler and its keys as integers (wave X).
     if (workComp && workComp->workId >= 0) {
-        uintptr_t sched = (uintptr_t)gw->m_tutorial;
+        uintptr_t sched = (uintptr_t)gw->m_tutorial;   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
         if (sched)
             CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
-                    (uint64_t)profession, (uint64_t)naturalKey);
+                    (uint64_t)profession, (uint64_t)naturalKey);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
     }
 
     profession = naturalKey;
@@ -599,12 +593,11 @@ char WorkPlaceComponent::EnterBuilt() {
     Profession* key = profession;
     if (key == nullptr) return 0;   // no profession (house / storage) -> nothing to register
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a), and
-    // 0x1400895a0 takes it and the key as integers (Game block's declaration).
-    uintptr_t townMgr = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
+    // 0x1400895a0 takes the town manager and the key as integers (Game/exe_bodies.h, wave X).
+    uintptr_t townMgr = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: SIG ResidenceComponent_impl_95a0
     if (!townMgr) return 0;
     ComponentEntity* ownerRef = _entity;
-    ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, (uint64_t)key);
+    ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, (uint64_t)key);   // LEFT: SIG ResidenceComponent_impl_95a0
     return 0;
 }
 
@@ -625,18 +618,12 @@ char WorkPlaceComponent::EnterDemolish() {
 }
 
 // ---- B4 FORWARD: the C spellings outside callers still use; the closing wave rewires
-// them. Detach / Attach: citizencomponent.cpp. SetAccepting: attendancecomponent(_states),
+// them. SetAccepting: attendancecomponent(_states),
 // cropfieldcomponent(_states), destroycomponent_workerrelease, orchardcomponent(_states),
 // pasturecomponent_states, resourceproducecomponent_states, Dialog/buildui.cpp,
 // Game/starttown.cpp. OnCreateInit: destroycomponent_workerrelease.
 // LeaveBuilderProfession: destroycomponent_states (the null test is the tree's).
 // ApplyOccupiedVisual: Game/starttown.cpp.
-void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
-    ((WorkPlaceComponent*)comp)->Detach((Object::InternalPtr<CitizenComponent>*)workerIbp);   // B4 FORWARD
-}
-void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
-    ((WorkPlaceComponent*)comp)->Attach((Object::InternalPtr<CitizenComponent>*)workerIbp);   // B4 FORWARD
-}
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD
 }
@@ -867,23 +854,22 @@ void WorkPlaceComponent::OnRemove() {
     if (professionId != nullptr && GameUpdateLoop::_singleton != nullptr) {
         ComponentEntity* ownerRef = _entity;
 
-        // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); the
-        // BST root at +0x100 and its node reads stay by offset.
-        CitizenBehavior* gameState = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
-        uint64_t* node = (uint64_t*)gameState->field_0x100;
-        const uint64_t key = (uint64_t)professionId;
+        // The town's profession tree: CitizenBehavior +0x100 (ProfessionBucket nodes).
+        CitizenBehavior* gameState = GameUpdateLoop::_singleton->m_citizenList;
+        ProfessionBucket* node = gameState->field_0x100;
+        Profession* const key = professionId;
 
         bool found = false;
         while (node != nullptr) {
-            if (key < *node) {
-                node = (uint64_t*)node[4];  // left child
-            } else if (key > *node) {
-                node = (uint64_t*)node[5];  // right child
+            if (key < node->key) {
+                node = node->left;   // +0x20
+            } else if (key > node->key) {
+                node = node->right;  // +0x28
             } else {
                 // Found: UNregister the owner entity from this bucket's entity array.
                 ComponentEntity* localRef[4];
                 localRef[0] = ownerRef;
-                CemeteryListErase_Reimpl(node + 1, localRef);   // 0x140002cc0
+                CemeteryListErase_Reimpl(&node->entities, localRef);   // 0x140002cc0 (+0x08)
                 found = true;
                 break;
             }

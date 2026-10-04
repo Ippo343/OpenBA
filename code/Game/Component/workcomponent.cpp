@@ -27,6 +27,9 @@
 #include "Entity/ComponentEntity.h"            // ComponentEntity::FindComponent<T>
 #include "Component/MapComponent.h"            // 0x140004680's class
 #include "Component/StatusIconComponent.h"     // 0x140002f90's class
+#include "Game/WorkScheduler.h"                // GameUpdateLoop::m_tutorial's class
+#include "Game/WorkSchedulerNodes.h"           // WorkSchedulerIdNode (the goals tree's node)
+#include "Work/Work.h"                         // Work::field_24
 
 // ============================================================
 // Helpers
@@ -63,21 +66,21 @@
 // Left uncorrected in a family that has now paid THREE TIMES for a child-offset or
 // slot mix-up (reference_workarea_bst_bad_entry.md), a comment that contradicts its own
 // code and its four siblings is a defect waiting for the next reader.
-// LEFT: the goals tree hangs off GameUpdateLoop::m_tutorial (+0x118), a void* GAME-a
-// types; its node reads stay by offset.
+// The goals tree is WorkScheduler::trees[0] (m_tutorial +0x30); its nodes are
+// WorkSchedulerIdNode (Game/WorkSchedulerNodes.h).
 bool WorkComponent::IsWorkPosted() const {
     if (GameUpdateLoop::_singleton == nullptr) return false;
     int key = workId;
-    int* node = *(int**)((uintptr_t)GameUpdateLoop::_singleton->m_tutorial + 0x30);
+    WorkSchedulerIdNode* node = GameUpdateLoop::_singleton->m_tutorial->trees[0].root;
     while (node != nullptr) {
-        if (*node <= key) {
-            if (key <= *node) {
-                // equal — found; value pointer lives at node+0x08
-                return *(int64_t*)((uintptr_t)node + 0x08) != 0;
+        if (node->key <= key) {
+            if (key <= node->key) {
+                // equal — found; the value is the node's InternalPtr<Work> (+0x08)
+                return node->work.Get() != nullptr;
             }
-            node = *(int**)((uintptr_t)node + 0x20);   // lesser child
+            node = node->right;   // +0x20: the node's key is below the target
         } else {
-            node = *(int**)((uintptr_t)node + 0x18);   // greater child
+            node = node->left;    // +0x18
         }
     }
     // not found: construct an empty IBP and report non-null (matches original)
@@ -95,33 +98,32 @@ void WorkComponent::CancelWork() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
     int key = workId;
-    int64_t valueIbp[1] = {0};
-    int* node = *(int**)((uintptr_t)GameUpdateLoop::_singleton->m_tutorial + 0x30);
+    Work* value = nullptr;
+    WorkSchedulerIdNode* node = GameUpdateLoop::_singleton->m_tutorial->trees[0].root;
     bool found = false;
     while (node != nullptr) {
-        if (key < *node) {
-            node = *(int**)((uintptr_t)node + 0x18);
-        } else if (key <= *node) {
-            valueIbp[0] = *(int64_t*)((uintptr_t)node + 0x08);
+        if (key < node->key) {
+            node = node->left;    // +0x18
+        } else if (key <= node->key) {
+            value = node->work.Get();   // +0x08
             found = true;
             break;
         } else {
-            node = *(int**)((uintptr_t)node + 0x20);
+            node = node->right;   // +0x20
         }
     }
     if (!found) {
-        new (valueIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&value) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
 
-    workFlags = *(uint32_t*)(valueIbp[0] + 0x24);   // LEFT: the work's +0x24 (goals-tree value)
+    workFlags = value->field_24;   // the work's +0x24 (the queue-order key)
 
     ActCt_TaskCleanup_8e30(GameUpdateLoop::_singleton->m_tutorial, key);   // 0x1400f8e30
 
     // 0x140002f90 FindComponent<StatusIconComponent>; the null test is the tree's.
     if (StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>()) {
-        // LEFT: 0x14012c3f0 takes the icon as int64_t* (COMP-b's declaration).
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 2, '\0');   // 0x14012c3f0
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 3, '\0');
+        icon->SetFlag(2, '\0');   // 0x14012c3f0
+        icon->SetFlag(3, '\0');
     }
 }
 
