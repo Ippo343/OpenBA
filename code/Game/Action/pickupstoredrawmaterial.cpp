@@ -110,7 +110,7 @@ void PickupStoredRawMaterial::Persist(IO::Stream& stream) {
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // LEFT: the shared 16-byte Array SetSize 0x14000da70 is ACT-a's file-local body,
         // reached only through its int64_t* forwarder.
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&_field30), matCount);   // 0x14000da70
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&_field30), matCount);   // 0x14000da70   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
     }
 
     // Serialize each material entry (ExternalPtr + int count, 0x10 bytes each)

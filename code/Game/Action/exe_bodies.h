@@ -96,10 +96,7 @@ int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
-void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count);  // 0x14012d150
-void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count);  // 0x14012d000
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
-int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity);  // 0x140088f90
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
 
 // ---- action_child_ctors.cpp
@@ -188,7 +185,6 @@ int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outP
 ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, ComponentEntity* const* exclude);  // 0x14008d590
 // B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
-uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80 -> StorageCanAdd
 
 // ---- keystone_a_zone.cpp
 class PathfinderThread;       // Game/PathfinderThread.h

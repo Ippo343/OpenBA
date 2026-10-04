@@ -38,20 +38,14 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 #include "Player/exe_bodies.h"   // Avl38Retrace (0x140025920)
+#include "Action/exe_bodies.h"   // ActRm_VectorClone_d9d0, ActRm_ArrayResize16_da70
 
 // ============================================================
 // External closure — every one of these is already ported + registered
 // ============================================================
 
-// 0x14000d9d0 (Ghidra: FUN_14000d9d0, ported as ActRm_VectorClone_d9d0)
-//   deep-copies a 16-byte-stride dynamic array: dst[RCX] <- src[RDX].
-// NOTE: defined as ordinary C++ (no extern "C") in code/Game/Action/action_base_rawmat.cpp,
-// so it must be declared the same way here or the mangled names will not match at link.
-extern void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);
-
-// 0x14000da70 (Ghidra: DynArray16_Resize, ported as ActRm_ArrayResize16_da70)
-//   resizes a 16-byte-stride dynamic array to `count` elements.
-extern void ActRm_ArrayResize16_da70(int64_t* arr, int count);
+// 0x14000d9d0 ActRm_VectorClone_d9d0 (deep copy dst <- src) and 0x14000da70
+// ActRm_ArrayResize16_da70 (SetSize), 16-byte stride: Action/exe_bodies.h.
 
 // 0x140025920 (Avl38Retrace, Player/exe_bodies.h) — the AVL retrace/rebalance.
 //   NOTE the argument: retail passes a pointer to the PARENT node slot
@@ -110,7 +104,7 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
 
     // 14002b618..b628 (0x14000da70 takes the array header as int64_t*: LEFT)
     if (SerIsLoading(serializer)) {
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
     }
 
     // 14002b62d..b662: element loop. Note retail reloads the buffer pointer AFTER the
@@ -142,7 +136,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
     n->element.carries.count = 0;      // with capacity: one 8-byte zero
     n->element.carries.capacity = 0;
     // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -273,7 +267,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
-                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70
+                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {

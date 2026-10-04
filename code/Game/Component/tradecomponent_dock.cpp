@@ -81,7 +81,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/MemoryAllocator.h"
-#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000, ActRm_GetResourceCategory_88f90
+#include "Action/exe_bodies.h"   // StorageAdd, ResourceCategory
 #include "Dialog/exe_bodies.h"   // TradeUI_GetBuyEntries_59670, TradeUI_GetResourcePrice_a520, TradeDescription_ExtendMerchantStay
 #include "Work/exe_bodies.h"     // WorkBase_TreeNodeFree_e320
 
@@ -525,10 +525,8 @@ void TradeComponent::AutoTrade() {
                     townMgr->field_0x1AC += unit;
                     // Retail passes the unit price where every other caller of 0x140088f90
                     // passes a StorageComponent. The function ignores its first parameter,
-                    // so this is harmless — passed through rather than "corrected".
-                    const int cat = ActRm_GetResourceCategory_88f90(
-                        reinterpret_cast<void*>(static_cast<uintptr_t>(unit)),
-                        reinterpret_cast<uintptr_t>(resource));   // LEFT: SIG ActRm_GetResourceCategory_88f90
+                    // so the body (which reads the material only) is called with it alone.
+                    const int cat = ResourceCategory(resource);   // 0x140088f90
                     if (cat >= 0) {
                         townMgr->professionResources[cat].field_0x0C += 1;
                     }
@@ -572,7 +570,7 @@ void TradeComponent::AutoTrade() {
         ComponentDescription* good = n->resource;
         const int units = n->quantity;
         townMgr->RegisterRawMaterial(good);   // 0x140091e60
-        ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage), reinterpret_cast<int64_t>(good), units);   // LEFT: SIG ActRm_StorageAdd_d000
+        StorageAdd(storage, good, units);   // 0x14012d000
         delivered += units;
         ++deliveredLines;
     }

@@ -1535,8 +1535,7 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         ComponentEntity* arg = target;
         ComponentDescription* work = nullptr;
         CitizenComp_Entity_impl_ef40(entity, &work, &arg, 0);
-        int64_t res10 = reinterpret_cast<int64_t>(work);   // LEFT: SIG ActRm_StorageSubtract_d150 / ActRm_GetResourceCategory_88f90 (the material as an integer; Action/exe_bodies.h)
-        if (res10 == 0) return;
+        if (work == nullptr) return;
 
         // add `work` to the citizen's consumed-type list (+0x98 array, +0xa0 count, +0xa4 cap)
         int count = consumedTypeCount;
@@ -1569,10 +1568,10 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         // subtract one unit from the storage + bump the town per-category
         // consumed counter (townMgr = *(gameWorld+0xf0), counters at +0x170,
         // 0x20-byte stride, count at +0xC: CitizenBehavior::professionResources).
-        ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(store), res10, 1);   // LEFT: SIG ActRm_StorageSubtract_d150 (Action/exe_bodies.h, wave X)
+        StorageSubtract(store, work, 1);   // 0x14012d150
         CitizenBehavior* worldGrid = GameUpdateLoop::_singleton->m_citizenList;
         {
-            uint32_t idx = ActRm_GetResourceCategory_88f90(store, res10);
+            uint32_t idx = ResourceCategory(work);   // 0x140088f90 (its first argument, the storage, is never read)
             if (-1 < (int)idx) {
                 int* p = &worldGrid->professionResources[(int64_t)(int)idx].field_0x0C;
                 *p = *p + 1;

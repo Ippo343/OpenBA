@@ -435,29 +435,14 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: outside callers in ~8 files (Action, Component, Dialog)
-void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count) {
-    StorageSubtract(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<const ComponentDescription*>(resType), count);   // LEFT: SIG ActRm_StorageSubtract_d150
-}
-
-// B4 FORWARD: outside callers in ~12 files (Action, Component, Dialog, Game)
-void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
-    StorageAdd(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<ComponentDescription*>(resType), count);   // LEFT: SIG ActRm_StorageAdd_d000
-}
-
 // B4 FORWARD: outside callers (Action/consumerawmaterial, pickupstoredrawmaterial;
 // Component/trackercomponent; Work/marketwork_bst_b290)
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
-    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70
-}
-
-// B4 FORWARD: outside callers in ~8 files; the first argument is never read.
-int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity) {
-    return ResourceCategory(reinterpret_cast<const ComponentDescription*>(entity));   // LEFT: SIG ActRm_GetResourceCategory_88f90
+    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
 }
 
 // B4 FORWARD: outside callers (Work/marketwork_bst_a9f0, marketwork_bst_b290)
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
-    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0
-                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0
+    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
+                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)
 }
