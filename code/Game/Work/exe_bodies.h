@@ -38,7 +38,8 @@ extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);  // 
 extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials_ctor.cpp
-extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (local extern in buildcomponent_state1.cpp)
+class Work;   // Work/Work.h
+extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
 extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)

@@ -271,14 +271,12 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         // -------- SPAWN branch: build the gather work + configure site storage --------
         void* mem = (::System::MemoryAllocator::_singleton)
                         ? ::System::MemoryAllocator::MemAlloc(0x78, 8) : nullptr;
-        void* work = nullptr;
+        Work* work = nullptr;
         if (mem) {
             ComponentEntity* entIbp = _entity;
             work = GatherRawMaterials_Ctor_Impl(mem, &entIbp);
         }
-        uintptr_t workIbp = 0;
-        new (&workIbp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge  LEFT: SIG GatherRawMaterials_Ctor_Impl returns void*
+        ::Object::InternalPtr<Work> workIbp(work);
 
         // find the WorkComponent (0x1401c8070) the work posts under
         WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
@@ -289,7 +287,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
         // Needs the live-citizen action stack + pathfinder.
         if (workComp != nullptr) {
-            CitizenAI_WorkScheduler_Post(workComp, 0x2001, 1, reinterpret_cast<Object::InternalPtr<Work>*>(&workIbp));   // LEFT: SIG GatherRawMaterials_Ctor_Impl returns void* (the work held as uintptr_t)
+            CitizenAI_WorkScheduler_Post(workComp, 0x2001, 1, &workIbp);
         }
 
         // configure the site StorageComponent accept-mask + capacity
