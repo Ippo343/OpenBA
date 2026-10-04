@@ -124,6 +124,24 @@ void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  
 void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg);  // 0x14001ca60
 namespace IO { class Serializer; }
 void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0
+// The typed entry points an area work's real `Collection::Set<T>` member (a 0x10-byte
+// {int key, pointer} element, 0x30-byte node) is handed to: one retail body per entry serves
+// every such set (ICF), so the Set's {root, count} header is given to the ONE erased core here.
+template <class T>
+inline void* WorkCellBST_Insert_9a40(Collection::Set<T>* set, void* outResult, void* keyRec) {
+    static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
+    return WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(set), outResult, keyRec);  // CAST-OK: elem_stride
+}
+template <class T>
+inline void WorkCellBST_Remove_ca60(Collection::Set<T>* set, typename Collection::Set<T>::Node* node) {
+    static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(set), node);  // CAST-OK: elem_stride
+}
+template <class T>
+inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* ser) {
+    static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(set), ser);  // CAST-OK: elem_stride
+}
 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h

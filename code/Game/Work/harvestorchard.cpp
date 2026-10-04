@@ -137,7 +137,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
     // Check tree count vs max workers (the tree's port of 0x14012e5c0 called here takes
     // the component as an integer: LEFT)
-    int treeCount = _field50;
+    int treeCount = _cells._count;
     if (matDesc->workState == 0) {
         int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         matDesc->workState = maxWorkers;
@@ -189,7 +189,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
             // Check if slot is already in the claim tree
             {
-                ClaimNode* found = BST_Find(_field48, i);
+                ClaimNode* found = BST_Find(_cells._root, i);
                 if (found != nullptr) {
                     goto next_cell;
                 }
@@ -333,7 +333,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 keyBuf.slot = i;
                                 keyBuf._pad04 = 0;
                                 keyBuf.citizen = *citizenIBP;
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                                WorkCellBST_Insert_9a40(&_cells, insertResult, &keyBuf);
 
                                 // Mark slot as used
                                 validityArray[i] = 0;
@@ -375,14 +375,14 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 int HarvestOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the claim tree for the key and remove if found (the helper takes the
     // container as uintptr_t*: LEFT)
-    ClaimNode* node = _field48;
+    ClaimNode* node = _cells._root;
     while (node != nullptr) {
         if (param4 < node->element.slot) {
             node = node->left;
         } else if (param4 > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&_cells, node);
             break;
         }
     }
@@ -401,14 +401,14 @@ int HarvestOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** 
 int HarvestOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the claim tree for the key and remove if found (the helper takes the
     // container as uintptr_t*: LEFT)
-    ClaimNode* node = _field48;
+    ClaimNode* node = _cells._root;
     while (node != nullptr) {
         if (param4 < node->element.slot) {
             node = node->left;
         } else if (param4 > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&_cells, node);
             break;
         }
     }
@@ -426,10 +426,10 @@ int HarvestOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*
 // The walk follows the LEFT child (+0x18 in the 0x30 node); the tree called the
 // node "rightmost".
 int HarvestOrchard::Cleanup() {
-    int count = _field50;
+    int count = _cells._count;
 
     while (count > 0) {
-        ClaimNode* node = _field48;
+        ClaimNode* node = _cells._root;
         ClaimNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -439,7 +439,7 @@ int HarvestOrchard::Cleanup() {
         CitizenComponent* citizenEntity = leftmost->element.citizen;
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
-        count = _field50;
+        count = _cells._count;
     }
     return 0;
 }
@@ -456,7 +456,7 @@ int HarvestOrchard::Validate() {
     uint32_t collectCount = 0;
     uint32_t collectCapacity = 0;
 
-    ClaimNode** root = &_field48;
+    ClaimNode** root = &_cells._root;
     ClaimNode* node = *root;
 
     if (node == nullptr) {
@@ -550,7 +550,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.slot) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                    WorkCellBST_Remove_ca60(&_cells, bstNode);   // root == &_cells._root
                     break;
                 }
             }
@@ -586,7 +586,7 @@ void HarvestOrchard::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // (the helper takes the container as uintptr_t*: LEFT)
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+    WorkCellBST_Serialize_9de0(&_cells, &serializer2);
 
     int cellCount = _field60;
     int cellCountBuf[2] = { cellCount, 0 };
@@ -624,14 +624,7 @@ HarvestOrchard::~HarvestOrchard() {
     _field60 = 0;   // with +0x64: one qword store in retail
     _field64 = 0;
 
-    ClaimNode* bstRoot = _field48;
-    if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_e320(&_field48, bstRoot->left);
-        WorkBase_TreeNodeFree_e320(&_field48, bstRoot->right);
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-    _field48 = nullptr;
-    _field50 = 0;
+    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400edf60).
 }
 
 
@@ -639,13 +632,13 @@ HarvestOrchard::~HarvestOrchard() {
 // [11] 0x140029860 (shared by 13 tables): `+0x50 > 0` — "is anyone assigned". The
 // old table pointed at Work_Slot11_HasActiveTasks, the same body.
 int HarvestOrchard::GetPriority() {
-    return _field50 > 0 ? 1 : 0;
+    return _cells._count > 0 ? 1 : 0;
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
 HarvestOrchard::HarvestOrchard()
-    : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(0), _field64(0) {
+    : AutoPickupWork(), _field58(nullptr), _field60(0), _field64(0) {
 }
 
 // ============================================================

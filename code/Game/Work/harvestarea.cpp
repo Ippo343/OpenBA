@@ -168,7 +168,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 
     // Check tree count vs max workers (the tree's port of 0x14012e5c0 called here takes
     // the component as an integer: LEFT)
-    int treeCount = _field50;
+    int treeCount = _cells._count;
     if (matDesc->workState == 0) {
         int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         matDesc->workState = maxWorkers;
@@ -209,7 +209,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 
             // Check if cell index is already in the claim tree (already assigned)
             {
-                ClaimNode* found = BST_Find(_field48, i);
+                ClaimNode* found = BST_Find(_cells._root, i);
                 if (found != nullptr) {
                     ++g_ha_inbst;
                     goto next_cell;
@@ -220,7 +220,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
             {
                 bool pairedAvailable = false;
                 if (cellIdx2 < fieldCellCount && validityArray[cellIdx2] != 0) {
-                    ClaimNode* found2 = BST_Find(_field48, cellIdx2);
+                    ClaimNode* found2 = BST_Find(_cells._root, cellIdx2);
                     if (found2 == nullptr) {
                         pairedAvailable = true;
                     }
@@ -337,7 +337,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 keyBuf.slot = i;
                                 keyBuf._pad04 = 0;
                                 keyBuf.citizen = *citizenIBP;
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                                WorkCellBST_Insert_9a40(&_cells, insertResult, &keyBuf);
 
                                 // Mark cell as used
                                 validityArray[i] = 0;
@@ -349,7 +349,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                     keyBuf2.slot = cellIdx2;
                                     keyBuf2._pad04 = 0;
                                     keyBuf2.citizen = *citizenIBP;
-                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult2, &keyBuf2);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                                    WorkCellBST_Insert_9a40(&_cells, insertResult2, &keyBuf2);
                                     validityArray[cellIdx2] = 0;
                                 }
 
@@ -376,14 +376,14 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 // Shared by slots 6 and 7: find `key` in the claim tree at +0x48 and remove it if
 // present (the helper takes the container as uintptr_t*: LEFT).
 static void HarvestArea_RemoveCellNode(HarvestArea* self, int key) {
-    HarvestArea::ClaimNode* node = self->_field48;
+    HarvestArea::ClaimNode* node = self->_cells._root;
     while (node != nullptr) {
         if (key < node->element.slot) {
             node = node->left;
         } else if (key > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&self->_field48), node);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&self->_cells, node);
             return;
         }
     }
@@ -462,10 +462,10 @@ int HarvestArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*par
 // The walk follows the LEFT child (+0x18 in the 0x30 node); the tree called the node
 // "rightmost".
 int HarvestArea::Cleanup() {
-    int count = _field50;
+    int count = _cells._count;
 
     while (count > 0) {
-        ClaimNode* node = _field48;
+        ClaimNode* node = _cells._root;
         ClaimNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -477,7 +477,7 @@ int HarvestArea::Cleanup() {
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
         const int before = count;
-        count = _field50;
+        count = _cells._count;
 
         // Cancelling made no progress: retail would spin here forever. The guard is a
         // deliberate deviation (it can only fire in a state that would otherwise hang).
@@ -504,7 +504,7 @@ int HarvestArea::Validate() {
     uint32_t collectCapacity = 0;
 
     // In-order traversal of the claim tree
-    ClaimNode** root = &_field48;
+    ClaimNode** root = &_cells._root;
     ClaimNode* node = *root;
 
     if (node == nullptr) {
@@ -605,7 +605,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.slot) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                    WorkCellBST_Remove_ca60(&_cells, bstNode);   // root == &_cells._root
                     break;
                 }
             }
@@ -646,7 +646,7 @@ void HarvestArea::Persist(IO::Stream& stream) {
 
     // Serialize the claim tree at +0x48 (the helper takes the container as uintptr_t*:
     // LEFT)
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+    WorkCellBST_Serialize_9de0(&_cells, &serializer2);
 
     // Serialize field cell count at +0x60
     int cellCount = _field60;
@@ -687,16 +687,7 @@ HarvestArea::~HarvestArea() {
     _field58 = nullptr;
     _field60 = 0;   // with +0x64: one qword store in retail
     _field64 = 0;
-
-    // Free the claim tree at +0x48
-    ClaimNode* bstRoot = _field48;
-    if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_e320(&_field48, bstRoot->left);
-        WorkBase_TreeNodeFree_e320(&_field48, bstRoot->right);
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-    _field48 = nullptr;
-    _field50 = 0;
+    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400ed410).
 }
 
 
@@ -704,13 +695,13 @@ HarvestArea::~HarvestArea() {
 // [11] 0x140029860 (shared by 13 tables): `+0x50 > 0` — "is anyone assigned". The
 // old table pointed at Work_Slot11_HasActiveTasks, the same body.
 int HarvestArea::GetPriority() {
-    return _field50 > 0 ? 1 : 0;
+    return _cells._count > 0 ? 1 : 0;
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
 HarvestArea::HarvestArea()
-    : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(0), _field64(0) {
+    : AutoPickupWork(), _field58(nullptr), _field60(0), _field64(0) {
 }
 
 // ============================================================

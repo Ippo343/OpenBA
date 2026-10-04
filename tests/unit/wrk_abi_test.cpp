@@ -221,16 +221,16 @@ UNIT_TEST(wrk_leaf_gatherrawmaterials) {
 
 UNIT_TEST(wrk_leaf_harvestarea) {
     WRK_LEAF_SHAPE(HarvestArea, AutoPickupWork, 0x68);
-    CHECK_EQ(offsetof(HarvestArea, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HarvestArea, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HarvestArea, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestArea, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestArea, _field60), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_harvestorchard) {
     WRK_LEAF_SHAPE(HarvestOrchard, AutoPickupWork, 0x68);
-    CHECK_EQ(offsetof(HarvestOrchard, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HarvestOrchard, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HarvestOrchard, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(HarvestOrchard, _cells) + offsetof(HarvestOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestOrchard, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestOrchard, _field60), (size_t)0x60);
 }
@@ -274,8 +274,8 @@ UNIT_TEST(wrk_leaf_pickup) {
 
 UNIT_TEST(wrk_leaf_plantarea) {
     WRK_LEAF_SHAPE(PlantArea, Work, 0x70);
-    CHECK_EQ(offsetof(PlantArea, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(PlantArea, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(PlantArea, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantArea, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantArea, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(PlantArea, field_68), (size_t)0x68);
@@ -283,8 +283,8 @@ UNIT_TEST(wrk_leaf_plantarea) {
 
 UNIT_TEST(wrk_leaf_plantorchard) {
     WRK_LEAF_SHAPE(PlantOrchard, Work, 0x70);
-    CHECK_EQ(offsetof(PlantOrchard, field_48), (size_t)0x48);
-    CHECK_EQ(offsetof(PlantOrchard, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(PlantOrchard, _cells), (size_t)0x48);
+    CHECK_EQ(offsetof(PlantOrchard, _cells) + offsetof(PlantOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantOrchard, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantOrchard, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(PlantOrchard, field_64), (size_t)0x64);
