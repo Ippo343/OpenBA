@@ -136,9 +136,9 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
         void* out = nullptr;
         int64_t emptyRec[2] = { 0, 0 };   // array record: +0x00 data / +0x08 count+cap
         uint64_t key = param_3;
-        ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(&town->field_0x100),   // LEFT: 0x140017230's int64_t* root parameter (Component block's declaration)
+        ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(&town->field_0x100),   // LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height)
                                      &out, &key, emptyRec);
-        found = reinterpret_cast<ProfessionTreeNode*>(out);     // *out = the new node  // LEFT: 0x140017230 returns the node as void*
+        found = reinterpret_cast<ProfessionTreeNode*>(out);     // *out = the new node  // LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height)
         if (found == nullptr) return;
     }
 

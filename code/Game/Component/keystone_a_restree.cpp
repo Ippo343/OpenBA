@@ -222,10 +222,12 @@ rebalance:
 // ============================================================
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
                                               uint64_t* param_3, int64_t* param_4) {
-    // LEFT: the caller (zonecomponent.cpp) hands the tree / out / array as untyped words.
-    RecordTree* tree = reinterpret_cast<RecordTree*>(param_1);
-    RecordNode** out = reinterpret_cast<RecordNode**>(param_2);
-    const RecordArray* items = reinterpret_cast<const RecordArray*>(param_4);
+    // Both callers' trees are CitizenBehavior's CitizenBucketNode<Key> trees (+0x100, +0x160);
+    // this file's Record* view stays until that node declares the two int16 fields the
+    // retrace reads: then 0x140017230 is a template over CitizenBucketNode<Key>.
+    RecordTree* tree = reinterpret_cast<RecordTree*>(param_1);   // LEFT: CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height
+    RecordNode** out = reinterpret_cast<RecordNode**>(param_2);   // LEFT: CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height
+    const RecordArray* items = reinterpret_cast<const RecordArray*>(param_4);   // LEFT: CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height
 
     // Stack record: local_20 (key) / local_18 (array.data) / local_10 (array.count/cap).
     Record rec;
