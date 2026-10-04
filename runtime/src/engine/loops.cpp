@@ -1099,10 +1099,8 @@ void Engine::MainLoop::Draw(float dt) {
     // size is re-read from the array on every iteration (`cmp 0x88(%rdi),%esi`),
     // so a callback that appends is seen by this same loop. Reproduced.
     for (int32_t i = 0; i < _postDraw._size; ++i) {
-        RtEngine::MainLoopCallback e = _postDraw._data[i];
-        // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
-        // userinterface_showdialog.cpp appends through one element type).
-        reinterpret_cast<PostDrawFunc>(e._func)(*_context, e._context);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        PostDrawCallback e = _postDraw._data[i];
+        e._func(*_context, e._context);
     }
 
     {

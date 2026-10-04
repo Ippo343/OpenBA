@@ -444,9 +444,7 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
         // CONTEXT from _postDraw._data. Transcribed, not tidied. See §2a.
         for (int32_t i = 0; i < _postUpdate._size; ++i) {
             void* context = _postDraw._data[i]._context;                   // +0x80's data
-            // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
-            // userinterface_showdialog.cpp appends through one element type).
-            auto fn = reinterpret_cast<PostUpdateFunc>(_postUpdate._data[i]._func);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+            PostUpdateFunc fn = _postUpdate._data[i]._func;
             fn(_deltaTime, context);
         }
 
