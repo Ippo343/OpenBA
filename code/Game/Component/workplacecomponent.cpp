@@ -659,9 +659,9 @@ void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
 //     the natural profession, register under it) transitions {3}; 3 enter=ed60
 //     ("demolish": release workers + BST-erase) transitions {6,4,5}.
 
-static char WPC_EnterConstructionState(WorkPlaceComponent* c, void* /*sm*/) { return c->EnterConstruction(); }   // 0x14012ee40
-static char WPC_EnterBuiltStateNode(WorkPlaceComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }          // 0x14012edf0
-static char WPC_EnterDemolishState(WorkPlaceComponent* c, void* /*sm*/)     { return c->EnterDemolish(); }       // 0x14012ed60
+static char WPC_EnterConstructionState(WorkPlaceComponent* c, StateMachine* /*sm*/) { return c->EnterConstruction(); }   // 0x14012ee40
+static char WPC_EnterBuiltStateNode(WorkPlaceComponent* c, StateMachine* /*sm*/)    { return c->EnterBuilt(); }          // 0x14012edf0
+static char WPC_EnterDemolishState(WorkPlaceComponent* c, StateMachine* /*sm*/)     { return c->EnterDemolish(); }       // 0x14012ed60
 
 using WPCCtrlDispatch = ::ControllerLive::Dispatcher<WPCCtrlTag>;
 

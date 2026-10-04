@@ -628,7 +628,7 @@ void DiseaseComponent::KillOneAnimal() {
 // ============================================================
 // 0x140048610 — InfectionTick (healthy path)
 // ============================================================
-void DiseaseComponent::InfectionTick(System::Time* deltaTime) {
+void DiseaseComponent::InfectionTick(const System::Time* deltaTime) {
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
 
@@ -685,7 +685,7 @@ void DiseaseComponent::InfectionTick(System::Time* deltaTime) {
 // ============================================================
 // 0x140048840 — ActiveDisease (infested path): kill tick + spread tick
 // ============================================================
-void DiseaseComponent::ActiveDisease(System::Time* deltaTime) {
+void DiseaseComponent::ActiveDisease(const System::Time* deltaTime) {
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     Description* base = _description;
@@ -875,8 +875,8 @@ void DiseaseComponent::OnRemove() {
 
 // [9] 0x140048b90. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
-void DiseaseComponent::Update(void* time) {
-    System::Time* deltaTime = static_cast<System::Time*>(time);   // LEFT: SIG Component::Update(void* time) (Component.h)
+void DiseaseComponent::Update(const System::Time* time) {
+    const System::Time* deltaTime = time;
     if (duration._ticks > 0) ActiveDisease(deltaTime);
     else                     InfectionTick(deltaTime);
 }

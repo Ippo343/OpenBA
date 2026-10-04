@@ -100,7 +100,7 @@ static inline bool MoveTickTraceOn() {
 static inline int CallPre(Action* node, ActionStack* stack) {
     return node->AbstractImpl(stack);   // slot 4
 }
-static inline int CallMain(Action* node, ActionStack* stack, void* time) {
+static inline int CallMain(Action* node, ActionStack* stack, const System::Time* time) {
     return node->Execute(stack, time);   // slot 5
 }
 static inline void CallExit(Action* node, ActionStack* stack) {
@@ -143,8 +143,8 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(ActionStack* param_1) {
 // FUN_1400c4c50 — the action-stack executor. do/while over the stack top index.
 // param_1 = stack object (== CharacterComponent+0x48); param_2 = Time* (forwarded to main).
 // ===========================================================================
-extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2) {
-    ActionStack* stack = reinterpret_cast<ActionStack*>(param_1);   // LEFT: SIG CitizenAI_ActionExecutor_c4c50
+extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const System::Time* param_2) {
+    ActionStack* stack = param_1;
     bool bVar2 = false;            // R14: "stay" sticky flag → break the outer loop
     do {
         int iVar1 = stack->current;                                     // top index (stack+0x18)
@@ -357,12 +357,12 @@ static inline float fabs_f(float v) {
 
 extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
 
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* selfBytes, void* time) {
+extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* selfBytes, const System::Time* time) {
     CharacterComponent* self = reinterpret_cast<CharacterComponent*>(selfBytes);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (charactercomponent.cpp's extern)
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
     if (-1 < self->currentAction) {
-        CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(&self->actions), time);   // LEFT: SIG CitizenAI_ActionExecutor_c4c50
+        CitizenAI_ActionExecutor_c4c50(reinterpret_cast<ActionStack*>(&self->actions), time);   // LEFT: CharacterComponent.h declares +0x48 as separate fields, not an ActionStack
     }
     // Crash-safety gate: char render-index < 0 (always in standalone) → skip the tail.
     if (self->characterIndex < 0) {

@@ -301,7 +301,7 @@ void RawMaterialComponent::OnAdded() {
 // above (RawMaterialComponent_Update, the pile expiry timer) but the tree's
 // table never installed it; the inert stub is kept here. Installing it is its
 // own titled commit.
-void RawMaterialComponent::Update(void*) {}
+void RawMaterialComponent::Update(const System::Time*) {}
 
 // create 0x140037270: MemAlloc(0x40, 8), then the ctor.
 void* RawMaterialComponent::CreateNewObject() {

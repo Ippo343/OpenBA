@@ -196,7 +196,7 @@ AmbientEnvironmentComponent::AmbientEnvironmentComponent()
 struct AmbientThrottleState { int dominant; int countdown; };
 static std::unordered_map<void*, AmbientThrottleState> s_ambientThrottle;
 
-void AmbientEnvironmentComponent::Update(void* /*time*/) {
+void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
 
     EnsureResolved();
 

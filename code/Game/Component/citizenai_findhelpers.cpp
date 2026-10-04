@@ -239,7 +239,7 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
     ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2); // LEFT: SIG Entity_impl_ec70 (the out entity)
     EnsureInit();
     Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
-    int* mapGrid = reinterpret_cast<int*>(map);      // LEFT: SIG WorkBase_ValidateCell_a00f0 takes int* (wave X)
+    Map* mapGrid = map;
     int best = 0x7fffffff;
     *found = nullptr;
     if (list->field_0x28 < 1) return param_2;
@@ -301,7 +301,7 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
     ComponentEntity** origP7 = reinterpret_cast<ComponentEntity**>(param_7);   // LEFT: SIG CitizenAI_helper_e370 (the preferred entity)
     EnsureInit();
     Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
-    int* mapGrid = reinterpret_cast<int*>(map);      // LEFT: SIG WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830 take int* (wave X)
+    Map* mapGrid = map;
     int64_t* ret = param_2;
     *found = nullptr;
     int best = 0x7fffffff;

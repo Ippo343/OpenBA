@@ -145,9 +145,8 @@ inline const Math::Vector3* ModelPos(ModelComponent* model) {
 // flush in the first half is retail's way of forcing a valid current index before
 // asking, and it matters here because a boat handler can fire on the very tick the
 // machine entered its state.
-// The state machine arrives as void* (the handler type of controller_state_table.h).
-void RequestTransition(void* smV, int desiredStateId) {
-    StateMachine* sm = reinterpret_cast<StateMachine*>(smV);   // LEFT: controller_state_table.h handlers pass the machine as void* (COMP-2)
+// The state machine is the one the handler received (controller_state_table.h).
+void RequestTransition(StateMachine* sm, int desiredStateId) {
     if (!sm) return;
     if (sm->activeState < 0) {
         System::Time zeroTime{0};
@@ -155,7 +154,7 @@ void RequestTransition(void* smV, int desiredStateId) {
         // The time argument is the ADDRESS of the Time (retail passes it by reference).
         sm->Tick(&zeroTime, 0, 0);   // 0x1400a9660
     }
-    ::ControllerLive::RequestStateTransition(smV, desiredStateId);
+    ::ControllerLive::RequestStateTransition(sm, desiredStateId);
 }
 
 // Post an event to the DESTINATION entity's StateMachineComponent — the boat's only
@@ -178,7 +177,7 @@ void PostEventToDestination(BoatComponent* boat, int eventId) {
         return;
     }
 
-    void* sm   = &smc->stateMachine;
+    StateMachine* sm   = &smc->stateMachine;
     ControllerComponent::Controller* node = smc->stateMachine.current;
     if (!node) return;
     const int curIdx = smc->stateMachine.activeState;
@@ -452,7 +451,7 @@ char BoatComponent::State0Update() {
 // The arrival test is Dot(d, d) — the SQUARED distance — against 0x1401721f4, which is
 // therefore a squared radius. Retail calls Vector3::Dot with the same vector for both
 // operands (RCX and R8 are the same address at 0x14004532c).
-char BoatComponent::State0Tick(void* smV) {
+char BoatComponent::State0Tick(StateMachine* smV) {
     if (!Steer()) {
         DeleteBoatEntity(this);
         PostEventToDestination(this, 0xb);
@@ -492,7 +491,7 @@ char BoatComponent::State1Enter() {
 // The clamp is read off the branch pair at 0x14005008d/0x14005009a: `COMISS XMM6,max;
 // JA take-max` then `COMISS min,XMM6; JBE keep`, i.e. high clamp to 0x14017214c and low
 // clamp to 0x14017210c. Ghidra renders this as nonsense involving `DAT_1401720ec * 0.0`.
-char BoatComponent::State1Tick(void* smV) {
+char BoatComponent::State1Tick(StateMachine* smV) {
     const Math::Vector3* mp = ModelPos(model.Get());
     if (!mp) return 1;
     const Math::Vector3* dockPos = &dockPosition;
@@ -540,7 +539,7 @@ char BoatComponent::State2Enter() {
 // state 2 EVENT 0 — 0x140044f00      (the post releases the merchant)
 // ============================================================
 // Reads nothing of its receiver: stays free (B1).
-extern "C" char BoatCtrl_State2_Event0(BoatComponent* /*self*/, void* smV) {
+extern "C" char BoatCtrl_State2_Event0(BoatComponent* /*self*/, StateMachine* smV) {
     RequestTransition(smV, 3);
     return 1;
 }
@@ -549,7 +548,7 @@ extern "C" char BoatCtrl_State2_Event0(BoatComponent* /*self*/, void* smV) {
 // EVENT 1 on states 0/1/2 — 0x140045670   (abort: go straight to GONE)
 // ============================================================
 // Reads nothing of its receiver: stays free (B1).
-extern "C" char BoatCtrl_Event1_Abort(BoatComponent* /*self*/, void* smV) {
+extern "C" char BoatCtrl_Event1_Abort(BoatComponent* /*self*/, StateMachine* smV) {
     RequestTransition(smV, 4);
     return 1;
 }
@@ -579,7 +578,7 @@ char BoatComponent::State3Enter() {
 // CURRENT WAYPOINT, not between the boat and anything. That reads oddly until you note
 // the departing leg re-walks the same route array: the waypoint marching away from the
 // dock is exactly the progress signal.
-char BoatComponent::State3Tick(void* smV) {
+char BoatComponent::State3Tick(StateMachine* smV) {
     const Math::Vector3* mp = ModelPos(model.Get());
     if (!mp) return 1;
     const Math::Vector3 modelPos = *mp;
@@ -634,16 +633,16 @@ char BoatComponent::State4Tick() {
 // handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer,
 // this component, so each entry is a one-line adapter that calls the member.
 namespace {
-char BoatState0Enter(BoatComponent* b, void* /*sm*/)               { return b->State0Enter(); }    // 53f0
-char BoatState0Update(BoatComponent* b, void* /*sm*/)              { return b->State0Update(); }   // 5190
-char BoatState0Tick(BoatComponent* b, void* sm, void* /*time*/)      { return b->State0Tick(sm); }   // 5250
-char BoatState1Enter(BoatComponent* b, void* /*sm*/)               { return b->State1Enter(); }    // 5150
-char BoatState1Tick(BoatComponent* b, void* sm, void* /*time*/)      { return b->State1Tick(sm); }   // 4ff0
-char BoatState2Enter(BoatComponent* b, void* /*sm*/)               { return b->State2Enter(); }    // 4f70
-char BoatState3Enter(BoatComponent* b, void* /*sm*/)               { return b->State3Enter(); }    // 4ec0
-char BoatState3Tick(BoatComponent* b, void* sm, void* /*time*/)      { return b->State3Tick(sm); }   // 4d10
-char BoatState4Enter(BoatComponent* b, void* /*sm*/)               { return b->State4Enter(); }    // 4cd0
-char BoatState4Tick(BoatComponent* b, void* /*sm*/, void* /*time*/)                { return b->State4Tick(); }     // 4c40
+char BoatState0Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State0Enter(); }    // 53f0
+char BoatState0Update(BoatComponent* b, StateMachine* /*sm*/)              { return b->State0Update(); }   // 5190
+char BoatState0Tick(BoatComponent* b, StateMachine* sm, const System::Time* /*time*/)      { return b->State0Tick(sm); }   // 5250
+char BoatState1Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State1Enter(); }    // 5150
+char BoatState1Tick(BoatComponent* b, StateMachine* sm, const System::Time* /*time*/)      { return b->State1Tick(sm); }   // 4ff0
+char BoatState2Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State2Enter(); }    // 4f70
+char BoatState3Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State3Enter(); }    // 4ec0
+char BoatState3Tick(BoatComponent* b, StateMachine* sm, const System::Time* /*time*/)      { return b->State3Tick(sm); }   // 4d10
+char BoatState4Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State4Enter(); }    // 4cd0
+char BoatState4Tick(BoatComponent* b, StateMachine* /*sm*/, const System::Time* /*time*/)                { return b->State4Tick(); }     // 4c40
 }  // namespace
 
 // Idempotent: the installer runs once per component instance.

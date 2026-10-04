@@ -233,7 +233,7 @@ UNIT_TEST(mib_controller_own_slots_land_on_retail_indices) {
 // ===========================================================================
 void* g_mibSeenData = nullptr;
 void* g_mibSeenSm   = nullptr;
-char MibEnterHandler(ResourceProduceComponent* data, void* sm) { g_mibSeenData = data; g_mibSeenSm = sm; return 7; }
+char MibEnterHandler(ResourceProduceComponent* data, ::StateMachine* sm) { g_mibSeenData = data; g_mibSeenSm = sm; return 7; }
 
 UNIT_TEST(mib_rp_controller_member_raw_dispatch) {
     using Ctl = ResourceProduceComponent::StateController;

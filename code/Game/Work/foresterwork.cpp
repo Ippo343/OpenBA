@@ -268,8 +268,8 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // -------------------------------------------------------
     System::Random* rng = gameWorld->m_random;
     Map* map = gameWorld->m_game;
-    // The map helpers (0x14009c480, 0x140008830, 0x14009ccf0, 0x1400a00f0, 0x14009f5d0,
-    // 0x14009f3e0) take the map as int* / void*: LEFT.
+    // The map helpers 0x14009c480, 0x14009f5d0 and 0x14009f3e0 take the map as int* /
+    // void*: LEFT (0x140008830, 0x14009ccf0, 0x1400a00f0 take the Map).
     int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
 
     int workplaceRadius = materialComp->_radius;
@@ -380,7 +380,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                 if (testCellData2.blocker != nullptr) goto next_attempt;
 
                 // Check distance is within 2x workplace radius
-                int dist = WorkBase_CalcDistance_8830(mapGrid, entityGridCell, testCell);
+                int dist = WorkBase_CalcDistance_8830(map, entityGridCell, testCell);
                 if (dist > workplaceRadius * 2) goto next_attempt;
 
                 // Get resource entity at this cell
@@ -402,7 +402,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
                 if (plantEnabled && resourceEntity == nullptr) {
                     // PLANT PATH: empty cell, check if we can plant here
-                    bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, testCell, citizenGridCell));   // the door read AL
+                    bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(map, 0xe1f, testCell, citizenGridCell));   // the door read AL
                     if (canPath) {
                         // Check terrain suitability for planting
                         bool terrainOk = PlayerPath_CharComp_f5d0(
@@ -496,12 +496,12 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
                             // Find nearest passable cell for pathfinding
                             int nearestCell = WorkGrid_FindCell_9ccf0(
-                                mapGrid, testCell, citizenGridCell, 0xe07);
+                                map, testCell, citizenGridCell, 0xe07);
                             if (nearestCell < 0) goto next_attempt;
 
                             // Check path to the nearest passable cell
                             bool canPath2 = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
-                                mapGrid, 0xe1f, nearestCell, citizenGridCell));   // the door read AL
+                                map, 0xe1f, nearestCell, citizenGridCell));   // the door read AL
                             if (!canPath2) goto next_attempt;
 
                             // Reset fail counter

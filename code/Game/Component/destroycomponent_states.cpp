@@ -446,7 +446,7 @@ static int Yard_Required(BuildComponent* prod) {
 // ============================================================
 // State 3 enter — 0x14011d7b0 (begin demolition).
 // ============================================================
-char DestroyComponent::State3Enter(void* sm) {
+char DestroyComponent::State3Enter(StateMachine* sm) {
     progress = 0;   // reset progress
 
     // Stop pending production work on the yard (FUN_14012ead0/FUN_14012eb50).
@@ -486,7 +486,7 @@ char DestroyComponent::State3Enter(void* sm) {
 // ============================================================
 // State 4 enter — 0x14011cfd0 (queue the haul-away).
 // ============================================================
-char DestroyComponent::State4Enter(void* sm) {
+char DestroyComponent::State4Enter(StateMachine* sm) {
     ComponentEntity* entity = _entity;
 
     // Re-seat the workplace onto the BUILDER profession (retail FUN_14012f520 on the 2e10
@@ -532,7 +532,7 @@ char DestroyComponent::State4Enter(void* sm) {
 // ============================================================
 // State 4 tick — 0x14011cec0 (per-frame: storage drained -> state 5).
 // ============================================================
-char DestroyComponent::State4Tick(void* sm) {
+char DestroyComponent::State4Tick(StateMachine* sm) {
     if (!StorageEmpty()) return 1;
     WorkComponent* yard = FindOn<WorkComponent>(_entity);
     if (!Destroy_ReclaimPending_ea20(yard)) {
@@ -810,7 +810,7 @@ static void Destroy_ReseatWorkplaceOnBuilder(ComponentEntity* entity) {
 // State 7 event 0 — 0x14011d2a0. "Rebuild" (buttonRebuild) and "Reclaim"
 // (buttonReclaim; 0x14011e400 posts the same event 0, then additionally calls the
 // component's own vtable slot 4).
-char DestroyComponent::State7Rebuild(void* sm) {
+char DestroyComponent::State7Rebuild(StateMachine* sm) {
     ComponentEntity* entity = _entity;
 
     Destroy_ReseatWorkplaceOnBuilder(entity);
@@ -836,7 +836,7 @@ char DestroyComponent::State7Rebuild(void* sm) {
 }
 
 // State 7 event 1 — 0x14011d1a0. "Remove" (buttonDestroy).
-char DestroyComponent::State7Remove(void* sm) {
+char DestroyComponent::State7Remove(StateMachine* sm) {
     ComponentEntity* entity = _entity;
 
     Destroy_ReseatWorkplaceOnBuilder(entity);
@@ -861,7 +861,7 @@ char DestroyComponent::State7Remove(void* sm) {
 // event 2 today (the Remove/Rebuild buttons are state 7 / events 0-1), but the
 // registration exists in dd00, so the handler does too. It reads no field of the
 // component (RCX unused): it stays a free function (B1).
-extern "C" char Destroy_State6Event2_ToRubble_d390(DestroyComponent* /*data*/, void* sm) {
+extern "C" char Destroy_State6Event2_ToRubble_d390(DestroyComponent* /*data*/, StateMachine* sm) {
     ::ControllerLive::RequestStateTransition(sm, 7);
     return 1;
 }
@@ -877,7 +877,7 @@ extern "C" char Destroy_State6Event2_ToRubble_d390(DestroyComponent* /*data*/, v
 // Retail derefs the three finder results unguarded — a building sitting in state 4/5
 // always carries a MeshInstance, a production yard and (for the variant math) a model
 // component. Those derefs stay faithful.
-char DestroyComponent::CancelDemolition(void* sm) {
+char DestroyComponent::CancelDemolition(StateMachine* sm) {
     ComponentEntity* entity = _entity;
 
     // Read first (retail order): does the building have a build yard at all?
@@ -950,17 +950,17 @@ using DestroyDispatch = ::ControllerLive::Dispatcher<DestroyCtrlTag>;
 // The table holds one-line adapters: the dispatcher hands the handler
 // `[node+0x18]` (the DestroyComponent), the state machine and, for the per-frame
 // column, the elapsed Time.
-static char DestroyState3Enter(DestroyComponent* c, void* sm)  { return c->State3Enter(sm); }   // 0x14011d7b0
-static char DestroyState4Enter(DestroyComponent* c, void* sm)  { return c->State4Enter(sm); }   // 0x14011cfd0
-static char DestroyState4Tick(DestroyComponent* c, void* sm, void* /*time*/)   { return c->State4Tick(sm); }    // 0x14011cec0
-static char DestroyState5Enter(DestroyComponent* c, void* /*sm*/)            { return c->State5Enter(); }     // 0x14011cc70
-static char DestroyState5Tick(DestroyComponent* c, void* /*sm*/, void* /*time*/)             { return c->State5Tick(); }      // 0x14011c120
-static char DestroyState6Enter(DestroyComponent* c, void* /*sm*/)            { return c->State6Enter(); }     // 0x14011d4d0
-static char DestroyState6Update(DestroyComponent* c, void* /*sm*/)           { return c->State6Update(); }    // 0x14011d400
-static char DestroyState6Tick(DestroyComponent* c, void*, System::Time* t) { return c->State6Tick(t); }   // 0x14011d490
-static char DestroyState7Rebuild(DestroyComponent* c, void* sm) { return c->State7Rebuild(sm); }  // 0x14011d2a0
-static char DestroyState7Remove(DestroyComponent* c, void* sm)  { return c->State7Remove(sm); }   // 0x14011d1a0
-static char DestroyCancel(DestroyComponent* c, void* sm)        { return c->CancelDemolition(sm); }  // 0x14011bcc0
+static char DestroyState3Enter(DestroyComponent* c, StateMachine* sm)  { return c->State3Enter(sm); }   // 0x14011d7b0
+static char DestroyState4Enter(DestroyComponent* c, StateMachine* sm)  { return c->State4Enter(sm); }   // 0x14011cfd0
+static char DestroyState4Tick(DestroyComponent* c, StateMachine* sm, const System::Time* /*time*/)   { return c->State4Tick(sm); }    // 0x14011cec0
+static char DestroyState5Enter(DestroyComponent* c, StateMachine* /*sm*/)            { return c->State5Enter(); }     // 0x14011cc70
+static char DestroyState5Tick(DestroyComponent* c, StateMachine* /*sm*/, const System::Time* /*time*/)             { return c->State5Tick(); }      // 0x14011c120
+static char DestroyState6Enter(DestroyComponent* c, StateMachine* /*sm*/)            { return c->State6Enter(); }     // 0x14011d4d0
+static char DestroyState6Update(DestroyComponent* c, StateMachine* /*sm*/)           { return c->State6Update(); }    // 0x14011d400
+static char DestroyState6Tick(DestroyComponent* c, StateMachine*, const System::Time* t) { return c->State6Tick(t); }   // 0x14011d490
+static char DestroyState7Rebuild(DestroyComponent* c, StateMachine* sm) { return c->State7Rebuild(sm); }  // 0x14011d2a0
+static char DestroyState7Remove(DestroyComponent* c, StateMachine* sm)  { return c->State7Remove(sm); }   // 0x14011d1a0
+static char DestroyCancel(DestroyComponent* c, StateMachine* sm)        { return c->CancelDemolition(sm); }  // 0x14011bcc0
 
 extern "C" void DestroyCtrl_PopulateTable() {
     using namespace ::ControllerLive;
@@ -974,7 +974,7 @@ extern "C" void DestroyCtrl_PopulateTable() {
 
     // sub_3e50(6, A=d4d0, B=d400, D=d490): A -> enter, B -> update, D -> trans38.
     TableRegisterState(t, 6, &DestroyState6Enter,
-                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<DestroyComponent>::Tick>(&DestroyState6Tick),   // LEFT: its time is System::Time*; Controller::Tick / StateMachine::Tick carry it as void* (ControllerComponent.h, statemachinecomponent.cpp)
+                       nullptr, &DestroyState6Tick,
                        &DestroyState6Update);
     TableAddTransition(t, 7, nullptr);
     // sub_4020(2, d390) — state 6's only event.

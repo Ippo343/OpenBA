@@ -91,15 +91,15 @@ public:
     void  PushAccepting();   // the WorkPlaceComponent accepting push 0x14011a920 / 0x14011a7b0 share
     // The state handlers of the controller's table (RCX = [node+0x18] = this).
     char  State2Enter();                                                // 0x14011a920
-    char  Event3Plant(void* sm);                                        // 0x14011a7b0
-    char  State2PerFrame(void* sm);                                     // 0x14011a860
+    char  Event3Plant(StateMachine* sm);                                        // 0x14011a7b0
+    char  State2PerFrame(StateMachine* sm);                                     // 0x14011a860
     char  State9Enter();                                                // 0x14011a310
-    char  State9PerFrame(void* sm);                                     // 0x14011a1e0
+    char  State9PerFrame(StateMachine* sm);                                     // 0x14011a1e0
     char  State10Enter();                                               // 0x14011a100
     char  State10Update();                                              // 0x140119f70
-    char  State10PerFrame(void* sm);                                    // 0x140119fd0
+    char  State10PerFrame(StateMachine* sm);                                    // 0x140119fd0
     char  State11Enter();                                               // 0x140119e60
-    char  State11PerFrame(void* sm);                                    // 0x140119d80
+    char  State11PerFrame(StateMachine* sm);                                    // 0x140119d80
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     // Types from Persist 0x14011ae70: +0x48 / +0x49 Serialize(bool&), +0x50

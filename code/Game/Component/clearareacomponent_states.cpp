@@ -310,7 +310,7 @@ static uint32_t ClearArea_ScanKindFlags(const Map* grid, int x1, int y1, int w, 
 // ============================================================
 // State-0 ENTER — ClearAreaComponent::State0Enter, 0x140117960.
 // ============================================================
-char ClearAreaComponent::State0Enter(void* sm) {
+char ClearAreaComponent::State0Enter(StateMachine* sm) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw == nullptr) return 1;
 
@@ -382,7 +382,7 @@ char ClearAreaComponent::State0Enter(void* sm) {
 //   lies there, holding the job open until a citizen hauls it away — exactly as retail.
 //   State0Enter keeps its short-circuit: that guards the already-built founding houses,
 //   whose own footprint self-occupancy would otherwise post phantom clear-work forever.
-char ClearAreaComponent::State0PerFrame(void* sm) {
+char ClearAreaComponent::State0PerFrame(StateMachine* sm) {
     if (IsDone()) {
         ::ControllerLive::RequestStateTransition(sm, 1);
     }
@@ -458,7 +458,7 @@ void ClearArea_Finalize8270(void* comp) {
 // State-1 ENTER — ClearAreaComponent::State1Enter, 0x140117820.
 //   FinishClear then request the 1 -> 2 transition.
 // ============================================================
-char ClearAreaComponent::State1Enter(void* sm) {
+char ClearAreaComponent::State1Enter(StateMachine* sm) {
     FinishClear();
     ::ControllerLive::RequestStateTransition(sm, 2);   // 1 -> 2
     return 1;
@@ -476,14 +476,14 @@ char ClearAreaComponent::State2Enter() {
 
 // The state table's handler adapters: the controller hands each one its owner
 // (node+0x18), the ClearAreaComponent.
-static char CA_State0Enter(ClearAreaComponent* c, void* sm)    { return c->State0Enter(sm); }     // 0x140117960
-static char CA_State0PerFrame(ClearAreaComponent* c, void* sm, void* /*time*/) { return c->State0PerFrame(sm); }  // 0x1401178f0
-static char CA_State0Update(ClearAreaComponent* c, void* /*sm*/)             { return c->State0Update(); }      // 0x140117890
-static char CA_State1Enter(ClearAreaComponent* c, void* sm)    { return c->State1Enter(sm); }     // 0x140117820
-static char CA_State2Enter(ClearAreaComponent* c, void* /*sm*/)              { return c->State2Enter(); }       // 0x1401177f0
+static char CA_State0Enter(ClearAreaComponent* c, StateMachine* sm)    { return c->State0Enter(sm); }     // 0x140117960
+static char CA_State0PerFrame(ClearAreaComponent* c, StateMachine* sm, const System::Time* /*time*/) { return c->State0PerFrame(sm); }  // 0x1401178f0
+static char CA_State0Update(ClearAreaComponent* c, StateMachine* /*sm*/)             { return c->State0Update(); }      // 0x140117890
+static char CA_State1Enter(ClearAreaComponent* c, StateMachine* sm)    { return c->State1Enter(sm); }     // 0x140117820
+static char CA_State2Enter(ClearAreaComponent* c, StateMachine* /*sm*/)              { return c->State2Enter(); }       // 0x1401177f0
 
 // B4 FORWARD: tool_harness.cpp drives state 0's enter directly.
-extern "C" char ClearArea_State0Enter(void* data, void* sm) {
+extern "C" char ClearArea_State0Enter(void* data, StateMachine* sm) {
     if (!data) return 1;
     return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);   // LEFT: B4 FORWARD (tool_harness.cpp)
 }

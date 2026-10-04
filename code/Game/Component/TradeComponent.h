@@ -131,12 +131,12 @@ public:
     void SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigned int qty);   // 0x14005ace0
     // The controller's state handlers (table 0x14005c650; RCX = this).
     char EnterIdle();                                                   // 0x14005abd0 state 2 enter
-    char TickIdle(void* sm, const System::Time* deltaTime);                         // 0x14005aa60 state 2 per-frame
+    char TickIdle(StateMachine* sm, const System::Time* deltaTime);                         // 0x14005aa60 state 2 per-frame
     char EnterInbound();                                                // 0x14005aa50 state 0x12 enter
-    char OnMerchantDocked(void* sm);                                    // 0x14005a850 state 0x12 event 9
-    char OnMerchantLost(void* sm);                                      // 0x14005a9c0 state 0x12 event 0xb
+    char OnMerchantDocked(StateMachine* sm);                                    // 0x14005a850 state 0x12 event 9
+    char OnMerchantLost(StateMachine* sm);                                      // 0x14005a9c0 state 0x12 event 0xb
     char EnterDocked();                                                 // 0x14005a800 state 0x13 enter
-    char TickDocked(void* sm, const System::Time* deltaTime);                       // 0x14005a780 state 0x13 per-frame
+    char TickDocked(StateMachine* sm, const System::Time* deltaTime);                       // 0x14005a780 state 0x13 per-frame
     char LeaveDocked();                                                 // 0x14005a6d0 state 0x13 update
     char Teardown();                                                    // 0x14005b160 transition 3
 

@@ -24,10 +24,8 @@
 // iterates with the COLUMN tied to the outer loop and the ROW tied to the inner loop (a
 // transposed traversal); ties resolve to the first-visited minimum, so the exact order is
 // preserved here. The Map's cells, terrain type (+0x29).
-// Caller: int fn(int* grid, int srcCell, int destCell, uint32_t passFlags)
-// LEFT: the 14 outside callers hand the Map as its leading int.
-int WorkGrid_FindCell_9ccf0(int* mapGrid, int srcCell, int destCell, uint32_t passFlags) {
-    Map* map = reinterpret_cast<Map*>(mapGrid);
+// Caller: int fn(Map* map, int srcCell, int destCell, uint32_t passFlags)
+int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags) {
     int gridW = map->size;
     int best = -1;
     int bestDist = 0;

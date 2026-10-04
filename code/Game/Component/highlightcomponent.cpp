@@ -106,7 +106,7 @@ void HighlightComponent::Persist(IO::Stream& stream) {
 
 // [8] 0x14004c850 / [12] 0x14004c870. PORT GAP — B38 D9: never ported; the
 // tree's table left them inert; kept inert here.
-void HighlightComponent::Tick(void*) {}
+void HighlightComponent::Tick(const System::Time*) {}
 void HighlightComponent::OnEvent(int) {}
 
 // create 0x140006e40: MemAlloc(0x128, 8), then the ctor.

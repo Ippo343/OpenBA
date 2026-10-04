@@ -30,7 +30,7 @@ public:
                        ComponentDescription* material, uint32_t count, bool flag);   // 0x1400c7cd0
     ~DropOffRawMaterial() override = default;                  // [0] 0x140022670
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c7b10
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c7300
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c7300
     void CheckEntity() override;                               // [8] 0x1400c72f0 (JMP 0x1400c7570)
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c7270
 

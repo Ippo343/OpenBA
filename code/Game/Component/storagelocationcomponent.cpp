@@ -71,7 +71,7 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
 // state-2 walk at this node, starving WPC's edf0 (so the completed barn stayed
 // registered as an available Builder workplace, capacity 4, and absorbed the
 // first 4 builders town-wide) and ClearArea's state-2 event-1 broadcast.
-static char StorageLoc_State2Enter(StorageLocationComponent* data, void* /*sm*/) {
+static char StorageLoc_State2Enter(StorageLocationComponent* data, StateMachine* /*sm*/) {
     if (!data) return 0;
     TownRegistry_RegisterStorageLocation(data);
     return 0;
@@ -82,7 +82,7 @@ static char StorageLoc_State2Enter(StorageLocationComponent* data, void* /*sm*/)
 // The list base is the town manager itself (townMgr+0x00 is the array head), which is
 // the same object the state-2 append grows.
 // Returns 0 for the same reason as State2Enter above (retail d1f0 zeroes AL too).
-static char StorageLoc_State3Enter(StorageLocationComponent* data, void* /*sm*/) {
+static char StorageLoc_State3Enter(StorageLocationComponent* data, StateMachine* /*sm*/) {
     if (!data) return 0;
     if (GameUpdateLoop::_singleton == nullptr) return 0;
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;

@@ -37,8 +37,8 @@
 //   slot 3 (+0x18) Enter(node, sm, int idx)              -> char
 //   slot 4 (+0x20) Update(node, sm, int idx)             -> char
 //   slot 5 (+0x28) OnState(node, sm, int actIdx, int trIdx) -> void
-//   slot 6 (+0x30) Transition(node, sm, void* time, int idx) -> char
-//   slot 7 (+0x38) Transition(node, sm, void* time, int idx) -> char
+//   slot 6 (+0x30) Transition(node, sm, const Time* time, int idx) -> char
+//   slot 7 (+0x38) Transition(node, sm, const Time* time, int idx) -> char
 // Each handler is tail-called as `handler(*(node+0x18))` (the dispatcher does
 // `MOV RCX,[RCX+0x18]; JMP handler`); a null handler is a graceful no-op (return 0).
 //
@@ -59,7 +59,7 @@
 // Our port of StateMachine::Tick (retail 0x1400a9660), defined in
 // statemachinecomponent.cpp and registered for that address. RequestStateTransition
 // below needs it for the retail nested-tick idiom on a not-yet-entered SM.
-void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4);
+void StateMachine_TickReimpl(StateMachine* smP, int64_t time, char param3, char param4);
 
 namespace ControllerLive {
 
@@ -74,14 +74,14 @@ namespace ControllerLive {
 //      event   0x140009da0  JMP [RAX+8]                    -> (owner, sm)        char
 //      transition 0x140002bc0: the null arm is a bare RET (no XOR AL), the slot is
 //        `void OnTransition` -> void; the tree calls it with the owner alone.
-//    `time` stays `void*`: Controller::Tick / StateMachine::Tick carry it untyped.
+//    `time` is the System::Time* StateMachine::Tick forwards (RDX = &time, 0x14012b67b).
 template <class Owner>
 struct StateHandlers {
-    using Enter      = char (*)(Owner* owner, void* sm);
-    using Update     = char (*)(Owner* owner, void* sm);
-    using Tick       = char (*)(Owner* owner, void* sm, void* time);
+    using Enter      = char (*)(Owner* owner, StateMachine* sm);
+    using Update     = char (*)(Owner* owner, StateMachine* sm);
+    using Tick       = char (*)(Owner* owner, StateMachine* sm, const System::Time* time);
     using Transition = void (*)(Owner* owner);
-    using Event      = char (*)(Owner* owner, void* sm);
+    using Event      = char (*)(Owner* owner, StateMachine* sm);
 };
 
 #pragma pack(push, 1)
@@ -215,7 +215,7 @@ struct Dispatcher {
     // The exe enter dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`, so a real
     // handler receives RCX=controller-data AND RDX=sm (preserved through the tail-JMP,
     // bug-class #6). Forward sm as the 2nd arg; 1-arg handlers ignore the extra RDX.
-    static char Enter(::ControllerComponent::Controller* node, void* sm, int idx) {
+    static char Enter(::ControllerComponent::Controller* node, StateMachine* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Enter h = table.entries[idx].enterHandler;
         if (!h) return 0;
@@ -246,14 +246,14 @@ struct Dispatcher {
     // Like Enter, the exe update dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`
     // preserving RDX=sm (bug-class #6), so real update handlers (e.g. sub_81e0/sub_76e0)
     // receive (controller-data, sm) and use sm to request state transitions.
-    static char Update(::ControllerComponent::Controller* node, void* sm, int idx) {
+    static char Update(::ControllerComponent::Controller* node, StateMachine* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Update h = table.entries[idx].updateHandler;
         if (!h) return 0;
         return h(NodeData(node), sm);
     }
     // slot 5 (+0x28): OnState — table[actIdx].transitions[trIdx].handler(node+0x18)
-    static void OnState(::ControllerComponent::Controller* node, void* /*sm*/, int actIdx, int trIdx) {
+    static void OnState(::ControllerComponent::Controller* node, StateMachine* /*sm*/, int actIdx, int trIdx) {
         if (actIdx < 0 || actIdx >= table.count) return;
         if (trIdx < 0 || trIdx >= 8) return;
         typename StateHandlers<Owner>::Transition h = table.entries[actIdx].transitions[trIdx].handler;
@@ -275,7 +275,7 @@ struct Dispatcher {
     // Forwarding them is required, not cosmetic — 0x140045250 and 0x140044ff0 both read
     // sm to request their state transition. Handlers that take fewer arguments simply
     // ignore the extra registers.
-    static char Trans30(::ControllerComponent::Controller* node, void* sm, void* time, int idx) {
+    static char Trans30(::ControllerComponent::Controller* node, StateMachine* sm, const System::Time* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Tick h = table.entries[idx].trans30Handler;
         if (!h) return 0;
@@ -293,7 +293,7 @@ struct Dispatcher {
     // (data, sm, Time* dt). Handlers that don't need dt (2-arg ports like the
     // BuildComponent state work) simply ignore R8; the ResidenceComponent heat
     // tick (0x140129970) dereferences it for its heat countdown.
-    static char Trans38(::ControllerComponent::Controller* node, void* sm, void* time, int idx) {
+    static char Trans38(::ControllerComponent::Controller* node, StateMachine* sm, const System::Time* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Tick h = table.entries[idx].trans38Handler;
         if (!h) return 0;
@@ -311,7 +311,7 @@ struct Dispatcher {
     //     miss: XOR AL,AL ; RET
     // So a handler is called as handler(NodeData(node), sm) and returns char — the
     // same shape as Enter/Update. A miss is a graceful 0, exactly as retail.
-    static char PostEvent(::ControllerComponent::Controller* node, void* sm, int curIdx, int eventId) {
+    static char PostEvent(::ControllerComponent::Controller* node, StateMachine* sm, int curIdx, int eventId) {
         if (curIdx < 0 || curIdx >= table.count) return 0;
         const StateEntry<Owner>& e = table.entries[curIdx];
         for (int i = 0; i < e.eventCount; ++i) {
@@ -342,11 +342,8 @@ template <class Tag> StateTable<typename Dispatcher<Tag>::Owner> Dispatcher<Tag>
 // so a plain 0 stands in for retail's Time(0.0) byte-for-byte. If the SM has nothing
 // pending either, the nested Tick is a no-op, +0x09 stays negative, and the slot-8
 // dispatcher bounds-rejects the request exactly as before.
-inline void RequestStateTransition(void* sm, int desiredStateId) {
-    if (!sm) return;
-    // The handlers receive the machine as the `void* stateMachine` the Controller slots
-    // carry (ControllerComponent.h, COMP-7): one cast, LEFT.
-    ::StateMachine* m = reinterpret_cast<::StateMachine*>(sm);   // LEFT: ControllerComponent.h (COMP-7) passes void*
+inline void RequestStateTransition(::StateMachine* m, int desiredStateId) {
+    if (!m) return;
     if (m->activeState < 0)
         m->Tick(nullptr, 0, 0);   // 0x1400a9660; the old forwarder's integer time 0 was this null
     ::ControllerComponent::Controller* node = m->current;   // re-read after the nested tick
@@ -383,18 +380,18 @@ public:
     int  FindTransition(int stateIndex, int* desired) override {
         return Dispatcher<Tag>::RequestTransition(this, stateIndex, desired);
     }
-    char PostEvent(void* sm, int stateIndex, int eventId) override {
+    char PostEvent(StateMachine* sm, int stateIndex, int eventId) override {
         return Dispatcher<Tag>::PostEvent(this, sm, stateIndex, eventId);
     }
-    char Enter(void* sm, int stateIndex) override { return Dispatcher<Tag>::Enter(this, sm, stateIndex); }
-    char Update(void* sm, int stateIndex) override { return Dispatcher<Tag>::Update(this, sm, stateIndex); }
-    void OnTransition(void* sm, int stateIndex, int transitionIndex) override {
+    char Enter(StateMachine* sm, int stateIndex) override { return Dispatcher<Tag>::Enter(this, sm, stateIndex); }
+    char Update(StateMachine* sm, int stateIndex) override { return Dispatcher<Tag>::Update(this, sm, stateIndex); }
+    void OnTransition(StateMachine* sm, int stateIndex, int transitionIndex) override {
         Dispatcher<Tag>::OnState(this, sm, stateIndex, transitionIndex);
     }
-    char Tick(void* sm, void* time, int stateIndex) override {
+    char Tick(StateMachine* sm, const System::Time* time, int stateIndex) override {
         return Dispatcher<Tag>::Trans30(this, sm, time, stateIndex);
     }
-    char TickAlt(void* sm, void* time, int stateIndex) override {
+    char TickAlt(StateMachine* sm, const System::Time* time, int stateIndex) override {
         return Dispatcher<Tag>::Trans38(this, sm, time, stateIndex);
     }
     // [8] retail (Well 0x140010260): `table count != 0` (B38_RULES D9 #9).

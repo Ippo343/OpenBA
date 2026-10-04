@@ -581,8 +581,8 @@ void CitizenAIComponent::OnAdded() {}
 // bucket tick 0x1400c42af).
 // Recipe step 1 (Update), routed to slot +0x48. Signature matches the macro's
 // UpdateVSlot adapter: (self, int64_t* time).
-void CitizenAIComponent::Update(void* timeArg) {
-    const System::Time* time = static_cast<const System::Time*>(timeArg);   // LEFT: SIG Component::Update(void* time) (Component.h, wave X)
+void CitizenAIComponent::Update(const System::Time* timeArg) {
+    const System::Time* time = timeArg;
 
     EnsureCallees();
 

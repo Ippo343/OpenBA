@@ -92,7 +92,7 @@ void RemoveNaturalResource::Persist(IO::Stream& stream) {
 // Checks the resource's profession, sets its mature / harvestable flags, calls the
 // removal helper (0x1401260f0). Returns 0 (action complete).
 // ============================================================
-int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
+int  RemoveNaturalResource::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     // The resource entity's NaturalResourceComponent (+0x28)

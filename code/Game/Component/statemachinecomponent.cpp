@@ -181,7 +181,7 @@ state_walk:
 // DROPS these in the decompile; the real dispatchers read them.
 // Node slots used: [0] FindState(int), [3] Enter, [4] Update, [5] OnTransition,
 // [6] Tick / [7] TickAlt; node+0x08 parent, node+0x10 first child.
-void StateMachine::Tick(void* time, char useAlt, char run) {
+void StateMachine::Tick(const System::Time* time, char useAlt, char run) {
     if (pendingState < 0) goto LAB_transition;
     do {
         do {
@@ -241,13 +241,13 @@ void StateMachine::Tick(void* time, char useAlt, char run) {
     } while (pendingState >= 0);
 }
 
-// B4 FORWARD: outside callers in 7 files (Component: boatcomponent_states,
-// controller_state_table.h, firecomponent_smstate, orchardcomponent_states,
-// tradecomponent_states; Player: keystone_a_removalcalcpath; Work: work_leaf_hunt).
-// `time` is the Time* the node's Tick / TickAlt receive, carried as an integer by
-// the old signature (controller_state_table.h).
-void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) {
-    reinterpret_cast<StateMachine*>(smP)->Tick(reinterpret_cast<void*>(time), param3, param4);   // LEFT: SIG StateMachine_TickReimpl (controller_state_table.h, COMP-2+3)
+// B4 FORWARD: 2 outside caller files (firecomponent_smstate.cpp, tradecomponent_states.cpp),
+// both passing an integer where the machine takes a `const System::Time*`.
+void StateMachine_TickReimpl(StateMachine* smP, int64_t time, char param3, char param4) {
+    // LEFT: the integer callers (firecomponent_smstate.cpp x2, tradecomponent_states.cpp x2) hand
+    // the tick VALUE of a Time(0), which arrives here as a null pointer; retail passes &Time
+    // (known_port_issues 14, row 510).
+    smP->Tick(reinterpret_cast<const System::Time*>(time), param3, param4);   // LEFT: SIG StateMachine_TickReimpl: integer time (row 510)
 }
 
 // ============================================================================
@@ -602,7 +602,7 @@ void StateMachineComponent::OnAdded() {
 // null handler and returns 0 — the same graceful no-op retail performs for an
 // unregistered slot. It is gated anyway, on the boat controller's own flag, so an A/B
 // run can isolate it.
-void StateMachineComponent::Tick(void* t) {
+void StateMachineComponent::Tick(const System::Time* t) {
     if (stateMachine.current == nullptr)
         BodyInit();
     // Same guard as the Update adapter: an unlinked chain would drive Tick's parent-walk
@@ -614,7 +614,7 @@ void StateMachineComponent::Tick(void* t) {
 // bucket round-robin calls). The Time pointer is forwarded opaquely to Tick (which
 // never derefs it — it only passes it on to the node Tick / TickAlt slots), matching
 // the original StateMachineComponent::Update.
-void StateMachineComponent::Update(void* time) {
+void StateMachineComponent::Update(const System::Time* time) {
     // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
     if (stateMachine.current == nullptr)
         BodyInit();
@@ -638,12 +638,12 @@ void StateMachineComponent::Slot11() {}
 // every slot answers 0, as the tree's stub table did.
 int  StateMachineComponent::RootController::FindState(int) { return 0; }
 int  StateMachineComponent::RootController::FindTransition(int, int*) { return 0; }
-char StateMachineComponent::RootController::PostEvent(void*, int, int) { return 0; }
-char StateMachineComponent::RootController::Enter(void*, int) { return 0; }
-char StateMachineComponent::RootController::Update(void*, int) { return 0; }
-void StateMachineComponent::RootController::OnTransition(void*, int, int) {}
-char StateMachineComponent::RootController::Tick(void*, void*, int) { return 0; }
-char StateMachineComponent::RootController::TickAlt(void*, void*, int) { return 0; }
+char StateMachineComponent::RootController::PostEvent(StateMachine*, int, int) { return 0; }
+char StateMachineComponent::RootController::Enter(StateMachine*, int) { return 0; }
+char StateMachineComponent::RootController::Update(StateMachine*, int) { return 0; }
+void StateMachineComponent::RootController::OnTransition(StateMachine*, int, int) {}
+char StateMachineComponent::RootController::Tick(StateMachine*, const System::Time*, int) { return 0; }
+char StateMachineComponent::RootController::TickAlt(StateMachine*, const System::Time*, int) { return 0; }
 char StateMachineComponent::RootController::HasStates() { return 0; }
 
 // create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.

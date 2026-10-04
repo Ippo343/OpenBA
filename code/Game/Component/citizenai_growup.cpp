@@ -217,7 +217,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
         return param_2;
     }
     Map* map = MapGrid();
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830 (int* map; Work/exe_bodies.h)
+    Map* mapGrid = map;
     int w = map->size;
     // worldPos = ((cell % w) - (w>>1 - DAT_140172114), (cell / w) - ..., 0) — but the only
     // use is feeding f3e0 (terrain sample) which the original immediately overwrites with a
@@ -429,7 +429,7 @@ void CitizenComponent::LongTermPlan() {
         RtSystem_Time_Ctor(&timeStamp, 0.0f);
         CharacterComponent* ch = character;
         if (-1 < ch->currentAction) {
-            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(&ch->actions), &timeStamp);   // LEFT: SIG CitizenAI_ActionExecutor_c4c50 (int64_t* stack; Component/exe_bodies.h)
+            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<ActionStack*>(&ch->actions), &timeStamp);   // LEFT: CharacterComponent.h declares +0x48 as separate fields, not an ActionStack
         }
         (void)committed;
     }

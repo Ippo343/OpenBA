@@ -39,7 +39,7 @@ public:
     ~SpawnComponent() override = default;                         // [0] 0x14000c350
     void Persist(IO::Stream& stream) override;                          // [3] 0x140055ee0
     void Startup() override;                                      // [4] 0x140055e90
-    void Update(void* time) override;                             // [9] 0x140055ad0
+    void Update(const System::Time* time) override;                             // [9] 0x140055ad0
 
     // 0x140055cc0: the worldgen seed (one DoSpawn per entry in age, repeated by age).
     void InitialSpawn();

@@ -369,7 +369,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // The world map; the grid callees take it as a leading int*
     Map* map = GameUpdateLoop::_singleton->m_game;
-    int* worldGrid = (int*)map;   // LEFT: SIG WorkGrid_* / WorkLeaf_* (Map passed as int*)
+    int* worldGrid = (int*)map;   // LEFT: SIG WorkLeaf_* (Map passed as int*)
 
     // Read the tile-query filter flag.
     //
@@ -480,13 +480,13 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Find valid cell near this tile
-                int cellIdx = WorkGrid_FindCell_9ccf0(worldGrid, tile->tileIndex, refTileIdx, 0xe07);
+                int cellIdx = WorkGrid_FindCell_9ccf0(map, tile->tileIndex, refTileIdx, 0xe07);
                 if (cellIdx < 0) {
                     continue;
                 }
 
                 // Validate cell is passable
-                int valid = static_cast<int>(WorkBase_ValidateCell_a00f0(worldGrid, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
+                int valid = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
                 if (!(valid & 0xFF)) {
                     continue;
                 }
@@ -591,7 +591,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Validate cell passability
-                int passable = static_cast<int>(WorkBase_ValidateCell_a00f0(worldGrid, 0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
+                int passable = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
                 if (!(passable & 0xFF)) {
                     tileCount = tileArray.count;
                     continue;

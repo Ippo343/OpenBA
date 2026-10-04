@@ -211,7 +211,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     // -------------------------------------------------------
     Map* map = gameWorld->m_game;
     // The map helpers (0x140008830, 0x1400a00f0) take the map as int*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
+    Map* mapGrid = map;
     System::Random* rng = gameWorld->m_random;
 
     int areaRadius = area->_radius;

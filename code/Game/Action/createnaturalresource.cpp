@@ -77,7 +77,7 @@ void CreateNaturalResource::Persist(IO::Stream& stream) {
 // sets up model/NR/growth components, randomizes variant, registers entity.
 // Returns 0 on success, 2 on failure (cell occupied or invalid).
 // ============================================================
-int  CreateNaturalResource::AbstractImpl(void* actionStack) {
+int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     Map* map = gameWorld->m_game;

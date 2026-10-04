@@ -123,7 +123,7 @@ char ClearResourceComponent::State2Enter() {
 }
 
 // The state table's handler adapter: the controller hands it its owner (node+0x18).
-static char ClearResource_State2Enter(ClearResourceComponent* c, void* /*sm*/) { return c->State2Enter(); }   // 0x140118560
+static char ClearResource_State2Enter(ClearResourceComponent* c, StateMachine* /*sm*/) { return c->State2Enter(); }   // 0x140118560
 
 // ============================================================
 // Dispatcher + state table for the ClearResourceComponent controller.

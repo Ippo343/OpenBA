@@ -58,7 +58,7 @@ void AnimateNaturalResource::Persist(IO::Stream& stream) {
 // Gets NR component from entity at +0x20, calls SetAnimIndex with +0x28.
 // Returns waitForAnim flag.
 // ============================================================
-int  AnimateNaturalResource::AbstractImpl(void* actionStack) {
+int  AnimateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     NaturalResourceSetAnimation(_field20->FindComponent<NaturalResourceComponent>(),   // 0x1400052c0
@@ -71,7 +71,7 @@ int  AnimateNaturalResource::AbstractImpl(void* actionStack) {
 // Execute (0x1400c55b0, vtable slot 5)
 // Checks if entity's model is still animating. Returns true while animating.
 // ============================================================
-int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
+int  AnimateNaturalResource::Execute(ActionStack* actionStack, const System::Time* time) {
     (void)actionStack;
     (void)time;
 

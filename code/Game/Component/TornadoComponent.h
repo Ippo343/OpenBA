@@ -41,7 +41,7 @@ public:
     ~TornadoComponent() override = default;                       // [0] 0x14000d640
     void Persist(IO::Stream& stream) override;                          // [3] 0x140058b80
     void Startup() override;                                      // [4] 0x1400585a0
-    void Tick(void* time) override;                               // [8] 0x140057cd0
+    void Tick(const System::Time* time) override;                               // [8] 0x140057cd0
 
     // The waypoint path at +0x30 (H6): 0x1400a70c0 and 0x1400a71e0 take `this+0x30`
     // as their receiver. The point array is an Array<Vector3> (SetSize 0x14000d030,

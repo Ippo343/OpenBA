@@ -207,7 +207,7 @@ bool BuildComponent_DemoGateSkip(BuildComponent* buildComp) {
 }
 
 // 0x140108290, the state-1 ENTER handler (sm = the state machine).
-int BuildComponent::State1Enter(void* smNode) {
+int BuildComponent::State1Enter(StateMachine* smNode) {
     // 0x14000a170 (FindComponent<ClearAreaComponent>) and 0x140118270
     // (ModelComponent_impl_8270): ClearArea_Finalize8270 is the clean C++ port
     // of the second, called below.

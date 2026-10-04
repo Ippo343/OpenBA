@@ -181,7 +181,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // Step 3: Setup iteration
     Map* map = gameWorld->m_game;
     // The map helpers (0x14009ccf0, 0x1400a00f0) take the map as int*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
+    Map* mapGrid = map;
 
     // Get citizen position
     const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;

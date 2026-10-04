@@ -126,7 +126,7 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
 //   Then: SubtractItem from storage, update global resource tracker.
 // Returns 0 on success, 2 on failure.
 // ============================================================
-int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
+int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     int matCount = _field30;

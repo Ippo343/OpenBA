@@ -75,7 +75,7 @@ long long g_elProfTreeNodes = 0, g_elProfBucketVisits = 0, g_elProfBucketTicked 
 extern "C" int  CompProf_BeginKind(void* comp, int kind);
 extern "C" void CompProf_End(int slot, long long qpcTicks);
 
-void ComponentEntity::TickComponents(void* time) {
+void ComponentEntity::TickComponents(const System::Time* time) {
     uint32_t entityFlags = _entityFlags;
 
     // Check entity has "needs tree tick" flag (bit 2) and is not deleted (bit 10)
@@ -422,7 +422,7 @@ static bool RebuildWalkSnapshot(EntityList* self) {
 }
 
 // Returns true when the snapshot walk ran (so the tree walk is skipped).
-static bool WalkUpdateTreeSnapshot(EntityList* self, void* time, bool prof) {
+static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, bool prof) {
     if (!PerfX::TreeSnapshot()) return false;
     if (s_walkDirty || s_walkOwner != self || s_walkCountAtBuild != self->updateTreeCount) {
         if (!RebuildWalkSnapshot(self)) return false;   // corrupt: fall back to the tree walk
@@ -460,7 +460,7 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, void* time, bool prof) {
     return true;
 }
 
-void EntityList::Update(void* time) {
+void EntityList::Update(const System::Time* time) {
     // Step 0 (SA DEVIATION — one-frame removal deferral): drain the removal list
     // that was BUILT LAST FRAME, at the TOP of this frame's update, instead of at
     // the bottom of the same frame it was built (retail drains at the end — the
@@ -490,7 +490,7 @@ void EntityList::Update(void* time) {
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfDrainTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 1: Accumulate time
-    accumulatedTime._ticks += *(int64_t*)time;   // LEFT: SIG EntityList::Update(void* time) (caller gameupdateloop.cpp, GAME-2)
+    accumulatedTime._ticks += time->_ticks;
 
     // Step 2: PreUpdate — process staging arrays into update tree
     PreUpdate();
@@ -593,7 +593,7 @@ void EntityList::Update(void* time) {
                             (ent->_entityFlags & 0x400) == 0) {
 
                             int32_t compCount = ent->_componentCount;
-                            int64_t deltaTime[1] = { delta };
+                            System::Time deltaTime = { delta };
 
                             for (int64_t ci = 0; ci < compCount; ci++) {
                                 // Read component IBP and CheckPtr
@@ -609,10 +609,10 @@ void EntityList::Update(void* time) {
                                         // vtable, so the only per-call cost is two QPC reads.
                                         const int slot = CompProf_Begin(comp);
                                         const long long q0 = CompProf_Now();
-                                        comp->Update(deltaTime);
+                                        comp->Update(&deltaTime);
                                         CompProf_End(slot, CompProf_Now() - q0);
                                     } else {
-                                        comp->Update(deltaTime);
+                                        comp->Update(&deltaTime);
                                     }
                                 }
 

@@ -336,7 +336,7 @@ void DecalComponent::OnRemove() {
 // scene/material aren't ready), then un-bucket so the tree stops ticking this component
 // (the placed decal is thereafter rendered by GeomDraw_CollectDraw, not the update tree).
 // TREE DIVERGENCE: retail's slot 8 is Component's `RET`.
-void DecalComponent::Tick(void* /*time*/) {
+void DecalComponent::Tick(const System::Time* /*time*/) {
     if (decalId < 0) DecalComponent::OnAdded();                  // retry the build until the material is ready
     if (decalId >= 0) DecalComponent_SetDrawFlag(this, false);   // placed -> un-bucket
 }

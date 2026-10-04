@@ -60,12 +60,12 @@ public:
     // The state handlers of the controller's table (RCX = [node+0x18] = this).
     char State0Enter();                                           // 0x1400453f0
     char State0Update();                                          // 0x140045190
-    char State0Tick(void* sm);                                    // 0x140045250 (trans30)
+    char State0Tick(StateMachine* sm);                                    // 0x140045250 (trans30)
     char State1Enter();                                           // 0x140045150
-    char State1Tick(void* sm);                                    // 0x140044ff0 (trans30)
+    char State1Tick(StateMachine* sm);                                    // 0x140044ff0 (trans30)
     char State2Enter();                                           // 0x140044f70
     char State3Enter();                                           // 0x140044ec0
-    char State3Tick(void* sm);                                    // 0x140044d10 (trans30)
+    char State3Tick(StateMachine* sm);                                    // 0x140044d10 (trans30)
     char State4Enter();                                           // 0x140044cd0
     char State4Tick();                                            // 0x140044c40 (trans30)
 

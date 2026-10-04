@@ -54,7 +54,7 @@ public:
     void OnAddedPass();                                           // 0x1400c2f60
     // The EntityList tree walks' per-entity bodies (B4 WORK-a; no retail symbol:
     // named from what they do). Defined in entitylist.cpp.
-    void TickComponents(void* time);                              // 0x1400c2de0 slot 8 on flag-bit-2 components
+    void TickComponents(const System::Time* time);                              // 0x1400c2de0 slot 8 on flag-bit-2 components
     void PostUpdateComponents();                                  // 0x1400c2c70 slot 10 on flag-bit-4 components
     void SendEvent(int eventId);                                  // 0x1400c2b70 slot 12 on every component (body: modelcomponent.cpp)
 

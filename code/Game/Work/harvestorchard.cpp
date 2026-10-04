@@ -163,7 +163,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // Step 3: Get map and citizen position
     Map* map = gameWorld->m_game;
     // The map helpers (0x14009ccf0, 0x1400a00f0) take the map as int*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
+    Map* mapGrid = map;
 
     const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 

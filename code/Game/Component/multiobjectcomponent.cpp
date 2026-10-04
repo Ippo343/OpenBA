@@ -94,7 +94,7 @@ char MultiObjectComponent::EnterState2() {
 // The table (controller_state_table.h) holds plain handler addresses called as
 // handler([node+0x18], sm): [node+0x18] is the controller's back-pointer, this
 // component, so the entry is a one-line adapter that calls the member.
-static char MultiObjectEnterState2(MultiObjectComponent* c, void* /*sm*/) { return c->EnterState2(); }   // 0x140125560
+static char MultiObjectEnterState2(MultiObjectComponent* c, StateMachine* /*sm*/) { return c->EnterState2(); }   // 0x140125560
 
 // Retail's table, transcribed from MultiObjectDescription_Setup (0x14014f530): its
 // RegisterState (0x1400360f0) registers state 2 with enter 0x140125560 and every other

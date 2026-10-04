@@ -58,7 +58,7 @@ public:
     void Startup() override;                                      // [4] 0x140124ac0
     void OnAdded() override;                                      // [6] 0x140124a30
     void OnRemove() override;                                     // [7] 0x1401249d0
-    void Tick(void* time) override;                               // [8] 0x140124960
+    void Tick(const System::Time* time) override;                               // [8] 0x140124960
     // Re-point every mesh material to one material set (defined in
     // destroycomponent_state6.cpp, B4 COMP-c).
     void SetMaterialSet(int materialSetIdx);                      // 0x140125020

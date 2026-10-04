@@ -100,9 +100,8 @@ void DropOffRawMaterial::Persist(IO::Stream& stream) {
 //   array, transfer each via DropOffExec.
 // Returns 1 (needs more work) or 2 (action pushed, e.g. MoveTo for full storage).
 // ============================================================
-int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
-    // LEFT: Action::AbstractImpl's parameter is void* (Action.h); it is the ActionStack.
-    ActionStack* stack = static_cast<ActionStack*>(actionStack);
+int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
+    ActionStack* stack = actionStack;
 
     // If the destination is null, drop all inventory items
     if (_field38.Get() == nullptr) {

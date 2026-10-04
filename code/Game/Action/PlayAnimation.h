@@ -28,8 +28,8 @@ public:
 
     ~PlayAnimation() override = default;                       // [0] 0x140001260
     void Persist(IO::Stream& stream) override;                       // [3] 0x140042480
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x140042420
-    int  Execute(void* actionStack, void* time) override;      // [5] 0x140042400
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x140042420
+    int  Execute(ActionStack* actionStack, const System::Time* time) override;      // [5] 0x140042400
     void CheckEntity() override;                               // [8] 0x1400423f0 own `RET 0` (same bytes as the base body)
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400423b0
 

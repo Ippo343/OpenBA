@@ -44,7 +44,8 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x
 
 // ---- charactercomponent.cpp
 class Action;
-void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime);  // 0x1400c4f80
+namespace System { class Time; }
+void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, const System::Time* deltaTime);  // 0x1400c4f80
 
 // ---- citizen_assign_citizens.cpp
 extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
@@ -84,7 +85,8 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, ui
 void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_t* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0
 
 // ---- citizenai_executor.cpp
-extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2);  // 0x1400c4c50
+struct ActionStack;   // Action/Action.h
+extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const System::Time* param_2);  // 0x1400c4c50
 
 // ---- citizenai_findhelpers.cpp
 bool ResidenceCheck_2ac30(int64_t param_1);  // 0x14012ac30
