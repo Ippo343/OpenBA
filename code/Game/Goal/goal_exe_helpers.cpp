@@ -43,14 +43,6 @@ const System::String& NamedExternalRef::Name() const {
     return *reinterpret_cast<const System::String*>(name);
 }
 
-// LEFT: CitizenBehavior::field_0x100 / field_0x160 are `void*` (WORK-a's header).
-ProfessionBucketNode* ProfessionTreeRoot(const CitizenBehavior* cb) {
-    return reinterpret_cast<ProfessionBucketNode*>(cb->field_0x100);
-}
-TemplateBucketNode* TemplateTreeRoot(const CitizenBehavior* cb) {
-    return reinterpret_cast<TemplateBucketNode*>(cb->field_0x160);
-}
-
 void NamedExternalRef::Resolve() {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     if (!efactory) return;

@@ -90,9 +90,9 @@ uint32_t HighlightTypeId() { return TutorialHighlightDialog::TypeId(); }
 // narrow fail and the step panel is never bound.
 uint32_t TutorialUITypeId() { return TutorialUI::TypeId(); }
 
-// The CitizenBehavior +0x160 template tree (Goal/goal_exe_helpers.h): key
+// The CitizenBehavior +0x160 template tree (Entity/CitizenBehavior.h): key
 // +0x00, entities +0x08, count +0x10, left +0x20, right +0x28.
-TemplateBucketNode* BstFind(TemplateBucketNode* node, const Object::External* key) {
+TemplateBucket* BstFind(TemplateBucket* node, const Object::External* key) {
     while (node) {
         const Object::External* nodeKey = node->key;
         if (key < nodeKey)      node = node->left;
@@ -354,13 +354,13 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
     if (toolbarRef.resolved != nullptr) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
-        TemplateBucketNode* root = mgr ? TemplateTreeRoot(mgr) : nullptr;
+        TemplateBucket* root = mgr ? mgr->field_0x160 : nullptr;
 
         NamedExternalRef refCopy{};
         TutWave_ExternalRefCopy(&refCopy, &toolbarRef);
         const Object::External* key = TutWave_ExternalRefResolve(&refCopy);
 
-        TemplateBucketNode* found = BstFind(root, key);
+        TemplateBucket* found = BstFind(root, key);
         int count = found ? found->count : 0;
         int index = toolbarIndex;
 
@@ -368,7 +368,7 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
             NamedExternalRef refCopy2{};
             TutWave_ExternalRefCopy(&refCopy2, &toolbarRef);
             const Object::External* key2 = TutWave_ExternalRefResolve(&refCopy2);
-            TemplateBucketNode* found2 = BstFind(root, key2);
+            TemplateBucket* found2 = BstFind(root, key2);
             if (found2 && found2->entities) {
                 targetElem = found2->entities[index];
             }
