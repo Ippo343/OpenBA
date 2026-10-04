@@ -9,7 +9,7 @@
 // and the first one reached died with EXEC-of-0:
 //
 //   0x1400c3d30  EntityList::Shutdown
-//   0x1400c3e60  EntityList::~EntityList
+//   0x1400c3e60  EntityList::~EntityList   (since B.4 X4-COMP: the class dtor, entitylist.cpp)
 //   0x1400907b0  CitizenList::~CitizenList
 //   0x1401024d0  EntityUI::~EntityUI
 //   0x1400f8ff0  Tutorial::~Tutorial
@@ -58,21 +58,20 @@
 
 // B.4 P2 GAME-2: the five teardown bodies take their object typed and read it by
 // name. What still goes through the offset helpers below is LEFT, each site with
-// its reason: the arrays EntityList.h / CitizenBehavior.h / PlayerToolManager.h
+// its reason: the arrays CitizenBehavior.h / PlayerToolManager.h
 // declare as three raw fields (not a Collection::Array, so `~Array` is reached
 // through a cast; H5 in headers owned by ENT / PLAYER), the trees whose root is
 // a `void*` there (WorkScheduler +0x20), and the tool registry's {root, count} header.
 namespace {
 
-inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
-inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
-inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
+inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
+inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
+inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
 
 inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }
 
 // B.3.2 bridge: the owning structs are still untyped bytes.
-inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
-inline Collection::Array<void*>&  PtrArr(void* base, int off) { return *reinterpret_cast<Collection::Array<void*>*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
+inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
 
 // MSVC's __ehvec_dtor_iter: destroy the elements of an embedded array in
 // REVERSE order. Retail reaches these through the CRT helper at 0x14003ad30;
@@ -83,14 +82,6 @@ void VectorDtorIter(T (&elements)[N], Dtor dtor) {
 }
 
 } // namespace
-
-// ============================================================
-// 0x140001740 — {ptr,count} array clear (element dtor of the 5-bucket array)
-// ============================================================
-extern "C" void Array8_Clear_1740(void* hdrV) {
-    // retail: MemFree; data = 0; count + capacity in one 8-byte store
-    Arr(hdrV, 0x00).~Array();   // LEFT: EntityList.h (ENT): UpdateBucket is three raw fields, not a Collection::Array (H5)
-}
 
 // ============================================================
 // 0x1400174e0 — recursive node free, children +0x20/+0x28, owns a buffer at +0x08
@@ -248,8 +239,8 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
     }
 
     // Mark every entity not already flagged deleted (entity+0x40 bit 10).
-    for (int32_t i = 0; i < self->masterArray.count; ++i) {
-        ComponentEntity** slot = &self->masterArray.data[i];
+    for (int32_t i = 0; i < self->masterArray._size; ++i) {
+        ComponentEntity** slot = &self->masterArray._data[i];
         ComponentEntity* entity = *slot;
         if ((entity->_entityFlags >> 10 & 1) == 0) {
             MarkEntityForRemoval(*slot);   // 0x1400c2ea0
@@ -273,58 +264,20 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
     }
 
     // Drain the pending-removal array (+0xD0 data / +0xD8 count).
-    for (int32_t i = 0; i < self->removalList.count; ++i) {
-        ComponentEntity* ibp = self->removalList.data[i];
+    for (int32_t i = 0; i < self->removalList._size; ++i) {
+        ComponentEntity* ibp = self->removalList._data[i];
         self->RemoveEntity(&ibp);   // 0x1400c38e0
     }
-    PtrArr(self, 0xD0).~Array();   // LEFT: EntityList.h (ENT): removalList is an IBPArray, not a Collection::Array (H5)
+    self->removalList.~Array();   // retail inlines the Array dtor here (free, then the two zero qwords); ~EntityList runs it again on the empty array
 
     // Whatever is still in the master array goes now. RemoveEntity shrinks the
     // array, so retail re-reads the count every pass and always takes slot 0.
-    while (self->masterArray.count > 0) {
-        ComponentEntity* ibp = self->masterArray.data[0];
+    while (self->masterArray._size > 0) {
+        ComponentEntity* ibp = self->masterArray._data[0];
         self->RemoveEntity(&ibp);   // 0x1400c38e0
     }
 
     self->shuttingDown = false;
-}
-
-// ============================================================
-// 0x1400c3e60 — EntityList::~EntityList
-// ============================================================
-extern "C" void EntityList_Dtor_c3e60(EntityList* self) {
-    EntityList_Shutdown_c3d30(self);
-
-    PtrArr(self, 0xD0).~Array();   // removal list   // LEFT: EntityList.h (ENT): IBPArray is not a Collection::Array (H5)
-    PtrArr(self, 0x98).~Array();   // staging post-update   // LEFT: EntityList.h (ENT): IBPArray is not a Collection::Array (H5)
-    PtrArr(self, 0x88).~Array();   // staging update   // LEFT: EntityList.h (ENT): IBPArray is not a Collection::Array (H5)
-
-    // post-update tree (+0x78) then update tree (+0x68): nodes with kids +0x10/+0x18
-    {
-        EntityTreeNode* root = self->postUpdateTreeRoot;
-        if (root) {
-            WorkBase_TreeNodeFree_14c30(&self->postUpdateTreeRoot, root->left);
-            WorkBase_TreeNodeFree_14c30(&self->postUpdateTreeRoot, root->right);
-            MemFree(root);
-        }
-        self->postUpdateTreeRoot = nullptr;
-        self->postUpdateTreeCount = 0;
-    }
-    {
-        EntityTreeNode* root = self->updateTreeRoot;
-        if (root) {
-            WorkBase_TreeNodeFree_14c30(&self->updateTreeRoot, root->left);
-            WorkBase_TreeNodeFree_14c30(&self->updateTreeRoot, root->right);
-            MemFree(root);
-        }
-        self->updateTreeRoot = nullptr;
-        self->updateTreeCount = 0;
-    }
-
-    // 5 round-robin update buckets at +0x18, 0x10 bytes each
-    VectorDtorIter(self->buckets, [](UpdateBucket* e) { Array8_Clear_1740(e); });
-
-    PtrArr(self, 0x08).~Array();   // master array   // LEFT: EntityList.h (ENT): IBPArray is not a Collection::Array (H5)
 }
 
 // ============================================================

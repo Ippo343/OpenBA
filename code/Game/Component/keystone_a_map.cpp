@@ -195,8 +195,8 @@ void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint
                                     }
                                     ActHunt_MarkEntityRemoval_c2ea0(local_68);   // 0x1400c2ea0
                                     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                                    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
-                                        .SetSizeFill(entityList->removalList.count + 1, &local_68);
+                                    entityList->removalList
+                                        .SetSize(entityList->removalList._size + 1, local_68);
                                 }
                             }
                         }

@@ -56,8 +56,8 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
 
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     EntityList* entityList = gw ? gw->m_entityList : nullptr;                     // +0xe8
-    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;   // +0x08
-    const int n   = entityList ? entityList->masterArray.count : 0;               // +0x10
+    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;   // +0x08
+    const int n   = entityList ? entityList->masterArray._size : 0;               // +0x10
     const uint32_t tid = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tid) {
         std::fprintf(stderr, "[OrchardCut] frame=%d: cannot scan (arr=%p n=%d tid=%u)\n",

@@ -33,7 +33,7 @@ extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount);  // 0x
 // ---- attendancecomponent.cpp
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
 void AttendanceComponent_ReleaseLink1650(CitizenComponent* worker);  // 0x140111650
-void AttendanceComponent_ReleaseLink59b0(void* workerP);  // 0x1401159b0
+void AttendanceComponent_ReleaseLink59b0(CitizenComponent* worker);  // 0x1401159b0
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)
 
 // ---- buildcomponent.cpp
@@ -137,8 +137,6 @@ int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0
 
 // ---- citizencomponent.cpp
 ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)
-void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  // 0x140111ee0
-char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2);  // 0x140111840
 
 // ---- citizencomponent_lifecycle.cpp
 

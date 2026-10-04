@@ -142,8 +142,7 @@ static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Attendan
 void AttendanceComponent_ReleaseLink1650(CitizenComponent* self) {
     AttendanceComponent_ReleaseLinkSlot(self, self->field_0x230);
 }
-void AttendanceComponent_ReleaseLink59b0(void* workerP) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);  // LEFT: SIG AttendanceComponent_ReleaseLink59b0 (wave X family across two agents)
+void AttendanceComponent_ReleaseLink59b0(CitizenComponent* self) {
     AttendanceComponent_ReleaseLinkSlot(self, self->careBuilding);
 }
 

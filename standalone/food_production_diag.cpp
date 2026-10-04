@@ -139,8 +139,8 @@ void DumpAll(int frame) {
         std::fprintf(stderr, "[FoodDiag] frame=%d: EntityList (gw+0xe8) null\n", frame);
         return;
     }
-    ComponentEntity** arr = entityList->masterArray.data;       // +0x08
-    int       n   = entityList->masterArray.count;              // +0x10
+    ComponentEntity** arr = entityList->masterArray._data;       // +0x08
+    int       n   = entityList->masterArray._size;              // +0x10
 
     ClassRow rows[] = {
         { "CropFieldComponent", CropFieldComponent::TypeId(), 0 },

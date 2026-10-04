@@ -137,11 +137,11 @@ void NotifyEntityChanged(ComponentEntity* entity) {
         uint32_t newFlags = entity->_entityFlags;
         if (((oldFlags ^ newFlags) & 4) != 0) {
             ComponentEntity* ibp = entity;
-            ActHunt_DynArraySetCount_3110(&owner->stagingUpdate, owner->stagingUpdate.count + 1, &ibp);
+            ActHunt_DynArraySetCount_3110(&owner->stagingUpdate, owner->stagingUpdate._size + 1, &ibp);
         }
         if (((oldFlags ^ newFlags) & 0x10) != 0) {
             ComponentEntity* ibp = entity;
-            ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate, owner->stagingPostUpdate.count + 1, &ibp);
+            ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate, owner->stagingPostUpdate._size + 1, &ibp);
         }
     }
 }

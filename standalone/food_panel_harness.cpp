@@ -165,8 +165,8 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
     if (!gw) { std::fprintf(stderr, "[FoodPanel] gameWorld null\n"); return; }
     EntityList* el = gw->m_entityList;                 // +0xe8
     if (!el) { std::fprintf(stderr, "[FoodPanel] EntityList null\n"); return; }
-    ComponentEntity** arr = el->masterArray.data;      // +0x08
-    const int n = el->masterArray.count;               // +0x10
+    ComponentEntity** arr = el->masterArray._data;      // +0x08
+    const int n = el->masterArray._size;               // +0x10
 
     ComponentEntity* ent = nullptr; Component* comp = nullptr;
     for (int i = 0; i < n && arr && !ent; ++i) {
@@ -737,10 +737,9 @@ void FollowUp(int frameNum) {
                             // picked (citizen+0x208), NOT off `w` — `w` is the
                             // WorkPlaceComponent, whose +0x30 is an unrelated field, and
                             // printing it made a successful enrolment read as "queue 0 -> 0".
-                            int64_t seed = 0;
-                            new (&seed) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                            AttendanceComponent* seed = nullptr;   // the null InternalPtr<AttendanceComponent>
                             // 0x140111840 (the enroller).
-                            const char ok = CitizenComp_TryEnrolInSchool(victim, &seed);
+                            const char ok = victim->TryEnrolInSchool(seed);
                             AttendanceComponent* att = victim->school;      // +0x208
                             std::fprintf(stderr, "[FoodPanel]       enrol probe on minor %p: "
                                          "returned %d, +0x208=%p, that component's queue(+0x30)=%d   %s\n",

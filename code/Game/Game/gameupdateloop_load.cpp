@@ -591,11 +591,10 @@ PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float p
     RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &t3, true);  // LEFT: POD RtGraphics::Camera: the runtime view-setup door takes the mirror (runtime/types/graphics, outside this set)
 }
 
-// 0x1400c3f90 — the EntityList ctor's body (+0xE8, 0xe8): memset + the 5
-// non-zero defaults. EntityList is trivially constructible: Load begins its
-// lifetime with a placement new (no code) and runs this on it.
-static_assert(std::is_trivially_default_constructible<EntityList>::value,
-              "placement new of EntityList runs no code");
+// (0x1400c3f90, the EntityList ctor, is EntityList::EntityList since B.4
+// X4-COMP: Load's placement new runs it.) The classes below are trivially
+// constructible: Load begins their lifetime with a placement new (no code) and
+// runs their ctor body on it.
 static_assert(std::is_trivially_default_constructible<CitizenBehavior>::value,
               "placement new of CitizenBehavior runs no code");
 static_assert(std::is_trivially_default_constructible<Calendar>::value,
@@ -606,18 +605,9 @@ static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
 static_assert(std::is_trivially_default_constructible<Minimap>::value,
               "placement new of Minimap runs no code");
-static void EntityList_Construct(EntityList* list) {
-    memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
-    list->processCount[0] = 0x32;             // +0xA8 50
-    list->processCount[1] = 0xf;              // +0xAC 15
-    list->processCount[2] = 8;                // +0xB0
-    list->processCount[3] = 5;                // +0xB4
-    list->processCount[4] = 2;                // +0xB8 retail's qword store of 2 (H7: two stores)
-    list->cursor[0] = 0;                      // +0xBC
-}
 
 // 0x140090a30 — the CitizenBehavior (town manager) ctor's body (+0xF0, 0x1c0).
-// Trivially constructible, as EntityList above.
+// Trivially constructible (the static_assert above).
 static void CitizenBehavior_Construct(CitizenBehavior* cb) {
     memset(cb, 0, offsetof(CitizenBehavior, _pad1B4));   // zero +0x00..+0x1B3
     Reimpl_TradeComponent_sub_77c0(&cb->professionResources, 0x15);
@@ -1022,8 +1012,7 @@ void GameUpdateLoop::Load() {
     // Step 8 — EntityList (+0xE8, 0xe8).
     {
         void* mem = AllocSub<void>(0xe8, 4);
-        EntityList* list = mem ? new (mem) EntityList : nullptr;
-        if (list) EntityList_Construct(list);
+        EntityList* list = mem ? new (mem) EntityList : nullptr;   // the ctor 0x1400c3f90
         m_entityList = list;
     }
 

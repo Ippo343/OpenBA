@@ -595,7 +595,7 @@ void DiseaseComponent::KillOneAnimal() {
             if (entityMgr) {
                 ActHunt_DynArraySetCount_3110(
                     &entityMgr->removalList,
-                    entityMgr->removalList.count + 1,
+                    entityMgr->removalList._size + 1,
                     &victim);
             }
             killed = true;

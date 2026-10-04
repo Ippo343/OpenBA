@@ -185,8 +185,8 @@ void DumpOrchards(int frameNum) {
         fprintf(stderr, "[OrchardDiag] frame=%d: EntityList (gw+0xe8) null — cannot scan\n", frameNum);
         return;
     }
-    ComponentEntity** arr = entityList->masterArray.data;       // +0x08
-    int       n   = entityList->masterArray.count;              // +0x10
+    ComponentEntity** arr = entityList->masterArray._data;       // +0x08
+    int       n   = entityList->masterArray._size;              // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     const uint32_t tidWorkPlaceComp = WorkPlaceComponent::TypeId();
     const uint32_t tidStateMachineComp = StateMachineComponent::TypeId();

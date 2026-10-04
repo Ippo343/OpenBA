@@ -188,8 +188,8 @@ static void DoOverstock(int frameNum) {
     {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         EntityList* el = gw->m_entityList;                                // +0xe8
-        ComponentEntity** arr = el ? el->masterArray.data : nullptr;      // +0x08
-        const int entCount = el ? el->masterArray.count : 0;              // +0x10
+        ComponentEntity** arr = el ? el->masterArray._data : nullptr;      // +0x08
+        const int entCount = el ? el->masterArray._size : 0;              // +0x10
         for (int e = 0; e < entCount && arr; ++e) {
             ComponentEntity* ent = arr[e];
             if (!ent) continue;

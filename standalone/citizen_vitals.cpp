@@ -106,7 +106,7 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
     {
         EntityList* el = gameWorld->m_entityList;          // +0xE8
         if (Readable(el)) {
-            const int n2 = el->masterArray.count;            // +0x10
+            const int n2 = el->masterArray._size;            // +0x10
             if (n2 >= 0 && n2 < 10000000) entities = n2;
         }
     }

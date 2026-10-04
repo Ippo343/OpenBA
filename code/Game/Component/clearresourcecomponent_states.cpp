@@ -116,8 +116,8 @@ char ClearResourceComponent::State2Enter() {
 
     ActHunt_MarkEntityRemoval_c2ea0(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
-        .SetSizeFill(entityList->removalList.count + 1, &entity);
+    entityList->removalList
+        .SetSize(entityList->removalList._size + 1, entity);
 
     return 1;
 }

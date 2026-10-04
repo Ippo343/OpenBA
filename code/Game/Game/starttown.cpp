@@ -413,7 +413,6 @@ extern bool g_wpcRosterOnly;
 
 // Apply the occupied end-state visual for a rostered house (ModelKick mode 2 + StatusIcon
 // toggle). MUST run at gameplay time (live scene). See its definition in workplacecomponent.cpp.
-extern void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp);
 
 // ---------------------------------------------------------------------------
 // Shared "activate a pre-built workplace" replay (open E consolidation — was two
@@ -458,7 +457,7 @@ static Profession* StartTown_ActivateWorkplace(ComponentEntity* entity, bool reg
 // WorkPlaceComponent pointers of the founding houses rostered in roster-only mode, whose
 // occupied visual was deferred to gameplay time. Drained once by
 // StartTown_ApplyPendingOccupiedVisuals on an early GameUpdateLoop tick (scene live).
-static std::vector<int64_t> g_pendingOccupiedVisuals;
+static std::vector<WorkPlaceComponent*> g_pendingOccupiedVisuals;
 // One-shot guard for the deferred occupied-visual pass, reset per town spawn.
 static bool g_occupiedVisualsApplied = false;
 
@@ -4006,8 +4005,8 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
     fprintf(stderr, "[startTown::housing] applying %zu deferred occupied visuals at frame %d\n",
             g_pendingOccupiedVisuals.size(), frameNum);
     fflush(stderr);
-    for (int64_t wp : g_pendingOccupiedVisuals) {
-        if (wp) WorkplaceComponent_ApplyOccupiedVisual(wp);
+    for (WorkPlaceComponent* wp : g_pendingOccupiedVisuals) {
+        if (wp) wp->ApplyOccupiedVisual();
     }
     g_pendingOccupiedVisuals.clear();
     g_occupiedVisualsApplied = true;
@@ -5365,18 +5364,18 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
 
     // EntityList main-array count lives at entityList+0x10 (Foundation B); log it
     // before/after to confirm registration actually adds entities to the world.
-    int before = entityList->masterArray.count;
+    int before = entityList->masterArray._size;
 
     // STRUCTURES (impl_1fc0) — the initial buildings.
     int ns = StartTown_SpawnStructures(sc, entityList, game, spawnX, spawnY);
-    int afterStruct = entityList->masterArray.count;
+    int afterStruct = entityList->masterArray._size;
     fprintf(stderr, "[startTown::spawn] structures: spawned %d; entityList count %d -> %d\n",
             ns, before, afterStruct);
     fflush(stderr);
 
     // CITIZENS (impl_0dd0) — the founding families.
     int nc = StartTown_SpawnCitizens(sc, entityList, game, spawnX, spawnY);
-    int afterCitizens = entityList->masterArray.count;
+    int afterCitizens = entityList->masterArray._size;
     fprintf(stderr, "[startTown::spawn] citizens: spawned %d; entityList count %d -> %d\n",
             nc, afterStruct, afterCitizens);
     fflush(stderr);
@@ -5397,7 +5396,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     int resSize = sc->subdivisions;
     if (resSize <= 0) resSize = 1;
     int nr = StartTown_SpawnResources(sc, world, spawnX, spawnY, resSize * resSize);
-    int afterRes = entityList->masterArray.count;
+    int afterRes = entityList->masterArray._size;
     fprintf(stderr, "[startTown::spawn] resources: spawned %d; entityList count %d -> %d\n",
             nr, afterCitizens, afterRes);
     fflush(stderr);
@@ -5408,14 +5407,14 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
 
     // ENVIRONMENT (impl_02f0) — ambient emitters + environment volumes.
     int ne = StartTown_SpawnEnvironment(sc, world);
-    int afterEnv = entityList->masterArray.count;
+    int afterEnv = entityList->masterArray._size;
     fprintf(stderr, "[startTown::spawn] environment: spawned %d; entityList count %d -> %d\n",
             ne, afterRes, afterEnv);
     fflush(stderr);
 
     // SIMPLE pool (impl_09e0) — population/deer.
     int n = StartTown_SpawnSimplePool(sc, entityList);
-    int after = entityList->masterArray.count;
+    int after = entityList->masterArray._size;
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
             "entityList count %d -> %d\n", n, afterEnv, after);
     fflush(stderr);
