@@ -18,6 +18,7 @@
 #include "Action/PathSearch.h"          // PathOpenNode
 
 #include "Component/exe_bodies.h"      // CitizenAI_Reg_helper_e360
+#include "Dialog/TownHallUI.h"         // TownHallUI::ProfessionNode / AgricultureNode
 #include "Entity/CitizenBehavior.h"    // PathGraph
 #include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode, WorkCandidateNode
 #include "Work/Work.h"                 // WorkEntitySetNode
@@ -227,6 +228,11 @@ template void AvlRebalance<WorkSchedulerIdNode>(WorkSchedulerIdNode**, WorkSched
 template void AvlRebalance<WorkEntitySetNode>(WorkEntitySetNode**, WorkEntitySetNode**);
 template WorkCandidateNode* AvlRotateLeft<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
 template WorkCandidateNode* AvlRotateRight<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
+// TownHallUI's profession tree (0x30 node: 0x140013480) and agriculture trees (0x28
+// node: 0x1400149a0, retail's third copy of the 0x28 retrace, same rotations
+// 0x140014c70 / 0x140014da0).
+template void AvlRebalance<TownHallUI::ProfessionNode>(TownHallUI::ProfessionNode**, TownHallUI::ProfessionNode**);
+template void AvlRebalance<TownHallUI::AgricultureNode>(TownHallUI::AgricultureNode**, TownHallUI::AgricultureNode**);
 
 // ===========================================================================
 // Node allocators

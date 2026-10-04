@@ -561,8 +561,11 @@ TUT (rows 80-84, 88-89):
 - (X-G1-2, row 560) `TownHallUI::ProfessionNode` (`Dialog/TownHallUI.h`) declares +0x28 as ONE `int32_t balance`
   where the shared AVL retrace 0x140013480 (`AvlRebalance`, Action/PathAvl.h) reads and writes an int16 balance at
   +0x28 and an int16 height at +0x2a. townhallui.cpp therefore still hands the tree to the retrace as `AvlNode30`
-  (two casts, LEFT); any read of `balance` as an int32 in the dialog sees both halves. The dialog's own reads
-  were not checked against retail. SUSPECTED.
+  (two casts, LEFT); any read of `balance` as an int32 in the dialog sees both halves. CONFIRMED (X-G1-2b): retail's
+  0x140013480 reads `MOVZX word ptr [+0x2a]` and writes `MOV word ptr [R8+0x28]` / `[R8+0x2a]`; the same holds for
+  `AgricultureNode` +0x20 / +0x22 (0x1400149a0, `TownHall_AvlRebalance28`). FIXED on b4x-G1-2b: both nodes declare
+  int16 `balance` / `height` (layout unchanged, asserted), the dialog's node inits write both halves (H7), and the
+  three trees go to `AvlRebalance<TownHallUI::ProfessionNode / AgricultureNode>`; the dialog reads `balance` nowhere.
 - (X-G1-2, row 561) `PathCostNode::balance` (`Entity/CitizenBehavior.h`) is likewise one int32 at +0x28 while the
   insert 0x140025a10 (`PathCostTreeInsert`, which runs on `AvlNode30`) and its retrace 0x14000e360 treat +0x28 /
   +0x2a as two int16s; PathGraph's {m_bstRoot, m_bstCount} are two fields, not one Set header, so citizenbehavior.cpp

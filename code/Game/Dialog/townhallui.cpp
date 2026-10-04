@@ -21,7 +21,7 @@
 //   StorageComponent::storageSlots (W0 raw storage).
 //   ComponentDescription::_subDescs (COMP-c: void**).
 //   UI::Element::_description (R-UI-a: void*).
-//   The exe helpers' untyped parameters (Pf_AvlRebalanceB_13480, the
+//   The exe helpers' untyped parameters (the
 //   CitizenEmploy strategies, ToolbarUtility_BstInsert_4890: other blocks).
 
 #include "ui/Panels.h"
@@ -292,6 +292,7 @@ void TownHallUI::InitProfessions() {
                 newNode->left = nullptr;            // +0x18: left
                 newNode->right = nullptr;           // +0x20: right
                 newNode->balance = 0;               // +0x28: balance
+                newNode->height = 0;
             }
             professionTree = newNode;
         } else {
@@ -311,10 +312,11 @@ void TownHallUI::InitProfessions() {
                             newNode->left = nullptr;
                             newNode->right = nullptr;
                             newNode->balance = 0;
+                            newNode->height = 0;
                         }
                         parent->left = newNode;
                         // Rebalance
-                        AvlRebalance(reinterpret_cast<AvlNode30**>(&professionTree), reinterpret_cast<AvlNode30**>(&curNode));   // 0x140013480; LEFT: TownHallUI.h ProfessionNode +0x28 is one int32 where the retrace reads int16 balance / height
+                        AvlRebalance(&professionTree, &curNode);   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = curNode->left;
@@ -330,9 +332,10 @@ void TownHallUI::InitProfessions() {
                             newNode->left = nullptr;
                             newNode->right = nullptr;
                             newNode->balance = 0;
+                            newNode->height = 0;
                         }
                         parent->right = newNode;
-                        AvlRebalance(reinterpret_cast<AvlNode30**>(&professionTree), reinterpret_cast<AvlNode30**>(&curNode));   // 0x140013480; LEFT: TownHallUI.h ProfessionNode +0x28 is one int32 where the retrace reads int16 balance / height
+                        AvlRebalance(&professionTree, &curNode);   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = curNode->right;
@@ -601,6 +604,7 @@ void TownHallUI::InitAgriculture() {
                                 newNode->left = nullptr;
                                 newNode->right = nullptr;
                                 newNode->balance = 0;
+                                newNode->height = 0;
                             }
                             agriBST = newNode;
                             agriBSTCount = agriBSTCount + 1;
@@ -619,9 +623,10 @@ void TownHallUI::InitAgriculture() {
                                             newNode->left = nullptr;
                                             newNode->right = nullptr;
                                             newNode->balance = 0;
+                                            newNode->height = 0;
                                         }
                                         parent->left = newNode;
-                                        TownHall_AvlRebalance28(&agriBST, &curNode);   // 0x1400149a0
+                                        AvlRebalance(&agriBST, &curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = curNode->left;
@@ -635,9 +640,10 @@ void TownHallUI::InitAgriculture() {
                                             newNode->left = nullptr;
                                             newNode->right = nullptr;
                                             newNode->balance = 0;
+                                            newNode->height = 0;
                                         }
                                         parent->right = newNode;
-                                        TownHall_AvlRebalance28(&agriBST, &curNode);   // 0x1400149a0
+                                        AvlRebalance(&agriBST, &curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = curNode->right;
@@ -1265,6 +1271,7 @@ void TownHallUI::UpdateAgriculture() {
                 node->left = nullptr;
                 node->right = nullptr;
                 node->balance = 0;
+                node->height = 0;
                 tempBSTRoot = node;
             }
         } else {
@@ -1288,13 +1295,14 @@ void TownHallUI::UpdateAgriculture() {
                 node->left = nullptr;
                 node->right = nullptr;
                 node->balance = 0;
+                node->height = 0;
                 if (entityPtr < parent->key)
                     parent->left = node;
                 else
                     parent->right = node;
                 // Rebalance
                 AgricultureNode* newNodeAddr = node;
-                TownHall_AvlRebalance28(&tempBSTRoot, &newNodeAddr);   // 0x1400149a0
+                AvlRebalance(&tempBSTRoot, &newNodeAddr);   // 0x1400149a0
             }
         }
         tempBSTCount++;

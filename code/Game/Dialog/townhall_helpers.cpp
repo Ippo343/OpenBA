@@ -11,8 +11,6 @@
 //   0x140015800  ProfArrayPush         — growable push, 0x40-byte profession rows
 //                  (0x140015dd0 row copy + deep entity-list copy, 0x140015e50 shrink free)
 //   0x1400159b0  ProdArrayPush         — growable push, 0x28-byte production rows
-//   0x1400149a0  AVL rebalance         — retrace for 0x28-byte nodes (parent@8 left@10
-//                  right@18 bal@20 h@22), rotations 0x140014c70 (L) / 0x140014da0 (R)
 //   0x140090f20  QueryProductionStat   — clamped range-sum over townMgr+0x150 series
 //   0x140015200  InventorySort (asc)   — order by localized resource name
 //   0x140015500  InventorySort (desc)  — order by count desc, name tie-break
@@ -225,109 +223,6 @@ static_assert(sizeof(ProdRow) == 0x28, "production row stride 0x28");
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry) {
     Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);   // LEFT: SIG TownHall_ProdArrayPush (callers in townhallui.cpp, wave X)
     rows->SetSize(newCount, *reinterpret_cast<const ProdRow*>(entry));   // LEFT: SIG TownHall_ProdArrayPush (callers in townhallui.cpp, wave X)
-}
-
-// ===========================================================================
-// 0x1400149a0 — AVL retrace for 0x28-byte nodes: key@0, parent@+0x08,
-// left@+0x10, right@+0x18, balance int16@+0x20, height int16@+0x22.
-// Rotations: 0x140014c70 (rotate-left), 0x140014da0 (rotate-right).
-// ===========================================================================
-namespace {
-
-struct Avl28Node {
-    uint64_t   key;       // +0x00
-    Avl28Node* parent;    // +0x08
-    Avl28Node* left;      // +0x10
-    Avl28Node* right;     // +0x18
-    int16_t    balance;   // +0x20
-    int16_t    height;    // +0x22
-    int32_t    _pad24;    // +0x24
-};
-static_assert(sizeof(Avl28Node) == 0x28, "AVL node 0x28");
-static_assert(offsetof(Avl28Node, balance) == 0x20, "");
-static_assert(offsetof(Avl28Node, height) == 0x22, "");
-
-inline int16_t NodeH(const Avl28Node* n) { return n ? (int16_t)(n->height + 1) : 0; }
-
-void Avl28_Refresh(Avl28Node* n) {
-    if (!n) return;
-    int16_t hl = NodeH(n->left);
-    int16_t hr = NodeH(n->right);
-    n->height = (hr < hl) ? hl : hr;
-    n->balance = (int16_t)(hr - hl);
-}
-
-// 0x140014c70 — rotate-left around `n` (right child rises).
-Avl28Node* Avl28_RotL(Avl28Node** root, Avl28Node* n) {
-    Avl28Node* r = n->right;
-    if (n == *root) *root = r;
-    Avl28Node* p = n->parent;
-    if (p) {
-        if (p->left == n) p->left = r;
-        else              p->right = r;
-    }
-    r->parent = p;
-    Avl28Node* rl = r->left;
-    n->right = rl;
-    if (rl) rl->parent = n;
-    r->left = n;
-    n->parent = r;
-    Avl28_Refresh(r->left);
-    Avl28_Refresh(r->right);
-    Avl28_Refresh(r);
-    return r;
-}
-
-// 0x140014da0 — rotate-right around `n` (left child rises).
-Avl28Node* Avl28_RotR(Avl28Node** root, Avl28Node* n) {
-    Avl28Node* l = n->left;
-    if (n == *root) *root = l;
-    Avl28Node* p = n->parent;
-    if (p) {
-        if (p->left == n) p->left = l;
-        else              p->right = l;
-    }
-    l->parent = p;
-    Avl28Node* lr = l->right;
-    n->left = lr;
-    if (lr) lr->parent = n;
-    l->right = n;
-    n->parent = l;
-    Avl28_Refresh(l->left);
-    Avl28_Refresh(l->right);
-    Avl28_Refresh(l);
-    return l;
-}
-
-} // namespace
-
-extern "C" void TownHall_AvlRebalance28(void* treeRoot, void* nodePtr) {
-    Avl28Node** root = reinterpret_cast<Avl28Node**>(treeRoot);   // LEFT: SIG TownHall_AvlRebalance28 (callers in townhallui.cpp, wave X)
-    Avl28Node** cur = reinterpret_cast<Avl28Node**>(nodePtr);   // LEFT: SIG TownHall_AvlRebalance28 (callers in townhallui.cpp, wave X)
-    while (*cur != nullptr) {
-        Avl28Node* n = *cur;
-        Avl28Node* parent = n->parent;
-        int16_t hl = NodeH(n->left);
-        int16_t hr = NodeH(n->right);
-        n->height = (hr < hl) ? hl : hr;
-        n->balance = (int16_t)(hr - hl);
-        if ((int16_t)(hr - hl) > 1) {
-            Avl28Node* r = n->right;
-            if (r) {
-                if (r->balance < 0) { Avl28_RotR(root, r); n = *cur; }
-                Avl28_RotL(root, n);
-            }
-        }
-        n = *cur;
-        if (n->balance < -1) {
-            Avl28Node* l = n->left;
-            if (l) {
-                if (l->balance > 0) { Avl28_RotL(root, l); n = *cur; }
-                Avl28_RotR(root, n);
-            }
-        }
-        *cur = parent;
-    }
 }
 
 // ===========================================================================

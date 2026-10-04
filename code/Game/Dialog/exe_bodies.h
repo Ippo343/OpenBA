@@ -99,7 +99,6 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr);  // 0
 extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxValue);  // 0x14006aed0
 extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entry);  // 0x140015800
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry);  // 0x1400159b0
-extern "C" void TownHall_AvlRebalance28(void* treeRoot, void* nodePtr);  // 0x1400149a0
 extern "C" int TownHall_QueryProductionStat(void* townMgr, int seriesIdx, int startTick, int endTick);  // 0x140090f20
 extern "C" void TownHall_InventorySortAsc(void* items, int count, void*, void*);  // 0x140015200
 extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*);  // 0x140015500
