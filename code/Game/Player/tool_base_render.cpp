@@ -461,7 +461,7 @@ void Impl_b930(HighlightComponent* hc) {
 void Impl_c4a0(HighlightComponent* hc) {
     // LEFT: edgeMeshInstance (+0x28) and transform (+0x100) are raw storage in
     // block COMP's HighlightComponent (B.4 H5); they are reached from this integer.
-    const int64_t self = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+    const int64_t self = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
     Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
 
     // Standalone: the HighlightComponent is created via COMPONENT_INERT_FACTORY
@@ -470,8 +470,8 @@ void Impl_c4a0(HighlightComponent* hc) {
     // vtable is the "fresh/inert" tell — construct the sub-object and reset +0x120 to
     // -1. (Without the -1, the RemoveObject block below would delete live scene
     // object id 0 — e.g. the storage barn — and corrupt the scene / freeze.)
-    if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's) (the null vptr is the inert tell)
-        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+    if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition) (the null vptr is the inert tell)
+        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
         hc->highlightId = -1;
     }
 
@@ -537,18 +537,18 @@ void Impl_c4a0(HighlightComponent* hc) {
         MapComponent* r = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
         if (r && desc && desc->_ref0 != nullptr) {
             Impl_b930(hc);
-            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
                 ->SetMesh(Object::ExternalPtr<Graphics::EdgeMesh>(hc->fieldF8),
                           nullptr);   // B.3.5 bridge
-            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
                 ->SetTransform(hc->transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
-            void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
-            reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+            void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
+            reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
                 time);   // slot 1
             hc->highlightId = static_cast<int32_t>(
-                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
             return;
         }
     }
@@ -603,7 +603,7 @@ add_prebuilt:
         if (srcInst->_nodes._data == nullptr) {
             srcInst = nullptr;
         }
-        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
             ->SetMesh(Graphics::ExternalPtrHandle{cellMesh}, srcInst);   // B.3.5 bridge
 
         // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
@@ -618,15 +618,15 @@ add_prebuilt:
         // 0x20-byte Math::Transform that BridgeTool::CalcPath writes per segment). Same
         // call the BUILD branch above makes with the HighlightComponent's +0x100.
         if (srcInst == nullptr) {
-            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
                 ->SetTransform(charComp->transform);
         }
         System::Time time;
         RtSystem_Time_Ctor(&time, 0.0f);
-        void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
-        reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+        void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
+        reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
             time);   // slot 1
-        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
         uint32_t f0 = hc->_flags;
         hc->highlightId = static_cast<int32_t>(id);
         uint32_t f1 = f0 | 4;
@@ -742,7 +742,7 @@ void Impl_cb40(EditTool* self) {
     {
         const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);   // LEFT: the tripwire takes the tool as an integer (ReportBadSelectionRef above)
+            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);   // LEFT: FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final)
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can
@@ -870,15 +870,15 @@ void Impl_HighlightFollow(EditTool* self) {
     }
 
     // LEFT: the embedded EdgeMeshInstance (+0x28) is raw storage (block COMP, H5).
-    const int64_t hi = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
-    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
-    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0) (the null vptr is the inert tell)
+    const int64_t hi = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage: retail constructs it in the ctor, the tree builds it lazily and tests its null vptr (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
+    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage: retail constructs it in the ctor, the tree builds it lazily and tests its null vptr (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
+    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage: retail constructs it in the ctor, the tree builds it lazily and tests its null vptr (known_port_issues row 573; HighlightComponent.h, X6-CW partition) (the null vptr is the inert tell)
 
     System::Time time;
     RtSystem_Time_Ctor(&time, 0.0f);
     // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
-    reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
+    reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage: retail constructs it in the ctor, the tree builds it lazily and tests its null vptr (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
         time);   // slot 1
 
 }
@@ -894,7 +894,7 @@ void Impl_HighlightFollow(EditTool* self) {
 // B4 FORWARD: their callers (Dialog/edittool_select.cpp, Player/edittool.cpp,
 // Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
 extern "C" void HighlightSelect_Impl(EditTool* self) { Impl_c9e0(self); }  // 0x1400fc9e0 (caller: Dialog/edittool_select.cpp)
-extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcb40   // LEFT: B4 FORWARD edittool.cpp / edittool_select.cpp / toolui.cpp (other agents') pass void*
+extern "C" void HighlightClear_Impl(EditTool* self) { Impl_cb40(self); }  // 0x1400fcb40 (callers: Dialog/edittool_select.cpp, Dialog/toolui.cpp, Player/edittool.cpp)
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self) { Impl_c4a0(self); }  // 0x14004c4a0 (callers: Player/pathtool_setselected.cpp)
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from

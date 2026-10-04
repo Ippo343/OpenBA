@@ -88,10 +88,10 @@ static inline bool CitUI_OkPtr(const void* p) {
 // SetParameter/SetText increment the source String's refcount (write buffer[-4]); an
 // uninitialized citizen field (e.g. the name at CitizenComponent+0x28 is unset in standalone)
 // holds a garbage buffer pointer, faulting there. Accept only a null (empty) or a real
-// buffer pointer. `strObj` is the String's raw 8-byte storage.
-static inline bool CitUI_OkString(const uint64_t* strObj) {
+// buffer pointer.
+static inline bool CitUI_OkString(const System::String* strObj) {
     if (!CitUI_OkPtr(strObj)) return false;
-    uint64_t buf = *strObj;
+    uint64_t buf = reinterpret_cast<uint64_t>(strObj->_data);  // CAST-OK: ptr_int
     return buf == 0 || CitUI_OkAddr(buf);
 }
 
@@ -328,9 +328,8 @@ void CitizenUI::OnUpdateLayout() {
     // Guard both the destination element AND the source name String (+0x28), which is
     // uninitialized on a standalone citizen and would fault when SetParameter bumps its
     // ref-count.
-    bool okName = CitUI_OkString(reinterpret_cast<const uint64_t*>(&ai->name));   // LEFT: the file-local SA guard CitUI_OkString reads the String's data word as uint64_t (citizenui.cpp:92, X3-GAME's)
+    bool okName = CitUI_OkString(&ai->name);
     bool okParam = CitUI_OkTextParam(textName);
-    // LEFT: CitizenComponent::name is raw String storage (H5, COMP-b's header).
     if (okName && okParam)
         textName->SetParameter(0, ai->name);
 
