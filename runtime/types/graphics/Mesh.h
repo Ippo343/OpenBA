@@ -546,7 +546,7 @@ public:
     void            SetMaterialInstance(int index, ExternalPtrHandle value); // 0x1800ffe80
     void            SetMesh(ExternalPtrHandle mesh);                      // 0x1800ffea0
     void            PlayAnimation(ExternalPtrHandle group, int index,
-                                  const void* startTime, const void* blendTime,
+                                  const System::Time* startTime, const System::Time* blendTime,
                                   float weight);                          // 0x1800ff840
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined -

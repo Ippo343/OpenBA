@@ -2060,21 +2060,20 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
 // are typed against the callee's mangled name rather than guessed.
 // ---------------------------------------------------------------------------
 void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
-                                 const void* startTime, const void* blendTime,
+                                 const System::Time* startTime, const System::Time* blendTime,
                                  float weight) {
     // ENDGAME B.3.5 caller batch. `GetMesh()->_nodes` is the embedded
     // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
-    // LEFT: the `_animation` view (see SetMesh), the untyped group handle and
-    // the two untyped Time pointers are this member's declared signature,
-    // which its code/Game callers hold.
+    // LEFT: the `_animation` view (see SetMesh) and the untyped group handle
+    // are this member's declared signature, which its code/Game callers hold.
     reinterpret_cast<::Graphics::AnimationState*>(&_animation)
         ->::Graphics::AnimationState::PlayAnimation(
             Object::ExternalPtr<::Graphics::AnimationGroup>(
                 static_cast<::Graphics::AnimationGroup*>(group.p)),
             index,
             GetMesh()->GetNodes(),
-            *static_cast<const System::Time*>(startTime),  // LEFT: SIG PlayAnimation time params are void* (Mesh.h, outside callers, wave X)
-            *static_cast<const System::Time*>(blendTime),  // LEFT: SIG PlayAnimation time params are void* (Mesh.h, outside callers, wave X)
+            *startTime,
+            *blendTime,
             weight, true);
 }
 
