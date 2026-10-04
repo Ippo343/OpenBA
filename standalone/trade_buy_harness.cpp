@@ -48,26 +48,21 @@
 #include "Dialog/TradeUI.h"
 #include "Action/exe_bodies.h"   // StorageAdd (0x14012d000)
 #include "ui/DialogInstance.h"   // B4: the open dialog's controller array
-
-class TradeUI;
-void TradeUI_UpdateBuyTotals(TradeUI* self);
 // The sell/buy tables are built ONCE when the panel opens. Seeding the trade
 // stock afterwards leaves the rows as they were, so the refresh has to be
 // re-run explicitly -- otherwise the tree fills and sellRows stays 0 forever.
-void TradeUI_RefreshSellTable(TradeUI* self);
-void TradeUI_RefreshBuyTable(TradeUI* self);
-void TradeUI_UpdateSellTotals(TradeUI* self);
-extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* p2, void* p3, int64_t p4);
+#include "Dialog/tradeui_funcs.h"     // TradeUI_Refresh* / _Update*Totals (B4 FORWARD)
+// TradeUI_OnTradeButton: Dialog/exe_bodies.h.
 
 // edittool.cpp — activate the EditTool and drive the select path the way an
 // in-world click does. HarnessSelectEntity is the wrapper (it builds the
 // InternalBasePtr the impl expects); calling EditTool_SelectEntity_Impl with a
 // bare entity pointer instead faults on a -1 read inside the tool.
-extern "C" void* EditTool_HarnessAcquire(void* entityUI);
+#include "Player/edittool_funcs.h"    // EditTool_HarnessAcquire / _HarnessSelectEntity
 // tradecomponent_serialize.cpp — insert/top-up one {resource, qty} pair in the
 // TradeComponent's +0x60 AVL tree, the tree the sell table is built from.
+// LEFT: a local declaration; the definition has no header (tradecomponent_serialize.cpp, COMP-8).
 extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty);
-extern "C" int   EditTool_HarnessSelectEntity(void* editTool, void* entity);
 
 namespace {
 
@@ -109,7 +104,9 @@ Component* FindCompOnEntity(ComponentEntity* ent, uint32_t tid) {
 static int s_openedAtFrame = -1;
 static const int kSettleFrames = 30;
 
-extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
+// The tool manager (gameupdateloop.cpp hands its `m_toolManager`; its local
+// declaration still spells the parameter void*).
+extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
     Init();
     if (s_interval <= 0 || frameNum == 0) return;
     if (!entityUI) return;
@@ -145,7 +142,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         return;
     }
 
-    void* tool = EditTool_HarnessAcquire(entityUI);
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) { std::fprintf(stderr, "[TradeSell] f=%d EditTool activation FAILED\n", frameNum);
                  std::fflush(stderr); return; }
     if (openTick) {
@@ -154,9 +151,8 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         return;                     // let the panel populate its rows first
     }
     s_openedAtFrame = -1;
-    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
-    // (+0x28, the open dialog) is a uint64_t in PLAYER's header.
-    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
+
     if (!dialog) { std::fprintf(stderr, "[TradeSell] f=%d post opened no dialog\n", frameNum);
                    std::fflush(stderr); return; }
 
