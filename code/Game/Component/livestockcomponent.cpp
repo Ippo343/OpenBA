@@ -69,8 +69,7 @@ LivestockComponent::LivestockComponent() : pasture(nullptr), productionTimer{0} 
 void LivestockComponent::OnAdded() {
     if (pasture != nullptr) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;   // +0xF0
     if (!town) return;
     LivestockComponent* ibp = this;
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
@@ -88,8 +87,7 @@ void LivestockComponent::OnRemove() {
     LivestockComponent* ibp = this;
     if (pasture == nullptr) {
         if (GameUpdateLoop::_singleton == nullptr) return;
-        // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-        CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;   // +0xF0
         if (town) s_erase(&town->livestock, &ibp);
         return;
     }
@@ -99,8 +97,7 @@ void LivestockComponent::OnRemove() {
 // [9] 0x140123b50. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af); the ported body takes the Time by value.
 void LivestockComponent::Update(void* time) {
-    // LEFT: Component::Update takes the Time as void* (COMP-c's header).
-    const int64_t deltaTime = time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;
+    const int64_t deltaTime = time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;   // LEFT: SIG Component::Update (Component.h)
 
     // Early out: no pasture
     if (pasture == nullptr) {

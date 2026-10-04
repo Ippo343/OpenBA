@@ -58,8 +58,7 @@ void HuntComponent::Persist(IO::Stream& stream) {
 // VALUE (an 8-byte tick count in a register): the base declares that register as
 // `void*`, so its bits are the tick count.
 void HuntComponent::Update(void* time) {
-    // LEFT: the elapsed ticks travel in the pointer slot (see above).
-    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));
+    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // LEFT: SIG Component::Update (Component.h): the elapsed ticks travel in the pointer slot (see above)
 
     // The owner's workplace: its worker count is the speed numerator
     WorkPlaceComponent* workplace = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
@@ -71,8 +70,7 @@ void HuntComponent::Update(void* time) {
     // Lazily compute the capacity divisor if not cached
     int capacity = work->workState;
     if (capacity == 0) {
-        // LEFT: WorkComponent_CalcMaxWorkers takes the component as uintptr_t (TUTORIAL's body).
-        capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(work));
+        capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(work));   // LEFT: SIG WorkComponent_CalcMaxWorkers (Tutorial/exe_bodies.h, wave X)
         work->workState = capacity;
     }
 

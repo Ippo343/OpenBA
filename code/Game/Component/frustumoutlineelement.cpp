@@ -52,8 +52,7 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!gw) return;
     PlayerController* pc = gw->m_playerController;
     if (!pc) return;
-    // PlayerController::camera is raw storage (GAME-b, H5): the one bridge is LEFT.
-    const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(pc->camera);
+    const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(pc->camera);   // LEFT: PlayerController::camera is raw storage (PlayerController.h, H5)
 
     // Camera Transform3 (rotation + translation, 0x30 bytes) at camera +0x64 (the
     // controller's +0x98); its translation at +0x24 (the controller's +0xbc). Copy the
@@ -164,8 +163,7 @@ void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) cons
     float uvScale = kRdata_14017214c;
     int   width   = _width;
     int   height  = _height;
-    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): LEFT.
-    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
+    const Map* map = gw->m_game;   // +0xF8
     if (!map || map->size == 0) return;
     float scale = (float)width / (float)(map->size);
     float halfW = (float)width * 0.5f;

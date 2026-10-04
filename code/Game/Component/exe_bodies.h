@@ -160,21 +160,18 @@ extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIB
 
 // ---- floorcomponent.cpp
 void* FloorComponent_FindResData(void* owner, void* outIBP);  // 0x140004680
-void FloorComponent_SubF390(void* selfV);  // 0x14011f390  B4 FORWARD: FloorComponent::PlaceFloor (multiobjectcomponent.cpp)
 
 // ---- frustumoutlineelement.cpp
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- growthcomponent.cpp
 void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950  B4 FORWARD: Component::ModifyFlags (animalcomponent.cpp)
-void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORWARD: NaturalResourceComponent::ResetGrowthState (tornadocomponent.cpp)
 
 // ---- happinesscomponent.cpp
 
 // ---- herdcomponent.cpp
 
 // ---- interactcomponent.cpp
-void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  // 0x140004740
 
 // ---- keystone_a_map.cpp
 
@@ -182,7 +179,8 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230
 
 // ---- mapcomponent.cpp
-extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
+class Minimap;   // Game/Minimap.h
+extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 extern "C" void MapComponent_DetachOccupancy_4750(void* selfV);  // 0x140124750
 
 // ---- modelcomponent.cpp
