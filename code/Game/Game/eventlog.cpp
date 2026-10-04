@@ -382,7 +382,7 @@ extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int 
                                          const System::String* extraStr) {
     if (!eventLog) return;
     eventLog->AddCitizenEvent(eventType, severity, entityIBP,
-        reinterpret_cast<const System::String*>(nameStr),   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage
+        reinterpret_cast<const System::String*>(nameStr),  // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (CitizenComponent.h)
         titleStr, extraStr);
 }
 

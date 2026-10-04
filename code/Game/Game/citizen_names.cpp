@@ -201,7 +201,7 @@ static NameDatabase* LoadNameDb(const char* path) {
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.
     // (retail's IsDerivedFrom on the result is skipped, as before: see above)
-    return static_cast<NameDatabase*>(const_cast<::Object::External*>(
+    return static_cast<NameDatabase*>(const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: retail drops the const in inlined template code; decide at the close)
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname)));                                         // B.3.3 bridge
 }

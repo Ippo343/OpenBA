@@ -436,7 +436,7 @@ void SpotLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     // view of the POD as the class is here.
     RtGraphics::Camera cameraPod;
     RtGraphics_Camera_Ctor(&cameraPod, &_frustum, &t3, true);   // MOV R9B,1
-    const Camera& camera = *reinterpret_cast<const Camera*>(&cameraPod);
+    const Camera& camera = *reinterpret_cast<const Camera*>(&cameraPod);  // LEFT: POD RtGraphics::Camera: the (Frustum, Transform3, bool) ctor stays a door (Camera.h, outside this set)
 
     renderer.AddLight(this);
 

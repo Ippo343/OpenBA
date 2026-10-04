@@ -224,7 +224,7 @@ void TutorialInstance::LoadNextScenario() {
         IO::FileSystem* fileSystem = ::IO::FileSystem::_singleton;
         System::Filename dataDirBuf(fileSystem->GetDataDirectory());
         // LEFT: IO::Persistence::_savePath is the RtSystem::String POD (R-IO's header).
-        *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) =
+        *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) =  // LEFT: POD IO::Persistence::_savePath is the RtSystem::String POD (Persistence.h, outside this set)
             dataDirBuf.AsString();
 
         int operation = static_cast<int>(saveLoad->GetOperation());
@@ -240,7 +240,7 @@ void TutorialInstance::LoadNextScenario() {
         fflush(stderr);
 
         // LEFT: as above.
-        *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) = savePathBuf;
+        *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) = savePathBuf;  // LEFT: POD IO::Persistence::_savePath is the RtSystem::String POD (Persistence.h, outside this set)
 
         Save::SavedState* savedState = saveLoad->GetSaveState();
 

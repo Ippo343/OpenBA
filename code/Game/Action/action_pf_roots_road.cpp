@@ -124,7 +124,7 @@ void Map::SetTerrainType(int param_2, uint param_3) {
     field_0xA2 = static_cast<uint8_t>(field_0xA2) | bVar2;
     lVar3->terrainType = bVar4;
     // LEFT: the PerfX instrument (standalone/perf_terrain.h, block STANDALONE) takes the cell as bytes.
-    PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(lVar3));   // [PerfX] mirror
+    PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(lVar3));   // [PerfX] mirror  // LEFT: the PerfX instrument (standalone/perf_terrain.h, outside this set) takes the cell as bytes
     uVar5 = 1u << (bVar1 & 0x1f);
     if ((((uVar5 & 0xe1f) != 0) && ((1u << (bVar4 & 0x1f) & 0x1e0U) != 0)) ||
         (((uVar5 & 0x1e0) != 0) &&

@@ -91,7 +91,7 @@ PlayerController::PlayerController() {
 
     // LEFT: +0x34 is raw storage (H5: Camera's default ctor is protected); the
     // ctor door takes the POD mirror.
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &ident, true);
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &ident, true);  // LEFT: POD RtGraphics::Camera: the runtime view-setup door takes the mirror (runtime/types/graphics, outside this set)
 }
 
 // ============================================================

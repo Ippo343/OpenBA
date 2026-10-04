@@ -164,12 +164,12 @@ using InitialStructure30Array = Collection::Array<uint8_t, Collection::DefaultAl
 
 // FUN_14001b030 (mapgenerator.cpp) — String at element+0, stride 0x18.
 void Game_DestroyStringArray18(void* arrayHeader) {
-    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();          // LEFT: SIG Game_DestroyStringArray18 (callers mapgenerator.cpp, buildinggoal.cpp hold DynArrayHeader<ExternalRef>, not a Collection::Array)
+    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray18 (wave X family across two agents: callers hold DynArrayHeader<ExternalRef>)
 }
 
 // FUN_14001b0a0 (mapgenerator.cpp) — String at element+0, stride 0x30.
 void Game_DestroyStringArray30(void* arrayHeader) {
-    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();   // LEFT: SIG Game_DestroyStringArray30 (caller mapgenerator.cpp declares it locally)
+    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray30 (wave X family across two agents)
 }
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,
@@ -322,7 +322,7 @@ void Game_TerrainResolveMaterial(void* refTriple) {
     if (ref->factoryGen == factoryGen) return;
 
     System::Filename fnameBuf(ref->strPtr);  // String @ +0
-    void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge
+    void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge  // LEFT: const_cast ExternalFactory::Find returns a const External* (ledger S3: decide at the close)
 
     void* result = nullptr;
     if (obj) {

@@ -126,8 +126,8 @@ extern "C" Node* RtApp_SetAllocNode(void* /*unused, never read*/,
     Node* n = static_cast<Node*>(MemAlloc(0x30, 8));
     if (!n) return nullptr;
 
-    const uint64_t* s = static_cast<const uint64_t*>(src);
-    uint64_t* d = reinterpret_cast<uint64_t*>(n);
+    const uint64_t* s = static_cast<const uint64_t*>(src);  // CAST-OK: elem_stride
+    uint64_t* d = reinterpret_cast<uint64_t*>(n);  // CAST-OK: elem_stride
     d[0] = s[0];                       // 0x18000a61b — element +0x00..+0x07
     d[1] = s[1];                       // 0x18000a621 — element +0x08..+0x0f
 
@@ -184,15 +184,15 @@ void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallb
     // `message` written, `pad04` left alone. See AllocNode's banner.
     Element elem;                      // deliberately uninitialised
     elem.message  = id;                // 0x18009fa83
-    elem.callback = reinterpret_cast<MessageCallbackFn>(callback);  // 0x18009fa86
+    elem.callback = reinterpret_cast<MessageCallbackFn>(callback);  // 0x18009fa86  // LEFT: the public MessageCallback type (Application.h) and the set element's MessageCallbackFn differ in parameter types: one function-pointer view
 
     Node* root = set->root;
     if (!root) {
         // ---- empty tree: inline allocation, no retrace -----------------
         Node* n = static_cast<Node*>(MemAlloc(0x30, 8));
         if (n) {
-            uint64_t* d = reinterpret_cast<uint64_t*>(n);
-            const uint64_t* s = reinterpret_cast<const uint64_t*>(&elem);
+            uint64_t* d = reinterpret_cast<uint64_t*>(n);  // CAST-OK: elem_stride
+            const uint64_t* s = reinterpret_cast<const uint64_t*>(&elem);  // CAST-OK: elem_stride
             d[0] = s[0];
             d[1] = s[1];
             n->parent  = nullptr;
@@ -209,7 +209,7 @@ void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallb
     // ---- descend, tracking the parent in a slot the retrace will rewrite ----
     Node* slot = root;                 // [RSP+0x50]
     for (;;) {
-        const unsigned key = *reinterpret_cast<const unsigned*>(slot);
+        const unsigned key = *reinterpret_cast<const unsigned*>(slot);  // CAST-OK: elem_stride
         if (id < key) {                            // JC -> left
             Node* l = slot->left;
             if (!l) {
@@ -245,7 +245,7 @@ void Application::Application::UnregisterMessageCallback(uint32_t id) {
     App* app = this;
     Set* set = &app->_messageCallbacks;   // retail: this + 0x18
     for (Node* n = set->root; n; ) {
-        const unsigned key = *reinterpret_cast<const unsigned*>(n);
+        const unsigned key = *reinterpret_cast<const unsigned*>(n);  // CAST-OK: elem_stride
         if (id < key)       n = n->left;    // 0x18009fa41
         else if (key >= id) { rtsetavl::Erase(set, n); return; }  // 0x18009fa47
         else                n = n->right;   // 0x18009fa3b
