@@ -49,7 +49,6 @@
 
 // The seat cascade (code/Game/Component/citizen_employ.cpp) — the headless equivalent of
 // the per-worker inner loop of CitizenComponent_impl_dd10.
-extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
 
 namespace {
 
@@ -155,8 +154,7 @@ void Fire(int frameNum) {
         // The harness reads desc+0x20 whatever the description is: WorkPlaceDescription's layout.
         const Description* descBase = wpcIBP->_description;       // +0x18
         const WorkPlaceDescription* desc = static_cast<const WorkPlaceDescription*>(descBase);
-        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the town and the profession as integers.
-        uint64_t profKey = desc ? reinterpret_cast<uint64_t>(desc->_profession0) : 0;   // desc+0x20  // LEFT: SIG CitizenEmploy_SeatWorkers (uint64_t key; citizen_employ_cascade.cpp, wave X)
+        Profession* profKey = desc ? desc->_profession0 : nullptr;   // desc+0x20
         if (!profKey) {
             fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p workplace=%p has no "
                             "profession key (desc=%p) — cannot staff\n", frameNum, static_cast<void*>(orchComp),
@@ -165,7 +163,7 @@ void Fire(int frameNum) {
         }
 
         const int32_t rosterBefore = wpcIBP->workerCount;          // +0x60
-        int seated = CitizenEmploy_SeatWorkers(reinterpret_cast<int64_t>(townMgr), profKey, s_count);   // LEFT: SIG CitizenEmploy_SeatWorkers (int64_t town; wave X)
+        int seated = CitizenEmploy_SeatWorkers(townMgr, profKey, s_count);
         const int32_t rosterAfter  = wpcIBP->workerCount;
 
         if (s_seatedCount < kMaxTracked) s_seated[s_seatedCount++] = orchComp;
@@ -176,7 +174,7 @@ void Fire(int frameNum) {
         fprintf(stderr, "[OrchardWorkers] frame=%d: orchard comp=%p workplace=%p profKey=0x%llx "
                         "cascade seated %d/%d — roster(+0x60) %d -> %d%s\n",
                 frameNum, static_cast<void*>(orchComp), static_cast<void*>(wpcIBP),
-                static_cast<unsigned long long>(profKey), seated, s_count,
+                reinterpret_cast<unsigned long long>(profKey), seated, s_count,   // CAST-OK: ptr_int (the key logged as an integer)
                 rosterBefore, rosterAfter,
                 rosterAfter > rosterBefore ? "" :
                     "  <-- NO SEAT LANDED HERE (no idle laborer? the panel-staffing driver "

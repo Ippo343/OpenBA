@@ -42,8 +42,6 @@
 #include <cstdlib>
 #include <cstring>
 
-extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
-
 namespace {
 
 constexpr int kStartFrame  = 400;
@@ -218,8 +216,7 @@ void Fire(int frameNum) {
         // The harness reads desc+0x20 whatever the description is: WorkPlaceDescription's layout.
         const Description* descBase = wpcIBP->_description;     // +0x18
         const WorkPlaceDescription* desc = static_cast<const WorkPlaceDescription*>(descBase);
-        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the town and the profession as integers.
-        uint64_t profKey = desc ? reinterpret_cast<uint64_t>(desc->_profession0) : 0;   // desc+0x20  // LEFT: SIG CitizenEmploy_SeatWorkers (uint64_t key; citizen_employ_cascade.cpp, wave X)
+        Profession* profKey = desc ? desc->_profession0 : nullptr;   // desc+0x20
         if (!profKey) {
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p workplace=%p has no "
                          "profession key (desc=%p) — cannot staff\n",
@@ -229,8 +226,7 @@ void Fire(int frameNum) {
         }
 
         const int32_t before = wpcIBP->workerCount;              // +0x60
-        const int seated = CitizenEmploy_SeatWorkers(reinterpret_cast<int64_t>(townMgr),   // LEFT: SIG CitizenEmploy_SeatWorkers (int64_t town; wave X)
-                                                     profKey, s_count);
+        const int seated = CitizenEmploy_SeatWorkers(townMgr, profKey, s_count);
         const int32_t after = wpcIBP->workerCount;
 
         if (s_seatedCount < kMaxTracked) s_seated[s_seatedCount++] = foodComp;
@@ -241,7 +237,7 @@ void Fire(int frameNum) {
         std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p workplace=%p profKey=0x%llx "
                      "cascade seated %d/%d — roster(+0x60) %d -> %d%s\n",
                      frameNum, foodName, static_cast<void*>(foodComp), static_cast<void*>(wpcIBP),
-                     (unsigned long long)profKey, seated, s_count, before, after,
+                     reinterpret_cast<unsigned long long>(profKey), seated, s_count, before, after,   // CAST-OK: ptr_int (the key logged as an integer)
                      after > before ? "" :
                         "  <-- NO SEAT LANDED HERE (no idle laborer? the panel-staffing "
                         "driver may already have seated them; or the seat went to another "

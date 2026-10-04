@@ -405,11 +405,6 @@ extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity) {
     StartTown_PickMeshProbe(entity);
 }
 
-// Brick M-C — the real town-citizen-list registrar (CitizenComponent_OnAdd 0x140114000)
-// + the headless ProfessionUI worker-seat cascade driver (citizen_employ_cascade.cpp).
-// CitizenEmploy_SeatWorkers runs the exact FindAvailableBuilding + cbf0->ca20->c5f0->c4b0
-// fallback dd10 uses, seating each worker via +0x1f0=prof + AssignHousing(+0x248 roster).
-extern "C" int  CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
 
 // WorkPlaceComponent attach/detach roster-only mode (workplacecomponent.cpp). Set true for
 // the build-time founding-housing pass so the roster is populated WITHOUT the gameplay-time

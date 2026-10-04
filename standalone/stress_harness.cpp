@@ -54,7 +54,6 @@
 #define PSAPI_VERSION 2
 #include <psapi.h>
 
-extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
 // gameupdateloop.cpp — SIMPROF phase accumulators reserved for this harness.
 extern "C" int         GameUpdateLoop_SimProfTake(double* outMs, int maxN);
 extern "C" const char* GameUpdateLoop_SimProfName(int phase);
@@ -330,7 +329,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
     // Ghidra-misnamed; see reference_misnamed_component_finders): the two
     // ComponentEntity::FindComponent<T> instances, called by name.
 
-    struct Need { uint64_t prof; int want; int have; int buildings; };
+    struct Need { Profession* prof; int want; int have; int buildings; };
     std::vector<Need> needs;
     int workplaces = 0, notAccepting = 0;
     for (int i = 0; i < n; ++i) {
@@ -339,8 +338,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         if (ent->_entityFlags & 0x400) continue;   // removed (+0x40)
         WorkPlaceComponent* wpc = ent->FindComponent<WorkPlaceComponent>();   // 0x140002e10
         if (!wpc) continue;
-        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the profession as a uint64 key.
-        const uint64_t prof = reinterpret_cast<uintptr_t>(wpc->profession);   // +0x48  // LEFT: SIG CitizenEmploy_SeatWorkers (uint64_t key; wave X)
+        Profession* const prof = wpc->profession;   // +0x48
         if (!prof) continue;
         ++workplaces;
         if (wpc->isAccepting == 0) { ++notAccepting; continue; }            // +0x50
@@ -372,13 +370,12 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         const int missing = x.want - x.have;
         if (missing <= 0) continue;
         wanted += missing;
-        // LEFT: CitizenEmploy_SeatWorkers (CIT, Component/exe_bodies.h) takes the town
-        // manager as int64 and the profession as a uint64 key.
-        const int got = CitizenEmploy_SeatWorkers((int64_t)townMgr, x.prof, missing);   // LEFT: SIG CitizenEmploy_SeatWorkers (int64_t town; wave X)
+        const int got = CitizenEmploy_SeatWorkers(townMgr, x.prof, missing);
         seatedTotal += got;
         if (got || s_staffPasses == 0)
             std::fprintf(stderr, "[Stress::staff]   prof=0x%llx buildings=%d want=%d have=%d -> seated %d/%d\n",
-                         (unsigned long long)x.prof, x.buildings, x.want, x.have, got, missing);
+                         reinterpret_cast<unsigned long long>(x.prof),   // CAST-OK: ptr_int (the key logged as an integer)
+                         x.buildings, x.want, x.have, got, missing);
     }
     std::fprintf(stderr, "[Stress::staff] pass#%d worldFrame=%d workplaces=%d (notAccepting=%d) "
                          "professions=%zu missing=%d seated=%d\n",

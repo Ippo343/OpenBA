@@ -1649,32 +1649,32 @@ void TownHallUI::OnProfessionSpinner(int index) {
     if (current < desired) {
         int toAdd = desired - current;
         for (int i = 0; i < toAdd; i++) {
-            // The seat functions take the town manager and the profession as integers.
-            const int64_t townKey = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (Component/Game exe_bodies.h)
-            const int64_t profKey = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index]);   // LEFT: SIG CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (wave X)
+            // FindAvailableBuilding takes the town manager and the profession as integers.
+            CitizenBehavior* const townKey = GameUpdateLoop::_singleton->m_citizenList;
+            Profession* const profKey = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
 
-            int64_t retBuf[2] = {0, 0};
-            FindAvailableBuilding(townKey, retBuf, static_cast<uint64_t>(profKey));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
-            int64_t slot = retBuf[0];
+            ComponentEntity* retBuf[2] = {nullptr, nullptr};
+            FindAvailableBuilding(reinterpret_cast<int64_t>(townKey), retBuf, reinterpret_cast<uint64_t>(profKey));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)  // LEFT: SIG FindAvailableBuilding
+            ComponentEntity* slot = retBuf[0];
 
             // Try idle -> working -> student -> any. Each strategy returns its
             // `out` argument, so the result is read there.
-            int64_t slotCopy = slot;
-            int64_t found = 0;
+            ComponentEntity* slotCopy = slot;
+            CitizenComponent* found = nullptr;
             CitizenEmploy_Strat_cbf0(townKey, &found, &slotCopy, profKey);   // 0x14008cbf0
 
-            if (found == 0) {
-                if (slot != 0) {
+            if (found == nullptr) {
+                if (slot != nullptr) {
                     slotCopy = slot;
                     CitizenEmploy_Strat_ca20(townKey, &found, &slotCopy, profKey);   // 0x14008ca20
-                    if (found != 0) continue;
+                    if (found != nullptr) continue;
                 }
                 slotCopy = slot;
                 CitizenEmploy_Strat_c5f0(townKey, &found, &slotCopy, profKey);   // 0x14008c5f0
 
-                if (found == 0) {
+                if (found == nullptr) {
                     slotCopy = slot;
-                    int64_t anyBuf = 0;
+                    CitizenComponent* anyBuf = nullptr;
                     CitizenEmploy_Strat_c4b0(townKey, &anyBuf, &slotCopy, profKey);   // 0x14008c4b0
                 }
             }

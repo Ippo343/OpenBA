@@ -490,16 +490,14 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 #include <atomic>
 #include <cstring>
 
-// citizen_employ_cascade.cpp — helper_9de0 port (append house IBP to townMgr+0x20).
-extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP);
+#include "Component/exe_bodies.h"   // TownRegistry_RegisterResidence (helper_9de0 port, citizen_employ_cascade.cpp)
 
 // State-2 enter — faithful helper_9de0 (0x140129de0): append the owner-entity IBP
 // VALUE (comp+0x10) to the townMgr+0x20 residence list. Retail returns 0 in AL, so
 // the SM Enter walk continues past this node (Build's state-2 has no enter) — keep
 // that return value.
 char ResidenceComponent::EnterBuilt() {
-    int64_t ibp = reinterpret_cast<int64_t>(_entity);   // LEFT: SIG TownRegistry_RegisterResidence (takes the IBP value as int64_t; citizen_employ_cascade.cpp)
-    TownRegistry_RegisterResidence(ibp);
+    TownRegistry_RegisterResidence(_entity);
     {
         static int n = 0;
         if (n < 12) { ++n;
@@ -510,7 +508,7 @@ char ResidenceComponent::EnterBuilt() {
             // itself ([TownRegistry] lines); read those, not this one.
             fprintf(stderr, "[Residence] state-2 enter FIRED: house comp=%p entityIBP=%llx "
                     "-> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)\n",
-                    static_cast<void*>(this), (unsigned long long)ibp);
+                    static_cast<void*>(this), reinterpret_cast<unsigned long long>(_entity));   // CAST-OK: ptr_int (the entity logged as an integer)
             fflush(stderr);
         }
     }

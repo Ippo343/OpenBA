@@ -804,43 +804,43 @@ void ProfessionUI::HandleSpinner(int profIndex) {
 
 
     // Add citizens if desired > current
-    // (LEFT: the town's worker functions take the citizen list and the profession
-    // as integers — Component/Game exe_bodies.h, wave X: one cast each below)
+    // (LEFT: FindAvailableBuilding takes the citizen list and the profession as
+    // integers — Game/exe_bodies.h, a wave-X family of another agent: one cast each below)
     if (current < desired) {
         uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
         do {
-            int64_t citizenList = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenEmploy_Strat_* / FindAvailableBuilding
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);   // LEFT: SIG CitizenEmploy_Strat_* / FindAvailableBuilding
+            CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
+            Profession* profId = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx];
 
             // Request a worker slot
-            uint64_t retBuf[2] = {0, 0};
-            FindAvailableBuilding(citizenList, retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
-            uint64_t slot = retBuf[0];
+            ComponentEntity* retBuf[2] = {nullptr, nullptr};
+            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, reinterpret_cast<uint64_t>(profId));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)  // LEFT: SIG FindAvailableBuilding
+            ComponentEntity* slot = retBuf[0];
 
             // Try to find a citizen: idle -> working -> student -> any
-            int64_t slotCopy = slot;
-            uint8_t findBuf[8] = {0};
-            void* result = CitizenEmploy_Strat_cbf0(citizenList, findBuf, &slotCopy, static_cast<int64_t>(profId));   // 0x14008cbf0
-            int64_t found = *(int64_t*)result;   // LEFT: SIG CitizenEmploy_Strat_cbf0
+            ComponentEntity* slotCopy = slot;
+            CitizenComponent* findBuf[1] = {nullptr};
+            CitizenComponent** result = CitizenEmploy_Strat_cbf0(citizenList, findBuf, &slotCopy, profId);   // 0x14008cbf0
+            CitizenComponent* found = *result;
 
-            if (found == 0) {
-                if (slot != 0) {
+            if (found == nullptr) {
+                if (slot != nullptr) {
                     slotCopy = slot;
-                    uint8_t fb2[8] = {0};
-                    result = CitizenEmploy_Strat_ca20(citizenList, fb2, &slotCopy, static_cast<int64_t>(profId));   // 0x14008ca20
-                    found = *(int64_t*)result;   // LEFT: SIG CitizenEmploy_Strat_ca20
-                    if (found != 0) goto next_iter;
+                    CitizenComponent* fb2[1] = {nullptr};
+                    result = CitizenEmploy_Strat_ca20(citizenList, fb2, &slotCopy, profId);   // 0x14008ca20
+                    found = *result;
+                    if (found != nullptr) goto next_iter;
                 }
                 slotCopy = slot;
-                uint8_t fb3[8] = {0};
-                result = CitizenEmploy_Strat_c5f0(citizenList, fb3, &slotCopy, static_cast<int64_t>(profId));   // 0x14008c5f0
-                found = *(int64_t*)result;   // LEFT: SIG CitizenEmploy_Strat_c5f0
+                CitizenComponent* fb3[1] = {nullptr};
+                result = CitizenEmploy_Strat_c5f0(citizenList, fb3, &slotCopy, profId);   // 0x14008c5f0
+                found = *result;
 
-                if (found == 0) {
+                if (found == nullptr) {
                     slotCopy = slot;
-                    uint64_t anyBuf = 0;
-                    CitizenEmploy_Strat_c4b0(citizenList, &anyBuf, &slotCopy, static_cast<int64_t>(profId));   // 0x14008c4b0
-                    found = (int64_t)anyBuf;
+                    CitizenComponent* anyBuf = nullptr;
+                    CitizenEmploy_Strat_c4b0(citizenList, &anyBuf, &slotCopy, profId);   // 0x14008c4b0
+                    found = anyBuf;
                 }
             }
 next_iter:
