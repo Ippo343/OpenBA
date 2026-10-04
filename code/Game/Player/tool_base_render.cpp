@@ -277,9 +277,6 @@ inline void RelVec(float* dst, const float* p, float ox, float oy) {
 //   self = HighlightComponent*.
 // ===========================================================================
 void Impl_b930(HighlightComponent* hc) {
-    // LEFT: transform (+0x100) is raw storage (HighlightComponent H5); it is reached
-    // from this integer.
-    const int64_t self = reinterpret_cast<int64_t>(hc);
     Map* mapGrid = GameUpdateLoop::_singleton->m_game;
 
     // Entity footprint rect (MapComponent tileX0 / tileY0 / tileX1 / tileY1).
@@ -305,13 +302,13 @@ void Impl_b930(HighlightComponent* hc) {
     float ox = centerWorld[0];
     float oy = centerWorld[1];
 
-    // Quaternion(0,0,0,uv) rotation + centre position -> Transform at self+0x100.
+    // Quaternion(0,0,0,uv) rotation + centre position -> the Transform at +0x100.
     float uv = kRdata_14017214c;
     Math::Quaternion quat(0.0f, 0.0f, 0.0f, uv);
-    std::memcpy(reinterpret_cast<void*>(self + 0x100), &quat, 16);
-    *reinterpret_cast<float*>(self + 0x110) = ox;
-    *reinterpret_cast<float*>(self + 0x114) = oy;
-    *reinterpret_cast<uint32_t*>(self + 0x118) = 0;
+    hc->transform.rotation = quat;            // +0x100 (16 bytes)
+    hc->transform.translation.x = ox;         // +0x110
+    hc->transform.translation.y = oy;         // +0x114
+    hc->transform.translation.z = 0.0f;       // +0x118 (retail's dword 0)
 
     IdxArray     edgeIdx;   // local_208 / local_200  (short indices)
     EdgeVtxArray edgeVtx;   // local_218 / local_210  (16-byte EdgeVertex)
@@ -544,7 +541,7 @@ void Impl_c4a0(HighlightComponent* hc) {
                 ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
                           nullptr);   // B.3.5 bridge
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
-                ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x100));   // B.3.5 bridge
+                ->SetTransform(hc->transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
             void* inst = reinterpret_cast<void*>(self + 0x28);
@@ -654,17 +651,17 @@ add_prebuilt:
 // EditTool_HarnessAcquire in edittool.cpp, plus the ToolUI close-button gate). These two
 // reporters stay as a tripwire — nothing should reach them now, and if something does,
 // the line names the tool class rather than leaving an unexplained AV.
-void ReportBadSelectionRef(int64_t self, int64_t ref) {
+void ReportBadSelectionRef(EditTool* self, int64_t ref) {
     static int budget = 8;
     if (budget <= 0) return;
     --budget;
-    void** vt = *reinterpret_cast<void***>(self);
+    void** vt = *reinterpret_cast<void***>(self);   // LEFT: the tripwire prints the raw vptr of a possibly-recycled block
     // Print the raw facts FIRST: if `self` is a freed/recycled block, the virtual
     // GetTypeId below can itself fault, and a dump that never printed proves nothing.
     std::fprintf(stderr, "[HighlightClear] BAD selection ref: tool=%p vtbl=%p self+0x30=0x%llx\n",
-                 reinterpret_cast<void*>(self), reinterpret_cast<void*>(vt),
+                 static_cast<void*>(self), static_cast<void*>(vt),
                  static_cast<unsigned long long>(ref));
-    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);
+    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);   // LEFT: the tripwire dumps the tool's first 0x40 bytes raw
     std::fprintf(stderr, "[HighlightClear]   tool[0x00..0x38] = %016llx %016llx %016llx "
                  "%016llx %016llx %016llx %016llx %016llx\n",
                  (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
@@ -680,8 +677,8 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
     // Only now the virtual probe (a live EditTool answers; a recycled block may not).
     // (Tripwire probe of possibly-recycled memory: a null vptr, or a null Type()
     // entry in the table it names, skips the call; the slot comes from the member.)
-    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {
-        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)
+    if (vt && ::Object::SlotAddressOf(self, &::Object::Base::Type)) {
+        uint32_t tid = self->Type();   // slot 2
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);
@@ -691,15 +688,15 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
 // [diag] companion of ReportBadSelectionRef for the other failure shape: the stored
 // entity pointer is canonical but the object behind it is gone (freed and recycled),
 // so the component array/count the finder reads are nonsense.
-void ReportDeadSelectedEntity(int64_t self, uint64_t ent, uint64_t arr, int32_t cnt) {
+void ReportDeadSelectedEntity(EditTool* self, const ComponentEntity* ent, uint64_t arr, int32_t cnt) {
     static int budget = 8;
     if (budget <= 0) return;
     --budget;
     std::fprintf(stderr, "[HighlightClear] DEAD selected entity: tool=%p entity=%p "
                  "entity+0x30(compArray)=0x%llx entity+0x38(count)=%d entity+0x40(flags)=0x%x\n",
-                 reinterpret_cast<void*>(self), reinterpret_cast<void*>(ent),
+                 static_cast<void*>(self), static_cast<const void*>(ent),
                  static_cast<unsigned long long>(arr), cnt,
-                 *reinterpret_cast<uint32_t*>(ent + 0x40));
+                 ent->_entityFlags);
     std::fprintf(stderr, "[HighlightClear]   last 4 entities stored into EditTool+0x30: "
                  "%p %p %p %p (newest first)\n",
                  g_LastSelectStore[(g_LastSelectStoreIdx + 3) & 3],
@@ -742,7 +739,7 @@ void Impl_cb40(EditTool* self) {
     {
         const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);
+            ReportBadSelectionRef(self, (int64_t)ref);
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can
@@ -752,7 +749,7 @@ void Impl_cb40(EditTool* self) {
             const uint64_t arr = reinterpret_cast<uint64_t>(e->_components);   // CAST-OK: ptr_int
             const int32_t  cnt = e->_componentCount;
             const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
-            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(reinterpret_cast<int64_t>(self), ref, arr, cnt);
+            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(self, e, arr, cnt);
         }
     }
     SetSelectionHighlight(self->lastEntityRef, 0);

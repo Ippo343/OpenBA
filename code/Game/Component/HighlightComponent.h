@@ -21,8 +21,8 @@
 //     every other slot = Component's
 //
 // TREE DIVERGENCES kept (behaviour of the tree's table, not retail's):
-//   * the embedded EdgeMeshInstance / Transform are NOT constructed here: the
-//     tree zero-fills +0x28..+0x11f and the tool side (Entity_impl_c4a0,
+//   * the embedded EdgeMeshInstance is NOT constructed here: the tree
+//     zero-fills +0x28..+0xf7 and the tool side (Entity_impl_c4a0,
 //     tool_base_render.cpp) constructs the outline lazily; a null +0x28 vptr is
 //     the "never outlined" tell OnRemove tests. The members stay byte arrays.
 //   * flags are 0x82, not 0x80: bit 1 enrols the component in the
@@ -36,6 +36,7 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"   // Math::Transform (+0x100)
 
 namespace Graphics { class EdgeMesh; }
 
@@ -57,7 +58,7 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint8_t  edgeMeshInstance[0xD0]; // +0x28 Graphics::EdgeMeshInstance (built lazily by the tool side)
     Graphics::EdgeMesh* fieldF8;     // +0xF8 the built outline mesh (ctor 0; Impl_b930 0x14004b930 MemAlloc(0x180) + EdgeMesh ctor; dtor 0x14004c8c0 deletes it)
-    uint8_t  transform[0x1C];        // +0x100 Math::Transform
+    Math::Transform transform;       // +0x100 (ctor 0x14004c930: ??0Transform at +0x100 = identity; trivially destroyed, 0x14004c8c0 never touches it)
     uint8_t  highlightFlag;          // +0x11C (ctor 0)
     uint8_t  _pad11D[3];             // +0x11D
     int32_t  highlightId;            // +0x120 Scene object id of the outline (ctor -1)

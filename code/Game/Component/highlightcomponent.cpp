@@ -87,7 +87,7 @@ void HighlightComponent::OnRemove() {
 // and a 0 would make it Scene::RemoveObject(scene, 0) on whichever object
 // genuinely owns id 0 (live freeze 2026-07-25).
 HighlightComponent::HighlightComponent()
-    : edgeMeshInstance{}, fieldF8(nullptr), transform{}, highlightFlag(0),
+    : edgeMeshInstance{}, fieldF8(nullptr), transform(), highlightFlag(0),
       _pad11D{}, highlightId(-1), _pad124{} {
     OrFlagsInCtor(0x2);
 }
