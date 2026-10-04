@@ -2313,7 +2313,7 @@ namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -3272,7 +3272,7 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
 
 #define D1_J1_ENTRY(ADDR)                                                     \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -3388,7 +3388,7 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
