@@ -179,6 +179,7 @@
 #include "../../types/ui/LayoutDescription.h"       // UI::LayoutDescription::Entry
 #include "../../types/graphics/AnimationManager.h"  // AnimationManager::Instance
 #include "../../types/picking/PickingMesh.h"        // Picking::PickingMesh::SubMesh
+#include "../../types/video/ShaderProgram.h"        // Video::VertexProgram::Stream
 
 namespace rtcoll {
 
@@ -1389,18 +1390,20 @@ D1_J2_ENTRY(180056610, ReleaseStringsCounted,  kD_Str2_18)     // CALL 0x1800569
 void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count) {
     (void)ignoredThis;
     if (count <= 0) return;                       // TEST R8D,R8D / JLE
-    uint8_t* base = static_cast<uint8_t*>(basev);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    // B.4 (X-RL): the element is `Video::VertexProgram::Stream` (ShaderProgram.h).
+    Video::VertexProgram::Stream* base = static_cast<Video::VertexProgram::Stream*>(basev);  // LEFT: ERASED RtColl_DestroyVtxStream_180056cb0 (void* entry; vertexprogram.cpp / array.cpp pass the buffer)
     const int64_t n = static_cast<int64_t>(count);   // MOVSXD
     int freed = 0;
     for (int64_t i = 0; i < n; ++i) {
-        uint8_t* e = base + i * 0x18;
-        ReleaseStringsCore(e, 1, &kD_Str_18);      // the String at +0x10 (kD_Str_18)
-        uint8_t* inner = *reinterpret_cast<uint8_t**>(e + 0x00);  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
-        const int32_t innerN = *reinterpret_cast<int32_t*>(e + 0x08);  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
-        freed += ReleaseStringsCounted(inner, innerN, &kD_Str2_18);
+        Video::VertexProgram::Stream* e = base + i;  // stride 0x18
+        ReleaseStringsCore(reinterpret_cast<uint8_t*>(e), 1, &kD_Str_18);      // the String at +0x10 (kD_Str_18)  // LEFT: ERASED ReleaseStringsCore (byte core)
+        Video::VertexProgram::Element* inner = e->elements.data;
+        const int32_t innerN = e->elements.size;
+        freed += ReleaseStringsCounted(reinterpret_cast<uint8_t*>(inner), innerN, &kD_Str2_18);  // LEFT: ERASED ReleaseStringsCounted (byte core)
         if (inner) MemFree(inner);                 // 0x180056d53..0x180056d83
-        *reinterpret_cast<uint64_t*>(e + 0x00) = 0; // 0x180056d89  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
-        *reinterpret_cast<uint64_t*>(e + 0x08) = 0; // 0x180056d8c  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
+        e->elements.data     = nullptr;            // 0x180056d89
+        e->elements.size     = 0;                  // 0x180056d8c, one qword in retail (H7)
+        e->elements.capacity = 0;
     }
 }
 

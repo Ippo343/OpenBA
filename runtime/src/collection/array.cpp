@@ -147,6 +147,7 @@
 #include "../../types/io/FileSystem.h"            // RtIO::PackageFileEntry
 #include "../../types/object/External.h"          // RtObject::ExternalArrayElement
 #include "../../types/graphics/Material.h"        // RtGraphics::MaterialTexture
+#include "../../types/graphics/AnimationGroup.h"  // Graphics::AnimationGroup::Tag
 #include "../../types/audio/Audio.h"              // Audio::Scene::Channel / AttenutedEffect
 #include "../../types/audio/SoundEffect.h"        // Audio::SoundEffect::Sample / Variant
 #include "../../types/collision2d/CollisionMesh.h" // Collision2D::CollisionMesh::Face / Triple3
@@ -1482,9 +1483,13 @@ const ArraySpec kSpec_StringRef = {               // 0x180034860
 //     realloc arm and the shrink-tail arm — read from the disassembly, not
 //     assumed from kSpec_StringRef's shape.
 // MemAlloc's align argument is 8 (`MOV EDX,8` at 0x1800617d9).
+static void MaterialConstantAssign(RtGraphics::MaterialConstant* d,
+                                   const RtGraphics::MaterialConstant* s) {
+    StringAssign(&d->name.data, &s->name.data);           // +0x00: String* ref
+    std::memcpy(d->value, s->value, sizeof d->value);     // +0x08..+0x17: raw copy
+}
 void AssignStringPlus16(uint8_t* d, const uint8_t* s) {
-    AssignStringRef(d, s);                        // +0x00: String* ref
-    std::memcpy(d + 0x08, s + 0x08, 0x10);         // +0x08..+0x17: raw copy  // LEFT: the element is R-GFX MaterialConstant, whose +0x00 String is raw `_head[8]` (Material.h)
+    AssignAs<RtGraphics::MaterialConstant, &MaterialConstantAssign>(d, s);
 }
 void InitZero18(uint8_t* d) {
     std::memset(d, 0, 0x18);
@@ -2130,15 +2135,23 @@ const ArraySpec kSpec_AnimClip70 = {              // 0x180059e70
 // 0x3dcccccd == 0.1f (0x18005a30a) — the SAME default AnimationGroup's own ctor
 // gives its +0x30. destroy is `CALL 0x18001cbf0` with (base, count) on both
 // arms (0x18005a328 realloc, 0x18005a37b shrink).
+// B.4 (X-RL): the element is `Graphics::AnimationGroup::Tag` (AnimationGroup.h).
+static void AnimTagAssign(Graphics::AnimationGroup::Tag* d,
+                          const Graphics::AnimationGroup::Tag* s) {
+    AdoptString(d->_string00.data, s->_string00.data);              // 18005a2c8 (as AssignStringPair10)
+    AdoptString(d->_string08.data, s->_string08.data);
+    d->_float10 = s->_float10;                                      // 18005a2ed
+}
 void AssignTagStrStrF18(uint8_t* d, const uint8_t* s) {
-    AssignStringPair10(d, s);                                       // +0x00/+0x08
-    *reinterpret_cast<uint32_t*>(d + 0x10) =  // LEFT: AnimationGroup::_tags is raw Array<uint8_t> (R-GFX AnimationGroup.h), no element type
-        *reinterpret_cast<const uint32_t*>(s + 0x10);               // 18005a2ed  // LEFT: as above
+    AssignAs<Graphics::AnimationGroup::Tag, &AnimTagAssign>(d, s);
+}
+static void AnimTagInit(Graphics::AnimationGroup::Tag* d) {
+    d->_string00.data = nullptr;                                    // 18005a303
+    d->_string08.data = nullptr;                                    // 18005a306
+    d->_float10       = 0.1f;                                       // 18005a30a  0x3dcccccd
 }
 void InitTagStrStrF18(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;                     // 18005a303  // LEFT: as above
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;                     // 18005a306  // LEFT: as above
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3dcccccdu;           // 18005a30a  // LEFT: as above
+    InitAs<Graphics::AnimationGroup::Tag, &AnimTagInit>(d);
 }
 void DestroyTagStrStrF18(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_18001cbf0(ignoredThis, base, count);
@@ -3142,11 +3155,16 @@ const ArraySpec kSpec_PpSampler10 = {             // 0x180054a20
 //   assign  0x180056878..0x1800568a8   two adopts then two dword moves
 //   init    TWO qword zeros only (0x1800568b9/0x1800568bc) — +0x10..+0x17 is
 //           left holding whatever the allocation contained
+// B.4 (X-RL): the element is `Video::VertexProgram::Element` (ShaderProgram.h).
+static void VtxElementAssign(Video::VertexProgram::Element* d,
+                             const Video::VertexProgram::Element* s) {
+    StringAssign(&d->name._data, &s->name._data);
+    StringAssign(&d->semantic._data, &s->semantic._data);
+    d->format = s->format;
+    d->index  = s->index;
+}
 void AssignVtxElement18(uint8_t* d, const uint8_t* s) {
-    AssignStringRef(d + 0x00, s + 0x00);
-    AssignStringRef(d + 0x08, s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);  // LEFT: Video VertexProgram::Element has no type in any header (R-VIDEO)
-    *reinterpret_cast<int32_t*>(d + 0x14)  = *reinterpret_cast<const int32_t*>(s + 0x14);  // LEFT: as above
+    AssignAs<Video::VertexProgram::Element, &VtxElementAssign>(d, s);
 }
 void InitZero16(uint8_t* d) { InitAs<uint64_t, &ZeroWords<uint64_t, 2>>(d); }
 void DestroyVtxElementRange(void* ignoredThis, uint8_t* base, int count) {
@@ -3169,13 +3187,17 @@ const ArraySpec kSpec_VtxElement18 = {            // 0x1800567d0
 // 0x1800571b0 is reached by ADDRESS: it is the sibling batch's row, and
 // registry-first means the day it is ported this call lands on that body with
 // no edit here.
+// B.4 (X-RL): the element is `Video::VertexProgram::Stream` (ShaderProgram.h).
+static void VtxStreamAssign(Video::VertexProgram::Stream* d,
+                            const Video::VertexProgram::Stream* s) {
+    d->elements.data     = nullptr;                  // 180056bb3
+    d->elements.size     = 0;                        // 180056bb6, one qword in retail (H7)
+    d->elements.capacity = 0;
+    RtColl_ArrayAssign_1800571b0(&d->elements, &s->elements);              // 180056bc5
+    StringAssign(&d->name._data, &s->name._data);    // 180056bcd..180056bdd
+}
 void AssignVtxStream18(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;              // 180056bb3  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;              // 180056bb6  // LEFT: as above
-    {
-        RtColl_ArrayAssign_1800571b0(d + 0x00, s + 0x00);                              // 180056bc5
-    }
-    AssignStringRef(d + 0x10, s + 0x10);                     // 180056bcd..180056bdd
+    AssignAs<Video::VertexProgram::Stream, &VtxStreamAssign>(d, s);
 }
 void DestroyVtxStreamRange(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyVtxStream_180056cb0(ignoredThis, base, count);

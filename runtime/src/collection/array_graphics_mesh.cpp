@@ -31,6 +31,9 @@
 // ---------------------------------------------------------------------------
 // GraphicsMesh::TriangleList — 0xb0 bytes
 // ---------------------------------------------------------------------------
+// B.4 (X-RL): this element is `Graphics::GraphicsMesh::DetailLevel`
+// (GraphicsMesh.h, every offset below asserted there); "TriangleList" is this
+// file's old misnomer for it, kept in the function names only.
 // Read from the three bodies that cover it end to end (the default ctor's
 // stores, the copy ctor's moves, and the element destroy's releases); no field
 // is named from a guess.
@@ -67,22 +70,29 @@ namespace gfxmesh {
 constexpr uint32_t kTriStride   = 0xb0;
 constexpr uint32_t kInnerStride = 0x10;
 
+// B.4 (X-RL): the 0xb0 element this file calls "TriangleList" IS
+// `Graphics::GraphicsMesh::DetailLevel` (GraphicsMesh.h, every field asserted,
+// sizeof 0xb0 == kTriStride). The function names below keep the old misnomer so
+// the addresses stay findable; the fields are read by their names.
+using DetailLevel = Graphics::GraphicsMesh::DetailLevel;
+static_assert(sizeof(DetailLevel) == kTriStride, "DetailLevel is the 0xb0 element");
+
 // The four Video platform hooks. All four are members of the real
 // `Video::VertexBuffer` / `Video::IndexBuffer` (B.3.5), so these four wrappers
 // call them directly. They are the buffer's OWN members, not the element
 // ctor/dtor helpers B.3.2 left alone: the sub-object at +0x18/+0x38/+0x58/+0x78
 // IS a Video buffer, which is why the conversion applies here.
-void VertexBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformConstruct();  // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+void VertexBufferPlatformConstruct(Video::VertexBuffer* p) {
+    p->PlatformConstruct();
 }
-void IndexBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+void IndexBufferPlatformConstruct(Video::IndexBuffer* p) {
+    p->PlatformConstruct();
 }
-void VertexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+void VertexBufferPlatformDestruct(Video::VertexBuffer* p) {
+    p->PlatformDestruct();
 }
-void IndexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+void IndexBufferPlatformDestruct(Video::IndexBuffer* p) {
+    p->PlatformDestruct();
 }
 
 // `Collection::Array<T>::operator=` for the 0x98 index array — retail
@@ -113,26 +123,30 @@ void InnerArrayAssign(void* dst, const void* src) {
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
 //
 // Returns `this` (`MOV RAX,RBX`).
-void* TriangleListCtor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+DetailLevel* TriangleListCtor(DetailLevel* d) {
+    d->_name.data  = nullptr;                            // the String slot
+    d->_image._ptr = nullptr;
+    d->_distance   = 10000.0f;                           // 0x461c4000
 
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;          // the String slot  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x461c4000u;   // 10000.0f  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    // Retail's order: +0x18 Vertex, +0x38 Index, +0x58 Vertex, +0x78 Index.
+    d->_vertexBuffer.size        = 0;
+    d->_vertexBuffer.dynamic     = false;
+    VertexBufferPlatformConstruct(&d->_vertexBuffer);
+    d->_indexBuffer.size         = 0;
+    d->_indexBuffer.dynamic      = false;
+    IndexBufferPlatformConstruct(&d->_indexBuffer);
+    d->_skinVertexBuffer.size    = 0;
+    d->_skinVertexBuffer.dynamic = false;
+    VertexBufferPlatformConstruct(&d->_skinVertexBuffer);
+    d->_skinIndexBuffer.size     = 0;
+    d->_skinIndexBuffer.dynamic  = false;
+    IndexBufferPlatformConstruct(&d->_skinIndexBuffer);
 
-    const uint32_t kBuffers[4] = { 0x18, 0x38, 0x58, 0x78 };
-    for (int i = 0; i < 4; ++i) {
-        uint8_t* const b = d + kBuffers[i];
-        *reinterpret_cast<uint32_t*>(b) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-        b[4] = 0;
-        if ((i & 1) == 0) VertexBufferPlatformConstruct(b);  // +0x18, +0x58
-        else              IndexBufferPlatformConstruct(b);   // +0x38, +0x78
-    }
-
-    *reinterpret_cast<uint64_t*>(d + 0x98) = 0;          // the Array header  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    *reinterpret_cast<uint64_t*>(d + 0xa0) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    *reinterpret_cast<uint32_t*>(d + 0xa8) = 1;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    return self;
+    d->_triangleLists._data     = nullptr;               // the Array header
+    d->_triangleLists._size     = 0;                     // one qword in retail (H7)
+    d->_triangleLists._capacity = 0;
+    d->_maxInstances = 1;
+    return d;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,28 +169,30 @@ void* TriangleListCtor(void* self) {
 // assignment starts by destroying what the destination holds).
 //
 // +0xa8 is copied last. +0xac..+0xaf are NEVER WRITTEN.
-void* TriangleListCopyCtor(void* dst, const void* src) {
-    uint8_t* const d = static_cast<uint8_t*>(dst);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    const uint8_t* const s = static_cast<const uint8_t*>(src);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-
-    *reinterpret_cast<uint64_t*>(d) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    uint8_t* const name = *reinterpret_cast<uint8_t* const*>(s);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+DetailLevel* TriangleListCopyCtor(DetailLevel* d, const DetailLevel* s) {
+    d->_name.data = nullptr;
+    char* const name = s->_name.data;
     if (name != nullptr) {
-        *reinterpret_cast<uint8_t**>(d) = name;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-        ++*(reinterpret_cast<int32_t*>(name) - 1);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+        d->_name.data = name;
+        ++RtSystem::StringRefCount(name);
     }
 
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    for (uint32_t o = 0x18; o <= 0x90; o += 8)
-        *reinterpret_cast<uint64_t*>(d + o) = *reinterpret_cast<const uint64_t*>(s + o);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+    d->_image    = s->_image;                            // +0x08, the raw qword
+    d->_distance = s->_distance;                         // +0x10 (retail: a dword MOV)
+    // +0x18 .. +0x97: the four buffers, byte for byte (platform companions
+    // SHARED, as retail's seventeen-qword copy leaves them).
+    d->_vertexBuffer     = s->_vertexBuffer;
+    d->_indexBuffer      = s->_indexBuffer;
+    d->_skinVertexBuffer = s->_skinVertexBuffer;
+    d->_skinIndexBuffer  = s->_skinIndexBuffer;
 
-    *reinterpret_cast<uint64_t*>(d + 0x98) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    *reinterpret_cast<uint64_t*>(d + 0xa0) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    InnerIndexArrayAssign(d + 0x98, s + 0x98);
+    d->_triangleLists._data     = nullptr;
+    d->_triangleLists._size     = 0;                     // one qword in retail (H7)
+    d->_triangleLists._capacity = 0;
+    InnerIndexArrayAssign(&d->_triangleLists, &s->_triangleLists);
 
-    *reinterpret_cast<uint32_t*>(d + 0xa8) = *reinterpret_cast<const uint32_t*>(s + 0xa8);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-    return dst;
+    d->_maxInstances = s->_maxInstances;
+    return d;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,27 +219,27 @@ void* TriangleListCopyCtor(void* dst, const void* src) {
 // `ReleaseStringsCore`, because that helper walks its own loop over the whole
 // range and would visit the strings in a separate pass, changing the order of
 // allocator calls relative to the four PlatformDestructs.
-void DestroyTriangleListRange(void*, uint8_t* base, int count) {
+void DestroyTriangleListRange(DetailLevel* base, int count) {
     if (count <= 0) return;                                  // TEST R8D,R8D / JLE
     const int64_t n = static_cast<int64_t>(count);           // MOVSXD
 
     for (int64_t i = 0; i < n; ++i) {
-        uint8_t* const e = base + i * kTriStride;
+        DetailLevel* const e = base + i;                     // stride 0xb0
 
-        uint8_t** const buf = reinterpret_cast<uint8_t**>(e + 0x98);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-        if (*buf != nullptr) MemFree(*buf);
-        *reinterpret_cast<uint64_t*>(e + 0x98) = 0;          // unconditional  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-        *reinterpret_cast<uint64_t*>(e + 0xa0) = 0;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+        if (e->_triangleLists._data != nullptr) MemFree(e->_triangleLists._data);
+        e->_triangleLists._data     = nullptr;               // unconditional
+        e->_triangleLists._size     = 0;                     // one qword in retail (H7)
+        e->_triangleLists._capacity = 0;
 
-        IndexBufferPlatformDestruct(e + 0x78);
-        VertexBufferPlatformDestruct(e + 0x58);
-        IndexBufferPlatformDestruct(e + 0x38);
-        VertexBufferPlatformDestruct(e + 0x18);
+        IndexBufferPlatformDestruct(&e->_skinIndexBuffer);    // +0x78
+        VertexBufferPlatformDestruct(&e->_skinVertexBuffer);  // +0x58
+        IndexBufferPlatformDestruct(&e->_indexBuffer);        // +0x38
+        VertexBufferPlatformDestruct(&e->_vertexBuffer);      // +0x18
 
-        uint8_t** const nameSlot = reinterpret_cast<uint8_t**>(e);  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
-        uint8_t* const name = *nameSlot;
+        char** const nameSlot = &e->_name.data;
+        char* const name = *nameSlot;
         if (name == nullptr) continue;
-        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;  // LEFT: the 0xb0 TriangleList element has no type (GraphicsMesh.h's TriangleList is a different struct; R-GFX)
+        int32_t* const refs = &RtSystem::StringRefCount(name);
         --*refs;
         if (*refs != 0) {
             *nameSlot = nullptr;                             // MOV [RSI],R15 (== 0)
@@ -250,7 +266,7 @@ void DestroyInnerArrayRange(void*, uint8_t* base, int count) {
 // ---------------------------------------------------------------------------
 // The two new-tail initialisers, i.e. the `else` limb of each fill loop.
 // ---------------------------------------------------------------------------
-void InitTriangleList(uint8_t* p) { TriangleListCtor(p); }   // CALL 0x1800fefc0
+void InitTriangleList(DetailLevel* p) { TriangleListCtor(p); }   // CALL 0x1800fefc0
 
 // 0x18005cda0's arms BOTH open with `[rcx] = 0; [rcx+8] = 0`; the copy arm then
 // calls 0x180014c70 over the top. So the init is the two zero stores alone and
@@ -263,7 +279,7 @@ static void InnerArrayInit(ArrayHdr* a) {
 }
 void InitInnerArray(uint8_t* p) { InitAs<ArrayHdr, &InnerArrayInit>(p); }
 
-void AssignTriangleList(uint8_t* d, const uint8_t* s) { TriangleListCopyCtor(d, s); }
+void AssignTriangleList(DetailLevel* d, const DetailLevel* s) { TriangleListCopyCtor(d, s); }
 
 static void InnerArrayCopy(ArrayHdr* d, const ArrayHdr* s) {
     d->_data     = nullptr;
@@ -282,7 +298,8 @@ void AssignInnerArray(uint8_t* d, const uint8_t* s) { AssignAs<ArrayHdr, &InnerA
 // ---------------------------------------------------------------------------
 constexpr ArraySpec kSpec_TriangleList = {
     "Array<Graphics::GraphicsMesh::TriangleList>", kTriStride, 8,
-    &AssignTriangleList, &InitTriangleList, &DestroyTriangleListRange, false,
+    &AssignAs<DetailLevel, &AssignTriangleList>, &InitAs<DetailLevel, &InitTriangleList>,
+    &DestroyAs<DetailLevel, &DestroyTriangleListRange>, false,
     0xac, 0xb0,    // the copy ctor's last store ends at +0xac
     0xac, 0xb0,    // ... and so does the default ctor's
     0x00, 0x08 };  // the name slot is refcounted — a probe must seed it null

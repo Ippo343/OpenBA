@@ -480,13 +480,11 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     // change here. See the two bodies above.
     // Video::Device::_singleton's +0x50 / +0x58 -- the profile build's setter
     // `Video::Device::SetVideoErrorFuncs` (0x1800fd860), inlined by retail.
-    // LEFT (B.4 R-ENG): Device.h (R-VIDEO) still declares +0x50..+0x5f as
-    // `gap50[0x10]`; the two callback slots are viewed over it until that
-    // header names them (known_port_issues 14f).
+    // B.4 (X-RL): Device.h declares +0x50..+0x5f as the two callback slots
+    // (`gap50[2]`, the name its ctor's memset still uses).
     static_assert(MainLoopAddr::DeviceErrorFuncSlot   == offsetof(::Video::Device, gap50), "error callback @ +0x50");
     static_assert(MainLoopAddr::DeviceRestartFuncSlot == offsetof(::Video::Device, gap50) + 8, "restart callback @ +0x58");
-    using VideoCallback = void (*)();
-    VideoCallback* const callbacks = reinterpret_cast<VideoCallback*>(::Video::Device::_singleton->gap50);
+    auto* const callbacks = ::Video::Device::_singleton->gap50;
     callbacks[0] = &RtEngine_MainLoop_OnVideoError_static;     // +0x50
     callbacks[1] = &RtEngine_MainLoop_OnVideoRestart_static;   // +0x58
 

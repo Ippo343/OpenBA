@@ -699,7 +699,8 @@ public:
     // ??0EdgeMeshInstance@Graphics@@QEAA@XZ 0x1800a3ab0 — the REAL constructor:
     // Geometry() and the stamp are the compiler's; `_mesh = 0` is the whole
     // body. `_followed` (+0xc8) is deliberately NOT written (retail's own).
-    EdgeMeshInstance() { _mesh.p = nullptr; }
+    // B.4 (X-RL): the zero is `_mesh`'s own default ctor (Object::ExternalPtr).
+    EdgeMeshInstance() {}
 
     // [0] 0x1800175d0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xd0` = the element size).
@@ -726,7 +727,10 @@ public:
     // are deliberately not declared; see MeshInstance's note above.
 
 public:
-    RtGraphics::ExternalPtr _mesh;      // +0xc0  ExternalPtr<EdgeMesh>; ctor 0
+    // B.4 (X-RL): typed. `Object::ExternalPtr<T>` is one trivially copyable,
+    // trivially destructible pointer (External.h): same 8 bytes, no dtor added.
+    // Every reader is in mesh.cpp / meshinstance_draw.cpp.
+    Object::ExternalPtr<EdgeMesh> _mesh; // +0xc0  ExternalPtr<EdgeMesh>; ctor 0
     MeshInstance*           _followed;  // +0xc8  default ctor LEAVES IT UNSET
 };
 
