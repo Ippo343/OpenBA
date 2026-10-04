@@ -146,7 +146,8 @@ struct PathCostNode {
     PathCostNode* parent;     // +0x10
     PathCostNode* left;       // +0x18
     PathCostNode* right;      // +0x20
-    int32_t       balance;    // +0x28: the dword store of both allocators
+    int16_t       balance;    // +0x28 (retrace 0x14000e360: MOV word ptr [RDX+0x28]; the allocators zero +0x28..+0x2B with one dword store)
+    int16_t       height;     // +0x2A (retrace 0x14000e360: MOVZX word ptr [RAX+0x2a])
     int32_t       _pad2C;     // +0x2C
 };
 static_assert(sizeof(PathCostNode) == 0x30, "PathCostNode is MemAlloc(0x30, 8) (0x140025a10, 0x14001cc40)");
@@ -158,6 +159,7 @@ static_assert(offsetof(PathCostNode, parent)     == 0x10, "");
 static_assert(offsetof(PathCostNode, left)       == 0x18, "");
 static_assert(offsetof(PathCostNode, right)      == 0x20, "");
 static_assert(offsetof(PathCostNode, balance)    == 0x28, "");
+static_assert(offsetof(PathCostNode, height)     == 0x2A, "");
 static_assert(offsetof(PathCostNode, _pad2C)     == 0x2C, "");
 
 // ============================================================

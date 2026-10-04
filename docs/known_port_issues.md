@@ -569,7 +569,10 @@ TUT (rows 80-84, 88-89):
 - (X-G1-2, row 561) `PathCostNode::balance` (`Entity/CitizenBehavior.h`) is likewise one int32 at +0x28 while the
   insert 0x140025a10 (`PathCostTreeInsert`, which runs on `AvlNode30`) and its retrace 0x14000e360 treat +0x28 /
   +0x2a as two int16s; PathGraph's {m_bstRoot, m_bstCount} are two fields, not one Set header, so citizenbehavior.cpp
-  keeps two casts per insert (LEFT). Retail not re-read. SUSPECTED.
+  keeps two casts per insert (LEFT). CONFIRMED (X-G1-2b): 0x14000e360 reads `MOVZX word ptr [+0x2a]` and writes
+  `MOV word ptr [RDX+0x28]` / `[RDX+0x2a]`. FIXED on b4x-G1-2b: `PathCostNode` declares int16 `balance` / `height`
+  (layout unchanged, asserted; the tree reads neither, the C allocators write them). The two insert casts stay
+  (PathGraph's {m_bstRoot, m_bstCount} are two fields).
 
 ### 14f. Names that mislead (naming only)
 
