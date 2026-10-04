@@ -133,7 +133,7 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(ActionStack* param_1) {
             if (iVar1 != 1) break;
             node = node->_next.Get();                            // advance via node+0x10
         } while (node != nullptr);
-        reinterpret_cast< ::Object::InternalBasePtr*>(&param_1->field_0x10)->DeletePtr();   // B.3.3 bridge  // LEFT: Action.h (S2) ActionStack::field_0x10 is Action*, retail an InternalPtr<Action>
+        param_1->field_0x10.DeletePtr();
         // re-Ctor a default InternalBasePtr (null internal) and store into [stack+0x10]
         param_1->field_0x10 = nullptr;
     }

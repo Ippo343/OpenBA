@@ -858,8 +858,7 @@ extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr
     }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(MainMenuDialog), 8);
     MenuDialogLoopT* menuLoop = static_cast<MenuDialogLoopT*>(loop);
-    // LEFT: DialogLoopT::_dialogExternal is void* (runtime Engine header).
-    const UI::Dialog* rsc = menuLoop ? static_cast<const UI::Dialog*>(menuLoop->_dialogExternal) : nullptr;
+    const UI::Dialog* rsc = menuLoop ? menuLoop->_dialogExternal : nullptr;
     MainMenuDialog* dlg;
     if (rsc) {
         dlg = ::new (mem) MainMenuDialog(&menuLoop->_ui, rsc,

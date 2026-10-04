@@ -188,7 +188,7 @@ static ModelComponent* ToolTile_FindModelComponentScoped(const ComponentEntity* 
 // Keeps the mesh group CreateAt chose (+0x164), clamped to a valid group.
 static void ToolTile_SetPlacedModel(ModelComponent* model, bool foundation) {
     if (!model) return;
-    const ModelDescription* modelDesc = reinterpret_cast<const ModelDescription*>(model->_description);   // LEFT: ModelComponent::_description (block COMP) is void*
+    const ModelDescription* modelDesc = static_cast<const ModelDescription*>(model->_description);   // Component::_description (a ModelComponent's is its ModelDescription)
     if (!modelDesc) return;
     const ModelMeshGroup* groupArray = modelDesc->_meshGroups;
     uint32_t groupCount = static_cast<uint32_t>(modelDesc->_meshGroupCount);

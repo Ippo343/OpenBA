@@ -91,7 +91,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     }
     Action* msgIBP = msgAction;   // the InternalPtr's ctor is a plain store
     if (character->field_0x58 != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();   // B.3.3 bridge; LEFT: CharacterComponent::field_0x58 is Action*, not an InternalPtr (CharacterComponent.h, WORK-3)
+        character->field_0x58.DeletePtr();
     }
     character->field_0x58 = msgIBP;
 

@@ -365,7 +365,7 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
     duePair[1] = outRec->skillMult2;
     // LEFT: CitizenComponent::field_0x200 (block COMP-b's header) is declared int64_t, not
     // System::Time.
-    bool ok = BreakTimeCheck(reinterpret_cast<System::Time*>(&citizen->field_0x200), duePair, gw->m_random);   // 0x1400a9290 LEFT: Component/CitizenComponent.h (CIT-4)
+    bool ok = BreakTimeCheck(&citizen->field_0x200, duePair, gw->m_random);   // 0x1400a9290
     if (ok) {
         citizen->pendingProfession = outRec;
         return 1;
