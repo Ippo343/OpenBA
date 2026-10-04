@@ -13,10 +13,6 @@
 // Instruction-faithful transcription of the decompiled exe helper; do NOT "improve"
 // behavior.
 //
-// LEFT: the callers (CitizenAI's gather, ClearStorage) hand the citizen reference,
-// the hidden return slot and the locations as void* / uint64_t*; the action ctors
-// (ACT's C bodies) take their references as uint64_t*.
-//
 // All disasm citations are exe addresses (base 0x140000000).
 
 #include <new>
@@ -87,33 +83,28 @@ static inline int64_t WAP2_MakeTime(float seconds) {
 // ============================================================
 // WorkAct_GatherRawMatCtor_bf790  (exe Pathfinding_FindPath @ 0x1400bf790)
 // ============================================================
-//   retval         = InternalBasePtr* hidden return (RCX) — written with the Pickup IBP.
-//   entity         = citizen InternalBasePtr* (RDX)
+//   retval         = InternalPtr<Action>* hidden return (RCX) — written with the Pickup.
+//   citizenRef     = the citizen reference (RDX)
 //   pathType       = u32 (R8D, homed; reused as CompleteTask workId)
-//   srcLoc         = u64* (R9 — *srcLoc = source inner)
+//   srcRef         = entity reference (R9 — *srcRef = source)
 //   srcPos         = float* (stack; DropOff/MoveTo source position / first heading)
-//   dstLoc         = void** (stack; *dstLoc = dest inner — Pickup target)
+//   dstRef         = entity reference (stack; *dstRef = dest — Pickup target)
 //   dstPos         = float* (stack; second heading / second MoveTo destination)
-//   materialDesc   = int64_t (stack; DropOff/Pickup p4)
+//   material       = ComponentDescription* (stack; DropOff/Pickup p4)
 //   matCount       = int (stack; DropOff/Pickup p5)
 //   completionCode = int (stack; CompleteTask completionCode)
 //   useAnimal      = byte (stack; Pickup p6)
 //   twoWay         = char (stack; gates pre-CompleteTask + post pickup CompleteTask)
 //   flags          = int (stack; low byte gates the optional srcLoc SendComponentMessage)
 //   param_14       = byte (stack; PerformWork p6 + selects path/tool variants)
-extern "C" void* WorkAct_GatherRawMatCtor_bf790(
-        void* retval, void* entity, uint32_t pathType, uint64_t* srcLoc,
-        float* srcPos, void** dstLoc, float* dstPos, int64_t materialDesc,
+extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
+        ::Object::InternalPtr<Action>* retval, CitizenComponent* const* citizenRef,
+        uint32_t pathType, ComponentEntity* const* srcRef,
+        float* srcPos, ComponentEntity* const* dstRef, float* dstPos, ComponentDescription* material,
         int matCount, int completionCode, uint8_t useAnimal, char twoWay,
         int flags, uint8_t param_14) {
 
     // --- the action stack = character + 0x48 ; cleanup pending actions (0xbf7cf-0xbf7f3) ---
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(entity);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-    // LEFT: SIG WorkAct_GatherRawMatCtor_bf790: srcLoc / dstLoc are entity references,
-    // materialDesc the material (the outside callers hand them as integers / void**).
-    ComponentEntity* const* srcRef = reinterpret_cast<ComponentEntity* const*>(srcLoc);
-    ComponentEntity* const* dstRef = reinterpret_cast<ComponentEntity* const*>(dstLoc);
-    ComponentDescription* material = reinterpret_cast<ComponentDescription*>(materialDesc);
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
@@ -304,7 +295,7 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
         pick = new (obj) PickupStoredRawMaterial(&entInner, &dstInner, material,
                                                  matCount, useAnimal);  // p6=useAnimal (0xbfd94), 0x1400ca520
     }
-    ::Object::InternalPtr<Action>* ret = new (retval) ::Object::InternalPtr<Action>(pick);   // ctor into hidden retval (0xbfda4)
+    ::Object::InternalPtr<Action>* ret = new (retval) ::Object::InternalPtr<Action>(pick);   // ctor into the hidden return slot (0xbfda4)
     ::Object::InternalPtr<Action> retInner = *ret;                     // dstLoc = *retval (0xbfdaa)
     WAP2_Append(list, &retInner);                                     // (0xbfdb9)
 

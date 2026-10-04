@@ -68,6 +68,7 @@
 #include "Game/Map.h"
 #include "collection/Collection.h"
 #include "Action/PathSearch.h"   // RawArray (PickBestDropTarget)
+#include "Action/PickupStoredRawMaterial.h"   // AddMaterial 0x1400ca230 on the path result
 
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
@@ -588,7 +589,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // stops the caller's claim-walk. (0x14012cf10 takes the storage as an integer: LEFT.)
     CitizenComponent* citizen = *citizenSlot;
     StorageComponent* carriedStorage = citizen->_entity->FindComponent<StorageComponent>();
-    const int carried = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carriedStorage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount (its own null-guarded body, not a forwarder)
+    const int carried = CitizenComp_StorageComponent_QueryCount(carriedStorage);
     if (carried > 0) {
         (*citizenSlot)->LongTermPlan();
         return 2;
@@ -628,14 +629,14 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
     // --- 0x1400f01c8..0x1400f01da: how much the citizen can still carry ---
     // (0x140116540 takes the citizen as an integer: LEFT.)
-    const int freeCarry = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(*citizenSlot));   // LEFT: SIG WorkLeaf_FreeStorageCapacity_116540
+    const int freeCarry = WorkLeaf_FreeStorageCapacity_116540(*citizenSlot);
 
     // --- 0x1400f01dd..0x1400f0219: market already full enough -------------
     // fill = QueryCount(marketStorage) / (float)capacity.
     // COMISS/JNC: if fill >= MarketDescription::_fillRatio the market does not want
     // any more stock at all -> 1 = examined but declined.
     const float stocked = static_cast<float>(
-        CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(marketStorage)));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+        CitizenComp_StorageComponent_QueryCount(marketStorage));
     const float capacity = static_cast<float>(marketStorage->capacity);
     const float fill = stocked / capacity;
     if (marketDesc->_fillRatio <= fill) {
@@ -935,12 +936,12 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             // and the position by name.)
             float destPos[3] = {0.0f, 0.0f, 0.0f};
             ComponentEntity* exclude = field_10;  // this market
-            int64_t found = 0;
+            ComponentEntity* found = nullptr;
             PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(town),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
-                               reinterpret_cast<ComponentEntity**>(&found),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790 (the result travels on as a uint64_t location)
+                               &found,
                                static_cast<uint32_t>(cellIdx), resType, take, '\x01',
                                destPos, &exclude);   // 0x14008d590
-            if (found == 0) continue;   // 0x1400f0b86: nobody will take it, keep scanning
+            if (found == nullptr) continue;   // 0x1400f0b86: nobody will take it, keep scanning
 
             // ============ THE CLAIM (retail returns 2 from here) ============
             // 0x1400f0be3: a random interact point on the MARKET, weighted by the
@@ -961,14 +962,13 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             // 0x1400f0d57..0x1400f0ddc: build the citizen's action chain.
             // Arg 8 is the resource TYPE ENTITY POINTER, full 64 bits -- see the
             // engine_funcs.h note; it was truncated to 32 once before and crashed.
-            // (0x1400bf790 takes the locations and the material as integers: LEFT.)
-            uint64_t pathDest = static_cast<uint64_t>(found);   // where to deliver
+            ComponentEntity* pathDest = found;                    // where to deliver
             ComponentEntity* pathSrc = field_10;                  // this market
             CitizenComponent* pathWalker = *citizenSlot;
-            uintptr_t pathOut[2] = {0, 0};   // retail discards this handle on this arm
+            ::Object::InternalPtr<Action> pathOut;   // retail discards this handle on this arm
             const int pathType = field_20;
-            WorkAct_GatherRawMatCtor_bf790(pathOut, &pathWalker, pathType, &pathDest, destPos,
-                          reinterpret_cast<void**>(&pathSrc), marketPos, reinterpret_cast<int64_t>(resType), take,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+            WorkAct_GatherRawMatCtor_bf790(&pathOut, &pathWalker, pathType, &pathDest, destPos,
+                          &pathSrc, marketPos, resType, take,
                           0, 1, '\0', 0, 1);
 
             // 0x1400f0de1..0x1400f0e2a: stamp the citizen.
@@ -1272,12 +1272,11 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
             // Note the direction: SRC is the winner (pick up there), DEST is the
             // market (drop off here) -- the mirror of the S3 shed arm. Args 8/9 are
-            // 0 and -1 here, not a material template and a count. (0x1400bf790 takes
-            // the locations as integers: LEFT.)
-            int64_t pathOut2[2] = {0, 0};
+            // 0 and -1 here, not a material template and a count.
+            ::Object::InternalPtr<Action> pathOut2;
             const int pathType2 = field_20;
-            WorkAct_GatherRawMatCtor_bf790(pathOut2, &pathCitizen, pathType2, reinterpret_cast<uint64_t*>(&pathMarket), marketPos2,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                          reinterpret_cast<void**>(&pathWinner), winnerPos, 0, -1, 0, 1, '\0', 0, 1);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+            WorkAct_GatherRawMatCtor_bf790(&pathOut2, &pathCitizen, pathType2, &pathMarket, marketPos2,
+                          &pathWinner, winnerPos, nullptr, -1, 0, 1, '\0', 0, 1);
 
             CitizenComponent* citizen5 = *citizenSlot;
             Profession* tgtVal2 = nullptr;
@@ -1289,12 +1288,11 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
                 citizen5->happinessFlags |= 0x20000;
             }
 
-            // (0x1400ca230 takes the action and the material as integers: LEFT.)
+            // 0x1400ca230 (was its ActChild_TransferToCarrier_ca230 forwarder): the path
+            // result is the PickupStoredRawMaterial 0x1400bf790 built.
             for (int k = 0; k < carry.count; ++k) {
                 const Carry& ce = carry.data[k];
-                ActChild_TransferToCarrier_ca230(pathOut2[0],
-                                       reinterpret_cast<int64_t>(ce.resource),   // LEFT: SIG ActChild_TransferToCarrier_ca230
-                                       ce.count);
+                static_cast<PickupStoredRawMaterial*>(pathOut2.Get())->AddMaterial(ce.resource, ce.count);
             }
 
             ClaimNode* claimNode = nullptr;

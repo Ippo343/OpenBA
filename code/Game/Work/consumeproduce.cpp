@@ -529,11 +529,14 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                             uintptr_t destEntity = foundEntity;
                             CitizenComponent* destEntityRef = *citizenIBP;
 
+                            // The hidden return slot: retail reuses the town-list slot, whose
+                            // value is dead past this call; the tree gives the slot its own local.
+                            ::Object::InternalPtr<Action> pickup;
                             WorkAct_GatherRawMatCtor_bf790(
-                                &worldEntityList, &destEntityRef,
-                                field_20, &destEntity,
-                                searchPos, reinterpret_cast<void**>(&entityRef), terrainPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                &pickup, &destEntityRef,
+                                field_20, reinterpret_cast<ComponentEntity* const*>(&destEntity),   // LEFT: row 260 (the 8-byte slot doubles as the float[3] position out)
+                                searchPos, &entityRef, terrainPos,
+                                matEntity, available, slot, 0, '\x01', 0, 0);
 
                             int priority = field_20;
                             return FinalizeAction(this, citizenIBP, &destEntityRef, priority, slot);
@@ -623,11 +626,14 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                         // call at 0x1400e83f4 passes.
                                         CitizenComponent* pathCitizen = *citizenIBP;
 
+                                        // The hidden return slot: retail reuses foundStorage's
+                                        // slot (dead past this call); the tree gives it its own local.
+                                        ::Object::InternalPtr<Action> pickup;
                                         WorkAct_GatherRawMatCtor_bf790(
-                                            &foundStorage, &pathCitizen,
-                                            field_20, reinterpret_cast<uint64_t*>(&pathSrc),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                            fetchPos, reinterpret_cast<void**>(&fetchDest), searchPos2,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                            (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                            &pickup, &pathCitizen,
+                                            field_20, &pathSrc,
+                                            fetchPos, &fetchDest, searchPos2,
+                                            matEntity2, -1, slot, 1, '\0', 0, 0);
 
                                         int priority2 = field_20;
                                         return FinalizeAction(this, citizenIBP, &fetchDest, priority2, slot);

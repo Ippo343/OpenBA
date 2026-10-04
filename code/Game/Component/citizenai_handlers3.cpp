@@ -126,29 +126,29 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     CitizenDescription* desc = citizen->description;
 
     float dest[4] = {0, 0, 0, 0};
-    int64_t found = 0;        // local_res8
-    uint64_t holderEntity = 0; // entity passed to Ctor8
+    ComponentEntity* found = nullptr;        // local_res8
+    ComponentEntity* holderEntity = nullptr; // entity passed to Ctor8
     bool doPush = false;
 
     // coldness above the description's _fec threshold
     if (desc != nullptr && desc->_fec <= age && age != desc->_fec) {
         Map* mg = MapGrid();
-        int64_t listEnt = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG Entity_impl_ec70 (int64_t list; Component/exe_bodies.h)
+        CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
         const ModelComponent* model = CitizenModel(citizen);
         uint32_t cell = ModelCell(model, mg);
         Entity_impl_ec70(listEnt, &found, cell, dest);   // find nearest valid residence
-        if (found != 0) { holderEntity = found; doPush = true; }
+        if (found != nullptr) { holderEntity = found; doPush = true; }
     }
 
     if (!doPush) {
         if (citizen->home != nullptr) {
             if (citizen->home != nullptr) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-                bool ok = (stor) ? ResidenceCheck_2ac30(reinterpret_cast<int64_t>(stor)) : false;   // LEFT: SIG ResidenceCheck_2ac30 (int64_t; Component/exe_bodies.h)
+                bool ok = (stor) ? ResidenceCheck_2ac30(stor) : false;
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
                     Pf_EntityResolvePos_2e20(pp, dest, 0, 0, nullptr);
-                    holderEntity = reinterpret_cast<uint64_t>(citizen->home);   // LEFT: SIG CitizenAI_PerformWorkCtor8_bd790 (uint64_t* entity IBP; Component/exe_bodies.h)
+                    holderEntity = citizen->home;
                     doPush = true;
                 }
             }
@@ -180,10 +180,10 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
     bool isAdult = (desc != nullptr) && (age > desc->_fcc);
 
     float dest[4] = {0, 0, 0, 0};
-    int64_t found = 0;     // local_res8 (chosen target entity)
+    ComponentEntity* found = nullptr;     // local_res8 (chosen target entity)
     char flag = 0;         // Ctor6 flag (cVar9)
     bool ctorDirect = false;  // reached the Ctor6 push with holders already set (LAB_14010d004)
-    int64_t holderEntity = 0; // local_res10
+    ComponentEntity* holderEntity = nullptr; // local_res10
     CitizenComponent* holderCitizen = nullptr;// local_res18
 
     bool retryWorkPath = !isAdult;  // hunger <= thresh -> LAB_14010d03c
@@ -191,26 +191,26 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
     if (isAdult) {
         if (citizen->home != nullptr) {
             ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-            int cnt = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(stor));   // LEFT: SIG CitizenComp_Storage_GetResourceCount (wave X)
+            int cnt = CitizenComp_Storage_GetResourceCount(stor);
             if (cnt > 0) {
-                found = reinterpret_cast<int64_t>(citizen->home);  // the home   // LEFT: SIG CitizenAI_PerformWorkCtor6_bd420 / CitizenComp_Entity_FindComponent_Storage (int64_t entity)
+                found = citizen->home;  // the home
                 const ModelComponent* model = CitizenModel(citizen);
                 dest[0] = model->transform.translation.x;
                 dest[1] = model->transform.translation.y;
                 dest[2] = model->transform.translation.z;
             }
         }
-        if (found == 0) {
+        if (found == nullptr) {
             Map* mg = MapGrid();
-            int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_helper_e370 (int64_t* list; Component/exe_bodies.h)
+            CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
             const ModelComponent* model = CitizenModel(citizen);
             uint32_t cell = ModelCell(model, mg);
             ComponentEntity* e370arg = citizen->home;   // param_7 (home preferred candidate)
-            int64_t outComp = 0;           // local_res20
-            int64_t outBest = 0;           // local_res18
-            CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, dest, 0, reinterpret_cast<int64_t*>(&e370arg));   // LEFT: SIG CitizenAI_helper_e370 (int64_t* candidate)
+            ComponentDescription* outComp = nullptr;   // local_res20
+            ComponentEntity* outBest = nullptr;        // local_res18
+            CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, dest, 0, &e370arg);
             found = outBest;
-            if (outBest == 0) retryWorkPath = true;  // goto LAB_14010d03c
+            if (outBest == nullptr) retryWorkPath = true;  // goto LAB_14010d03c
         }
     }
 
@@ -221,13 +221,13 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             char ok = citizen->CanReach(citizen->home);
             if (ok != 0) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-                int cnt = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(stor));   // LEFT: SIG CitizenComp_Storage_GetResourceCount (wave X)
+                int cnt = CitizenComp_Storage_GetResourceCount(stor);
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
                     Pf_EntityResolvePos_2e20(pp, dest, 0, 0, nullptr);
                     holderCitizen = citizen;
                     flag = 1;
-                    holderEntity = reinterpret_cast<int64_t>(holderCitizen->home);   // LEFT: SIG CitizenAI_PerformWorkCtor6_bd420 (int64_t* entity IBP; Component/exe_bodies.h)
+                    holderEntity = holderCitizen->home;
                     ctorDirect = true;
                     handled = true;
                 }
@@ -236,16 +236,16 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
         if (!handled) {
             // dd30 find-food target
             dest[0] = dest[1] = dest[2] = 0.0f;
-            int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (int64_t* list; Component/exe_bodies.h)
+            CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
             Map* mg = MapGrid();
             uint32_t bGoal;
             if (citizen->home == nullptr) bGoal = 0xffffffff;
             else { ComponentEntity* wpIBP = citizen->home; bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr); }
             const ModelComponent* model = CitizenModel(citizen);
             uint32_t cell = ModelCell(model, mg);
-            int64_t outComp = 0;  // local_res18
+            ComponentDescription* outComp = nullptr;  // local_res18
             CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
-            if (found == 0) {
+            if (found == nullptr) {
                 // no target -> cooldown stamp (timers[0] & timers[14]) + return 0
                 System::Time stamp{};
                 RtSystem_Time_Ctor(&stamp, kCooldown);
@@ -259,15 +259,12 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
 
     if (!ctorDirect) {
         // common tail: validate found entity's Storage with ResidenceCheck_2ac30
-        int64_t sbuf20[2] = {0, 0};
-        void* p13 = CitizenComp_Entity_FindComponent_Storage(found, sbuf20);
-        int64_t storComp = p13 ? *reinterpret_cast<int64_t*>(p13) : 0;   // LEFT: SIG CitizenComp_Entity_FindComponent_Storage returns void* (B4 FORWARD)
-        if (storComp == 0) {
+        // 0x140008090 twice (was its CitizenComp_Entity_FindComponent_Storage forwarder)
+        ResidenceComponent* storComp = found->FindComponent<ResidenceComponent>();
+        if (storComp == nullptr) {
             flag = 0;
         } else {
-            int64_t sbuf68[2] = {0, 0};
-            void* p13b = CitizenComp_Entity_FindComponent_Storage(found, sbuf68);
-            int64_t storComp2 = p13b ? *reinterpret_cast<int64_t*>(p13b) : 0;   // LEFT: SIG CitizenComp_Entity_FindComponent_Storage returns void* (B4 FORWARD)
+            ResidenceComponent* storComp2 = found->FindComponent<ResidenceComponent>();
             flag = (storComp2 && ResidenceCheck_2ac30(storComp2)) ? 1 : 0;
         }
         holderEntity = found;
@@ -299,11 +296,11 @@ uint64_t CitizenAIComponent::State_Work() {
         if (static_cast<char>(valid) != '\0') {
             // NavigateTo the home
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-            uint32_t navDest[4] = {0, 0, 0, 0};
-            Pf_EntityResolvePos_2e20(pp, reinterpret_cast<float*>(navDest), 0, 0, nullptr);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50 (uint32_t* destination) vs Pf_EntityResolvePos_2e20 (float*)
+            float navDest[4] = {0, 0, 0, 0};
+            Pf_EntityResolvePos_2e20(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen;
             ComponentEntity* holderEntity = holderCitizen->home;
-            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, reinterpret_cast<int64_t*>(&holderEntity), navDest, 0);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50 (int64_t* entity IBP)
+            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
             return Pushed(citizen);
         }
         return valid & 0xffffffffffffff00ULL;  // db20 false -> return 0
@@ -343,11 +340,11 @@ uint64_t CitizenAIComponent::State_Work() {
         AttendanceComponent_ReleaseLink59b0(citizen);
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-            uint32_t navDest[4] = {0, 0, 0, 0};
-            Pf_EntityResolvePos_2e20(pp, reinterpret_cast<float*>(navDest), 0, 0, nullptr);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50 (uint32_t* destination) vs Pf_EntityResolvePos_2e20 (float*)
+            float navDest[4] = {0, 0, 0, 0};
+            Pf_EntityResolvePos_2e20(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen;
             ComponentEntity* holderEntity = holderCitizen->home;
-            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, reinterpret_cast<int64_t*>(&holderEntity), navDest, 0);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50 (int64_t* entity IBP)
+            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
             return Pushed(citizen);
         }
     }
@@ -360,7 +357,7 @@ uint64_t CitizenAIComponent::State_Work() {
     // [STANDALONE GUARD] the citDesc null-check is ours; the original derefs +0x124
     // unconditionally (would fault if the description type-check failed).
     float walkTime = citDesc ? citDesc->_f124 : 0.0f;
-    CitizenAI_Pathfinding_WalkTowards_bb490(&holderCitizen, 0xffffffff, reinterpret_cast<uint32_t*>(walkOut), 5, walkTime, 1);   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490 (uint32_t* destination; Component/exe_bodies.h)
+    CitizenAI_Pathfinding_WalkTowards_bb490(&holderCitizen, 0xffffffff, walkOut, 5, walkTime, 1);
 
     citizen->statusFlags |= 4;
     citizen->field_0x30 = -1;

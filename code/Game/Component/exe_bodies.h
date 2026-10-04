@@ -74,24 +74,28 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
 extern "C" void CitizenComp_Infect(void* self, void* disease);  // 0x140116b90
 
 // ---- citizenai_actionctors.cpp
-void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070
-void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* param_3, int64_t param_4);  // 0x1400bd070
-void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* param_3, char param_4);  // 0x1400bd420
-void CitizenAI_PerformWorkCtor8_bd790(void* param_1, uint64_t* param_2, float* param_3);  // 0x1400bd790
-void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* param_3, uint64_t param_4);  // 0x1400bccb0
-void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* param_3, float* param_4, int64_t* param_5, float* param_6);  // 0x1400bc790
-void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2, uint32_t* param_3, uint8_t );  // 0x1400bda50
-void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490
-void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_t* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0
+class ComponentEntity;
+class ComponentDescription;
+void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070
+void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bd070
+void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, char param_4);  // 0x1400bd420
+void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3);  // 0x1400bd790
+void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bccb0
+void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, ComponentDescription* material, ComponentEntity* const* srcRef, float* param_4, ComponentEntity* const* dstRef, float* param_6);  // 0x1400bc790
+void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, uint8_t );  // 0x1400bda50
+void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef, uint32_t param_2, float* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490
+void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0
 
 // ---- citizenai_executor.cpp
 struct ActionStack;   // Action/Action.h
 extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const System::Time* param_2);  // 0x1400c4c50
 
 // ---- citizenai_findhelpers.cpp
-bool ResidenceCheck_2ac30(int64_t param_1);  // 0x14012ac30
-int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, float* param_4);  // 0x14008ec70
-int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t param_3, int64_t* param_4, float* param_5, uint64_t , int64_t* param_7);  // 0x14008e370
+class ResidenceComponent;
+class CitizenBehavior;
+bool ResidenceCheck_2ac30(ResidenceComponent* self);  // 0x14012ac30
+ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4);  // 0x14008ec70
+ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, ComponentDescription** param_4, float* param_5, uint64_t , ComponentEntity** origP7);  // 0x14008e370
 
 // ---- citizenai_findtarget.cpp
 class ComponentEntity;
@@ -99,10 +103,11 @@ class MarketLocationComponent;
 namespace Object { template <class T> class InternalPtr; }
 ::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
     ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
-int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint32_t param_3, uint32_t param_4, int64_t* param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
+CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, uint32_t param_4, ComponentDescription** param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
 
 // ---- citizenai_gather.cpp
-extern "C" int Storage_GetResourceCount2(int64_t param_1);  // 0x14012ab00
+class Component;
+extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00
 
 // ---- citizenai_growup.cpp
 
@@ -115,16 +120,16 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
 extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId, uint64_t oldKey, uint64_t newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
-void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);  // 0x140008090
-int CitizenComp_StorageComponent_QueryCount(int64_t self);  // 0x14012cf10
-int CitizenComp_Storage_GetResourceCount(int64_t self);  // 0x14012a9d0
+class StorageComponent;
+int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self);  // 0x14012cf10
+int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0
 
 // ---- citizencomponent.cpp
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2);  // 0x140111fa0
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2);  // 0x14010ffc0
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2);  // 0x140110470
 void CitizenComp_helper_1b90(int64_t selfV);  // 0x140111b90
-int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4);  // 0x14008ef40
+ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  // 0x140111ee0
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2);  // 0x140111840
 

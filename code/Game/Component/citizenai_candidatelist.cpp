@@ -193,7 +193,7 @@ int CitizenComponent::HasSufficientResources() {
         } while (lVar6 != 0);
     }
 
-    int iVar4 = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(local_res8));   // LEFT: SIG CitizenComp_Storage_GetResourceCount
+    int iVar4 = CitizenComp_Storage_GetResourceCount(local_res8);
     return (iVar7 * iVar2 * factor <= iVar4) ? 1 : 0;
 }
 
@@ -225,7 +225,7 @@ int CitizenComponent::HasSufficientResources2() {
         } while (lVar5 != 0);
     }
 
-    int iVar3 = Storage_GetResourceCount2(reinterpret_cast<int64_t>(local_res8));   // LEFT: SIG Storage_GetResourceCount2
+    int iVar3 = Storage_GetResourceCount2(local_res8);
     float threshold = lVar1desc->_fd4;
     // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
     // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
@@ -285,7 +285,7 @@ int CitizenComponent::CarryCount() {
         }
         return 0;
     }
-    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carry));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    return CitizenComp_StorageComponent_QueryCount(carry);
 }
 
 // ============================================================

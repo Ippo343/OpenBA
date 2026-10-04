@@ -116,7 +116,6 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
-void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);  // 0x1400ca230
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
@@ -211,7 +210,6 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
 // B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80 -> StorageCanAdd
-int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3, uint64_t param_4, int param_5, char param_6, uint32_t* param_7, void* param_8);  // 0x14008d590 -> PickBestDropTarget
 
 // ---- keystone_a_zone.cpp
 int RoadTool_helper_6e30(int64_t param_1, unsigned int param_2, uint64_t param_3, void* param_4, int64_t param_5, int param_6);  // 0x1400a6e30

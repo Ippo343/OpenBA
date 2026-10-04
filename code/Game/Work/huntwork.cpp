@@ -149,7 +149,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    int storageCount = CitizenComp_StorageComponent_QueryCount(storage);
     if (storageCount >= 1) {
         (*citizenIBP)->LongTermPlan();
         return 2;

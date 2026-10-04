@@ -60,11 +60,7 @@
 //   0x14012cf10 StorageComponent_QueryCount  = CitizenComp_StorageComponent_QueryCount (by name)
 // ============================================================
 // RCX is a Component (only its +0x10 entity is read; the callers hand citizens).
-// LEFT: the five outside callers hand it as an integer; QueryCount's C signature
-// (COMP-b) takes the storage as one.
-int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
-    Component* owner = reinterpret_cast<Component*>(self);
-
+int WorkLeaf_FreeStorageCapacity_116540(const Component* owner) {
     // CheckPtr(self+0x10); FindComponent_Storage(*(self+0x10), &ibpStorage)
     StorageComponent* storage = owner->_entity->FindComponent<StorageComponent>();   // 0x140006270
 
@@ -73,7 +69,7 @@ int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
     int capacity = storage->capacity;
 
     // CheckPtr(&ibpStorage); iVar2 = StorageComponent_QueryCount(storage)
-    int count = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
+    int count = CitizenComp_StorageComponent_QueryCount(storage);
 
     return capacity - count;
 }

@@ -432,7 +432,7 @@ void TradeComponent::AutoTrade() {
     TradeResourceNode* treeRoot = nullptr;   // the purchase tally
     int treeCount = 0;                       // retail keeps it; nothing reads it back
 
-    int volume = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    int volume = CitizenComp_StorageComponent_QueryCount(storage);
     const int volumeCap = storage->capacity;
 
     const int orderCount = buyOrderCount;

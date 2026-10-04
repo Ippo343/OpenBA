@@ -145,7 +145,7 @@ uint64_t CitizenAIComponent::State_Education() {
         return 0;  // low byte 0 (retail's RAX carries the citizen pointer above it)
     }
 
-    int64_t local_res8 = 0;            // dd30 out: found component (also Ctor10 param_4)
+    ComponentDescription* local_res8 = nullptr;   // dd30 out: found component (also Ctor10 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
     // citizen ModelComponent world pos -> grid cell
@@ -168,21 +168,21 @@ uint64_t CitizenAIComponent::State_Education() {
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
-    int64_t outBest = 0;
-    int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (int64_t* list; Component/exe_bodies.h)
+    ComponentEntity* outBest = nullptr;
+    CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
     CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 4);
 
-    if (outBest == 0) {
+    if (outBest == nullptr) {
         citizen->field_0x1E0 = 0;
         citizen->happinessFlags |= 4;
         return 0;  // low byte 0
     }
 
     // found: Ctor10(citizen, &foundEntity, dest, foundComponent)
-    uint64_t foundEntity = static_cast<uint64_t>(outBest);
+    ComponentEntity* foundEntity = outBest;
     CitizenComponent* ibpHolder = citizen;   // the CitizenComponent in a stack IBP holder
-    CitizenAI_PerformWorkCtor10_bccb0(&ibpHolder, &foundEntity, dest, static_cast<uint64_t>(local_res8));
+    CitizenAI_PerformWorkCtor10_bccb0(&ibpHolder, &foundEntity, dest, local_res8);
 
     citizen->statusFlags |= 4;
     citizen->field_0xB0 = 0;
@@ -211,7 +211,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
         return 0;  // low byte 0
     }
 
-    int64_t local_res8 = 0;            // dd30 out: found component (Ctor5 param_4)
+    ComponentDescription* local_res8 = nullptr;   // dd30 out: found component (Ctor5 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
     const ModelComponent* model = citizen->character->modelComponent;
@@ -232,12 +232,12 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
-    int64_t outBest = 0;
-    int64_t* listpair = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (int64_t* list; Component/exe_bodies.h)
+    ComponentEntity* outBest = nullptr;
+    CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
     CitizenAI_FindBestTarget_dd30(listpair, &outBest, static_cast<uint32_t>(mapSize * cy + cx), bGoal,
                   &local_res8, dest, 2);
 
-    if (outBest == 0) {
+    if (outBest == nullptr) {
         // --- no target: clear state + run the StatusIconComponent "show" branch ---
         citizen->field_0xA8 = 0;
         citizen->happinessFlags |= 4;
@@ -290,7 +290,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
     }
 
     // found: Ctor5(citizen, &foundEntity, dest, foundComponent)
-    uint64_t foundEntity = static_cast<uint64_t>(outBest);
+    ComponentEntity* foundEntity = outBest;
     CitizenComponent* ibpHolder = citizen;
     CitizenAI_PerformWorkCtor5_bd070(&ibpHolder, &foundEntity, dest, local_res8);
 
@@ -358,7 +358,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
         // [STANDALONE GUARD] the desc null-check is ours; the original derefs +0x120
         // unconditionally (would fault if the description type-check failed).
         float walkTime = desc ? desc->_f120 : 0.0f;
-        CitizenAI_Pathfinding_WalkTowards_bb490(&ibpHolder, 0xffffffff, reinterpret_cast<uint32_t*>(outVec), 4, walkTime, 1);   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490 (uint32_t* destination; Component/exe_bodies.h)
+        CitizenAI_Pathfinding_WalkTowards_bb490(&ibpHolder, 0xffffffff, outVec, 4, walkTime, 1);
 
         citizen->statusFlags |= 4;
         citizen->field_0x30 = -1;

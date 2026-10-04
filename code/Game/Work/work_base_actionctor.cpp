@@ -110,7 +110,7 @@ static inline float WA_MoveSpeed() { return kRdata_140172280; }
 static int WA_CitizenCarryCount(CitizenComponent* const* citizenRef) {
     CitizenComponent* e = *citizenRef;
     StorageComponent* storage = e->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: C signature (COMP-b)
+    return CitizenComp_StorageComponent_QueryCount(storage);
 }
 
 // ============================================================

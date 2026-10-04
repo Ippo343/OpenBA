@@ -484,7 +484,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
             StorageComponent* storage = entObj->_entity->FindComponent<StorageComponent>();   // 0x140006270 (local_78)
             int count = 0;
             // LEFT: 0x14012cf10's C signature (COMP-b) takes the component as an integer.
-            count = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage)); // 0x14012cf10
+            count = CitizenComp_StorageComponent_QueryCount(storage); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
             ComponentEntity* entityInner = (*citizenRef)->_entity;

@@ -65,7 +65,9 @@ class ComponentDescription;
 void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId, ComponentDescription* plantType, uint32_t, float* destination, int loopCount, const int32_t* cells, uint32_t completeParam8, ComponentEntity** messageTarget, uint32_t* msgIdPtr10, uint64_t, const uint32_t* messageArgs);  // 0x1400bdd20
 
 // ---- work_act_path.cpp
-extern "C" void* WorkAct_GatherRawMatCtor_bf790(void* retval, void* entity, uint32_t pathType, uint64_t* srcLoc, float* srcPos, void** dstLoc, float* dstPos, int64_t materialDesc, int matCount, int completionCode, uint8_t useAnimal, char twoWay, int flags, uint8_t param_14);  // 0x1400bf790
+class Action;
+namespace Object { template <class T> class InternalPtr; }
+extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(::Object::InternalPtr<Action>* ret, CitizenComponent* const* citizen, uint32_t pathType, ComponentEntity* const* src, float* srcPos, ComponentEntity* const* dst, float* dstPos, ComponentDescription* material, int matCount, int completionCode, uint8_t useAnimal, char twoWay, int flags, uint8_t param_14);  // 0x1400bf790
 
 // ---- work_act_perform.cpp
 void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId, float* pos3, float* pos4, float* pos5, int64_t* srcEntity6);  // 0x1400ba9f0
@@ -108,7 +110,6 @@ float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
 
 // ---- work_base_reimpl.cpp
 void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP);  // 0x140002ed0
-void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP);  // 0x140006270
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 void WorkBase_TaskListCleanup_c5400(void* self);  // 0x1400c5400
@@ -130,7 +131,8 @@ void WorkLeaf_SortTilesByDistance_9d7c0(int* mapGrid, void* tileArray, int refCe
 void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h, void* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp
-int WorkLeaf_FreeStorageCapacity_116540(intptr_t self);  // 0x140116540
+class Component;
+int WorkLeaf_FreeStorageCapacity_116540(const Component* owner);  // 0x140116540
 void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut);  // 0x14000c3c0
 long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row);  // 0x140120c30
 

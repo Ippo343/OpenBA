@@ -402,12 +402,6 @@ void PickupStoredRawMaterial::AddMaterial(ComponentDescription* material, int co
     if (oldArr != _field30) System::MemoryAllocator::MemFree(oldArr);
 }
 
-// B4 FORWARD: outside callers (Component/citizenai_gather.cpp, Work/marketwork.cpp) hold
-// the action and the material as integers.
-void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) {
-    reinterpret_cast<PickupStoredRawMaterial*>(self)->AddMaterial(
-        reinterpret_cast<ComponentDescription*>(resType), count);
-}
 
 // ============================================================
 // FUN_1400ca520 — PickupStoredRawMaterial_Action_CopyCtor
@@ -459,7 +453,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
     int requested = param_5;
     if (requested <= 0) {
         // LEFT: 0x140116540 is declared in Work/exe_bodies.h (WORK) taking the citizen as intptr_t.
-        int total = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(_field20.Get()));   // 0x140116540
+        int total = WorkLeaf_FreeStorageCapacity_116540(_field20.Get());   // 0x140116540
         // unitWeight = rawMatDesc->_weight; guard the null-find (original assumes found).
         int perUnit = rawMatDesc ? rawMatDesc->_weight : 0;
         requested = (perUnit != 0) ? total / perUnit : 0;

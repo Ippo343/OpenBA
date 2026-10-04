@@ -222,16 +222,3 @@ uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3)
                          reinterpret_cast<const ComponentDescription*>(param_2), param_3);   // LEFT: SIG Pf_StorageCanAccept_cd80
 }
 
-
-// B4 FORWARD: outside callers in buildroad, citizenai_growup, clearstorage, consumeproduce,
-// gatherrawmaterials, marketwork, pickup, tradework
-int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3,
-                                     uint64_t param_4, int param_5, char param_6,
-                                     uint32_t* param_7, void* param_8) {
-    PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(param_1),   // LEFT: SIG Pf_PickBestDropTarget_8d590
-                       reinterpret_cast<ComponentEntity**>(param_2), param_3,   // LEFT: SIG Pf_PickBestDropTarget_8d590
-                       reinterpret_cast<const ComponentDescription*>(param_4), param_5, param_6,   // LEFT: SIG Pf_PickBestDropTarget_8d590
-                       reinterpret_cast<float*>(param_7),   // LEFT: SIG Pf_PickBestDropTarget_8d590
-                       reinterpret_cast<ComponentEntity* const*>(param_8));   // LEFT: SIG Pf_PickBestDropTarget_8d590
-    return param_2;
-}

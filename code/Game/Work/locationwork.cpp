@@ -101,7 +101,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    int itemCount = CitizenComp_StorageComponent_QueryCount(storage);
     if (itemCount > 0) {
         (*citizenIBP)->LongTermPlan();
     }
@@ -159,11 +159,10 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
     // The Ghidra decompilation shows the last two params come from stack;
     // the pattern is: (citizenIBP, priority, position, 0, g_fUVScale, flag&0xffffff00)
-    // (0x1400bb490 takes the position as uint32_t*: LEFT)
     CitizenAI_Pathfinding_WalkTowards_bb490(
         &citizenIBPLocal,
         field_20,                // priority from self+0x20
-        reinterpret_cast<uint32_t*>(bestPos),   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490
+        bestPos,
         0,                       // flag1
         kRdata_14017214c,            // UV scale constant
         0);                      // flag2 (cleared upper bits)

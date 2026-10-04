@@ -174,7 +174,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     int ret = 1;
     TWEntry* arrA = nullptr; uint32_t cntA = 0, capA = 0;   // import list (net > 0)  -> local_c8/local_c0
     TWEntry* arrB = nullptr; uint32_t cntB = 0, capB = 0;   // export list (net < 0)  -> local_f8/local_f0
-    uint64_t outBuf[8] = {0};                               // FindPath scratch (&local_res8)
+    ::Object::InternalPtr<Action> outBuf;                   // 0x1400bf790's hidden return slot (&local_res8)
 
     // ---- 0. capacity gate ----------------------------------------------------
     int workers = workerCount;                           // param_1[10]
@@ -193,7 +193,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     // ---- 1. citizen already carrying trade goods? ---------------------------
     CitizenComponent* citizenEnt = *citizenRef;
     StorageComponent* carried = citizenEnt->_entity->FindComponent<StorageComponent>();   // local_res20
-    if (CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carried)) > 0) {   // LEFT: C signature (COMP-b)
+    if (CitizenComp_StorageComponent_QueryCount(carried) > 0) {
         citizenEnt->LongTermPlan();   // 0x140115e60
         return 2;
     }
@@ -274,7 +274,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // The matDesc / weight arm is the tree's guard; retail divides unguarded.
         if (matDesc && matDesc->_weight != 0) {
             int freeSpace = carryStor->capacity;
-            int cur = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carryStor));   // LEFT: C signature
+            int cur = CitizenComp_StorageComponent_QueryCount(carryStor);
             int room = (freeSpace - cur) / matDesc->_weight;
             if (room < qty) qty = room;
         }
@@ -303,14 +303,12 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         int cell = mapSize * cellY + cellX;
 
         float searchPos[4] = {};                           // local_90 (out from FindStorage)
-        uint64_t srcStorIBP[2] = {0};                      // local_d8 (out IBP from FindStorage)
-        int64_t srcStorPrimary = 0;                        // local_b8 (primary result)
-        // LEFT: 0x14008d590's C signature (ACT-b) takes the town manager, the
-        // resource and the position scratch as integers.
-        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(resList), &srcStorPrimary, cell,
-                                    reinterpret_cast<uint64_t>(resType), qty,
-                                    1, reinterpret_cast<uint32_t*>(searchPos), srcStorIBP);
-        if (srcStorPrimary == 0) { continue; }
+        ComponentEntity* srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
+        ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
+        // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                           resType, qty, 1, searchPos, srcStorIBP);
+        if (srcStorPrimary == nullptr) { continue; }
 
         // destination position from the trade post's interact component:
         float destPos[4] = {};                             // local_a0
@@ -320,13 +318,12 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Pf_EntityResolvePos_2e20(posComp, destPos, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
-        uint64_t destStorage = static_cast<uint64_t>(srcStorPrimary);   // local_d8 = local_b8
+        ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
         CitizenComponent* citizenVal = *citizenRef;                     // local_b0 = *param2
-        void* bldgVal = field_10;                                       // local_res20 = *local_b0(old)
+        ComponentEntity* bldgVal = field_10;                            // local_res20 = *local_b0(old)
         uint32_t pathType = static_cast<uint32_t>(field_20);
-        WorkAct_GatherRawMatCtor_bf790(outBuf, &citizenVal, pathType, &destStorage,
-                          searchPos, &bldgVal, destPos,
-                          reinterpret_cast<int64_t>(resType),   // LEFT: bf790 takes the resource as an integer
+        WorkAct_GatherRawMatCtor_bf790(&outBuf, &citizenVal, pathType, &destStorage,
+                          searchPos, &bldgVal, destPos, resType,
                           qty, 1, 0, 1, 0, 1);
 
         ret = CommitAssignment(citizenRef, resType, -qty);   // NEGATIVE qty (export)
@@ -348,16 +345,16 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         int cell = mapSize * cellY + cellX;
 
         float srcPos[4] = {};                              // local_a0 (out from FindStorage)
-        uint64_t srcIBP[2] = {0};                          // local_90 (out IBP from FindStorage)
-        int64_t srcStorage = 0;                            // local_e8 (primary result)
-        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(resList), &srcStorage, cell,
-                                    reinterpret_cast<uint64_t>(resType), 1,
-                                    0, reinterpret_cast<uint32_t*>(srcPos), srcIBP);   // LEFT: as above
-        if (srcStorage == 0) continue;
+        ComponentEntity* srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
+        ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
+        // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                           resType, 1, 0, srcPos, srcIBP);
+        if (srcStorage == nullptr) continue;
 
         // source storage component: the FindStorage primary entity's StorageComponent,
         // then its items.
-        ComponentEntity* srcEntity = reinterpret_cast<ComponentEntity*>(srcStorage);   // LEFT: 0x14008d590 returns the entity as an integer
+        ComponentEntity* srcEntity = srcStorage;
         StorageComponent* a8 = TW_StorageOf(srcEntity);
         int qtyMove = qty;
         if (a8 && a8->slotCount > 0) {
@@ -380,7 +377,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         StorageComponent* b8 = TW_StorageOf(citizen->_entity);   // local_b8
         if (matDesc && matDesc->_weight != 0) {   // the tree's guard, as in pass 2
             int cap  = b8->capacity;
-            int cur  = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(b8));   // LEFT: C signature
+            int cur  = CitizenComp_StorageComponent_QueryCount(b8);
             int room = (cap - cur) / matDesc->_weight;
             if (room < qtyMove) qtyMove = room;
         }
@@ -411,12 +408,11 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2
-        uint64_t bldgVal = reinterpret_cast<uint64_t>(field_10);           // local_d8 = *local_b0(old); LEFT: bf790's srcLoc is an integer slot
-        void* srcStorVal = srcEntity;                                      // local_90 = local_e8
+        ComponentEntity* bldgVal = field_10;                               // local_d8 = *local_b0(old)
+        ComponentEntity* srcStorVal = srcEntity;                           // local_90 = local_e8
         uint32_t pathType = static_cast<uint32_t>(field_20);
-        WorkAct_GatherRawMatCtor_bf790(outBuf, &citizenVal, pathType, &bldgVal,
-                          srcPos2, &srcStorVal, srcPos,
-                          reinterpret_cast<int64_t>(resType),   // LEFT: as above
+        WorkAct_GatherRawMatCtor_bf790(&outBuf, &citizenVal, pathType, &bldgVal,
+                          srcPos2, &srcStorVal, srcPos, resType,
                           qtyMove, 0, 0, 0, 0, 1);
 
         ret = CommitAssignment(citizenRef, resType, qtyMove);  // POSITIVE qty (import)

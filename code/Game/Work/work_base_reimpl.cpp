@@ -66,11 +66,6 @@ void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
     return ForwardFindComponent<InteractComponent>(entity, retIBP);
 }
 
-// Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78 = StorageComponent)
-void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<StorageComponent>(entity, retIBP);
-}
-
 // ============================================================
 // Work_Ctor25 (0x1400f72e0) — the shared Work base constructor.
 // ============================================================
