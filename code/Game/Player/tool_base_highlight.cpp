@@ -273,8 +273,7 @@ haveSlot:
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // CAST-OK: float_bits
     entry->field_0x5C = true;
     *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: OTHER H8 alternateKey is a bool field (WorldGeometryElements.h); retail stores the caller's raw byte, which a bool store would normalise
-    // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
-    TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    TradeWork_impl_ace40(geom, iVar3, param_15, param_16, param_17);
     return iVar3;
 }
 

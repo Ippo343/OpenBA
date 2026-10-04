@@ -128,14 +128,14 @@ static ForesterComponent* VerifyLodgeForester(ComponentEntity* lodge, bool dump)
 // Driver. Called from the CitizenAI UpdateAdapter for ONE force-worked citizen. Returns true
 // if it "owns" the citizen this tick (caller should skip the competing AI state machine), so
 // ForesterWork — not Leisure/Wander — keeps driving the stack.
-extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
+extern "C" bool StartTown_ForcePushForesterWork(CitizenComponent* citizen) {
     if (!ForceForesterEnvOn()) return false;
     ComponentEntity* lodge = g_pForceWorkBuilding;
     if (!lodge || !citizen) return false;
     if (GameUpdateLoop::_singleton == nullptr) return false;
 
     // Bind to the FIRST force-worked citizen only (single, observable subject).
-    static void* s_owner = nullptr;
+    static CitizenComponent* s_owner = nullptr;
     if (!s_owner) s_owner = citizen;
     if (citizen != s_owner) return false;
 

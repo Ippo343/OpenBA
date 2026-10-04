@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Player/exe_bodies.h"
+#include "Game/WorldGeometry.h"           // TradeWork_impl_ace40 reads WorldGeometry::_decals
 #include "Game/WorldGeometryElements.h"   // GeometryBatch / GeometryBatchVertex (0x14001fa80 / 0x14001ee40)
 
 // ---- engine .rdata constants (retail values; see header) -------------------------
@@ -145,11 +146,11 @@ inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
 // =================================================================================
 // TradeWork_impl_ace40 — 0x1400ace40
 // =================================================================================
-extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
+extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char param_3,
                                      int param_4, int param_5) {
     const float fUV = kRdata_14017214c;   // g_fUVScale (1.0f in retail)
 
-    GeometryBatch* batch = *reinterpret_cast<GeometryBatch**>(param_1 + 0x1f0) + param_2;   // LEFT: SIG TradeWork_impl_ace40 takes the WorldGeometry as int64_t (this is _decals.data)
+    GeometryBatch* batch = param_1->_decals.data + param_2;   // +0x1f0
     int iVar24 = (batch->maxX - batch->minX) + 1; // width
     int iVar28 = (batch->maxY - batch->minY) + 1; // height
 
@@ -339,7 +340,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
 
                         // cc10: emit the 4 corner descriptors into descBlock.
                         uint8_t descBlock[0x60];
-                        Pf_RoadQuad_cc10(param_1, iVar22, iVar18, (int64_t)descBlock, iVar13,   // LEFT: SIG Pf_RoadQuad_cc10 (descBlock is retail's 0x60-byte stack buffer of 0x14-byte vertices, read by offset below)
+                        Pf_RoadQuad_cc10(reinterpret_cast<int64_t>(param_1), iVar22, iVar18, (int64_t)descBlock, iVar13,   // LEFT: SIG Pf_RoadQuad_cc10 (Action/exe_bodies.h, WORK's B4 FORWARD) takes the geometry and descBlock (retail's 0x60-byte stack buffer of 0x14-byte vertices, read by offset below) as int64_t
                                          batch->field_0x3C);
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.
