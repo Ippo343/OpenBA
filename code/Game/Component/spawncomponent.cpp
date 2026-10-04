@@ -217,8 +217,6 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
     Map* map = gw->m_game;
-    // LEFT: the can-place test 0x14009f5d0 takes the map as int* (Player block's declaration).
-    int* grid = reinterpret_cast<int*>(map);
     System::Random* random = gw->m_random;
     if ((gw->m_gameFlags >> 10) & 1) { ++g_doSpawn.worldBitSet; return; }
 
@@ -261,10 +259,10 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     float ca = SC_RdataF32(kRdata_140172140);
     float cb = SC_RdataF32(kRdata_140172248);
     bool canPlace =
-        PlayerPath_CharComp_f5d0(grid, x, y, 4, ca, cb, 0.0f, '\0', '\0', 0);
+        PlayerPath_CharComp_f5d0(map, x, y, 4, ca, cb, 0.0f, '\0', '\0', nullptr);   // 0x14009f5d0 (the Map* overload the int* one forwards to)
     if (!canPlace) { ++g_doSpawn.cannotPlace; return; }
     if (!(static_cast<char>(WorkLeaf_FootprintOwnerCheck_120c30(
-              reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
+              reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }   // LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30 (intptr_t self)
 
     int placeMapSize = map->size;
     ComponentEntity* mem = static_cast<ComponentEntity*>(
@@ -280,11 +278,11 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
 
     // Place at tile index (NaturalResourceComponent, FindComponent 0x1400052c0)
     NaturalResourceComponent* natRes = newEntity->FindComponent<NaturalResourceComponent>();
-    ActCNR_SetupModelAtCell_126540(reinterpret_cast<int64_t>(natRes), placeMapSize * y + x);
+    NaturalResourcePlaceAtCell(natRes, placeMapSize * y + x);   // 0x140126540 (ActCNR_SetupModelAtCell_126540's body)
 
     // Reset the growth (GrowthComponent, FindComponent 0x14000c460)
     GrowthComponent* growth = newEntity->FindComponent<GrowthComponent>();
-    ActCNR_SetGrowthProgress_120db0(reinterpret_cast<int64_t>(growth), 0.0f);
+    SetGrowthProgress(growth, 0.0f);   // 0x140120db0 (ActCNR_SetGrowthProgress_120db0's body)
 
     // Register with world entity list
     Object::InternalPtr<ComponentEntity> regIbp = entityIbp;
@@ -309,7 +307,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
         if (newEntity->FindComponent<GrowthComponent>() != nullptr) {
             GrowthComponent* g3 = newEntity->FindComponent<GrowthComponent>();
             float rf = random->RandFloat();
-            ActCNR_SetGrowthProgress_120db0(reinterpret_cast<int64_t>(g3), rf);
+            SetGrowthProgress(g3, rf);   // 0x140120db0
         }
     }
 }
@@ -360,7 +358,7 @@ void SpawnComponent::Persist(IO::Stream& stream) {
     // LEFT (a tree defect, listed): this test reads the STREAM as a Serializer, so it
     // answers from the stream's vtable word and is never "loading"; retail tests the
     // stream's direction here (0x140055ee0) and reconciles on every load.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(&stream)->GetDirection()) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(&stream)->GetDirection()) == 0) {   // LEFT: retail DIFFERENCE (known_port_issues 14b row 17)
         Description* desc = _description;
         SpawnDescription* validated = nullptr;
         if (desc && desc->IsDerivedFrom(SpawnDescription::TypeId()))
@@ -395,7 +393,7 @@ void SpawnComponent::Startup() {
 // [9] 0x140055ad0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void SpawnComponent::Update(void* timeV) {
-    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)
+    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)  LEFT: SIG Component::Update(void* time)
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array is
