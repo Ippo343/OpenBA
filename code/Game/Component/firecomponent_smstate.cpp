@@ -56,18 +56,18 @@ namespace {
 // ---------------------------------------------------------------------------
 // The shared body of e7b0 and ea10: request state `targetState` on the entity's
 // StateMachineComponent and pump the machine until it settles.
-// `owner` is the component's +0x10 entity. The StateMachine sub-object at
-// StateMachineComponent +0x48..+0x53 is raw bytes in COMP-e's header: LEFT.
+// `owner` is the component's +0x10 entity. The StateMachine is the component's
+// +0x48 member (StateMachineComponent::stateMachine).
 // ---------------------------------------------------------------------------
 void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) {
-    uint8_t* L = reinterpret_cast<uint8_t*>(
-        owner->FindComponent<StateMachineComponent>());   // 0x140003ea0
+    StateMachineComponent* L =
+        owner->FindComponent<StateMachineComponent>();   // 0x140003ea0
     if (!L) {
         return;
     }
 
-    void*  sm   = L + 0x48;                      // the StateMachine sub-object
-    void** node = reinterpret_cast<void**>(sm);  // sm[0] = the active state node
+    StateMachine* sm = &L->stateMachine;          // +0x48
+    ControllerComponent::Controller** node = &sm->current;  // sm[0] = the active state node
 
     // STANDALONE DIVERGENCE (deliberate, same one statemachinecomponent.cpp:558
     // already carries): retail always has a linked state-node chain here, so it
@@ -82,21 +82,18 @@ void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) 
     int32_t out = targetState;
 
     // Settle a half-finished transition before asking for a new state.
-    if (static_cast<int8_t>(L[0x51]) < 0) {
+    if (sm->activeState < 0) {   // +0x51
         ::System::Time t0 = {0};
         RtSystem_Time_Ctor(&t0, 0.0f);
         StateMachine_TickReimpl(sm, t0._ticks, 0, 0);
     }
 
-    // node->vtable[1](node, currentIndex, &targetState) -> transition index (or < 0)
-    typedef int (*fn_FindTrans_t)(void* node, int curIdx, int32_t* pTarget);
-    void*  n  = *node;
-    void** vt = *reinterpret_cast<void***>(n);
-    int r = reinterpret_cast<fn_FindTrans_t>(vt[1])(
-        n, static_cast<int>(static_cast<int8_t>(L[0x51])), &out);
+    // node slot 1 (FindTransition: the table has no dtor slot) -> transition index (or < 0)
+    ControllerComponent::Controller* n = *node;
+    int r = n->FindTransition(static_cast<int>(sm->activeState), &out);
     if (r >= 0) {
-        L[0x53] = static_cast<uint8_t>(r);
-        L[0x52] = static_cast<uint8_t>(out);
+        sm->transitionState = static_cast<int8_t>(r);   // +0x53
+        sm->pendingState = static_cast<int8_t>(out);    // +0x52
     }
 
 
@@ -116,14 +113,14 @@ void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) 
 // +0x50) is 6 or 7. Ignite aborts on true: a building on its way down does not
 // catch fire.
 bool DestroyComponent::IsBeingDemolished() {
-    uint8_t* L = reinterpret_cast<uint8_t*>(
-        _entity->FindComponent<StateMachineComponent>());   // 0x140003ea0
+    StateMachineComponent* L =
+        _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
     if (!L) return false;   // standalone: no SMC => not demolishing
-    int8_t s = static_cast<int8_t>(L[0x52]);
-    if (s < 0) s = static_cast<int8_t>(L[0x50]);
+    int8_t s = L->stateMachine.pendingState;                  // +0x52
+    if (s < 0) s = L->stateMachine.currentInput;             // +0x50
     if (s == 6) return true;
-    s = static_cast<int8_t>(L[0x52]);
-    if (s < 0) s = static_cast<int8_t>(L[0x50]);
+    s = L->stateMachine.pendingState;
+    if (s < 0) s = L->stateMachine.currentInput;
     return s == 7;
 }
 
@@ -166,14 +163,14 @@ void DestroyComponent::StopBurning() {
 // closing wave rewires it. The null tests are the tree's (kept, B9).
 extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp) {
     if (!destroyComp) return false;
-    return reinterpret_cast<DestroyComponent*>(destroyComp)->IsBeingDemolished();
+    return reinterpret_cast<DestroyComponent*>(destroyComp)->IsBeingDemolished();   // LEFT: B4 FORWARD (tornadocomponent.cpp)
 }
 extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* time) {
     if (!destroyComp) return false;
     return reinterpret_cast<DestroyComponent*>(destroyComp)->BeginBurning(
-        reinterpret_cast<const System::Time*>(time));
+        reinterpret_cast<const System::Time*>(time));   // LEFT: B4 FORWARD (tornadocomponent.cpp)
 }
 extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp) {
     if (!destroyComp) return;
-    reinterpret_cast<DestroyComponent*>(destroyComp)->StopBurning();
+    reinterpret_cast<DestroyComponent*>(destroyComp)->StopBurning();   // LEFT: B4 FORWARD (tornadocomponent.cpp)
 }
