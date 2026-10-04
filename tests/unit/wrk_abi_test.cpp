@@ -261,8 +261,8 @@ UNIT_TEST(wrk_leaf_marketwork) {
 
 UNIT_TEST(wrk_leaf_pasturework) {
     WRK_LEAF_SHAPE(PastureWork, AutoPickupWork, 0x58);
-    CHECK_EQ(offsetof(PastureWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(PastureWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(PastureWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(PastureWork, _citizens) + offsetof(PastureWork::CitizenSet, _count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_pickup) {

@@ -144,7 +144,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // -------------------------------------------------------
     Description* pvVar20 = local_a8->_description;  // pasture component description
     bool bVar8 = Object::IsDerivedFromNullSafe(pvVar20, PastureDescription::TypeId());  // DAT_1401c7bd8
-    int lVar18 = _field50;  // worker count at self+0x50
+    int lVar18 = _citizens._count;  // worker count at self+0x50
     PastureDescription* pvVar19 = nullptr;
     if (bVar8) {
         pvVar19 = static_cast<PastureDescription*>(pvVar20);
@@ -424,7 +424,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 // Register work with CitizenAI (CitizenAI_impl_1a30):
                 // (tree root = self+0x48, outResult = the GetTarget slot, key = citizen IBP;
                 // the helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+                WorkBST_RegisterWork_1a30(&_citizens, &workEnt, citizenIBP);
                 return 2;
             }
         }
@@ -442,7 +442,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int PastureWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return false;
 }
 
@@ -459,7 +459,7 @@ int PastureWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*
 // ============================================================
 int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, int /*arg3*/) {
     // Insert citizen into BST (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
 
     // Check if param3 entity is valid
     ComponentEntity* entity = *param3;
@@ -501,10 +501,10 @@ int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, i
 // Identical to HuntWork::Slot8 -- loops tree, cancels each.
 // ============================================================
 int PastureWork::Cleanup() {
-    int count = _field50;
+    int count = _citizens._count;
 
     while (count > 0) {
-        AssignmentNode* node = _field48;
+        AssignmentNode* node = _citizens._root;
         AssignmentNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -515,7 +515,7 @@ int PastureWork::Cleanup() {
 
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
-        count = _field50;
+        count = _citizens._count;
     }
     return 0;
 }
@@ -527,7 +527,7 @@ int PastureWork::Cleanup() {
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
 int PastureWork::Validate() {
-    AssignmentNode* root = _field48;
+    AssignmentNode* root = _citizens._root;
     CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
@@ -605,13 +605,13 @@ int PastureWork::Validate() {
     // (keys compare unsigned; the tree helper takes the container as uintptr_t*: LEFT)
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            AssignmentNode* searchNode = _field48;
+            AssignmentNode* searchNode = _citizens._root;
             while (searchNode != nullptr) {
                 if (removeArr[i] < searchNode->element) {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&_citizens, searchNode);
                         break;
                     }
                     searchNode = searchNode->right;
@@ -639,11 +639,11 @@ Profession** PastureWork::GetTarget(Profession** outPtr) {
 
 // ============================================================
 // PastureWork::GetPriority [11] 0x140029860 (shared by 13 tables) / HasWorkers.
-// Returns (this->_field50 > 0).
+// Returns (this->_citizens._count > 0).
 // ============================================================
 int PastureWork::GetPriority() {
     // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
-    return _field50 > 0 ? 1 : 0;
+    return _citizens._count > 0 ? 1 : 0;
 }
 
 
@@ -664,7 +664,7 @@ void PastureWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(&_citizens, &serializer2);
 }
 
 
@@ -673,25 +673,14 @@ void PastureWork::Persist(IO::Stream& stream) {
 // Identical pattern to HuntWork, uses vtable_PastureWork.
 // ============================================================
 // PastureWork dtor (retail 0x1400f2ce0, called by slot 0 0x14002bf70). The stamps and the `~Internal` call are the compiler's chain.
-PastureWork::~PastureWork() {
-    AssignmentNode* bstRoot = _field48;
-    if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->left);
-        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->right);
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-
-    _field48 = nullptr;
-    _field50 = 0;
-
-}
+PastureWork::~PastureWork() = default;   // the member's ~Set is retail's inlined Clear (0x1400f2ce0)
 
 
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
-PastureWork::PastureWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
+PastureWork::PastureWork() : AutoPickupWork() {
 }
 
 // ============================================================
@@ -707,7 +696,7 @@ PastureWork::PastureWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
 // -1s) and adds the entity-dependent fields on top; that is kept.
 // (The entity slot is void*, the caller's ABI: LEFT.)
 // ============================================================
-PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr), _field50(0) {
+PastureWork::PastureWork(void* entityIBP) : AutoPickupWork() {
     field_10 = *(ComponentEntity**)entityIBP;   // LEFT: the ctor's entity slot is void* (its callers' ABI)
     if (field_10 != nullptr &&
         GameUpdateLoop::_singleton != nullptr) {
