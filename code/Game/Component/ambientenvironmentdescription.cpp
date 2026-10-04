@@ -57,6 +57,10 @@
 // tail with elem+0x20 = 1 default, free the old block. 1:1 port of the exe helper.
 // Registered at 0x140002540 (reg_component_visuals.cpp) and called by
 // ambient_externalptr_serialize.cpp: a free function, not a member.
+// LEFT (every cast in this body): ERASED Array<entry>::SetSize hand-expanded instance, kept
+// AS IS: its element default writes +0x20 = 1 and it skips MemAlloc with no allocator, so it
+// is not provably SetSizeCore's first allocation / growth; its C signature (void* header) is
+// in Component/exe_bodies.h (wave X).
 extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
     uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
     int oldCount = *(int*)(arr + 8);
