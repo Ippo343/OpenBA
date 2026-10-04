@@ -17,6 +17,8 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/EventLog.h"         // GameUpdateLoop::m_eventNotifier, EventLogEntry
+#include "Game/Map.h"              // GameUpdateLoop::m_game
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -25,26 +27,13 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
-// The three element arrays as the Collection::Array retail's are.
-// LEFT (H5): their headers are declared field by field until the members'
-// ~Array runs (EventLogUI.h); these are the views of them as the class.
-using ElementArray = Collection::Array<Object::InternalPtr<UI::Element>>;
-static ElementArray& DisplayTexts(EventLogUI* self) {
-    return *reinterpret_cast<ElementArray*>(&self->displayTextData);
-}
-static ElementArray& DisplayButtons(EventLogUI* self) {
-    return *reinterpret_cast<ElementArray*>(&self->displayButtonData);
-}
-static ElementArray& NotifyButtons(EventLogUI* self) {
-    return *reinterpret_cast<ElementArray*>(&self->notifyButtonData);
-}
+// The three element arrays are EventLogUI's Collection::Array members.
+using ElementArray = EventLogUI::ElementArray;
 
-// The event log (GameUpdateLoop +0x138).
-// LEFT: m_eventNotifier is void* — the event log has no class yet (block GAME);
-// its +0x10 category filter bytes, +0x18 entry array (0x28 stride) and +0x20
-// count stay offset reads.
-static uintptr_t EventLogAddress() {
-    return (uintptr_t)GameUpdateLoop::_singleton->m_eventNotifier;
+// The event log (GameUpdateLoop +0x138; Game/EventLog.h): +0x10 the category
+// filter bytes, +0x18 the entry array (EventLogEntry, 0x28 stride), +0x20 count.
+static EventLog* EventLogAddress() {
+    return GameUpdateLoop::_singleton->m_eventNotifier;
 }
 
 // ============================================================
@@ -90,22 +79,22 @@ void EventLogUI::OnOpened() {
     // Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Both elements are 8-byte InternalPtr handles (byte-copy).
     int displayRowCount = displayElem->ChildCount();
-    DisplayTexts(this).SetSize(displayRowCount);
-    DisplayButtons(this).SetSize(displayRowCount);
+    displayTexts.SetSize(displayRowCount);
+    displayButtons.SetSize(displayRowCount);
 
     // Iterate display rows: store child text element, store the row as a
     // button, set element IDs
-    int rowCount = displayTextCount;
+    int rowCount = displayTexts._size;
     for (int i = 0; i < rowCount; i++) {
         // Child text element (direct child at index i)
-        displayTextData[i] = displayElem->Child(i);
+        displayTexts[i] = displayElem->Child(i);
 
         // The same child, as the row's button (the retail check is against
         // Object::Internal, i.e. any element)
-        displayButtonData[i] = displayElem->Child(i);
+        displayButtons[i] = displayElem->Child(i);
 
         // Set element ID on the button: 0x6C + index
-        displayButtonData[i]->SetElementId(0x6C + i);
+        displayButtons[i]->SetElementId(0x6C + i);
     }
 
     // Reset scroll offset to 0
@@ -120,7 +109,7 @@ void EventLogUI::OnOpened() {
 
     // Iterate notification button children, store them in the notify array, set IDs
     int notifyCount = notifyContainer->ChildCount();
-    uintptr_t eventLogSingleton = EventLogAddress();
+    EventLog* eventLogSingleton = EventLogAddress();
 
     for (int i = 0; i < notifyCount; i++) {
         // Child button element
@@ -132,10 +121,10 @@ void EventLogUI::OnOpened() {
         // Copy the notification flag from the event log into the check box:
         // ONE byte, flags[i] (retail 0x140067a55 / 0x140067a69).
         static_cast<UI::CheckElement*>(btnElem)->_checked =
-            *(uint8_t*)(eventLogSingleton + 0x10 + i);
+            eventLogSingleton->field_0x10[i];
 
         // Push button ptr to the notification array.
-        ElementArray& notifyBtns = NotifyButtons(this);
+        ElementArray& notifyBtns = notifyButtons;
         notifyBtns.SetSize(notifyBtns.GetSize() + 1, Object::InternalPtr<UI::Element>(btnElem));
     }
 }
@@ -151,10 +140,10 @@ void EventLogUI::OnOpened() {
 
 // [7] 0x140067440
 void EventLogUI::OnUpdateLayout() {
-    uintptr_t eventLog = EventLogAddress();
-    int totalEvents = *(int*)(eventLog + 0x20);  // total event count
+    EventLog* eventLog = EventLogAddress();
+    int totalEvents = eventLog->entryCount;  // total event count
 
-    int displayCount = displayTextCount;  // number of display rows
+    int displayCount = displayTexts._size;  // number of display rows
     int scroll = scrollOffset;
 
     // Rows are filled bottom-up: the newest visible event lands in the BOTTOM row.
@@ -164,12 +153,12 @@ void EventLogUI::OnUpdateLayout() {
     int firstIdx = totalEvents - scroll - 1;
     if (firstIdx >= 0) {
         int base = firstIdx - (displayCount - 1);
-        uintptr_t eventArray = *(uintptr_t*)(eventLog + 0x18);
+        EventLogEntry* eventArray = eventLog->entries;
         for (int row = displayCount - 1; row >= 0; row--) {
             int eventIdx = base + row;
 
-            UI::TextElement* textElem = static_cast<UI::TextElement*>(displayTextData[row].Get());
-            UI::Element* btnElem = displayButtonData[row].Get();
+            UI::TextElement* textElem = static_cast<UI::TextElement*>(displayTexts[row].Get());
+            UI::Element* btnElem = displayButtons[row].Get();
 
             int enabled;
             if (eventIdx < 0) {
@@ -178,15 +167,14 @@ void EventLogUI::OnUpdateLayout() {
                 textElem->SetParameter(0, emptyStr);
                 enabled = 0;
             } else {
-                // LEFT: the event-log entry (0x28 bytes) has no class (block GAME).
-                uintptr_t eventEntry = eventArray + (uintptr_t)eventIdx * 0x28;
+                const EventLogEntry& eventEntry = eventArray[eventIdx];
                 // Text = event entry +0x08.
-                textElem->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));
+                textElem->SetParameter(0, eventEntry.text);
                 // Colour = entry +0x00 (Element slot 10 SetColor).
-                textElem->SetColor(*(uint32_t*)eventEntry);
+                textElem->SetColor(eventEntry.color);
                 // The nav button is enabled only if the event has a map location
                 // (tileIdx at entry+0x18 >= 0).
-                enabled = (*(int*)(eventEntry + 0x18) >= 0) ? 1 : 0;
+                enabled = (eventEntry.tileIndex >= 0) ? 1 : 0;
             }
             // Element slot 8 Enable — common to both branches.
             btnElem->Enable(enabled != 0);
@@ -206,9 +194,11 @@ void EventLogUI::OnUpdateLayout() {
 // Reads the check box's state and writes it into the event log's category
 // filter byte (+0x10 + index).
 void EventLogUI::ToggleNotification(int32_t btnIdx) {
-    UI::CheckElement* btnElem = static_cast<UI::CheckElement*>(notifyButtonData[btnIdx].Get());
-    uintptr_t eventLog = EventLogAddress();
-    *(uint8_t*)(eventLog + 0x10 + btnIdx) = btnElem->_checked;
+    UI::CheckElement* btnElem = static_cast<UI::CheckElement*>(notifyButtons[btnIdx].Get());
+    EventLog* eventLog = EventLogAddress();
+    // LEFT: EventLog::field_0x10 is bool[6] (Game/EventLog.h, GAME-a's): a bool
+    // store would normalise the check box's raw byte, the byte store does not.
+    *reinterpret_cast<uint8_t*>(&eventLog->field_0x10[btnIdx]) = btnElem->_checked;
 }
 
 // ============================================================
@@ -218,16 +208,16 @@ void EventLogUI::ToggleNotification(int32_t btnIdx) {
 // the camera's look-at target.
 void EventLogUI::NavigateToRow(int32_t rowIdx) {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    uintptr_t eventLog = EventLogAddress();
-    int totalEvents = *(int*)(eventLog + 0x20);
-    int eventIdx = (totalEvents - displayTextCount - scrollOffset) + rowIdx;
-    // Tile index from the event entry at entryArray + eventIdx*0x28 + 0x18
-    uintptr_t entryArray = *(uintptr_t*)(eventLog + 0x18);
-    int tileIdx = *(int*)(entryArray + 0x18 + (uintptr_t)eventIdx * 0x28);
+    EventLog* eventLog = EventLogAddress();
+    int totalEvents = eventLog->entryCount;
+    int eventIdx = (totalEvents - displayTexts._size - scrollOffset) + rowIdx;
+    // Tile index from the event entry (+0x18)
+    EventLogEntry* entryArray = eventLog->entries;
+    int tileIdx = entryArray[eventIdx].tileIndex;
     if (tileIdx >= 0) {
-        // LEFT: GameUpdateLoop::m_game is void* (W0 header); Map::size at +0.
-        int* mapGrid = (int*)game->m_game;
-        int gridSize = *mapGrid;
+        // Map::size at +0.
+        Map* mapGrid = game->m_game;
+        int gridSize = mapGrid->size;
         float halfSize = (float)(gridSize >> 1) - 0.5f;
         float inXY[3] = {
             (float)(tileIdx % gridSize) - halfSize,

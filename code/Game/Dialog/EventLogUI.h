@@ -15,14 +15,15 @@
 //
 // B.4 W1 (DLG-b): the three buttons and the three element arrays OnOpened
 // 0x140067640 fills. The arrays are retail's Collection::Array<InternalPtr<
-// Element>> (0x1400114b0 frees all three); H5 declares them as their headers
-// until the members' ~Array runs (the leak below).
+// Element>> (0x1400114b0 frees all three), declared as such since B.4 P2 DLG-1.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array
+#include "object/Internal.h"         // Object::InternalPtr
 
 class EventLogUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(EventLogUI)
@@ -30,10 +31,9 @@ class EventLogUI final : public UI::DialogController {
 public:
     EventLogUI() = default;                              // 0x1400113e0 (ctor inlined in the factory)
 
-    // 0x1400114b0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array members at +0x70, +0x60, +0x50; the
-    // tree never did (leak kept).
+    // 0x1400114b0 minus the free (its body 0x140067b50). The compiler runs the
+    // three Arrays' dtors (+0x70, +0x60, +0x50, as retail) and chains
+    // ~DialogController (and so ~Internal: RemoveObject).
     ~EventLogUI() override = default;                             // [0] 0x1400114b0
     void OnOpened() override;   // [5] 0x140067640
     void OnClosed() override {}   // [6] 0x140067630  RET 0 in retail
@@ -52,18 +52,15 @@ public:
     Object::InternalPtr<UI::Element> buttonNext;       // +0x40 "buttonNext", id 0x65
     int32_t scrollOffset = 0;                          // +0x48 rows scrolled back from the newest
     int32_t _pad4C = 0;                                // +0x4C
-    // +0x50 Array<InternalPtr<Element>>: the "display" rows (text)
-    Object::InternalPtr<UI::Element>* displayTextData = nullptr;    // +0x50
-    int32_t displayTextCount = 0;                                    // +0x58
-    int32_t displayTextCapacity = 0;                                 // +0x5C
-    // +0x60 Array<InternalPtr<Element>>: the same rows as buttons (ids 0x6C + i)
-    Object::InternalPtr<UI::Element>* displayButtonData = nullptr;  // +0x60
-    int32_t displayButtonCount = 0;                                  // +0x68
-    int32_t displayButtonCapacity = 0;                               // +0x6C
-    // +0x70 Array<InternalPtr<Element>>: "notifybuttons"' check boxes (ids 0x67 + i)
-    Object::InternalPtr<UI::Element>* notifyButtonData = nullptr;   // +0x70
-    int32_t notifyButtonCount = 0;                                   // +0x78
-    int32_t notifyButtonCapacity = 0;                                // +0x7C
+    // B.4 P2 DLG-1 (behaviour: H5): the three arrays are Collection::Array
+    // members. Retail's create 0x1400113e0 zeroes +0x50..+0x7F (qwords
+    // 0x14001142c..0x140011440) = Array's default ctor; retail's dtor 0x140067b50
+    // frees +0x70, then +0x60, then +0x50 (MemFree data; qword 0 over data and
+    // over count|capacity) = the members' ~Array in reverse declaration order.
+    using ElementArray = Collection::Array<Object::InternalPtr<UI::Element>>;
+    ElementArray displayTexts;     // +0x50 the "display" rows (text)
+    ElementArray displayButtons;   // +0x60 the same rows as buttons (ids 0x6C + i)
+    ElementArray notifyButtons;    // +0x70 "notifybuttons"' check boxes (ids 0x67 + i)
 };
 
 static_assert(sizeof(EventLogUI) == 0x80, "EventLogUI is 0x80 (create 0x1400113e0 MemAlloc(0x80))");
@@ -72,12 +69,7 @@ static_assert(offsetof(EventLogUI, buttonBottom) == 0x30, "EventLogUI::buttonBot
 static_assert(offsetof(EventLogUI, buttonPrevious) == 0x38, "EventLogUI::buttonPrevious @ 0x38");
 static_assert(offsetof(EventLogUI, buttonNext) == 0x40, "EventLogUI::buttonNext @ 0x40");
 static_assert(offsetof(EventLogUI, scrollOffset) == 0x48, "EventLogUI::scrollOffset @ 0x48");
-static_assert(offsetof(EventLogUI, displayTextData) == 0x50, "EventLogUI::displayTextData @ 0x50");
-static_assert(offsetof(EventLogUI, displayTextCount) == 0x58, "EventLogUI::displayTextCount @ 0x58");
-static_assert(offsetof(EventLogUI, displayTextCapacity) == 0x5C, "EventLogUI::displayTextCapacity @ 0x5C");
-static_assert(offsetof(EventLogUI, displayButtonData) == 0x60, "EventLogUI::displayButtonData @ 0x60");
-static_assert(offsetof(EventLogUI, displayButtonCount) == 0x68, "EventLogUI::displayButtonCount @ 0x68");
-static_assert(offsetof(EventLogUI, displayButtonCapacity) == 0x6C, "EventLogUI::displayButtonCapacity @ 0x6C");
-static_assert(offsetof(EventLogUI, notifyButtonData) == 0x70, "EventLogUI::notifyButtonData @ 0x70");
-static_assert(offsetof(EventLogUI, notifyButtonCount) == 0x78, "EventLogUI::notifyButtonCount @ 0x78");
-static_assert(offsetof(EventLogUI, notifyButtonCapacity) == 0x7C, "EventLogUI::notifyButtonCapacity @ 0x7C");
+static_assert(offsetof(EventLogUI, displayTexts) == 0x50, "EventLogUI::displayTexts @ 0x50");
+static_assert(offsetof(EventLogUI, displayButtons) == 0x60, "EventLogUI::displayButtons @ 0x60");
+static_assert(offsetof(EventLogUI, notifyButtons) == 0x70, "EventLogUI::notifyButtons @ 0x70");
+static_assert(sizeof(EventLogUI::ElementArray) == 0x10, "Array is {data, count, capacity}");
