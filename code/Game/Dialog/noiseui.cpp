@@ -150,7 +150,7 @@ void NoiseUI::SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
 
 // Helper: an edit element's text as a float
 static float NoiseUI_ReadEditFloat(const UI::EditElement* edit) {
-    return System::String::ToFloat(edit->_text);
+    return System::String::ToFloat(edit->_text._data);
 }
 
 void NoiseUI::GenerateNoise() {

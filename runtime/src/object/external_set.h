@@ -93,7 +93,7 @@ inline const RtObject::ResourceEntry* Elem(const Node* n) {
 // (`ExternalFactory::Add`, 0x1800be570) builds it on the stack SEPARATELY from
 // the key and hands the two in different registers (R8 = key, R9 = this).
 struct EntryValue {
-    RtObject::External* external;    // +0x00 -> ResourceEntry::external
+    ::Object::External* external;    // +0x00 -> ResourceEntry::external
     uint32_t            usageMask;   // +0x08 -> ResourceEntry::usageMask
     uint32_t            referenceId; // +0x0c -> ResourceEntry::referenceId
 };

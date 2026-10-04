@@ -194,7 +194,7 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
             System::String::Format("%i", _i70));                   // 0x1800c9730, retslot = &tmp
         char** made = &tmp;
 
-        StringAssignInline(&elem->_text, *made);               // 1800d4d8f
+        StringAssignInline(&elem->_text._data, *made);               // 1800d4d8f
         StringReleaseInline(&tmp);                             // 1800d4dd8
     }
 
@@ -210,7 +210,7 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
         reinterpret_cast<System::String*>(&tmp)->Set(set);    // 1800d4e31  0x1800c95d0  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
         char* value = tmp;                                     // 1800d4e3e  RBX
-        StringAssignInline(&elem->_filter, value);             // 1800d4e37
+        StringAssignInline(&elem->_filter._data, value);             // 1800d4e37
 
         // The release works off the CAPTURED value, not a re-read of `tmp`:
         // retail keeps it in RBX across the assignment (0x1800d4e82).

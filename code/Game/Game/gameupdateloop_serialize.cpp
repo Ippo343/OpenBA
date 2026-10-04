@@ -597,15 +597,13 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             uint32_t flags = e->_entityFlags;
             if (flags & 4) {
                 void* ibp = nullptr;
-                new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
+                new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
                 ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
                                               owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
-                new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
+                new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
                 ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
                                               owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
             }

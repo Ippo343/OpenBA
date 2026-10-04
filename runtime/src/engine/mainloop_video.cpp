@@ -700,8 +700,7 @@ void Engine::MainLoop::OnVideoRestart() {
             System::Filename compiled = ::Object::ExternalFactory::GetCompiledPath(r->_path);
             // External::Load's entry point still takes the RtObject::External
             // POD (external_load.cpp; X-R1's mirror family).
-            RtObject::RtObject_External_Load(&compiled,
-                                             reinterpret_cast<RtObject::External*>(r->_object));   // LEFT: SIG RtObject::RtObject_External_Load takes the RtObject::External POD mirror (external_load.cpp)
+            RtObject::RtObject_External_Load(&compiled, r->_object);
             // `compiled` releases here — retail's 0x1800dc4fe, now ~Filename.
         }
     }

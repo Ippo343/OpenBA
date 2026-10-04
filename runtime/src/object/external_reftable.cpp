@@ -100,7 +100,7 @@
 namespace RtObject {
 // 0x180006250 — ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ, ported in
 // external.cpp. HIDDEN RETURN SLOT: (this in RCX, ret in RDX), returns ret.
-System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret);
+System::Filename* RtObject_External_GetPath(const ::Object::External* self, System::Filename* ret);
 }
 
 namespace RtObjFactoryDtor {

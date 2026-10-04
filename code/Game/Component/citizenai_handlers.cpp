@@ -133,7 +133,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     }
     int64_t moveIBP = 0;
     new (&moveIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(moveAction));   // B.3.3 bridge   // LEFT: H10 InternalBasePtr takes the RtObject::Internal POD
+        reinterpret_cast<::Object::Internal*>(moveAction));   // B.3.3 bridge; LEFT: `moveAction` is a void* local holding the MoveTo (COMP's file)
     Pf_ActStackPush_54e0(stack, &moveIBP);
 }
 

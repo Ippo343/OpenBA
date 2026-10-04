@@ -136,9 +136,9 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
         &slot);
 
     elem->_font = _ptr68;                                    // 1800d1023 QWORD
-    AssignStringField(elem->_text, _string70);               // 1800d102a
+    AssignStringField(elem->_text._data, _string70);               // 1800d102a
     elem->_maxLength = _word78;                              // 1800d107c DWORD
-    AssignStringField(elem->_filter, _string80);             // 1800d1082
+    AssignStringField(elem->_filter._data, _string80);             // 1800d1082
     elem->_password = _flag7c;                               // 1800d10d7 BYTE
 
     *ret = Object::InternalPtr<Element>(elem);                   // 1800d10e1

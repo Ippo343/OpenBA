@@ -201,7 +201,7 @@ void ArrayPtrSetSizeFill(Collection::Array<Internal*>* a, int newSize, Internal*
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+        a->_data = static_cast<Internal**>(  // LEFT: FLOOR? allocation: InternalMemAlloc returns void* (the tier-I MemAlloc shape does not match this allocator)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -227,7 +227,7 @@ void ArrayPtrSetSize(Collection::Array<Internal*>* a, int newSize) {
         a->_capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0)
             a->_capacity = newSize * 3;
-        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+        a->_data = static_cast<Internal**>(  // LEFT: FLOOR? allocation: InternalMemAlloc returns void* (the tier-I MemAlloc shape does not match this allocator)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     int i = (old == a->_data) ? oldSize : 0;
@@ -255,7 +255,7 @@ void ArrayPtrReserve(Collection::Array<Internal*>* a, int n) {
         a->_capacity = n;
         if (n == oldSize + 1 && oldSize != 0)
             a->_capacity = n * 3;
-        a->_data = static_cast<Internal**>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+        a->_data = static_cast<Internal**>(  // LEFT: FLOOR? allocation: InternalMemAlloc returns void* (the tier-I MemAlloc shape does not match this allocator)
             InternalMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity) << 3), 8));
     }
     if (old != a->_data) {

@@ -76,7 +76,6 @@
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 #include "../../types/volume/Volume.h"           // RtVolume_Frustum_Projection
 #include "../../types/system/MemoryAllocator.h"
-#include "../system/pod_bridge.h"                 // B4 FORWARD AddTexture(RtSystem::String)
 
 using RtGraphics::Camera;
 using RtGraphics::MaterialInstance;
@@ -236,36 +235,14 @@ const Matrix kZUpToYUp = {{
 // ABI, and delegates with a QUALIFIED non-virtual call.
 // ============================================================================
 
-// ?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z — retail 0x1800fe5c0
-extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustum) {
-    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge  // LEFT: POD the Camera ctor door is extern "C" (wave X)
-        ->::Graphics::Camera::SetFrustum(*frustum);
-}
-
 // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
 // — retail 0x1800fe960. Returns `this` in RAX like every MSVC constructor.
-//
-// THIS STAYS A CONSTRUCTOR DOOR, not a real C++ constructor (B4b-2, and
-// B35_RULES §11 names `fn_Graphics_Camera_Ctor` in its leave list). Its four
-// call sites in `code/Game` and `engine/funcs` keep working unchanged.
-//
-// Note the ordering retail chose and this reproduces: the projection matrix is
-// zeroed and the flag stored BEFORE SetFrustum runs, so SetFrustum's branch on
-// +0xd4 reads the value just written and its output overwrites the zeros.
+// The body is the member constructor `Graphics::Camera::Camera(const Frustum&,
+// const Transform3&, bool)` below; this extern "C" entry keeps the POD-typed
+// signature for its callers in code/Game and forwards.
 extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
                                           const Transform3* cameraToWorld, bool swapZUpToYUp) {
-    // 25 dwords: the ctor DOES move +0x60 as a dword, so the frustum's pad
-    // bytes come across too. (SetFrustum does not — see the member below.)
-    std::memcpy(&self->frustum, frustum, sizeof(Frustum));  // LEFT: retail moves 25 dwords incl. pad; a struct copy may change store widths
-    std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
-    // Was `memset(&self->projection, 0, sizeof(Matrix))`. ENDGAME B.3.1 made
-    // Math::Matrix a real class whose default ctor (retail 0x18001d770) zeroes
-    // all sixteen cells, so value-initialising it is the same sixteen stores
-    // and does not trip -Wclass-memaccess.
-    self->projection = Matrix();
-    self->swapZUpToYUp = swapZUpToYUp ? 1 : 0;
-    RtGraphics_Camera_SetFrustum(self, frustum);
-
+    new (static_cast<void*>(self)) ::Graphics::Camera(*frustum, *cameraToWorld, swapZUpToYUp);
     return self;
 }
 
@@ -443,11 +420,10 @@ MaterialInstance::~MaterialInstance() {
 //
 // WHAT DID **NOT** MOVE, and why:
 //
-//  * `??0Camera(const Frustum&, const Transform3&, bool)` (0x1800fe960) and
-//    `??0Renderer()` / `??1Renderer()` (0x180105180 / 0x1800180a0). ENDGAME §B.1
-//    decision 2, B4b-2 and B35_RULES §11's leave list keep all three as DOORS:
-//    `fn_Graphics_Camera_Ctor` and `fn_Graphics_Renderer_Ctor` are named there.
-//    The Renderer constructor additionally MUST NOT become a member-initialiser
+//  * `??0Renderer()` / `??1Renderer()` (0x180105180 / 0x1800180a0) stay DOORS
+//    (ENDGAME §B.1 decision 2, B4b-2, B35_RULES §11's leave list). The Camera
+//    constructor (0x1800fe960) is a member since B.4 wave X round 4; its
+//    extern "C" entry forwards. The Renderer constructor additionally MUST NOT become a member-initialiser
 //    list, because RULE B5-13 requires +0x3c and +0x4c stay unwritten.
 //  * `??4Camera@` (0x180017c40). Its retail body is a PARTIAL copy that leaves
 //    +0x61..+0x63 and +0xd5..+0xd7 alone, and `Graphics::Camera::operator=` is
@@ -476,6 +452,30 @@ MaterialInstance::~MaterialInstance() {
 // ############################################################################
 
 namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
+// retail 0x1800fe960, read in the disassembly:
+//   0x1800fe966..0x1800fe9fd  25 dwords [RDX+0x00..+0x60] -> [RCX+0x00..+0x60]
+//                             (the frustum INCLUDING its three pad bytes)
+//   0x1800fea00..0x1800fea5c  12 dwords [R8+0x00..+0x2c]  -> [RCX+0x64..+0x90]
+//   0x1800fea62..0x1800fead2  16 MOVSS of 0.0f            -> [RCX+0x94..+0xd0]
+//   0x1800feae2               MOV byte ptr [RCX+0xd4],R9B
+//   0x1800feae9               CALL 0x1800fe5c0 (SetFrustum, this, the frustum)
+//   0x1800feaee               MOV RAX,RBX
+// The initialiser list is that order: `Frustum` and `Transform3` copy
+// trivially (all 0x64 / 0x30 bytes), `Math::Matrix()` is retail's zeroing
+// ctor (0x18001d770), and `+0xd5..+0xd7` are not written. The projection is
+// zeroed and the flag stored BEFORE SetFrustum runs, so SetFrustum's branch on
+// +0xd4 reads the value just written and its output overwrites the zeros.
+// ---------------------------------------------------------------------------
+Camera::Camera(const ::Frustum& frustum, const Math::Transform3& cameraToWorld, bool zUp)
+    : _frustum(frustum),
+      _cameraToWorld(cameraToWorld),
+      _projection(),
+      _zUp(zUp ? 1 : 0) {
+    SetFrustum(frustum);
+}
 
 // ---------------------------------------------------------------------------
 // ?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z   retail 0x1800fe5c0
@@ -688,12 +688,6 @@ void MaterialInstance::AddTexture(const System::String& name,
         int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);  // CAST-OK: string_header
         if (--*refCount == 0) RtMemFree(local.name - 8);
     }
-}
-
-// B4 FORWARD: code/Game/Dialog/saveloaddialog.cpp still calls this.
-void MaterialInstance::AddTexture(const RtSystem::String& name,
-                                  Object::ExternalPtr<Video::ImageBuffer> image) {
-    AddTexture(RtSystem::Sys(name), image);
 }
 
 }  // namespace Graphics

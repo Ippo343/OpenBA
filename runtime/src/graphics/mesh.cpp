@@ -824,7 +824,7 @@ void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h), as above.
 void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
-    // B.4 LEFT: the outside caller's `void*` signature, as above.
+    // B.4: the three casts below keep the outside caller\'s `void*` signature.
     EdgeVertex* ev = static_cast<EdgeVertex*>(self);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
     const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
     const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples

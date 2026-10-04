@@ -258,7 +258,7 @@ void DestroyFilenameArray(void* ignoredThis, uint8_t* base, int count);
 // 0x1800098d0 — Collection::Array<Filename>::~Array. Releases every element
 // through 0x180009af0 first, then frees the buffer.
 void* RtColl_ArrayFilenameDtor_1800098d0(void* av) {
-    ModArray* a = static_cast<ModArray*>(av);   // LEFT: SIG RtColl_ArrayFilenameDtor_1800098d0 (void* core entry: callers hand Collection::Array<Filename>, wave X)
+    ModArray* a = static_cast<ModArray*>(av);   // LEFT: SIG RtColl_ArrayFilenameDtor_1800098d0 (void* core entry: callers hand Collection::Array<Filename>)
     DestroyFilenameArray(a, static_cast<uint8_t*>(a->data), a->size);   // CAST-OK: elem_stride
     return ArrayFreeBuffer(a);
 }
@@ -300,8 +300,8 @@ static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
 
 // 0x180011110 — Collection::Array<int32>::operator=
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
-    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (void* core entry, wave X)
-    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (void* core entry, wave X)
+    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
     for (int32_t i = 0; i < dst->size; ++i) {
@@ -314,8 +314,8 @@ void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
 
 // 0x180011220 — Collection::Array<uint8>::operator=
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
-    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (void* core entry, wave X)
-    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (void* core entry, wave X)
+    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (the erased core entry takes void*; one body serves every Array<T> of that element width)
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);
     for (int32_t i = 0; i < dst->size; ++i) {
@@ -567,7 +567,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
 
 // 0x180010b80 — Collection::Array<Mod>::~Array
 void* RtColl_ArrayModDtor_180010b80(void* av) {
-    ModArrayOf<Mod>* a = static_cast<ModArrayOf<Mod>*>(av);   // LEFT: SIG RtColl_ArrayModDtor_180010b80 (void* core entry, wave X)
+    ModArrayOf<Mod>* a = static_cast<ModArrayOf<Mod>*>(av);   // LEFT: SIG RtColl_ArrayModDtor_180010b80 (the erased core entry takes void*; one body serves every Array<T> of that element width)
     Mod* p = a->data;
     for (int32_t i = a->size; i > 0; --i, ++p)
         RtIo_Mod_Dtor_180011460(p);
@@ -578,8 +578,8 @@ void* RtColl_ArrayModDtor_180010b80(void* av) {
 // fn_ModArrayCopy (engine_funcs.cpp:1747) and again as ModArrayCopy()
 // (runtime/src/engine/loops.cpp:230). Both doors now land here.
 void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
-    ModArrayOf<Mod>* dst = static_cast<ModArrayOf<Mod>*>(dstv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (void* core entry, wave X)
-    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (void* core entry, wave X)
+    ModArrayOf<Mod>* dst = static_cast<ModArrayOf<Mod>*>(dstv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
     if (dst == src) return dst;
     RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
     ArrayAssignGrow(dst, src, 0x80, 8);

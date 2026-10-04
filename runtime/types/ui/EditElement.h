@@ -114,17 +114,20 @@ public:
     // ??0Element (Element()), then 0x1800d0f38..0x1800d0f6b: +0xc0/+0xc8 QWORD
     // 0, +0xd0 DWORD 0, +0xd4 BYTE 0, +0xd8 QWORD 0, +0xe0 BYTE 0, +0xe4 DWORD
     // 0, +0xe8 BYTE 0, +0xf0 QWORD 0. The pad bytes stay unwritten.
-    EditElement() : Element() {
-        _font             = nullptr;
-        _text             = nullptr;
-        _maxLength        = 0;
-        _password         = 0;
-        _filter           = nullptr;
-        _active           = 0;
-        _caret            = 0;
-        _blinkOn          = 0;
-        _blinkAccumulator = 0;
-    }
+    // The initialiser list is in field order, so the stores are retail's
+    // order: +0xc0, +0xc8 (`_text`'s String()), +0xd0, +0xd4, +0xd8
+    // (`_filter`'s String()), +0xe0, +0xe4, +0xe8, +0xf0.
+    EditElement()
+        : Element(),
+          _font(nullptr),
+          _text(),
+          _maxLength(0),
+          _password(0),
+          _filter(),
+          _active(0),
+          _caret(0),
+          _blinkOn(0),
+          _blinkAccumulator(0) {}
 
     // [0] 0x18003fed0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xf8`, the element size).
@@ -156,7 +159,7 @@ public:
     char SelectCharacter(int32_t keyIndex) const;
     // The three one-instruction accessors, whole bodies (disassembly above).
     const System::String& GetText() const {                      // 0x18003fc60
-        return *reinterpret_cast<const System::String*>(&_text);   // LEFT: H5 EditElement::_text / _filter: retail ctor 0x1800d0f10 / dtor 0x1800d0e50 order fits two String members, but code/Game/Dialog/noiseui.cpp:154 (X-GS) passes edit->_text to String::ToFloat(const char*) and must read ._data first
+        return _text;
     }
     int32_t GetMaxLength() const { return _maxLength; }          // 0x18003fc70
     bool    IsActive() const     { return _active != 0; }        // 0x18003fc80
@@ -172,11 +175,11 @@ private:
 public:
     // ---- the 0x38 bytes EditElement adds ------------------------------------
     Font*    _font;               // +0xc0  ExternalPtr<UI::Font>
-    char*    _text;               // +0xc8  System::String (refcounted char*)
+    System::String _text;         // +0xc8  ctor 0x1800d0f38.., dtor 0x1800d0ebb
     int32_t  _maxLength;          // +0xd0
     uint8_t  _password;           // +0xd4
     uint8_t  _padD5[3];           // +0xd5  never written
-    char*    _filter;             // +0xd8  System::String; empty = any character
+    System::String _filter;       // +0xd8  empty = any character; dtor 0x1800d0e85
     uint8_t  _active;             // +0xe0  focused; holds the text-input latch
     uint8_t  _padE1[3];           // +0xe1  never written
     int32_t  _caret;              // +0xe4

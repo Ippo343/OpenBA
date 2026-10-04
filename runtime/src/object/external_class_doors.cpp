@@ -63,15 +63,15 @@ namespace RtObject {
 // Declared in the files that define them; repeated here rather than pulled in
 // through a header, because several of these have no header of their own (the
 // one-body-one-file rule runtime/src/object/rt_object_port.cpp states).
-System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret);
+System::Filename* RtObject_External_GetPath(const ::Object::External* self, System::Filename* ret);
 // external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
 extern "C" bool RtObject_External_SaveText(::Object::External* self, const System::Filename* path,
                                            const System::Filename* name);
-const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
+const ::Object::External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
                                               const System::Filename* path);
-const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
-                                                  const External* prev);
-uint32_t  RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const External* e);
+const ::Object::External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
+                                                  const ::Object::External* prev);
+uint32_t  RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const ::Object::External* e);
 System::Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
                                                                  System::Filename* ret, uint32_t id);
 void      RtObject_ExternalFactory_Clean(ExternalFactory* self);
@@ -90,7 +90,7 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
                                                               bool appendIdentifier);
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
-extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
+extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, ::Object::External* external);
 // external_reftable.cpp:192 — C++ linkage inside `namespace RtObject`. Its
 // second parameter is spelled `rt::io::Stream` THERE (the file has a
 // `using rt::io::Stream;`), so it must be spelled the same way here or the
@@ -103,16 +103,6 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
 namespace Object {
 namespace {
 
-// B.3.3 bridge — the class and the POD are asserted field for field in
-// External.h; these two spell the cast once instead of at thirty call sites.
-// (B.4 P2 wave X: `RtObject::ExternalFactory` is an alias of this class now,
-// so the factory needs no bridge; `this` is passed as itself.)
-inline RtObject::External* Pod(External* e) {
-    return reinterpret_cast<RtObject::External*>(e);                 // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
-inline const RtObject::External* Pod(const External* e) {
-    return reinterpret_cast<const RtObject::External*>(e);           // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
 
 // A `System::Filename` returned by value out of an entry point that writes a
 // HIDDEN RETURN SLOT: the slot is raw, uninitialised bytes, so the callee
@@ -175,13 +165,11 @@ ExternalFactory* ExternalFactory::Get() {
 }
 
 const External* ExternalFactory::Find(const System::Filename& path) const {
-    return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_Find(this, &path));
+    return RtObject::RtObject_ExternalFactory_Find(this, &path);
 }
 
 const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev) const {
-    return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_FindNext(this, typeId, Pod(prev)));
+    return RtObject::RtObject_ExternalFactory_FindNext(this, typeId, prev);
 }
 
 // *** RETAIL DEREFERENCES THE FOUND NODE WITHOUT A NULL CHECK *** and the
@@ -189,7 +177,7 @@ const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev)
 // reading +0x14; a guard here would not restore the behaviour, it would skip it
 // (CLAUDE.md's hard rule, and external.cpp:372-381 has the disassembly).
 uint32_t ExternalFactory::GetReferenceId(const External* external) const {
-    return RtObject::RtObject_ExternalFactory_GetReferenceId(this, Pod(external));
+    return RtObject::RtObject_ExternalFactory_GetReferenceId(this, external);
 }
 
 System::Filename ExternalFactory::GetPathForReferenceId(uint32_t id) const {
@@ -232,12 +220,11 @@ void ExternalFactory::PopPath() {
 // THE ADD PATH. See the file banner: spelling only, body untouched, race
 // neither papered over nor removed.
 void ExternalFactory::Add(External* external) {
-    RtObject::RtObject_ExternalFactory_Add(this, Pod(external));
+    RtObject::RtObject_ExternalFactory_Add(this, external);
 }
 
 const External* ExternalFactory::FindOrLoad(const System::Filename& path) {
-    return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_FindOrLoad(this, &path));
+    return RtObject::RtObject_ExternalFactory_FindOrLoad(this, &path);
 }
 
 void ExternalFactory::Clean() {

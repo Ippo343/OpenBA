@@ -502,7 +502,7 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 namespace Graphics {
 
 void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
-    Particle* const p = static_cast<Particle*>(particle.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+    Particle* const p = static_cast<Particle*>(particle.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner)
     ++g_piSetParticle;
 
     // ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ (retail 0x1801040b0), the

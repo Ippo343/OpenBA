@@ -69,7 +69,7 @@ inline bool Loading(IO::Serializer& ser) {
 inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) {
     Object::InternalBasePtr* p = reinterpret_cast<Object::InternalBasePtr*>(ibp);   // LEFT: the IBP members are declared as plain T* (Herd/Livestock/Population headers; H5 / InternalPtr typing)
     p->Serialize(ser);
-    RtObject::Internal* obj = p->Get();
+    ::Object::Internal* obj = p->Get();
     if (obj && tid && !::Object::IsDerivedFromNullSafe(obj, tid))
         *p = Object::InternalBasePtr();
 }

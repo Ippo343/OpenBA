@@ -107,7 +107,7 @@ const char* const kResourceSuffix = ":resource";
 // directory (reference_aeaa_is_private_not_unexported.md). Verified with
 // pefile before this body was written, not inferred from the mangling.
 // ============================================================================
-External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path) {
+::Object::External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path) {
     ++g_fc.calls;
 
     // ---- 0x1800be0fc-0x1800be149: `Filename key = path`, then adjust again --
@@ -160,7 +160,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Fil
     // is what External.h asserts. THE DEREF IS UNGUARDED IN RETAIL BEYOND THE
     // null test, and it stays that way here: a node in this tree always carries
     // an External, and a guard would hide the desync rather than survive it.
-    External* result = nullptr;
+    ::Object::External* result = nullptr;
     if (node != nullptr) {
         ++g_fc.hits;
         result = rtresset::Elem(node)->external;

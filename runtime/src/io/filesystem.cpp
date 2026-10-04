@@ -226,9 +226,6 @@ bool FileSystem::Exists(const System::Filename& pathRef) const {
     return ours;
 }
 
-// B4 FORWARD: code/Game/Game/w2_takescreenshot.cpp still calls this.
-bool FileSystem::Exists(const RtSystem::Filename& path) const { return Exists(RtSystem::Sys(path)); }
-
 System::Filename FileSystem::GetDataDirectory() const {
 
     // ENDGAME B.3.1 step 2: retail's copy ctor, spelled as itself. `ret` is the

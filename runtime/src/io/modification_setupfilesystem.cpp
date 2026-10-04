@@ -231,7 +231,7 @@ struct PathIdSet {
 struct ReloadEntry {
     uint32_t             typeId;    // +0x00
     uint32_t             _hole04;   // +0x04 — NEVER WRITTEN
-    RtObject::External*  external;  // +0x08
+    ::Object::External*  external;  // +0x08
     Filename             file;      // +0x10
 };
 static_assert(offsetof(ReloadEntry, external) == 0x08, "0x1800af058 MOV [RBP-0x69],R14");
@@ -248,12 +248,6 @@ struct ReloadArray {
 // B3R RT-IO: every callee below was a resolve door (RtResolveCached by name,
 // ResolveAddr by address, RT_EXPORT_ONCE); each is called by name now. The two
 // casts are the B.3.x bridge from this body's PODs to the real classes.
-inline const ::Object::External* AsExt(const RtObject::External* e) {
-    return reinterpret_cast<const ::Object::External*>(e);            // B.3.x bridge  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
-}
-inline const RtObject::External* AsPod(const ::Object::External* e) {
-    return reinterpret_cast<const RtObject::External*>(e);            // B.3.x bridge  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
-}
 
 void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0
     ::System::MemoryAllocator::MemFree(p);
@@ -397,14 +391,14 @@ void Modification::SetupFileSystem() {
     // ========================= ACT 1 — SNAPSHOT =============================
     PathIdSet snapshot = { nullptr, 0, 0 };                    // [RBP-0x49]
 
-    for (const RtObject::External* ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, nullptr));
+    for (const ::Object::External* ext = extFactoryObj->FindNext(kExternalTypeId, nullptr);
          ext != nullptr; ) {
         System::Filename compiled;                             // [RBP+0x77]
         {
             // GetPath's hidden return slot is `raw` (retail's `got`);
             // GetCompiledPath's is `compiled`, constructed over the default
             // ctor's null exactly as the door that stood here did.
-            System::Filename raw(AsExt(ext)->GetPath());        // 0x1800aec29
+            System::Filename raw(ext->GetPath());        // 0x1800aec29
             ::new (&compiled) System::Filename(                // 0x1800aec36
                 ::Object::ExternalFactory::GetCompiledPath(raw));
         }  // ~raw releases here, exactly where retail's 0x1800aec3c release sat
@@ -415,7 +409,7 @@ void Modification::SetupFileSystem() {
                          reinterpret_cast<rtsetavl::Node**>(&outSlot),  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
                          &compiled._data, &id);
 
-        ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, AsExt(ext)));   // 0x1800aecc8
+        ext = extFactoryObj->FindNext(kExternalTypeId, ext);   // 0x1800aecc8
         // ~compiled releases here, exactly where retail's 0x1800aecd3 release sat.
     }
 
@@ -444,11 +438,11 @@ void Modification::SetupFileSystem() {
     // ========================= ACT 3 — DIFF =================================
     ReloadArray queue = { nullptr, 0, 0 };                     // [RSP+0x30]
 
-    for (const RtObject::External* ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, nullptr));
+    for (const ::Object::External* ext = extFactoryObj->FindNext(kExternalTypeId, nullptr);
          ext != nullptr; ) {
         System::Filename compiled;                             // [RBP+0x7f]
         {
-            System::Filename raw(AsExt(ext)->GetPath());        // 0x1800aedc7  [RBP-0x59]
+            System::Filename raw(ext->GetPath());        // 0x1800aedc7  [RBP-0x59]
             ::new (&compiled) System::Filename(                // 0x1800aedd4
                 ::Object::ExternalFactory::GetCompiledPath(raw));
         }  // ~raw releases here, exactly where retail's 0x1800aedda release sat
@@ -460,7 +454,7 @@ void Modification::SetupFileSystem() {
         if (hit != nullptr && hit->value != fsObj->GetPackfileId(compiled)) {
             System::Filename compiled2;                         // [RBP+0x77]
             {
-                System::Filename raw2(AsExt(ext)->GetPath());   // 0x1800aef22  [RBP-0x51]
+                System::Filename raw2(ext->GetPath());   // 0x1800aef22  [RBP-0x51]
                 ::new (&compiled2) System::Filename(            // 0x1800aef2f
                     ::Object::ExternalFactory::GetCompiledPath(raw2));
             }  // ~raw2 releases here, retail's 0x1800aef35 release
@@ -477,12 +471,12 @@ void Modification::SetupFileSystem() {
             if (present) {
                 // ---- queue the reload, 0x1800af03d --------------------------
                 ReloadEntry entry;
-                entry.typeId   = reinterpret_cast<const ::Object::Base*>(ext)->Type();   // 0x1800af052 (B.3.x bridge)  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
-                entry.external = const_cast<RtObject::External*>(ext);  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
+                entry.typeId   = ext->Type();   // 0x1800af052
+                entry.external = const_cast<::Object::External*>(ext);  // LEFT: FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code
                 // entry._hole04 is DELIBERATELY left uninitialised: retail's
                 // first store is a DWORD and nothing ever writes +0x04..+0x07.
                 {
-                    System::Filename raw3(AsExt(ext)->GetPath());   // 0x1800af044  [RBP-0x79]
+                    System::Filename raw3(ext->GetPath());   // 0x1800af044  [RBP-0x79]
                     // `entry.file` is raw, uninitialised bytes here (a fresh
                     // ReloadEntry), so placement-construct. Release-then-adopt
                     // on a null destination is a plain adopt, and the ctor's
@@ -503,7 +497,7 @@ void Modification::SetupFileSystem() {
                 Sys(entry.file).~Filename();
             } else {
                 // ---- drop it, 0x1800af195 ----------------------------------
-                System::Filename raw4(AsExt(ext)->GetPath());   // 0x1800af19d  [RBP-0x?]
+                System::Filename raw4(ext->GetPath());   // 0x1800af19d  [RBP-0x?]
                 extFactory->ForceUnload(raw4);                  // 0x1800af1a9
                 // ~raw4 releases here, retail's release right after ForceUnload
             }
@@ -511,16 +505,16 @@ void Modification::SetupFileSystem() {
             // ~compiled2 releases here, retail's 0x1800af243 release
         }
 
-        ext = AsPod(extFactoryObj->FindNext(kExternalTypeId, AsExt(ext)));   // 0x1800af275
+        ext = extFactoryObj->FindNext(kExternalTypeId, ext);   // 0x1800af275
         // ~compiled releases here, retail's 0x1800af281 release
     }
 
     // ========================= ACT 4 — RELOAD ===============================
     for (int32_t i = 0; i < queue.size; ++i) {                 // 0x1800af2e6
         ReloadEntry* const e = &queue.data[i];
-        RtObject::External* const ext = e->external;
+        ::Object::External* const ext = e->external;
 
-        reinterpret_cast<::Object::External*>(ext)->Destruct();   // 0x1800af306 (B.3.x bridge)  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
+        ext->Destruct();   // 0x1800af306
 
         // the type-tree descent, inlined; a MISS yields null and is then
         // dereferenced. See the banner.
@@ -539,10 +533,10 @@ void Modification::SetupFileSystem() {
         // re-point `External::_path` (+0x08) at the queued filename. A single
         // AdjustDelimiters after release-then-adopt on an object that already
         // owns a string is `Filename::operator=(const Filename&)`, 0x180006770
-        // (Filename.h's DELIMITERS note). `ext->_path` is a `RtSystem::Filename`
-        // MEMBER of the not-yet-converted `Object::External`, reached through
-        // the bridge; `e->file` is the `ReloadEntry` POD member (see its banner).
-        Sys(ext->_path) = Sys(e->file);                         // 0x1800af341/0x1800af3b3
+        // (Filename.h's DELIMITERS note). `ext->_path` is the class's
+        // `System::Filename`; `e->file` is the `ReloadEntry` POD member (see its
+        // banner), reached through the bridge.
+        ext->_path = Sys(e->file);                         // 0x1800af341/0x1800af3b3
 
         System::Filename compiled(                            // 0x1800af3c0  [RBP+0x6f]
             ::Object::ExternalFactory::GetCompiledPath(Sys(e->file)));

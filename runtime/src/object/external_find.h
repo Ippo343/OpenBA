@@ -24,7 +24,7 @@ namespace RtObject {
 // ?Find@ExternalFactory@Object@@AEAAPEAVExternal@2@AEBVFilename@System@@@Z
 //                                                     retail 0x1800be0e0, ord 2336
 // RCX = this, RDX = path. Returns the cached External*, or null on a miss.
-External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path);
+::Object::External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path);
 
 // The effectiveness control. `hits` and `misses` are the two outcomes of the
 // tree descent; `identDefaulted` is the ":resource" arm. A run in which

@@ -112,8 +112,7 @@ namespace {
 //   `Math::Transform::AsTransform3` — members of the real Math classes, called
 //   on typed operands (B.4: the `(self, ret)` wrappers are gone).
 // `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
-//   0x1800fe960 — PORTED as renderer.cpp's door `RtGraphics_Camera_Ctor`,
-//   which stays a door (Camera.h's B4b-2 note).
+//   0x1800fe960 — the member constructor (renderer.cpp).
 // `Renderer::AddLight` / `BeginDrawGroup` / `EndDrawGroup` and
 //   `Scene::AddGlobalDrawItems` / `AddCulledDrawItems` — members.
 // The two unexported Collection::Array<T>::SetSize instantiations
@@ -430,13 +429,7 @@ void SpotLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     const Math::Transform xform = _transform;       // +0x84, 0x1c
     const Math::Transform3 t3 = xform.AsTransform3();
 
-    // The Camera is built through its ctor's door (renderer.cpp) into the
-    // POD's bytes. LEFT: `Graphics::Camera`'s default ctor is protected and its
-    // `(Frustum, Transform3, bool)` ctor stays a door (Camera.h), so the one
-    // view of the POD as the class is here.
-    RtGraphics::Camera cameraPod;
-    RtGraphics_Camera_Ctor(&cameraPod, &_frustum, &t3, true);   // MOV R9B,1
-    const Camera& camera = *reinterpret_cast<const Camera*>(&cameraPod);  // LEFT: POD RtGraphics::Camera: the (Frustum, Transform3, bool) ctor stays a door (Camera.h, outside this set)
+    const Camera camera(_frustum, t3, true);   // 0x1800fe960, MOV R9B,1
 
     renderer.AddLight(this);
 
