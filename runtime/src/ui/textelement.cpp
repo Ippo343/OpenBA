@@ -53,7 +53,7 @@ namespace {
 // fields are spelled `char*`, so the Font/SpriteContext calls see them as the
 // String they are.
 const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);
+    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 }  // namespace
@@ -69,7 +69,7 @@ namespace UI {
 // member ~Array follows); then the compiler chains ~Element (0x1801161a0).
 TextElement::~TextElement() {
     System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_cachedText));
+        *reinterpret_cast<System::String*>(&_cachedText));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
     rtcoll::RtColl_ArrayDtorElem_180010ab0(&_params);
 }
 

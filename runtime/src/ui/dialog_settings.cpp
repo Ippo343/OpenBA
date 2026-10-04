@@ -313,7 +313,7 @@ void DialogInstance::SaveSettings() {
     if (size >= 4) {
         // Stored DIRECTLY into the buffer, then the cursor is stepped past it.
         // LEFT: _userData is the raw settings byte buffer, not a field.
-        *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
+        *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;   // CAST-OK: byte_io
         ms._cursor += 4;
     }
 
@@ -366,7 +366,7 @@ void DialogInstance::OnOpened() {                              // [4]
     uint32_t magic = 0;
     if (size >= 4) {
         // LEFT: _userData is the raw settings byte buffer, not a field.
-        magic = *reinterpret_cast<const uint32_t*>(buf);
+        magic = *reinterpret_cast<const uint32_t*>(buf);   // CAST-OK: byte_io
         ms._cursor += 4;
     }
     if (magic != 0xdeadbeefu) {

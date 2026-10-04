@@ -633,7 +633,7 @@ void UI::UserInterface::AddDialog(Object::InternalPtr<DialogInstance>* dialog) {
 
 extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr) {
     self->UI::UserInterface::AddDialog(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));   // LEFT: SIG the extern "C" door takes void** (pinned by tests/unit/ui_userinterface_abi_test.cpp:122)
 }
 
 // ---- ?Play@UserInterface@UI@@QEAAXH@Z  0x1801223d0  ord 3418 ---------------
@@ -687,7 +687,7 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
     // `DeviceData` slot 8 (+0x40) `SetImageBuffer(image, hotX, hotY)`
     // (CompanionData.h).
     Video::DeviceData* const backend =
-        reinterpret_cast<Video::DeviceData*>(Video::Device::_singleton->deviceData);
+        reinterpret_cast<Video::DeviceData*>(Video::Device::_singleton->deviceData);   // LEFT: FIELD Video::Device::deviceData is void* (Device.h, R-GFX-1)
 
     const SpriteSheet* sheet = cursor->_spriteSheet.Get();
     const Graphics::MaterialInstance* const material =
@@ -1227,7 +1227,7 @@ void UI::UserInterface::SaveAllSettings() {
             if (enc) {
                 // Encoding slot 4 (+0x20) CreateWriter when writing, slot 3
                 // (+0x18) CreateReader when reading; version 0.
-                IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(&ser);
+                IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(&ser);   // LEFT: the tree guards a null Encoding before CreateWriter, which IO::Serializer's ctor (0x1800b9960) does not: a real Serializer would drop that guard
                 rw = st->_direction != 0 ? enc->CreateWriter(s, 0) : enc->CreateReader(s, 0);
             }
             ser.rw = rw;
@@ -1252,7 +1252,7 @@ void UI::UserInterface::SaveAllSettings() {
                 UiSerializer ser2{ st, nullptr };
                 IO::ReaderWriter* rw2 = nullptr;
                 if (enc) {
-                    IO::Serializer& s2 = *reinterpret_cast<IO::Serializer*>(&ser2);
+                    IO::Serializer& s2 = *reinterpret_cast<IO::Serializer*>(&ser2);   // LEFT: as above (null-Encoding guard)
                     rw2 = st->_direction != 0 ? enc->CreateWriter(s2, 0)
                                               : enc->CreateReader(s2, 0);
                 }

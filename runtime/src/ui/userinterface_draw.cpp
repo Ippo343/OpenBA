@@ -284,7 +284,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // its dtor, which retail's inlined builder does not (B4_RULES H5); the
     // storage stays raw until that is a `behaviour:` commit of its own.
     alignas(16) uint8_t scStorage[0xa0];
-    SpriteContext* const sc = reinterpret_cast<SpriteContext*>(scStorage);
+    SpriteContext* const sc = reinterpret_cast<SpriteContext*>(scStorage);   // LEFT: H5 UserInterface's SpriteContext is raw stack storage (its ctor / dtor would start to run)
 
     sc->_scale        = 1.0f;                       // 0x180121cad, as 0x3f800000
     sc->_currentSheet = nullptr;
@@ -314,7 +314,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // B.4 LEFT: `_captureViewport` stays bytes (a `Video::Viewport` member
     // would pull video/Context.h into every exe includer of this header).
     sc->Begin(_uiScale, _spriteCapture,
-              reinterpret_cast<Video::Viewport*>(_captureViewport));   // +0x118
+              reinterpret_cast<Video::Viewport*>(_captureViewport));   // +0x118  // LEFT: _captureViewport is raw bytes (typing it embeds Video::Viewport, which pulls Context.h into UserInterface.h)
 
     // A local lambda for retail's repeated "switch the batch key" preamble,
     // which appears FIVE times verbatim (0x180121e96, 0x180121f79, 0x180122084,

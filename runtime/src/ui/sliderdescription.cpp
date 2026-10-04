@@ -111,8 +111,8 @@ bool SliderDescription::Serialize(IO::Stream& streamArg) {
     IO::Serializer ser(*stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800d78e8 ExternalPtr<ElementDescription>
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800d78f6 ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800d78e8 ExternalPtr<ElementDescription>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800d78f6 ExternalPtr<SpriteSheet>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
     _trackStartName.Serialize(&ser);         // 1800d7904
     _trackMiddleName.Serialize(&ser);        // 1800d7915
     _trackEndName.Serialize(&ser);           // 1800d7926

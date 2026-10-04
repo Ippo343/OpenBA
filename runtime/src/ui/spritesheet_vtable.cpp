@@ -278,7 +278,7 @@ namespace {
 // members are spelt `char*` (H5: a System::String member would run a ctor/dtor
 // the retail class does not), so each is viewed as the String it is.
 void StringSerialize(char** field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);
+    reinterpret_cast<System::String*>(field)->Serialize(ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name. `m_field30`
@@ -286,8 +286,8 @@ void StringSerialize(char** field, IO::Serializer* ser) {
 // takes the rt::io POD view of the Serializer (cursor.cpp does the same).
 void MaterialPtrSerialize(Graphics::MaterialInstance** field, IO::Serializer* ser) {
     RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(field),
-        reinterpret_cast<rt::io::Serializer*>(ser));
+        reinterpret_cast<RtObject::External**>(field),   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+        reinterpret_cast<rt::io::Serializer*>(ser));   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 
 }  // namespace

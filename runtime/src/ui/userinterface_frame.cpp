@@ -397,7 +397,7 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
                 // the real class (block B), which spells the state as its
                 // address; it WRITES BACK into `st`.
                 // B.4 LEFT: the `uint8_t*` parameter is R-UI-a's signature.
-                dlg->Update(timeRef, this, reinterpret_cast<uint8_t*>(&st));
+                dlg->Update(timeRef, this, reinterpret_cast<uint8_t*>(&st));   // LEFT: NOCLASS the frame's value-initialised 0x30-byte record (see dialog.cpp:1172)
             }
             if ((dlg->_flags >> 1) & 1u) break;
             n = n->prev;

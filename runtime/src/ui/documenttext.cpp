@@ -152,11 +152,11 @@ void AssignString(char** slot, char* value) {
 
 // ---- the Runtime helpers these bodies call ---------------------------------
 // A System::String / Filename held in a raw slot.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 const System::String& Str(char* const* slot) {
-    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge
+    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
-System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge
+System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
 // ?SubString@String@System@@QEBA?AV12@HH@Z — 0x1800c9230. The last argument is
 // the INCLUSIVE end index, not a length: its body computes `end - start + 1`

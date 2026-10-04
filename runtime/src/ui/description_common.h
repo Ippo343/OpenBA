@@ -82,18 +82,18 @@ inline void* MemAlloc(uint64_t bytes, int align) {
 // `rt::io::Serializer*`; every caller here holds them as the typed field and an
 // `IO::Serializer`. LEFT until External.h takes the real types.
 inline RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 inline RtObject::External** ExtArray(void* data) {
-    return reinterpret_cast<RtObject::External**>(data);                   // B.3.x bridge
+    return reinterpret_cast<RtObject::External**>(data);                   // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 inline rt::io::Serializer* IoSer(IO::Serializer* ser) {
-    return reinterpret_cast<rt::io::Serializer*>(ser);                     // B.3.x bridge
+    return reinterpret_cast<rt::io::Serializer*>(ser);                     // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) on a
 // System::String field held as raw char* storage (H5).
 inline void StringSerialize(char** field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);             // B.3.x bridge (H5)
+    reinterpret_cast<System::String*>(field)->Serialize(ser);             // B.3.x bridge (H5)  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ---- fragment 3: the refcounted System::String release ---------------------
@@ -133,7 +133,7 @@ inline void AttachAndPushChild(UI::Element* parent, Object::InternalPtr<UI::Elem
 // member (sprite.cpp), called directly instead of by address.
 inline int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, char* const* name) {
     // LEFT (H5): the name is a System::String held as raw char* storage.
-    return sheet->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(name));
+    return sheet->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(name));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // *** THE SPRITE INDEX IS STORED AS A QWORD READ FROM A SLOT ONLY A DWORD WAS

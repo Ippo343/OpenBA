@@ -184,7 +184,7 @@ void NumberElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
 
     Font* font = _font;
     ctx.AddFont(Object::ExternalPtr<Font>(font),
-                *reinterpret_cast<const System::String*>(&_cachedText),
+                *reinterpret_cast<const System::String*>(&_cachedText),   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                 false, 0, 0, -1,
                 _layoutLeft,
                 (font->_lineHeight - font->_baseLine) + _layoutTop,

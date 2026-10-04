@@ -159,7 +159,7 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
     if (ser._stream->_direction == 0) {                      // 1800d95a5 (re-read)
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n);      // 1800d95b2
     }
-    RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));
+    RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     rw->SerializeInt(_width, nullptr);                       // 1800d95d5  _width
     rw->SerializeInt(_height, nullptr);                      // 1800d95e9  _height
@@ -195,7 +195,7 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
                     // now the member. The entry's `name` IS a System::String
                     // (B.4 LEFT: spelt `char*`, H5).
                     const int32_t idx = sheet->GetSpriteIndexFromName(
-                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3
+                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                     __builtin_memcpy(&idxSlot, &idx, sizeof idx);         // 1800d96a8
                 } else {
                     const int32_t minusOne = -1;
@@ -379,7 +379,7 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(IO::Serializer* ser, int cou
         ser->Serialize(e->sheetIndex, nullptr);               // +0x00
 
         // B.4 LEFT: `name` is a System::String spelt `char*` (H5).
-        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);   // 18004c10b 0x1800c9930, +0x08
+        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);   // 18004c10b 0x1800c9930, +0x08  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
         ser->Serialize(e->x1, nullptr);                       // +0x10
         ser->Serialize(e->y1, nullptr);                       // +0x14

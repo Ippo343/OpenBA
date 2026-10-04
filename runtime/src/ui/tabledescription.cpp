@@ -134,8 +134,8 @@ bool TableDescription::Serialize(IO::Stream& streamv) {
         rw->SerializeInt(cell->column, nullptr);
         rw->SerializeInt(cell->row, nullptr);
         RtObject_ExternalPtrSerialize_ElementDescription(               // 18011e6a2
-            reinterpret_cast<RtObject::External**>(&cell->desc),        // B.3.x bridge
-            reinterpret_cast<rt::io::Serializer*>(&ser));               // B.3.x bridge
+            reinterpret_cast<RtObject::External**>(&cell->desc),        // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+            reinterpret_cast<rt::io::Serializer*>(&ser));               // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
     }
 
     // The inlined ~Serializer deletes the ReaderWriter (18011e6b8).

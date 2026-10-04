@@ -133,7 +133,7 @@ namespace {
 // (runtime/src/object/external_ptr_serialize.cpp, declared in
 // runtime/types/object/External.h) and System::String::Serialize, called by name.
 RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 
 }  // namespace
@@ -169,7 +169,7 @@ bool ElementDescription::Serialize(IO::Stream& streamArg) {
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), &ser);   // +0x48 0x180038f90
     RtObject_ExternalPtrSerialize_Dialog(ExtField(&_toolTipDialog), &ser);           // +0x50 0x180076610
     RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), &ser);        // +0x58 0x1800042a0
-    reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930
+    reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     return true;                    // ~Serializer: the ReaderWriter's slot 0, flags 1
 }

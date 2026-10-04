@@ -164,7 +164,7 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
 
     // The empty name. Set() on a null slot allocates a fresh refcounted block.
     char* tmp = nullptr;
-    reinterpret_cast<System::String*>(&tmp)->Set("");   // System::String::Set 0x1800c95d0
+    reinterpret_cast<System::String*>(&tmp)->Set("");   // System::String::Set 0x1800c95d0  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
     if (tmp) {
         e.name = tmp;
         ++StringRc(tmp);
@@ -182,7 +182,7 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
     // [RBP-0x38] plus a dword -1 at [RBP-0x30], twelve bytes, exactly
     // kSpriteWrittenBytes.
 
-    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
+    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)   // LEFT: H5 SpriteCapture::_sprites is raw Array storage (its dtor would start to run)
         .SetSizeFill(_sprites.size + 1, &fill);            // 0x18004bfc0
     rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
         ->SetSizeFill(_entries.size + 1, &e);               // 0x18004bde0
@@ -317,7 +317,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     e.x2 = x2; e.y2 = y2;                 // 0x1800d8e4b
 
     // ---- (c) append ---------------------------------------------------------
-    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
+    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)   // LEFT: H5 SpriteCapture::_sprites is raw Array storage (its dtor would start to run)
         .SetSizeFill(_sprites.size + 1, &sprite);             // 0x18004bfc0
     rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
         ->SetSizeFill(_entries.size + 1, &e);                 // 0x18004bde0

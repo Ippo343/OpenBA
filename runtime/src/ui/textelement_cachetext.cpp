@@ -160,7 +160,7 @@ void TextElement::CacheText() {
         // Array header — Ghidra's decompiled C drops this third argument
         // (reference_ghidra_c_output_vs_disassembly.md).
         result = System::String::FormatParamList(
-            param0, reinterpret_cast<const Str*>(_params._data));
+            param0, reinterpret_cast<const Str*>(_params._data));   // LEFT: TextElement::ParamArray::_data is char** (citizenui.cpp, DLG, reads it as char**)
         newData = result._data;                               // 0x18011ecd1: R14 = &result
     }
 

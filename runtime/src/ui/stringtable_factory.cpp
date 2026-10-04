@@ -174,8 +174,8 @@ bool StringTable::Serialize(IO::Stream& streamV) {
     // System::String::Serialize (0x1800c9930), by name. The two Strings are
     // spelt `char*` in TextEntry (H5), so each is viewed as the String it is.
     for (int32_t i = 0; i < count; ++i, ++e) {               // bound is the LOCAL
-        reinterpret_cast<System::String*>(&e->name)->Serialize(&ser);  // 18011d9d8
-        reinterpret_cast<System::String*>(&e->text)->Serialize(&ser);  // 18011d9e6
+        reinterpret_cast<System::String*>(&e->name)->Serialize(&ser);  // 18011d9d8  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        reinterpret_cast<System::String*>(&e->text)->Serialize(&ser);  // 18011d9e6  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
     }
 
     // ~Serializer (0x1800b99b0), inlined by retail: deletes the ReaderWriter

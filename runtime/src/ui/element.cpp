@@ -668,7 +668,7 @@ void Element::ReleaseFields() {
     // after this body, a no-op on the header this zeroes, and ending the
     // member's lifetime twice would be undefined.
     decltype(_children)::ClearCallback(
-        reinterpret_cast<rtcoll::ArrayHdr*>(&_children));
+        reinterpret_cast<rtcoll::ArrayHdr*>(&_children));   // LEFT: ERASED the Array core ClearCallback takes rtcoll::ArrayHdr* (Collection.h, R-COLL)
 
     // The two System::String releases, in retail's order (+0x58 then +0x10) and
     // with retail's asymmetry: on the FREEING branch the field is left holding

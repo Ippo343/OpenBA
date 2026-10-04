@@ -632,7 +632,7 @@ void TextDescription::CreateInstance(Object::InternalPtr<TextElement>* element,
     uint64_t indexSlot;                                            // [RSP+0x28], see the banner
     if (table != nullptr) {                                        // 18011efac
         const int32_t idx = table->GetIndexFromName(               // 18011efb5
-            *reinterpret_cast<const System::String*>(&_name));     // +0x78  B.3.6 bridge
+            *reinterpret_cast<const System::String*>(&_name));     // +0x78  B.3.6 bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
         __builtin_memcpy(&indexSlot, &idx, sizeof idx);            // 18011efba  DWORD store
     } else {
         const int32_t minusOne = -1;

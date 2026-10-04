@@ -358,7 +358,7 @@ public:
     bool IsDialogOpen(Object::InternalPtr<DialogInstance>* dialog) const {
         auto* node = _dialogs._head;
         if (node == nullptr) return false;
-        void* const want = *reinterpret_cast<void* const*>(dialog);
+        void* const want = *reinterpret_cast<void* const*>(dialog);   // LEFT: the header only forward-declares InternalPtr (unit test links this inline body alone)
         do {
             if (node->element == want) return true;
             node = node->next;

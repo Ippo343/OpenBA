@@ -88,14 +88,14 @@ bool ProgressDescription::Serialize(IO::Stream& streamArg) {
     // kScalarUInt, NOT kScalarInt — vt+0x98 at 0x180119fbe.
     rw->SerializeUInt(_unknown68, nullptr);
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 180119fcd ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 180119fcd ExternalPtr<SpriteSheet>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
     _fillLeftName.Serialize(&ser);           // 180119fdb
     _fillMiddleName.Serialize(&ser);         // 180119fec
     _fillRightName.Serialize(&ser);          // 180119ffd
     _trackLeftName.Serialize(&ser);          // 18011a00e
     _trackMiddleName.Serialize(&ser);        // 18011a01f
     _trackRightName.Serialize(&ser);         // 18011a030
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 18011a041 ExternalPtr<ElementDescription>
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 18011a041 ExternalPtr<ElementDescription>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     // The inlined ~Serializer deletes the ReaderWriter (18011a04f).
     return true;

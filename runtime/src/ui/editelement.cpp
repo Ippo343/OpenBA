@@ -84,7 +84,7 @@ void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // A System::String held in a raw char* slot, as the member calls below need
 // it. LEFT (H5): the Strings of this class are raw char* storage.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
 struct Event {
     void*    dialog;
@@ -107,7 +107,7 @@ int StrLen(const char* s) {
 }
 
 const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);
+    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 void ReleaseString(char** slot) {

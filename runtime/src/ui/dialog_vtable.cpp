@@ -331,10 +331,10 @@ using rt::io::Stream;
 // ElementDescription, 0x180004590 SpriteSheet, 0x1800756d0
 // DialogControllerConfig, 0x1800493d0 / 0x18002f170 the two array walks).
 RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 }
 void StringSerialize(void* field, Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge
+    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ENDGAME B.3.2 step 2 — the four by-address SetSize forwarders that used to

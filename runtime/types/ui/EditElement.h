@@ -156,7 +156,7 @@ public:
     char SelectCharacter(int32_t keyIndex) const;
     // The three one-instruction accessors, whole bodies (disassembly above).
     const System::String& GetText() const {                      // 0x18003fc60
-        return *reinterpret_cast<const System::String*>(&_text);
+        return *reinterpret_cast<const System::String*>(&_text);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
     }
     int32_t GetMaxLength() const { return _maxLength; }          // 0x18003fc70
     bool    IsActive() const     { return _active != 0; }        // 0x18003fc80

@@ -61,7 +61,7 @@ using namespace rtuielem;
 namespace {
 
 const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);
+    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 }  // namespace

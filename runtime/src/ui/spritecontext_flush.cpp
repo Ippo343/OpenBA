@@ -302,7 +302,7 @@ inline void* VideoDeviceData() {
 // what dx11's override returns; the receiver is PROVED (it is `Device+0x100`,
 // the DeviceData the singleton owns).
 inline float DeviceHalfPixel(void* deviceData) {
-    return reinterpret_cast<Video::DeviceData*>(deviceData)->Slot5();  // B.3.5 bridge
+    return reinterpret_cast<Video::DeviceData*>(deviceData)->Slot5();  // B.3.5 bridge  // LEFT: FIELD Video::Device::deviceData is void* (Device.h, R-GFX-1)
 }
 
 // One vertex into the live buffer.
@@ -379,7 +379,7 @@ void SpriteContext::Flush() {
         const int32_t n = (count < chunkCap) ? count : chunkCap;
         count -= n;
 
-        Video::ContextData* cd = reinterpret_cast<Video::ContextData*>(
+        Video::ContextData* cd = reinterpret_cast<Video::ContextData*>(   // LEFT: FIELD Video::Context platform data is void* (Context.h, R-GFX-1)
             _context->_contextData);
         const bool ok = cd->BeginVertices(n * vertsPer, 0x20);   // B.3.5 bridge
 
@@ -502,7 +502,7 @@ void SpriteContext::Flush() {
         base += n;
 
         // 0x18011c5c5..0x18011c5e3. `_context` and `+0x2160` are re-read.
-        Video::ContextData* cd2 = reinterpret_cast<Video::ContextData*>(
+        Video::ContextData* cd2 = reinterpret_cast<Video::ContextData*>(   // LEFT: FIELD Video::Context platform data is void* (Context.h, R-GFX-1)
             _context->_contextData);
         const int32_t prim = isLine ? 2 : 0;
         cd2->EndVertices(prim);                                  // B.3.5 bridge

@@ -242,11 +242,11 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
             // as raw char* storage.
             char* tmp = nullptr;
             new (static_cast<void*>(&tmp)) System::String(                 // 0x1800c9230, retslot
-                reinterpret_cast<const System::String*>(&_sourceText)->SubString(item->first, item->last));
+                reinterpret_cast<const System::String*>(&_sourceText)->SubString(item->first, item->last));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
             Font* font = _fontsData[item->index];
             context.AddFont(Object::ExternalPtr<UI::Font>(font),          // 0x18011ccb0
-                            *reinterpret_cast<const System::String*>(&tmp), false, 0, 0, -1,
+                            *reinterpret_cast<const System::String*>(&tmp), false, 0, 0, -1,   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                             item->x + L, item->y + T, static_cast<uint32_t>(item->color));
 
             const uint8_t underline = item->byte21;

@@ -138,8 +138,8 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
             if (item->_params._size > 0) {
                 rtuielem::SetNeedsSizeCalc(item);
                 // LEFT (H5): both Strings are held as raw char* storage.
-                *reinterpret_cast<System::String*>(item->_params._data) =        // 0x1800c9810
-                    *reinterpret_cast<const System::String*>(&_strings._data[i]);
+                *reinterpret_cast<System::String*>(item->_params._data) =        // 0x1800c9810  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                    *reinterpret_cast<const System::String*>(&_strings._data[i]);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                 item->CacheText();                                    // 0x18011ec10
             }
 
