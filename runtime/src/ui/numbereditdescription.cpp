@@ -206,7 +206,7 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
         const char* set = _b80 != 0 ? "0123456789-" : "0123456789";  // 1800d4e1c
 
         char* tmp = nullptr;                                   // 1800d4e27
-        reinterpret_cast<System::String*>(&tmp)->Set(set);    // 1800d4e31  0x1800c95d0
+        reinterpret_cast<System::String*>(&tmp)->Set(set);    // 1800d4e31  0x1800c95d0  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
         char* value = tmp;                                     // 1800d4e3e  RBX
         StringAssignInline(&elem->_filter, value);             // 1800d4e37

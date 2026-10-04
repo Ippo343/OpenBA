@@ -102,7 +102,7 @@ public:
     void Serialize(IO::Serializer& serializer);
 
     // ---- the 0x10 bytes -----------------------------------------------------
-    void*   spriteSheet;    // +0x00  ExternalPtr<UI::SpriteSheet> (one raw pointer)
+    SpriteSheet* spriteSheet; // +0x00  ExternalPtr<UI::SpriteSheet> (one raw pointer; B4 P2 H4: typed)
     int32_t spriteIndex;    // +0x08  index into the sheet (-1 = unset)
     int32_t pad0C;          // +0x0C  never written by a ctor; copied by operator=
 };

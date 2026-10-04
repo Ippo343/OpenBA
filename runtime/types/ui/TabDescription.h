@@ -49,6 +49,7 @@
 #include <cstdint>
 
 #include "ElementDescription.h"
+#include "../system/String.h"       // System::String members (B4 P2 H5)
 
 namespace UI {
 
@@ -64,9 +65,8 @@ public:
         _pageBackdropDescription  = nullptr;
         _pageFrameDescription     = nullptr;
         _spriteSheet              = nullptr;
-        _edgeLeftName             = nullptr;
-        _edgeMiddleName           = nullptr;
-        _edgeRightName            = nullptr;
+        // +0x88 .. +0x98: the three System::String members, zeroed by their
+        // own ctor (0x180006760) (B4 P2 H5).
         _tabsData                 = nullptr;
         _tabsCount                = 0;
         _tabsCapacity             = 0;
@@ -102,9 +102,9 @@ public:
     ElementDescription* _pageBackdropDescription;   // +0x70  -> children[1]
     ElementDescription* _pageFrameDescription;      // +0x78  -> children[2]
     SpriteSheet*        _spriteSheet;               // +0x80  ExternalPtr<UI::SpriteSheet>
-    char*    _edgeLeftName;              // +0x88  System::String -> TabElement::_edgeLeft
-    char*    _edgeMiddleName;            // +0x90  -> _edgeMiddle
-    char*    _edgeRightName;             // +0x98  -> _edgeRight
+    System::String _edgeLeftName;              // +0x88  System::String -> TabElement::_edgeLeft
+    System::String _edgeMiddleName;            // +0x90  -> _edgeMiddle
+    System::String _edgeRightName;             // +0x98  -> _edgeRight
     int32_t  _gap;                       // +0xa0  NOT written by the ctor -> TabElement::_gap
     uint32_t _padA4;                     // +0xa4  written by nothing
     // +0xa8 Collection::Array<{ExternalPtr<ElementDescription> button,

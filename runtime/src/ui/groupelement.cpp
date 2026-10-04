@@ -89,7 +89,7 @@ void GroupElement::ComputeSize() {
 //
 // The border and the child calls are VIRTUAL (slot 5 of THEIR tables).
 void GroupElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
-    Element* border = static_cast<Element*>(_border);
+    Element* border = _border;
     if (border != nullptr)
         border->ComputeLayout(x, y, w, h);
 
@@ -132,7 +132,7 @@ void GroupElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // ?Draw@GroupElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1801181c0
 // ============================================================================
 void GroupElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    const Element* border = static_cast<const Element*>(_border);
+    const Element* border = _border;
     if (border != nullptr)
         border->Draw(context, alpha);
 

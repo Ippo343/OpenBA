@@ -112,9 +112,9 @@ bool SpinnerDescription::Serialize(IO::Stream& streamArg) {
     IO::Serializer ser(*stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_editDescription), reinterpret_cast<rt::io::Serializer*>(&ser));        // 1800d88d8
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_upDescription), reinterpret_cast<rt::io::Serializer*>(&ser));          // 1800d88e6
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_downDescription), reinterpret_cast<rt::io::Serializer*>(&ser));        // 1800d88f4
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_editDescription), reinterpret_cast<rt::io::Serializer*>(&ser));        // 1800d88d8  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_upDescription), reinterpret_cast<rt::io::Serializer*>(&ser));          // 1800d88e6  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_downDescription), reinterpret_cast<rt::io::Serializer*>(&ser));        // 1800d88f4  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     rw->SerializeInt(_increment, nullptr);
 

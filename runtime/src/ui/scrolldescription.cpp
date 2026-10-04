@@ -100,9 +100,9 @@ bool ScrollDescription::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 18011a998
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 18011a998  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
-        reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(&ser);
+        reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(&ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     rw->SerializeBool(_vertical, nullptr);
     rw->SerializeInt(_inset, nullptr);
@@ -150,7 +150,7 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
         SpriteSheet* sheet = _spriteSheet;                            // RE-READ each time
         if (sheet != nullptr) {
             const int32_t idx = sheet
-                ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteNames[i]));
+                ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteNames[i]));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // DWORD store
         } else {
             const int32_t minusOne = -1;

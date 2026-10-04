@@ -270,14 +270,14 @@ int32_t Element::ChildCount() const {
 // VIRTUAL call on the border — its own table's slot 5, which is what retail's
 // `JMP [RAX+0x28]` reads.
 void Element::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
-    Element* border = static_cast<Element*>(_border);
+    Element* border = _border;
     if (!border) return;
     border->ComputeLayout(x, y, w, h);
 }
 
 // ---- ?Draw@  0x1801168f0  (vtable slot 6, const) ---------------------------
 void Element::Draw(SpriteContext& context, uint8_t alpha) const {
-    Element* border = static_cast<Element*>(_border);
+    Element* border = _border;
     if (!border) return;
     border->Draw(context, alpha);
 }
@@ -653,9 +653,9 @@ void Element::ReleaseFields() {
     // one of the three spellings resolves null behind a guard
     // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
     if (_border != nullptr) {
-        void* border = _border;
+        Element* border = _border;
         if (border != nullptr)             // retail's second, redundant test
-            delete static_cast<Element*>(border);
+            delete border;
         _border = nullptr;
     }
 
@@ -668,7 +668,7 @@ void Element::ReleaseFields() {
     // after this body, a no-op on the header this zeroes, and ending the
     // member's lifetime twice would be undefined.
     decltype(_children)::ClearCallback(
-        reinterpret_cast<rtcoll::ArrayHdr*>(&_children));
+        reinterpret_cast<rtcoll::ArrayHdr*>(&_children));   // LEFT: ERASED the Array core ClearCallback takes rtcoll::ArrayHdr* (Collection.h, R-COLL)
 
     // The two System::String releases, in retail's order (+0x58 then +0x10) and
     // with retail's asymmetry: on the FREEING branch the field is left holding
@@ -907,7 +907,7 @@ void Element::AdjustUpperLeft(int32_t dx, int32_t dy) {
             Element* child = e->_children.GetData()[i];
             if (child) child->AdjustUpperLeft(dx, dy);
         }
-        e = static_cast<Element*>(e->_border);
+        e = e->_border;
     }
 }
 }  // namespace UI

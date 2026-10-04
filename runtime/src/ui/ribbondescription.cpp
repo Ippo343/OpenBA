@@ -126,7 +126,7 @@ bool RibbonDescription::Serialize(IO::Stream& streamArg) {
         rtcoll::RtColl_ArraySetSize_1800492d0(&_itemsData, n);              // 1800d5fb8
     }
 
-    RtObject_ExternalPtrArraySerialize_ElementDescription(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_itemsData));
+    RtObject_ExternalPtrArraySerialize_ElementDescription(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_itemsData));   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     // The inlined ~Serializer deletes the ReaderWriter (1800d5fd5).
     return true;

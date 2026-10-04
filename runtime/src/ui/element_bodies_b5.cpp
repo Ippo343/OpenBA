@@ -535,7 +535,7 @@ int32_t ScrollSpriteExtent(const ::Sprite& sprite, bool vertical) {
     const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;                                         // 18011a3a8 JNS / else 0
     // LEFT: UI::Sprite::spriteSheet is void* (Sprite.h, R-UI-b).
-    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
+    const UI::SpriteSheet* sheet = sprite.spriteSheet;
     // `SpriteInfo` lives at GLOBAL scope in runtime/types/ui/SpriteSheet.h, not
     // in namespace UI, and its sizeof is static_asserted there to be 0x38 —
     // which is the stride retail's `IMUL RDX,RDX,0x38` uses.
@@ -632,7 +632,7 @@ void TextDescription::CreateInstance(Object::InternalPtr<TextElement>* element,
     uint64_t indexSlot;                                            // [RSP+0x28], see the banner
     if (table != nullptr) {                                        // 18011efac
         const int32_t idx = table->GetIndexFromName(               // 18011efb5
-            *reinterpret_cast<const System::String*>(&_name));     // +0x78  B.3.6 bridge
+            *reinterpret_cast<const System::String*>(&_name));     // +0x78  B.3.6 bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
         __builtin_memcpy(&indexSlot, &idx, sizeof idx);            // 18011efba  DWORD store
     } else {
         const int32_t minusOne = -1;

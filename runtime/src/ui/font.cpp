@@ -90,7 +90,7 @@ namespace {
 // LEFT (H5): the four Strings are held as RtSystem::String raw storage, so
 // System::String's member is reached through a view of that storage.
 void StringSerialize(RtSystem::String& str, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(&str)->Serialize(ser);
+    reinterpret_cast<System::String*>(&str)->Serialize(ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z — 0x1800c7ad0. Retail inlines the
@@ -225,10 +225,10 @@ Object::Base* Font::CreateInPlaceObject(void* place) {
 // array frees instead of following them. The four releases and two frees are
 // of independent blocks; nothing reads between them.
 Font::~Font() {
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string88));   // 1801175c5
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string80));   // 1801175f8
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string78));   // 18011762a
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string20));   // 180117664
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string88));   // 1801175c5  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string80));   // 1801175f8  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string78));   // 18011762a  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string20));   // 180117664  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 }  // namespace UI
@@ -281,9 +281,9 @@ bool Font::Serialize(IO::Stream& streamv) {
 
     // LEFT: the ExternalPtr<T>::Serialize thunks take RtObject::External** and
     // the rt::io::Serializer POD (External.h, block R-IO).
-    RtObject_ExternalPtrSerialize_CharacterSet(reinterpret_cast<RtObject::External**>(&_field28), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177a2
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177af  ExternalPtr<SpriteSheet>
-    RtObject_ExternalPtrSerialize_MaterialInstance(reinterpret_cast<RtObject::External**>(&_material), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177bc  ExternalPtr<MaterialInstance>
+    RtObject_ExternalPtrSerialize_CharacterSet(reinterpret_cast<RtObject::External**>(&_field28), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177a2  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177af  ExternalPtr<SpriteSheet>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    RtObject_ExternalPtrSerialize_MaterialInstance(reinterpret_cast<RtObject::External**>(&_material), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177bc  ExternalPtr<MaterialInstance>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     const int32_t version = rw->GetVersion();                        // 1801177c8
 

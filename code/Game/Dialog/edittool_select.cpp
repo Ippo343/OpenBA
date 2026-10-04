@@ -71,8 +71,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
     ComponentEntity* entity = selected->Get();
 
     // 1. CheckPtr(entity); early-out if this entity is already the selected one.
-    // LEFT: lastEntityRef is uint64_t in PLAYER's header (retail InternalPtr<ComponentEntity>).
-    if (lastEntityRef == reinterpret_cast<uint64_t>(entity)) return;
+    if (lastEntityRef == entity) return;
 
     // 2. (Retail calls 0x1400fcc90 here to tear down the previous panel + clear its
     //    outline. We DON'T, because our EditTool::OnKey pick handler re-runs this
@@ -186,10 +185,9 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
         }
     }
 
-    // LEFT (both): entityRef / lastEntityRef are uint64_t in PLAYER's header.
-    entityRef = reinterpret_cast<uint64_t>(resultDialog);
+    entityRef = resultDialog;
     g_LastSelectStore[g_LastSelectStoreIdx & 3] = entity;
     g_LastSelectStoreIdx = (g_LastSelectStoreIdx + 1) & 3;
-    lastEntityRef = reinterpret_cast<uint64_t>(entity);
+    lastEntityRef = entity;
     HighlightSelect_Impl(this);   // 0x1400fc9e0
 }

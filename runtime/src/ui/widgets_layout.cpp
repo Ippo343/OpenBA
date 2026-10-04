@@ -89,8 +89,8 @@ inline void WalkDirty(UI::Element* self) {
 // TextElement keeps its parameters in, so the eight bytes are cast here at the
 // one use site; the cast dies when Collection::Array<T> is a template.
 void RtStringAssign(void* self, const void* other) {
-    *reinterpret_cast<System::String*>(self) =
-        *reinterpret_cast<const System::String*>(other);
+    *reinterpret_cast<System::String*>(self) =   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        *reinterpret_cast<const System::String*>(other);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called by name.
@@ -334,7 +334,7 @@ void TextElement::SetText(const String* text) {
 // `index` (matches SpriteSheet::GetSpriteNameFromIndex's pattern).
 System::String DocumentTextElement::GetLink(int32_t index) const {
     const Link* links = static_cast<const Link*>(_linksData);
-    return *reinterpret_cast<const System::String*>(&links[index].text);
+    return *reinterpret_cast<const System::String*>(&links[index].text);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z  0x18003bfd0. UI::String
@@ -448,13 +448,9 @@ void GraphElement::RemoveGraphs() {
 //
 // ORACLE: none — a replay would append the point a SECOND time.
 void GraphElement::AddGraphPoint(int32_t graph, int32_t value) {
-    uint8_t* seriesData = static_cast<uint8_t*>(_seriesData);
-    // record = data + graph*0x18; the point Array header sits at record + 8.
-    uint8_t* pointArray = seriesData + static_cast<int64_t>(graph) * 0x18 + 8;
-
-    // ENDGAME B.3.2 step 2 — `kSpec_Fill4` is trait-equivalent for `int32_t`,
-    // so the bridge is a plain `Array<int32_t>` view of the nested header.
-    auto* points = reinterpret_cast<Collection::Array<int32_t>*>(pointArray);
+    // record = data + graph*0x18; the point Array header sits at record + 8
+    // (GraphSeries::points).
+    Collection::Array<int32_t>* points = &_seriesData[static_cast<int64_t>(graph)].points;
     points->SetSize(points->GetSize() + 1, value);
 }
 
@@ -490,8 +486,8 @@ void GraphElement::AddGraph(uint32_t colour) {
 
     uint8_t tmp[0x18];
     // tmp[0x00..0x07] intentionally left uninitialised — see (1) above.
-    *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
+    *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;   // LEFT: as above
 
     // ENDGAME B.3.2 step 2 — `_seriesData` is GraphElement.h's raw
     // `Array<GraphSeries>` header (NON-TRIVIAL `kSpec_GraphSeries`), so it
@@ -501,10 +497,9 @@ void GraphElement::AddGraph(uint32_t colour) {
     rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(&_seriesData)
         ->SetSizeFill(_seriesCount + 1, tmp);
 
-    reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();
+    reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();   // LEFT: as above
 
-    uint8_t* data = static_cast<uint8_t*>(_seriesData);
-    *reinterpret_cast<uint32_t*>(data + old * 0x18) = colour;
+    _seriesData[old].colour = colour;
 }
 
 // ============================================================

@@ -159,7 +159,7 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
     if (ser._stream->_direction == 0) {                      // 1800d95a5 (re-read)
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n);      // 1800d95b2
     }
-    RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));
+    RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     rw->SerializeInt(_width, nullptr);                       // 1800d95d5  _width
     rw->SerializeInt(_height, nullptr);                      // 1800d95e9  _height
@@ -195,7 +195,7 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
                     // now the member. The entry's `name` IS a System::String
                     // (B.4 LEFT: spelt `char*`, H5).
                     const int32_t idx = sheet->GetSpriteIndexFromName(
-                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3
+                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                     __builtin_memcpy(&idxSlot, &idx, sizeof idx);         // 1800d96a8
                 } else {
                     const int32_t minusOne = -1;
@@ -306,7 +306,7 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
 
         // A recorded sprite. The Sprite the scissor entries do NOT have.
         const Sprite& sprite = _sprites.data[i];
-        const SpriteSheet* const sheet = static_cast<const SpriteSheet*>(sprite.spriteSheet);
+        const SpriteSheet* const sheet = sprite.spriteSheet;
 
         const int32_t x1 = e.x1 + ox;
         const int32_t y1 = e.y1 + oy;
@@ -323,7 +323,7 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
         // `CMP dword [RCX+0x6c],1`), inlined. `m_field30` is spelt uint64_t
         // (saveload_draw.cpp stores it as an integer).
         const Graphics::MaterialInstance* const instance =
-            reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30);  // 1800d93fb
+            sheet->m_field30;  // 1800d93fb
         const Graphics::Material* const material = instance->_material.Get();       // 1800d9406
         const Video::VideoProgram* const pass0 = material->_passes.GetData()[0].Get();  // 1800d9410 / 1800d9417
         const Video::RenderState* const state = pass0->_renderState.Get();          // 1800d941a
@@ -379,7 +379,7 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(IO::Serializer* ser, int cou
         ser->Serialize(e->sheetIndex, nullptr);               // +0x00
 
         // B.4 LEFT: `name` is a System::String spelt `char*` (H5).
-        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);   // 18004c10b 0x1800c9930, +0x08
+        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);   // 18004c10b 0x1800c9930, +0x08  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
         ser->Serialize(e->x1, nullptr);                       // +0x10
         ser->Serialize(e->y1, nullptr);                       // +0x14

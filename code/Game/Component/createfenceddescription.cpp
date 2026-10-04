@@ -54,7 +54,7 @@ CreateFencedDescription::CreateFencedDescription()
       _i64(0),
       _b68(false),
       _ref70(nullptr) {
-    for (void*& r : _refs) r = nullptr;
+    for (auto& r : _refs) r = nullptr;
 }
 
 // [5] 0x1400478f0: stream order as retail.

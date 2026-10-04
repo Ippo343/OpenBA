@@ -150,8 +150,8 @@ UNIT_TEST(ui_userinterface_internalptr_argument_is_by_address) {
 
     int dlgA = 0, dlgB = 0, dlgC = 0;                // any distinct addresses
     ListT::Node n1{}; ListT::Node n2{};
-    n1.element = &dlgA; n1.prev = nullptr; n1.next = &n2;
-    n2.element = &dlgB; n2.prev = &n1;     n2.next = nullptr;
+    n1.element = reinterpret_cast<UI::DialogInstance*>(&dlgA); n1.prev = nullptr; n1.next = &n2;
+    n2.element = reinterpret_cast<UI::DialogInstance*>(&dlgB); n2.prev = &n1;     n2.next = nullptr;
     ui->_dialogs._head = &n1;
     ui->_dialogs._tail = &n2;
 

@@ -375,10 +375,8 @@ void UpdateCreateBar(PlayerToolManager* param_1, int param_2, int param_3,
     int screenY = static_cast<int>(cy) - halfH;
 
     // --- Smooth toward the target (0.25 new / 0.75 cached); first frame (cached<0) snaps ---
-    // LEFT: the manager's +0x08 / +0x0C floats are one `uint64_t field_0x08` in
-    // block GAME-b's header.
-    float* cachedX = reinterpret_cast<float*>(&param_1->field_0x08);
-    float* cachedY = cachedX + 1;
+    float* cachedX = &param_1->field_0x08;
+    float* cachedY = &param_1->field_0x0C;
     if (*cachedX >= 0.0f) {
         *cachedX = static_cast<float>(screenX) * 0.25f + *cachedX * 0.75f;  // DAT_140172100 / DAT_140172124
         *cachedY = static_cast<float>(screenY) * 0.25f + *cachedY * 0.75f;

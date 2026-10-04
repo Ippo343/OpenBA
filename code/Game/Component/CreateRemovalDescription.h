@@ -38,7 +38,7 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     bool _b20;                                  // +0x20
     uint8_t _pad21[7];                          // +0x21 never written by the ctor
-    void* _refs;                                // +0x28 heap ExternalPtr array (8-byte elements)
+    class ComponentDescription** _refs;         // +0x28 heap ExternalPtr array (8-byte elements; B4 PLAYER H4: the field templates RemovalTool compares entity descriptions with)
     int32_t _refCount;                          // +0x30
     int32_t _refCap;                            // +0x34
     class ComponentDescription* _ref38;         // +0x38 ExternalPtr (B4 PLAYER H4: the template RemovalTool compares entity descriptions with, 0x140104670)

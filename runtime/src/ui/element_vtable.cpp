@@ -211,7 +211,7 @@ void Element::SetColor(uint32_t color) {
 // RULE B6-2: the hidden return slot is spelled as the first parameter in
 // RETAIL order (`this` in RCX, the slot in RDX) and handed back in RAX.
 Object::InternalPtr<Element>* Element::GetBorder(Object::InternalPtr<Element>* ret) const {
-    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(static_cast<Element*>(_border));
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(_border);
     return ret;
 }
 
@@ -365,7 +365,7 @@ void Element::Update(const System::Time& time, UserInterface* ui,
 
     // ---- 3/4. hover bit ---------------------------------------------------
     const uint32_t oldFlags = _flags;
-    const Element* rect = _border ? static_cast<const Element*>(_border) : this;
+    const Element* rect = _border ? _border : this;
     const int32_t l = rect->_layoutLeft, r = rect->_layoutRight;
     const int32_t t = rect->_layoutTop,  b = rect->_layoutBottom;
 

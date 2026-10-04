@@ -274,14 +274,12 @@ uint64_t RemovalTool::CanRemoveField(ComponentEntity* const* param_2, int param_
             int iVar12 = compCount;  // captured before the loop (decompile semantics)
 
             // Determine whether param_2's entity belongs to this field.
-            // LEFT: CreateRemovalDescription::_refs (+0x28) is `void*` raw Array storage
-            // in block COMP-c's header (its Serialize resizes it through GameColl::AsArray).
             bool atWorkBlock = false;
             {
                 int idx = 0;
                 while (idx < compCount) {
                     const ComponentDescription* lv =
-                        reinterpret_cast<ComponentDescription* const*>(removalDesc->_refs)[idx];
+                        removalDesc->_refs[idx];
                     if (lv == (*param_2)->_description) {
                         atWorkBlock = true;  // LAB_140104a0f
                         break;

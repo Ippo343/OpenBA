@@ -240,7 +240,7 @@ public:
         m_sprites = nullptr;                  // +0x20
         m_spriteCount = 0;                    // +0x28 } one qword
         m_spriteCapacity = 0;                 //       }
-        m_field30 = 0;                        // +0x30
+        m_field30 = nullptr;                  // +0x30
         m_textureName = nullptr;              // +0x38
         m_groupName = nullptr;                // +0x40
         m_field48 = 0;                        // +0x48 } one qword
@@ -253,7 +253,7 @@ public:
     SpriteInfo* m_sprites;          // +0x20  Collection::Array<SpriteInfo>._data
     int32_t     m_spriteCount;      // +0x28  Collection::Array<SpriteInfo>._size  (GetSpriteCount)
     int32_t     m_spriteCapacity;   // +0x2C  Collection::Array<SpriteInfo>._capacity
-    uint64_t    m_field30;          // +0x30  ExternalPtr<Graphics::MaterialInstance> (banner)
+    Graphics::MaterialInstance* m_field30; // +0x30  ExternalPtr<Graphics::MaterialInstance> (banner; B4 P2 H4: typed, serializer 0x180014520)
     char*       m_textureName;      // +0x38  System::String data ptr — Set's p3
     char*       m_groupName;        // +0x40  System::String data ptr — Set's p4
     int32_t     m_field48;          // +0x48  Set's p1

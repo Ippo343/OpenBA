@@ -262,7 +262,7 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
         Object::InternalPtr<DialogInstance> tmp(                // the by-value InternalPtr
             dlg->_children._head->element);                     // +0x38, node[0]
         // B.4 LEFT: `DialogInstance::_ui` (+0x10) is `void*` (R-UI-a).
-        reinterpret_cast<UserInterface*>(dlg->_ui)->CloseDialog(&tmp);
+        dlg->_ui->CloseDialog(&tmp);
     }
 
     // ---- Block B, 0x180120f76..0x180120fb1 -------------------------------
@@ -302,10 +302,10 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
         // ---- Block E, 0x180120ff8..0x180121051 ---------------------------
         // DialogInstance vtable slot 5 (+0x28) `OnClosed` — VIRTUAL, so an exe
         // dialog's hand-built slot 5 is what runs.
-        reinterpret_cast<DialogInstance*>(node->element)->OnClosed();
+        node->element->OnClosed();
 
         // If this dialog owns the in-flight drag, queue a cancel event and end it.
-        void* drag = _dragDropDialog;
+        DialogInstance* drag = _dragDropDialog;
         if (node->element == drag) {
             // `_pad24` is NEVER written by retail — the record is a raw stack
             // frame there. Zeroing it here is UNOBSERVABLE: the grow helper at
@@ -331,7 +331,7 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
         // ---- Block F, 0x180121054..0x18012110b -----------------------------
         // Retail RE-LOADS the dialog out of the node here (0x180121054), after
         // OnClosed has run. Reproduced rather than reused from above.
-        UnlinkFromParent(reinterpret_cast<DialogInstance*>(node->element));
+        UnlinkFromParent(node->element);
 
         // ---- 0x18012110d..0x180121165 --------------------------------------
         UpdateEvents();
@@ -346,7 +346,7 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
         if (!sound) return;
         // B.4 LEFT: `_audioScene` (+0x90) stays `void*` (code/Game assigns it a
         // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158).
-        Audio::Scene* const scene = reinterpret_cast<Audio::Scene*>(_audioScene);
+        Audio::Scene* const scene = _audioScene;
         if (!scene) return;
         Audio::Scene::Channel* const table = scene->channels._data;       // +0x10
 
@@ -392,11 +392,11 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
     int32_t k = i;                                                     // RBX, MOVSXD
 
     // DialogInstance vtable slot 5 (+0x28) `OnClosed` — VIRTUAL.
-    reinterpret_cast<DialogInstance*>(base[k])->OnClosed();
+    base[k]->OnClosed();
 
     // The array base is RE-LOADED after the virtual (0x180121246): OnClosed can
     // reallocate the queue. Reproduced.
-    UnlinkFromParent(reinterpret_cast<DialogInstance*>(_addDialogs._data[k]));
+    UnlinkFromParent(_addDialogs._data[k]);
 
     UpdateEvents();                                                    // 0x180121314
 

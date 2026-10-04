@@ -590,10 +590,8 @@ static T* FencedFindComponent(const ComponentDescription* entity) {
 }
 
 // The section-0 template of a CreateFencedDescription (+0x28, ExternalPtr[6]).
-// LEFT: block COMP-c declares `_refs` as `void*[6]` (its ctor loops over them as
-// `void*&`), so this one read is a reinterpret.
 static const ComponentDescription* FencedSection0(const CreateFencedDescription* desc) {
-    return reinterpret_cast<const ComponentDescription*>(desc->_refs[0]);
+    return desc->_refs[0];
 }
 
 // ============================================================
