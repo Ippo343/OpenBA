@@ -124,19 +124,12 @@
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
+#include "../../types/ui/Dialog.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
-using rt::io::Serializer;
-
-namespace {
-
-// The three ExternalPtr<T>::Serialize instantiations this body dispatches
-// (runtime/src/object/external_ptr_serialize.cpp, declared in
-// runtime/types/object/External.h) and System::String::Serialize, called by name.
-RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-}
-
-}  // namespace
+// The three ExternalPtr<T>::Serialize instantiations this body dispatches are
+// `Object::SerializeExternal<T>` (runtime/types/object/External.h, the one body
+// in runtime/src/object/external_ptr_serialize.cpp).
 
 // ============================================================================
 // bool UI::ElementDescription::Serialize(IO::Stream&) — the MEMBER
@@ -151,7 +144,7 @@ bool ElementDescription::Serialize(IO::Stream& streamArg) {
     // ??0Serializer@IO@@ 0x1800b9960 (version 0) / ??1Serializer@IO@@ 0x1800b99b0.
     IO::Serializer serializer(streamArg, 0);
     IO::ReaderWriter* const rw = serializer._readerWriter;
-    Serializer& ser = *reinterpret_cast<Serializer*>(&serializer);   // LEFT: SIG the ExternalPtr<T>::Serialize thunks take rt::io::Serializer* (External.h, R-OBJ; wave X)
+    IO::Serializer& ser = serializer;
 
     rw->SerializeInt(_x, nullptr); // +0x20
     rw->SerializeInt(_y, nullptr); // +0x24
@@ -166,9 +159,9 @@ bool ElementDescription::Serialize(IO::Stream& streamArg) {
 
     rw->SerializeInt(_tabOrder, nullptr); // +0x38
 
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), &ser);   // +0x48 0x180038f90
-    RtObject_ExternalPtrSerialize_Dialog(ExtField(&_toolTipDialog), &ser);           // +0x50 0x180076610
-    RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), &ser);        // +0x58 0x1800042a0
+    Object::SerializeExternal<UI::ElementDescription>(ser, _childDesc);   // +0x48 0x180038f90
+    Object::SerializeExternal<UI::Dialog>(ser, _toolTipDialog);           // +0x50 0x180076610
+    Object::SerializeExternal<UI::StringTable>(ser, _stringTable);        // +0x58 0x1800042a0
     reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     return true;                    // ~Serializer: the ReaderWriter's slot 0, flags 1

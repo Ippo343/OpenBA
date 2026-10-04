@@ -102,18 +102,15 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
 #include "../../types/object/External.h"
+#include "../../types/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 
 namespace {
 
 // The two ExternalBasePtr::Serialize instantiations (see the banner). Both take
 // (ExternalBasePtr* self, Serializer* ser) — RCX/RDX at the call sites — and
-// return nothing the caller reads. Both bodies are ours
-// (runtime/src/object/external_ptr_serialize.cpp, declared in
-// object/External.h) and are called by name (B3R).
-RtObject::External** AsExt(void* p) {
-    return reinterpret_cast<RtObject::External**>(p);   // B.3.x bridge
-}
+// return nothing the caller reads. They are `Object::ExternalPtr<T>::Serialize`
+// over the one body in runtime/src/object/external_ptr_serialize.cpp.
 
 // B.4 (R-ENG): the shared prologue (stream, null readerWriter,
 // `enc->vtable[+0x18 / +0x20](enc, &ser, 0)`) and epilogue (`if (rw) delete
@@ -144,8 +141,7 @@ namespace Achievement {
 bool Goal::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(streamv, 0);
 
-    RtObject_ExternalPtrSerialize_StringTable(                      // 0x1800042a0, Goal+0x20
-        AsExt(&_stringTable), reinterpret_cast<rt::io::Serializer*>(&ser));
+    _stringTable.Serialize(ser);                                    // 0x1800042a0, Goal+0x20
     _text.Serialize(&ser);                                          // Goal+0x28
 
     return true;   // ~Serializer deletes the ReaderWriter
@@ -166,8 +162,7 @@ bool Goal::Serialize(IO::Stream& streamv) {
 void GoalInstance::Persist(IO::Stream& streamv) {
     IO::Serializer ser(streamv, 0);
 
-    RtObject_ExternalPtrSerialize_Goal(                             // 0x180005dc0, GoalInstance+0x18
-        AsExt(&_goal), reinterpret_cast<rt::io::Serializer*>(&ser));
+    _goal.Serialize(ser);                                           // 0x180005dc0, GoalInstance+0x18
 
     ser._readerWriter->SerializeUInt(_flags, nullptr);              // GoalInstance+0x10, +0x98
 }   // ~Serializer deletes the ReaderWriter

@@ -80,7 +80,7 @@ bool ClipRegionDescription::Serialize(IO::Stream& streamv) {
     rw->SerializeInt(_width, nullptr);                      // 1800cc06e
     rw->SerializeInt(_height, nullptr);                     // 1800cc083
 
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), IoSer(&ser));  // 1800cc092
+    Object::SerializeExternal<UI::ElementDescription>(ser, _childDesc);  // 1800cc092
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800cc0aa
     return true;

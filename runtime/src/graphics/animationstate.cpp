@@ -74,9 +74,10 @@
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"             // B.4: IO::Stream::_direction (IsReading)
-#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_AnimationGroup
+#include "../../types/object/External.h"         // Object::SerializeExternal<AnimationGroup>
 #include "../../types/math/Math.h"               // Math::Quaternion::Lerp
 #include "../../types/system/MemoryAllocator.h"
+#include "../../types/graphics/AnimationGroup.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../system/string.h"                  // B.4: RtString_ReleaseInline (~Node)
 #include "../picking/scene_grid.h"               // rtpickgrid::TransformArrayAssign
 
@@ -119,9 +120,7 @@ bool IsReading(const IO::Serializer& ser) {
 // block's entry point still takes the `RtObject::External**` / `rt::io::
 // Serializer*` PODs (runtime/types/object/External.h:1046).
 void SerializeGroupPtr(Graphics::AnimationGroup*& group, IO::Serializer& ser) {
-    RtObject_ExternalPtrSerialize_AnimationGroup(
-        reinterpret_cast<RtObject::External**>(&group),
-        reinterpret_cast<rt::io::Serializer*>(&ser));
+    Object::SerializeExternal<Graphics::AnimationGroup>(ser, group);
 }
 
 }  // namespace

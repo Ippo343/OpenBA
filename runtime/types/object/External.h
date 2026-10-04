@@ -403,22 +403,57 @@ namespace rt { namespace io { struct Serializer; } }
 // of those translation units to satisfy one parameter — and, worse for section
 // 7.2, it would arm the bare-name grep hazard in files that have no other
 // reason to see those classes. The one file that forwards the call
-// (external_class_doors.cpp) includes Stream.h itself.
-namespace IO { class Stream; }
+// (external_class_doors.cpp) includes Stream.h itself. `IO::Serializer` is
+// forward-declared for the same reason: the serialize entry points below take
+// it by reference only.
+namespace IO { class Stream; class Serializer; }
 
 namespace Object {
 
-// The one shared body, defined in runtime/src/object/external_ptr_serialize.cpp
-// next to the dependency doors it needs (GetPath / FindOrLoad / IsDerivedFrom /
-// GetReferenceId / GetPathForReferenceId / String::Serialize, all still reached
-// through RT_EXPORT_ONCE because none of those classes is converted yet --
-// SMARTPTR_INVENTORY.md section 4). `typeInfo` is this instantiation's
-// `?_typeInfo@T@...` record; its FIRST DWORD is the type id and it is read at
-// call time, as retail does (the id is 0xFFFFFFFF until Factory::Startup).
-void ExternalPtrSerializeBody(RtObject::External** self, rt::io::Serializer& ser,
-                              const void* typeInfo);
-void ExternalPtrSerializeArrayBody(rt::io::Serializer& ser, int count,
-                                   RtObject::External** elems, const void* typeInfo);
+class External;
+
+// ============================================================================
+// THE ONE ERASED CORE of `ExternalPtr<T>::Serialize` (B.4 P2 wave X, X-R1).
+//
+// Retail emits the same 748-byte body once per T (the table above); the only
+// per-T instructions are the two `MOV EDX,[rip+?_typeInfo@T@...]` loads. The
+// port is ONE body, defined in runtime/src/object/external_ptr_serialize.cpp,
+// with the type record as a parameter; the typed template wrappers below are
+// what every caller names (they replace the 30 `RtObject_ExternalPtr*Serialize_<T>`
+// thunks, which took the field as `RtObject::External**` and the pair as the
+// `rt::io::Serializer` POD).
+//
+// `cur` is the field's value on entry: retail reads `*self` and writes nothing
+// through it until the load tail. The body returns TRUE exactly where retail
+// stores `*self = result` (0x180004555) and hands that value back in `loaded`;
+// on every other exit it returns false and the caller's field is not written.
+// `typeInfo.typeId` is read at call time, at each of the two sites, as retail
+// does (it is 0xFFFFFFFF until Factory::Startup).
+// ============================================================================
+bool ExternalPtrSerializeBody(External* cur, IO::Serializer& ser,
+                              const BaseTypeInfo& typeInfo, External*& loaded);
+
+// ?Serialize@?$ExternalPtr@VT@...@Object@@QEAAXAEAVSerializer@IO@@@Z for a
+// field held as a bare `T*` (most description headers declare it so: the eight
+// bytes ARE the ExternalPtr). T is an `Object::External` subclass with its own
+// DEFINE_TYPE record; the downcast is the one retail's template body makes
+// after its IsDerivedFrom(T) test.
+template <class T>
+inline void SerializeExternal(IO::Serializer& ser, T*& field) {
+    External* loaded = nullptr;
+    if (ExternalPtrSerializeBody(field, ser, T::GetTypeInfo(), loaded))
+        field = static_cast<T*>(loaded);
+}
+
+// The array form (818 bytes, eight instantiations in retail): its loop body is
+// the single-pointer body with `elems[i]` in place of `*self` (0x18005d4a0,
+// instruction for instruction, indexed by R14); `count <= 0` runs nothing
+// (`TEST EDX,EDX / JLE <epilogue>`).
+template <class T>
+inline void SerializeExternalArray(IO::Serializer& ser, int count, T** elems) {
+    for (int i = 0; i < count; ++i)
+        SerializeExternal(ser, elems[i]);
+}
 
 template <class T>
 class ExternalPtr {
@@ -448,22 +483,14 @@ public:
     bool operator!=(const ExternalPtr& o) const { return _ptr != o._ptr; }
 
     // ?Serialize@?$ExternalPtr@...@Object@@QEAAXAEAVSerializer@IO@@@Z -- the one
-    // template body; the only per-T instruction is the `typeInfo` load, which
-    // the caller supplies until `T` is a real C++ class with a `_typeInfo`
-    // static of its own (ENDGAME section B.3 step 3, decision 4).
-    void Serialize(rt::io::Serializer& ser, const void* typeInfo) {
-        // TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): none of the
-        // 26 `T`s is a C++ class in this tree yet, so the shared body is typed
-        // over `Object::External**`. It goes when `Object::External`'s hierarchy
-        // is converted (ENDGAME section B.3 step 3).
-        ExternalPtrSerializeBody(reinterpret_cast<RtObject::External**>(&_ptr),   // LEFT: H10 the shared body is typed over the RtObject::External POD; its ~100 callers are in other blocks' files (wave X)
-                                 ser, typeInfo);
-    }
+    // template body over the erased core (SerializeExternal above); T's own
+    // `_typeInfo` record is the per-T load.
+    void Serialize(IO::Serializer& ser) { SerializeExternal(ser, _ptr); }
 
-    static void SerializeArray(rt::io::Serializer& ser, int count,
-                               ExternalPtr* elems, const void* typeInfo) {
-        ExternalPtrSerializeArrayBody(
-            ser, count, reinterpret_cast<RtObject::External**>(elems), typeInfo);   // LEFT: as Serialize above
+    // The array form, over a run of ExternalPtr<T> (see SerializeExternalArray).
+    static void SerializeArray(IO::Serializer& ser, int count, ExternalPtr* elems) {
+        for (int i = 0; i < count; ++i)
+            elems[i].Serialize(ser);
     }
 
     T* _ptr;   // +0x00 -- public: the array bulk-copy paths reach these bytes
@@ -977,34 +1004,6 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const RtSystem::F
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);  // 0x1800be570
 }  // namespace RtObject
 
-// ---- object/external_ptr_serialize.cpp
-extern "C" void RtObject_ExternalPtrArraySerialize_External(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18002f170
-extern "C" void RtObject_ExternalPtrArraySerialize_Goal(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x180005220
-extern "C" void RtObject_ExternalPtrArraySerialize_ElementDescription(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x1800493d0
-extern "C" void RtObject_ExternalPtrArraySerialize_MaterialInstance(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18005d4a0
-extern "C" void RtObject_ExternalPtrArraySerialize_VideoProgram(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x1800605e0
-extern "C" void RtObject_ExternalPtrArraySerialize_Font(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18003e710
-extern "C" void RtObject_ExternalPtrArraySerialize_SpriteSheet(rt::io::Serializer* ser, int count, RtObject::External** elems);  // 0x18003eb60
-extern "C" void RtObject_ExternalPtrSerialize_ElementDescription(RtObject::External** self, rt::io::Serializer* ser);  // 0x180038f90
-extern "C" void RtObject_ExternalPtrSerialize_Dialog(RtObject::External** self, rt::io::Serializer* ser);  // 0x180076610
-extern "C" void RtObject_ExternalPtrSerialize_StringTable(RtObject::External** self, rt::io::Serializer* ser);  // 0x1800042a0
-extern "C" void RtObject_ExternalPtrSerialize_Goal(RtObject::External** self, rt::io::Serializer* ser);  // 0x180005dc0
-extern "C" void RtObject_ExternalPtrSerialize_SpriteSheet(RtObject::External** self, rt::io::Serializer* ser);  // 0x180004590
-extern "C" void RtObject_ExternalPtrSerialize_MaterialInstance(RtObject::External** self, rt::io::Serializer* ser);  // 0x180014520
-extern "C" void RtObject_ExternalPtrSerialize_ImageBuffer(RtObject::External** self, rt::io::Serializer* ser);  // 0x18005d0f0
-extern "C" void RtObject_ExternalPtrSerialize_Material(RtObject::External** self, rt::io::Serializer* ser);  // 0x180061100
-extern "C" void RtObject_ExternalPtrSerialize_GraphicsMesh(RtObject::External** self, rt::io::Serializer* ser);  // 0x180014230
-extern "C" void RtObject_ExternalPtrSerialize_DialogControllerConfig(RtObject::External** self, rt::io::Serializer* ser);  // 0x1800756d0
-extern "C" void RtObject_ExternalPtrSerialize_AnimationGroup(RtObject::External** self, rt::io::Serializer* ser);  // 0x18005b840
-extern "C" void RtObject_ExternalPtrSerialize_Achievement(RtObject::External** self, rt::io::Serializer* ser);  // 0x180006d10
-extern "C" void RtObject_ExternalPtrSerialize_VertexLayout(RtObject::External** self, rt::io::Serializer* ser);  // 0x180055090
-extern "C" void RtObject_ExternalPtrSerialize_VertexProgram(RtObject::External** self, rt::io::Serializer* ser);  // 0x1800542a0
-extern "C" void RtObject_ExternalPtrSerialize_PixelProgram(RtObject::External** self, rt::io::Serializer* ser);  // 0x180055380
-extern "C" void RtObject_ExternalPtrSerialize_RenderState(RtObject::External** self, rt::io::Serializer* ser);  // 0x180055670
-extern "C" void RtObject_ExternalPtrSerialize_Font(RtObject::External** self, rt::io::Serializer* ser);  // 0x18003f1e0
-extern "C" void RtObject_ExternalPtrSerialize_CharacterSet(RtObject::External** self, rt::io::Serializer* ser);  // 0x180076e90
-extern "C" void RtObject_ExternalPtrSerialize_SoundBuffer(RtObject::External** self, rt::io::Serializer* ser);  // 0x180052a50
-extern "C" void RtObject_ExternalPtrSerialize_ExternalList(RtObject::External** self, rt::io::Serializer* ser);  // 0x18003dc90
 // ==== end B3R W0-P0c ====
 
 // runtime/src/object/external_load.cpp -- installs the atexit hooks that print the

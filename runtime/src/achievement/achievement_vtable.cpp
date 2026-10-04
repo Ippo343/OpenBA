@@ -249,9 +249,7 @@ void AchievementInstance::Persist(IO::Stream& streamv) {
         return;
     }
 
-    RtObject_ExternalPtrSerialize_Achievement(                      // 0x180006d10, +0x20
-        reinterpret_cast<RtObject::External**>(&_achievement),
-        reinterpret_cast<rt::io::Serializer*>(&outer));              // POD views (object/External.h)
+    _achievement.Serialize(outer);                                  // 0x180006d10, +0x20
 
     // The INNER codec, version 0 (XOR R8D,R8D at 0x18009e522).
     IO::Serializer inner(stream, 0);

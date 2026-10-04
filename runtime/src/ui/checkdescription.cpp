@@ -84,7 +84,7 @@ bool CheckDescription::Serialize(IO::Stream& streamv) {
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_checkDesc), IoSer(&ser)); // 18011198b
+    Object::SerializeExternal<UI::ElementDescription>(ser, _checkDesc); // 18011198b
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                // 1801119a3
     return true;

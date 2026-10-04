@@ -96,7 +96,7 @@ bool ButtonDescription::Serialize(IO::Stream& streamv) {
     IO::ReaderWriter* rw = ser._readerWriter;
 
     for (int i = 0; i < 5; ++i)                            // 18011142f .. 180111476
-        RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc[i]), IoSer(&ser));
+        Object::SerializeExternal<UI::ElementDescription>(ser, _childDesc[i]);
 
     rw->SerializeUInt(_word90, nullptr);                     // 18011147b .. 1801114d5
     rw->SerializeUInt(_word94, nullptr);

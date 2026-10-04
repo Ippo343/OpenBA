@@ -73,7 +73,7 @@ bool GraphDescription::Serialize(IO::Stream& streamArg) {
     rw->SerializeInt(_tickSize, nullptr);                               // 1800d1ab8
     rw->SerializeUInt(_unknown74, nullptr);                             // 1800d1acd
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));            // 1800d1adc ExternalPtr<SpriteSheet>
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // 1800d1adc ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);             // 1800d1aed System::String
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                             // 1800d1b05

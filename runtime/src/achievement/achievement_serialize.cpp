@@ -84,6 +84,8 @@
 #include "../../types/io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
 #include "../../types/object/External.h"
 #include "../../types/object/Internal.h"
+#include "../../types/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -104,9 +106,8 @@ namespace {
 //   0x180004590  ExternalPtr<UI::SpriteSheet>::Serialize      (+0x38)
 //   0x180005220  serialize N ExternalPtr<Goal>                (+0x48)
 //   0x180009a20  serialize N InternalPtr<AchievementInstance>
-RtObject::External** AsExt(void* p) {
-    return reinterpret_cast<RtObject::External**>(p);   // B.3.x bridge
-}
+// The three ExternalPtr ones are the typed members of `Object::ExternalPtr<T>`
+// over the one body (B.4 P2 wave X).
 
 }  // namespace
 
@@ -129,12 +130,11 @@ namespace Achievement {
 bool Achievement::Serialize(IO::Stream& streamv) {
     IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);
-    rt::io::Serializer* const podSer = reinterpret_cast<rt::io::Serializer*>(&ser);   // B.3.x bridge
 
-    RtObject_ExternalPtrSerialize_StringTable(AsExt(&_stringTable), podSer);   // +0x20
+    _stringTable.Serialize(ser);                                    // +0x20 0x1800042a0
     _title.Serialize(&ser);                                         // +0x28
     _description.Serialize(&ser);                                   // +0x30
-    RtObject_ExternalPtrSerialize_SpriteSheet(AsExt(&_spriteSheet), podSer);   // +0x38
+    _spriteSheet.Serialize(ser);                                    // +0x38 0x180004590
     _spriteName.Serialize(&ser);                                    // +0x40
 
     int count = _goals.GetSize();                                   // +0x50
@@ -143,7 +143,7 @@ bool Achievement::Serialize(IO::Stream& streamv) {
     if (stream._direction == rt::io::kDirectionReading) {
         _goals.SetSize(count);   // 0x180005110 — `GoalArray` names kSpec_U64Zero
     }
-    RtObject_ExternalPtrArraySerialize_Goal(podSer, count, AsExt(_goals.GetData()));   // +0x48
+    Object::ExternalPtr<Goal>::SerializeArray(ser, count, _goals.GetData());   // +0x48 0x180005220
 
     return true;   // ~Serializer deletes the ReaderWriter
 }
