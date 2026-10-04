@@ -111,7 +111,7 @@ class TradeComponent;
 extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list)
 
 // ---- tradeui_checkout.cpp
-extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp);  // 0x14005a490
+extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490
 // B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 
