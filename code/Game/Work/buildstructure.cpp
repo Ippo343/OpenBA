@@ -8,11 +8,11 @@
 // Fields:
 //   +0x48: bool   field_48      — use alternate animation flag (serialized)
 //   +0x4C: int    field_4c      — rotating scan index into bool array (serialized)
-//   +0x50: void*  field_50      — byte array (one per build position: 0=free, 1=claimed)
+//   +0x50: void*  _slots      — byte array (one per build position: 0=free, 1=claimed)
 #include "Work/exe_bodies.h"
-//   +0x58: int    field_58      — count of build positions
-//   +0x60: void*  field_60      — BST root (tracks which entity claimed which position)
-//   +0x68: int    field_68      — build progress counter
+//   +0x58: int    _slots._size      — count of build positions
+//   +0x60: void*  _citizens._root      — BST root (tracks which entity claimed which position)
+//   +0x68: int    _citizens._count      — build progress counter
 //
 // Work base fields used:
 //   +0x10: void*  field_10      — InternalBasePtr to building entity
@@ -58,8 +58,7 @@
 // compiler's), then +0x50/+0x58 (a qword: count AND capacity), +0x60, +0x68.
 // +0x48/+0x4c are left to Persist / the caller, as in retail.
 BuildStructure::BuildStructure()
-    : Work(),
-      field_50(nullptr), field_58(0), field_5c(0), field_60(nullptr), field_68(0) {}
+    : Work() {}
 
 // ============================================================
 // Full Ctor (0x1400e59c0) — 3-arg: (self, &entityIBP, altAnim)
@@ -67,29 +66,27 @@ BuildStructure::BuildStructure()
 // The REAL retail ctor used by BuildComponent State8Enter (sub_7ae0). Unlike the
 // 1-arg ctor (0x1400e5a90) it (a) routes base init through Work_Ctor25 so field_10
 // (building entity), +0x18 (WorkComponent) and +0x28 (target cell) are populated, and
-// (b) ALLOCATES the build-position byte array field_50/field_58 sized to the site's
+// (b) ALLOCATES the build-position byte array _slots/_slots._size sized to the site's
 // PositionComponent footprint (FUN_140123070 position count -> FUN_14000a590 resize),
 // zeroing every position byte. Without this array Execute's unbuilt-position scan finds
-// nothing (field_58 == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
+// nothing (_slots._size == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
 // 2c-B blocker. Faithful offset-for-offset port of the Ghidra decompilation.
 BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
     : Work(entityIBP),   // local_res10 = *entityIBP; Work_Ctor25(this, &local_res10)
-      field_48(altAnim), field_4c(0),
-      field_50(nullptr), field_58(0),
-      // +0x5c is the array's capacity (read by FUN_14000a590). Retail zeroes +0x58 as a
-      // full qword, so the resize below never reads a garbage capacity.
-      field_5c(0),
-      field_60(nullptr), field_68(0) {
+      field_48(altAnim), field_4c(0) {
+    // The +0x50 array and the +0x60 set are members: their ctors zero data, count and
+    // capacity (retail 0x1400e5a0a / 0x1400e5a0e: two qwords, so the resize below never
+    // reads a garbage capacity) and the set's root (qword) and count (dword).
     // Allocate the build-position byte array from the site's PositionComponent count.
     if (entityIBP) {
         // The site's InteractComponent (Work(entityIBP) stored *entityIBP in field_10)
         InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
         int count = InteractNodeCount(posComp, 1);   // 0x140123070
-        // FUN_14000a590(&field_50, count): resizes the {data,count,cap} array in place,
-        // writing field_58 = count. New bytes are uninitialised, so zero-fill below.
-        Reimpl_Array_Resize_Byte(&field_50, count);
-        int n = field_58;
-        uint8_t* arr = field_50;
+        // FUN_14000a590(&_slots, count): resizes the {data,count,cap} array in place,
+        // writing _slots._size = count. New bytes are uninitialised, so zero-fill below.
+        Reimpl_Array_Resize_Byte(&_slots, count);
+        int n = _slots._size;
+        uint8_t* arr = _slots._data;
         for (int i = 0; i < n && arr; i++) arr[i] = 0;
     }
 }
@@ -98,27 +95,20 @@ BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
 // BaseDtor (0x1400e5920)
 // ============================================================
 // The stamps (BuildStructure, then Work) and `~Internal` are the compiler's.
-BuildStructure::~BuildStructure() {
-    AssignmentNode* treeRoot = field_60;
-    if (treeRoot != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&field_60, treeRoot->left);
-        WorkBase_TreeNodeFree_14c30(&field_60, treeRoot->right);
-        System::MemoryAllocator::MemFree(treeRoot);
-    }
-    field_60 = nullptr;
-    field_68 = 0;
-
-    System::MemoryAllocator::MemFree(field_50);
-    field_50 = nullptr;
-    field_58 = 0;
-}
+// Retail 0x1400e5920: stamp 0x1401610a0; the +0x60 set's inlined Clear (0x140014c30 on the
+// root's +0x10 / +0x18 children, MemFree [0x140152b68] of the root, root = 0 qword, count =
+// 0 dword); MemFree +0x50, +0x50 = 0, +0x58 = 0 (qwords: count AND capacity); stamp Work
+// 0x140161a80 and tail-jump ~Internal. That is the compiler's chain over the two members in
+// reverse declaration order: ~Set (Clear), then ~Array (_slots). (The tree's hand-written
+// body left the +0x5C capacity; ~Array zeroes it, as retail's qword store does.)
+BuildStructure::~BuildStructure() = default;
 
 // ============================================================
 // OnComplete (0x1400e4f80)
 // ============================================================
 int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
-    field_50[slotIndex] = 0;
+    WorkBST_BSTFindRemove_25520(&_citizens, citizenIBP);
+    _slots[slotIndex] = 0;
     return 0;
 }
 
@@ -126,8 +116,8 @@ int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** 
 // OnCancel (0x1400e4f40)
 // ============================================================
 int BuildStructure::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
-    field_50[slotIndex] = 0;
+    WorkBST_BSTFindRemove_25520(&_citizens, citizenIBP);
+    _slots[slotIndex] = 0;
     return 0;
 }
 
@@ -136,7 +126,7 @@ int BuildStructure::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*
 // ============================================================
 int BuildStructure::Cleanup() {
     while (true) {
-        AssignmentNode* root = field_60;
+        AssignmentNode* root = _citizens._root;
         if (root == nullptr) return 0;
 
         AssignmentNode* node = root;
@@ -168,7 +158,7 @@ int BuildStructure::Cleanup() {
 // GetPriority (0x140029670) — not hookable, available as clean code
 // ============================================================
 int BuildStructure::GetPriority() {
-    return field_68 > 0;
+    return _citizens._count > 0;
 }
 
 // ============================================================
@@ -185,19 +175,19 @@ void BuildStructure::Persist(IO::Stream& stream) {
     ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
+    WorkBST_BST_Serialize_296b0(&_citizens, &ser);
 
     // Serialize count (+0x58), resize array on load
-    int count = field_58;
+    int count = _slots._size;
     ser.Serialize(count, nullptr);
 
     // Check if loading (direction 0)
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        Reimpl_Array_Resize_Byte(&field_50, count);
+        Reimpl_Array_Resize_Byte(&_slots, count);
     }
 
     // Bulk serialize the byte array (one byte per build position)
-    ser.Serialize(count, field_50, nullptr);
+    ser.Serialize(count, _slots._data, nullptr);
 
     // Serialize rotating scan index at +0x4C
     ser.Serialize(field_4c, nullptr);
@@ -266,7 +256,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
     // --- Phase 2: Check if we have positions left to build ---
     int totalPositions = InteractNodeCount(posComp, 1);   // 0x140123070
-    if (field_68 >= totalPositions) {
+    if (_citizens._count >= totalPositions) {
         return 1;
     }
 
@@ -306,9 +296,9 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
     // --- Phase 4: Count unbuilt positions ---
     int unbuiltCount = 0;
-    int posCount = field_58;
+    int posCount = _slots._size;
     if (posCount > 0) {
-        uint8_t* arr = field_50;
+        uint8_t* arr = _slots._data;
         for (int i = 0; i < posCount; i++) {
             if (arr[i] == 0) unbuiltCount++;
         }
@@ -336,11 +326,11 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
     // --- Phase 6: Search for accessible unbuilt position ---
     while (attemptCount < unbuiltCount) {
         // Scan for next unbuilt position using rotating index
-        int scanTotal = field_58;
+        int scanTotal = _slots._size;
         if (scanTotal > 0) {
             for (int scan = 0; scan < scanTotal; scan++) {
                 int idx = field_4c;
-                if (field_50[idx] == 0) {
+                if (_slots[idx] == 0) {
                     chosenIndex = idx;
                 }
                 int next = idx + 1;
@@ -373,7 +363,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                 int bestPathCost = map->PathDistance((uint32_t)buildingCell, exactCell, 1);   // 0x14009f810
 
                 // Iterate ALL positions to find a shorter path
-                int total = field_58;
+                int total = _slots._size;
                 int64_t centerCellIdx = (int64_t)buildingCell;
                 if (total < 1) goto doSetupActions;
 
@@ -507,10 +497,10 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                     }
 
                     // Insert claimed position into BST at +0x60
-                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);   // LEFT: H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a member in the same commit)
+                    WorkBST_RegisterWork_1a30(&_citizens, &targetIBP, citizenPtr);
 
                     // Mark build position as claimed
-                    field_50[chosenIndex] = 1;
+                    _slots[chosenIndex] = 1;
 
                     return 2;
                 }
@@ -620,11 +610,8 @@ int BuildStructure::Validate() {
     int slotCount = 0;
     int slotCap = 0;
 
-    // (the tree-helper signatures take the root slot as uintptr_t*)
-    uintptr_t* treeRootPtr = reinterpret_cast<uintptr_t*>(&field_60);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
-
     // BST in-order traversal: find leftmost node first
-    AssignmentNode* root = field_60;
+    AssignmentNode* root = _citizens._root;
     if (root == nullptr) goto done_empty;
 
     {
@@ -722,14 +709,14 @@ int BuildStructure::Validate() {
             CitizenComponent** rList = removeList;
             for (int i = 0; i < removeCount; i++) {
                 // BST lookup to find the node
-                AssignmentNode* searchNode = field_60;
+                AssignmentNode* searchNode = _citizens._root;
                 while (searchNode != nullptr) {
                     if (rList[i] < searchNode->element) {
                         searchNode = searchNode->left;  // left at +0x10
                     } else {
                         if (rList[i] <= searchNode->element) {
                             // Found — remove from BST
-                            WorkBST_BSTFindRemove_25520(treeRootPtr, searchNode);
+                            WorkBST_BSTFindRemove_25520(&_citizens, searchNode);
                             break;
                         }
                         searchNode = searchNode->right;  // right at +0x18
@@ -738,7 +725,7 @@ int BuildStructure::Validate() {
             }
 
             // Update slot array: mark only validated slots as claimed
-            int totalSlots = field_58;
+            int totalSlots = _slots._size;
             for (int si = 0; si < totalSlots; si++) {
                 // Check if this slot index appears in the slotList
                 bool found = false;
@@ -748,7 +735,7 @@ int BuildStructure::Validate() {
                         break;
                     }
                 }
-                field_50[si] = found ? 1 : 0;
+                _slots[si] = found ? 1 : 0;
             }
 
             System::MemoryAllocator::MemFree(slotList);
@@ -812,9 +799,9 @@ DEFINE_EXE_TYPE(BuildStructure, "Work")
 
 // Build a BuildStructure bound to a construction SITE entity using the FAITHFUL full ctor
 // (0x1400e59c0): it routes base init through Work_Ctor25 (field_10=site entity, +0x18
-// WorkComponent, +0x28 target cell) AND allocates the build-position byte array (field_50/
-// field_58) from the site's PositionComponent footprint — without which Execute's unbuilt-
-// position scan finds nothing (field_58==0) and returns 1 (never assigns labor). buildEntityIBP
+// WorkComponent, +0x28 target cell) AND allocates the build-position byte array (_slots/
+// _slots._size) from the site's PositionComponent footprint — without which Execute's unbuilt-
+// position scan finds nothing (_slots._size==0) and returns 1 (never assigns labor). buildEntityIBP
 // is an InternalBasePtr* whose *value is the site entity pointer.
 extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP) {
     void* mem = Object::detail::InternalMemAlloc(sizeof(BuildStructure), 8);

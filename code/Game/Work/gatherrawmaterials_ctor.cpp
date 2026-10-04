@@ -13,10 +13,10 @@
 //   +0x58 int[] ptr  / +0x60 count(=matCount)  "delivered per material" (all 0)
 //   +0x68 BST root (0) / +0x70 count (0)
 //
-// For each material in the build entity's BuildDescription, field_48[i] is seeded
+// For each material in the build entity's BuildDescription, _present[i] is seeded
 // with the amount ALREADY in the site StorageComponent (slot.total - slot.reserved),
-// and field_58[i] with 0.  (Execute() treats field_48 as the per-material
-// already-assigned/present count and field_58 as the in-flight build count.)
+// and _inFlight[i] with 0.  (Execute() treats _present as the per-material
+// already-assigned/present count and _inFlight as the in-flight build count.)
 //
 // Faithful offset-by-offset port. Verified against Ghidra disassembly of
 // 0x1400ec710 and callees: Work_Ctor25 @0x1400f72e0, FUN_14000d6c0 @0x14000d6c0
@@ -46,7 +46,7 @@
 // 0x140006270 WorkBase_FindComponent_6270 (Work/exe_bodies.h). Both called by name (B3R).
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
-// GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
+// member calls (now of the two Array<int32_t> members), so its resolved-pointer stand-in
 // is gone.
 
 // "BuildDescription" type-id (DWORD_1401c7040). Name verified via the .rdata
@@ -61,16 +61,8 @@ static uint32_t GRMC_BuildDescTypeId() {
 // holding the raw build-entity pointer (it reads *param only, into field_10); the two
 // stamps are the compiler's.
 GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityIBP) {
-    // --- Zero GatherRawMaterials fields (retail: 8 bytes each; here the named fields in
-    // address order) ---
-    field_48 = nullptr;   // int[] ptr
-    field_50 = 0;         // count + capacity
-    field_54 = 0;
-    field_58 = nullptr;   // int[] ptr
-    field_60 = 0;         // count + capacity
-    field_64 = 0;
-    field_68 = nullptr;   // BST root
-    field_70 = 0;         // BST count
+    // The +0x48 / +0x58 arrays and the +0x68 set are members: their ctors zero them (retail
+    // 0x1400ec752..0x1400ec771: four qwords, then the set's root qword and count dword).
 
     // --- Locate BuildComponent (-> BuildDescription at +0x18) on the build entity ---
     // (the entity is *buildEntityIBP, which the Work base stored in field_10)
@@ -93,16 +85,16 @@ GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityI
     // FLAG: original reads desc+0x28 unconditionally (assumes desc valid). We guard
     // desc==null -> matCount 0 so the arrays stay empty rather than deref null.
     int matCount = desc ? desc->_costCount : 0;
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
-    // GatherRawMaterials_Ctor calls it at 1400ec7e0 and 1400ec7ed). I32NoInit — a grown
+    // FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+    // GatherRawMaterials_Ctor calls it at 1400ec7e0 and 1400ec7ed, the member's own SetSize; no init arm) — a grown
     // tail is left as the allocation found it, like retail. Safe: the seeding loop right
     // below (retail 1400ec800..1400ec87f) writes BOTH arrays at every index i < +0x50
     // before either is read.
-    GameColl::AsArray<GameColl::I32NoInit>(&field_48).SetSize(matCount);
-    GameColl::AsArray<GameColl::I32NoInit>(&field_58).SetSize(matCount);
+    _present.SetSize(matCount);
+    _inFlight.SetSize(matCount);
 
-    // --- Seed field_48[i] = amount already present in site storage, field_58[i] = 0 ---
-    int count50 = field_50;   // == matCount after resize
+    // --- Seed _present[i] = amount already present in site storage, _inFlight[i] = 0 ---
+    int count50 = _present._size;   // == matCount after resize
     const BuildCost* matArr = desc ? desc->_costs : nullptr;
 
     for (int i = 0; i < count50; i++) {
@@ -125,10 +117,10 @@ GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityI
             }
         }
 
-        // NOTE: the exe stores the *current storage amount* into field_48[i] (NOT a
-        // costQty shortfall) — verified from disassembly. field_58[i] starts at 0.
-        if (field_48) field_48[i] = delivered;
-        if (field_58) field_58[i] = 0;
+        // NOTE: the exe stores the *current storage amount* into _present[i] (NOT a
+        // costQty shortfall) — verified from disassembly. _inFlight[i] starts at 0.
+        if (_present._data) _present[i] = delivered;
+        if (_inFlight._data) _inFlight[i] = 0;
     }
 
 }

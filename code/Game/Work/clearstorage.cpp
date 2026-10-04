@@ -249,7 +249,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         }
 
         // Register work with citizen AI (the tree helpers take the root as uintptr_t*)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);   // LEFT: H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in the same commit)
+        WorkBST_RegisterWork_1a30(&_citizens, &entityRefOut, citizenAI);
         return 2;
     }
 
@@ -276,7 +276,7 @@ int ClearStorage::Validate() {
     int removeCapacity = 0;
 
     // Find leftmost node (smallest key)
-    AssignmentNode* node = _field58;
+    AssignmentNode* node = _citizens._root;
     if (node == nullptr) goto phase2;
 
     // Go to leftmost
@@ -361,7 +361,7 @@ phase2:
     if (removeCount > 0) {
         for (int i = 0; i < removeCount; i++) {
             // Find node in BST by key
-            AssignmentNode* searchNode = _field58;
+            AssignmentNode* searchNode = _citizens._root;
             CitizenComponent* key = removeList[i]->element;
 
             while (searchNode != nullptr) {
@@ -371,7 +371,7 @@ phase2:
                 } else {
                     if (key <= nodeKey) {
                         // Found it, remove (the tree helpers take the root as uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field58), searchNode);   // LEFT: H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in the same commit)
+                        WorkBST_BSTRemove_a6e0(&_citizens, searchNode);
                         break;
                     }
                     searchNode = searchNode->right;
@@ -386,24 +386,12 @@ phase2:
     return removeCount == 0 ? 1 : 0;
 }
 
-// 0x1400e73b0. The stamps (ClearStorage, then Work) and `~Internal` are the compiler's.
-ClearStorage::~ClearStorage() {
-
-    // Free BST at +0x58 (citizen assignment tree)
-    AssignmentNode* bstRoot = _field58;
-    if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&_field58, bstRoot->left);
-        WorkBase_TreeNodeFree_14c30(&_field58, bstRoot->right);
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-    _field58 = nullptr;
-    _field60 = 0;
-
-    // Free auxiliary data at +0x48
-    System::MemoryAllocator::MemFree(_field48);
-    _field48 = nullptr;
-    _field50 = nullptr;
-}
+// Retail 0x1400e73b0: stamp 0x1401611a0; the +0x58 set's inlined Clear (0x140014c30 on the
+// root's +0x10 / +0x18 children, MemFree [0x140152b68] of the root, root = 0 qword, count =
+// 0 dword); MemFree +0x48, +0x48 = 0, +0x50 = 0 (qwords); stamp Work 0x140161a80 and
+// tail-jump ~Internal. That is the compiler's chain over the two members in reverse
+// declaration order: ~Set (Clear), then ~Array (_field48).
+ClearStorage::~ClearStorage() = default;
 
 // ============================================================
 // ClearStorage::Slot6 (vtable +0x30, 0x1400e6c30)
@@ -413,7 +401,7 @@ ClearStorage::~ClearStorage() {
 // entry from the work tracking tree.
 int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in the same commit)
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return 0;
 }
 
@@ -430,7 +418,7 @@ int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2
 // citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
 int ClearStorage::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in the same commit)
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return 0;
 }
 
@@ -442,7 +430,7 @@ int ClearStorage::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/
 // shared Work_Slot11_HasActiveTasks reads), so it needs its own body. Was pinned to
 // Work_SlotRet0, i.e. permanently "nobody is working this".
 int ClearStorage::GetPriority() {
-    return (int)_field60 > 0 ? 1 : 0;   // retail's signed compare of the dword
+    return (int)_citizens._count > 0 ? 1 : 0;   // retail's signed compare of the dword
 }
 
 // ============================================================
@@ -456,7 +444,7 @@ int ClearStorage::GetPriority() {
 int ClearStorage::Cleanup() {
 
     while (true) {
-        AssignmentNode* node = _field58;
+        AssignmentNode* node = _citizens._root;
         if (node == nullptr) {
             return 0;
         }
@@ -523,7 +511,7 @@ void ClearStorage::Persist(IO::Stream& stream) {
     Work::Persist(stream);
 
     IO::Serializer ser(stream, 0);
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)   // LEFT: H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in the same commit)
+    WorkBST_BST_Serialize_296b0(&_citizens, &ser);   // 0x1400296b0 (work_base_bst.cpp)
 }
 
 // ============================================================
@@ -531,12 +519,11 @@ void ClearStorage::Persist(IO::Stream& stream) {
 // the leaf fields zeroed. The stamps are the compiler's.
 // ============================================================
 ClearStorage::ClearStorage()
-    : Work(), _field48(nullptr), _field50(nullptr), _field58(nullptr), _field60(0) {
+    : Work() {
 }
 
 ClearStorage::ClearStorage(void* pEntityIBP)
-    : Work(pEntityIBP), _field48(nullptr), _field50(nullptr), _field58(nullptr),
-      _field60(0), _pad64{} {
+    : Work(pEntityIBP) {
 }
 
 // ============================================================
