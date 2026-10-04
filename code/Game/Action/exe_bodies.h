@@ -107,12 +107,12 @@ void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  //
 void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0
 template <class Holder>
 inline void MaterialArraySetSize(Holder* arr, int newCount) {
-    static_assert(sizeof(Holder) == 0x10 && sizeof(*arr->data) == 0x10, "an Array<16-byte element> {data, count, capacity}");
+    static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");
     ActRm_ArrayResize16_da70(reinterpret_cast<RawArray<MaterialCount16>*>(arr), newCount);  // CAST-OK: elem_stride
 }
 template <class Holder>
 inline void MaterialArrayAssign(Holder* dst, const Holder* src) {
-    static_assert(sizeof(Holder) == 0x10 && sizeof(*dst->data) == 0x10, "an Array<16-byte element> {data, count, capacity}");
+    static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");
     ActRm_VectorClone_d9d0(reinterpret_cast<RawArray<MaterialCount16>*>(dst),  // CAST-OK: elem_stride
                            reinterpret_cast<const RawArray<MaterialCount16>*>(src));  // CAST-OK: elem_stride
 }

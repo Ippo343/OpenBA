@@ -305,48 +305,48 @@ void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<Mater
 // reset the +0x28 list. Then upsert {material, count} into +0x28: if present add, else
 // append (grow 3x on a non-first append). Leaf.
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
-    TrackerComponent::EntryArray* live = &tracker->displayed;
-    TrackerComponent::EntryArray* archive = &tracker->produced;
+    TrackerComponent::EntryList* live = &tracker->displayed;
+    TrackerComponent::EntryList* archive = &tracker->produced;
     int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
     if (gen != tracker->trackerId) {
         MaterialArrayAssign(archive, live);   // 0x14000d9d0
-        System::MemoryAllocator::MemFree(live->data);
-        live->data = nullptr;
+        System::MemoryAllocator::MemFree(live->_data);
+        live->_data = nullptr;
         // Retail stores EIGHT bytes here -- `*(undefined8 *)(param_1 + 0x30) = 0;` --
         // clearing the count AND the capacity (an earlier 4-byte port left a stale capacity:
         // the next upsert then committed a count over a NULL array -> ACCESS_VIOLATION).
-        live->count = 0;
-        live->capacity = 0;
+        live->_size = 0;
+        live->_capacity = 0;
         tracker->trackerId = gen;
     }
 
-    int n = live->count;
+    int n = live->_size;
     if (n > 0) {
-        const TrackerComponent::Entry* p = live->data;
+        const TrackerComponent::Entry* p = live->_data;
         int idx = 0;
         do {
             if (p->_resource == material) {
-                live->data[idx]._count = live->data[idx]._count + value;
+                live->_data[idx]._count = live->_data[idx]._count + value;
                 return;
             }
             idx++;
             p += 1;
-        } while (idx < live->count);
+        } while (idx < live->_size);
     }
 
-    int oldN = live->count;
+    int oldN = live->_size;
     int newN = oldN + 1;
-    TrackerComponent::Entry* oldBuf = live->data;
-    live->count = newN;
-    if (live->capacity < newN) {
-        live->capacity = newN;
-        if (oldN != 0) live->capacity = newN * 3;
-        live->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(
-                          static_cast<uint64_t>(live->capacity) << 4, 8));
+    TrackerComponent::Entry* oldBuf = live->_data;
+    live->_size = newN;
+    if (live->_capacity < newN) {
+        live->_capacity = newN;
+        if (oldN != 0) live->_capacity = newN * 3;
+        live->_data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(live->_capacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == live->data) ? oldN : 0;
+    int srcIdx = (oldBuf == live->_data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        TrackerComponent::Entry* d = live->data + i;
+        TrackerComponent::Entry* d = live->_data + i;
         if (!d) continue;
         if (i < oldN) {
             *d = oldBuf[i];
@@ -356,7 +356,7 @@ void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, in
             d->_pad0C[0] = 0; d->_pad0C[1] = 0; d->_pad0C[2] = 0; d->_pad0C[3] = 0;   // the qword store's high dword
         }
     }
-    if (oldBuf != live->data)
+    if (oldBuf != live->_data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
