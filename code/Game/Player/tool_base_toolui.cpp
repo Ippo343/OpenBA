@@ -132,10 +132,9 @@ extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* o
     }
 
     // (5) Reset the two cached float coords (+0x08, +0x0C) to -1.0f. Retail
-    // stores the dword 0xbf800000 twice; the manager's header (block GAME-b)
-    // declares the eight bytes as one uint64_t `field_0x08`, so the pair is one
-    // store of the same bytes.
-    owner->field_0x08 = 0xbf800000bf800000ull;
+    // stores the dword 0xbf800000 twice.
+    owner->field_0x08 = -1.0f;
+    owner->field_0x0C = -1.0f;
 
     // (6) Probe the description's sub-descriptions for the ToolbarDescription
     // (cell 0x1401c7f58); retail calls IsDerivedFrom on the match and discards it.
