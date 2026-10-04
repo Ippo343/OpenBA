@@ -18,7 +18,6 @@
 
 // ---- action_base_cnr.cpp
 void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP);  // 0x140003f60
-void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP);  // 0x14000c460
 class Map;                    // Game/Map.h
 class GrowthComponent;        // Component/GrowthComponent.h
 class ModelComponent;         // Component/ModelComponent.h
@@ -34,7 +33,6 @@ uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellInde
 void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
 uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex);  // 0x14009cb00
 void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // 0x140120db0
-uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp);  // 0x1401252f0
 uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant);  // 0x140125320
 void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant);  // 0x1401253d0
 void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx);  // 0x140126440
@@ -53,8 +51,6 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx);  // 0x1400f8e30
 void ActCt_HideTool_1176e0(void* entityV);  // 0x1401176e0
 
 // ---- action_base_hunt.cpp
-void* ActHunt_FindComponent_5500(uintptr_t entity, void* retIBP);  // 0x140005500
-void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP);  // 0x1400227e0
 class HuntComponent;          // Component/HuntComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
@@ -62,7 +58,6 @@ bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
 void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 void NotifyEntityChanged(ComponentEntity* entity);  // 0x1400c3470 (a second body of ComponentEntity::RefreshEntityFlags)
-bool ActHunt_IsAnimalReady_2a80(void* self);  // 0x140122a80 B4 FORWARD -> HuntIsReady
 void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr);  // 0x140003110 B4 FORWARD -> QwordArraySetSize
 void ActHunt_MarkEntityRemoval_c2ea0(void* self);  // 0x1400c2ea0 B4 FORWARD -> MarkEntityForRemoval
 void ActHunt_NotifyEntityChanged_c3470(void* self);  // 0x1400c3470 B4 FORWARD -> NotifyEntityChanged
