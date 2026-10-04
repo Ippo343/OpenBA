@@ -52,6 +52,7 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
+#include "Game/WorldGeometry.h"    // WorldGeometry::RebuildRoadMesh (0x1400af370)
 #include "Action/PathAvl.h"        // AvlNode28, the +0xE8 tree's node (B4 P2 GAME-1)
 #include "perf_terrain.h"
 #include "collection/Collection.h"
@@ -323,9 +324,7 @@ void Map::Serialize(IO::Stream& stream) {
         if (GameUpdateLoop::_singleton != nullptr) {
             GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
             WorldGeometry* worldGeometry = gameWorld->m_worldGeometry;
-            // LEFT: the road mesh rebuild takes (int64_t, uint32_t*) (Action/exe_bodies.h).
-            Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(worldGeometry),
-                                     reinterpret_cast<uint32_t*>(this));   // LEFT: SIG Pf_RoadMeshRebuild_f370 (Action/exe_bodies.h, wave X)
+            worldGeometry->RebuildRoadMesh(this);   // 0x1400af370
         }
     }
 }

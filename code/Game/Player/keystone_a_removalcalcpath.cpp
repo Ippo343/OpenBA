@@ -66,6 +66,8 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"
 #include "Game/Map.h"
+#include "Game/WorldGeometry.h"      // WorldGeometry::RebuildRoadMesh (0x1400af370)
+#include "Game/PathfinderThread.h"   // PathfinderThread::SetCellTerrain (0x1400a6fe0)
 #include "Game/PlayerToolManager.h"
 #include "Action/PathAvl.h"
 #include "Work/Work.h"
@@ -453,14 +455,10 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
         PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (LEFT: block STANDALONE's perf_terrain.h takes the cell as bytes)
         if (((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0) {
             int div = param_1->size;
-            // LEFT: 0x1400a8c90 / 0x1400a6fe0 are C doors in block ACT-b's
-            // Action/exe_bodies.h taking the region graph / pathfinder as integers.
-            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(param_1->regionGraph),
-                                   param_2 % div, param_2 / div);
+            param_1->regionGraph->MarkCellDirty(param_2 % div, param_2 / div);   // 0x1400a8c90
         }
         // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only; retail's R9 is not read.
-        Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(param_1->pathfinder),
-                             static_cast<int>(param_2), 2);
+        param_1->pathfinder->SetCellTerrain(static_cast<int>(param_2), 2);   // 0x1400a6fe0
         result = 0;  // uVar8 & 0xff..00
     } else {
         if (found) {
@@ -471,8 +469,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
             if (removeKind == 0xff) {
                 result = 0;
             } else {
-                Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_worldGeometry),
-                                        reinterpret_cast<uint32_t*>(param_1));   // LEFT: as above
+                GameUpdateLoop::_singleton->m_worldGeometry->RebuildRoadMesh(param_1);   // 0x1400af370
                 result = 1;
             }
         } else {
@@ -834,10 +831,8 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
         } while ((int)uVar26 <= (int)uVar13);  // uVar26 == iVar24+1 here
 
         // 0x1400af370 is void; the door read a uint64_t nobody uses.
-        // LEFT: its C door (block ACT-b) takes the decal system as an integer.
         if (bVar5)
-            Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_worldGeometry),
-                                    reinterpret_cast<uint32_t*>(puVar18));
+            GameUpdateLoop::_singleton->m_worldGeometry->RebuildRoadMesh(puVar18);
     }
 
     // FIX(lead-verify): faithful CONCAT71 — roadMesh return in the upper bytes, low byte 1.
