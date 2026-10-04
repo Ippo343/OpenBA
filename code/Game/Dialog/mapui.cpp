@@ -19,6 +19,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerController.h"
 #include "Game/Map.h"
+#include "Game/Minimap.h"   // GameUpdateLoop::m_imageCapture
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -216,8 +217,8 @@ static void MapUI_HandleClick(Object::InternalPtr<UI::Element>* /*element*/, int
     PlayerController* camCtrl = gameWorld->m_playerController;
 
     // The map's edge in cells.
-    // LEFT: GameUpdateLoop::m_game is void* (GUL's header; it is the Map).
-    int mapGridSize = reinterpret_cast<Map*>(gameWorld->m_game)->size;
+    // (GameUpdateLoop::m_game is the Map.)
+    int mapGridSize = gameWorld->m_game->size;
 
     // Compute world-space scale factor: mapGridSize / mapWidth
     float worldScale = (float)mapGridSize / (float)mapWidth;
@@ -253,28 +254,28 @@ void MapUI::OnCreated() {
     if (!s_logged && Opt().mapTrace) {
         s_logged = true;
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-        // LEFT: GameUpdateLoop::m_imageCapture is void* (no ImageCapture class yet).
-        [[maybe_unused]] Video::ImageBuffer* const* mapObj =
-            gw ? reinterpret_cast<Video::ImageBuffer* const*>(gw->m_imageCapture) : nullptr;
+        // GameUpdateLoop +0x148 is the Minimap.
+        [[maybe_unused]] Minimap* mapObj =
+            gw ? gw->m_imageCapture : nullptr;
         printf("[MapUI::Slot4] dispatched self=%p mat_tid=%u img_tid=%u "
                "terrBuf=%p ovrBuf=%p\n", this,
                Graphics::Material::TypeId(), UI::ImageElement::TypeId(),
-               mapObj ? mapObj[1] : nullptr,
-               mapObj ? mapObj[2] : nullptr);
+               mapObj ? mapObj->terrainImage : nullptr,
+               mapObj ? mapObj->overlayImage : nullptr);
         fflush(stdout);
     }
     // The image capture (GameUpdateLoop +0x148) holds the terrain map (+0x08) and
     // overlay (+0x10) ImageBuffers.
-    // LEFT: GameUpdateLoop::m_imageCapture is void* (no ImageCapture class yet).
-    Video::ImageBuffer* const* imageCapture =
-        reinterpret_cast<Video::ImageBuffer* const*>(GameUpdateLoop::_singleton->m_imageCapture);
+    // (GameUpdateLoop::m_imageCapture is the Minimap.)
+    Minimap* imageCapture =
+        GameUpdateLoop::_singleton->m_imageCapture;
 
     // Setup terrain map image (no blend, element "imageMap")
-    SetupImage(imageCapture[1], &mapSpriteSheet, &mapMaterial,
+    SetupImage(imageCapture->terrainImage, &mapSpriteSheet, &mapMaterial,
                '\0', "imageMap");
 
     // Setup overlay image (with blend, element "imageOverlay")
-    SetupImage(imageCapture[2], &overlaySpriteSheet, &overlayMaterial,
+    SetupImage(imageCapture->overlayImage, &overlaySpriteSheet, &overlayMaterial,
                '\x01', "imageOverlay");
 }
 
