@@ -129,7 +129,7 @@ class ComponentDescription;  // code/Game/Component/ComponentDescription.h
 namespace System { class String; }
 extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out);  // 0x140015fd0
 extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490
-extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree, void** out, const uint64_t* entry);  // 0x14000e1c0
+// B4 P2 DLG-3: TradeUI_StorageTree_Insert_e1c0 (0x14000e1c0) is declared typed in Dialog/TradeUI.h.
 
 // ---- tradeui_price.cpp
 extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity);  // 0x14005a520

@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <new>
 #include "Dialog/exe_bodies.h"
+#include "Dialog/TradeUI.h"   // TradeStockEntry, TradeUI_StorageTree_Insert_e1c0
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ── B.4 DLG-e: the three clears are Collection::Array<T>::Clear() ──────────
@@ -89,13 +90,12 @@ extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::
         new (out) System::String();
         return out;
     }
-    const uintptr_t base = reinterpret_cast<uintptr_t>(tradeState->merchantOrders);   // LEFT: the order array (COMP-f)
+    const TradeMerchantOrder* base = tradeState->merchantOrders;
     if (!base) {      // standalone guard: retail derefs blind
         new (out) System::String();
         return out;
     }
-    const System::String* src = reinterpret_cast<const System::String*>(
-        base + static_cast<uintptr_t>(idx) * 0x20);
+    const System::String* src = &base[idx].merchantName;
     new (out) System::String(*src);
     return out;
 }
@@ -142,18 +142,17 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
                                                ComponentDescription* resource,
                                                int8_t  addFlag) {
     if (!tradeState) return;                 // standalone-only; retail derefs blind.
-    const int64_t resourceEntity = reinterpret_cast<int64_t>(resource);   // the list holds the pointer bits
+    ComponentDescription* const resourceEntity = resource;   // the list holds the pointer
     const int32_t orderIdx = tradeState->tradeId;
-    const uintptr_t orderBase = reinterpret_cast<uintptr_t>(tradeState->merchantOrders);   // LEFT: the order array (COMP-f)
+    TradeMerchantOrder* const orderBase = tradeState->merchantOrders;
     // Retail indexes unconditionally; a negative index (no order selected) would read
     // behind the array. Callers gate on the selection, so this only guards standalone.
     if (orderIdx < 0 || !orderBase) return;
 
-    uint8_t* rec = reinterpret_cast<uint8_t*>(orderBase) +
-                   static_cast<uintptr_t>(orderIdx) * 0x20;
-    int64_t** items = reinterpret_cast<int64_t**>(rec + 0x10);
-    int32_t*  count = reinterpret_cast<int32_t*>(rec + 0x18);
-    int32_t*  cap   = reinterpret_cast<int32_t*>(rec + 0x1c);
+    TradeMerchantOrder* rec = orderBase + orderIdx;
+    ComponentDescription*** items = &rec->goods;
+    int32_t*  count = &rec->goodsCount;
+    int32_t*  cap   = &rec->goodsCap;
 
     bool present = false;
     if (*items) {
@@ -187,12 +186,12 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
     const int32_t oldCount = *count;
     const int32_t oldCap   = *cap;
     const int32_t newCount = oldCount + 1;
-    int64_t* oldItems = *items;
+    ComponentDescription** oldItems = *items;
     *count = newCount;
     if (*cap < newCount) {
         *cap = newCount;
         if (oldCount != 0) *cap = newCount * 3;
-        int64_t* grown = static_cast<int64_t*>(System::MemoryAllocator::MemAlloc(
+        ComponentDescription** grown = static_cast<ComponentDescription**>(System::MemoryAllocator::MemAlloc(
                   static_cast<uint64_t>(*cap) * 8, 8));
         if (!grown) {                        // standalone-only: retail never checks.
             *count = oldCount;               // leave the array exactly as we found it
@@ -231,69 +230,78 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
 // 0x14000e360 — the AVL rebalance walk, ported in citizenai_housing_idle.cpp as
 // CitizenAI_Reg_helper_e360 and called by name (B3R; the lazy resolver is gone).
 
-extern "C" void* TradeUI_StorageTreeNodeNew_e2c0(uint64_t /*key*/,
-                                                 const uint64_t* entry,
-                                                 void* parent) {
+// The node's first 16 bytes come from the entry (TradeStockEntry, TradeUI.h):
+// retail copies key and value as two qwords, so the value's pad dword is copied too.
+static void TradeUI_StorageTreeNodeFill(TradeResourceNode* n, const TradeStockEntry* entry) {
+    n->resource = entry->resource;           // key
+    n->quantity = entry->quantity;           // value (low dword)
+    n->_pad0C[0] = entry->_pad0C[0];         // value (high dword: the pad)
+    n->_pad0C[1] = entry->_pad0C[1];
+    n->_pad0C[2] = entry->_pad0C[2];
+    n->_pad0C[3] = entry->_pad0C[3];
+}
+
+extern "C" TradeResourceNode* TradeUI_StorageTreeNodeNew_e2c0(const ComponentDescription* /*key*/,
+                                                              const TradeStockEntry* entry,
+                                                              TradeResourceNode* parent) {
     // The key argument is genuinely unused: retail passes it but the ctor takes both
-    // key and value from `entry`. Kept in the signature because the second caller
-    // (TradeUI_impl_55a0, 0x1400255a0) passes it too.
-    uint64_t* n = static_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    // key and value from `entry`.
+    TradeResourceNode* n = static_cast<TradeResourceNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;                  // retail checks this too
-    n[0] = entry[0];                         // key
-    n[1] = entry[1];                         // value
-    n[2] = reinterpret_cast<uint64_t>(parent);
-    n[3] = 0;                                // left
-    n[4] = 0;                                // right
-    *reinterpret_cast<uint32_t*>(n + 5) = 0; // balance + height
+    TradeUI_StorageTreeNodeFill(n, entry);
+    n->parent = parent;
+    n->left = nullptr;
+    n->right = nullptr;
+    n->balance = 0;                          // balance + height: one dword in retail
+    n->height = 0;
     return n;
 }
 
-extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree,
-                                                 void**   out,
-                                                 const uint64_t* entry) {
+extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(TradeResourceNode** tree,
+                                                               TradeResourceNode** out,
+                                                               const TradeStockEntry* entry) {
     if (!tree || !out || !entry) return out;   // standalone-only
-    int32_t* count = reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(tree) + 0x08);
+    int32_t* count = reinterpret_cast<int32_t*>(tree + 1);   // LEFT: TradeComponent.h (the +0x60 tree header is two members stockRoot / stockCount, COMP-8)
 
-    if (*tree == 0) {
+    if (*tree == nullptr) {
         // Empty tree: the root node is built inline rather than through e2c0 (retail
         // duplicates the ctor here), with a null parent and no rebalance.
-        uint64_t* n = static_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+        TradeResourceNode* n = static_cast<TradeResourceNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
         if (!n) {
-            *tree = 0;
+            *tree = nullptr;
             *out  = nullptr;
         } else {
-            n[0] = entry[0];
-            n[1] = entry[1];
-            n[2] = 0;
-            n[3] = 0;
-            n[4] = 0;
-            *reinterpret_cast<uint32_t*>(n + 5) = 0;
+            TradeUI_StorageTreeNodeFill(n, entry);
+            n->parent = nullptr;
+            n->left = nullptr;
+            n->right = nullptr;
+            n->balance = 0;
+            n->height = 0;
             *out  = n;
-            *tree = reinterpret_cast<int64_t>(n);
+            *tree = n;
         }
         ++*count;                            // retail bumps the count even when the
         return out;                          // allocation failed — kept faithful
     }
 
-    const uint64_t key = entry[0];
-    uint64_t* node = reinterpret_cast<uint64_t*>(*tree);
-    void* inserted = nullptr;
+    const ComponentDescription* key = entry->resource;
+    TradeResourceNode* node = *tree;
+    TradeResourceNode* inserted = nullptr;
     for (;;) {
-        if (key < node[0]) {                 // unsigned, see note above
-            if (node[3] == 0) {
+        if (key < node->resource) {          // unsigned, see note above
+            if (node->left == nullptr) {
                 inserted = TradeUI_StorageTreeNodeNew_e2c0(key, entry, node);
-                node[3] = reinterpret_cast<uint64_t>(inserted);
+                node->left = inserted;
                 break;
             }
-            node = reinterpret_cast<uint64_t*>(node[3]);
-        } else if (node[0] < key) {
-            if (node[4] == 0) {
+            node = node->left;
+        } else if (node->resource < key) {
+            if (node->right == nullptr) {
                 inserted = TradeUI_StorageTreeNodeNew_e2c0(key, entry, node);
-                node[4] = reinterpret_cast<uint64_t>(inserted);
+                node->right = inserted;
                 break;
             }
-            node = reinterpret_cast<uint64_t*>(node[4]);
+            node = node->right;
         } else {
             *out = node;                     // key already present: hand back the
             return out;                      // existing node, count UNCHANGED
@@ -305,8 +313,8 @@ extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree,
     // Helper_e360 walks it up via +0x10 to the root, rotating as it goes. That helper
     // is 0x14000e360, CitizenAI_Reg_helper_e360, called by name (B3R).
     {
-        int64_t walk = reinterpret_cast<int64_t>(node);
-        CitizenAI_Reg_helper_e360(tree, &walk);   // 0x14000e360
+        int64_t walk = reinterpret_cast<int64_t>(node);   // LEFT: SIG CitizenAI_Reg_helper_e360 (retail 0x14000e360 serves several node types)
+        CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(tree), &walk);   // 0x14000e360  LEFT: SIG CitizenAI_Reg_helper_e360
     }
     *out = inserted;
     ++*count;

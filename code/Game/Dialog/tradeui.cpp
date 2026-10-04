@@ -1694,13 +1694,13 @@ void TradeUI::OnStorageSpinner(int idx) {
     // The insert/update logic (FUN_14000e1c0) handles both cases:
     // If resource already in BST: update quantity
     // If not found: insert new leaf
-    uint64_t newEntry[2] = { reinterpret_cast<uint64_t>(resourceEntity), (uint64_t)(uint32_t)newVal };
-    void* retval = nullptr;
-    TradeUI_StorageTree_Insert_e1c0(reinterpret_cast<int64_t*>(&trade->stockRoot), &retval, newEntry);   // 0x14000e1c0; LEFT: the tree header (COMP-f)
+    TradeStockEntry newEntry[1] = { { resourceEntity, newVal, { 0, 0, 0, 0 } } };
+    TradeResourceNode* retval = nullptr;
+    TradeUI_StorageTree_Insert_e1c0(&trade->stockRoot, &retval, newEntry);   // 0x14000e1c0
 
     // If we got a result back (found existing), update its qty
     if (retval) {
-        *(int*)((uintptr_t)retval + 8) = newVal;
+        retval->quantity = newVal;
     }
 
 
