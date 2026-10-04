@@ -193,9 +193,6 @@ public:
 
     // ---- serialization -----------------------------------------------------
     void Serialize(IO::Serializer& serializer);     // ?Serialize@..@QEAAXAEAVSerializer@IO@@@Z 0x1800c9930
-    // B4 FORWARD: runtime/src/object/external_load.cpp and external_reftable.cpp
-    // still call this: they build the Serializer as an rt::io POD view.
-    void Serialize(void* serializer);
 
 private:
     void SetLength(int len);                        // ?SetLength@..@AEAAXH@Z (PRIVATE)  0x1800c8220

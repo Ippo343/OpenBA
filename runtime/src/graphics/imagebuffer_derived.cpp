@@ -287,8 +287,8 @@ Object::Base* FrameCopyImageBuffer::CreateInPlaceObject(void* place) {
 // (reference_retail_ships_empty_bodies.md) — a slot left as an abort trap is
 // not the same thing, because the trap fires where retail returns.
 // ============================================================================
-void FrameCopyImageBuffer::Render(void* renderer, const void* scene,
-                                  const void* camera, int32_t generation) const {
+void FrameCopyImageBuffer::Render(Renderer& renderer, const Scene& scene,
+                                  const Camera& camera, int32_t generation) const {
     (void)renderer; (void)scene; (void)camera; (void)generation;
 }
 
@@ -606,8 +606,8 @@ void GroupArraySetSize(void* arrayHdr, int n, const void* fill) {
 
 namespace Graphics {
 
-void ReflectionImageBuffer::Render(void* renderer, const void* scene,
-                                   const void* camera, int32_t generation) const {
+void ReflectionImageBuffer::Render(Renderer& rend, const Scene& scene,
+                                   const Camera& cam, int32_t generation) const {
     // `?Render@` is `UEBA` — CONST — and the body's last act WRITES `_generation`
     // (0x1800a6e91). Retail's own signature and retail's own body disagree, which
     // MSVC source can only have expressed with a cast too. The const-ness is
@@ -615,12 +615,6 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // is spelled with the cast at the one site rather than by making the field
     // `mutable`, which would hide the disagreement in the declaration.
     ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);  // LEFT: retail's const (UEBA) slot writes _generation (see above)
-
-    // LEFT: the slot's three references arrive as `void*` (the declaration
-    // GeneratedImageBuffer.h and tests/unit/rb_graphics_abi_test.cpp share);
-    // each is viewed once as retail's `Renderer&` / `const Scene&` / `const Camera&`.
-    Graphics::Renderer& rend = *static_cast<Graphics::Renderer*>(renderer);   // LEFT: SIG GeneratedImageBuffer slot [11] Render declares retail's Renderer& as void* (GeneratedImageBuffer.h, rb_graphics_abi_test.cpp)
-    const Graphics::Camera& cam = *static_cast<const Graphics::Camera*>(camera);   // LEFT: SIG GeneratedImageBuffer slot [11] Render declares retail's const Camera& as void* (GeneratedImageBuffer.h, rb_graphics_abi_test.cpp)
 
     if (p->_generation == generation) return;      // CMP [RCX+0x68],ESI / JZ
 
@@ -652,7 +646,7 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // copies the camera straight into it and the transform is overwritten there;
     // `Graphics::Camera` cannot be a C++ local (its default ctor is protected, B5-4).
     Graphics::RendererSceneEntry group;            // ctor: `_drawableIds` zeroed (+0x100)
-    group._scene        = static_cast<const Graphics::Scene*>(scene);  // LEFT: SIG slot takes void* (GeneratedImageBuffer.h + rb_graphics_abi_test)
+    group._scene        = &scene;
     group._renderBuffer = p->_target;
     rtgfxd::RtGraphics_Camera_CopyCtor(&group._camera, &cam);
     group._camera._cameraToWorld = mirrored;

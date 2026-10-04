@@ -100,6 +100,7 @@
 #include "../../types/system/String.h"   // B.4: RtSystem::StringRefCount
 #include "../../types/collection/Collection.h"
 #include "set_avl.h"
+#include "set_avl_pathid.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 
 namespace rtpathid {
@@ -107,51 +108,8 @@ namespace rtpathid {
 using rtsetavl::Node;
 using rtsetavl::Set;
 
-// The element: a refcounted `System::Filename` (one char*) and a uint32.
-// 0x1800278c0 writes exactly these two slots and nothing between them, and
-// `Set::Node`'s tail starts at +0x10, so the element occupies +0x00..+0x0f
-// with +0x0c never written by anybody.
-struct PathId {
-    char*    key;     // +0x00 — System::Filename::data
-    uint32_t value;   // +0x08 — the packfile id
-    uint32_t _pad0c;  // +0x0c — NEVER WRITTEN by the ctor or the wrapper
-};
-static_assert(sizeof(PathId) == 0x10, "the element fills Set::Node's +0x00..+0x0f");
-static_assert(offsetof(PathId, value) == 0x08,
-              "0x1800278e9 MOV dword ptr [RAX+0x8],ECX");
-
-// B.4 (R-COLL): the node 0x1800278c0 allocates (0x30, align 8) and builds —
-// the element above at +0x00, parent +0x10, the two null children +0x18 /
-// +0x20 and ONE dword zero at +0x28 over balance and height. It is
-// rtsetavl::Node's layout (set_avl.h) with the element typed, so the shared
-// retrace 0x1800279f0 serves it.
-struct PathIdNode {
-    PathId      element;   // +0x00
-    PathIdNode* parent;    // +0x10
-    PathIdNode* left;      // +0x18
-    PathIdNode* right;     // +0x20
-    int16_t     balance;   // +0x28
-    int16_t     height;    // +0x2a
-    uint32_t    pad2c;     // +0x2c  never written by the ctor
-};
-static_assert(sizeof(PathIdNode) == 0x30, "0x1800278c0 allocates 0x30");
-static_assert(offsetof(PathIdNode, element) == 0x00, "PathIdNode::element @ +0x00");
-static_assert(offsetof(PathIdNode, parent)  == offsetof(Node, parent),  "PathIdNode::parent @ +0x10");
-static_assert(offsetof(PathIdNode, left)    == offsetof(Node, left),    "PathIdNode::left @ +0x18");
-static_assert(offsetof(PathIdNode, right)   == offsetof(Node, right),   "PathIdNode::right @ +0x20");
-static_assert(offsetof(PathIdNode, balance) == offsetof(Node, balance), "PathIdNode::balance @ +0x28");
-static_assert(offsetof(PathIdNode, height)  == offsetof(Node, height),  "PathIdNode::height @ +0x2a");
-static_assert(offsetof(PathIdNode, pad2c)   == 0x2c, "PathIdNode::pad2c @ +0x2c");
-
-// The {root, count} header the insert core takes: set_avl.h's `Set` with the
-// typed node.
-struct PathIdSet {
-    PathIdNode* root;    // +0x00
-    int32_t     count;   // +0x08
-    int32_t     pad0c;   // +0x0c
-};
-static_assert(sizeof(PathIdSet) == sizeof(Set), "PathIdSet is {root, count}");
-static_assert(offsetof(PathIdSet, count) == offsetof(Set, count), "PathIdSet::count @ +0x08");
+// PathId, PathIdNode and PathIdSet: set_avl_pathid.h (B.4 wave X: the one
+// declaration this file and io/modification_setupfilesystem.cpp share).
 
 namespace {
 
@@ -290,7 +248,7 @@ PathIdNode** InsertCore(PathIdSet* set, PathIdNode** outSlot, const PathId* pair
 // written and neither is the node's — the caller passes a POINTER to the
 // uint32, not the uint32.
 // ---------------------------------------------------------------------------
-Node** Insert(Set* set, Node** outSlot, char* const* key, const uint32_t* value) {
+PathIdNode** Insert(PathIdSet* set, PathIdNode** outSlot, char* const* key, const uint32_t* value) {
     PathId temp;
     temp.key = nullptr;                       // retail stores the zero FIRST
     if (*key) {
@@ -300,7 +258,7 @@ Node** Insert(Set* set, Node** outSlot, char* const* key, const uint32_t* value)
     temp.value = *value;
     // temp._pad0c deliberately left uninitialised: retail's store is a DWORD.
 
-    InsertCore(reinterpret_cast<PathIdSet*>(set), reinterpret_cast<PathIdNode**>(outSlot), &temp);  // LEFT: SIG rtpathid::Insert (modification_setupfilesystem.cpp holds the erased rtsetavl::Set / Node)
+    InsertCore(set, outSlot, &temp);
 
     StringReleaseInline(&temp.key);
     return outSlot;
@@ -325,13 +283,13 @@ Node** Insert(Set* set, Node** outSlot, char* const* key, const uint32_t* value)
 // Retail recurses and so does this; an explicit stack would be a different
 // program with a different overflow point.
 // ---------------------------------------------------------------------------
-void SubtreeFree(void* ignoredThis, Node* node) {
+void SubtreeFree(void* ignoredThis, PathIdNode* node) {
     if (node == nullptr) return;
 
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    StringReleaseInline(&reinterpret_cast<PathIdNode*>(node)->element.key);  // LEFT: SIG rtpathid::SubtreeFree (its caller holds the erased rtsetavl::Node)
+    StringReleaseInline(&node->element.key);
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }

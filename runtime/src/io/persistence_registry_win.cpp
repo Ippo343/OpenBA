@@ -229,18 +229,19 @@ static_assert(std::is_same<HKEY, HKEY__*>::value, "Registry.h's HKEY__* is <wind
 // header and 0x18000f7d0 IS `Set<T>::Clear()` (set_clear.cpp's own banner
 // names it), but `IO::Persistence` holds that header as three loose fields
 // (it has no constructor -- engine/singleton_ctors.cpp builds it), so the
-// collection bodies are handed `this` as the untyped Set they are.
-void MapClear(void* self) {
-    rtsetclear::Clear(static_cast<rtsetavl::Set*>(self));            // 0x18000f7d0  LEFT: see above   // LEFT: H5 IO::Persistence holds its settings map as loose fields; the erased Set core takes the object as its rtsetavl::Set header (ledger: typed with _savePath and the worker)
+// collection bodies are handed the map's {root, count} header (B.4 wave X:
+// `RtIo::SettingsMap`, Persistence.h).
+void MapClear(RtIo::SettingsMap* map) {
+    rtsetclear::Clear(map);                                           // 0x18000f7d0
 }
 
 // Map_Insert hands back the collection's opaque-element node; the settings
 // map's node IS `RtIo::SettingsMapNode` (Persistence.h).
-SettingsMapNode* MapInsert(void* map, const System::String& key, const System::String& value) {
-    rtsetavl::Node* node = nullptr;
-    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
+SettingsMapNode* MapInsert(RtIo::SettingsMap* map, const System::String& key, const System::String& value) {
+    SettingsMapNode* node = nullptr;
+    rtavl::StringMapInsert(map,                                      // 0x18002a090
                            &node, &key._data, &value._data);
-    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
+    return node;
 }
 
 // Convert one NUL-terminated UTF-16 buffer to a System::String, exactly the
@@ -353,7 +354,7 @@ namespace IO {
 
 void Persistence::ReadSettings() {
 
-    ::MapClear(this);                                          // 0x1800b84db
+    ::MapClear(&_settingsMap);                                 // 0x1800b84db
 
     // 0x1800b84e7 `Registry reg(nullptr)`. Its destructor is retail's inlined
     // ~Registry at 0x1800b887d (Registry.h's banner), the last of the three
@@ -388,7 +389,7 @@ void Persistence::ReadSettings() {
         ::AssignFromWide(name, nameBuf);                       // 0x1800b85b2..
         ::AssignFromWide(value, valueBuf);                     // 0x1800b86a5..
 
-        SettingsMapNode* const n = ::MapInsert(this, name, value);   // 0x1800b87ad
+        SettingsMapNode* const n = ::MapInsert(&_settingsMap, name, value);   // 0x1800b87ad
 
         // 0x1800b87b2-0x1800b882d. Map_Insert leaves an ALREADY-PRESENT key's
         // value untouched, so retail re-seats it by hand. The `!=` is the
@@ -570,7 +571,7 @@ namespace {
 // signature (system/Configuration.h) takes the map's root slot and the key
 // String and returns the node (B.4 R-SYS).
 const SettingsMapNode* MapFind(const IO::Persistence* map, const System::String& key) {
-    return RtSystem_ConfigMap_Find(&map->_settingsMapRoot, &key);
+    return RtSystem_ConfigMap_Find(&map->_settingsMap.root, &key);
 }
 
 // The allocator boundary for phase 2's array: retail open-codes
@@ -709,7 +710,7 @@ void Persistence::WriteSettings() const {
     {
         IO::Registry reg(nullptr);                              // 0x1800b8912
 
-        const SettingsMapNode* node = Leftmost(_settingsMapRoot);   // 0x1800b8918
+        const SettingsMapNode* node = Leftmost(_settingsMap.root);   // 0x1800b8918
         while (node != nullptr) {
             {
                 System::WideString wValue(node->value);         // 0x1800b894b

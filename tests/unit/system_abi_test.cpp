@@ -608,9 +608,9 @@ UNIT_TEST(system_configuration_is_0x30_bytes_at_the_ctors_literal_offsets) {
     CHECK_EQ(sizeof(System::Configuration), static_cast<size_t>(0x30));
     CHECK_EQ(offsetof(System::Configuration, _entries),     static_cast<size_t>(0x00));
     CHECK_EQ(offsetof(System::Configuration, _entryCount),  static_cast<size_t>(0x08));
-    CHECK_EQ(offsetof(System::Configuration, _mapRoot),     static_cast<size_t>(0x10));
-    CHECK_EQ(offsetof(System::Configuration, _mapCount),    static_cast<size_t>(0x18));
-    CHECK_EQ(offsetof(System::Configuration, _pad1c),       static_cast<size_t>(0x1c));
+    CHECK_EQ(offsetof(System::Configuration, _map.root),     static_cast<size_t>(0x10));
+    CHECK_EQ(offsetof(System::Configuration, _map.count),    static_cast<size_t>(0x18));
+    CHECK_EQ(offsetof(System::Configuration, _map.pad0c),   static_cast<size_t>(0x1c));
     CHECK_EQ(offsetof(System::Configuration, _currentPlatform), static_cast<size_t>(0x20));
     CHECK_EQ(offsetof(System::Configuration, _currentBuild),    static_cast<size_t>(0x28));
     CHECK_EQ(offsetof(System::Configuration, _pad2c),       static_cast<size_t>(0x2c));

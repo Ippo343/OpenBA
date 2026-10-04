@@ -823,7 +823,7 @@ void Modification::RefreshList() {
             // the finder (R-CORE's, system/Configuration.h) returns it as void*.
             const RtIo::SettingsMapNode* node =
                 RtSystem_ConfigMap_Find(                         // 0x18002ace0
-                    &pers->_settingsMapRoot, &keyStr.AsString());
+                    &pers->_settingsMap.root, &keyStr.AsString());
             if (node != nullptr) {
                 const char* v = node->value._data;               // +0x08
                 const int cmp = (v == nullptr) ? -1 : std::strcmp(v, "true");
@@ -838,7 +838,7 @@ void Modification::RefreshList() {
                 System::String::Format("%s%s", "ModIndex_", nameRef));
             const RtIo::SettingsMapNode* node =
                 RtSystem_ConfigMap_Find(
-                    &pers->_settingsMapRoot, &keyStr.AsString());
+                    &pers->_settingsMap.root, &keyStr.AsString());
             if (node != nullptr) {
                 const char* v = node->value._data;               // +0x08
                 m->order = RtCrt_ParseInt10_18007f034(v);        // 0x18007f034

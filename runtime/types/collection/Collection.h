@@ -1924,14 +1924,11 @@ void* Array16Assign(void* dstRaw, const void* srcRaw);  // 0x180050d30
 void  EffectSlotAssign(uint8_t* dst, const uint8_t* src);  // 0x180051650 (B.4: the element op, rtcoll::AssignAs)
 }  // namespace rtsort
 
-namespace rtpathid {
-// ---- collection/set_avl_pathid.cpp
-rtsetavl::Node** Insert(rtsetavl::Set* set, rtsetavl::Node** outSlot, char* const* key, const uint32_t* value);  // 0x180027380
-void SubtreeFree(void* ignoredThis, rtsetavl::Node* node);  // 0x180027970
-}  // namespace rtpathid
+// rtpathid::Insert / SubtreeFree (0x180027380 / 0x180027970): runtime/src/collection/set_avl_pathid.h
 
+namespace RtIo { struct SettingsMap; }   // io/Persistence.h
 namespace rtsetclear {
 // ---- collection/set_clear.cpp
-void Clear(rtsetavl::Set* set);  // 0x18000f7d0
+void Clear(RtIo::SettingsMap* set);  // 0x18000f7d0
 }  // namespace rtsetclear
 // ==== end B3R W0-P0c ====

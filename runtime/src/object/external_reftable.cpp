@@ -86,6 +86,7 @@
 #include "external_set.h"                 // rtresset::{Node,Set,Elem} — the
                                           //   0x38-byte ResourceEntry node
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"       // IO::Stream: _encoding / _direction, the Serializer ctor
 #include "../../types/object/External.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
@@ -115,36 +116,14 @@ void ReferenceSubtreeFree(void* set, RtObject::ReferenceSet::Node* node);
 
 namespace {
 
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
 using RtObject::ExternalFactory;
 using RtObject::External;
 
-// ---------------------------------------------------------------------------
-// The vtable call shapes, all pinned by the disassembly.
-//
-//   1800bcbab  MOV RAX,[RCX] ; XOR R8D,R8D ; LEA RDX,[RBP-0x18] ; CALL [RAX+0x18]
-//       -> (Encoding* this, Serializer* ser, int version = 0) -> ReaderWriter*
-//   1800bcbd5  MOV RAX,[RCX] ; XOR R8D,R8D ; LEA RDX,[RBP+0x40] ; CALL [RAX+0xa0]
-//       -> (ReaderWriter* this, T* value, const char* name = 0)
-//   1800bcf28  MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]
-//       -> (ReaderWriter* this, int flags)
-// ---------------------------------------------------------------------------
-using EncFactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-
-// B3X W0: the ReaderWriter is called by name (SerializeInt +0xa0,
-// SerializeUInt +0x98, DeletingDtor slot 0). `VSlot` stays for the IO::Encoding
-// factory slot alone -- that table has no destructor slot and does not flip.
-inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
-    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-}
-
-inline void* VSlot(void* obj, int byteOffset) {
-    void** vt = *reinterpret_cast<void***>(obj);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-    return vt[byteOffset / 8];
-}
+// The vtable call shapes, all pinned by the disassembly: 1800bcbab the
+// Encoding's CreateReader / CreateWriter (inside the inlined Serializer ctor),
+// 1800bcbd5 the ReaderWriter's SerializeInt (+0xa0), 1800bcf28 its deleting
+// destructor (slot 0, flags 1, inside the inlined ~Serializer). All three are
+// IO::Serializer's and IO::ReaderWriter's members, called by name.
 
 // ENDGAME B.3.1 step 2 removed this file's `ReleaseInline` and `AdoptRef`
 // helpers. The six inlined releases are `~Filename` (0x180006980); three of the
@@ -179,7 +158,7 @@ void RtObjectExternalRefTableSummary();
 namespace RtObject {
 
 void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
-                                                      Stream* stream) {
+                                                      ::IO::Stream* stream) {
     ++g_c.calls;
 
     // ---- MUTATION A: tear the reference table down --------------------------
@@ -193,19 +172,17 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     refs._count = 0;                             // 1800bcb94, DWORD
 
     // ---- the local Serializer and its codec ---------------------------------
-    Serializer ser;
-    ser.stream       = stream;                   // 1800bcb98 [RBP-0x18]
-    ser.readerWriter = nullptr;                  // 1800bcb9c [RBP-0x10]
-
-    Encoding* enc = stream->encoding;            // 1800bcba0 [RBX+0x10]
-    if (!enc) ++g_c.nullEncoding;                // counted, NOT guarded: retail
+    // 1800bcb98 .. 1800bcbbc is `??0Serializer@IO@@QEAA@AEAVStream@1@H@Z`
+    // (0x1800b9960) inlined with version 0: `_stream = stream`, `_readerWriter
+    // = 0`, the Encoding at [stream+0x10], CreateReader (+0x18) on a read or
+    // CreateWriter (+0x20) on a write, the result stored at +0x08. It is the
+    // real IO::Serializer (B.4 wave X); its destructor (0x1800b99b0, inlined
+    // at 1800bcf17) closes the block below.
+    if (!stream->_encoding) ++g_c.nullEncoding;  // counted, NOT guarded: retail
                                                  //   derefs it unconditionally
-    const int factorySlot = (stream->direction == rt::io::kDirectionReading)
-                                ? rt::io::encoding_vtbl::kCreateReader   // +0x18
-                                : rt::io::encoding_vtbl::kCreateWriter;  // +0x20
-    ReaderWriter* rw =
-        reinterpret_cast<EncFactoryFn>(VSlot(enc, factorySlot))(enc, &ser, 0);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-    ser.readerWriter = rw;                       // 1800bcbbc
+    {
+    ::IO::Serializer ser(*stream, 0);
+    ::IO::ReaderWriter* const rw = ser._readerWriter;   // 1800bcbbc
     if (!rw) ++g_c.nullRw;
 
     // ---- the entry count ----------------------------------------------------
@@ -215,9 +192,9 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     // (`kScalarInt`, +0xa0) and the read-path loop is `JLE` / `JL` on it, so a
     // negative count is a zero-iteration loop rather than a wild one.
     int32_t count = self->_resources._count;     // this + 0x18
-    Rw(rw)->SerializeInt(count, nullptr);        // +0xa0
+    rw->SerializeInt(count, nullptr);            // +0xa0
 
-    if (stream->direction == rt::io::kDirectionReading) {
+    if (stream->_direction == rt::io::kDirectionReading) {
         // ====================================================================
         // READ PATH — 1800bcbe5 .. 1800bcdef
         // ====================================================================
@@ -229,12 +206,12 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
 
         for (int32_t i = 0; i < count; ++i) {    // 1800bcbef JLE / 1800bcdbf JL
             uint32_t id = 0;                     // [RBP+0x48]
-            Rw(rw)->SerializeUInt(id, nullptr);  // 1800bcc1e, +0x98
+            rw->SerializeUInt(id, nullptr);      // 1800bcc1e, +0x98
 
             // 1800bcc2c — reads the path into `scratch`, replacing whatever it
             // held. `RBX` is reloaded from the slot AFTER this call, which is
             // why the port re-reads `scratch.data` here and not before.
-            scratch.AsString().Serialize(&ser);
+            scratch.AsString().Serialize(ser);
             ++g_c.entries;                       // 1800bcc35 reloads the slot
 
             // Temporary A: an AddRef'd alias, delimiter-normalised, handed to
@@ -359,8 +336,8 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                     }                                        // 1800bce54
                     ++g_c.entries;
 
-                    Rw(rw)->SerializeUInt(id, nullptr);      // +0x98
-                    path.AsString().Serialize(&ser);         // 1800bce99
+                    rw->SerializeUInt(id, nullptr);          // +0x98
+                    path.AsString().Serialize(ser);          // 1800bce99
                 }                                            // 1800bce9f
 
                 // ---- in-order successor, 1800bcec0 .. 1800bcf02 ------------
@@ -388,9 +365,9 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     }
 
     // ---- destroy the codec the factory allocated ----------------------------
-    // 1800bcf17. Skipping it leaks 0x30 bytes per call.
-    if (rw)
-        delete Rw(rw);                 // slot 0, flags 1
+    // 1800bcf17: `~Serializer` (0x1800b99b0), `if (rw) delete rw` (slot 0,
+    // flags 1). Skipping it leaks 0x30 bytes per call.
+    }
 
     // ---- report, HERE, inside the subject's live window ---------------------
     // Not only from the exit summary. This body runs at most twice per session

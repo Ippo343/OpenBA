@@ -108,23 +108,16 @@ namespace RtObject {
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// `IO::Serializer` — the 16-byte facade described in the header above.
-// ---------------------------------------------------------------------------
-struct Serializer {
-    RtIo::Stream* stream;  // +0x00
-    void*         impl;    // +0x08
-};
-static_assert(sizeof(Serializer) == 0x10, "the pair retail keeps at [rsp+0x20]");
+// `IO::Serializer` — the 16-byte facade described in the header above — is
+// the real class (runtime/types/io/Serializer.h; B.4 wave X).
 
 // The magic that opens every compiled resource. 0x1800bc6e5 compares against it
 // verbatim; it is not derived from anything.
 constexpr uint32_t kCompiledMagic = 0x5412a91fu;
 
-// ---- the two raw function-pointer shapes this body calls through ----------
 // B3R RT-Core: CompressedStream::Open / Commit, FileSystem::CloseFile,
-// Base::IsDerivedFrom and String::Serialize are called by name.
-using SerFactoryFn  = void* (*)(void* encoding, Serializer* ser, int flag);
+// Base::IsDerivedFrom and String::Serialize are called by name; the Encoding's
+// CreateReader / CreateWriter by IO::Serializer's constructor.
 
 // `Collection::Array<ExternalArrayElement>::SetSize`, 0x18002c6a0. NOT exported
 // in either build, so this is a genuine ADDRESS door and the only one this file
@@ -172,12 +165,12 @@ void CloseIfOpen(RtIO::FileInfo* fi) {
 // which is `SerializeUInt` (Serializer.h:504-505). The helper names were
 // swapped against their slots; the offsets are retail's and are what stays.
 // Both pass the third argument (the name) as zero, as retail does.
-void SerU32(void* impl, uint32_t* v) {
-    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeInt(     // +0xa0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+void SerU32(::IO::ReaderWriter* rw, uint32_t* v) {
+    rw->SerializeInt(                                              // +0xa0
         *reinterpret_cast<int32_t*>(v), nullptr);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail's slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 }
-void SerI32(void* impl, int32_t* v) {
-    reinterpret_cast<::IO::ReaderWriter*>(impl)->SerializeUInt(    // +0x98 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+void SerI32(::IO::ReaderWriter* rw, int32_t* v) {
+    rw->SerializeUInt(                                             // +0x98
         *reinterpret_cast<uint32_t*>(v), nullptr);  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 }
 
@@ -247,11 +240,10 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
     // ENDGAME B.3.9 IO (foreign site, IO's class): the class's real constructor
     // (??0CompressedStream, the vptr, ??0BinaryFileStream at +0x68 -- the same
     // three steps in the same order) on raw stack storage. The body below reads
-    // the object through the RtIo POD view, unchanged.
+    // the object through the class (B.4 wave X).
     alignas(IO::CompressedFileStream) unsigned char cfsMem[sizeof(IO::CompressedFileStream)];
     IO::CompressedFileStream* const cfsObj =
         ::new (static_cast<void*>(cfsMem)) IO::CompressedFileStream();
-    RtIo::CompressedFileStream& cfs = *reinterpret_cast<RtIo::CompressedFileStream*>(cfsObj);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 
     // ---- 1800bc669..1800bc695 -------------------------------------------
     // Slot 7 of a FileStream is `Open`. On the MemoryStream/CompressedStream
@@ -269,15 +261,12 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
         // Build the Serializer facade and ask the Encoding for the half it
         // does not have. READING takes +0x18, WRITING takes +0x20 -- and this
         // one branch is the whole difference between a load and a save here.
-        Serializer ser;
-        ser.stream = &cfs.base.base;
-        ser.impl   = nullptr;
-
-        void*  enc   = cfs.base.base.encoding;
-        void** encVt = *reinterpret_cast<void***>(enc);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-        const size_t slot = (cfs.base.base.direction == 0) ? 0x18 : 0x20;   // 1800bc6bc
-        ser.impl = reinterpret_cast<SerFactoryFn>(encVt[slot / sizeof(void*)])(  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-                       enc, &ser, 0);
+        // 1800bc69b..1800bc6ca IS `??0Serializer@IO@@QEAA@AEAVStream@1@H@Z`
+        // (0x1800b9960) inlined with version 0: `_stream`, a null
+        // `_readerWriter`, the Encoding's CreateReader (+0x18, direction 0)
+        // or CreateWriter (+0x20), the result at +0x08.
+        ::IO::Serializer ser(*cfsObj, 0);
+        ::IO::ReaderWriter* const rw = ser._readerWriter;
 
         bool bad = false;
 
@@ -286,14 +275,14 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
         // serializer fills it, on a write it emits whatever is there. Left
         // uninitialised for the same reason the stream is.
         uint32_t magic;
-        SerU32(ser.impl, &magic);
+        SerU32(rw, &magic);
         if (magic != kCompiledMagic) {
             ++g_lc.badMagic;
             bad = true;
         } else {
             // ---- 1800bc6f3..1800bc70e -------------------------------------
             int32_t typeId = 0;                                   // 1800bc6f3
-            SerI32(ser.impl, &typeId);
+            SerI32(rw, &typeId);
 
             if (obj != nullptr) {
                 ++g_lc.reusedExisting;                            // 1800bc70e
@@ -341,7 +330,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
             if (!bad) {
                 // ---- 1800bc767..1800bc78a -----------------------------------
                 uint32_t version;
-                SerU32(ser.impl, &version);
+                SerU32(rw, &version);
                 const int32_t objVersion =          // slot 3 +0x18 (B.3.x bridge)
                     obj->GetFileVersion();
                 if (static_cast<int32_t>(version) != objVersion) {
@@ -356,9 +345,9 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 // object's CURRENT size and then serializes it, so the same
                 // instruction reads on a load and writes on a save.
                 int32_t depCount = obj->_refs._size;              // 1800bc790
-                SerU32(ser.impl, reinterpret_cast<uint32_t*>(&depCount));  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
+                SerU32(rw, reinterpret_cast<uint32_t*>(&depCount));  // LEFT: R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8
 
-                if (ser.stream->direction == 0) {                 // 1800bc7b0
+                if (ser._stream->_direction == 0) {               // 1800bc7b0
                     ++g_lc.sizedArray;
                     ArraySetSize(&obj->_refs, depCount);          // 1800bc7bd
                 }
@@ -370,16 +359,16 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 uint8_t* elem = reinterpret_cast<uint8_t*>(obj->_refs._data);  // LEFT: External.h ExternalArrayElement {char* owned; uint64_t opaque}: splitting `opaque` into its two int32s (0x1800bc7fc / 0x1800bc811) breaks array.cpp:854's one-qword copy (R-COLL); `owned` is retail's Filename (H5)
                 for (int32_t i = 0; i < depCount; ++i, elem += 0x10) {
                     ++g_lc.deps;
-                    reinterpret_cast<::System::String*>(elem)->Serialize(&ser);   // 1800bc7e9  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                    reinterpret_cast<::System::String*>(elem)->Serialize(ser);    // 1800bc7e9  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                    SerI32(rw, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                    SerI32(rw, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
                 }
 
                 // ---- 1800bc820..1800bc82b -------------------------------
                 // The object reads (or writes) ITSELF, through the same slot
                 // ExternalFactory::Add and External::SaveText drive.
                 ++g_lc.serialized;
-                obj->Serialize(*reinterpret_cast<IO::Stream*>(&cfs));   // slot 5 +0x28 (B.3.x bridge)   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
+                obj->Serialize(*cfsObj);   // slot 5 +0x28
             }
         }
 
@@ -387,9 +376,9 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
         // The Serializer implementation's DELETING destructor, `vtbl[0](1)`.
         // Both the good and the bad exits run it; they differ only in where
         // they go next, which is what decides the return value.
-        if (ser.impl != nullptr) {
-            delete reinterpret_cast<::IO::ReaderWriter*>(ser.impl);   // slot 0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-        } else {
+        // `~Serializer` (0x1800b99b0) at the end of this block runs it:
+        // `if (rw) delete rw`, nothing in between but the local `keep`.
+        if (rw == nullptr) {
             ++g_lc.nullSerializer;
         }
 
@@ -406,7 +395,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
             ++g_lc.committed;
             cfsObj->Commit();                                              // 0x1800a9ee0
         }
-        CloseIfOpen(&cfs.file.base.file);                                // 1800bc872
+        CloseIfOpen(&cfsObj->_file._file);                                // 1800bc872
     }
     ::Object::External* result = keep ? obj : nullptr;                             // 1800bc888
     if (result == nullptr) ++g_lc.returnedNull;

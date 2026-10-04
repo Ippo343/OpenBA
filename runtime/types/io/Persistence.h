@@ -239,6 +239,21 @@ static_assert(offsetof(SettingsMapNode, left)   == 0x18, "left @ +0x18 (0x18000f
 static_assert(offsetof(SettingsMapNode, right)  == 0x20, "right @ +0x20 (0x18000f7fd)");
 static_assert(sizeof(SettingsMapNode) == 0x30, "the Set node set_avl.h pins");
 
+// The {root, count} header of that map: the `Set` both Map_Insert (0x18002a090:
+// `MOV [RSP+..],RCX`, then [RCX] the root and dword [RCX+0x08] the count it
+// bumps) and Map_Clear (0x18000f7d0: its two zero stores, qword +0x00 and
+// dword +0x08) take as their first argument. IO::Persistence holds one at
+// +0x00, System::Configuration at +0x10. A view of three words: no ctor, no
+// dtor; the owners zero it and clear it by hand, in retail's order.
+struct SettingsMap {
+    SettingsMapNode* root;    // +0x00
+    int32_t          count;   // +0x08
+    uint32_t         pad0c;   // +0x0c  NOT pinned (Configuration: never written by its ctor)
+};
+static_assert(offsetof(SettingsMap, root)  == 0x00, "root @ +0x00 (0x18002ace0: MOV R9,[R8])");
+static_assert(offsetof(SettingsMap, count) == 0x08, "count @ +0x08 (Map_Clear's dword store)");
+static_assert(sizeof(SettingsMap) == 0x10, "the {root, count} Set header");
+
 // ============================================================================
 // IO::Persistence::SaveBlock — 0x10 bytes. One buffer handed to the save/load
 // worker thread. Added by Wave 13, pinned by THREE independent readers rather
@@ -450,9 +465,7 @@ public:
     // offsets through `RtIo::Persistence`, and `offsetof` on them has to be
     // well formed for the pins below. Field for field with the POD above, whose
     // per-offset evidence comments are not repeated here.
-    RtIo::SettingsMapNode* _settingsMapRoot; // +0x00 — the Set<Pair<String,String>> root
-    int32_t             _settingsMapCount;   // +0x08
-    uint8_t             _pad0c[0x04];        // +0x0C — NOT pinned
+    RtIo::SettingsMap   _settingsMap;        // +0x00 — the Set<Pair<String,String>> {root, count}
     void*               _workerVtable;       // +0x10 — the EMBEDDED worker's vptr
     uint32_t            _flags;              // +0x18 — bit 0 == unavailable
     uint8_t             _pad1c[0x04];        // +0x1C — NOT pinned
@@ -500,8 +513,7 @@ public:
 // that the class and the POD describe the same bytes, offset for offset.
 static_assert(sizeof(Persistence) == sizeof(RtIo::Persistence),
               "IO::Persistence and the RtIo::Persistence POD describe the same bytes");
-static_assert(offsetof(Persistence, _settingsMapRoot)  == 0x00, "see field comment");
-static_assert(offsetof(Persistence, _settingsMapCount) == 0x08, "see field comment");
+static_assert(offsetof(Persistence, _settingsMap)      == 0x00, "see field comment");
 static_assert(offsetof(Persistence, _workerVtable)     == 0x10, "see field comment");
 static_assert(offsetof(Persistence, _flags)            == 0x18, "see field comment");
 static_assert(offsetof(Persistence, _threadHandle)     == 0x20, "see field comment");
@@ -523,8 +535,7 @@ static_assert(offsetof(Persistence, _saves)            == 0x80, "see field comme
 static_assert(offsetof(Persistence, _saveCount)        == 0x88, "see field comment");
 static_assert(offsetof(Persistence, _savePath)         == 0x90, "see field comment");
 
-static_assert(offsetof(Persistence, _settingsMapRoot)  == offsetof(RtIo::Persistence, settingsMapRoot),  "alias");
-static_assert(offsetof(Persistence, _settingsMapCount) == offsetof(RtIo::Persistence, settingsMapCount), "alias");
+static_assert(offsetof(Persistence, _settingsMap)      == offsetof(RtIo::Persistence, settingsMapRoot),  "alias");
 static_assert(offsetof(Persistence, _workerVtable)     == offsetof(RtIo::Persistence, workerVtable),     "alias");
 static_assert(offsetof(Persistence, _flags)            == offsetof(RtIo::Persistence, flags),            "alias");
 static_assert(offsetof(Persistence, _threadHandle)     == offsetof(RtIo::Persistence, threadHandle),     "alias");
