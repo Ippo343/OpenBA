@@ -703,8 +703,8 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
     if (model && PerfX::IconCull() && PerfX::ModelCulled(static_cast<ModelComponent*>(model))) {   // found by ModelComponent::TypeId() (B10)
         PerfX::Count(PerfX::kCntIconCulled);
-        PerfX::NoteDeferred(this, [](void* o) {
-            reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge  LEFT: SIG PerfX::NoteDeferred (SA: the callback takes void*)
+        PerfX::NoteDeferred(this, [](StatusIconComponent* o) {
+            o->StatusIconComponent::Tick(nullptr);
         });
         return;
     }
