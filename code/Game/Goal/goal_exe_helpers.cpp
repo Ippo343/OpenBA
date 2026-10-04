@@ -37,10 +37,10 @@
 // The +0x00 String (H5 raw storage; see the header). LEFT: the one
 // reinterpretation of the name storage.
 System::String& NamedExternalRef::Name() {
-    return *reinterpret_cast<System::String*>(name);
+    return *reinterpret_cast<System::String*>(name);   // LEFT: the one reinterpretation of the name storage.
 }
 const System::String& NamedExternalRef::Name() const {
-    return *reinterpret_cast<const System::String*>(name);
+    return *reinterpret_cast<const System::String*>(name);   // LEFT: the one reinterpretation of the name storage.
 }
 
 void NamedExternalRef::Resolve() {
@@ -84,7 +84,7 @@ void NamedExternalRef::Resolve() {
 
     // The factory hands out const Externals; the reference holds them mutable
     // (retail's ExternalPtr<T> is a plain T*).
-    resolved = const_cast<::Object::External*>(result);
+    resolved = const_cast<::Object::External*>(result);   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
     // Re-read the generation: a FindOrLoad that actually loaded bumps it, and
     // stamping the pre-load value would make the next call redo the whole
     // lookup for nothing.
@@ -175,5 +175,5 @@ void Goal_RefArray_Resize(NamedExternalRefArray* arr, uint32_t newCount) {
     if (!arr) return;
     // LEFT: the element ops are a uint8_t ArraySpec row (above), so the typed
     // header is driven as that Array instantiation.
-    reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));
+    reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));   // LEFT: the element ops are a uint8_t ArraySpec row (above), so the typed header is driven as that Array instantiation.
 }

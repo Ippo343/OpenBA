@@ -301,3 +301,8 @@ static_assert(offsetof(TownHallUI, agriLabelCount) == 0x1D0, "agriLabelCount @ 0
 static_assert(offsetof(TownHallUI, agriBST) == 0x1D8, "agriBST @ 0x1D8 (dtor 0x1400810f7)");
 static_assert(offsetof(TownHallUI, agriBSTCount) == 0x1E0, "agriBSTCount @ 0x1E0 (dtor 0x140081131)");
 static_assert(offsetof(TownHallUI, _pad1E4) == 0x1E4, "_pad1E4 @ 0x1E4");
+
+// townhall_helpers.cpp: the two row-array pushes. arrayBase is the raw {data, count,
+// capacity} triple at +0x40 / +0xF0 (H5, above); entry is the row every new slot copies.
+extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, const TownHallUI::ProfessionRow* entry);  // 0x140015800
+extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, const TownHallUI::ProductionRow* entry);  // 0x1400159b0

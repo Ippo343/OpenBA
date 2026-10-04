@@ -110,7 +110,7 @@ Save::SaveLoad::SaveInfo::SaveInfo(const SaveInfo& other)
 // kSpec_MetaData58 row hands it raw element bytes.
 extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
     return new (self) Save::SaveLoad::SaveInfo(
-        *static_cast<const Save::SaveLoad::SaveInfo*>(src));
+        *static_cast<const Save::SaveLoad::SaveInfo*>(src));   // LEFT: B4 FORWARD RtSave_MetaData_CopyCtor: array.cpp's kSpec_MetaData58 row hands raw element bytes (an elem_stride floor candidate at the close)
 }
 
 // ============================================================================

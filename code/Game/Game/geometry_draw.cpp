@@ -76,31 +76,31 @@ std::atomic<bool> s_itemDrawLogged{false};
 // headers; each accessor's cast is the one place a header is read as its
 // element type (WorldGeometryElements.h). Every caller reads them by name.
 RawArray<TerrainVertex>& WorldGeometry::ContourVertices() {
-    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);
+    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<uint16_t>& WorldGeometry::ContourIndices() {
-    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);
+    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesA() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesB() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<RawArray<Math::Vector2>>& WorldGeometry::ContourOutlines() {
-    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);
+    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<GeometryBatch>& WorldGeometry::Decals() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<GeometryBatch>& WorldGeometry::RoadBatches() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<Object::External*>& WorldGeometry::BatchMaterials() {
-    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);
+    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 RawArray<int32_t>& WorldGeometry::BatchCounters() {
-    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);
+    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
 }
 
 // ============================================================
@@ -192,7 +192,7 @@ void WorldGeometry::Update(const System::Time& /*time*/) {
 void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
                                  Graphics::Renderer& renderer) const {
     // LEFT: the _arrays accessors are non-const members (the slot is const).
-    WorldGeometry& self = const_cast<WorldGeometry&>(*this);
+    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the _arrays accessors are non-const members (the slot is const).
 
     if (!s_collectLogged.exchange(true)) {
         printf("[GeomDraw_CollectDraw] first call self=%p renderer=%p\n",
@@ -333,7 +333,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
                          float param5, int a, int /*b*/, int /*c*/) const {
     // LEFT: the _arrays accessors are non-const members, and the context binds
     // this object's buffers through its non-const `void*` _indexBuffer.
-    WorldGeometry& self = const_cast<WorldGeometry&>(*this);
+    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the _arrays accessors are non-const members, and the context binds this object's buffers through its non-const `void*` _indexBuffer.
     const uint32_t param6 = static_cast<uint32_t>(a);
 
     if (!s_itemDrawLogged.exchange(true)) {
@@ -346,7 +346,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     //    with the alpha. LEFT: Graphics::Geometry (R-GFX) holds the pair as two
     //    Transforms, not as the InterpolatedState Lerp is a member of.
     const Math::Transform lerpedTransform =
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: Graphics::Geometry (R-GFX) holds the pair as two Transforms, not as the InterpolatedState Lerp is a member of.
             ->Lerp(Math::Scalar(param5));
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
@@ -379,7 +379,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
         // LEFT: Context +0x20f0 (the dynamic index cursor) is an integer in
         // R-VIDEO's header (`_unknown20f0`).
         size_t idxBytes = static_cast<size_t>(idxCount) * 2;
-        std::memcpy(reinterpret_cast<void*>(context._unknown20f0), batch.indices.data, idxBytes);
+        std::memcpy(reinterpret_cast<void*>(context._unknown20f0), batch.indices.data, idxBytes);   // LEFT: Context +0x20f0 (the dynamic index cursor) is an integer in R-VIDEO's header (`_unknown20f0`).
         context._unknown20f0 += idxBytes;
 
         context.EndIndexedVertices(0);

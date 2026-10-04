@@ -95,7 +95,7 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
     // not registered yet).
     auto load = [&](const System::Filename& path) -> ::Object::External* {
         // LEFT: FindOrLoad returns a const External*; the slot holds External*.
-        ::Object::External* loaded = const_cast<::Object::External*>(efactory->FindOrLoad(path));
+        ::Object::External* loaded = const_cast<::Object::External*>(efactory->FindOrLoad(path));   // LEFT: FindOrLoad returns a const External*; the slot holds External*.
         if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId)))
             return loaded;
         return nullptr;
@@ -110,7 +110,7 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
         const ::Object::External* found = efactory->FindOrLoad(pathBuf);
         if (found && typeIdResolved) {
             // LEFT: IsDerivedFromOrTrust takes a non-const void* (factory_registration.h).
-            ::Object::IsDerivedFromOrTrust(const_cast<::Object::External*>(found), typeId);
+            ::Object::IsDerivedFromOrTrust(const_cast<::Object::External*>(found), typeId);   // LEFT: IsDerivedFromOrTrust takes a non-const void* (factory_registration.h).
         }
         return;
     }
@@ -154,8 +154,8 @@ namespace {
 // The C entry points' two LEFT casts: the slot and the serializer arrive as void*
 // from callers holding them with their own types.
 void ForwardRef(void* refField, void* serializer, uint32_t typeId, const char* typeName) {
-    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),
-                                *reinterpret_cast<IO::Serializer*>(serializer),
+    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),   // LEFT: casts: the slot and the serializer arrive as void* from callers holding them with their own types.
+                                *reinterpret_cast<IO::Serializer*>(serializer),   // LEFT: casts: the slot and the serializer arrive as void* from callers holding them with their own types.
                                 typeId, typeName, "ExternalPtr::Serialize");
 }
 } // namespace

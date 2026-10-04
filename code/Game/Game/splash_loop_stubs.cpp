@@ -262,7 +262,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // before returning (MainLoop owns it); retail's slot takes it by const&.
     // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
     // const& of retail's slot signature (our divergence, not retail's).
-    System::Time* dt = const_cast<System::Time*>(&time);   // B.3.8 bridge
+    System::Time* dt = const_cast<System::Time*>(&time);   // B.3.8 bridge   // LEFT: the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
 
     // Pump the embedded UI — flushes the pending-open list (where Startup
     // pushed our LoaderDialog), runs each open dialog's OnUpdate, processes
@@ -425,7 +425,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // LEFT: a vptr identity compare (GameUpdateLoop is unreflected: no type id).
     bool worldReady = true;
     if (_nextLoop &&
-        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {
+        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {   // LEFT: FLOOR? vtable probe (a vptr identity compare: GameUpdateLoop is unreflected, no type id)
         worldReady = GameUpdateLoop_IsWorldBuilt(_nextLoop);
     }
 

@@ -194,8 +194,8 @@ void FinishTutorialInstance::Startup() {
 void FinishTutorialInstance::Update(const System::Time& time, const Achievement::GoalList& list) {
     FinishTutorialInstance* self = this;
     // LEFT: the setup / goal slots StepExecute forwards these to take void*.
-    void* p2 = const_cast<void*>(static_cast<const void*>(&time));
-    void* p3 = const_cast<void*>(static_cast<const void*>(&list));
+    void* p2 = const_cast<void*>(static_cast<const void*>(&time));   // LEFT: the setup / goal slots StepExecute forwards these to take void*.
+    void* p3 = const_cast<void*>(static_cast<const void*>(&list));   // LEFT: the setup / goal slots StepExecute forwards these to take void*.
 
     // Read the TutorialInstance pointer
     TutorialInstance* tutInst = _field20.Get();

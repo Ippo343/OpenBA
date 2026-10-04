@@ -31,7 +31,7 @@
 #include <new>
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Game/exe_bodies.h"
-#include "Action/exe_bodies.h"   // Pf_StorageCanAccept_cd80, ActRm_StorageAdd_d000
+#include "Action/exe_bodies.h"   // StorageCanAdd, StorageAdd
 
 extern "C" GameContainer* Game_Ctor(GameContainer* self) {
     // Zero the entire 0xe0-byte struct, including the regions where the
@@ -137,7 +137,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                 }
                 // Check if SelectDescription.type (+0x40) matches requested disaster type
                 if (selectDesc && static_cast<int>(selectDesc->_u40) == disasterType) {
-                    citizenList->RemoveEntity(const_cast<ComponentDescription*>(desc));   // 0x140091a20
+                    citizenList->RemoveEntity(const_cast<ComponentDescription*>(desc));   // 0x140091a20   // LEFT: FindNext returns a const ComponentDescription*; RemoveEntity takes it non-const (retail drops the const: PASS2_LEDGER S3, the close decides)
                 }
             }
         }
@@ -151,7 +151,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 
     // Dynamic array for matching entities
     // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)
-    int64_t* matchArr = nullptr;
+    ComponentDescription** matchArr = nullptr;
     int matchCount = 0;
     int matchCapacity = 0;
 
@@ -161,9 +161,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
         int entityIdx = 0;
         do {
             ComponentDescription* entityDesc = citizenList->field_0x110[entityIdx];
-            // The match array carries the description as the int64 the storage
-            // helpers take (Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000).
-            int64_t entity = reinterpret_cast<int64_t>(entityDesc);   // LEFT: SIG Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 take the description as int64_t (wave X)
+            ComponentDescription* entity = entityDesc;
 
             // Find the RawMaterialDescription among its sub-descriptions (+0x28/+0x30)
             const RawMaterialDescription* natResComp = nullptr;
@@ -189,7 +187,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
             {
                 // Check resource flags match (natResComp+0x5c & resourceFlag)
                 // Original code does NOT null-check — relies on entities always having the component
-                int64_t* oldArr = matchArr;
+                ComponentDescription** oldArr = matchArr;
                 int oldCount = matchCount;
                 if ((natResComp->_flags & resourceFlag) != 0) {
                     int newCount = matchCount + 1;
@@ -201,7 +199,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                             if (oldArr != nullptr) {
                                 matchCapacity = newCount * 3;
                             }
-                            matchArr = static_cast<int64_t*>(
+                            matchArr = static_cast<ComponentDescription**>(
                                 System::MemoryAllocator::MemAlloc((uint64_t)matchCapacity * 8, 8));
                         }
 
@@ -214,11 +212,11 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                         }
                         int copyIdx = (int)copyStart;
                         if (copyIdx < newCount) {
-                            int64_t* dstSlot = matchArr + copyIdx;
-                            int64_t* srcSlot = oldArr + copyIdx;
+                            ComponentDescription** dstSlot = matchArr + copyIdx;
+                            ComponentDescription** srcSlot = oldArr + copyIdx;
                             do {
                                 if (dstSlot != nullptr) {
-                                    int64_t* source = &entity;
+                                    ComponentDescription** source = &entity;
                                     if ((int)copyStart < oldCount) {
                                         source = srcSlot;
                                     }
@@ -257,7 +255,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 
                     // Find StorageComponent on citizen
                     // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38
-                    Component* storageComp = nullptr;
+                    StorageComponent* storageComp = nullptr;
                     int cCompIdx = 0;
                     if (citizen->_componentCount > 0) {
                         do {
@@ -273,7 +271,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                                 bool isDerived = ::Object::IsDerivedFromNullSafe(compVal, StorageComponent::TypeId());
                                 storageComp = nullptr;
                                 if (isDerived) {
-                                    storageComp = compVal;
+                                    storageComp = static_cast<StorageComponent*>(compVal);
                                 }
                                 goto phase2_found;
                             }
@@ -284,23 +282,21 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 
                 phase2_found:
                     {
-                        // Wrap found storage component in an InternalBasePtr: the
-                        // storage helpers take its value as an int64.
-                        int64_t storageIBP = reinterpret_cast<int64_t>(storageComp);   // LEFT: SIG Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 take the component as int64_t (wave X)
+                        StorageComponent* storageIBP = storageComp;
 
                         // Try to add one item via round-robin
                         if (spawned < count) {
-                            int64_t* matchSlot = matchArr + (spawned % matchCount);
+                            ComponentDescription** matchSlot = matchArr + (spawned % matchCount);
 
                             // CheckPtr the storage IBP before use
 
                             // Call original exe CanAdd function (0x14012cd80)
-                            uint32_t canAdd = Pf_StorageCanAccept_cd80(storageIBP, *matchSlot, 1);
+                            uint32_t canAdd = StorageCanAdd(storageIBP, *matchSlot, 1);   // 0x14012cd80
                             if ((char)canAdd != '\0') {
                                 // CheckPtr again before AddItem
 
                                 // Call original exe AddItem function (0x14012d000)
-                                ActRm_StorageAdd_d000(static_cast<uintptr_t>(storageIBP), *matchSlot, 1);
+                                StorageAdd(storageIBP, *matchSlot, 1);   // 0x14012d000
                                 spawned++;
                                 anyAdded = true;
                             }

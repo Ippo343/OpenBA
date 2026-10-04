@@ -545,36 +545,32 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
     CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
     if (!town) return;
 
-    // The seat functions take the town manager and the profession as integers.
-    const int64_t townKey = reinterpret_cast<int64_t>(town);          // LEFT: CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (Component/Game exe_bodies.h)
-    const int64_t profKey = reinterpret_cast<int64_t>(profession);    // LEFT: same
-
     // NO g_wpcRosterOnly HOLD HERE: this path runs at gameplay time, when the
     // visual toggle is meant to run, so Attach/Detach do their full work.
     if (add) {
         // Add one worker: request a slot, then convert idle -> working -> student -> any.
-        int64_t retBuf[2] = {0, 0};
-        FindAvailableBuilding(townKey, retBuf, static_cast<uint64_t>(profKey));   // 0x14008d100
-        int64_t slot = retBuf[0];
-        int64_t slotCopy = slot;
+        ComponentEntity* retBuf[2] = {nullptr, nullptr};
+        FindAvailableBuilding(reinterpret_cast<int64_t>(town), retBuf, reinterpret_cast<uint64_t>(profession));   // 0x14008d100  // LEFT: SIG FindAvailableBuilding (int64_t town, uint64_t key)
+        ComponentEntity* slot = retBuf[0];
+        ComponentEntity* slotCopy = slot;
         // Each strategy returns its `out` argument, so the result is read there.
-        int64_t found = 0;
-        CitizenEmploy_Strat_cbf0(townKey, &found, &slotCopy, profKey);   // 0x14008cbf0
+        CitizenComponent* found = nullptr;
+        CitizenEmploy_Strat_cbf0(town, &found, &slotCopy, profession);   // 0x14008cbf0
         // Faithful to retail driver dd10 (0x14007dd10): FindWorking (0x14008ca20)
         // unconditionally anchors *availPtr, so retail gates it behind a real
         // building (slot != 0). FindIdle / FindStudent / FindAny guard it themselves.
-        if (found == 0 && slot != 0) {
+        if (found == nullptr && slot != nullptr) {
             slotCopy = slot;
-            CitizenEmploy_Strat_ca20(townKey, &found, &slotCopy, profKey);   // 0x14008ca20
+            CitizenEmploy_Strat_ca20(town, &found, &slotCopy, profession);   // 0x14008ca20
         }
-        if (found == 0) {
+        if (found == nullptr) {
             slotCopy = slot;
-            CitizenEmploy_Strat_c5f0(townKey, &found, &slotCopy, profKey);   // 0x14008c5f0
+            CitizenEmploy_Strat_c5f0(town, &found, &slotCopy, profession);   // 0x14008c5f0
         }
-        if (found == 0) {
+        if (found == nullptr) {
             slotCopy = slot;
-            int64_t anyBuf = 0;
-            CitizenEmploy_Strat_c4b0(townKey, &anyBuf, &slotCopy, profKey);   // 0x14008c4b0
+            CitizenComponent* anyBuf = nullptr;
+            CitizenEmploy_Strat_c4b0(town, &anyBuf, &slotCopy, profession);   // 0x14008c4b0
         }
     } else {  // 0x1451 — remove one worker of this profession
         TownHall_RemoveWorker(town, profession);   // 0x140091180

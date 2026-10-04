@@ -127,12 +127,12 @@ inline bool HasText(const System::String& s) {
 // LEFT: ExternalPtrSerializeGeneric (Game/serialize_externals.h) takes void**.
 // ===========================================================================
 extern "C" void TutWave_SerializeTutorialRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeTutorialRef's callers hand the slot as void*
                                 nullptr, "Tutorial");
 }
 
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeDialogRef's callers hand the slot as void*
                                 nullptr, "UI::Dialog");
 }
 
@@ -174,8 +174,8 @@ void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDes
     void* out[4] = {};
     // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record
     // as uint64_t* (DLG-d's B4 FORWARD signature).
-    ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&treeOwner->field_0x50), out,
-                                  reinterpret_cast<uint64_t*>(&rec));   // 0x140014890
+    ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&treeOwner->field_0x50), out,   // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record as uint64_t* (DLG-d's B4 FORWARD signature).
+                                  reinterpret_cast<uint64_t*>(&rec));   // 0x140014890   // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record as uint64_t* (DLG-d's B4 FORWARD signature).
 }
 
 // ===========================================================================

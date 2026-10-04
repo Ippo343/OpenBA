@@ -41,7 +41,7 @@
 // RCX is a ComponentDescription: the list is its sub-descriptions (+0x28 / +0x30).
 // LEFT: the six outside callers hand it as an integer and the out slot as void*.
 void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
-    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(compList);
+    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(compList);   // LEFT: SIG WorkAcc_FindComponent_6330 (X-G2-WAIT): its callers hand the description as an integer
     const uint32_t typeId = RawMaterialDescription::TypeId();  // 0x1401c7cb8
     RawMaterialDescription* found = nullptr;
     int n = desc->_subDescCount;
@@ -55,6 +55,6 @@ void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
             break;
         }
     }
-    *reinterpret_cast<RawMaterialDescription**>(retOut) = found;
+    *reinterpret_cast<RawMaterialDescription**>(retOut) = found;   // LEFT: SIG WorkAcc_FindComponent_6330 (X-G2-WAIT): the out slot arrives as void*
     return retOut;
 }

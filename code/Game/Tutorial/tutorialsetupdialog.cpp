@@ -43,7 +43,7 @@ TutorialSetupDialog::TutorialSetupDialog()
 // LEFT H5: the +0x40 String is raw storage (the ctor stores 0 inline, the dtor
 // destroys it by hand).
 System::String& TutorialSetupDialog::HighlightPath() {
-    return *reinterpret_cast<System::String*>(&highlightPath);
+    return *reinterpret_cast<System::String*>(&highlightPath);   // LEFT: H5: the +0x40 String is raw storage (the ctor stores 0 inline, the dtor destroys it by hand).
 }
 
 // The dtor 0x1400e2bf0: ~String +0x58, ~String +0x40, then the two String
@@ -126,7 +126,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
             const ::Object::External* found = efactory->Find(filenameBuf);
             bool valid = found && Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId());
             // The factory hands out const Externals; the reference holds them mutable.
-            toolbarRef.resolved = valid ? const_cast<::Object::External*>(found) : nullptr;
+            toolbarRef.resolved = valid ? const_cast<::Object::External*>(found) : nullptr;   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
             toolbarRef.generation = efactory->_generation;
         }
     }

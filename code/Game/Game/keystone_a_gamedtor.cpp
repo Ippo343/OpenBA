@@ -215,7 +215,7 @@ PathfinderThread::~PathfinderThread() {
 
     // LEFT: the CriticalSection dtor is a door on the POD mirror (System::
     // CriticalSection is trivially destructible by design, Thread.h).
-    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(&lock));
+    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(&lock));   // LEFT: the CriticalSection dtor is a door on the POD mirror (System:: CriticalSection is trivially destructible by design, Thread.h).
     // tail-call: System::Thread::~Thread() -- the compiler's base chain.
 }
 
@@ -277,9 +277,7 @@ Map::~Map() {
     }
 
     if (regionPairCache != nullptr) {
-        // LEFT: Map::regionPairCache is int64_t* (gameupdateloop.cpp, GAME-a,
-        // hands it to 0x1400a5d10's int64_t* parameter).
-        RegionPairCache* cache = reinterpret_cast<RegionPairCache*>(regionPairCache);
+        RegionPairCache* cache = regionPairCache;
         // 0x14001a450: the index tree (children +0x18 / +0x20 through 0x14000e320),
         // its root / count zeroed, then the ring array freed.
         AvlNode30* root = cache->index.root;
@@ -313,7 +311,7 @@ Map::~Map() {
     cellCapacity = 0;
 
     // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
-    reinterpret_cast<Picking::Scene*>(pickingScene)->Picking::Scene::~Scene();   // tail-call
+    reinterpret_cast<Picking::Scene*>(pickingScene)->Picking::Scene::~Scene();   // tail-call   // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
 }
 
 // B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The caller MemFrees

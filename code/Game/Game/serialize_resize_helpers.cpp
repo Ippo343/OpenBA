@@ -55,7 +55,7 @@ extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cp
 namespace {
 
 RawArray<uint8_t>& ByteHeader(void* arrayHeader) {
-    return *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);
+    return *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: the C entry points receive each caller's header as void* (geometry, name database, plant-area, worldgen, ...), so the one cast below is where it is read as a byte-elem...
 }
 
 void GenericArrayResize(void* arrayHeader, int newCount,
@@ -307,7 +307,7 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
         return;
     }
 
-    RawArray<Outline>& hdr = *reinterpret_cast<RawArray<Outline>*>(arrayHeader);
+    RawArray<Outline>& hdr = *reinterpret_cast<RawArray<Outline>*>(arrayHeader);   // LEFT: the C entry receives each caller's header as void* (other owners' raw triples, H5)
 
     int oldCount = hdr.size;
     if (newCount == oldCount) return;

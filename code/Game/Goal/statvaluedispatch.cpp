@@ -696,7 +696,7 @@ uint32_t StatGoal::ReadSubTypeEntry() const {
     // LEFT: WorldGeometry +0x220 is an untyped {data, count|cap} Header (GAME-c).
     const WorldGeometry::Header& ints = pc->_arrays[8];
     if (idx >= 0 && idx < (int)ints.sizeCap) {
-        return reinterpret_cast<const uint32_t*>(ints.data)[idx];
+        return reinterpret_cast<const uint32_t*>(ints.data)[idx];   // LEFT: WorldGeometry +0x220 is an untyped {data, count|cap} Header (GAME-c).
     }
     return 0;
 }

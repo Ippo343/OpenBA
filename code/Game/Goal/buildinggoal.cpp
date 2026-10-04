@@ -260,7 +260,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     // evaluated through a QUALIFIED (non-dispatching) member call.
     alignas(8) uint8_t goalBytes[0x48];
     memset(goalBytes, 0, sizeof(goalBytes));
-    BuildingGoal* goal = reinterpret_cast<BuildingGoal*>(goalBytes);
+    BuildingGoal* goal = reinterpret_cast<BuildingGoal*>(goalBytes);   // LEFT: a vptr-less stack image of the class (diagnostic, not retail), evaluated through a QUALIFIED (non-dispatching) member call.
     goal->_field30 = true;                             // requireAll
     Goal_RefArray_Resize(&goal->_field38, 1);          // seeds generation -1
     NamedExternalRef* entry = goal->_field38.data;

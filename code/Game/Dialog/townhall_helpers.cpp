@@ -115,16 +115,8 @@ extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxV
 // ===========================================================================
 namespace {
 
-// TownHallUI's profession row (stride 0x40; TownHallUI.h, DLG-e's, names it
-// ProfessionRow), as this copy reads it.
-struct ProfRow {
-    uint32_t          workers;          // +0x00
-    uint32_t          slots;            // +0x04
-    void*             elements[5];      // +0x08..+0x28 the row's element InternalPtrs
-    ComponentEntity** entities;         // +0x30 Collection::Array<InternalPtr<ComponentEntity>>
-    int32_t           entityCount;      // +0x38
-    int32_t           entityCapacity;   // +0x3C
-};
+// TownHallUI's profession row (stride 0x40; TownHallUI.h).
+using ProfRow = TownHallUI::ProfessionRow;
 static_assert(sizeof(ProfRow) == 0x40, "profession row stride 0x40");
 static_assert(offsetof(ProfRow, entities) == 0x30, "");
 
@@ -138,7 +130,11 @@ struct ProfRowArray {
 void ProfRow_Copy(ProfRow* dst, const ProfRow* src) {
     dst->workers = src->workers;
     dst->slots = src->slots;
-    for (int q = 0; q < 5; q++) dst->elements[q] = src->elements[q];
+    dst->label = src->label;                       // +0x08..+0x28 the five element InternalPtrs
+    dst->desired = src->desired;
+    dst->slotsNumber = src->slotsNumber;
+    dst->buildingsNumber = src->buildingsNumber;
+    dst->button = src->button;
     dst->entities = nullptr;
     dst->entityCount = 0;
     dst->entityCapacity = 0;
@@ -172,9 +168,9 @@ void ProfRow_Free(ProfRow* row) {
 // hand-derived ArraySpec (kSpec_PkgEntry / kSpec_StringExt are the Runtime-side
 // examples) rather than the trait-derived blob. It stays hand-rolled until this
 // array gets its own spec or its owning struct becomes a real class (§B.2).
-extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entry) {
-    ProfRowArray* rows = reinterpret_cast<ProfRowArray*>(arrayBase);   // LEFT: SIG TownHall_ProfArrayPush (callers in townhallui.cpp, wave X)
-    const ProfRow* fill = reinterpret_cast<const ProfRow*>(entry);   // LEFT: SIG TownHall_ProfArrayPush (callers in townhallui.cpp, wave X)
+extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, const ProfRow* entry) {
+    ProfRowArray* rows = reinterpret_cast<ProfRowArray*>(arrayBase);   // LEFT: H5 TownHallUI +0x40 is the raw triple of an Array<ProfessionRow> (TownHallUI.h: the hand-written dtor frees it)
+    const ProfRow* fill = entry;
     int oldCount = rows->size;
     if (newCount == oldCount) return;
     ProfRow* oldBuf = rows->data;
@@ -215,13 +211,13 @@ extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entr
 namespace {
 // TownHallUI's production row (stride 0x28; TownHallUI.h's ProductionRow): five
 // NumberElement InternalPtrs.
-struct ProdRow { void* elements[5]; };
+using ProdRow = TownHallUI::ProductionRow;
 static_assert(sizeof(ProdRow) == 0x28, "production row stride 0x28");
 } // namespace
 
-extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry) {
-    Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);   // LEFT: SIG TownHall_ProdArrayPush (callers in townhallui.cpp, wave X)
-    rows->SetSize(newCount, *reinterpret_cast<const ProdRow*>(entry));   // LEFT: SIG TownHall_ProdArrayPush (callers in townhallui.cpp, wave X)
+extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, const ProdRow* entry) {
+    Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);   // LEFT: H5 TownHallUI +0xF0 is the raw triple of an Array<ProductionRow> (TownHallUI.h: the hand-written dtor frees it)
+    rows->SetSize(newCount, *entry);
 }
 
 // ===========================================================================

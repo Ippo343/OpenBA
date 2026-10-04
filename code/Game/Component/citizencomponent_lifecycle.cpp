@@ -169,8 +169,7 @@ static inline int ProfessionPriorityOf(ComponentEntity* handle) {
 // ============================================================
 // CitizenComp_SortByProfession_02a0 (0x1400302a0) — see file-header note.
 // ============================================================
-void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* /*tmpV*/) {
-    ComponentEntity** array = reinterpret_cast<ComponentEntity**>(arrV);   // LEFT: SIG CitizenComp_SortByProfession_02a0 (Component/exe_bodies.h, wave X)
+void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* /*tmpV*/) {
     if (!array || n < 2) return;
     std::sort(array, array + n, [](ComponentEntity* a, ComponentEntity* b) {
         return ProfessionPriorityOf(a) < ProfessionPriorityOf(b);
@@ -320,7 +319,5 @@ void CitizenComponent::Slot11() {
     // description lookup is fixed.
 }
 
-// B4 FORWARD: 1 outside caller(s) (Game/starttown.cpp)
-void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
-    reinterpret_cast<CitizenComponent*>(selfV)->AddChild(*reinterpret_cast<CitizenComponent**>(param2V));   // LEFT: B4 FORWARD C signature (wave X)
-}
+// B4 X-G2-3: CitizenComp_JoinRoster_68a0 (the forwarder to CitizenComponent::AddChild) deleted:
+// its one caller (starttown.cpp) calls the member.

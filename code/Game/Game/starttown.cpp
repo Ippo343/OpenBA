@@ -405,11 +405,6 @@ extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity) {
     StartTown_PickMeshProbe(entity);
 }
 
-// Brick M-C — the real town-citizen-list registrar (CitizenComponent_OnAdd 0x140114000)
-// + the headless ProfessionUI worker-seat cascade driver (citizen_employ_cascade.cpp).
-// CitizenEmploy_SeatWorkers runs the exact FindAvailableBuilding + cbf0->ca20->c5f0->c4b0
-// fallback dd10 uses, seating each worker via +0x1f0=prof + AssignHousing(+0x248 roster).
-extern "C" int  CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
 
 // WorkPlaceComponent attach/detach roster-only mode (workplacecomponent.cpp). Set true for
 // the build-time founding-housing pass so the roster is populated WITHOUT the gameplay-time
@@ -633,9 +628,7 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
 // StartTown_SpawnStartingHerd (code/Game/Component/pasturecomponent_spawn.cpp) and is
 // now called below.
 
-// The starting-herd spawn (retail FUN_1400a0b10), ported alongside the other animal-spawn
-// bodies in code/Game/Component/pasturecomponent_spawn.cpp.
-extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl);
+// The starting-herd spawn (retail FUN_1400a0b10): Component/exe_bodies.h.
 
 // Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
 // body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
@@ -3824,7 +3817,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 
 // CitizenComponent_helper_68a0 (0x1401168a0) — splice `member` into `host`'s family
 // ring (host +0x260 head, member +0x268/+0x270 links, member +0x258 host back-ref).
-// Ported as CitizenComp_JoinRoster_68a0 (Component/exe_bodies.h), called by name.
+// Ported as CitizenComponent::AddChild (0x1401168a0), called by name.
 
 // ---- Founding-family housing (BANISHED_LIVE_HOUSING) ------------------------
 // Vanilla has NO dedicated founding-family→house placement: the founding spawner
@@ -4376,7 +4369,7 @@ static int StartTown_SpawnCitizens(MapGenerator* startConfig, EntityList* entity
             if (adultB && kid) {
                 {
                     CitizenComponent* node = kid;
-                    CitizenComp_JoinRoster_68a0(adultB, &node);   // 0x1401168a0
+                    adultB->AddChild(node);   // 0x1401168a0
                     ++linkedKids;
                 }
             }

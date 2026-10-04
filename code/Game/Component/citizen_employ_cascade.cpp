@@ -362,7 +362,7 @@ CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
 // guarded function, never let a silent no-op read as success), every call now reports
 // which guard fired and the count before/after. Behaviour is unchanged: same guards, same
 // order, same early return.
-extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
+extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP) {
     EnsureFns();
 
     const char* fail = nullptr;
@@ -393,7 +393,7 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
         ++n;
         std::fprintf(stderr, "[TownRegistry] RegisterResidence ibp=%llx townMgr=%p "
                      "count %d -> %d : %s\n",
-                     static_cast<unsigned long long>(houseEntityIBP),
+                     reinterpret_cast<unsigned long long>(houseEntityIBP),   // CAST-OK: ptr_int (the entity logged as an integer)
                      reinterpret_cast<void*>(townMgr), before, after,
                      fail ? fail : "APPENDED OK");
         std::fflush(stderr);
@@ -408,17 +408,15 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
 // lodge's WorkPlaceDescription — so we take it directly.) Faithful fallback order:
 // FindAvailableBuilding then cbf0 -> (if avail!=0) ca20 -> c5f0 -> c4b0.
 // ============================================================================
-extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count) {
+extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count) {
     EnsureFns();
-    if (townMgr == 0 || GameUpdateLoop::_singleton == nullptr) return 0;
-    if (professionKey == 0) return 0;
-    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(townMgr);   // LEFT: SIG CitizenEmploy_SeatWorkers (outside callers: starttown.cpp, standalone harnesses)
-    Profession* profKey = reinterpret_cast<Profession*>(professionKey);    // LEFT: SIG CitizenEmploy_SeatWorkers
+    if (town == nullptr || GameUpdateLoop::_singleton == nullptr) return 0;
+    if (profKey == nullptr) return 0;
 
     int seated = 0;
     for (int i = 0; i < count; ++i) {
         ComponentEntity* availOut[2] = { nullptr, nullptr };
-        FindAvailableBuilding(townMgr, availOut, professionKey);
+        FindAvailableBuilding(reinterpret_cast<int64_t>(town), availOut, reinterpret_cast<uint64_t>(profKey));   // LEFT: SIG FindAvailableBuilding (int64_t town, uint64_t key)
         ComponentEntity* avail = availOut[0];
 
         CitizenComponent* result[2];
@@ -455,71 +453,6 @@ extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey
 }
 
 // ============================================================================
-// Direct-target variant of CitizenEmploy_SeatWorkers: seat up to `count` workers of
-// profession `profKey` onto a SPECIFIC workplace entity (`availEntity`), WITHOUT going
-// through FindAvailableBuilding (which requires the workplace to be registered in the
-// townMgr+0x100 profession BST). Used for construction sites: registering a build site
-// into townMgr+0x100 activates the BuildPathGraph->ProcessPaths->AssignCitizens drain
-// path, whose Phase-5B clears every idle laborer's housing via AssignHousing and can
-// deadlock the WPC Scene mesh-visual toggle. Seating directly against the site entity
-// avoids that entirely while running the exact same cbf0->ca20->c5f0->c4b0 cascade.
-// Each seat's AssignHousing attaches the worker to availEntity's WorkPlaceComponent
-// roster (+0x58/+0x60); once full the strategies find no more idle laborers and stop.
-// ============================================================================
-extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity, uint64_t professionKey, int count) {
-    EnsureFns();
-    if (townMgr == 0 || availEntity == 0 || GameUpdateLoop::_singleton == nullptr) return 0;
-    if (professionKey == 0) return 0;
-    CitizenBehavior* town     = reinterpret_cast<CitizenBehavior*>(townMgr);       // LEFT: SIG CitizenEmploy_SeatWorkersAt (outside caller: buildcomponent_state8.cpp)
-    ComponentEntity* availEnt = reinterpret_cast<ComponentEntity*>(availEntity);   // LEFT: SIG CitizenEmploy_SeatWorkersAt
-    Profession*      profKey  = reinterpret_cast<Profession*>(professionKey);      // LEFT: SIG CitizenEmploy_SeatWorkersAt
-
-    int seated = 0;
-    for (int i = 0; i < count; ++i) {
-        CitizenComponent* result[2];
-        ComponentEntity* availArg;
-
-        result[0] = nullptr; availArg = availEnt;
-        Strat_cbf0(town, result, &availArg, profKey);
-        CitizenComponent* seatedCz = result[0];
-        if (seatedCz == nullptr) {
-            result[0] = nullptr; availArg = availEnt;
-            Strat_ca20(town, result, &availArg, profKey);
-            seatedCz = result[0];
-            if (seatedCz == nullptr) {
-                result[0] = nullptr; availArg = availEnt;
-                Strat_c5f0(town, result, &availArg, profKey);
-                seatedCz = result[0];
-                if (seatedCz == nullptr) {
-                    result[0] = nullptr; availArg = availEnt;
-                    Strat_c4b0(town, result, &availArg, profKey);
-                    seatedCz = result[0];
-                }
-            }
-        }
-
-        if (seatedCz != nullptr) {
-            ++seated;
-            // A real retail Builder-profession citizen has NO producing workplace: work flows
-            // through the task-reservation system (+0x208 / town task-mgr), not AssignWorkplace,
-            // so citizen+0x238 == 0 for them (Ghidra-verified). Our idle-laborer seed carries a
-            // stale +0x238 (old/residence workplace) which makes the CitizenAI candidate brain
-            // offer GatherResources/2 (restock-your-workplace) forever — the "firewood at the
-            // build site" distraction. Clear it faithfully via AssignWorkplace(&null,-1) (proper
-            // worker-list detach + +0x238=0 / +0x240=-1) so the healthy-branch gather block,
-            // gated `if(+0x238!=0)`, is skipped and the builder falls through to Idle -> build.
-            ComponentEntity* prevWp = seatedCz->home;   // +0x238
-            if (prevWp != nullptr) {
-                seatedCz->SetHome(nullptr, -1);         // 0x1401163d0
-            }
-        } else {
-            break;
-        }
-    }
-    return seated;
-}
-
-// ============================================================================
 // Registerable exports of the four seat strategies. The exe's ONLY dispatcher of
 // these addresses is TownHallUI's profession spinner (CitizenComponent_impl_dd10,
 // 0x14007dd10 -> fn_CitizenList_FindIdle/FindWorking/FindStudent/FindAny). Now that
@@ -528,25 +461,25 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
 // ============================================================================
 // The C signatures stay for their outside callers (professionui.cpp, townhallui.cpp,
 // workplaceui.cpp); each argument is typed once here.
-extern "C" void* CitizenEmploy_Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+extern "C" CitizenComponent** CitizenEmploy_Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
+                                                       ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_cbf0(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_cbf0 (Component/exe_bodies.h, wave X)
-                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_cbf0
+    return Strat_cbf0(townMgr, out, availPtr, profKey);
 }
-extern "C" void* CitizenEmploy_Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+extern "C" CitizenComponent** CitizenEmploy_Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
+                                                       ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_ca20(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_ca20 (Component/exe_bodies.h, wave X)
-                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_ca20
+    return Strat_ca20(townMgr, out, availPtr, profKey);
 }
-extern "C" void* CitizenEmploy_Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+extern "C" CitizenComponent** CitizenEmploy_Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
+                                                       ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_c5f0(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_c5f0 (Component/exe_bodies.h, wave X)
-                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_c5f0
+    return Strat_c5f0(townMgr, out, availPtr, profKey);
 }
-extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out,
+                                                       ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    return Strat_c4b0(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_c4b0 (Component/exe_bodies.h, wave X)
-                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_c4b0
+    return Strat_c4b0(townMgr, out, availPtr, profKey);
 }
 
 // CitizenList::AssignWorker (0x14008c3d0) — the top-level seat cascade the exe's

@@ -266,7 +266,7 @@ void EventLog::Serialize(IO::Stream& stream) {
             EventLogEntry& e = entries[i];
             // LEFT: retail serializes the colour through the uint overload
             // (0x1400952c0); the tree's int overload is kept (an H8 question).
-            ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);
+            ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);   // LEFT: retail serializes the colour through the uint overload (0x1400952c0); the tree's int overload is kept (an H8 question).
             e.text.Serialize(&ser);
             ser.Serialize(e.eventType, nullptr);
             ser.Serialize(e.severity, nullptr);
@@ -300,7 +300,7 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
     // LEFT (H5): +0x1C is a Math::Vector4, declared as float[4]: a Vector4
     // member would give the class a constructor that runs in Load.
-    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(&ser);
+    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(&ser);   // LEFT: H5: +0x1C is a Math::Vector4, declared as float[4]: a Vector4 member would give the class a constructor that runs in Load.
     ser.Serialize(field_0x2C, nullptr);
     ser.Serialize(field_0x30, nullptr);
     ser.Serialize(field_0x44, nullptr);
@@ -364,8 +364,8 @@ static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countF
             void* outNode = nullptr;
             // LEFT: the shared set insert takes the header as int64_t* and the
             // record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
-            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(root), &outNode,
-                                          reinterpret_cast<uint64_t*>(&rec.ref));   // 0x140014890
+            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(root), &outNode,   // LEFT: the shared set insert takes the header as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
+                                          reinterpret_cast<uint64_t*>(&rec.ref));   // 0x140014890   // LEFT: the shared set insert takes the header as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
         }
     } else {
         // SAVE: leftmost-first in-order walk
@@ -418,7 +418,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
             bool used = false;
             // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has
             // no typed slot accessor here).
-            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has no typed slot accessor here).
             if (key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;
             serializer->Serialize(a, nullptr);
             serializer->Serialize(b, nullptr);
@@ -478,7 +478,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
         if (!cur) return;
         while (cur->left) cur = cur->left;
         while (cur) {
-            reinterpret_cast<Object::InternalBasePtr*>(&cur->key)->Serialize(*serializer);   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(&cur->key)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has no typed slot accessor here)
             if (cur->key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key, s_tidCompEnt))
                 cur->key = nullptr;
             serializer->Serialize(cur->x, nullptr);
@@ -598,14 +598,14 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             if (flags & 4) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD RtObject::Internal (the mirror X-R1 listed; its door takes the mirror)
                 ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
                                               owner->stagingUpdate.count + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD RtObject::Internal (the mirror X-R1 listed; its door takes the mirror)
                 ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
                                               owner->stagingPostUpdate.count + 1, &ibp);   // 0x140003110
             }
@@ -637,7 +637,7 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
         ComponentEntity** slot = hdr->data;
         for (int i = 0; i < count; i++, slot++) {
             // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
             if (*slot != nullptr && s_tidCompEnt &&
                 !::Object::IsDerivedFromNullSafe(*slot, s_tidCompEnt)) {
                 *slot = nullptr;
@@ -762,7 +762,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     // retail returns early here and this IBP is NOT the one that faults. Kept
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
-    reinterpret_cast<Object::InternalBasePtr*>(&m_scenarioInstance)->Serialize(ser);   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&m_scenarioInstance)->Serialize(ser);   // B.3.4 bridge   // LEFT: GameUpdateLoop::m_scenarioInstance is an InternalPtr held as a raw pointer (GameUpdateLoop.h, not this agent's)
     if (m_scenarioInstance != nullptr) {
         uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
         if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance, achTid))
@@ -878,7 +878,7 @@ static bool RoundtripDecompress(Save::SavedState* savedState, uint8_t** outData,
     savedState->Retrieve(cms->GetMemoryStream());
     if (!cms->Open()) { cms->IO::CompressedMemoryStream::~CompressedMemoryStream(); return false; }
     const uint32_t size = cms->IO::CompressedStream::GetSize();
-    uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
+    uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));   // LEFT: a CRT malloc result (the tier-I allocation shape covers MemAlloc / Allocate only: the close decides)
     const bool ok = size == 0 || cms->IO::CompressedStream::Read(static_cast<int>(size), data);
     cms->IO::CompressedMemoryStream::Close();
     cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
@@ -906,7 +906,7 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::Sa
     fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
             loaded->_size);
     fflush(stderr);
-    self->SaveRestoreOut(true, reinterpret_cast<Save::SavedState*>(&fresh), &out);   // B.3.8 bridge
+    self->SaveRestoreOut(true, reinterpret_cast<Save::SavedState*>(&fresh), &out);   // B.3.8 bridge   // LEFT: the round-trip probe's local SS image stands in for a Save::SavedState (diagnostic, not retail)
 
     uint8_t* a = nullptr; uint32_t an = 0;
     uint8_t* b = nullptr; uint32_t bn = 0;

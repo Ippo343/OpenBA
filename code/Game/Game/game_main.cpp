@@ -277,7 +277,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // 10. FreeLibrary on Object::Factory's compiler-plugin module (Runtime
     // 0x1801fc6d0, the class static Object::Factory::_compilerModule).
     if (::Object::Factory::_compilerModule)
-        FreeLibrary(static_cast<HMODULE>(::Object::Factory::_compilerModule));
+        FreeLibrary(static_cast<HMODULE>(::Object::Factory::_compilerModule));   // CAST-OK: win32
     ::Object::Factory::_compilerModule = nullptr;
 
     // 11. Modification::SaveList

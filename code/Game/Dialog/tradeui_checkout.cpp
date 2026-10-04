@@ -73,7 +73,7 @@
 #include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Entity/CitizenBehavior.h"
-#include "Action/exe_bodies.h"      // B3R: ActRm_StorageSubtract_d150, _StorageAdd_d000, _GetResourceCategory_88f90
+#include "Action/exe_bodies.h"      // B3R: StorageSubtract, StorageAdd, ResourceCategory
 #include "Component/exe_bodies.h"   // B3R: TradeComponent_SpawnPurchasedLivestock
 #include <cstdint>
 #include <cstdio>
@@ -249,14 +249,12 @@ void TradeUI::OnTradeButton() {
 
             ComponentDescription* resEntity = _sellItems[i].resource;
 
-            ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),   // LEFT: SIG ActRm_StorageSubtract_d150 (Action/exe_bodies.h)
-                                       reinterpret_cast<int64_t>(resEntity), qty);   // 0x14012d150  LEFT: SIG (same)
+            StorageSubtract(storage, resEntity, qty);   // 0x14012d150
 
             // Credit the town's per-category produced-goods tally.
             //   town->professionResources (+0x170): the category array, running total at +0x0c
             {
-                int cat = ActRm_GetResourceCategory_88f90(
-                    storage, reinterpret_cast<uintptr_t>(resEntity));   // 0x140088f90  LEFT: SIG ActRm_GetResourceCategory_88f90 (Action/exe_bodies.h)
+                int cat = ResourceCategory(resEntity);   // 0x140088f90 (its first argument, the storage, is never read)
                 if (cat >= 0) {
                     town->professionResources[cat].field_0x0C += qty;
                 }
@@ -293,8 +291,7 @@ void TradeUI::OnTradeButton() {
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
             if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
-                ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),   // LEFT: SIG ActRm_StorageAdd_d000 (Action/exe_bodies.h)
-                                      reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000  LEFT: SIG (same)
+                StorageAdd(storage, bought, qty);   // 0x14012d000
                 town->RegisterRawMaterial(bought);   // 0x140091e60
             }
             // Natural resource (crop / orchard seed): availability only.

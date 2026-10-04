@@ -193,7 +193,7 @@ void LoadInputNameTables() {
         }
         printf("[InputBindings]   '%s' -> %p\n", path, (const void*)ext);
         // LEFT: FindOrLoad returns a const External*; the container holds StringTable*.
-        return const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext));
+        return const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext));   // LEFT: FindOrLoad returns a const External*; the container holds StringTable*.
     };
 
     GameContainer* container = g_gameContainer;

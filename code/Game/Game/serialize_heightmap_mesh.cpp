@@ -514,12 +514,8 @@ void WorldGeometry::RebuildDirtyChunks() {
 // ============================================================
 // The C entry points
 // ============================================================
-// B4 FORWARD: 1 outside caller (worldgen.cpp, GAME-c, holds the geometry as
-// void*). LEFT: that void*.
-extern "C" void Reimpl_TradeWork_sub_c1e0(void* self) {
-    if (!self) return;
-    reinterpret_cast<WorldGeometry*>(self)->BuildTerrainMesh();
-}
+// B4 X-G2-3: Reimpl_TradeWork_sub_c1e0 (the C entry of WorldGeometry::BuildTerrainMesh) had
+// no caller left: deleted.
 
 // B4 FORWARD: 1 outside caller (Action/action_pf_road.cpp, ACT-a: a float[3]).
 extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row) {

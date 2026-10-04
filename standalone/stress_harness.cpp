@@ -54,7 +54,6 @@
 #define PSAPI_VERSION 2
 #include <psapi.h>
 
-extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
 // gameupdateloop.cpp — SIMPROF phase accumulators reserved for this harness.
 extern "C" int         GameUpdateLoop_SimProfTake(double* outMs, int maxN);
 extern "C" const char* GameUpdateLoop_SimProfName(int phase);
@@ -330,7 +329,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
     // Ghidra-misnamed; see reference_misnamed_component_finders): the two
     // ComponentEntity::FindComponent<T> instances, called by name.
 
-    struct Need { uint64_t prof; int want; int have; int buildings; };
+    struct Need { Profession* prof; int want; int have; int buildings; };
     std::vector<Need> needs;
     int workplaces = 0, notAccepting = 0;
     for (int i = 0; i < n; ++i) {
@@ -339,8 +338,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         if (ent->_entityFlags & 0x400) continue;   // removed (+0x40)
         WorkPlaceComponent* wpc = ent->FindComponent<WorkPlaceComponent>();   // 0x140002e10
         if (!wpc) continue;
-        // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the profession as a uint64 key.
-        const uint64_t prof = reinterpret_cast<uintptr_t>(wpc->profession);   // +0x48  // LEFT: SIG CitizenEmploy_SeatWorkers (uint64_t key; wave X)
+        Profession* const prof = wpc->profession;   // +0x48
         if (!prof) continue;
         ++workplaces;
         if (wpc->isAccepting == 0) { ++notAccepting; continue; }            // +0x50
@@ -372,13 +370,12 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         const int missing = x.want - x.have;
         if (missing <= 0) continue;
         wanted += missing;
-        // LEFT: CitizenEmploy_SeatWorkers (CIT, Component/exe_bodies.h) takes the town
-        // manager as int64 and the profession as a uint64 key.
-        const int got = CitizenEmploy_SeatWorkers((int64_t)townMgr, x.prof, missing);   // LEFT: SIG CitizenEmploy_SeatWorkers (int64_t town; wave X)
+        const int got = CitizenEmploy_SeatWorkers(townMgr, x.prof, missing);
         seatedTotal += got;
         if (got || s_staffPasses == 0)
             std::fprintf(stderr, "[Stress::staff]   prof=0x%llx buildings=%d want=%d have=%d -> seated %d/%d\n",
-                         (unsigned long long)x.prof, x.buildings, x.want, x.have, got, missing);
+                         reinterpret_cast<unsigned long long>(x.prof),   // CAST-OK: ptr_int (the key logged as an integer)
+                         x.buildings, x.want, x.have, got, missing);
     }
     std::fprintf(stderr, "[Stress::staff] pass#%d worldFrame=%d workplaces=%d (notAccepting=%d) "
                          "professions=%zu missing=%d seated=%d\n",
@@ -550,18 +547,17 @@ extern "C" void StressHarness_DrawEnd() {
     s_drawMsSum += QpcMs(QpcNow() - s_drawT0); ++s_drawN;
 }
 
-static void CompProf_WatchBegin(void* comp, uint32_t tid) {
+static void CompProf_WatchBegin(Object::Base* comp, uint32_t tid) {
     if (!s_tidResolved) {
         s_tidResolved = true;
         s_tidCitizen   = CitizenComponent::TypeId();
         s_tidCitizenAI = CitizenAIComponent::TypeId();
     }
     s_curComp = comp; s_curTid = tid; s_curCitizen = nullptr; s_curHome = nullptr;
-    // LEFT: `comp` is void* (entitylist.cpp declares CompProf_Begin* itself, ENTITY);
-    // the type id just matched names the class.
+    // The type id just matched names the class (B10 downcast).
     CitizenComponent* cz = nullptr;
-    if (tid == s_tidCitizen) cz = reinterpret_cast<CitizenComponent*>(comp);   // LEFT: SIG CompProf_BeginKind (void* comp)
-    else if (tid == s_tidCitizenAI) cz = reinterpret_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38  // LEFT: SIG CompProf_BeginKind (void* comp)
+    if (tid == s_tidCitizen) cz = static_cast<CitizenComponent*>(comp);
+    else if (tid == s_tidCitizenAI) cz = static_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38
     if (cz && Readable(cz)) {
         s_curCitizen = cz;
         s_curHome = cz->home;                                            // +0x238
@@ -569,7 +565,7 @@ static void CompProf_WatchBegin(void* comp, uint32_t tid) {
 }
 
 extern "C" int CompProf_BeginKind(Object::Base* comp, int kind) {
-    void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: the profiler keys its table on the vtable word (no floor category names it: coordinator)
+    void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: FLOOR? vtable probe (the profiler keys its table on the vtable word)
     uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);  // CAST-OK: hash
     for (int probe = 0; probe < kCompSlots; ++probe) {
         const int idx = (int)((h + probe) & (kCompSlots - 1));

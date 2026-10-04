@@ -134,9 +134,9 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     // transform, bool) ctor is a door on the POD mirror (R-GFX); the camera
     // lives in stack storage of its size.
     alignas(16) uint8_t cameraStorage[sizeof(Graphics::Camera)];
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(cameraStorage), frustumRet,
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(cameraStorage), frustumRet,   // LEFT: Graphics::Camera's default ctor is protected and its (frustum, transform, bool) ctor is a door on the POD mirror (R-GFX); the camera lives in stack storage of its size.
                            &identity, /*isPerspective*/true);
-    Graphics::Camera* camera = reinterpret_cast<Graphics::Camera*>(cameraStorage);
+    Graphics::Camera* camera = reinterpret_cast<Graphics::Camera*>(cameraStorage);   // LEFT: Graphics::Camera's default ctor is protected and its (frustum, transform, bool) ctor is a door on the POD mirror (R-GFX); the camera lives in stack storage of its size.
 
     // Look straight down (yaw 0, pitch -90deg), positioned at world (0,0,100).
     const float yaw   = 0.0f;
@@ -172,10 +172,10 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     // (R-GFX); both live in stack storage of their size.
     alignas(16) uint8_t rendererStorage[256];
     alignas(16) uint8_t sceneStorage[256];
-    RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(rendererStorage));
-    RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));
-    Graphics::Renderer* renderer = reinterpret_cast<Graphics::Renderer*>(rendererStorage);
-    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(sceneStorage);
+    RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(rendererStorage));   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
+    RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
+    Graphics::Renderer* renderer = reinterpret_cast<Graphics::Renderer*>(rendererStorage);   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
+    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(sceneStorage);   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
 
     context.SetDefaultRenderBuffer(renderBuffer);
     context.SetRenderBuffer(renderBuffer);
@@ -190,11 +190,11 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     context._unknown03b8 = Math::Vector4(0.0f, 0.0f, clearDepth, 0.0f);   // +0x3b8..+0x3c4
     // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in
     // R-VIDEO's header).
-    uint8_t* ctx = reinterpret_cast<uint8_t*>(&context);
-    *reinterpret_cast<float*>(ctx + 0x288) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x28c) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x290) = clearDepth;
-    *reinterpret_cast<float*>(ctx + 0x294) = 0.0f;
+    uint8_t* ctx = reinterpret_cast<uint8_t*>(&context);   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
+    *reinterpret_cast<float*>(ctx + 0x288) = 0.0f;   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
+    *reinterpret_cast<float*>(ctx + 0x28c) = 0.0f;   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
+    *reinterpret_cast<float*>(ctx + 0x290) = clearDepth;   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
+    *reinterpret_cast<float*>(ctx + 0x294) = 0.0f;   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
     context._dirty |= 0x10800;
 
     renderer->_shaderDetail = 0;   // +0x3c (SetShaderDetail's field)
@@ -241,8 +241,8 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     CreateAndUpload();
 
     context.Reset();
-    RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));
-    RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(rendererStorage));
+    RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));   // LEFT: POD RtGraphics::Scene / Renderer: the ctor / dtor doors take the mirrors (R-GFX); the objects live in stack storage of their size
+    RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(rendererStorage));   // LEFT: POD RtGraphics::Scene / Renderer: the ctor / dtor doors take the mirrors (R-GFX); the objects live in stack storage of their size
 
     if (s_trace)
         printf("[MinimapPaint] painted terrain: width=%d colorBuf=%p terrainPixels=%p "

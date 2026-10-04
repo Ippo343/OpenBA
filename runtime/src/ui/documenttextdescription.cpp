@@ -216,7 +216,7 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
         text.table = table;
         text.index = (table != nullptr)                     // 1800cf559
             ? table->GetIndexFromName(                      // 1800cf56a
-                  *reinterpret_cast<const System::String*>(&_documentTextName))   // LEFT (H5)
+                  *reinterpret_cast<const System::String*>(&_documentTextName))   // LEFT (H5)   // LEFT: H5 _documentTextName is a String held as raw storage (DocumentTextDescription.h, not this agent's)
             : -1;                                           // 1800cf570
         DocumentTextElement* e = element->Get();            // 1800cf578
         e->_text = text;                                    // 1800cf57b / 1800cf587

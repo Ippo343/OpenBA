@@ -35,7 +35,7 @@ TutorialGoalDialog::TutorialGoalDialog()
 // LEFT H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor
 // destroys it by hand).
 System::String& TutorialGoalDialog::DialogName() {
-    return *reinterpret_cast<System::String*>(&dialogName);
+    return *reinterpret_cast<System::String*>(&dialogName);   // LEFT: H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor destroys it by hand).
 }
 
 // The dtor inside [0] 0x140027590: ~String on +0x28, then +0x20; the compiler

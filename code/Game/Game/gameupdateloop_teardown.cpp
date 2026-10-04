@@ -64,15 +64,15 @@
 // a `void*` there (WorkScheduler +0x20), and the tool registry's {root, count} header.
 namespace {
 
-inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }
-inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(base) + off); }
-inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }
+inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
+inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
+inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
 
 inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }
 
 // B.3.2 bridge: the owning structs are still untyped bytes.
-inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }
-inline Collection::Array<void*>&  PtrArr(void* base, int off) { return *reinterpret_cast<Collection::Array<void*>*>(B(base) + off); }
+inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
+inline Collection::Array<void*>&  PtrArr(void* base, int off) { return *reinterpret_cast<Collection::Array<void*>*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5 in EntityList.h / CitizenBehavior.h / PlayerToolManager.h, other owners)
 
 // MSVC's __ehvec_dtor_iter: destroy the elements of an embedded array in
 // REVERSE order. Retail reaches these through the CRT helper at 0x14003ad30;
@@ -368,7 +368,7 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
     // drop the IBP.
     if (self->currentTool != nullptr) {
         self->currentTool->Shutdown();   // slot 5
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->currentTool)->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(&self->currentTool)->DeletePtr(   // LEFT: H5 PlayerToolManager::currentTool is a bare Tool*, retail an InternalPtr<Tool> (PlayerToolManager.h, not this agent's)
             );   // LEFT: PlayerToolManager.h (PLAYER): currentTool is a bare Tool*, retail an InternalPtr<Tool> (H5)
     }
 

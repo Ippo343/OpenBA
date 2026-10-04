@@ -34,8 +34,8 @@ namespace {
 // the slot and the serializer arrive as void* from callers holding their own types.
 void ForwardRef7140(void* refField, void* serializer, uint32_t typeId, const char* typeName) {
     if (!refField || !serializer) return;
-    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),
-                                *reinterpret_cast<IO::Serializer*>(serializer),
+    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),   // LEFT: casts: the slot and the serializer arrive as void* from callers holding their own types.
+                                *reinterpret_cast<IO::Serializer*>(serializer),   // LEFT: casts: the slot and the serializer arrive as void* from callers holding their own types.
                                 typeId, typeName, "ExternalPtr::Serialize_7140");
 }
 } // namespace

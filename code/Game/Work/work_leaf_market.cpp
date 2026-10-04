@@ -58,7 +58,7 @@ static_assert(sizeof(MarketDemandNode) == 0x38, "left +0x20, right +0x28");
 void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node) {
     (void)ctx;
     if (node == nullptr) return;
-    MarketDemandNode* n = reinterpret_cast<MarketDemandNode*>(node);
+    MarketDemandNode* n = reinterpret_cast<MarketDemandNode*>(node);   // LEFT: SIG WorkLeaf_MarketTreeCleanup_2af40 takes the node as void* (its callers hold the tree untyped)
     WorkLeaf_MarketTreeCleanup_2af40(ctx, n->left);  // left
     WorkLeaf_MarketTreeCleanup_2af40(ctx, n->right); // right
     System::MemoryAllocator::MemFree(n->element.data); // data buffer

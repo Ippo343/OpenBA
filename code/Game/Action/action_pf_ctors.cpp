@@ -215,10 +215,4 @@ int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, cha
     return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);   // LEFT: SIG Pf_IsDstReachable_f810
 }
 
-// B4 FORWARD: code/Game/Game/game.cpp still calls this (its storage and material travel on
-// as int64_t to ActRm_StorageAdd_d000, which is not typed yet).
-uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3) {
-    return StorageCanAdd(reinterpret_cast<StorageComponent*>(param_1),   // LEFT: SIG Pf_StorageCanAccept_cd80
-                         reinterpret_cast<const ComponentDescription*>(param_2), param_3);   // LEFT: SIG Pf_StorageCanAccept_cd80
-}
 
