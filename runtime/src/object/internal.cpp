@@ -134,20 +134,6 @@ namespace {
 // callers and those are now the real class's members. WAVE2's warning stands
 // where they live now: one ported body cannot serve two element widths.
 
-// ---- ENDGAME B.3.1 step 1: the bridge to the real class ---------------------
-//
-// `Object::InternalBasePtr` (runtime/types/object/Internal.h) now owns every
-// body in this family. The `RtObject_InternalBasePtr_*` functions below stay —
-// they are the registered symbols and their callers have not moved yet — and
-// each is now a ONE-LINE shim onto the class, running over the same eight
-// bytes. The cast is the transitional kind B31_RULES sanctions for a
-// not-yet-converted POD; it disappears with the POD in step 2.
-inline ::Object::InternalBasePtr* AsClass(InternalBasePtr* p) {
-    return reinterpret_cast< ::Object::InternalBasePtr*>(p);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
-inline const ::Object::InternalBasePtr* AsClass(const InternalBasePtr* p) {
-    return reinterpret_cast<const ::Object::InternalBasePtr*>(p);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
 
 }  // namespace
 

@@ -171,9 +171,8 @@ void AchievementManager::Persist(IO::Stream& stream) {
 
     if (stream._direction == rt::io::kDirectionReading)
         _instances.SetSize(count);
-    RtObject_InternalPtrArraySerialize_AchievementInstance(
-        &ser, count,
-        reinterpret_cast<RtObject::InternalBasePtr*>(_instances.GetData()));   // InternalPtr<T>[] as the base array (Internal.h)
+    Object::InternalPtr<AchievementInstance>::SerializeArray(           // 0x180009a20
+        ser, count, _instances.GetData(), AchievementInstance::TypeId());
 }   // ~Serializer deletes the ReaderWriter
 
 }  // namespace Achievement

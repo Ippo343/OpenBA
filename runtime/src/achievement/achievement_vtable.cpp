@@ -261,9 +261,8 @@ void AchievementInstance::Persist(IO::Stream& streamv) {
         // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
         _goalList._goals.SetSize(count);
     }
-    RtObject_InternalPtrArraySerialize_GoalInstance(                // 0x180009fa0
-        &inner, count,
-        reinterpret_cast<RtObject::InternalBasePtr*>(_goalList._goals.GetData()));
+    Object::InternalPtr<GoalInstance>::SerializeArray(               // 0x180009fa0
+        inner, count, _goalList._goals.GetData(), GoalInstance::TypeId());
 }   // ~inner, then ~outer: the two ReaderWriters deleted in retail's order
 
 }  // namespace Achievement
