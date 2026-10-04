@@ -76,7 +76,7 @@ BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
                      uint32_t roadState, uint32_t terrainType)
     : Work(ownerIbp),
       field_48(nullptr),
-      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t
+      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad takes the road description as uint64_t: its by-address door BuildRoad_CtorParams_Impl is called from Player/roadtool_calcpath.cpp (X6-GAME-B) with the description as uint64_t
       field_58(static_cast<int32_t>(cellIdx)),
       field_5c(mapDescVal),
       field_60(static_cast<int32_t>(roadTypeExisting)),

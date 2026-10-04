@@ -60,7 +60,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     // If loading, resize the array
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         // LEFT: SIG ActRm_ArrayResize16_da70 (takes the array header as int64_t*; TrackerComponent.h, DLG-1, holds a raw triple).
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&displayed), localCount1);   // 0x14000da70   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&displayed), localCount1);   // 0x14000da70   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
     }
 
     // Serialize each (ExternalPtr + int) entry
@@ -78,7 +78,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     ser.Serialize(localCount2, nullptr);
 
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&produced), localCount2);   // 0x14000da70  LEFT: SIG ActRm_ArrayResize16_da70 (TrackerComponent.h holds a raw triple, DLG-1)   // LEFT: SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is a B13 template over the erased SetSize
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&produced), localCount2);   // 0x14000da70  LEFT: SIG ActRm_ArrayResize16_da70 (TrackerComponent.h holds a raw triple, DLG-1)   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
     }
 
     if (localCount2 > 0) {

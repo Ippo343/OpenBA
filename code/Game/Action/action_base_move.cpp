@@ -290,10 +290,6 @@ void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, floa
     character->field_0x38 = character->modelComponent->meshInstance._color[2] * p4;
 }
 
-// B4 FORWARD: code/Game/Component/citizencomponent_lifecycle.cpp still calls this (X-G1-3's file)
-void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
-    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);   // B4 FORWARD: the old void* receiver   // LEFT: B4 FORWARD citizencomponent_lifecycle.cpp (another agent's) passes the receiver as void*
-}
 
 // ============================================================
 // FUN_140116650 — PerformWork_helper_6650 (citizen break / task-due check)

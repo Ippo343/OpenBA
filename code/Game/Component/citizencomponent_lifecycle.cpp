@@ -254,8 +254,8 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
     maxAge = rf * spanA + baseA;
 
     // 13. sprite/anim init on the CharacterComponent (+0x278)
-    ActMv_SetAnimation_a1f0(character, 0,
-                            kRdata_14017214c, 0.0f);
+    SetAnimation(character, 0,
+              kRdata_14017214c, 0.0f);
 }
 
 // B4 FORWARD: 3 outside caller(s) (Component/immigrationcomponent_states.cpp,

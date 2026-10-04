@@ -236,7 +236,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 // void*; 0x1400bb7b0 takes it as an integer: LEFT)
                                 void* rawMatRef = descComp->_ref30;
                                 RawMaterialDescription* rawMatIBP = nullptr;
-                                WorkAcc_FindComponent_6330(reinterpret_cast<ComponentDescription*>(rawMatRef), &rawMatIBP);  // LEFT: FruitDescription::_ref30 is declared void* (Component/FruitDescription.h, COMP)
+                                WorkAcc_FindComponent_6330(reinterpret_cast<ComponentDescription*>(rawMatRef), &rawMatIBP);  // LEFT: FruitDescription::_ref30 is void*: its serializer Reimpl_ExternalPtr_Serialize_StringTable takes the slot as void** and also serves Select / ValueDescription's StringTable slot
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
@@ -296,7 +296,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                     (uint32_t)field_20,            // work id / priority (self+0x20)
                                     &entityRef,                    // entity ref ptr
                                     pathPos,                       // position
-                                    reinterpret_cast<ComponentDescription*>(rawMatRef),   // raw material ref   // LEFT: FruitDescription::_ref30 is void* (FruitDescription.h; its Serialize takes &_ref30 untyped)
+                                    reinterpret_cast<ComponentDescription*>(rawMatRef),   // raw material ref   // LEFT: FruitDescription::_ref30 is void*: its serializer Reimpl_ExternalPtr_Serialize_StringTable takes the slot as void** and also serves Select / ValueDescription's StringTable slot
                                     altCellFlag,                   // alternating-cell flag
                                     rawMatAmount,                  // float, -> CreateRawMaterial XMM2
                                     (uint32_t)nearestCell,         // map cell index
