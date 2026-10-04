@@ -250,9 +250,9 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 // CancelWork / CalcMaxWorkers; deleted.
 
 // ---- workplacecomponent.cpp
-void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (outside callers)
-void WorkPlaceComponent_OnCreateInit(void* selfP);  // 0x14012ee60 B4 FORWARD -> WorkPlaceComponent::ReleaseWorkers (destroycomponent_workerrelease.cpp)
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)
+class WorkPlaceComponent;
+void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (buildui.cpp takes its address)
+extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)
 
 // ---- zonecomponent.cpp
 // B.4 COMP-f: 0x140088e20 is CitizenBehavior::AddZoneEntity.
@@ -269,7 +269,7 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10 B4 FORWARD: outside callers in ~25 files -> StorageComponent::QueryCount
+int fn_StorageComponent_QueryCount(StorageComponent* storageComp);  // 0x14012cf10 B4 FORWARD: callers in Component / Dialog -> StorageComponent::QueryCount
 
 // ---- workcomponent.cpp
 // FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —

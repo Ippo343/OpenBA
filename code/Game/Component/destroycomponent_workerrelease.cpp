@@ -191,7 +191,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
 
     // 1. Release every seated worker (ee60). This is the piece whose absence left the
     //    roster half-torn-down: +0x60 non-zero over a clobbered +0x58.
-    WorkPlaceComponent_OnCreateInit(this);
+    ReleaseWorkers();   // 0x14012ee60
 
     // 2. The owner entity's WorkComponent.
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050

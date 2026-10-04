@@ -351,7 +351,8 @@ int StorageComponent::QueryCount() const {
     return total;
 }
 
-// B4 FORWARD: outside callers in ~25 files (Action, Component, Dialog, Entity, Game, Work).
-int fn_StorageComponent_QueryCount(void* storageComp) {
-    return reinterpret_cast<StorageComponent*>(storageComp)->QueryCount();   // LEFT: B4 FORWARD (wave X: its callers hold void*)
+// B4 FORWARD: callers in destroyui.cpp, storagecapacityui.cpp, tradeui.cpp (X3-GAME's) and two
+// Component files; the closing wave calls QueryCount there.
+int fn_StorageComponent_QueryCount(StorageComponent* storageComp) {
+    return storageComp->QueryCount();
 }
