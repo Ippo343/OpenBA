@@ -33,6 +33,9 @@
 #include "Player/Tool.h"
 #include "Object/exe_type.h"
 
+namespace UI { class DialogInstance; }
+class ComponentEntity;
+
 class EditTool final : public Tool {
     DECLARE_EXE_TYPE(EditTool)
 
@@ -53,12 +56,12 @@ public:
     // [13] 0x14002daf0 `MOV RAX,[RCX+0x30]; MOV [RDX],RAX; MOV RAX,RDX; RET`:
     // EditTool's own new virtual — the selected-entity handle, by value through
     // the hidden return slot (B8-11 shape: `this` in RCX, `ret` in RDX).
-    virtual uint64_t* GetSelected(uint64_t* ret) const { *ret = lastEntityRef; return ret; }
+    virtual ComponentEntity** GetSelected(ComponentEntity** ret) const { *ret = lastEntityRef; return ret; }
 
     void SelectEntity(const Object::InternalPtr<class ComponentEntity>* entity);  // 0x1400fd3b0 (B4 DLG-a; body in Dialog/edittool_select.cpp)
 
-    uint64_t entityRef;       // +0x28 InternalBasePtr: the open info dialog
-    uint64_t lastEntityRef;   // +0x30 InternalBasePtr: the selected entity
+    UI::DialogInstance* entityRef;       // +0x28 InternalBasePtr<DialogInstance>: the open info dialog (0x1400fd3b0 stores it)
+    ComponentEntity*    lastEntityRef;   // +0x30 InternalBasePtr<ComponentEntity>: the selected entity (0x1400fd3b0 stores it)
 };
 
 

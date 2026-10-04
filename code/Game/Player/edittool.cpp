@@ -76,7 +76,7 @@ bool EditTool::IsSelected(uint64_t* ref) {
     // CheckPtr on self->lastEntityRef to resolve lazy/weak pointers
 
     // Compare: does *ref match self->lastEntityRef?
-    return *ref == lastEntityRef;
+    return *ref == reinterpret_cast<uint64_t>(lastEntityRef);   // LEFT: SIG Tool slot [10] takes the handle as uint64_t* (Player/Tool.h, every tool overrides it)
 }
 
 // ============================================================
@@ -190,8 +190,8 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // the whole point of the right-click path.
     if (!dialogPtr) return;
 
-    self->entityRef = 0;
-    self->lastEntityRef = 0;
+    self->entityRef = nullptr;
+    self->lastEntityRef = nullptr;
 
     // PIN CHECK. Retail cc90 reads the dialog's ToolUI controller and closes only
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
@@ -246,7 +246,7 @@ void EditTool::Update(void*, char) {
     HighlightFollow_Impl(this);
 
     // Early out: if entity IBP at +0x28 is null, nothing to do
-    if (entityRef == 0)
+    if (entityRef == nullptr)
         return;
 
     // Resolve lazy/weak pointer
@@ -261,21 +261,19 @@ void EditTool::Update(void*, char) {
     // (Retail destroys the tool on close, so the dialog is always live there and
     // this guard never triggers.)
     {
-        uintptr_t resolved = entityRef;
+        uintptr_t resolved = reinterpret_cast<uintptr_t>(entityRef);   // CAST-OK: ptr_int (the tree's dead-reference probe)
         if (resolved < 0x10000 || resolved > 0x00007FFFFFFFFFFFULL) {
-            entityRef = 0;
+            entityRef = nullptr;
             // Drop the selected-entity ref too: leaving +0x30 set blocks re-selecting
             // the same building (EditTool::OnKey's `lastEntityRef != foundEntity`
             // guard and d3b0's step-1 early-out both see it as still selected).
-            lastEntityRef = 0;
+            lastEntityRef = nullptr;
             return;
         }
     }
 
     // Get ToolUI controller from dialog.
-    // LEFT: EditTool::entityRef (+0x28) holds the dialog as an integer (see
-    // EditTool_CloseInfoDialog).
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(entityRef);
+    UI::DialogInstance* dialog = entityRef;
     ToolUI* toolUI = nullptr;
 
     {
@@ -333,7 +331,7 @@ void EditTool::Update(void*, char) {
     // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
     // backstop for PINNED panels, which retail also leaves open).
     if (!SA_DialogEntityAlive(pageToggle)) {
-        EditTool_CloseInfoDialog(this, entityRef);
+        EditTool_CloseInfoDialog(this, reinterpret_cast<uintptr_t>(entityRef));   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t; standalone callers)
         return;
     }
 
@@ -615,7 +613,7 @@ char EditTool::OnKey(char param2) {
             // flag80 was 0, so this whole branch was skipped and the corrupt value went
             // straight through to SelectEntity.
             // LEFT: the tree's address probe (a guard retail lacks, 14d row 74).
-            uintptr_t foundBits = reinterpret_cast<uintptr_t>(foundEntity);
+            uintptr_t foundBits = reinterpret_cast<uintptr_t>(foundEntity);   // CAST-OK: ptr_int
             if (foundBits < 0x10000 || (foundBits & 0x7) != 0) {
                 static int s_warned = 0;
                 if (s_warned < 4) {
@@ -634,15 +632,13 @@ char EditTool::OnKey(char param2) {
         }
 
         // Check if entity is different from last selected
-        // LEFT: EditTool::lastEntityRef (+0x30) holds the entity as an integer (see
-        // EditTool_CloseInfoDialog).
-        if (lastEntityRef != reinterpret_cast<uint64_t>(foundEntity)) {
+        if (lastEntityRef != foundEntity) {
             // EditTool::SelectEntity (0x1400fd3b0)
             Object::InternalPtr<ComponentEntity> entityParam(foundEntity);
             SelectEntity(&entityParam);
             if (SelDiagOn())
                 printf("[SelDiag] SELECT entity=%p -> dialog(self+0x28)=%p\n",
-                       static_cast<void*>(foundEntity), (void*)entityRef);
+                       static_cast<void*>(foundEntity), static_cast<void*>(entityRef));
         }
     } else if (SelDiagOn()) {
         printf("[SelDiag] no entity under cursor — nothing selected\n");
@@ -669,7 +665,7 @@ char EditTool::OnKey(char param2) {
 // (0x1401ee710), and registering it made cc90 run every frame
 // (reg_player_render.cpp records the measurement). Retail reads the dialog IBP
 // from +0x28 itself.
-void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, static_cast<uintptr_t>(entityRef)); }
+void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, reinterpret_cast<uintptr_t>(entityRef)); }   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t; standalone callers)
 
 // [6] OnKey (0x1400fd030), [7] Update (0x1400fcda0) and [10] IsSelected
 // (0x1400fd290: "is *ref the entity I have selected?" — callers MUST pass the
@@ -742,7 +738,7 @@ extern "C" int EditTool_HarnessSelectEntity(EditTool* editTool, ComponentEntity*
     EditTool* tool = editTool;
     Object::InternalPtr<ComponentEntity> entityParam(entity);
     tool->SelectEntity(&entityParam);   // 0x1400fd3b0
-    void* dlg = (void*)tool->entityRef;
+    void* dlg = tool->entityRef;
     printf("[EditSel] direct select entity=%p -> dialog=%p (%s)\n",
            entity, dlg, dlg ? "OPENED" : "no dialog");
     return dlg != 0 ? 1 : 0;
@@ -769,7 +765,7 @@ extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool) {
         // LEFT: Picking::Scene's user data is `void*` (block R-GFX).
         Object::InternalPtr<ComponentEntity> entityParam(reinterpret_cast<ComponentEntity*>(userData));
         tool->SelectEntity(&entityParam);   // 0x1400fd3b0
-        void* dlg = (void*)tool->entityRef;
+        void* dlg = tool->entityRef;
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",
                userData, dlg, dlg ? "OPENED" : "no dialog");
         if (dlg) {
@@ -809,7 +805,7 @@ extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool) {
                 Object::InternalPtr<ComponentEntity> entityParam(entity);
                 tool->SelectEntity(&entityParam);   // 0x1400fd3b0
                 tried++;
-                void* dlg = (void*)tool->entityRef;
+                void* dlg = tool->entityRef;
                 if (dlg != 0) {
                     printf("[EditSel] cell(%d,%d) entity=%p OPENED info dialog=%p "
                            "(tried=%d occupants=%d)\n", cx, cy, static_cast<void*>(entity), dlg, tried, found);

@@ -737,14 +737,10 @@ void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
     }
 }
 
-// EditTool::lastEntityRef (+0x30) holds the entity as an integer (read so by
-// Dialog/edittool_select.cpp, Dialog/toolui.cpp, standalone/orchard_force_start.cpp):
-// the casts from it below are LEFT.
-
 void Impl_cb40(EditTool* self) {
-    if (self->lastEntityRef == 0) return;
+    if (self->lastEntityRef == nullptr) return;
     {
-        const uint64_t ref = self->lastEntityRef;
+        const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
             ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);
         } else {
@@ -752,14 +748,14 @@ void Impl_cb40(EditTool* self) {
             // its allocation recycled — that is the other shape the reported crash can
             // take, since the finder faults on entity+0x30 (component array) rather
             // than on the entity pointer. Screen the two fields the finder reads.
-            const ComponentEntity* e = reinterpret_cast<ComponentEntity*>(self->lastEntityRef);
+            const ComponentEntity* e = self->lastEntityRef;
             const uint64_t arr = reinterpret_cast<uint64_t>(e->_components);   // CAST-OK: ptr_int
             const int32_t  cnt = e->_componentCount;
             const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
             if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(reinterpret_cast<int64_t>(self), ref, arr, cnt);
         }
     }
-    SetSelectionHighlight(reinterpret_cast<ComponentEntity*>(self->lastEntityRef), 0);
+    SetSelectionHighlight(self->lastEntityRef, 0);
 }
 
 // ===========================================================================
@@ -769,8 +765,8 @@ void Impl_cb40(EditTool* self) {
 // ===========================================================================
 void Impl_c9e0(EditTool* self) {
     Impl_cb40(self);
-    if (self->lastEntityRef == 0) return;
-    SetSelectionHighlight(reinterpret_cast<ComponentEntity*>(self->lastEntityRef), 1);
+    if (self->lastEntityRef == nullptr) return;
+    SetSelectionHighlight(self->lastEntityRef, 1);
 }
 
 // ===========================================================================
@@ -829,12 +825,12 @@ void Impl_cc90(EditTool* self) {
 // harmless no-op for them.
 // ===========================================================================
 void Impl_HighlightFollow(EditTool* self) {
-    if (self->lastEntityRef == 0) return;      // nothing selected
-    const uint64_t entityBits = self->lastEntityRef;
+    if (self->lastEntityRef == nullptr) return;      // nothing selected
+    const uint64_t entityBits = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's dead-reference probe)
     // Dead / non-canonical ref (a torn-down entity leaves the -1 sentinel) — the
     // finder would deref it. Treat as "nothing to follow" (mirrors edittool.cpp:328).
     if (entityBits < 0x10000 || entityBits > 0x00007FFFFFFFFFFFULL) return;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(self->lastEntityRef);
+    ComponentEntity* entity = self->lastEntityRef;
 
     HighlightComponent* hc = entity->FindComponent<HighlightComponent>();   // find HighlightComponent
     if (hc == nullptr) return;
