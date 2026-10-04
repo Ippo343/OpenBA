@@ -470,10 +470,10 @@ void CitizenComponent::Infect(Disease* disease) {
             fprintf(stderr, "[Plague] INFECT skip=alreadySick citizen=%p\n", self), fflush(stderr);
         return;
     }
-    if (field_0x70 > 0) {
+    if (field_0x70._ticks > 0) {
         if (PlagueTraceOn())
             fprintf(stderr, "[Plague] INFECT skip=immune citizen=%p immunityTicks=%lld\n",
-                    self, (long long)field_0x70), fflush(stderr);
+                    self, (long long)field_0x70._ticks), fflush(stderr);
         return;
     }
     Profession* p1f0 = profession;
@@ -511,9 +511,9 @@ void CitizenComponent::Infect(Disease* disease) {
     this->disease = disease;
     CitizenDescription* desc = description;
     float tol = rng->RandFloatTol();   // ?RandFloatTol@Random@System@@ 0x1800c8000
-    field_0x70 = TimeFromSeconds(
+    field_0x70._ticks = TimeFromSeconds(
         (tol * desc->_f98 + desc->_f94) * SecsPerMonth());
-    field_0x78 = TimeFromSeconds(
+    field_0x78._ticks = TimeFromSeconds(
         disease->_field30 * SecsPerMonth());
     FindCareBuilding();   // 0x140111590
 
@@ -525,8 +525,8 @@ void CitizenComponent::Infect(Disease* disease) {
         fprintf(stderr,
                 "[Plague] INFECT ok citizen=%p disease=%p durationTicks=%lld "
                 "spreadTicks=%lld care(+0x228)=%s finderResolved=%d\n",
-                self, (void*)disease, (long long)field_0x70,
-                (long long)field_0x78,
+                self, (void*)disease, (long long)field_0x70._ticks,
+                (long long)field_0x78._ticks,
                 (careBuilding != nullptr) ? "LINKED" : "NOT-LINKED",
                 1);   // the finder is a direct call: always resolved
         fflush(stderr);
@@ -716,15 +716,15 @@ char CitizenComponent::RecoverOrDie() {
         AttendanceComponent_ReleaseLink59b0(self);   // 0x1401159b0
         return 0;                               // dead
     }
-    field_0x78 = 0;
-    field_0x70 = TimeFromSeconds(desc->_f9c * SecsPerMonth());
+    field_0x78._ticks = 0;
+    field_0x70._ticks = TimeFromSeconds(desc->_f9c * SecsPerMonth());
     this->disease = nullptr;
     if (PlagueTraceOn()) {
         fprintf(stderr, "[Plague] RESOLVE citizen=%p outcome=RECOVERED deathChance=%.5f "
                 "roll=%.5f recipMortality(+0x40)=%.3f careMult=%.4f care(+0x228)=%s "
                 "immunityTicks=%lld\n",
                 self, deathChance, r, disease->_field40, mult,
-                treated ? "LINKED" : "NOT-LINKED", (long long)field_0x70);
+                treated ? "LINKED" : "NOT-LINKED", (long long)field_0x70._ticks);
         fflush(stderr);
     }
     AttendanceComponent_ReleaseLink59b0(self);   // 0x1401159b0
@@ -751,8 +751,8 @@ char CitizenComponent::UpdateDisease(const System::Time* dtTime) {
     PlagueBootReport(this);
 
     if (disease == nullptr) {
-        field_0x70 -= *dt;
-        if (field_0x70 < 0) field_0x70 = 0;
+        field_0x70._ticks -= *dt;
+        if (field_0x70._ticks < 0) field_0x70._ticks = 0;
 
         CitizenDescription* desc = description;
         // The town health scale is CitizenBehavior +0x1a8.
@@ -769,13 +769,12 @@ char CitizenComponent::UpdateDisease(const System::Time* dtTime) {
         ++s_rollCalls;
         if (!(B > 0.0f)) {                       // COMISS 0,B; !JC (B <= 0 or NaN)
             ++s_rollSkippedNoWindow;
-            field_0x60 = 0;
+            field_0x60._ticks = 0;
             PlagueCensusTick();
             return 1;
         }
-        // field_0x60 is a System::Time held as its int64 ticks (CitizenComponent.h).
-        float elapsed = reinterpret_cast<const System::Time*>(&field_0x60)->AsSeconds();   // LEFT: CitizenComponent.h (CIT-4) field_0x60 is int64_t ticks, retail System::Time
-        field_0x60 = 0;
+        float elapsed = field_0x60.AsSeconds();
+        field_0x60._ticks = 0;
         float denom = A * MonthsPerYear() * SecsPerMonth() * B;
         float ratio = elapsed / denom;
         float r = rng->RandFloat();
@@ -816,12 +815,12 @@ char CitizenComponent::UpdateDisease(const System::Time* dtTime) {
     }
 
     // sick
-    field_0x70 -= *dt;
-    field_0x78 -= *dt;
-    if (field_0x78 <= 0) {
+    field_0x70._ticks -= *dt;
+    field_0x78._ticks -= *dt;
+    if (field_0x78._ticks <= 0) {
         SpreadDisease();
-        field_0x78 = TimeFromSeconds(this->disease->_field30 * SecsPerMonth());
+        field_0x78._ticks = TimeFromSeconds(this->disease->_field30 * SecsPerMonth());
     }
-    if (field_0x70 > 0) return 1;
+    if (field_0x70._ticks > 0) return 1;
     return RecoverOrDie();      // original tail-jumps here
 }

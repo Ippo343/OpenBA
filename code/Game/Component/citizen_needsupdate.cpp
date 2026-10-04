@@ -111,7 +111,7 @@ void CitizenComponent::ShortenDisease() {
     float base = desc ? desc->_f12c : 0.0f;
     System::Time t{};
     RtSystem_Time_Ctor(&t, base * kRdata_140172234);
-    field_0x70 -= t._ticks;
+    field_0x70._ticks -= t._ticks;
 }
 
 // ============================================================
@@ -200,5 +200,5 @@ void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_
     float base = desc ? desc->_f130 : 0.0f;
     RtSystem_Time_Ctor(&t, base * kRdata_140172234);
     happinessFlags |= 0x800;
-    clothingTimer = t._ticks;
+    clothingTimer = t;
 }

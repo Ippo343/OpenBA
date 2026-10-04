@@ -244,17 +244,17 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // --- Accumulate timers ---
     foodTimer._ticks += dt_ticks;        // food timer
     happinessTimer._ticks += dt_ticks;   // happiness timer
-    clothingTimer -= dt_ticks;           // clothing wear timer
+    clothingTimer._ticks -= dt_ticks;           // clothing wear timer
     if (school != nullptr) {
         schoolTime._ticks += dt_ticks;   // school timer
     }
     field_0x200._ticks += dt_ticks;      // general timer
-    field_0x60 += dt_ticks;              // work timer
+    field_0x60._ticks += dt_ticks;              // work timer
 
     // Clothing worn out: back to no clothing
-    if (clothingTimer < 0) {
+    if (clothingTimer._ticks < 0) {
         clothingLevel = 0;
-        clothingTimer = 0;
+        clothingTimer._ticks = 0;
     }
 
     // --- Adult transition: post became-adult event (10 = found partner, 9 = alone) ---
@@ -2370,12 +2370,12 @@ static Component* CitizenComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, 
 CitizenComponent::CitizenComponent()
     : name(0), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
       coldness(0), pregnancyTimer(0), health(0), statusFlags(0), foodTimer{0},
-      field_0x60(0), disease(nullptr), field_0x70(0), field_0x78(0), happiness(0),
+      field_0x60{0}, disease(nullptr), field_0x70{0}, field_0x78{0}, happiness(0),
       field_0x84(0), happinessFlags(0), _pad8C{}, happinessTimer{0},
       consumedTypes(nullptr), consumedTypeCount(0), consumedTypeCapacity(0),
       field_0xA8(-1), field_0xAC(0), field_0xB0(0), _padB4{},
       meshInstance{}, toolId(-1), toolSceneId(-1), field_0x1E0(4), clothingLevel(0),
-      clothingTimer(0), profession(nullptr), pendingProfession(nullptr),
+      clothingTimer{0}, profession(nullptr), pendingProfession(nullptr),
       field_0x200{0}, school(nullptr), education(0), _pad214{}, schoolTime{0},
       field_0x220(false), _pad221{}, careBuilding(nullptr), field_0x230(nullptr),
       home(nullptr), homeSlot(0), _pad244{}, workplace(nullptr), spouse(nullptr),
