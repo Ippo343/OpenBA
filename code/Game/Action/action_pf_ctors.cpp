@@ -195,13 +195,13 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // nomadcomponent_states, build_actions, work_act_clear, work_act_consume, work_act_hunt,
 // work_act_path, work_act_perform, work_act_rawmat, work_base_actionctor
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
-    ActionStackPush(reinterpret_cast<ActionStack*>(param_1),
-                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));
+    ActionStackPush(reinterpret_cast<ActionStack*>(param_1),   // LEFT: SIG Pf_ActStackPush_54e0
+                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0
 }
 
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Entity, Game, Player, Work)
 int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
-    return InteractNodeCount(reinterpret_cast<const InteractComponent*>(param_1), param_2);
+    return InteractNodeCount(reinterpret_cast<const InteractComponent*>(param_1), param_2);   // LEFT: SIG Pf_RecursiveChildSum_123070
 }
 
 // ---- action_pf_roots_route.cpp's C spellings (kept here: that file's reinterpret column
@@ -212,31 +212,26 @@ int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
 // citizen_lifeevent_handler, citizenbehavior, buildstructure, firework_search,
 // marketwork, work_base_reimpl, work_base_walkpos)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
-    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);
+    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);   // LEFT: SIG Pf_IsDstReachable_f810
 }
 
 // B4 FORWARD: outside callers in absorbresourcecomponent, citizen_reassign_workers,
 // citizenai_growup, game, pickup, pickup_gate, tradework
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3) {
-    return StorageCanAdd(reinterpret_cast<StorageComponent*>(param_1),
-                         reinterpret_cast<const ComponentDescription*>(param_2), param_3);
+    return StorageCanAdd(reinterpret_cast<StorageComponent*>(param_1),   // LEFT: SIG Pf_StorageCanAccept_cd80
+                         reinterpret_cast<const ComponentDescription*>(param_2), param_3);   // LEFT: SIG Pf_StorageCanAccept_cd80
 }
 
-// B4 FORWARD: outside callers in citizenai_findhelpers, citizenai_findtarget, clearstorage,
-// consumeproduce, marketwork. Retail's fourth argument is never read.
-int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t /*param_4*/) {
-    return FindBestAdjacentCell(reinterpret_cast<const Component*>(param_1), param_2, param_3);
-}
 
 // B4 FORWARD: outside callers in buildroad, citizenai_growup, clearstorage, consumeproduce,
 // gatherrawmaterials, marketwork, pickup, tradework
 int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3,
                                      uint64_t param_4, int param_5, char param_6,
                                      uint32_t* param_7, void* param_8) {
-    PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(param_1),
-                       reinterpret_cast<ComponentEntity**>(param_2), param_3,
-                       reinterpret_cast<const ComponentDescription*>(param_4), param_5, param_6,
-                       reinterpret_cast<float*>(param_7),
-                       reinterpret_cast<ComponentEntity* const*>(param_8));
+    PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(param_1),   // LEFT: SIG Pf_PickBestDropTarget_8d590
+                       reinterpret_cast<ComponentEntity**>(param_2), param_3,   // LEFT: SIG Pf_PickBestDropTarget_8d590
+                       reinterpret_cast<const ComponentDescription*>(param_4), param_5, param_6,   // LEFT: SIG Pf_PickBestDropTarget_8d590
+                       reinterpret_cast<float*>(param_7),   // LEFT: SIG Pf_PickBestDropTarget_8d590
+                       reinterpret_cast<ComponentEntity* const*>(param_8));   // LEFT: SIG Pf_PickBestDropTarget_8d590
     return param_2;
 }

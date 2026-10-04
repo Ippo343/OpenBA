@@ -991,53 +991,19 @@ void Map::FillZone(uint32_t cell, uint16_t zone) {
 // ===========================================================================
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
-// B4 FORWARD: 3 outside callers (Action/keystone_a_zone.cpp, Component/cemeterycomponent.cpp,
-// Game/pathfinder_seed.cpp). Retail reads RCX and RDX only.
-void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2) {
-    reinterpret_cast<PathfinderThread*>(param_1)->ApplyCommand(*reinterpret_cast<const PathCommandArgs*>(param_2));
-}
 // B4 FORWARD: 7 outside callers (cemeterycomponent, citizen_lifeevent_handler,
 // pasturecomponent, quarrycomponent_deform, terraformcomponent, starttown,
 // keystone_a_removalcalcpath)
 void Pf_EnqueueCmd2_a6fe0(int64_t param_1, int cell, int terrainType) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetCellTerrain(cell, terrainType);
+    reinterpret_cast<PathfinderThread*>(param_1)->SetCellTerrain(cell, terrainType);   // LEFT: SIG Pf_EnqueueCmd2_a6fe0
 }
 // B4 FORWARD: 2 outside callers (Action/keystone_a_zone.cpp, Component/boatcomponent_route.cpp)
 void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattanFlag, uint8_t respectBlocked) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetSearchFlags(diagonal, manhattanFlag, respectBlocked);
+    reinterpret_cast<PathfinderThread*>(param_1)->SetSearchFlags(diagonal, manhattanFlag, respectBlocked);   // LEFT: SIG Pf_EnqueueCmd4_a68b0
 }
 // B4 FORWARD: 3 outside callers (Action/keystone_a_zone.cpp, Component/boatcomponent_route.cpp,
 // Game/pathfinder_seed.cpp)
 void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetStepCost(terrainType, cost);
-}
-// B4 FORWARD: 1 outside caller (Action/keystone_a_zone.cpp)
-void Pf_EnqueueCmd0_a6b20(int64_t param_1, int mask) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetPassableTypes(mask);
-}
-// B4 FORWARD: 1 outside caller (Action/keystone_a_zone.cpp)
-int* Pf_EnqueueTradeRoute_a6c10(int64_t param_1, int* ticket, int start, int goal) {
-    return &reinterpret_cast<PathfinderThread*>(param_1)->RequestPath(reinterpret_cast<PathTicket*>(ticket), start, goal)->slot;
-}
-// B4 FORWARD: 1 outside caller (Work/work_base_accessor.cpp, block WORK-c, running)
-void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3) {
-    reinterpret_cast<Map*>(param_1)->FillZone(param_2, param_3);
+    reinterpret_cast<PathfinderThread*>(param_1)->SetStepCost(terrainType, cost);   // LEFT: SIG Pf_EnqueueCmd1_a6a30
 }
 
-// ===========================================================================
-// B4 FORWARD (action_pf_region.cpp's members): the C spellings other blocks' files still
-// call, one line each.
-// ===========================================================================
-// B4 FORWARD: 1 outside caller (Game/region_seed.cpp)
-void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
-    reinterpret_cast<RegionGraph*>(param_1)->Flush();
-}
-// B4 FORWARD: 1 outside caller (Work/buildstructure.cpp); retail's fourth argument is
-// passed through to 0x14001dc00, which never reads it.
-int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64_t) {
-    return reinterpret_cast<RegionGraph*>(param_1)->PathLength(param_2, param_3);
-}
-// B4 FORWARD: 2 outside callers (Action/region_paircache.cpp, Work/buildstructure.cpp)
-void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, uint32_t param_4) {
-    reinterpret_cast<RegionPairCache*>(param_1)->Store(param_2, param_3, param_4);
-}

@@ -133,13 +133,9 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 uint64_t WeightedRandomIndex_119470(int64_t param_1);  // 0x140119470
 
 // ---- action_pf_astar.cpp
-void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2);  // 0x1400a6430 -> PathfinderThread::ApplyCommand
 void Pf_EnqueueCmd2_a6fe0(int64_t param_1, int cell, int terrainType);  // 0x1400a6fe0 -> PathfinderThread::SetCellTerrain
 void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattan, uint8_t respectBlocked);  // 0x1400a68b0 -> PathfinderThread::SetSearchFlags
 void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost);  // 0x1400a6a30 -> PathfinderThread::SetStepCost
-void Pf_EnqueueCmd0_a6b20(int64_t param_1, int mask);  // 0x1400a6b20 -> PathfinderThread::SetPassableTypes
-int* Pf_EnqueueTradeRoute_a6c10(int64_t param_1, int* ticket, int start, int goal);  // 0x1400a6c10 -> PathfinderThread::RequestPath
-void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3);  // 0x14009c170
 
 // ---- action_pf_avl.cpp
 extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node);  // 0x14000e450
@@ -173,7 +169,6 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
-int Pf_RegionSpiral_9d0a0(int* param_1, int param_2);  // 0x14009d0a0
 void Pf_QuadtreeSubdivide_18880(uintptr_t param_1);  // 0x140018880 B4 FORWARD -> CharacterGridWalker::Subdivide
 uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4);  // 0x140018dd0 B4 FORWARD -> CharacterGridWalker::Init
 class PopulationComponent;    // Component/PopulationComponent.h
@@ -185,9 +180,6 @@ void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001fa80
 
 // ---- action_pf_region.cpp
-void Pf_FlushDirtyChunks_8a90(int64_t param_1);  // 0x1400a8a90 (local extern in code/Game/Game/region_seed.cpp (reg_pf_region.cpp prototype registers nothing))
-int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64_t param_4);  // 0x1400a8ba0
-void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, uint32_t param_4);  // 0x1400a5b30
 
 // ---- action_pf_road.cpp
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);  // 0x1400acc10 B4 FORWARD -> BuildRoadQuad
@@ -239,7 +231,6 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
 // B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80 -> StorageCanAdd
-int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t param_4);  // 0x14012d5d0 -> FindBestAdjacentCell
 int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3, uint64_t param_4, int param_5, char param_6, uint32_t* param_7, void* param_8);  // 0x14008d590 -> PickBestDropTarget
 
 // ---- keystone_a_zone.cpp
