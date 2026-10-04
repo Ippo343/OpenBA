@@ -752,8 +752,8 @@ UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
     CHECK_EQ(p->_unknown68, 0u);
     CHECK_EQ((int)pd[0x6c], 0xCD);
     CHECK(p->_spriteSheet == nullptr);
-    CHECK(p->_fillLeftName == nullptr);
-    CHECK(p->_trackRightName == nullptr);
+    CHECK(p->_fillLeftName._data == nullptr);
+    CHECK(p->_trackRightName._data == nullptr);
     CHECK(p->_childDescription == nullptr);
     p->~ProgressDescription();
     // ??0ProgressElement 0x180119c40: six {null, -1} sprites, the three tail
@@ -822,7 +822,7 @@ UNIT_TEST(b39_uib_c5_slider) {
     std::memset(d, 0xCD, sizeof d);
     auto* sd = ::new (static_cast<void*>(d)) UI::SliderDescription();
     CHECK(sd->_childDescription == nullptr);
-    CHECK(sd->_thumbHotName == nullptr);
+    CHECK(sd->_thumbHotName._data == nullptr);
     CHECK_EQ(sd->_trackOffsetY, 0);
     CHECK_EQ(sd->_thumbMargin, 0);
     CHECK(sd->_minimum == 0.0f);

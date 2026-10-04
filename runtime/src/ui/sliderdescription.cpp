@@ -61,19 +61,6 @@ namespace {
 
 
 
-// The refcounted-String release retail inlines six times in ~SliderDescription,
-// with its usual asymmetry: on the last reference the FIELD is moved to
-// `data - 8` and that is what is freed; otherwise the field is NULLED.
-void ReleaseStringField(char** field) {
-    char* s = *field;
-    if (s == nullptr) return;
-    if (--RtSystem::StringRefCount(s) == 0) {
-        *field = s - 8;
-        System::MemoryAllocator::MemFree(*field);
-    } else {
-        *field = nullptr;
-    }
-}
 
 }  // namespace
 
@@ -84,10 +71,8 @@ void ReleaseStringField(char** field) {
 // ============================================================================
 namespace {
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
-// B.4 LEFT: the names are `System::String` fields spelt `char*` (their dtors
-// would start to run as the real type, B4_RULES H5).
-int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const void* nameStr) {
-    return sheet->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
+int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const System::String* name) {
+    return sheet->GetSpriteIndexFromName(*name);
 }
 // A raw 4-byte copy: retail moves the two floats through EAX, not an XMM register.
 template <typename D, typename S>
@@ -128,11 +113,11 @@ bool SliderDescription::Serialize(IO::Stream& streamArg) {
 
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800d78e8 ExternalPtr<ElementDescription>
     RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800d78f6 ExternalPtr<SpriteSheet>
-    reinterpret_cast<System::String*>(&_trackStartName)->Serialize(&ser);         // 1800d7904
-    reinterpret_cast<System::String*>(&_trackMiddleName)->Serialize(&ser);        // 1800d7915
-    reinterpret_cast<System::String*>(&_trackEndName)->Serialize(&ser);           // 1800d7926
-    reinterpret_cast<System::String*>(&_thumbName)->Serialize(&ser);              // 1800d7937
-    reinterpret_cast<System::String*>(&_thumbHotName)->Serialize(&ser);           // 1800d7948
+    _trackStartName.Serialize(&ser);         // 1800d7904
+    _trackMiddleName.Serialize(&ser);        // 1800d7915
+    _trackEndName.Serialize(&ser);           // 1800d7926
+    _thumbName.Serialize(&ser);              // 1800d7937
+    _thumbHotName.Serialize(&ser);           // 1800d7948
 
     rw->SerializeInt(_trackOffsetY, nullptr);
     rw->SerializeInt(_thumbMargin, nullptr);
@@ -199,7 +184,7 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
     // The five {sheet, index} pairs. ONE stack slot, written 4 bytes wide and
     // read 8 — see the banner.
     uint64_t idxSlot;                                                   // [RBP-0x10]
-    char* const* const names[5] = { &_trackStartName, &_trackMiddleName, &_trackEndName,
+    const System::String* const names[5] = { &_trackStartName, &_trackMiddleName, &_trackEndName,
                                     &_thumbName, &_thumbHotName };
     ::Sprite* const sprites[5] = { &elem->_trackStart, &elem->_trackMiddle, &elem->_trackEnd,
                                    &elem->_thumb, &elem->_thumbHot };
@@ -233,13 +218,10 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
 // the retired door (ENDGAME B.3.9 UI-B): the five Strings in REVERSE order,
 // 0x98 down to 0x78. The restamps, the base's _textName (+0x60) and the tail
 // JMP into ~External are the compiler's chain.
-SliderDescription::~SliderDescription() {
-    ReleaseStringField(&_thumbHotName);    // +0x98// 1800d7a25
-    ReleaseStringField(&_thumbName);    // +0x90// 1800d7a58
-    ReleaseStringField(&_trackEndName);    // +0x88// 1800d7a8a
-    ReleaseStringField(&_trackMiddleName);    // +0x80// 1800d7abc
-    ReleaseStringField(&_trackStartName);    // +0x78// 1800d7aee
-}
+// B4 P2 H5: retail 0x1800d7a00 releases +0x98 .. +0x78 (0x1800d7a25 .. 0x1800d7b0e)
+// then the base +0x60 and JMP ~External (0x1800bc950): the members ~String
+// (0x180006c80) in reverse declaration order, then the base chain.
+SliderDescription::~SliderDescription() {}
 
 // ?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ 0x180049840 --
 // `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xb8, align 8; retail's null
