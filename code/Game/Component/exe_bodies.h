@@ -181,7 +181,8 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230
 
 // ---- mapcomponent.cpp
-extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
+class Minimap;   // Game/Minimap.h
+extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 extern "C" void MapComponent_DetachOccupancy_4750(void* selfV);  // 0x140124750
 
 // ---- modelcomponent.cpp
