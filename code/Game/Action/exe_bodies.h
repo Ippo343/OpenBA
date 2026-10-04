@@ -79,13 +79,8 @@ void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, floa
 uint8_t CitizenBreakCheck(CitizenComponent* citizen);  // 0x140116650
 void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP);  // 0x1400012d0
 void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer);  // 0x140022970
-void ActMv_SetFacingDirection_a060(void* comp, void* vector3);  // 0x14010a060
 void ActMv_UpdateFacing_c8d20(void* selfp);  // 0x1400c8d20
 void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4);  // 0x14010a1f0
-uint8_t ActMv_CitizenBreakCheck_116650(void* entityp);  // 0x140116650
-void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, void* param4);  // 0x14009e550
-int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes);  // 0x1400a6d50
-void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags, uint32_t destCell, uint32_t srcCell);  // 0x14009cfb0
 void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void*, void* param4);  // 0x1400c8c10
 
 // ---- action_base_movedeps.cpp
