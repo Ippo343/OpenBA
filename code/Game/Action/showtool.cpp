@@ -164,7 +164,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
 
     // LEFT: CitizenComponent +0xB8 is raw storage for a Graphics::MeshInstance (H5, owned
     // by CIT; declaring it makes its ctor / dtor run).
-    Graphics::MeshInstance* held = reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);
+    Graphics::MeshInstance* held = reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (+0xB8) is raw storage for a Graphics::MeshInstance (CitizenComponent.h; declaring it makes its ctor / dtor run)
 
     // Ensure the held-item MeshInstance (citizen +0xb8) is a constructed object.
     // Retail treats +0xb8 as an embedded, already-constructed Graphics::MeshInstance
@@ -176,7 +176,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // same MeshInstance default-ctor the StorageDisplayComponent pile renderer uses
     // before its own SetMesh+AddObject — and store -1 at +0xb8 + 0x120 (which is the
     // citizen's toolId, +0x1D8).
-    void* heldVt = *reinterpret_cast<void* const*>(citizen->meshInstance);   // LEFT: H5 raw storage (vptr probe)
+    void* heldVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
     if (!heldVt) {
         ::new (static_cast<void*>(citizen->meshInstance)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         citizen->toolId = -1;
@@ -205,7 +205,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // and SetMesh'd as one. The `meshVt` test stays: it tests the OBJECT (a
     // never-constructed held-item slot is zeroed), not a door pointer.
     const System::Time time0{0};
-    void* meshVt = *reinterpret_cast<void* const*>(citizen->meshInstance);   // LEFT: H5 raw storage (vptr probe)
+    void* meshVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
     if (meshVt) {
         held->Update(time0);
     }
@@ -318,7 +318,7 @@ void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
     // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp, the Work action
     // builders) hold the citizen reference as void*.
     return static_cast<Object::Base*>(
-        new (self) ShowTool(static_cast<CitizenComponent* const*>(param_2), toolType));
+        new (self) ShowTool(static_cast<CitizenComponent* const*>(param_2), toolType));  // LEFT: SIG the ShowTool in-place ctor door: outside callers (citizenai_actionctors.cpp, the Work action builders) hand the citizen reference as void*
 }
 
 // 0x140042890: Action() (Internal, +0x10/+0x18 = 0), then +0x20 = *param_2 (the

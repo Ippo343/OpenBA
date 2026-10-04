@@ -300,7 +300,7 @@ bool ExternalPtrSerializeBody(External* cur, IO::Serializer& ser,
             // exe-side sibling in code/Game/Component/ambient_externalptr_serialize.cpp
             // deliberately relaxes, and this one must not. `FindOrLoad` is
             // retail's `QEAAPEBV` (const result); the field is a non-const T*.
-            result = const_cast<External*>(found);
+            result = const_cast<External*>(found);  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: retail drops the const in inlined template code; decide at the close)
         }
         loaded = result;
         return true;                            // 0x180004555 `*self = result`

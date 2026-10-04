@@ -97,9 +97,8 @@ using EntitySet = Collection::Set<WorkEntityAssignment>;
 // layout).
 // ABI: void fn(longlong* treeRootSlot, InternalBasePtr* key)
 // Closure: 0x14001ca60 (reg) + InternalBasePtr_CheckPtr (engine). SAFE.
-void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP) {
-    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);
-    ComponentEntity* const* key = reinterpret_cast<ComponentEntity* const*>(keyIBP);
+void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* key) {
+    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);  // LEFT: H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)
     WorkEntitySetNode* node = set->_root;
     if (node == nullptr) return;
     do {
@@ -108,7 +107,7 @@ void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP) {
             node = node->left;       // left (+0x18)
         } else {
             if (*key <= node->element.entity) {
-                WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(treeRootSlot), node);
+                WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(treeRootSlot), node);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF; work_base_cellbst.cpp)
                 return;
             }
             node = node->right;      // right (+0x20)
@@ -145,10 +144,9 @@ static WorkEntitySetNode* WorkLeaf_BstNewNode_9b40(const WorkEntityAssignment* p
 // 0x140013480. The count is incremented on every insert that adds a node.
 // ABI: undefined8* fn(longlong* treeRootSlot, undefined8* outNode, InternalBasePtr* ins)
 // Closure: 0x140029b40 (inlined) + 0x140013480 (reg) + MemAlloc/CheckPtr (engine). SAFE.
-void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* insIBP) {
-    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);
-    const WorkEntityAssignment* ins = reinterpret_cast<const WorkEntityAssignment*>(insIBP);
-    WorkEntitySetNode** out = reinterpret_cast<WorkEntitySetNode**>(outNode);
+void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const WorkEntityAssignment* ins) {
+    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);  // LEFT: H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)
+    WorkEntitySetNode** out = reinterpret_cast<WorkEntitySetNode**>(outNode);  // LEFT: the out slot is the caller's reused scratch (ClearArea::Execute's Profession* local, retail's one stack slot)
     WorkEntitySetNode* node = set->_root;
     WorkEntitySetNode* result;
 
@@ -219,9 +217,8 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
 // ABI: void fn(longlong* treeRootSlot, Serializer* ser)
 // Closure: 9920 (sibling) + Serialize(int)/IBP::Serialize/IsDerivedFrom + type
 //          IDs (all engine globals). SAFE.
-void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* serializer) {
-    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);
+void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser) {
+    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);  // LEFT: H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)
 
     int count = set->_count;
     ser->Serialize(count, nullptr);
@@ -243,11 +240,11 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* serializer) {
             WorkEntityAssignment pair;
             pair.entity = nullptr;
             pair.citizen = nullptr;
-            reinterpret_cast<Object::InternalBasePtr*>(&pair.entity)->Serialize(*ser);
+            reinterpret_cast<Object::InternalBasePtr*>(&pair.entity)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
             if (pair.entity != nullptr && !Object::IsDerivedFromNullSafe(pair.entity, tidEntity)) {
                 pair.entity = nullptr;
             }
-            reinterpret_cast<Object::InternalBasePtr*>(&pair.citizen)->Serialize(*ser);
+            reinterpret_cast<Object::InternalBasePtr*>(&pair.citizen)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
             if (pair.citizen != nullptr && !Object::IsDerivedFromNullSafe(pair.citizen, tidCitizenAI)) {
                 pair.citizen = nullptr;
             }
@@ -267,13 +264,13 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* serializer) {
         }
         while (node != nullptr) {
             // IBP A at node+0x00
-            reinterpret_cast<Object::InternalBasePtr*>(&node->element.entity)->Serialize(*ser);
+            reinterpret_cast<Object::InternalBasePtr*>(&node->element.entity)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
             ComponentEntity* a = node->element.entity;
             if (a != nullptr && !Object::IsDerivedFromNullSafe(a, tidEntity)) {
                 node->element.entity = nullptr;
             }
             // IBP B at node+0x08
-            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*ser);
+            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
             CitizenComponent* b = node->element.citizen;
             if (b != nullptr && !Object::IsDerivedFromNullSafe(b, tidCitizenAI)) {
                 node->element.citizen = nullptr;

@@ -142,9 +142,9 @@ static Node* CellBST_AllocNode(const WorkCellAssignment* rec, Node* parent) {
 // cell index. Prototype: void* fn(longlong* root, void* outResult, uint* keyRec).
 // keyRec = {int key@+0; ptr IBP@+8}; key = *keyRec; the node is written to *outResult.
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);
-    const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);
-    Node** pOut = reinterpret_cast<Node**>(outResult);
+    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_*: one body over the area works' raw field pairs (H5) and the scheduler's WorkSchedulerTree (ICF)
+    const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);  // LEFT: SIG WorkCellBST_Insert_9a40: the scheduler inserts {id, pad, InternalPtr<Work>} through the same body (ICF)
+    Node** pOut = reinterpret_cast<Node**>(outResult);  // LEFT: SIG as above (the scheduler's out slot is its own node type)
     int key = rec->cell;
     if (set->_root == nullptr) {
         Node* node = CellBST_AllocNode(rec, nullptr);
@@ -184,8 +184,8 @@ void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
 // Same three-case structure as the simple-BST delete, cell offsets.
 // Caller: void fn(void* bstRoot, void* node).
 void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);
-    Node* node = reinterpret_cast<Node*>(nodeArg);
+    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF: cell, entity, scheduler id / bucket, region pair, goals)
+    Node* node = reinterpret_cast<Node*>(nodeArg);  // LEFT: SIG as above
     Node* local_res8 = node->parent;
     set->_count -= 1; // count--
     Node* lVar5 = node->right;
@@ -257,9 +257,8 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 // Stream order: count(int), then `count` (int key, IBP) pairs. LOAD inserts each pair
 // (IBP type-checked vs CitizenComponent 0x1401c7158). SAVE is an iterative in-order
 // parent-walk writing each node's key(int @+0) then IBP(@+8). Caller: void fn(root, ser).
-void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);
+void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser) {
+    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_*: the area works hold the set as two raw fields (ClearArea.h / PlantArea.h / PlantOrchard.h / HarvestArea.h / HarvestOrchard.h, H5: a Collection::Set member would run its dtor)
     int count = set->_count;
     ser->Serialize(count, nullptr);
     bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
@@ -271,7 +270,7 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
             ser->Serialize(rec.cell, nullptr);
             CitizenComponent* keyIBP = nullptr;
             // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);
+            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);  // LEFT: WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr
             if (keyIBP != nullptr && citTid &&
                 !Object::IsDerivedFromNullSafe(keyIBP, citTid))
                 keyIBP = nullptr;
@@ -292,7 +291,7 @@ joined:
     while ((pIVar5 = pIVar7) != nullptr) {
         ser->Serialize(pIVar5->element.cell, nullptr);   // key @+0
         // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8
+        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8  // LEFT: as above
         if (pIVar5->element.citizen != nullptr && citTid &&
             !Object::IsDerivedFromNullSafe(pIVar5->element.citizen, citTid))
             pIVar5->element.citizen = nullptr;

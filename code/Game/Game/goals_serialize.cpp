@@ -77,16 +77,16 @@ void RebalanceIdTree(WorkSchedulerIdNode** root, WorkSchedulerIdNode* from) {   
     AvlRebalance(root, &from);
 }
 void RebalanceCountTree(WorkSchedulerCountNode** root, WorkSchedulerCountNode* from) { // 0x14001a8c0
-    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));
+    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));  // LEFT: SIG Pf_AvlRebalanceA_a8c0 (wave X family across two agents)
 }
 void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode* from) { // 0x140014b40
-    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));
+    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));  // LEFT: SIG TradeWork_impl_4b40 (wave X family across two agents)
 }
 void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
 }
 void EraseCountNode(WorkSchedulerCountNode** root, WorkSchedulerCountNode* node) {    // 0x14001a6e0
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);  // LEFT: SIG WorkBST_BSTRemove_a6e0 (wave X family across two agents)
 }
 
 // ============================================================

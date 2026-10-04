@@ -57,6 +57,7 @@
 namespace rtsetavl   { struct Set; struct Node; }   // runtime/src/collection/set_avl.h
 namespace rtsetavl24 { struct Set; struct Node; }   // runtime/src/collection/set_avl_e24.h
 namespace RtObject   { struct Factory; struct TypeNode; }   // runtime/types/object/TypeInfo.h
+namespace RtIO       { struct ModSetNode; }                 // runtime/types/io/Modification.h
 
 namespace Collection {
 
@@ -447,7 +448,7 @@ inline void Array<T, Allocator, SpecPolicy>::ClearCallback(Array<uint8_t>* hdr) 
 
 template <class T, class Allocator, class SpecPolicy>
 inline Array<T, Allocator, SpecPolicy>::~Array() {
-    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
 }
 
 // retail 0x18001cdf0 — the deep assign. Every arm of it is
@@ -456,28 +457,28 @@ inline Array<T, Allocator, SpecPolicy>::~Array() {
 template <class T, class Allocator, class SpecPolicy>
 inline Array<T, Allocator, SpecPolicy>&
 Array<T, Allocator, SpecPolicy>::Assign(const Array& src) {
-    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
-                            reinterpret_cast<const rtcoll::ArrayHdr*>(&src),  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+                            reinterpret_cast<const rtcoll::ArrayHdr*>(&src),  // CAST-OK: elem_stride
                             Spec(), &ClearCallback);
     return *this;
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
                         nullptr, Spec());
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize, const T& fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
-                        reinterpret_cast<const uint8_t*>(&fill), Spec());  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+                        reinterpret_cast<const uint8_t*>(&fill), Spec());  // CAST-OK: elem_stride
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void* fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
-                        static_cast<const uint8_t*>(fill), Spec());  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+                        static_cast<const uint8_t*>(fill), Spec());  // CAST-OK: elem_stride
 }
 
 // ============================================================
@@ -1191,10 +1192,17 @@ struct AvlGeneric {
 // pointer and the two spellings agree byte for byte. The retrace never touches
 // `_count`, exactly like the other three widths.
 //
-// The retrace keeps its `void*` signature: it is defined in R-IO's
-// modification_refresh.cpp. (Its two rotations, 0x180027e20 / 0x180027f50, had
+// The retrace is R-IO's port in modification_refresh.cpp, typed on its node
+// (`RtIO::ModSetNode`), called by name; the one-line forwarder `PortedRetrace8`
+// was deleted in B.4 wave X. (Its two rotations, 0x180027e20 / 0x180027f50, had
 // no body and no caller left; their declarations were deleted in B.4 wave X.)
-void  PortedRetrace8(void* set, void** slot);         // 0x1800274c0
+}  // namespace detail
+}  // namespace Collection
+namespace RtIO {
+extern "C" void RtColl_SetInsertFixup_1800274c0(ModSetNode** root, ModSetNode** cursor);   // 0x1800274c0
+}  // namespace RtIO
+namespace Collection {
+namespace detail {
 
 // The other three widths take the erased node and container types of their
 // ported core (B.4 R-COLL: typed at the core, set_core.cpp forwards with no
@@ -1220,7 +1228,7 @@ template <class NodeT>
 struct AvlOps<NodeT, 0x8> : AvlGeneric<NodeT> {
     template <class SetT>
     static void Retrace(SetT* set, NodeT** slot) {
-        PortedRetrace8(set, reinterpret_cast<void**>(slot));  // LEFT: SIG PortedRetrace8 (void* signature, defined in modification_refresh.cpp: R-IO)
+        RtIO::RtColl_SetInsertFixup_1800274c0(reinterpret_cast<RtIO::ModSetNode**>(set), reinterpret_cast<RtIO::ModSetNode**>(slot));  // CAST-OK: elem_stride
     }
     // No erase was ever emitted at this width either: `Mod::~Mod` tears the
     // whole tree down post-order (0x180010470) and nothing ever removes one
@@ -1571,7 +1579,7 @@ private:
     // retail's rule (Key == T in both mangled names that spell the parameters
     // out). The cast is the leading-subobject one, not a type pun.
     static const Key& KeyOf(const T& e) {
-        return *reinterpret_cast<const Key*>(&e);  // LEFT: the Set node / key view: element bytes of a type-erased node
+        return *reinterpret_cast<const Key*>(&e);  // CAST-OK: elem_stride
     }
 
     enum : unsigned { kElemWidth = (sizeof(T) + 7u) & ~7u };

@@ -76,7 +76,7 @@ BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
                      uint32_t roadState, uint32_t terrainType)
     : Work(ownerIbp),
       field_48(nullptr),
-      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),   // LEFT: SIG BuildRoad ctor (roadDescExtra uint64_t; caller roadtool_calcpath.cpp, PLAYER)
+      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t
       field_58(static_cast<int32_t>(cellIdx)),
       field_5c(mapDescVal),
       field_60(static_cast<int32_t>(roadTypeExisting)),
@@ -87,12 +87,12 @@ BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
 
 // The by-address door RoadTool's commit path calls (roadtool_calcpath.cpp resolves
 // 0x1400e4b50): the real ctor on the caller's memory (B8-5 — the same bytes).
-void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t cellIdx,
-                                uint32_t mapDescVal, uint64_t roadDescExtra,
-                                uint32_t roadTypeExisting, uint32_t roadState,
-                                uint32_t terrainType) {
+BuildRoad* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t cellIdx,
+                                     uint32_t mapDescVal, uint64_t roadDescExtra,
+                                     uint32_t roadTypeExisting, uint32_t roadState,
+                                     uint32_t terrainType) {
     if (!self) return nullptr;
-    return static_cast<Object::Base*>(new (static_cast<void*>(self)) BuildRoad(
+    return (new (static_cast<void*>(self)) BuildRoad(
         ownerIbp, cellIdx, mapDescVal, roadDescExtra, roadTypeExisting, roadState, terrainType));
 }
 
@@ -321,7 +321,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             int workId = workComp->workId;
             CitizenComponent* citizenRef = *entityIBP;
 
-            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
+            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;  // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
@@ -373,7 +373,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
     if (field_50 == nullptr) {
         ++g_brExecClearPath;
-        int64_t actionRef = 0;   // a null InternalBasePtr
+        ComponentEntity* actionRef = nullptr;   // a null InternalBasePtr
 
         float velocity[3] = { 0.0f, 0.0f, 0.0f };
         Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
@@ -384,9 +384,9 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         CitizenComponent* citizenRef = *entityIBP;
 
         WorkAct_PerformWorkCtor_bffd0(
-            &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+            &citizenRef, field_20, terrainPos,
             (uint64_t)(uint32_t)targetCell,
-            (uint32_t)field_5c, 0xff, 1, 0, 0,
+            (uint32_t)field_5c, 0xff, 1, nullptr, 0,
             velocity, &actionRef);
 
         int priority = field_20;
@@ -400,7 +400,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         int available = StorageComponent_QueryAvailable(storageComp, (int64_t)field_50);   // LEFT: SIG StorageComponent_QueryAvailable (the forwarder's null guard)
 
         if (available > 0) {
-            int64_t actionRef = 0;   // a null InternalBasePtr
+            ComponentEntity* actionRef = nullptr;   // a null InternalBasePtr
 
             float velocity[3] = { 0.0f, 0.0f, 0.0f };
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
@@ -411,10 +411,10 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             CitizenComponent* citizenRef = *entityIBP;
 
             WorkAct_PerformWorkCtor_bffd0(
-                &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                &citizenRef, field_20, terrainPos,
                 (uint64_t)(uint32_t)targetCell,
                 (uint32_t)field_5c, 0xff, 1,
-                (int64_t)field_50, 0, velocity, &actionRef);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                field_50, 0, velocity, &actionRef);
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &actionRef, priority);
@@ -462,10 +462,10 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             CitizenComponent* citizenRef = *entityIBP;
 
             WorkAct_PerformWorkCtor_bffd0(
-                &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                &citizenRef, field_20, terrainPos,
                 (uint64_t)(uint32_t)targetCell,
                 (uint32_t)field_5c, 0xff, 1,
-                (int64_t)field_50, 1, velocity, reinterpret_cast<int64_t*>(&foundStorageIBP));   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                field_50, 1, velocity, reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));   // LEFT: the scratch slot is reused for three types
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &foundStorageIBP, priority);

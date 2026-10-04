@@ -36,6 +36,7 @@
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Work/buildroad_funcs.h"
+#include "Work/BuildRoad.h"   // BuildRoad_CtorParams_Impl returns the BuildRoad (a Work)
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
@@ -131,13 +132,13 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* d
         // array's own dword at +0x228 (0x1400acdd8 / 0x1400ace01: CMP EBX,[RDI+0x228]) -- the
         // low dword of its {data, size|capacity} header, i.e. its size -- NOT by `needed`.
         int intCount = static_cast<int>(static_cast<uint32_t>(ints.sizeCap));   // +0x228 (low dword)
-        uint32_t* intBase = (uint32_t*)ints.data;
+        uint32_t* intBase = (uint32_t*)ints.data;  // LEFT: WorldGeometry.h declares its nine arrays as raw {void* data; uint64_t sizeCap} headers (header outside this set)
         if (intBase) {
             for (int i = oldCount; i < intCount; ++i)
                 intBase[i] = 0;
         }
     }
-    void** ptrBase = (void**)refs.data;
+    void** ptrBase = (void**)refs.data;  // LEFT: WorldGeometry.h declares its nine arrays as raw {void* data; uint64_t sizeCap} headers (header outside this set)
     if (ptrBase) ptrBase[index] = decal;
 }
 
@@ -179,7 +180,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
 
     // Build the BuildRoad work item (0x70 bytes) and hand it to the work scheduler.
     uint64_t ownerIbp = 0;   // retail seeds a null InternalBasePtr
-    void* work = nullptr;
+    Work* work = nullptr;
     BuildRoad* mem = static_cast<BuildRoad*>(System::MemoryAllocator::MemAlloc(0x70, 8));
     if (mem) {
         new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // the IBP ctor 0x140152a90
@@ -194,7 +195,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
         return;
     }
 
-    Object::InternalPtr<Work> workIbp(static_cast<Work*>(work));   // LEFT: SIG BuildRoad_CtorParams_Impl returns void*
+    Object::InternalPtr<Work> workIbp(work);
 
     // Post to the work scheduler (GameUpdateLoop +0x118). code 0x2000 = the road
     // category; retail passes fromExisting='\0' and prio=-1 (the prio is dead here).
@@ -210,7 +211,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
         AvlNode28* inserted = nullptr;
         // LEFT: Map +0xE8 / +0xF0 (block GAME-b's header) are the Set header
         // {root, count} declared as two fields.
-        AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(&mapGrid->field_0xE8), &inserted, &key);
+        AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(&mapGrid->field_0xE8), &inserted, &key);  // LEFT: Map.h declares the +0xE8 / +0xF0 pending-road Set header {root, count} as two fields (header outside this set)
     }
 
     cell->field_0x2A = roadType;
@@ -284,7 +285,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     uint32_t mapDescVal = mapDesc->_cellType;
     // +0x20 is the bool CreateRoadDescription serializes; retail reads its byte (0 or 1).
     const uint8_t roadType       = static_cast<uint8_t>(roadDesc->_b20);
-    const uint64_t roadDescExtra = reinterpret_cast<uint64_t>(roadDesc->_created);   // LEFT: BuildRoad's C ctor takes it as an integer
+    const uint64_t roadDescExtra = reinterpret_cast<uint64_t>(roadDesc->_created);  // LEFT: SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t
 
     WorldGeometry* decalMgr = gameWorld->m_worldGeometry;
     RoadTool_DecalStore_acd90(decalMgr, (int)roadType, decal);

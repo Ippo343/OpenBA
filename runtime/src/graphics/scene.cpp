@@ -297,10 +297,7 @@ const float kBigNeg       = -1.0e8f;
 // negative control (scene_grid_probe.cpp, SweepFloatBodies). Tolerance zero.
 // ONE registration, in that file: do not add a second here.
 //   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
-// B3R: rtpickgrid::BoxTransform, by name.
-float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
-    return static_cast<float*>(rtpickgrid::BoxTransform(out, xf, localBox));  // LEFT: SIG rtpickgrid::BoxTransform returns void* (picking/, wave X)
-}
+// B3R: rtpickgrid::BoxTransform, by name (the forwarder RtBoxTransform is gone).
 
 // Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191,
 // ?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z. HIDDEN RETURN SLOT:
@@ -1187,8 +1184,8 @@ bool Geometry::Clean() {
         // the box helper; kept so the helper never sees the live object.
         const Math::Transform xf = _transform;
         float box[6];
-        const float* world = RtBoxTransform(box, &xf,
-                                            reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform takes float[6] (picking/, wave X)
+        const float* world = rtpickgrid::BoxTransform(box, &xf,
+                                                      reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform takes the six floats (its scene_grid caller hands it a float[6] copy; a typed ::Box local would run Vector3's zeroing ctor)
         _prevWorldBounds = _worldBounds;
         _worldBounds.min.x = world[0];
         _worldBounds.min.y = world[1];

@@ -217,7 +217,7 @@
 // the same reason filesystem_openfile_win.cpp does it: that lane publishes
 // none, and the linker checks the two declarations against each other.
 namespace RtSystem {
-void RtSystem_Filename_AdjustDelimiters(Filename* self);
+void RtSystem_Filename_AdjustDelimiters(String* self);
 }  // namespace RtSystem
 
 // ---- the ported callees, called DIRECTLY --------------------------------
@@ -652,18 +652,15 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
 
             String tmp;
             BuildStringFrom(buf60, &tmp);                      // 1800b5ec6..5f3d
-            RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<Filename*>(&tmp));            // 1800b5f42  // LEFT: SIG RtSystem_Filename_AdjustDelimiters takes the RtSystem::Filename POD (system/, R-SYS)
+            RtSystem_Filename_AdjustDelimiters(&tmp);          // 1800b5f42
 
             PackageFileEntry entry;
             entry.name.data = nullptr;                         // 1800b5f4a
             AssignStringField(&entry.name, &tmp);              // 1800b5f4e..5f8e
             // TWICE. 0x1800b5f95 and 0x1800b5f9e, back to back, on the same
             // object. Idempotent, and reproduced rather than folded.
-            RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<Filename*>(&entry.name));     // 1800b5f95  // LEFT: SIG RtSystem_Filename_AdjustDelimiters takes the RtSystem::Filename POD (system/, R-SYS)
-            RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<Filename*>(&entry.name));     // 1800b5f9e  // LEFT: SIG RtSystem_Filename_AdjustDelimiters takes the RtSystem::Filename POD (system/, R-SYS)
+            RtSystem_Filename_AdjustDelimiters(&entry.name);   // 1800b5f95
+            RtSystem_Filename_AdjustDelimiters(&entry.name);   // 1800b5f9e
 
             entry.offset = static_cast<uint32_t>(entryOffset); // 1800b5fa4  §91
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91

@@ -340,9 +340,7 @@ static void* AvlRotateLeft(AvlNode** root, AvlNode* n) {
 // Both rebalance arms are guarded on the balance factor AND the child being
 // non-null, in that order, and the second arm RE-READS `*cursor` because the
 // first arm may have rotated that node out from under it.
-extern "C" void RtColl_SetInsertFixup_1800274c0(void* rootv, void* cursorv) {
-    AvlNode** const root   = static_cast<AvlNode**>(rootv);     // LEFT: SIG PortedRetrace8 (erased void* signature, Collection.h R-COLL)
-    AvlNode** const cursor = static_cast<AvlNode**>(cursorv);   // LEFT: SIG as above
+extern "C" void RtColl_SetInsertFixup_1800274c0(AvlNode** root, AvlNode** cursor) {
     if (*cursor == nullptr) return;                    // CMP qword [RDX],0 ; JZ
     do {
         AvlNode* n = *cursor;
@@ -417,9 +415,8 @@ int ModStrICmp(const char* a, const char* b) {
 namespace Collection {
 namespace detail {
 
-void PortedRetrace8(void* set, void** slot) {               // 0x1800274c0
-    RtIO::RtColl_SetInsertFixup_1800274c0(set, slot);
-}
+// PortedRetrace8 (the 0x1800274c0 forwarder) was deleted in B.4 wave X: the
+// template calls RtColl_SetInsertFixup_1800274c0 above by name.
 // PortedRotateLeft8 / PortedRotateRight8 (0x180027e20 / 0x180027f50 forwarders)
 // were deleted in B.4 P2 R-IO: no caller was left; the two rotations are
 // reached only from the retrace above.

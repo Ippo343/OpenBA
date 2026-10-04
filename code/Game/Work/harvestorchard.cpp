@@ -139,7 +139,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // the component as an integer: LEFT)
     int treeCount = _field50;
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         matDesc->workState = maxWorkers;
     }
     if (treeCount > matDesc->workState) {
@@ -237,7 +237,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 // LEFT)
                                 void* rawMatRef = descComp->_ref30;
                                 uintptr_t rawMatIBP = 0;
-                                WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(rawMatRef), &rawMatIBP);   // LEFT: SIG WorkAcc_FindComponent_6330
+                                WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(rawMatRef), &rawMatIBP);  // LEFT: SIG WorkAcc_FindComponent_6330 (wave X family across two agents)
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
@@ -295,9 +295,9 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 WorkAct_GatherWorkCtor_bb7b0(
                                     actionBuf,                     // citizenIBP
                                     (uint32_t)field_20,            // work id / priority (self+0x20)
-                                    reinterpret_cast<int64_t*>(&entityRef),                    // entity ref ptr   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
+                                    &entityRef,                    // entity ref ptr
                                     pathPos,                       // position
-                                    reinterpret_cast<uint64_t>(rawMatRef),   // raw material ref   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
+                                    reinterpret_cast<ComponentDescription*>(rawMatRef),   // raw material ref   // LEFT: FruitDescription::_ref30 is void* (FruitDescription.h; its Serialize takes &_ref30 untyped)
                                     altCellFlag,                   // alternating-cell flag
                                     rawMatAmount,                  // float, -> CreateRawMaterial XMM2
                                     (uint32_t)nearestCell,         // map cell index
@@ -333,7 +333,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 keyBuf.slot = i;
                                 keyBuf._pad04 = 0;
                                 keyBuf.citizen = *citizenIBP;
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);   // LEFT: SIG WorkCellBST_Insert_9a40
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
                                 // Mark slot as used
                                 validityArray[i] = 0;
@@ -382,7 +382,7 @@ int HarvestOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** 
         } else if (param4 > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
             break;
         }
     }
@@ -408,7 +408,7 @@ int HarvestOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*
         } else if (param4 > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&_field48), node);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
             break;
         }
     }
@@ -550,7 +550,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.slot) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
                     break;
                 }
             }
@@ -586,7 +586,7 @@ void HarvestOrchard::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // (the helper takes the container as uintptr_t*: LEFT)
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkCellBST_Serialize_9de0
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);  // LEFT: H5 HarvestOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
     int cellCount = _field60;
     int cellCountBuf[2] = { cellCount, 0 };

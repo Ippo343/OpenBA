@@ -73,7 +73,7 @@ void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* load
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr) {
     if (!worldSetup) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);   // LEFT: the receiver's class is not settled here (MainMenuDialog by 0x1400b4790's twin; Dialog callers pass void*)
+    uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);  // LEFT: SIG the reload entry's receiver is not settled (MainMenuDialog by its callers' types; outside callers in Dialog hold it as an integer)
 
     // Caller batch CB6: the three loops are built by their real ctors (below),
     // which stamp the compiler tables and chain the Runtime base ctors

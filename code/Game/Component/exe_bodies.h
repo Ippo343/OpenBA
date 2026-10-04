@@ -31,7 +31,7 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount);  // 
 extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount);  // 0x140002540
 
 // ---- attendancecomponent.cpp
-void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll);  // 0x140115a50
+void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
 void AttendanceComponent_ReleaseLink1650(CitizenComponent* worker);  // 0x140111650
 void AttendanceComponent_ReleaseLink59b0(void* workerP);  // 0x1401159b0
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)

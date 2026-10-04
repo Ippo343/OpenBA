@@ -74,10 +74,10 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(::Objec
 
 // ---- work_act_perform.cpp
 void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint32_t workId, float* pos3, float* pos4, float* pos5, ComponentEntity* const* srcRef6);  // 0x1400ba9f0
-void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* roadP3, int roadP4, uint32_t completeRoadP5, uint8_t roadByte6, uint32_t completeTaskP7, int64_t consumeArg8, int loopCount9, float* pos10, int64_t* srcEntity11);  // 0x1400bffd0
+void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t workId, float* destination, int roadP4, uint32_t completeRoadP5, uint8_t roadByte6, uint32_t completeTaskP7, ComponentDescription* material, int loopCount9, float* pos10, ComponentEntity* const* srcRef11);  // 0x1400bffd0
 
 // ---- work_act_rawmat.cpp
-void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* workEntity, float* worldPos, uint64_t rawMatP2, char flag6, float rawMatP3, uint32_t rawMatP8, uint32_t param9);  // 0x1400bb7b0
+void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* worldPos, ComponentDescription* rawMatDesc, char flag6, float rawMatP3, uint32_t rawMatP8, uint32_t param9);  // 0x1400bb7b0
 void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* position, float param5_heading, ComponentDescription* rawMatDesc, float rawMatP3, uint32_t param8, uint32_t param9);  // 0x1400beae0
 
 // ---- work_base_accessor.cpp
@@ -102,7 +102,8 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40
 void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg);  // 0x14001ca60
-void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer);  // 0x140029de0
+namespace IO { class Serializer; }
+void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0
 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h
@@ -129,9 +130,10 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int pa
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;
 void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropFieldComponent member; its header is COMP-c's)
-void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP);  // 0x1400298a0
-void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* insIBP);  // 0x140029920
-void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser);  // 0x140029c10
+struct WorkEntityAssignment;   // Work/Work.h
+void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* key);  // 0x1400298a0
+void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const WorkEntityAssignment* ins);  // 0x140029920
+void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser);  // 0x140029c10
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0

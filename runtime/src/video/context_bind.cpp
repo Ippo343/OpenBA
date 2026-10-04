@@ -252,7 +252,7 @@ void Video::Context::BindTextures() {
         if (img) {
             // 0x1800ef358: RCX = img->+0x60, RDX = ctx, R8D = i, vt[+0x20].
             // LEFT: `_imageBuffers` is `void*` in Context.h (see the banner).
-            static_cast<const ImageBuffer*>(img)->_data->Bind(this, static_cast<unsigned>(i));
+            static_cast<const ImageBuffer*>(img)->_data->Bind(this, static_cast<unsigned>(i));  // LEFT: FIELD Context::_imageBuffers is void* (X-RL left it: its readers outside this set index it raw)
         } else {
             // 0x1800ef372: companion->BindTextureNone(i).
             _contextData->BindTextureNone(i);
@@ -316,7 +316,7 @@ void Video::Context::BindResources() {
         // LEFT: +0x200 is `_videoProgram`, the first qword of
         // `_pixelConstantStaging`, which Context.h keeps undivided (see the banner).
         const VideoProgram* p =
-            *reinterpret_cast<const VideoProgram* const*>(_pixelConstantStaging);
+            *reinterpret_cast<const VideoProgram* const*>(_pixelConstantStaging);  // LEFT: FIELD Context::_pixelConstantStaging stays one byte block (X-RL left it: engine/loops.cpp and wave21_lane_gfxbody.cpp index it by byte)
         p->_data->Bind(this, detail);
     }
 
@@ -417,7 +417,7 @@ void Context::SetVertexBuffer(const void* vb, int32_t slot,
         // LEFT (B.4 R-VIDEO): the parameter stays `const void*` because
         // dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it
         // one; the field is typed.
-        _vertexBuffers[slot] = static_cast<const Video::VertexBuffer*>(vb);
+        _vertexBuffers[slot] = static_cast<const Video::VertexBuffer*>(vb);  // LEFT: SIG Context::SetVertexBuffer keeps its const void* parameter (dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it one)
         _vertexOffsets[slot] = offset;
         _vertexStrides[slot] = stride;
     }

@@ -153,7 +153,7 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname("Game/Profession/Profession.rsc");
-    ::Object::External* profList = const_cast<::Object::External*>(
+    ::Object::External* profList = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
         efactory->FindOrLoad(fname));                                       // B.3.3 bridge
     self->m_professionList = static_cast<ProfessionList*>(profList);   // unchecked, as before
 
@@ -197,7 +197,7 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* mat = const_cast<::Object::External*>(
+    ::Object::External* mat = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
@@ -225,7 +225,7 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Help/HelpTopics.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* list = const_cast<::Object::External*>(
+    ::Object::External* list = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
@@ -278,7 +278,7 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Disease/Diseases.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* list = const_cast<::Object::External*>(
+    ::Object::External* list = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
@@ -588,7 +588,7 @@ PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float p
     Math::Transform3 t3 = localTransform.AsTransform3();
     // LEFT: +0x34 is raw storage (H5: Camera's default ctor is protected); the
     // ctor door takes the POD mirror.
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &t3, true);
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &t3, true);  // LEFT: POD RtGraphics::Camera: the runtime view-setup door takes the mirror (runtime/types/graphics, outside this set)
 }
 
 // 0x1400c3f90 — the EntityList ctor's body (+0xE8, 0xe8): memset + the 5
@@ -775,8 +775,8 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
     void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
         &nearS, &farS, &fovXS, &fovYS);
     // LEFT: +0x34 is raw storage (H5).
-    reinterpret_cast<Graphics::Camera*>(camera)->SetFrustum(
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
+    reinterpret_cast<Graphics::Camera*>(camera)->SetFrustum(  // LEFT: H5 the camera at +0x34 is raw storage (its Graphics::Camera ctor runs by door; header outside this set)
+        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge  // LEFT: H5 the camera at +0x34 is raw storage (its Graphics::Camera ctor runs by door; outside this set)
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
@@ -869,7 +869,7 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         System::Filename fname("Models/Sky/SkyMesh.rsc");
-        meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge
+        meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
     }
 
     // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. The `s_SetMesh` cache, its
@@ -1098,7 +1098,7 @@ void GameUpdateLoop::Load() {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             // The file's root resource is the EnvironmentDescription.
-            envRes = static_cast<EnvironmentDescription*>(const_cast<::Object::External*>(
+            envRes = static_cast<EnvironmentDescription*>(const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
                 ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(fname)));                                   // B.3.3 bridge
             int wxCount = envRes ? static_cast<int>(envRes->_weatherCount) : 0;   // env+0x30
@@ -1262,7 +1262,7 @@ void GameUpdateLoop::Load() {
                 // Retail: String(name) then Filename::AdjustDelimiters on it —
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
-                ::Object::External* ext = const_cast<::Object::External*>(
+                ::Object::External* ext = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
                     efactory->FindOrLoad(fname));                            // B.3.3 bridge
                 if (!ext) return nullptr;
                 if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;

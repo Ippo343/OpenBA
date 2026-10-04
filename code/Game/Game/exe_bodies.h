@@ -38,11 +38,13 @@ class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 // ---- citizen_names.cpp
 class NameDatabase;
 extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db, System::Random* rng, int minLen, int maxLen);  // 0x1400a4b30
-extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  // 0x1400a4c60
+extern "C" System::String* NameDB_PickAndGenerate(System::String* retStr, System::Random* rng, char female);  // 0x1400a4c60
 
 // ---- citizenlist_serialize.cpp
 
 // ---- eventlog.cpp
+struct EventLogEntry;   // Game/EventLog.h
+extern "C" void EventLog_EventArray_Destroy(EventLogEntry** arrBase);  // 0x14000a8a0
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
 // The two below keep their null-log guard (not pure forwarders).
@@ -82,8 +84,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 
 // ---- game_leaf_helpers.cpp
 void Game_DestroyStringArray18(void* arrayHeader);  // 0x14001b030
-void Game_EventNotifierCleanup(void* arrayHeader);  // 0x14000a8a0
-void Game_MusicPlayerDtor(void* self);  // 0x140018220
+class CharacterGrid;   // Component/CharacterGrid.h
+void Game_MusicPlayerDtor(CharacterGrid* self);  // 0x140018220
 void Game_ImageCaptureDtor(Minimap* self);  // 0x1400a4fc0
 void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 

@@ -118,10 +118,10 @@ const State* DeviceArrayBase(const Input::Device* d, int32_t device, int32_t joy
 // 0x180009c30). B3R: called by name; the atomic by-address caches are gone.
 // ---------------------------------------------------------------------------
 rtsetavl24::Set* AsSet24(void* p) {
-    return reinterpret_cast<rtsetavl24::Set*>(p);   // B.3.x bridge
+    return reinterpret_cast<rtsetavl24::Set*>(p);   // B.3.x bridge  // CAST-OK: elem_stride
 }
 rtsetavl24::Node* AsNode24(BindingNode* n) {
-    return reinterpret_cast<rtsetavl24::Node*>(n);  // B.3.x bridge
+    return reinterpret_cast<rtsetavl24::Node*>(n);  // B.3.x bridge  // CAST-OK: elem_stride
 }
 
 // The three device-state readers of KeyMap (GetValue / Pressed / Released)
@@ -242,11 +242,11 @@ void KeyMap::RegisterInput(int32_t id, int32_t device, int32_t input,
                            const char* name, bool exclusive) {
     // 0x180023060 / 0x180023170 (set_avl_e24.cpp), called by name (B3R).
     auto allocNode = [](void* unused, const Binding* src, BindingNode* parent) {
-        return reinterpret_cast<BindingNode*>(
+        return reinterpret_cast<BindingNode*>(  // CAST-OK: elem_stride
             rtsetavl24::AllocNode(unused, src, AsNode24(parent)));
     };
     auto rebalance = [](void* setPtr, BindingNode** parentSlot) {
-        rtsetavl24::Retrace(AsSet24(setPtr), reinterpret_cast<rtsetavl24::Node**>(parentSlot));
+        rtsetavl24::Retrace(AsSet24(setPtr), reinterpret_cast<rtsetavl24::Node**>(parentSlot));  // CAST-OK: elem_stride
     };
 
     BindingNode* root = _root;

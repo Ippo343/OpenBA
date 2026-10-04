@@ -88,7 +88,7 @@ static inline void* WAP_Alloc(uint64_t size, uint32_t align) {
 // 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
 // action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 static inline void  WAP_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);  // LEFT: CharacterComponent.h declares the +0x48 action stack as separate fields, not an ActionStack (ledger: a later round)
 }
 
 // Build an inline PerformWork action object into 'o' (0x48 alloc, already non-null).
@@ -284,29 +284,26 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
 // ============================================================
 // Builds the road/raw-material work-action chain for a citizen and stores it on the
 // citizen's action stack (CharacterComponent +0x48).
-//   citizenIBP = InternalBasePtr*  (RCX)            param_1
+//   citizenRef = InternalPtr<CitizenComponent>* (RCX) param_1
 //   workId     = u32   (EDX = R15D)                 param_2  -> CompleteTask workId
-//   roadP3     = u32   (R8D... actually R8=p3 ptr)  param_3  (int; CompleteRoad p2 + MoveTo#1 dest cast)
+//   destination = float* (R8)                       param_3  -> MoveTo#1 destination
 //   roadP4     = int64*/int (R9D = R12D)            param_4  -> CompleteRoad p3 / ConsumeRawMaterial p4 byte chain
 //   completeRoadP5 = u32                            param_5  -> CompleteTask p5
 //   roadByte6  = byte                               param_6  -> CompleteRoad p4 byte
-//   consumeFlag8 = int64                            param_8  -> ConsumeRawMaterial cond + arg
+//   material   = ComponentDescription*              param_8  -> ConsumeRawMaterial cond + arg
 //   loopCount9 = int                                param_9  -> optional pickup-chain count gate
 //   pos10      = float*                             param_10 -> Entity_impl_29a0 worldPos + MoveTo#2 dest
-//   srcEntity11 = longlong*                         param_11 -> pickup chain entity inner
+//   srcRef11   = InternalPtr<ComponentEntity>*      param_11 -> pickup chain entity inner
 //
 // NOTE: param_3 is the home [RBP+0x57] (DWORD read as msg/road id) and ALSO reused as the
 // MoveTo#1 destination float* (passed via the RCX home pointer). param_7 = completeRoadP5
 // is the CompleteTask p5; in the disasm CompleteTask reads its p5 from [RBP+0x67] (param_7).
-void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* roadP3,
+void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t workId, float* destination,
                                    int roadP4, uint32_t completeRoadP5, uint8_t roadByte6,
-                                   uint32_t completeTaskP7, int64_t consumeArg8, int loopCount9,
-                                   float* pos10, int64_t* srcEntity11) {
+                                   uint32_t completeTaskP7, ComponentDescription* consumeMaterial, int loopCount9,
+                                   float* pos10, ComponentEntity* const* srcRef11) {
 
     // the action stack = character + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
-    ComponentDescription* consumeMaterial = reinterpret_cast<ComponentDescription*>(consumeArg8);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0 (param_8 is the material)
-    ComponentEntity* const* srcRef11 = reinterpret_cast<ComponentEntity* const*>(srcEntity11);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0 (param_11 is an entity reference)
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;  // RSI = character+0x48
     WorkBase_TaskListCleanup_c5400(list);
@@ -363,7 +360,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     WAP_Append(list, &ibpC);
 
     // --- optional ConsumeRawMaterial when param_8 != 0 (0x1400c01c3..0x1400c0226) ---
-    if (consumeArg8 != 0) {
+    if (consumeMaterial != nullptr) {
         obj = WAP_Alloc(0x40, 8); // 0x1400c01cf: MOV EDX,8; LEA ECX,[RDX+0x38] = 0x40
                                   // (was mis-transcribed 0x38 — same LEA-operand misread as
                                   // the Ctor7 0x40/0x48 bug. The ConsumeRawMaterial ctor
@@ -411,7 +408,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         ComponentEntity* entityInner = (*citizenRef)->_entity;
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         // 0x1400c031d: LEA R8D,[R9+2] (R9=0) → pathType=2 (Fast); dest=param_3 (R13 at entry); XMM8=speed
-        mv1 = new (obj) MoveTo(&family, 2, 0, reinterpret_cast<float*>(roadP3), 0xe1f, 0, speed);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0 (param_3 is the MoveTo destination, declared uint32_t*)
+        mv1 = new (obj) MoveTo(&family, 2, 0, destination, 0xe1f, 0, speed);
     }
     ibpA = mv1;
     WAP_Append(list, &ibpA);

@@ -471,7 +471,7 @@ namespace rtcoll {
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int freed = FreeInnerArraysCounted(                             \
-            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
     }
 
 // ONLY THE HELPERS OUR TREE ACTUALLY RESOLVES GET AN ENTRY POINT.
@@ -533,7 +533,7 @@ A_ENTRY(18004ff80, kD_InnerArr_10)    // Video: ShaderProgram::_byteCode inner A
     void RtColl_DestroyStrings_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int n = ReleaseStringsCounted(                                  \
-            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
     }
 
 B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSpec_StringExt
@@ -721,7 +721,7 @@ B_ENTRY(1800341e0, kD_Str2_20)        // Save: Persistence metadata entry
 
 #define J2_ENTRY(ADDR, CORE, SPEC)                                            \
     void* RtColl_ArrayDtorElem_##ADDR(void* self) {                           \
-        ArrayHdr* a = static_cast<ArrayHdr*>(self);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+        ArrayHdr* a = static_cast<ArrayHdr*>(self);  /* LEFT: FLOOR? erased core views its receiver (void* self); M2 bars a self operand */ \
         /* retail: R8D=[RCX+8], RDX=[RCX], RCX unchanged, then CALL helper */  \
         const int freed = CORE(a->_data, a->_size, &SPEC);                    \
         void* r = ArrayDtorImpl(a);                                           \
@@ -924,7 +924,7 @@ static void DestroyNestedPair(AnimInstance* base, int count) {
 }
 
 void* RtColl_ArrayDtorElem_18005bf60(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
     DestroyAs<AnimInstance, &DestroyNestedPair>(nullptr, a->_data, a->_size);   // CALL 0x18005c550
     void* r = ArrayDtorImpl(a);
     return r;
@@ -1067,8 +1067,8 @@ void* RtColl_LayoutEntryAssign_180043980(uint8_t* dst, const uint8_t* src) {
 // and reaches ExpandRelativePath / FindOrLoad / BinaryFileStream. Porting it
 // would create a J9 row, which is the trade J9 exists to avoid taking piecemeal.
 void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
-    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // CAST-OK: elem_stride
     if (a == s) return a;
 
     ArrayDtorImpl(a);                      // CALL 0x180004890 — lane Q's J1 body
@@ -1212,8 +1212,8 @@ const ArraySpec kAsgn_MetaEntry20 = {
 
 #define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
-        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
-                               static_cast<const ArrayHdr*>(src),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: FLOOR? erased core views its receiver (void* self); M2 bars a self operand */ \
+                               static_cast<const ArrayHdr*>(src),  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
                                &SPEC, &CLEAR);                  \
     }
 
@@ -1245,12 +1245,12 @@ const ArraySpec kAsgn_Blob38 = {
     "Array<blob0x38>", 0x38, 8, &Assign56, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 void* RtColl_ArrayAssign_18001cd30(void* self, const void* src) {
-    return ArrayAssignCore(static_cast<ArrayHdr*>(self),  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
-                           static_cast<const ArrayHdr*>(src),  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    return ArrayAssignCore(static_cast<ArrayHdr*>(self),  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+                           static_cast<const ArrayHdr*>(src),  // CAST-OK: elem_stride
                            &kAsgn_Blob38, &ArrayClearTrivial);
 }
 void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
-    ArrayHdr* h = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* h = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
     h->_data = nullptr;                                       // 18001c624
     h->_size = 0;                                             // 18001c62b (qword:
     h->_capacity = 0;                                         //   size + capacity)
@@ -1267,8 +1267,8 @@ void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
 // body, not a new one — its own Site so the diff registry attributes
 // divergences to the right retail address.
 void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
-    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // CAST-OK: elem_stride
     if (a == s) return a;
 
     ArrayDtorImpl(a);                      // CALL 0x18001bf50 — a J1 body
@@ -1327,7 +1327,7 @@ static_assert(kD_Str2_18.offs[0] > kD_Str2_18.offs[1],
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int freed = FreeInnerArraysCounted(                             \
-            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
     }
 
 // 0x180052220: `LEA RBX,[RDX+0x8]` at 0x18005224c, the two zero stores at
@@ -1342,7 +1342,7 @@ D1_A_ENTRY(180052220, kD_InnerArr_18)  // Audio: SoundEffect::Buffer's nested Ar
     void RtColl_DestroyStrings_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int n = ReleaseStringsCounted(                                  \
-            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
     }
 
 // 0x18003e3e0: `MOV RBX,RDX` (no +off seed) and `ADD RBX,0x18` at 0x18003e46c
@@ -1361,7 +1361,7 @@ D1_B_ENTRY(180056960, kD_Str2_18)     // Video: VertexProgram::Element
 
 #define D1_J2_ENTRY(ADDR, CORE, SPEC)                                         \
     void* RtColl_ArrayDtorElem_##ADDR(void* self) {                           \
-        ArrayHdr* a = static_cast<ArrayHdr*>(self);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+        ArrayHdr* a = static_cast<ArrayHdr*>(self);  /* LEFT: FLOOR? erased core views its receiver (void* self); M2 bars a self operand */ \
         const int freed = CORE(a->_data, a->_size, &SPEC);                    \
         void* r = ArrayDtorImpl(a);                                           \
         return r;                                                             \
@@ -1391,15 +1391,15 @@ void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count
     (void)ignoredThis;
     if (count <= 0) return;                       // TEST R8D,R8D / JLE
     // B.4 (X-RL): the element is `Video::VertexProgram::Stream` (ShaderProgram.h).
-    Video::VertexProgram::Stream* base = static_cast<Video::VertexProgram::Stream*>(basev);  // LEFT: ERASED RtColl_DestroyVtxStream_180056cb0 (void* entry; vertexprogram.cpp / array.cpp pass the buffer)
+    Video::VertexProgram::Stream* base = static_cast<Video::VertexProgram::Stream*>(basev);  // CAST-OK: elem_stride
     const int64_t n = static_cast<int64_t>(count);   // MOVSXD
     int freed = 0;
     for (int64_t i = 0; i < n; ++i) {
         Video::VertexProgram::Stream* e = base + i;  // stride 0x18
-        ReleaseStringsCore(reinterpret_cast<uint8_t*>(e), 1, &kD_Str_18);      // the String at +0x10 (kD_Str_18)  // LEFT: ERASED ReleaseStringsCore (byte core)
+        ReleaseStringsCore(reinterpret_cast<uint8_t*>(e), 1, &kD_Str_18);      // the String at +0x10 (kD_Str_18)  // CAST-OK: elem_stride
         Video::VertexProgram::Element* inner = e->elements.data;
         const int32_t innerN = e->elements.size;
-        freed += ReleaseStringsCounted(reinterpret_cast<uint8_t*>(inner), innerN, &kD_Str2_18);  // LEFT: ERASED ReleaseStringsCounted (byte core)
+        freed += ReleaseStringsCounted(reinterpret_cast<uint8_t*>(inner), innerN, &kD_Str2_18);  // CAST-OK: elem_stride
         if (inner) MemFree(inner);                 // 0x180056d53..0x180056d83
         e->elements.data     = nullptr;            // 0x180056d89
         e->elements.size     = 0;                  // 0x180056d8c, one qword in retail (H7)
@@ -1417,7 +1417,7 @@ void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count
 // therefore reached BY ADDRESS — registry-first, so the day it lands this call
 // goes to our body with no edit here.
 void* RtColl_ArrayDtorAnim_18001c1e0(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
     const int32_t n = a->_size;
     uint8_t* p = a->_data;
     if (n > 0) {                                   // TEST EAX,EAX / JLE
@@ -1462,8 +1462,8 @@ const ArraySpec kAsgn_Blk18A8 = {
 
 #define D1_J4_ENTRY(ADDR, SPEC, CLEAR)                                        \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
-        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
-                               static_cast<const ArrayHdr*>(src),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: FLOOR? erased core views its receiver (void* self); M2 bars a self operand */ \
+                               static_cast<const ArrayHdr*>(src),  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
                                &SPEC, &CLEAR);                  \
     }
 
@@ -1514,7 +1514,7 @@ static_assert(kD_InnerArr2_28.offs[0] > kD_InnerArr2_28.offs[1], "descending");
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int freed = FreeInnerArraysCounted(                             \
-            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
     }
 
 A_ENTRY(1800664c0, kD_InnerArr2_28)   // Collision2D: ~Face's two inner arrays
@@ -1560,21 +1560,21 @@ static void DestroySubMesh80(SubMesh* base, int count) {
 }
 void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {
     (void)ignoredThis;
-    DestroyAs<SubMesh, &DestroySubMesh80>(ignoredThis, static_cast<uint8_t*>(base), count);  // LEFT: void* door (Collection.h declaration)
+    DestroyAs<SubMesh, &DestroySubMesh80>(ignoredThis, static_cast<uint8_t*>(base), count);  // CAST-OK: elem_stride
 }
 
 // ---- the two J2 entry points ----------------------------------------------
 // Shape is J2 exactly (`R8D=[RCX+8]; RDX=[RCX]; CALL helper`, then the J1
 // body); only the helper differs.
 void* RtColl_ArrayDtorElem_180065d40(void* self) {          // ~Array<Face>
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
     const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr2_28);
     void* r = ArrayDtorImpl(a);
     return r;
 }
 
 void* RtColl_ArrayDtorElem_180073720(void* self) {          // ~Array<SubMesh>
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
     DestroyAs<SubMesh, &DestroySubMesh80>(nullptr, a->_data, a->_size);
     void* r = ArrayDtorImpl(a);
     return r;
@@ -1640,8 +1640,8 @@ const ArraySpec kAsgnD2_VPParam18 = {
 
 #define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
-        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
-                               static_cast<const ArrayHdr*>(src),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: FLOOR? erased core views its receiver (void* self); M2 bars a self operand */ \
+                               static_cast<const ArrayHdr*>(src),  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
                                &SPEC, &CLEAR);                  \
     }
 

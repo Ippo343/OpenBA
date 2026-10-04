@@ -151,7 +151,7 @@ void ClearArea::Persist(IO::Stream& stream) {
     int version = serializer.GetVersion();
     if (version > 0) {
         // Serialize cell BST at +0x58
-        WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_58), &serializer);   // LEFT: SIG WorkCellBST_Serialize_9de0
+        WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_58), &serializer);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
         // Serialize clearGround bool at +0x71
         serializer.Serialize(*reinterpret_cast<bool*>(&field_71), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
@@ -201,7 +201,7 @@ int ClearArea::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** tree
                     searchNode = searchNode->right;
                 } else {
                     // Remove this node from cell tree
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_58), searchNode);   // LEFT: SIG WorkCellBST_Remove_ca60
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_58), searchNode);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
                     return 0;
                 }
             }
@@ -322,7 +322,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // Get total slot count for the entity
     if (workEntity->workState == 0) {
-        int count = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workEntity));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int count = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workEntity));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         workEntity->workState = count;
     }
 
@@ -585,7 +585,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // A null entity InternalBasePtr
-                int64_t nullIBP = 0;
+                ComponentEntity* nullIBP = nullptr;
 
                 // Zero-init clear info
                 struct { int64_t a; int32_t b; } clearInfo;
@@ -607,10 +607,10 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 CitizenComponent* citizenRef = *citizenIBP;
                 int workId = field_20;
 
-                WorkAct_PerformWorkCtor_bffd0(&citizenRef, workId, reinterpret_cast<uint32_t*>(walkPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                WorkAct_PerformWorkCtor_bffd0(&citizenRef, workId, walkPos,
                                      static_cast<int>(tileIdx),   // the door passed (uint64_t)tileIdx; the body reads R9D
-                                     2, 0, tileIdx, 0, 0,
-                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                                     2, 0, tileIdx, nullptr, 0,
+                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);   // LEFT: the zeroed 12-byte position is built as {int64, int32} (two integer stores); a Math::Vector3 local would store three floats (B11)
 
                 // Post-work setup on citizen
                 int workIdSaved = field_20;
@@ -633,7 +633,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 groundPair.cell = static_cast<int32_t>(tileIdx);
                 groundPair._pad04 = 0;
                 groundPair.citizen = *citizenIBP;
-                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_58), &workIBP, &groundPair);   // LEFT: SIG WorkCellBST_Insert_9a40
+                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_58), &workIBP, &groundPair);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
                 result = 0;
                 goto cleanup;
@@ -666,7 +666,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 // Create citizen IBP for gather work
                 CitizenComponent* citizenRef = *citizenIBP;
 
-                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
+                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,  // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)
                                                           resourceTypeId, 0));   // the door read EAX
                 if (gatherResult & 0xFF) {
                     result = 2;
@@ -851,7 +851,7 @@ int ClearArea::Validate() {
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found — remove it
-                        WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
+                        WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);  // LEFT: H5 ClearArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
                         break;
                     }
                     bstNode = bstNode->right;

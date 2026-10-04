@@ -533,7 +533,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // Retail's slot takes the Time by const&; the tick bodies below take a mutable
     // Time* / int64_t* (EntityList::Update, Weather_ResetTime_Reimpl,
     // CitizenBehavior::Update), so the body holds it through a mutable pointer.
-    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
+    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge  // LEFT: const_cast the tick bodies take a mutable Time* (EntityList::Update, Weather_ResetTime_Reimpl, CitizenBehavior::Update; headers outside this set) where retail's slot passes const&
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
     // in-game world build) is not yet implemented, so on the new-game path
     // m_game (+0xF8) is still null when the loader chain transitions in. Every
@@ -775,7 +775,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 TRACE("[GameUpdateLoop::Update] === sim iteration %d/%d ===\n", iteration + 1, speedMultiplier);
 
                 // 3a. Region-pair distance cache staleness sweep
-                int64_t* regionPairCache = reinterpret_cast<int64_t*>(m_game->regionPairCache);   // LEFT: SIG Pf_RegionPairCacheTick_5d10 (Action/exe_bodies.h takes int64_t*)
+                RegionPairCache* regionPairCache = m_game->regionPairCache;
                 TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", (void*)regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
                 Pf_RegionPairCacheTick_5d10(regionPairCache, &time->_ticks);   // 0x1400a5d10
@@ -999,7 +999,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // readiness guard here.
             // LEFT: PlayerController::camera is raw storage (H5: Camera's default
             // ctor is protected).
-            reinterpret_cast<Graphics::Camera*>(playerCtrl->camera)
+            reinterpret_cast<Graphics::Camera*>(playerCtrl->camera)  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
                 ->SetCameraToWorld(t3);   // B.3.5 bridge
         }
         TRACE("[GameUpdateLoop::Update] camera transform done\n");
@@ -1097,7 +1097,7 @@ post_simulation:
         // Build listener position from PlayerController camera data: the camera's
         // cameraToWorld (Transform3) at playerCtrl+0x34+0x64 = +0x98.
         // LEFT: PlayerController::camera is raw storage (H5).
-        const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera);
+        const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera);  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
         float tx = camera->_cameraToWorld.axisX.x;   // +0x98
         float ty = camera->_cameraToWorld.axisX.y;   // +0x9c
         float tz = camera->_cameraToWorld.axisX.z;   // +0xa0
@@ -1200,7 +1200,7 @@ post_simulation:
     {
         // LEFT: PlayerController::camera is raw storage (H5).
         const Math::Transform3& view =
-            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera)->_cameraToWorld;
+            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera)->_cameraToWorld;  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
         float dirX = view.axisY.x + view.axisX.x + 0.0f;   // +0xa4 + +0x98
         float dirY = view.axisY.y + view.axisX.y + 0.0f;   // +0xa8 + +0x9c
         float dirZ = (view.axisY.z + view.axisX.z) - kRdata_14017214c;   // +0xac + +0xa0
@@ -1426,7 +1426,7 @@ void GameUpdateLoop::Draw(float alpha) {
                 videoCtx->_unknown03b8 = params;                  // ctx+0x3b8
                 // LEFT: ctx+0x288 lies in the Context's undivided pixel-constant
                 // staging bytes (Video/Context.h, 0x200..0x297).
-                *reinterpret_cast<Math::Vector4*>(&videoCtx->_pixelConstantStaging[0x88]) = params;   // ctx+0x288
+                *reinterpret_cast<Math::Vector4*>(&videoCtx->_pixelConstantStaging[0x88]) = params;   // ctx+0x288  // LEFT: FIELD Context::_pixelConstantStaging stays one byte block (X-RL left it: engine/loops.cpp and wave21_lane_gfxbody.cpp index it by byte)
                 videoCtx->_dirty |= 0x10800;                      // ctx+0x10
             }
         }
@@ -1477,7 +1477,7 @@ void GameUpdateLoop::Draw(float alpha) {
         m_renderer->Draw(
             *videoCtx, alpha,
             *m_graphicsScene,
-            *reinterpret_cast<const Graphics::Camera*>(m_playerController->camera));   // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(m_playerController->camera));   // B.3.5 bridge  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
 
@@ -1509,7 +1509,7 @@ void GameUpdateLoop::Draw(float alpha) {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // LEFT: PlayerController::camera is raw storage (H5).
         const Graphics::Camera* camera =
-            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera);
+            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera);  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
 
         // Original copies Transform3 (12 floats at +0x98..+0xC4 = 48 bytes) and projection
         // matrix (16 floats at +0xC8) from PlayerController onto the stack, then calls
@@ -1728,7 +1728,7 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(
+            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
                 ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
@@ -1788,7 +1788,7 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(
+            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
                 ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
@@ -1839,7 +1839,7 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(
+            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
                 ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
@@ -2001,7 +2001,7 @@ void GameUpdateLoop::Shutdown() {
     // Delete scenario instance
     if (m_scenarioInstance != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown] deleting scenario instance...\n");
-        reinterpret_cast< ::Object::InternalBasePtr*>(&m_scenarioInstance)->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(&m_scenarioInstance)->DeletePtr(  // LEFT: GameUpdateLoop.h declares m_scenarioInstance as a raw pointer where retail has an InternalPtr (H5, W0 header outside this set)
             );   // B.3.3 bridge
     }
 
@@ -2023,7 +2023,7 @@ void GameUpdateLoop::Shutdown() {
     // Renderer
     if (m_renderer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Renderer...\n");
-        RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(m_renderer));   // the dtor door takes the POD mirror
+        RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(m_renderer));   // the dtor door takes the POD mirror  // LEFT: POD RtGraphics::Renderer: the runtime dtor door takes the mirror (runtime/types/graphics, outside this set)
         System::MemoryAllocator::MemFree(m_renderer);
     }
 
@@ -2087,14 +2087,14 @@ void GameUpdateLoop::Shutdown() {
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
-        Game_EventNotifierCleanup(&m_eventNotifier->entries);   // 0x14000a8a0
+        EventLog_EventArray_Destroy(&m_eventNotifier->entries);   // 0x14000a8a0
         System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 
     // Graphics::Scene
     if (m_graphicsScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Graphics::Scene...\n");
-        RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(m_graphicsScene));
+        RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(m_graphicsScene));  // LEFT: POD RtGraphics::Scene: the runtime dtor door takes the mirror (runtime/types/graphics, outside this set)
         System::MemoryAllocator::MemFree(m_graphicsScene);
     }
 
@@ -2130,7 +2130,7 @@ void GameUpdateLoop::Shutdown() {
     // AnimationManager
     if (m_animationManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying AnimationManager...\n");
-        RtGraphics_AnimationManager_Dtor(reinterpret_cast<RtGraphics::AnimationManager*>(m_animationManager));
+        RtGraphics_AnimationManager_Dtor(reinterpret_cast<RtGraphics::AnimationManager*>(m_animationManager));  // LEFT: POD RtGraphics::AnimationManager: the runtime dtor door takes the mirror (runtime/types/graphics, outside this set)
         System::MemoryAllocator::MemFree(m_animationManager);
     }
 
@@ -2194,7 +2194,7 @@ static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
     // The camera's position: its cameraToWorld translation (+0x34 + 0x88).
     // LEFT: PlayerController::camera is raw storage (H5).
     const Math::Vector3& camPos =
-        reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera)->_cameraToWorld.translation;
+        reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera)->_cameraToWorld.translation;  // LEFT: H5 PlayerController::camera is raw storage for a Graphics::Camera (PlayerController.h, outside this set)
     float dx = camPos.x - playerCtrl->targetX;
     float dy = camPos.y - playerCtrl->targetY;
     float dz = camPos.z - playerCtrl->targetZ;
@@ -2349,7 +2349,7 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIb
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;
-    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3
+    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor's scenario parameter is the IBP's raw bits (GameUpdateLoop.h ctor, W0 header outside this set)
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }

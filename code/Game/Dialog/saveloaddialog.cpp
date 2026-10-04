@@ -250,14 +250,14 @@ void SaveLoadDialog::PopulateFileList() {
             // non-const handle.
             matInstFinal->SetMaterial(
                 Object::ExternalPtr<Graphics::Material>(
-                    const_cast<Graphics::Material*>(
+                    const_cast<Graphics::Material*>(  // LEFT: const_cast FindOrLoad returns a const External; SetMaterial takes a non-const ExternalPtr (ledger S3: decide at the close)
                         static_cast<const Graphics::Material*>(matExternal))));
 
             // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
             // LEFT: AddTexture takes the RtSystem::String POD mirror.
             System::String diffuseStr("diffuse");
             matInstFinal->AddTexture(
-                *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+                *reinterpret_cast<const RtSystem::String*>(&diffuseStr),  // LEFT: POD RtSystem::String: MaterialInstance::AddTexture takes the POD mirror (runtime header outside this set)
                 Object::ExternalPtr<Video::ImageBuffer>(saveInfo.imageBuffer));
 
             matInstFinal->BuildParameters();
@@ -326,7 +326,7 @@ void SaveLoadDialog::PopulateFileList() {
                 // LEFT: SaveInfo::sortKey (+0x30) is declared uint64_t; it is the
                 // save's System::DateTime (runtime/types/save/SaveLoad.h).
                 System::String dateStr =
-                    reinterpret_cast<const System::DateTime*>(&saveInfo.sortKey)->AsString();   // B.3.x bridge
+                    reinterpret_cast<const System::DateTime*>(&saveInfo.sortKey)->AsString();   // B.3.x bridge  // LEFT: SaveInfo::sortKey (+0x30) is declared uint64_t; it is the save's System::DateTime (runtime/types/save/SaveLoad.h, outside this set)
                 entry.labelSaveDate->SetParameter(0, dateStr);
             } else {
                 // Corrupt save: show "Corrupt" text from the globalNames table (+0xD8)

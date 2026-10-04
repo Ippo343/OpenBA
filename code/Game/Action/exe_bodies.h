@@ -40,7 +40,6 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
 void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx);  // 0x1400f8e30
-void ActCt_HideTool_1176e0(void* entityV);  // 0x1401176e0
 
 // ---- action_base_hunt.cpp
 class HuntComponent;          // Component/HuntComponent.h
@@ -196,4 +195,4 @@ int RoadTool_sub_ce00(Map* map, unsigned int passableTypes, unsigned int start, 
 // ---- region_paircache.cpp
 struct RegionPairCache;   // Action/PathSearch.h
 extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)
-void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2);  // 0x1400a5d10
+void Pf_RegionPairCacheTick_5d10(RegionPairCache* cache, const int64_t* nowTicks);  // 0x1400a5d10

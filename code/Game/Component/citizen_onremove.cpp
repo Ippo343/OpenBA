@@ -130,7 +130,7 @@ void CitizenComponent::OnRemove() {
     // genuinely owns id 0 (the exact in-world freeze fixed in 0f97d16). Skip the call
     // when the body was never populated; nothing of ours is in the scene in that case.
     if (character != nullptr)
-        ActCt_HideTool_1176e0(this);                            // 0x1401176e0
+        HideCitizenTool(this);                                  // 0x1401176e0
     AttendanceComponent_ReleasePartnerSlot(this, '\0');         // 0x140115a50, +0x208
     AttendanceComponent_ReleaseLink59b0(this);                  // 0x1401159b0, +0x228
     AttendanceComponent_ReleaseLink1650(this);                  // 0x140111650, +0x230

@@ -170,7 +170,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // the component as an integer: LEFT)
     int treeCount = _field50;
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         matDesc->workState = maxWorkers;
     }
     if (treeCount > matDesc->workState) {
@@ -337,7 +337,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 keyBuf.slot = i;
                                 keyBuf._pad04 = 0;
                                 keyBuf.citizen = *citizenIBP;
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);   // LEFT: SIG WorkCellBST_Insert_9a40
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
                                 // Mark cell as used
                                 validityArray[i] = 0;
@@ -349,7 +349,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                     keyBuf2.slot = cellIdx2;
                                     keyBuf2._pad04 = 0;
                                     keyBuf2.citizen = *citizenIBP;
-                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult2, &keyBuf2);   // LEFT: SIG WorkCellBST_Insert_9a40
+                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult2, &keyBuf2);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
                                     validityArray[cellIdx2] = 0;
                                 }
 
@@ -383,7 +383,7 @@ static void HarvestArea_RemoveCellNode(HarvestArea* self, int key) {
         } else if (key > node->element.slot) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&self->_field48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&self->_field48), node);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
             return;
         }
     }
@@ -605,7 +605,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.slot) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
                     break;
                 }
             }
@@ -646,7 +646,7 @@ void HarvestArea::Persist(IO::Stream& stream) {
 
     // Serialize the claim tree at +0x48 (the helper takes the container as uintptr_t*:
     // LEFT)
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: SIG WorkCellBST_Serialize_9de0
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);  // LEFT: H5 HarvestArea.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
     // Serialize field cell count at +0x60
     int cellCount = _field60;

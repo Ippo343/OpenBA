@@ -296,8 +296,8 @@ Graphics::ParticleSystemInstance::~ParticleSystemInstance() {
 // real ctor (W1 brief: Animation's ctors change only with object-identical
 // proof). The float fields are plain 4-byte moves either way.
 extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
-    Graphics::Animation* const self = static_cast<Graphics::Animation*>(selfv);
-    const Graphics::Animation* const src = static_cast<const Graphics::Animation*>(srcv);
+    Graphics::Animation* const self = static_cast<Graphics::Animation*>(selfv);  // CAST-OK: elem_stride
+    const Graphics::Animation* const src = static_cast<const Graphics::Animation*>(srcv);  // CAST-OK: elem_stride
 
     self->_events._data     = nullptr;           // +0x00 \ both qwords zero
     self->_events._size     = 0;                 // +0x08 |
@@ -362,7 +362,7 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
 // B.4: on the named fields; the door keeps its `void*` signature (LEFT, as
 // the copy ctor's).
 extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
-    Graphics::Animation* const self = static_cast<Graphics::Animation*>(selfv);
+    Graphics::Animation* const self = static_cast<Graphics::Animation*>(selfv);  // CAST-OK: elem_stride
 
     rtpickgrid::ArrayDtorTransform(&self->_keys);         // 0x18001c100, +0x60
 
@@ -665,7 +665,7 @@ void SpotLight::CreateTargets() {
     // PlatformConstruct). LEFT: the raw allocation is viewed once as the
     // RenderBuffer the inlined ctor builds in it.
     Video::RenderBuffer* const rb =
-        static_cast<Video::RenderBuffer*>(Video::RenderBuffer::operator new(0x30));   // 0x18001f2e0
+        static_cast<Video::RenderBuffer*>(Video::RenderBuffer::operator new(0x30));   // 0x18001f2e0  // LEFT: allocation result of Video::RenderBuffer::operator new: castmetric's tier-I shape does not recognise a class operator new (ledger: decide at the close)
     if (rb != nullptr) {
         rb->colorBuffer = nullptr;   // +0x00
         rb->depthBuffer = nullptr;   // +0x08
@@ -802,7 +802,7 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
             item._geometry->Draw(
                 context,
                 group._cullCamera,
-                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },
+                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },  // LEFT: const_cast ExternalPtrHandle takes a non-const MaterialInstance* (X-RL left the handle parameters)
                 _alphaT,
                 static_cast<int32_t>(item._arg5),
                 shaderIndex,

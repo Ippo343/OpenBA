@@ -646,7 +646,7 @@ void NewGameDialog::StartGame() {
 
     // The map name: the name edit box's String.
     // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);
+    const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);  // LEFT: H5 EditElement::_text is the String's raw char* (EditElement.h: a String member changes the class's ctor / dtor)
 
     // Save combo selections to game settings
     GameSettings* settings = g_gameSettings;
@@ -696,12 +696,12 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
             // LEFT: GameUpdateLoop's ctor takes the IBP as its 8 raw bytes (W0 header).
-            const uint64_t ibp = savedStateIBP ? *(const uint64_t*)savedStateIBP : 0;
+            const uint64_t ibp = savedStateIBP ? *(const uint64_t*)savedStateIBP : 0;  // LEFT: GameUpdateLoop's ctor takes the IBP as its 8 raw bytes (GameUpdateLoop.h, W0 header outside this set)
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 nullptr, ibp, (int32_t)scenarioResIdx,
                 name,
                 (int32_t)seed, (int32_t)terrainSize, /*p8=*/!disastersOff,
-                static_cast<MapGenerator*>(mapGen), static_cast<TerrainGenerator*>(terrainGen), static_cast<ClimateGenerator*>(climateGen));
+                static_cast<MapGenerator*>(mapGen), static_cast<TerrainGenerator*>(terrainGen), static_cast<ClimateGenerator*>(climateGen));  // LEFT: B10 downcast after ResourceIsType (the generators are Object::External resources); castmetric reads the operand as void*
         }
 
         // Step 2: GameLoadDialogLoopT (0xB60 bytes) — retail inlines the subclass
@@ -789,7 +789,7 @@ void NewGameDialog::OnClosed() {}
 void NewGameDialog::OnUpdateLayout() {
     // The name edit box's text length (0 when empty).
     // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    int len = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();
+    int len = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();  // LEFT: H5 EditElement::_text is the String's raw char* (EditElement.h: a String member changes the class's ctor / dtor)
 
     // Element slot 8: Enable(bool)
     buttonOk->Enable(len > 0 ? 1 : 0);
