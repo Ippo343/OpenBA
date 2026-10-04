@@ -39,17 +39,6 @@
 
 namespace rtui {
 
-// ---------------------------------------------------------------------------
-// Byte accessors. B.4 LEFT: their one remaining caller is listelement.cpp
-// (block R-UI-a: the grid view's extents / spacing / vertical byte); they go
-// with it.
-// ---------------------------------------------------------------------------
-inline uint8_t*  B(void* p, int off)       { return static_cast<uint8_t*>(p) + off; }
-
-inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(B(p, off)); }
-inline uint8_t&  U8 (void* p, int off) { return *reinterpret_cast<uint8_t*>(B(p, off)); }
-inline void*&    PTR(void* p, int off) { return *reinterpret_cast<void**>(B(p, off)); }
-
 // Element::_flags bits used by these bodies (names from Element.h).
 constexpr uint32_t kFlagHidden        = 0x00000001;
 constexpr uint32_t kFlagStretchX      = 0x00000004;
