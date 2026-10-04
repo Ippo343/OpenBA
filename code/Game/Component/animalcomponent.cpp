@@ -734,7 +734,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
                 int64_t actionIBP = 0;
                 new (&actionIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge  LEFT: H10 InternalBasePtr takes the RtObject::Internal POD
+                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge   // LEFT: H10 InternalBasePtr takes the RtObject::Internal POD
                 Pf_ActStackPush_54e0(stack, &actionIBP);
                 moveTimer._ticks = 0;
 

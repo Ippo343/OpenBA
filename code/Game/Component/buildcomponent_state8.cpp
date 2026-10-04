@@ -286,7 +286,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
                 uintptr_t bsIBP = 0;
                 new (&bsIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge  LEFT: SIG BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
+                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge   // LEFT: SIG BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
                 // find the site WorkComponent (c8070) the work posts under
                 WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
                 if (workComp != nullptr) {

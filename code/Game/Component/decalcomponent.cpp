@@ -64,9 +64,9 @@
 void WorldGeometry::RemoveDecal(int decalId) {
     uintptr_t base = reinterpret_cast<uintptr_t>(_arrays[5].data);   // +0x1F0   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, not this set's)
     uintptr_t slot = base + static_cast<uintptr_t>(decalId) * 0x60;
-    if (*reinterpret_cast<int*>(slot + 0x28) == decalId) {   // LEFT: POD as above (decal slot +0x28 id)
-        *reinterpret_cast<uint32_t*>(slot + 0x28) = 0xffffffff;   // LEFT: POD as above
-        *reinterpret_cast<uint64_t*>(slot) = 0;   // LEFT: POD as above
+    if (*reinterpret_cast<int*>(slot + 0x28) == decalId) {   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, X3-GAME's): the slot's +0x28 id
+        *reinterpret_cast<uint32_t*>(slot + 0x28) = 0xffffffff;   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, X3-GAME's): the slot's +0x28 id
+        *reinterpret_cast<uint64_t*>(slot) = 0;   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, X3-GAME's): the slot's first qword
         // B.3.2 bridge: exe 0x14001ee40 / 0x14001c890 ARE
         // Collection::Array<T>::SetSize(0) — see the note above the (removed)
         // typedefs for why the init-policy mismatch never fires at count 0.

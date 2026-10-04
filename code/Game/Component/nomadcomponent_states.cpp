@@ -118,7 +118,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
         act = ::new (mem) ::MoveTo(&ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);   // 0x1400c9170
     }
     void* actIBP = act;
-    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0  LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent +0x48 is no ActionStack yet, wave X)
+    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0   // LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent +0x48 is no ActionStack yet, wave X)
 }
 
 // ============================================================

@@ -64,7 +64,7 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
     // TradeDescription, ComponentDescription) hand in their serializer and their
     // External* array untyped: the two bridges are the one place they are named.
     IO::Serializer& ser = *reinterpret_cast<IO::Serializer*>(serializer);   // LEFT: SIG Desc_LoadExternalArray takes void* (callers in animal / herbalist / immigration / trade description, other agents')
-    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // LEFT: SIG as above
+    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // LEFT: SIG Desc_LoadExternalArray takes the external array as void* (callers in animal / herbalist / immigration / trade description pass raw triples)
 
     const int encState = ser.GetEncoding().GetKind();   // Encoding slot 2 (+0x10)
 

@@ -443,7 +443,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                     void* strm = ser._stream;
                     if (strm) {
                         pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);   // LEFT: the trace probes two stream classes' cursors (CompressedMemoryStream +0x8C, MemoryStream +0x24) on a stream of unknown class
-                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);   // LEFT: as above
+                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);   // LEFT: the trace probes two stream classes' cursors (CompressedMemoryStream +0x8C, MemoryStream +0x24) on a stream of unknown class
                         // Neither documented cursor moves for THIS stream type, so
                         // find the real one instead of guessing a third offset:
                         // snapshot the first 0x100 bytes and report which dwords
@@ -621,7 +621,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
 // (standalone/address_registry.cpp). Placement-constructs on the caller's block.
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
     return new (static_cast<void*>(self))
-        ComponentEntity(static_cast<ComponentDescription*>(descriptionPtr));   // B.3.8 bridge  LEFT: SIG ComponentEntity_CtorFromDescription (void*; callers in other blocks, wave X)
+        ComponentEntity(static_cast<ComponentDescription*>(descriptionPtr));   // B.3.8 bridge   // LEFT: SIG ComponentEntity_CtorFromDescription: founding_spawn.cpp:262 / bridgetool_calcpath.cpp:207 pass the template as void* and disaster_harness.cpp:417 prints the function's address (a typed overload makes that ambiguous); X3-GAME's files
 }
 
 // ============================================================

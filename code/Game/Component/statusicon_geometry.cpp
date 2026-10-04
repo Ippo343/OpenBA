@@ -212,7 +212,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         ip[3] = base;
         ip[4] = static_cast<short>(base + 2);
         ip[5] = static_cast<short>(base + 3);
-        context._unknown20f0 = reinterpret_cast<uint64_t>(ip + 6);   // LEFT: as above
+        context._unknown20f0 = reinterpret_cast<uint64_t>(ip + 6);   // LEFT: video/Context.h (X3-RT's) declares the +0x20f0 index cursor as uint64_t
 
         base = static_cast<short>(base + 4);
         center[0] += advance[0];

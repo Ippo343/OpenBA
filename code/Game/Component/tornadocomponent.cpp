@@ -535,7 +535,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         for (int i = 0; i < found.size; i++) {
             CharacterComponent** slot = &found.data[i];
             ComponentEntity* ownerEntity = (*slot)->_entity;
-            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: as above (dead first argument)
+            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: the dead first argument of Tornado_StrikeEntityCounted holds what retail's RCX holds (B6: retail leaves the register)
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
         }

@@ -49,7 +49,7 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 
     // LEFT: the wrong finder (row 552): retail reads the ModelComponent's +0x28 MeshInstance.
     bool isAnimating = reinterpret_cast<const Graphics::MeshInstance*>(   // LEFT: row 552 (the wrong finder: retail reads the ModelComponent's +0x28 MeshInstance)
-        reinterpret_cast<const uint8_t*>(found) + 0x28)->IsAnimating();   // LEFT: row 552 (as above)
+        reinterpret_cast<const uint8_t*>(found) + 0x28)->IsAnimating();   // LEFT: row 552 (the wrong finder: retail reads the ModelComponent's +0x28 MeshInstance)
     if (isAnimating) return;
 
     // Clear bit 2 of the flags

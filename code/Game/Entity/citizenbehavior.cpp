@@ -261,7 +261,7 @@ bool PathGraph::ProcessPaths() {
             PathCostNode* outNode = nullptr;
             PathCostTreeInsert(   // 0x140025a10
                 reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
-                reinterpret_cast<AvlNode30**>(&outNode),                     // LEFT: as above
+                reinterpret_cast<AvlNode30**>(&outNode),                     // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
                 &key.high);
             foundNode = outNode;
         }
@@ -543,7 +543,7 @@ void PathGraph::BuildPathGraph() {
                         void* dummy = nullptr;
                         PathCostTreeInsert(   // 0x140025a10
                             reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
-                            reinterpret_cast<AvlNode30**>(&dummy),                       // LEFT: as above
+                            reinterpret_cast<AvlNode30**>(&dummy),                       // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
                             &bstKey.high);
                     }
                 }

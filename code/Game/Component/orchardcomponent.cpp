@@ -117,13 +117,13 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
             slot->tree = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);   // LEFT: as above
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);   // LEFT: POD the orchard slot holds its InternalPtr<ComponentEntity> as a bare pointer (OrchardComponent.h); InternalBasePtr has no typed view of it
         if (slot->resource != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->resource, NaturalResourceComponent::TypeId())))
             slot->resource = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);   // LEFT: as above
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);   // LEFT: POD the orchard slot holds its InternalPtr<ComponentEntity> as a bare pointer (OrchardComponent.h); InternalBasePtr has no typed view of it
         if (slot->fruit != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->fruit, FruitComponent::TypeId())))
             slot->fruit = nullptr;

@@ -59,7 +59,7 @@ void HighlightComponent::OnRemove() {
     // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
     // in the Scene and +0x120 is not a real object id. Must precede the sceneId
     // read — an inert component's +0x120 is 0, not -1.
-    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;   // LEFT: FLOOR? vtable probe (the embedded EdgeMeshInstance is H5 raw storage, HighlightComponent.h; its first word is the vptr)
+    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;   // LEFT: H5 HighlightComponent::edgeMeshInstance is raw storage the tree builds lazily; its null vptr is the tree's "never outlined" test where retail constructs the member in the ctor (known_port_issues row 573)
     int32_t sceneId = highlightId;
     if (sceneId < 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
