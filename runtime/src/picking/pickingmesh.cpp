@@ -65,6 +65,7 @@
 
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
 #include "../../types/picking/PickingMesh.h"
@@ -80,11 +81,6 @@ using SubMesh  = Picking::PickingMesh::SubMesh;
 using Triangle = Picking::PickingMesh::Triangle;
 using UV16     = Picking::PickingMesh::UV16;
 
-// The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
-// POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-}
 
 // ENDGAME B.3.9 PILOT: `InlineCtorStores` (Base / External / PickingMesh vptr
 // stamps from the MINT plus the zero stores) and the file's `CallSlot0` are
@@ -149,11 +145,11 @@ void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
 // kScalarInt, grows the array when reading, and only then walks TWO
 // kArrayUShort(n=3) per element, at +0x00 and +0x06. Its argument order is
 // (RCX = the Array, RDX = the Serializer) -- the OPPOSITE of 0x18007ac20's.
-void SerializeTrianglesBody(Collection::Array<Triangle>* arr, Serializer* ser) {
-    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
+void SerializeTrianglesBody(Collection::Array<Triangle>* arr, IO::Serializer* ser) {
+    IO::ReaderWriter* rw = ser->_readerWriter;
     int32_t count = arr->_size;
     rw->SerializeInt(count, nullptr);                         // +0xa0
-    if (ser->stream->direction == 0) TriArraySetSize(arr, count);
+    if (ser->_stream->_direction == rt::io::kDirectionReading) TriArraySetSize(arr, count);
     for (int32_t i = 0; i < count; ++i) {                     // SerializeUShortArray, +0x50
         rw->SerializeUShortArray(3, &arr->_data[i].i0, nullptr);
         rw->SerializeUShortArray(3, &arr->_data[i].j0, nullptr);
@@ -163,16 +159,16 @@ void SerializeTrianglesBody(Collection::Array<Triangle>* arr, Serializer* ser) {
 // 0x18007ac20(Serializer*, int count, SubMesh* base) -- the per-SubMesh walk.
 // Read from the raw disassembly rather than the pseudo-C, which drops the
 // third argument on most of these indirect calls.
-void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
+void SerializeSubMeshesBody(IO::Serializer* ser, int32_t count, SubMesh* base) {
     if (count <= 0) return;
     // SerializeInt +0xa0, SerializeFloatArray +0x28, SerializeUShortArray +0x50.
-    IO::ReaderWriter* rw = AsRw(ser->readerWriter);
-    const bool reading = (ser->stream->direction == 0);
+    IO::ReaderWriter* rw = ser->_readerWriter;
+    const bool reading = (ser->_stream->_direction == rt::io::kDirectionReading);
 
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
         // B.3.1 bridge: SubMesh::_name is a raw slot (PickingMesh.h says why).
-        reinterpret_cast<System::String&>(s->_name).Serialize(ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+        reinterpret_cast<System::String&>(s->_name).Serialize(ser);  // LEFT: H5 PickingMesh.h SubMesh::_name is raw char* storage of a String (its ctor / dtor would run: a behaviour commit)
         rw->SerializeInt(s->_parent, nullptr);
         rw->SerializeFloatArray(4, &s->_local.rotation.x, nullptr);
         rw->SerializeFloatArray(3, &s->_local.translation.x, nullptr);
@@ -252,24 +248,19 @@ Object::Base* PickingMesh::CreateInPlaceObject(void* place) {
 // ============================================================================
 // Order: _string20, _string28, _flag30 (kScalarBool), then the SubMesh array
 // (count @ +0x40, resize 0x18007aa40, walk 0x18007ac20).
-bool PickingMesh::Serialize(IO::Stream& streamv) {
-    void* const streamvRaw = &streamv;
-    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    ser.readerWriter = rw;
+bool PickingMesh::Serialize(IO::Stream& stream) {
+    // B.4 R-SYS: retail's `??0Serializer@IO@@` (0x1800b9960): the stream, a
+    // null ReaderWriter, then the encoding's CreateReader (+0x18) / CreateWriter
+    // (+0x20) by direction, version 0; `~Serializer` (0x1800b99b0) deletes the
+    // ReaderWriter at scope exit, where the hand-written `delete` stood.
+    IO::Serializer ser(stream, 0);
 
     // B.3.1 bridge: the two Strings are the POD spelling (PickingMesh.h).
-    reinterpret_cast<System::String&>(_string20).Serialize(&ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
-    reinterpret_cast<System::String&>(_string28).Serialize(&ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+    reinterpret_cast<System::String&>(_string20).Serialize(&ser);  // LEFT: H5 PickingMesh.h holds the two Strings as the RtSystem POD (the class's dtor would run: a behaviour commit)
+    reinterpret_cast<System::String&>(_string28).Serialize(&ser);  // LEFT: as above
 
-    IO::ReaderWriter* rwc = AsRw(rw);
-    const bool reading = (stream->direction == 0);
+    IO::ReaderWriter* rwc = ser._readerWriter;
+    const bool reading = (stream._direction == rt::io::kDirectionReading);
 
     rwc->SerializeBool(_flag30, nullptr);                     // +0x78
 
@@ -281,10 +272,7 @@ bool PickingMesh::Serialize(IO::Stream& streamv) {
     // this, through the ported body (batch D2, 2026-09-12).
     SerializeSubMeshesBody(&ser, nodeCount, _nodes._data);
 
-    if (rw != nullptr) {
-        delete rwc;
-    }
-    return true;
+    return true;   // ~Serializer deletes the ReaderWriter
 }
 
 // ??1PickingMesh@Picking@@UEAA@XZ  0x1801228a0 — retail's body, moved here

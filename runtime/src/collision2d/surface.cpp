@@ -31,6 +31,7 @@
 #include <new>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
 #include "../../types/collision2d/Surface.h"
 
 namespace {
@@ -84,29 +85,20 @@ Object::Base* Surface::CreateInPlaceObject(void* place) {
 Surface::~Surface() {}
 
 // ?Serialize@Surface@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x18010ca40)
-bool Surface::Serialize(IO::Stream& streamv) {
-    void* const streamvRaw = &streamv;
-    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
+bool Surface::Serialize(IO::Stream& stream) {
+    // B.4 R-SYS: retail's `??0Serializer@IO@@` (0x1800b9960): the stream, a
+    // null ReaderWriter, then the encoding's CreateReader (+0x18) / CreateWriter
+    // (+0x20) by direction, version 0; `~Serializer` (0x1800b99b0) deletes the
+    // ReaderWriter at scope exit, where the hand-written `delete` stood.
+    IO::Serializer ser(stream, 0);
 
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    ser.readerWriter = rw;
-
-    // The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-    // interchangeable (Serializer.h); SerializeUInt is +0x98.
-    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
+    // SerializeUInt is +0x98.
+    IO::ReaderWriter* rwc = ser._readerWriter;
     rwc->SerializeUInt(_f20, nullptr);
     rwc->SerializeUInt(_f28, nullptr);
     rwc->SerializeUInt(_f24, nullptr);
 
-    if (rw != nullptr) {
-        delete rwc;
-    }
-    return true;
+    return true;   // ~Serializer deletes the ReaderWriter
 }
 
 }  // namespace Collision2D

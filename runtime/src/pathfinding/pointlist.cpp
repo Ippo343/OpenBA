@@ -69,6 +69,7 @@
 
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"       // IO::Stream::_direction (B.4 R-SYS)
 #include "../../types/pathfinding/PointList.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -222,31 +223,24 @@ Object::Base* PointList::CreateInPlaceObject(void* place) {
 // only THEN _points (+0x30, count at +0x38) — retail serializes the SECOND
 // array field before the first. Per Point: String, kArrayFloat(n=3) at +8,
 // kScalarFloat at +0x14.
-bool PointList::Serialize(IO::Stream& streamv) {
-    void* const streamvRaw = &streamv;
-    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
-    ser.readerWriter = rw;
+bool PointList::Serialize(IO::Stream& stream) {
+    // B.4 R-SYS: retail's `??0Serializer@IO@@` (0x1800b9960): the stream, a
+    // null ReaderWriter, then the encoding's CreateReader (+0x18) / CreateWriter
+    // (+0x20) by direction, version 0. `~Serializer` (0x1800b99b0) deletes the
+    // ReaderWriter at scope exit, where the hand-written `delete` stood.
+    IO::Serializer ser(stream, 0);
 
     // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
     _meshName.Serialize(&ser);
     _string28.Serialize(&ser);
 
-    // The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-    // interchangeable (Serializer.h). SerializeInt +0xa0, SerializeFloat +0x80,
-    // SerializeFloatArray +0x28.
-    IO::ReaderWriter* rwc = reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
+    // SerializeInt +0xa0, SerializeFloat +0x80, SerializeFloatArray +0x28.
+    IO::ReaderWriter* rwc = ser._readerWriter;
 
     auto serializeArray = [&](Collection::Array<Point>* arr) {
         int32_t n = arr->_size;
         rwc->SerializeInt(n, nullptr);
-        if (stream->direction == 0) PointArraySetSize(arr, n);
+        if (stream._direction == rt::io::kDirectionReading) PointArraySetSize(arr, n);
         for (int32_t i = 0; i < n; ++i) {
             Point* p = &arr->_data[i];
             p->name.Serialize(&ser);
@@ -258,10 +252,7 @@ bool PointList::Serialize(IO::Stream& streamv) {
     serializeArray(&_pathPoints);   // this+0x40 first
     serializeArray(&_points);       // then this+0x30
 
-    if (rw != nullptr) {
-        delete rwc;
-    }
-    return true;
+    return true;   // ~Serializer deletes the ReaderWriter
 }
 
 // ??1PointList@Pathfinding@@UEAA@XZ  0x18010f8e0 -- retail's body, moved here
