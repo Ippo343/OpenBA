@@ -23,6 +23,7 @@
 #include <cstdint>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // the steps Array (B4 X7-GAME-A)
 
 class ComponentDescription;
 class TutorialStep;
@@ -43,17 +44,19 @@ public:
 public:
     ComponentDescription* setup; // +0x20: ExternalPtr<ComponentDescription> (0x140002340 serializes it;
                                  //        StepExecute keys the utility-dialog lookup 0x140100270 on it)
-    TutorialStep** steps;        // +0x28: Array<ExternalPtr<TutorialStep>> data (H5 raw triple)
-    int32_t  stepCount;          // +0x30: count
-    int32_t  stepCapacity;       // +0x34: capacity
+    // +0x28: Array<ExternalPtr<TutorialStep>> (data, count +0x30, capacity +0x34).
+    // B4 X7-GAME-A (H5): the member; the ctor 0x1400deb90 zeroes it, the dtor in
+    // [0] 0x140026f50 frees it (MemFree, zero data and the count/capacity qword:
+    // ~Array of a trivial element) and is the only member destruction there.
+    Collection::Array<TutorialStep*> steps;
     int32_t  currentStep;        // +0x38: -1 by default (tutorial_next_scenario.cpp reads it as the next scenario index)
     uint8_t  _pad3C[4];          // +0x3C: padding
 };
 
 static_assert(offsetof(Tutorial, setup) == 0x20, "+0x20");
 static_assert(offsetof(Tutorial, steps) == 0x28, "+0x28");
-static_assert(offsetof(Tutorial, stepCount) == 0x30, "+0x30");
-static_assert(offsetof(Tutorial, stepCapacity) == 0x34, "+0x34");
+static_assert(offsetof(Tutorial, steps) + offsetof(Collection::Array<TutorialStep*>, _size) == 0x30, "+0x30");
+static_assert(offsetof(Tutorial, steps) + offsetof(Collection::Array<TutorialStep*>, _capacity) == 0x34, "+0x34");
 static_assert(offsetof(Tutorial, currentStep) == 0x38, "+0x38");
 static_assert(sizeof(Tutorial) == 0x40, "Tutorial is 0x40 (create 0x140026e50 MemAlloc(0x40))");
 static_assert(alignof(Tutorial) == 8, "qword-aligned");

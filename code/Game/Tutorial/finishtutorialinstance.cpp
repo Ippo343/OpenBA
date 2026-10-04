@@ -228,7 +228,7 @@ Achievement::Goal::GoalState FinishTutorialInstance::CheckGoalState() const {
     if (tutDef == nullptr) return static_cast<Achievement::Goal::GoalState>(0);
 
     // Compare: totalSteps <= currentStep
-    int totalSteps = tutDef->stepCount;
+    int totalSteps = tutDef->steps._size;
     int currentStep = tutInst->currentStep;
 
     return static_cast<Achievement::Goal::GoalState>((totalSteps <= currentStep) ? 1 : 0);

@@ -457,7 +457,7 @@ void TutorialSetupDialog::ShowListedElements() {
 void TutorialInstance::RefreshStepUI() {
     Tutorial* tutorial = tutorialDef;
     if (!tutorial) return;
-    TutorialStep** steps = tutorial->steps;
+    TutorialStep** steps = tutorial->steps._data;
     if (!steps) return;
     int idx = currentStep;
     TutorialStep* step = steps[idx];
@@ -606,11 +606,11 @@ void TutorialInstance::StepExecute(void* param2, void* param3, uint64_t param4) 
     }
 
     int stepIndex = currentStep;
-    int stepCount = tutorial->stepCount;
+    int stepCount = tutorial->steps._size;
 
     if (stepIndex >= stepCount) return;
 
-    TutorialStep** steps = tutorial->steps;
+    TutorialStep** steps = tutorial->steps._data;
     if (!steps) return;
     TutorialStep* step = steps[stepIndex];
     if (!step) return;
