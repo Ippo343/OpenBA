@@ -322,7 +322,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 const uint8_t dirty = ((oldMask & 0xe1f) != 0) ? 1u : 0u;
                 tileGrid->field_0xA2 |= dirty;
                 cell->terrainType = 5;
-                PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (takes the cell's bytes)   // LEFT: SIG PerfX::TerrainNoteWrite (SA)
+                PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
 
                 if (dirty) {
                     RegionGraph* regionObj = tileGrid->regionGraph;
