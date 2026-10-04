@@ -773,10 +773,6 @@ UI::DialogInstance* PlayerToolManager::OpenPauseMenu() {
     return finalDialog;
 }
 
-// B4 FORWARD: 1 outside caller (standalone/pausemenu_harness.cpp).
-extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
-    return reinterpret_cast<PlayerToolManager*>(gameSubsys)->OpenPauseMenu();   // LEFT: SIG EntityUI_OpenPauseMenu (standalone/pausemenu_harness.cpp declares it with void*)
-}
 
 // ============================================================
 // Helper: push_back for the engine's inlined dynamic arrays (data, count,

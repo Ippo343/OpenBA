@@ -53,7 +53,7 @@ struct Flags {
     int  ambientThrottle;
 };
 extern Flags g_flags;
-extern uint8_t* g_rootOnlyPtr;   // MeshInstance::_rootOnlyUpdates (resolved with the flags)
+extern bool* g_rootOnlyPtr;   // MeshInstance::_rootOnlyUpdates (resolved with the flags)
 
 inline bool Enabled()         { return g_flags.master; }   // master switch
 inline bool AnimCull()        { return g_flags.animCull; }
@@ -81,7 +81,7 @@ void Reset();
 
 // Current MeshInstance::_rootOnlyUpdates value (0 on the last iteration / speed 1).
 inline bool RootOnlyNow() { return g_rootOnlyPtr && *g_rootOnlyPtr != 0; }
-uint8_t* RootOnlyFlag();
+bool* RootOnlyFlag();
 
 // Conservative visibility test of a world position against the cached frustum
 // (returns true when no frustum is available).

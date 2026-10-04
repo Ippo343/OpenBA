@@ -430,7 +430,7 @@ void Walk(UI::Element* e, UI::DialogInstance* dlg, Scan& sc, int depth) {
             printf("[MouseInject/probe] %*sname=%-24s id=%-6d flags=%08x rect=(%d,%d)-(%d,%d) "
                    "tipDlg=%p tipTbl=%p tipIdx=%d %s\n",
                    depth * 2, "",
-                   e->_name ? static_cast<const char*>(e->_name) : "(null)",   // LEFT: Element::_name is H5 String storage (ui/Element.h, R-UI-2)
+                   e->_name ? e->_name : "(null)",
                    (int)e->_elementId, (unsigned)e->_flags,
                    (int)e->_layoutLeft, (int)e->_layoutTop,
                    (int)e->_layoutRight, (int)e->_layoutBottom,
@@ -448,14 +448,14 @@ void Walk(UI::Element* e, UI::DialogInstance* dlg, Scan& sc, int depth) {
             printf("[MouseInject/probe] %*s    tipStr(+0x58)=%p [%s]\n",
                    depth * 2, "", e->_toolTipString,
                    e->_toolTipString
-                       ? static_cast<const char*>(e->_toolTipString)   // LEFT: Element::_toolTipString is H5 String storage (ui/Element.h, R-UI-2)
+                       ? e->_toolTipString
                        : "null -> EMPTY arm");
         }
 
         bool candidate = false;
         if (g_cfg.byName) {
             candidate = e->_name &&
-                        !std::strcmp(static_cast<const char*>(e->_name), g_cfg.name) &&   // LEFT: Element::_name (H5, R-UI-2)
+                        !std::strcmp(e->_name, g_cfg.name) &&
                         HasRect(e);
         } else if (g_cfg.wantTipCapable) {
             candidate = tip && HasRect(e);
@@ -606,9 +606,9 @@ void ApplyToolTipString(UI::Element* elem) {
     printf("[MouseInject/tipstr] elem=%p name=%s  +0x58 %p -> %p [%s]  "
            "(BeginToolTip must now take the NON-EMPTY arm)\n",
            (void*)elem,
-           elem->_name ? static_cast<const char*>(elem->_name) : "(null)",   // LEFT: Element::_name (H5, R-UI-2)
+           elem->_name ? elem->_name : "(null)",
            before, elem->_toolTipString,
-           elem->_toolTipString ? static_cast<const char*>(elem->_toolTipString)   // LEFT: Element::_toolTipString (H5, R-UI-2)
+           elem->_toolTipString ? elem->_toolTipString
                                 : "?");
     fflush(stdout);
 }
@@ -648,7 +648,7 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
 
     int32_t dragX = t.cx, dragY = t.cy;
     ui->BeginDragDrop(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgLocal),  // B.3.6 bridge  // LEFT: two raw locals handed where BeginDragDrop takes InternalPtr<>* (an InternalPtr would construct / release)
-                      reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemLocal),   // LEFT: (the same)
+                      reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemLocal),   // LEFT: OTHER a raw Element* local handed where BeginDragDrop takes InternalPtr<Element>* (an InternalPtr local would construct / release a handle)
                       dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
     ++g_s.dragStarted;
     printf("[MouseInject] BeginDragDrop(dlg=%p, x=%d, y=%d) -> _dragDropDialog=%p\n",

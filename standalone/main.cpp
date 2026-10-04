@@ -877,7 +877,7 @@ static void DumpSwapChainState(const char* tag) {
     }
     // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
     // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
-    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: dx11 seam
+    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: OTHER dx11 seam: the swap chain is a field (+0x18) of the DX11 DeviceData subclass, not of Video::DeviceData (plan section 4.1)
     if (!swapChain) {
         printf("[SwapProbe %s] swapChain NULL (activeDD+0x18)\n", tag);
         return;
@@ -949,7 +949,7 @@ static void CaptureBootFullscreenMode() {
     if (!activeDD) return;
     // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
     // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
-    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: dx11 seam
+    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: OTHER dx11 seam: the swap chain is a field (+0x18) of the DX11 DeviceData subclass, not of Video::DeviceData (plan section 4.1)
     if (!swapChain) return;
     DXGI_SWAP_CHAIN_DESC desc{};
     if (swapChain->GetDesc(&desc) == 0) {                              // vtable +0x60

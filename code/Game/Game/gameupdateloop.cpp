@@ -93,10 +93,10 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal
 // (code/Game/Player/tool_activation_standalone.cpp). Gated behind BANISHED_LIVE_TOOLS
 // so the default build stays byte-identical: build the tool-mode tree at EntityUI
 // startup, tick the active tool each frame (OnKey/Serialize/cursor), draw its footprint.
-extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI);
+extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI);
 extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr);  // EntityUI::Startup 2nd half
-extern "C" int  EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time);
-extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFlag);
+extern "C" int  EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag, int64_t time);
+extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context* context, int activeFlag);
 // Minimap terrain painter (code/Game/Game/minimap_paint.cpp) — standalone fallback for
 // the exe FUN_1400a5140 (ImageCapture::DrawCheck), wired into fn_ImageCapture_DrawCheck.
 // In-app RenderDoc capture driver — ticked once per in-game rendered frame so a

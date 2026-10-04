@@ -132,7 +132,7 @@ TutorialGoalCount::TutorialGoalCount()
 
 // LEFT H5: the +0x48 String is raw storage (see the header).
 System::String& TutorialGoalCount::ElementName() {
-    return *reinterpret_cast<System::String*>(&elementName);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    return *reinterpret_cast<System::String*>(&elementName);   // LEFT: H5 TutorialGoalCount::elementName (+0x48) is raw String storage: retail's dtor 0x140027820 releases +0x48 (0x14002784b) BEFORE typeRef's name +0x30 (0x14002785b); a String member would be released after the body's manual typeRef release, reversing that, until NamedExternalRef::name is typed in the same commit
 }
 
 // The dtor inside [0] 0x140027820: ~String +0x48, ~String +0x30; the

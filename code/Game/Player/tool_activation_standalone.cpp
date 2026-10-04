@@ -160,13 +160,6 @@ void Tree_Insert(ToolModeTree* tree, uint32_t key, uint32_t toolTypeId) {
     }
 }
 
-// The tool manager the C entry points below receive: gameupdateloop.cpp (block
-// GAME-b) binds them through local `extern "C"` declarations taking `void*`, so
-// the signature stays (B4 FORWARD) and the manager is recovered here once.
-PlayerToolManager* Manager(void* entityUI) {
-    return reinterpret_cast<PlayerToolManager*>(entityUI);   // B4 FORWARD: the callers' C signature   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
-}
-
 }  // namespace
 
 // ============================================================
@@ -227,12 +220,12 @@ extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr) {
 // ALL placeable buildings — their description carries a CreatePlacedDescription (the
 // trigger the SetEditMode component-scan matches), and the other 7 tools that retail's
 // EntityUI::Startup registers (Edit/Path/DragPlacement/Road/Bridge/Removal/Fenced).
-extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
+extern "C" void EntityUI_BuildToolModeTree_SA(PlayerToolManager* entityUI) {
     if (!entityUI) return;
-    PlayerToolManager* mgr = Manager(entityUI);
+    PlayerToolManager* mgr = entityUI;
     // LEFT: +0x10 / +0x18 are declared `ToolRegistryNode*` / int32 in GAME-b's header,
     // the node type file-local to Dialog/toolbardialog.cpp; the pair is this tree.
-    ToolModeTree* tree = reinterpret_cast<ToolModeTree*>(&mgr->field_0x10);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    ToolModeTree* tree = reinterpret_cast<ToolModeTree*>(&mgr->field_0x10);   // LEFT: OTHER PlayerToolManager +0x10 / +0x18 are declared ToolRegistryNode* root + int32 count (PlayerToolManager.h); ToolModeTree is this file's view of the same pair
     if (tree->root != nullptr) return;  // already built
 
     // The "Tool" / "ToolSetting" base type ids the SetEditMode reimpls IsDerivedFrom
@@ -314,9 +307,9 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
 // ============================================================
 // Returns the tool's cursor id (from +0x60) when a tool is active, else -1 (caller
 // keeps its default). activeFlag = noInputFocus (UserInterface+0xd9 == 0).
-extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time) {
+extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag, int64_t time) {
     if (!entityUI) return -1;
-    PlayerToolManager* mgr = Manager(entityUI);
+    PlayerToolManager* mgr = entityUI;
     if (mgr->currentTool == nullptr) {
         // No active tool — install the default EditTool (retail EntityUI::Update does this
         // via SetEditMode(pc, 0)). Guarded to run only when idle so it does NOT churn
@@ -392,9 +385,9 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
 // ============================================================
 // Piece 3 — draw-phase footprint overlay (tool +0x40).
 // ============================================================
-extern "C" void EntityUI_ToolDraw_SA(void* entityUI, Video::Context* context, int activeFlag) {
+extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context* context, int activeFlag) {
     if (!entityUI) return;
-    PlayerToolManager* mgr = Manager(entityUI);
+    PlayerToolManager* mgr = entityUI;
     if (mgr->currentTool == nullptr) return;
     Tool* tool = mgr->currentTool;
     if (!tool) return;
