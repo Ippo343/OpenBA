@@ -76,31 +76,31 @@ std::atomic<bool> s_itemDrawLogged{false};
 // headers; each accessor's cast is the one place a header is read as its
 // element type (WorldGeometryElements.h). Every caller reads them by name.
 RawArray<TerrainVertex>& WorldGeometry::ContourVertices() {
-    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<uint16_t>& WorldGeometry::ContourIndices() {
-    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesA() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesB() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<RawArray<Math::Vector2>>& WorldGeometry::ContourOutlines() {
-    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<GeometryBatch>& WorldGeometry::Decals() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<GeometryBatch>& WorldGeometry::RoadBatches() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<Object::External*>& WorldGeometry::BatchMaterials() {
-    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 RawArray<int32_t>& WorldGeometry::BatchCounters() {
-    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);   // LEFT: H5 WorldGeometry::_arrays is nine untyped {data, size|cap} headers (Game/WorldGeometry.h, not this agent's)
+    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
 }
 
 // ============================================================

@@ -242,7 +242,7 @@ using CamViewArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
     // B.3.2 bridge: the event notifier's +0x18 header is still raw bytes.
-    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);   // LEFT: EventLog.h (GAME-1): entries is three raw fields, not a Collection::Array (H5)
+    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);   // LEFT: H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (eventlog.cpp's, grow 0x140019b70; this one, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
 }
 
 // ============================================================
@@ -598,14 +598,14 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             if (flags & 4) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD RtObject::Internal (the mirror X-R1 listed; its door takes the mirror)
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
                 ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
                                               owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD RtObject::Internal (the mirror X-R1 listed; its door takes the mirror)
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
                 ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
                                               owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
             }

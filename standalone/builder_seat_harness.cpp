@@ -94,7 +94,7 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
 
     s_fired = true;
     Profession* const builder = profMgr->field_0x38;  // +0x38
-    const uint64_t builderKey = reinterpret_cast<uintptr_t>(builder);   // LEFT: the log line prints the key as %016llx
+    const uint64_t builderKey = reinterpret_cast<uintptr_t>(builder);   // the log line prints the pointer as an integer (%016llx)  // CAST-OK: ptr_int
     const int before = CountProfession(townMgr, builder);
 
     for (int i = 0; i < s_want; ++i)

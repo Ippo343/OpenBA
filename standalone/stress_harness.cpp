@@ -227,9 +227,7 @@ void LogHomeLoss(CitizenComponent* cz, const char* where) {
     const int depth = Readable(ch) ? ch->currentAction : -99;              // +0x60
     CitizenDescription* desc = cz->description;                            // +0x288
     const float adultAge = Readable(desc) ? desc->adultAge : 0.f;          // +0x44
-    // LEFT: CitizenComponent::name (+0x28) is H5 raw storage (a System::String; CIT / W0-H1):
-    // its first qword is the character data.
-    const char* name = *reinterpret_cast<const char* const*>(&cz->name);   // LEFT: H5 CitizenComponent::name (CIT)
+    const char* name = cz->name._data;                                     // +0x28 String's character data
     const unsigned long long prof =
         reinterpret_cast<uintptr_t>(cz->profession);  // CAST-OK: ptr_int
     std::fprintf(stderr, "[HomeLoss] frame=%d %s citizen=%p name=%s age=%.2f(adult>=%.1f) hunger=%.1f "

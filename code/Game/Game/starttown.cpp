@@ -579,7 +579,7 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
         return nullptr;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    System::Filename fname(*reinterpret_cast<const System::String*>(entry));  // String -> Filename  LEFT: ExternalRef::strPtr is the String's raw storage (H5, MapGenerator.h GAME-b)
+    System::Filename fname(*reinterpret_cast<const System::String*>(entry));  // String -> Filename  // LEFT: H5 ExternalRef::strPtr is a String's raw storage (MapGenerator.h); the pool's element lifecycle is hand-written
     // A pool's template is a ComponentDescription (an Object::External).
     tmpl = static_cast<ComponentDescription*>(
         const_cast<::Object::External*>(efactory->FindOrLoad(fname)));    // LEFT: FindOrLoad returns const External* (retail ?FindOrLoad@...QEAAPEBV)
@@ -4593,7 +4593,7 @@ static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t 
         dirty = 1;
     game->field_0xA2 |= dirty;
     cell->terrainType = newType;
-    PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror  LEFT: STANDALONE's perf_terrain.h takes the cell as bytes
+    PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror  // LEFT: SIG PerfX::TerrainNoteWrite takes the cell as bytes (standalone/perf_terrain.h: the mirror keeps its base and 0x30 stride as bytes; typing it is the whole TerrainGet / TerrainGetSlow / TerrainNoteWrite family)
     const int dim = game->size;
     RegionGraph* regionObj = game->regionGraph;
     if (dirty && regionObj && dim > 0)

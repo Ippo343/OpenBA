@@ -544,7 +544,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
             uint32_t pathType = 0; int tileH = 0, tileW = 0; uint64_t extra = 0;   // printed %d / %u as before
             int rc = drag->CalcCost(startCell, endCell,
                                     &pathType, &tileH, &tileW,
-                                    reinterpret_cast<int*>(&extra));   // LEFT: an 8-byte local behind CalcCost's int* (resizing it is not B.4's)
+                                    reinterpret_cast<int*>(&extra));   // LEFT: OTHER the harness hands its 8-byte uint64_t local to CalcCost's int* out-param; narrowing the local to int is a resize, not B.4's
             // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
             // that differs from RemovalTool). The path length comes back in the out-params,
             // and param_4 is the validity: 1 = valid, 2 = invalid.
@@ -2444,8 +2444,8 @@ void UpgradeTick(int frameNum) {
 // Builders are seated by standalone/panel_staffing_driver.cpp on unattended runs (the
 // old BANISHED_BUILDER_AUTOPOOL bypass was retired 2026-08-15); this run is much
 // faster under BANISHED_FORCE_SPEED=40.
-extern "C" void* g_BridgeLastMaster;
-extern "C" void* g_BridgeLastSegments[32];
+extern "C" ComponentEntity* g_BridgeLastMaster;
+extern "C" ComponentEntity* g_BridgeLastSegments[32];
 extern "C" int   g_BridgeLastSegmentCount;
 
 enum BridgeStage { BR_IDLE = 0, BR_DRAG, BR_WAIT_BUILT, BR_SELECT_SETTLE, BR_DONE };
@@ -2522,11 +2522,11 @@ const char* BridgeComponentName(uint32_t tid) {
     return "?";
 }
 
-void BridgeDumpEntity(const char* what, void* ent) {
+void BridgeDumpEntity(const char* what, ComponentEntity* ent) {
     if (!ent) { fprintf(stderr, "[Bridge] %s = null\n", what); return; }
     const uint32_t tidPicking = PickingComponent::TypeId();
 
-    ComponentEntity* e = static_cast<ComponentEntity*>(ent);   // LEFT: g_BridgeLastMaster / g_BridgeLastSegments are void* (bridgetool, owner: Player)
+    ComponentEntity* e = ent;
     const int count = e->_componentCount;
     Object::InternalPtr<Component>* arr = e->_components;
     fprintf(stderr, "[Bridge] %s=%p components=%d:", what, ent, count);
@@ -2722,7 +2722,7 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
         bridge->endCell   = c.b;
         uint32_t pathType = 0; int h = 0, wd = 0; uint64_t extra = 0;   // pathType printed %d as before
         int rc = drag->CalcCost(c.a, c.b, &pathType, &h, &wd,
-                                reinterpret_cast<int*>(&extra));   // LEFT: an 8-byte local behind CalcCost's int* (resizing it is not B.4's)
+                                reinterpret_cast<int*>(&extra));   // LEFT: OTHER the harness hands its 8-byte uint64_t local to CalcCost's int* out-param; narrowing the local to int is a resize, not B.4's
         if (rc == 0 && pathType == 1) {
             startCell = c.a; endCell = c.b;
             fprintf(stderr, "[ToolHarness][bridge] span accepted after %d of %d candidates "
@@ -2823,7 +2823,7 @@ void BridgeSelectFire(PlayerToolManager* entityUI) {
            "full click (info dialog + selection outline).\n", tool, g_BridgeLastMaster);
     fflush(stdout);
 
-    const int opened = EditTool_HarnessSelectEntity(tool, static_cast<ComponentEntity*>(g_BridgeLastMaster));   // LEFT: g_BridgeLastMaster is void* (bridgetool, owner: Player)
+    const int opened = EditTool_HarnessSelectEntity(tool, g_BridgeLastMaster);
 
     fprintf(stderr, "[Bridge][select] select -> %d (1=info dialog opened). Returned without "
            "faulting; a crash from this lands in the NEXT Draw.\n", opened);

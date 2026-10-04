@@ -328,7 +328,7 @@ void ModelComponent::Tick(const System::Time* time) {
         if (PerfX::AnimBatchDecide(this, time, &batchedTime)) return;
         const System::Time t{batchedTime};
         if (PerfX::AnimCullSkip(this)) {
-            uint8_t* flag = PerfX::RootOnlyFlag();
+            bool* flag = PerfX::RootOnlyFlag();
             *flag = 1;
             mesh->Update(t);
             *flag = 0;

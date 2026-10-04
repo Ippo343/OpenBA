@@ -446,7 +446,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
         uint8_t setBit = ((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0 ? 1 : 0;
         param_1->field_0xA2 = param_1->field_0xA2 | (setBit != 0);
         cell->terrainType = 2;
-        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (LEFT: block STANDALONE's perf_terrain.h takes the cell as bytes)
+        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror  // LEFT: SIG PerfX::TerrainNoteWrite takes the cell as bytes (standalone/perf_terrain.h: the mirror keeps its base and 0x30 stride as bytes; typing it is the whole TerrainGet / TerrainGetSlow / TerrainNoteWrite family)
         if (((1u << (bVar1 & 0x1f)) & 0x1e0u) != 0) {
             int div = param_1->size;
             param_1->regionGraph->MarkCellDirty(param_2 % div, param_2 / div);   // 0x1400a8c90
