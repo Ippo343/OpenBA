@@ -125,7 +125,7 @@ int  HuntAnimal::AbstractImpl(void* actionStack) {
 // Slot 5: Execute (0x1400c8240) -- unhookable (9 bytes)
 // Same logic as AbstractImpl: returns 1 if hunt not started, 0 if completed.
 // ============================================================
-int  HuntAnimal::Execute(void* actionStack, void* time) {
+int  HuntAnimal::Execute(void* actionStack, const System::Time* time) {
     (void)actionStack;
     (void)time;
     return (!_field38) ? 1 : 0;
@@ -149,7 +149,7 @@ int  HuntAnimal::Execute(void* actionStack, void* time) {
 //    c. Build the removal actions (0x1400bbea0)
 //    d. Find the WildAnimalComponent and start its herd's migration
 
-void HuntAnimal::Enter(void*, void*) {
+void HuntAnimal::Enter(void*, const System::Time*) {
 
     // If hunt already started, return early
     if (_field38) {

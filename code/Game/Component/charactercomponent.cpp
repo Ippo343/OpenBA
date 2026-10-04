@@ -63,7 +63,7 @@
 // whose enabled-flag (+0x18) is set, invokes vtable slot +0x30 (Draw/UpdateAnimation)
 // with (node, arrayBase, deltaTime); advances via node+0x10. Non-static for registration.
 // ============================================================
-void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime) {
+void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, const System::Time* deltaTime) {
     Action* node = *ptrRef;
     while (node != nullptr) {
         if ((*ptrRef)->_status) {
@@ -125,7 +125,7 @@ static Component* CharComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, uin
 // handlers push them.
 //
 // ------------------------------------------------------------------
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
+extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, const System::Time* time);
 
 // RETAIL SLOT WIRING (ENDGAME B.3.8 CIT: the class's compiler vtable carries it —
 // CharacterComponent.h; the members are at the bottom of this file).
@@ -298,7 +298,7 @@ void CharacterComponent::OnRemove() {
 
 // [8] 0x1401094c0 — the move-tick, EVERY FRAME from the EntityList tree walk
 // (flag bit 2; 0x1400c2e5d passes the update's time pointer through).
-void CharacterComponent::Tick(void* time) {
+void CharacterComponent::Tick(const System::Time* time) {
     CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(this), time);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (defined in citizenai_executor.cpp, CAI-2)
 }
 
@@ -306,7 +306,7 @@ void CharacterComponent::Tick(void* time) {
 // slot 9 does MOV R8,RDX at 0x1401094a8 and Character_UpdateAnimation hands that
 // same value to the action's +0x30 as param_3, so it is passed through, not
 // dereferenced.
-void CharacterComponent::Update(void* time) {
+void CharacterComponent::Update(const System::Time* time) {
     if (currentAction >= 0) {
         // actions is the array of action pointers, currentAction the index into it
         Action* localPtr = actions[currentAction];

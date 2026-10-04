@@ -37,8 +37,8 @@
 //   slot 3 (+0x18) Enter(node, sm, int idx)              -> char
 //   slot 4 (+0x20) Update(node, sm, int idx)             -> char
 //   slot 5 (+0x28) OnState(node, sm, int actIdx, int trIdx) -> void
-//   slot 6 (+0x30) Transition(node, sm, void* time, int idx) -> char
-//   slot 7 (+0x38) Transition(node, sm, void* time, int idx) -> char
+//   slot 6 (+0x30) Transition(node, sm, const Time* time, int idx) -> char
+//   slot 7 (+0x38) Transition(node, sm, const Time* time, int idx) -> char
 // Each handler is tail-called as `handler(*(node+0x18))` (the dispatcher does
 // `MOV RCX,[RCX+0x18]; JMP handler`); a null handler is a graceful no-op (return 0).
 //
@@ -74,12 +74,12 @@ namespace ControllerLive {
 //      event   0x140009da0  JMP [RAX+8]                    -> (owner, sm)        char
 //      transition 0x140002bc0: the null arm is a bare RET (no XOR AL), the slot is
 //        `void OnTransition` -> void; the tree calls it with the owner alone.
-//    `time` stays `void*`: Controller::Tick / StateMachine::Tick carry it untyped.
+//    `time` is the System::Time* StateMachine::Tick forwards (RDX = &time, 0x14012b67b).
 template <class Owner>
 struct StateHandlers {
     using Enter      = char (*)(Owner* owner, StateMachine* sm);
     using Update     = char (*)(Owner* owner, StateMachine* sm);
-    using Tick       = char (*)(Owner* owner, StateMachine* sm, void* time);
+    using Tick       = char (*)(Owner* owner, StateMachine* sm, const System::Time* time);
     using Transition = void (*)(Owner* owner);
     using Event      = char (*)(Owner* owner, StateMachine* sm);
 };
@@ -275,7 +275,7 @@ struct Dispatcher {
     // Forwarding them is required, not cosmetic — 0x140045250 and 0x140044ff0 both read
     // sm to request their state transition. Handlers that take fewer arguments simply
     // ignore the extra registers.
-    static char Trans30(::ControllerComponent::Controller* node, StateMachine* sm, void* time, int idx) {
+    static char Trans30(::ControllerComponent::Controller* node, StateMachine* sm, const System::Time* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Tick h = table.entries[idx].trans30Handler;
         if (!h) return 0;
@@ -293,7 +293,7 @@ struct Dispatcher {
     // (data, sm, Time* dt). Handlers that don't need dt (2-arg ports like the
     // BuildComponent state work) simply ignore R8; the ResidenceComponent heat
     // tick (0x140129970) dereferences it for its heat countdown.
-    static char Trans38(::ControllerComponent::Controller* node, StateMachine* sm, void* time, int idx) {
+    static char Trans38(::ControllerComponent::Controller* node, StateMachine* sm, const System::Time* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         typename StateHandlers<Owner>::Tick h = table.entries[idx].trans38Handler;
         if (!h) return 0;
@@ -388,10 +388,10 @@ public:
     void OnTransition(StateMachine* sm, int stateIndex, int transitionIndex) override {
         Dispatcher<Tag>::OnState(this, sm, stateIndex, transitionIndex);
     }
-    char Tick(StateMachine* sm, void* time, int stateIndex) override {
+    char Tick(StateMachine* sm, const System::Time* time, int stateIndex) override {
         return Dispatcher<Tag>::Trans30(this, sm, time, stateIndex);
     }
-    char TickAlt(StateMachine* sm, void* time, int stateIndex) override {
+    char TickAlt(StateMachine* sm, const System::Time* time, int stateIndex) override {
         return Dispatcher<Tag>::Trans38(this, sm, time, stateIndex);
     }
     // [8] retail (Well 0x140010260): `table count != 0` (B38_RULES D9 #9).

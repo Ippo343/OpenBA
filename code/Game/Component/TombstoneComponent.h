@@ -32,7 +32,7 @@ public:
     ~TombstoneComponent() override = default;                     // [0] 0x14000d480
     void Persist(IO::Stream& stream) override;                          // [3] 0x1400578e0
     void Startup() override;                                      // [4] 0x140057860
-    void Update(void* time) override;                             // [9] 0x1400577d0
+    void Update(const System::Time* time) override;                             // [9] 0x1400577d0
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     System::Time lifetime;   // +0x28 the countdown (lifetime remaining; Persist 0x1400578e0)

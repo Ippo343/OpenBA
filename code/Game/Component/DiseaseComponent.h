@@ -42,14 +42,14 @@ public:
     void Startup() override;                                      // [4] 0x140048c50
     void OnAdded() override;                                      // [6] 0x140048c00
     void OnRemove() override;                                     // [7] 0x140048bb0
-    void Update(void* time) override;                             // [9] 0x140048b90
+    void Update(const System::Time* time) override;                             // [9] 0x140048b90
 
     // ---- non-virtual members (retail addresses; RCX = this) ----
     bool CheckCure();                                             // 0x1400481b0
     void Cure();                                                  // 0x140048320
     void Infect();                                                // 0x1400483a0
-    void InfectionTick(System::Time* elapsed);                    // 0x140048610
-    void ActiveDisease(System::Time* elapsed);                    // 0x140048840
+    void InfectionTick(const System::Time* elapsed);                   // 0x140048610
+    void ActiveDisease(const System::Time* elapsed);                   // 0x140048840
     void KillOnePlant();                                          // 0x140047b40
     void KillOneAnimal();                                         // 0x140047d70
 

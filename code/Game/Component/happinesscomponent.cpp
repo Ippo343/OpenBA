@@ -356,7 +356,7 @@ char HappinessComponent::StateDemolishEnter() {
 // The state table's handler adapters: the controller hands each one its owner
 // (node+0x18), the HappinessComponent.
 static char Happiness_StateBuiltEnter(HappinessComponent* c, StateMachine* /*sm*/) { return c->StateBuiltEnter(); }      // 0x14004a9f0
-static char Happiness_StateBuiltPerFrame(HappinessComponent* c, StateMachine* /*sm*/, void* /*time*/) {
+static char Happiness_StateBuiltPerFrame(HappinessComponent* c, StateMachine* /*sm*/, const System::Time* /*time*/) {
     return c->StateBuiltPerFrame();                                                                             // 0x14004a9a0
 }
 static char Happiness_StateDemolishEnter(HappinessComponent* c, StateMachine* /*sm*/) { return c->StateDemolishEnter(); } // 0x14004a940

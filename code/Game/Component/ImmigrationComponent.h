@@ -59,7 +59,7 @@ public:
     char EnterIdle(StateMachine* sm);                             // 0x14004d290 state 2
     char TickIdle(StateMachine* sm);                              // 0x14004d220
     char EnterWaiting();                                  // 0x14004d1a0 state 0xf
-    char TickWaiting(StateMachine* sm, void* time);               // 0x14004d0d0
+    char TickWaiting(StateMachine* sm, const System::Time* time);               // 0x14004d0d0
     char EnterArriving();                                 // 0x14004d090 state 0x10
     char TickArriving();                                  // 0x14004d070
     char OnArrived(StateMachine* sm);                             // 0x14004cff0 event 6

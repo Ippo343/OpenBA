@@ -863,22 +863,22 @@ char OrchardComponent::TickClearing(StateMachine* sm) {
 // null-component guards stay in the adapters.
 namespace {
 char OrchEnterIdle(OrchardComponent* c, StateMachine*)                { return c ? c->EnterIdle() : 0; }         // 0x140051530
-char OrchTickIdle(OrchardComponent* c, StateMachine* sm, void*)       { return c ? c->TickIdle(sm) : 1; }        // 0x1400514c0
+char OrchTickIdle(OrchardComponent* c, StateMachine* sm, const System::Time*)       { return c ? c->TickIdle(sm) : 1; }        // 0x1400514c0
 char OrchOnPlant(OrchardComponent* c, StateMachine* sm)               { return c ? c->OnPlantEvent(sm) : 1; }    // 0x140051450
 char OrchEnterPlanting(OrchardComponent* c, StateMachine*)            { return c ? c->EnterPlanting() : 1; }     // 0x140051070
-char OrchTickPlanting(OrchardComponent* c, StateMachine* sm, void*)   { return c ? c->TickPlanting(sm) : 1; }    // 0x140050f90
+char OrchTickPlanting(OrchardComponent* c, StateMachine* sm, const System::Time*)   { return c ? c->TickPlanting(sm) : 1; }    // 0x140050f90
 char OrchOnHarvest(OrchardComponent* c, StateMachine* sm)             { return c ? c->OnHarvestEvent(sm) : 1; }  // 0x140050900
 char OrchOnClear(OrchardComponent* c, StateMachine* sm)               { return c ? c->OnClearEvent(sm) : 1; }    // 0x1400513e0
 char OrchEnterTending(OrchardComponent* c, StateMachine* sm)          { return c ? c->EnterTending(sm) : 1; }    // 0x140050e30
 char OrchUpdateTending(OrchardComponent* c, StateMachine*)     { return c ? c->UpdateTending() : 1; }     // 0x140050ba0 / 0x1400509b0
-char OrchTickTending(OrchardComponent* c, StateMachine* sm, void*)    { return c ? c->TickTending(sm) : 1; }     // 0x140050c00
+char OrchTickTending(OrchardComponent* c, StateMachine* sm, const System::Time*)    { return c ? c->TickTending(sm) : 1; }     // 0x140050c00
 char OrchEnterReplanting(OrchardComponent* c, StateMachine*)          { return c ? c->EnterReplanting() : 1; }   // 0x140050ae0
-char OrchTickReplanting(OrchardComponent* c, StateMachine* sm, void*) { return c ? c->TickReplanting(sm) : 1; }  // 0x140050a10
+char OrchTickReplanting(OrchardComponent* c, StateMachine* sm, const System::Time*) { return c ? c->TickReplanting(sm) : 1; }  // 0x140050a10
 char OrchEnterHarvesting(OrchardComponent* c, StateMachine*)          { return c ? c->EnterHarvesting() : 1; }   // 0x140050800
-char OrchTickHarvesting(OrchardComponent* c, StateMachine* sm, void*) { return c ? c->TickHarvesting(sm) : 1; }  // 0x140050650
+char OrchTickHarvesting(OrchardComponent* c, StateMachine* sm, const System::Time*) { return c ? c->TickHarvesting(sm) : 1; }  // 0x140050650
 char OrchEnterClearing(OrchardComponent* c, StateMachine*)            { return c ? c->EnterClearing() : 1; }     // 0x1400504e0
 char OrchUpdateClearing(OrchardComponent* c, StateMachine*)    { return c ? c->UpdateClearing() : 1; }    // 0x1400503e0
-char OrchTickClearing(OrchardComponent* c, StateMachine* sm, void*)   { return c ? c->TickClearing(sm) : 1; }    // 0x140050430
+char OrchTickClearing(OrchardComponent* c, StateMachine* sm, const System::Time*)   { return c ? c->TickClearing(sm) : 1; }    // 0x140050430
 }  // namespace
 
 // Replica of OrchardDescription_helper_20f0 (0x1400520f0), in registration order.

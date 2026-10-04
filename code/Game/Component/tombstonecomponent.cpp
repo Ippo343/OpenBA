@@ -116,8 +116,8 @@ void TombstoneComponent::Startup() {
 // ============================================================
 // TombstoneComponent::Update (0x1400577D0)
 // ============================================================
-void TombstoneComponent::Update(void* timeV) {
-    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)  LEFT: SIG Component::Update(void* time)
+void TombstoneComponent::Update(const System::Time* timeV) {
+    const System::Time* pDeltaTime = timeV;
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // countdown is zero unless Startup (slot +0x20) ran. If it is still zero but the

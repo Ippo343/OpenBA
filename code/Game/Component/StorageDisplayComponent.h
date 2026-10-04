@@ -44,7 +44,7 @@ public:
     void Startup() override;                                      // [4]  0x140056930 own RET
     void OnAdded() override;                                      // [6]  0x140056730
     void OnRemove() override;                                     // [7]  0x1400566b0
-    void Update(void* time) override;                             // [9]  0x1400566a0
+    void Update(const System::Time* time) override;                             // [9]  0x1400566a0
     void Slot11() override;                                       // [11] 0x140056940
 
     // One pile on the footprint, 0x128 bytes: the MeshInstance and its scene id

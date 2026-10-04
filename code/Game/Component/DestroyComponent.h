@@ -75,7 +75,7 @@ public:
     char State5Tick();                                            // 0x14011c120
     char State6Enter();                                           // 0x14011d4d0
     char State6Update();                                          // 0x14011d400
-    char State6Tick(System::Time* elapsed);                       // 0x14011d490
+    char State6Tick(const System::Time* elapsed);                     // 0x14011d490
     char State7Rebuild(StateMachine* sm);                                 // 0x14011d2a0 state 7 event 0
     char State7Remove(StateMachine* sm);                                  // 0x14011d1a0 state 7 event 1
     char CancelDemolition(StateMachine* sm);                              // 0x14011bcc0 states 4/5 event 0

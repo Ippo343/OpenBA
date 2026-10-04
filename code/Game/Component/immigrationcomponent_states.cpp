@@ -540,11 +540,11 @@ char ImmigrationComponent::EnterWaiting() {
     return 0;
 }
 // tick 0x14004d0d0: countdown; in season -> 0x10 if CanAccept else 2
-char ImmigrationComponent::TickWaiting(StateMachine* sm, void* time) {
+char ImmigrationComponent::TickWaiting(StateMachine* sm, const System::Time* time) {
     GameUpdateLoop* gw = GW();
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return 1;
-    waitTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;   // LEFT: SIG the controller tick handler's void* time (controller_state_table.h, COMP-2+3)
+    waitTimer._ticks -= time ? time->_ticks : 0;
     int month = MonthOfYear(gw);
     bool inSeason = (desc->_arrivalMonthFirst <= month && month <= desc->_arrivalMonthLast);
     if (waitTimer._ticks < 1 && inSeason) {
@@ -632,15 +632,15 @@ using ImmigrationDispatch = ::ControllerLive::Dispatcher<ImmigrationCtrlTag>;
 // component, so each entry is a one-line adapter that calls the member.
 namespace {
 char ImmEnterIdle(ImmigrationComponent* c, StateMachine* sm)                { return c->EnterIdle(sm); }        // 0x14004d290
-char ImmTickIdle(ImmigrationComponent* c, StateMachine* sm, void*)          { return c->TickIdle(sm); }         // 0x14004d220
+char ImmTickIdle(ImmigrationComponent* c, StateMachine* sm, const System::Time*)          { return c->TickIdle(sm); }         // 0x14004d220
 char ImmEnterWaiting(ImmigrationComponent* c, StateMachine*)                { return c->EnterWaiting(); }       // 0x14004d1a0
-char ImmTickWaiting(ImmigrationComponent* c, StateMachine* sm, void* time)  { return c->TickWaiting(sm, time); } // 0x14004d0d0
+char ImmTickWaiting(ImmigrationComponent* c, StateMachine* sm, const System::Time* time)  { return c->TickWaiting(sm, time); } // 0x14004d0d0
 char ImmEnterArriving(ImmigrationComponent* c, StateMachine*)               { return c->EnterArriving(); }      // 0x14004d090
-char ImmTickArriving(ImmigrationComponent* c, StateMachine*, void*)         { return c->TickArriving(); }       // 0x14004d070
+char ImmTickArriving(ImmigrationComponent* c, StateMachine*, const System::Time*)         { return c->TickArriving(); }       // 0x14004d070
 char ImmOnArrived(ImmigrationComponent* c, StateMachine* sm)                { return c->OnArrived(sm); }        // 0x14004cff0
 void ImmOnLeaveGroup(ImmigrationComponent* c)                       { c->OnLeaveGroup(); }              // 0x14004cd00
 char ImmEnterAnswer(ImmigrationComponent* c, StateMachine*)                 { return c->EnterAnswer(); }        // 0x14004ceb0
-char ImmTickAnswer(ImmigrationComponent* c, StateMachine* sm, void*)        { return c->TickAnswer(sm); }       // 0x14004ce00
+char ImmTickAnswer(ImmigrationComponent* c, StateMachine* sm, const System::Time*)        { return c->TickAnswer(sm); }       // 0x14004ce00
 char ImmOnAllow(ImmigrationComponent* c, StateMachine* sm)                  { return c->OnAllow(sm); }          // 0x14004cd90
 char ImmOnDeny(ImmigrationComponent* c, StateMachine* sm)                   { return c->OnDeny(sm); }           // 0x14004cd20
 }  // namespace

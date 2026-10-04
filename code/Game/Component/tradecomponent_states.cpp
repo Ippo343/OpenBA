@@ -459,15 +459,15 @@ char TradeComponent::Teardown() {
 // ============================================================
 // The handlers the dispatcher calls with (owner, sm[, delta]); RCX is the component.
 static char TradeCtrl_State2_Enter(TradeComponent* c, StateMachine* /*sm*/)       { return c->EnterIdle(); }         // 0x14005abd0
-static char TradeCtrl_State2_Tick(TradeComponent* c, StateMachine* sm, void* dt) {                    // 0x14005aa60
-    return c->TickIdle(sm, static_cast<const System::Time*>(dt));
+static char TradeCtrl_State2_Tick(TradeComponent* c, StateMachine* sm, const System::Time* dt) {                    // 0x14005aa60
+    return c->TickIdle(sm, dt);
 }
 static char TradeCtrl_State12_Enter(TradeComponent* c, StateMachine* /*sm*/)      { return c->EnterInbound(); }      // 0x14005aa50
 static char TradeCtrl_Event09_MerchantDocked(TradeComponent* c, StateMachine* sm) { return c->OnMerchantDocked(sm); }   // 0x14005a850
 static char TradeCtrl_Event0B_MerchantLost(TradeComponent* c, StateMachine* sm)   { return c->OnMerchantLost(sm); }     // 0x14005a9c0
 static char TradeCtrl_State13_Enter(TradeComponent* c, StateMachine* /*sm*/)      { return c->EnterDocked(); }       // 0x14005a800
-static char TradeCtrl_State13_Tick(TradeComponent* c, StateMachine* sm, void* dt) {                   // 0x14005a780
-    return c->TickDocked(sm, static_cast<const System::Time*>(dt));
+static char TradeCtrl_State13_Tick(TradeComponent* c, StateMachine* sm, const System::Time* dt) {                   // 0x14005a780
+    return c->TickDocked(sm, dt);
 }
 static char TradeCtrl_State13_Update(TradeComponent* c, StateMachine* /*sm*/)     { return c->LeaveDocked(); }       // 0x14005a6d0
 static void TradeCtrl_Teardown(TradeComponent* c)           { c->Teardown(); }          // 0x14005b160

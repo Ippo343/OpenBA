@@ -611,8 +611,8 @@ void HerdComponent::OnAdded() {
 // at namespace scope rather than function-local statics (B6-5).
 static long long s_herdUpdCalls = 0, s_herdUpdNoPop = 0, s_herdUpdNoCfg = 0, s_herdUpdFired = 0;
 
-void HerdComponent::Update(void* time) {
-    const System::Time* deltaTime = static_cast<const System::Time*>(time);   // LEFT: SIG Component::Update (Component.h)
+void HerdComponent::Update(const System::Time* time) {
+    const System::Time* deltaTime = time;
 
     // Every branch below reaches the owning PopulationComponent through +0x28
     // (food sampling, tile validity, migration retarget), which retail derefs

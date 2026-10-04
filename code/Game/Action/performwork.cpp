@@ -147,7 +147,7 @@ int  PerformWork::AbstractImpl(void* actionStack) {
 // When elapsed >= required, checks if citizen needs a break.
 // Returns: 0 = done, 1 = still working, 2 = needs break
 // ============================================================
-int  PerformWork::Execute(void* actionStack, void* time) {
+int  PerformWork::Execute(void* actionStack, const System::Time* time) {
     (void)actionStack;
 
     int64_t elapsed = elapsedTime._ticks;
@@ -161,7 +161,7 @@ int  PerformWork::Execute(void* actionStack, void* time) {
     }
 
     // Still working -- accumulate delta time
-    int64_t dt = *(int64_t*)time;   // LEFT: Action::Execute's time parameter is void* (Action.h)
+    int64_t dt = time->_ticks;
     elapsedTime._ticks = elapsed + dt;
     return 1;
 }

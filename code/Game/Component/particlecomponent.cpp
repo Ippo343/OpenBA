@@ -679,7 +679,7 @@ void ParticleComponent::OnRemove() {
 // ============================================================
 // ParticleComponent per-frame tick (vtable +0x40, 0x140052b30)
 // ============================================================
-void ParticleComponent::Tick(void* time) {
+void ParticleComponent::Tick(const System::Time* time) {
     if (PC_Culled(this)) return;   // frozen off-screen: neither the unstamp nor the tick
     PC_UnstampOwnEmitters(this);   // SA per-frame frame-index advance (see helper) before the tick
     int total = emitterCount;
@@ -688,7 +688,7 @@ void ParticleComponent::Tick(void* time) {
     if (!geoArr) return;
     float uvScale = PC_UVScale();
     // LEFT: Component::Tick takes void* (COMP-c's header).
-    const System::Time& elapsed = *reinterpret_cast<const System::Time*>(time);   // LEFT: SIG Component::Tick(void* time)
+    const System::Time& elapsed = *time;
 
     for (int i = 0; i < total; i++) {
         ParticleEmitterSlot* ge = &geoArr[i];

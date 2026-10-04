@@ -78,7 +78,7 @@ public:
     // State handlers (the controller's table, 0x14012a350).
     char     EnterBuilt();                                            // 0x140129de0 state 2 enter
     char     EnterDemolish();                                         // 0x140129920 state 3 enter
-    char     HeatTick(System::Time* dt);                              // 0x140129970 state 2 per-frame (residence_heattick.cpp)
+    char     HeatTick(const System::Time* dt);                            // 0x140129970 state 2 per-frame (residence_heattick.cpp)
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)

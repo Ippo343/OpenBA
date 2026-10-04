@@ -33,7 +33,7 @@ public:
     void        Persist(IO::Stream& stream) override;                         // [3]  0x140122820
     // [9] receives the System::Time BY VALUE (an 8-byte tick count in RDX); the
     // base declares the register as `void*`, so the body reads its bits.
-    void        Update(void* time) override;                            // [9]  0x140122740
+    void        Update(const System::Time* time) override;                            // [9]  0x140122740
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x1401226a0
 
     // +0x50 the hunt-progress accumulator (a System::Time, in ticks).

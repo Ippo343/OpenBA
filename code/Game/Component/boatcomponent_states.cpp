@@ -635,14 +635,14 @@ char BoatComponent::State4Tick() {
 namespace {
 char BoatState0Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State0Enter(); }    // 53f0
 char BoatState0Update(BoatComponent* b, StateMachine* /*sm*/)              { return b->State0Update(); }   // 5190
-char BoatState0Tick(BoatComponent* b, StateMachine* sm, void* /*time*/)      { return b->State0Tick(sm); }   // 5250
+char BoatState0Tick(BoatComponent* b, StateMachine* sm, const System::Time* /*time*/)      { return b->State0Tick(sm); }   // 5250
 char BoatState1Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State1Enter(); }    // 5150
-char BoatState1Tick(BoatComponent* b, StateMachine* sm, void* /*time*/)      { return b->State1Tick(sm); }   // 4ff0
+char BoatState1Tick(BoatComponent* b, StateMachine* sm, const System::Time* /*time*/)      { return b->State1Tick(sm); }   // 4ff0
 char BoatState2Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State2Enter(); }    // 4f70
 char BoatState3Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State3Enter(); }    // 4ec0
-char BoatState3Tick(BoatComponent* b, StateMachine* sm, void* /*time*/)      { return b->State3Tick(sm); }   // 4d10
+char BoatState3Tick(BoatComponent* b, StateMachine* sm, const System::Time* /*time*/)      { return b->State3Tick(sm); }   // 4d10
 char BoatState4Enter(BoatComponent* b, StateMachine* /*sm*/)               { return b->State4Enter(); }    // 4cd0
-char BoatState4Tick(BoatComponent* b, StateMachine* /*sm*/, void* /*time*/)                { return b->State4Tick(); }     // 4c40
+char BoatState4Tick(BoatComponent* b, StateMachine* /*sm*/, const System::Time* /*time*/)                { return b->State4Tick(); }     // 4c40
 }  // namespace
 
 // Idempotent: the installer runs once per component instance.

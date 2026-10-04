@@ -170,7 +170,7 @@ static char RP_State14Enter(ResourceProduceComponent* self, StateMachine* /*sm*/
 // ── state 13 per-frame — 0x14012b190 ──────────────────────────────────────────────
 // A one-line forward to the component's ProduceTick (slot 21). The base leaves it a
 // no-op; FishingComponent is the only subclass in this wave that installs a real one.
-static char RP_State13PerFrame(ResourceProduceComponent* self, StateMachine* /*sm*/, void* time) {
+static char RP_State13PerFrame(ResourceProduceComponent* self, StateMachine* /*sm*/, const System::Time* time) {
     return self->ProduceTick(time);
 }
 

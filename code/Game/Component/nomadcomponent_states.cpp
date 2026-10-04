@@ -158,9 +158,9 @@ char NomadComponent::OnLeave(StateMachine* sm) {
     return 1;
 }
 // state 1 tick 0x14004f600: loiter around the meeting point
-char NomadComponent::TickLoiter(void* time) {
+char NomadComponent::TickLoiter(const System::Time* time) {
     if (!Idle(this)) return 1;
-    wanderTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;   // LEFT: SIG the controller tick handler's void* time (controller_state_table.h, COMP-2+3)
+    wanderTimer._ticks -= time ? time->_ticks : 0;
     if (wanderTimer._ticks >= 0) return 1;
     GameUpdateLoop* gw = GW();
     if (!gw) return 1;
@@ -243,13 +243,13 @@ using NomadDispatch = ::ControllerLive::Dispatcher<NomadCtrlTag>;
 // component, so each entry is a one-line adapter that calls the member.
 namespace {
 char NomadEnterWalkIn(NomadComponent* c, StateMachine*)                { return c->EnterWalkIn(); }     // 0x14004faf0
-char NomadTickWalkIn(NomadComponent* c, StateMachine* sm, void*)       { return c->TickWalkIn(sm); }    // 0x14004f9c0
+char NomadTickWalkIn(NomadComponent* c, StateMachine* sm, const System::Time*)       { return c->TickWalkIn(sm); }    // 0x14004f9c0
 char NomadOnLeave(NomadComponent* c, StateMachine* sm)                 { return c->OnLeave(sm); }       // 0x14004f4a0
 char NomadEnterLoiter(NomadComponent*, StateMachine*)                  { return 1; }                    // LAB_14004f9b0 `mov al,1; ret`
-char NomadTickLoiter(NomadComponent* c, StateMachine*, void* time)     { return c->TickLoiter(time); }  // 0x14004f600
+char NomadTickLoiter(NomadComponent* c, StateMachine*, const System::Time* time)     { return c->TickLoiter(time); }  // 0x14004f600
 char NomadOnDestroy(NomadComponent* c, StateMachine*)                  { return c->OnDestroy(); }       // 0x14004f420
 char NomadEnterWalkOut(NomadComponent* c, StateMachine*)               { return c->EnterWalkOut(); }    // 0x14004f5e0
-char NomadTickWalkOut(NomadComponent* c, StateMachine*, void*)         { return c->TickWalkOut(); }     // 0x14004f530
+char NomadTickWalkOut(NomadComponent* c, StateMachine*, const System::Time*)         { return c->TickWalkOut(); }     // 0x14004f530
 }  // namespace
 
 extern "C" void NomadCtrl_PopulateTable() {

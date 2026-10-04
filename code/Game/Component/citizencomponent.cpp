@@ -209,14 +209,14 @@ static inline float RdataF(uint32_t bits) {
 // state: a citizen only gets Work (id 5) as a candidate once it is HOUSED and/or
 // EMPLOYED — both assigned here.
 // Crash-safe guards bail until the body is populated + the world singleton is live.
-void CitizenComponent::Update(void* timeArg) {
+void CitizenComponent::Update(const System::Time* timeArg) {
     // GUARD: Update derefs the CitizenDescription (+0x288, set by BodyInit), the
     // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
     if (description == nullptr) return;
     if (_entity == nullptr) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    const System::Time* deltaTime = static_cast<const System::Time*>(timeArg);
+    const System::Time* deltaTime = timeArg;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     // +0x130 is not the Weather resource (B4_RULES correction 5): the WeatherSimulation.
     WeatherSimulation* weather = gameWorld->m_weather;

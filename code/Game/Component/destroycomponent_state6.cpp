@@ -444,7 +444,7 @@ char DestroyComponent::State6Update() {
 // comp+0x48 is the collapse countdown in raw System::Time units, seeded by
 // FireComponent_BeginBurning_11e7b0. Subtract this frame's delta; when it reaches
 // zero, clamp it and take the rubble step that puts the building in its final state.
-char DestroyComponent::State6Tick(System::Time* time) {
+char DestroyComponent::State6Tick(const System::Time* time) {
     int64_t remaining = burnTime._ticks;
     if (remaining == 0) return 1;
     remaining -= time ? time->_ticks : 0;

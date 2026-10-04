@@ -36,7 +36,7 @@ public:
     ~FruitComponent() override = default;                         // [0] 0x140005b20
     void Persist(IO::Stream& stream) override;                          // [3] 0x14004a070
     void Startup() override;                                      // [4] 0x14004a030
-    void Update(void* time) override;                             // [9] 0x140049de0
+    void Update(const System::Time* time) override;                             // [9] 0x140049de0
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x14004a070:
     // InternalPtr +0x28 (IsDerivedFrom 0x1401c7b30), Serialize(float&) +0x30,

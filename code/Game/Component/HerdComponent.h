@@ -50,7 +50,7 @@ public:
     // [4] inherited: Component's `RET` 0x140118a50 (the ctor writes +0x4c = -1).
     void OnAdded() override;                                      // [6] 0x140121f40
     void OnRemove() override;                                     // [7] 0x140121e20
-    void Update(void* time) override;                             // [9] 0x140121bf0
+    void Update(const System::Time* time) override;                             // [9] 0x140121bf0
 
     // ---- non-virtual members (retail addresses) ----
     char CheckMigrationDone();                                    // 0x140121980

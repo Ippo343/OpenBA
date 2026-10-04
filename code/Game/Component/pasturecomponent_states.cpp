@@ -582,7 +582,7 @@ using PastureDispatch = ::ControllerLive::Dispatcher<PastureCtrlTag>;
 // null-component guards stay in the adapters.
 namespace {
 char PastEnterOperational(PastureComponent* c, StateMachine*)   { return c ? c->EnterOperational() : 0; }  // 0x1401270c0
-char PastTickOperational(PastureComponent* c, StateMachine*, void*) { return c ? c->TickOperational() : 1; } // 0x1401267e0
+char PastTickOperational(PastureComponent* c, StateMachine*, const System::Time*) { return c ? c->TickOperational() : 1; } // 0x1401267e0
 char PastEnterTeardown(PastureComponent* c, StateMachine*)      { return c ? c->EnterTeardown() : 0; }     // 0x140126e40
 }  // namespace
 

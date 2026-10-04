@@ -57,8 +57,8 @@ public:
     virtual void     Slot5();                                     // [5]  0x140118a60 RET
     virtual void     OnAdded();                                   // [6]  0x140118820 RET
     virtual void     OnRemove();                                  // [7]  0x140118830 RET
-    virtual void     Tick(void* time);                            // [8]  0x140118a70 RET
-    virtual void     Update(void* time);                          // [9]  0x140118a80 RET
+    virtual void     Tick(const System::Time* time);                            // [8]  0x140118a70 RET
+    virtual void     Update(const System::Time* time);                          // [9]  0x140118a80 RET
     virtual void     PostUpdate();                                // [10] 0x140118a90 RET
     virtual void     Slot11();                                    // [11] 0x140118aa0 RET
     virtual void     OnEvent(int eventId);                        // [12] 0x140118ab0 RET

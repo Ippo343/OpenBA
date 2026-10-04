@@ -38,7 +38,7 @@ public:
     void Persist(IO::Stream& stream) override;                          // [3] 0x140123e10
     void OnAdded() override;                                      // [6] 0x140123c70
     void OnRemove() override;                                     // [7] 0x140123c00
-    void Update(void* time) override;                             // [9] 0x140123b50
+    void Update(const System::Time* time) override;                             // [9] 0x140123b50
 
     void SetPasture(PastureComponent* const* pasture);   // 0x140123cc0
     void PenInPasture();                                  // 0x1401240a0

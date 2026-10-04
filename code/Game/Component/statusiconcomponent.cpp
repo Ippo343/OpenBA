@@ -635,7 +635,7 @@ void StatusIconComponent::Startup() {
 // then positions the icon. Buildings take the MODEL-BOUNDS path (icon centred above
 // the model's bounding box); the map-cell fallback mirrors the original for entities
 // without a model. Verified line-by-line against the disassembly.
-void StatusIconComponent::Tick(void* /*time*/) {
+void StatusIconComponent::Tick(const System::Time* /*time*/) {
     // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
     // the geometry vtable (+0x28) null, so +0x100 == 0 is "not registered", not scene
     // object 0. Touching the scene from here would either add a null-vtable geometry to

@@ -45,7 +45,7 @@ public:
     void Startup() override;                                      // [4]  0x14011b7d0 TREE DIVERGENCE
     void OnAdded() override;                                      // [6]  0x14011b560
     void OnRemove() override;                                     // [7]  0x14011b510
-    void Tick(void* time) override;                               // [8]  = Component's in retail; TREE DIVERGENCE
+    void Tick(const System::Time* time) override;                               // [8]  = Component's in retail; TREE DIVERGENCE
     void Slot11() override;                                       // [11] 0x14011b810 PORT GAP
     void OnEvent(int eventId) override;                           // [12] 0x14011b760 PORT GAP
 

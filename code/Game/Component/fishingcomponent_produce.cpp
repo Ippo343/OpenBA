@@ -116,7 +116,7 @@ char FishingComponent::OnExitProducing() {
 //     fishingRate = matching / (total * 0.5)          [DAT_140172114 = 0.5f]
 // A dock with no water in range therefore rates 0 and produces nothing — which is the
 // retail behaviour players see when a dock is placed too far up the bank.
-char FishingComponent::ProduceTick(void* /*time*/) {
+char FishingComponent::ProduceTick(const System::Time* /*time*/) {
     const int r = RadiusOf(this);
     int cx = 0, cy = 0;
     if (r < 0 || !TileCentre(this, &cx, &cy) ||

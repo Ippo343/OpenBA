@@ -548,14 +548,14 @@ char CropFieldComponent::State11PerFrame(StateMachine* sm) {
 // (the CropFieldComponent) and the state machine.
 static char CropField_State2Enter(CropFieldComponent* c, StateMachine* /*sm*/)                 { return c->State2Enter(); }        // 0x14011a920
 static char CropField_Event3Plant(CropFieldComponent* c, StateMachine* sm)       { return c->Event3Plant(sm); }     // 0x14011a7b0
-static char CropField_State2PerFrame(CropFieldComponent* c, StateMachine* sm, void* /*time*/)    { return c->State2PerFrame(sm); }  // 0x14011a860
+static char CropField_State2PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)    { return c->State2PerFrame(sm); }  // 0x14011a860
 static char CropField_State9Enter(CropFieldComponent* c, StateMachine* /*sm*/)                 { return c->State9Enter(); }       // 0x14011a310
-static char CropField_State9PerFrame(CropFieldComponent* c, StateMachine* sm, void* /*time*/)    { return c->State9PerFrame(sm); }  // 0x14011a1e0
+static char CropField_State9PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)    { return c->State9PerFrame(sm); }  // 0x14011a1e0
 static char CropField_State10Enter(CropFieldComponent* c, StateMachine* /*sm*/)                { return c->State10Enter(); }      // 0x14011a100
 static char CropField_State10Update(CropFieldComponent* c, StateMachine* /*sm*/)               { return c->State10Update(); }     // 0x140119f70
-static char CropField_State10PerFrame(CropFieldComponent* c, StateMachine* sm, void* /*time*/)   { return c->State10PerFrame(sm); } // 0x140119fd0
+static char CropField_State10PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)   { return c->State10PerFrame(sm); } // 0x140119fd0
 static char CropField_State11Enter(CropFieldComponent* c, StateMachine* /*sm*/)                { return c->State11Enter(); }      // 0x140119e60
-static char CropField_State11PerFrame(CropFieldComponent* c, StateMachine* sm, void* /*time*/)   { return c->State11PerFrame(sm); } // 0x140119d80
+static char CropField_State11PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)   { return c->State11PerFrame(sm); } // 0x140119d80
 
 // Replica of the populator at 0x14011b150, in registration order. Order matters: it
 // fixes the state INDEX that StateMachine::Tick carries in its +0x09/+0x0a/+0x0b bytes.

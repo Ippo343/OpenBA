@@ -99,7 +99,7 @@ public:
     void Startup() override;                                      // [4]  0x140114050
     void OnAdded() override;                                      // [6]  0x140114000
     void OnRemove() override;                                     // [7]  0x140113ca0
-    void Update(void* time) override;                             // [9]  0x140112e70
+    void Update(const System::Time* time) override;                             // [9]  0x140112e70
     void Slot11() override;                                       // [11] 0x1401140f0
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x140112260

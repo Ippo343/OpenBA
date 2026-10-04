@@ -71,7 +71,7 @@ int  AnimateNaturalResource::AbstractImpl(void* actionStack) {
 // Execute (0x1400c55b0, vtable slot 5)
 // Checks if entity's model is still animating. Returns true while animating.
 // ============================================================
-int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
+int  AnimateNaturalResource::Execute(void* actionStack, const System::Time* time) {
     (void)actionStack;
     (void)time;
 

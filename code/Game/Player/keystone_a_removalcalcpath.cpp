@@ -209,7 +209,7 @@ void DestroyComponent::PostDestroyEvent() {
 // The node slots (ControllerComponent::Controller): [0] FindState, [3] Enter,
 // [4] Update, [5] OnTransition, [6] Tick; +0x08 the parent, +0x10 the child.
 // ============================================================
-static void SM_RunPhase(StateMachine* sm, int32_t* outState) {
+static void SM_RunPhase(StateMachine* sm, const System::Time* timeOutSlot) {
     using Controller = ControllerComponent::Controller;
     bool first = true;
     if (sm->pendingState < 0)
@@ -272,7 +272,7 @@ static void SM_RunPhase(StateMachine* sm, int32_t* outState) {
             // call pass &outState (LEA R8,[RBP+0x20] in each).
             // FIX(lead 2026-07-20, bug-class #6): slot +0x30 is
             // Tick(node, sm, time/out, idx) — idx rides R9D, also dropped.
-            while (((it < 0) || (p->Tick(sm, outState, it) == 0)) &&
+            while (((it < 0) || (p->Tick(sm, timeOutSlot, it) == 0)) &&
                    ((p = p->_data08) != nullptr)) {
                 it = p->FindState(sm->currentInput);
             }
@@ -299,7 +299,7 @@ void DestroyComponent::RunStateMachine() {
     // compiler placed in the adjacent 4 bytes (observed live 2026-07-26, debug build:
     // SM_RunPhase faulted on the first upgrade-click pump). An explicit 8-byte slot
     // with the outState aliased to its low dword reproduces the retail frame exactly.
-    int64_t timeOutSlot = 0;
+    System::Time timeOutSlot = {0};
     int32_t* outState = reinterpret_cast<int32_t*>(&timeOutSlot);   // LEFT: retail's one slot is the Time and the int out
 
     StateMachineComponent* st0 = _entity->FindComponent<StateMachineComponent>();
@@ -332,20 +332,20 @@ void DestroyComponent::RunStateMachine() {
     // ---- main tick path ----
     StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
     // Time(0.0) into the shared 8-byte slot (see timeOutSlot note above).
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeOutSlot), 0.0f);   // LEFT: as above
+    RtSystem_Time_Ctor(&timeOutSlot, 0.0f);
     StateMachine* sm = &machine->stateMachine;
 
     // Phase 1 (transition slot +0x30 passes the shared slot, same as phase 2)
-    SM_RunPhase(sm, outState);
+    SM_RunPhase(sm, &timeOutSlot);
 
     // ---- between-phase: choose transition + kick Tick ----
     *outState = 3;  // outState seed
     if (sm->activeState < 0) {
-        int64_t timeBuf[1] = {0};
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);   // LEFT: as above
+        System::Time timeBuf = {0};
+        RtSystem_Time_Ctor(&timeBuf, 0.0f);
         // The door passed the Time buffer's ADDRESS where the body takes the time
         // VALUE (int64_t); the bits the door passed are kept.
-        StateMachine_TickReimpl(sm, reinterpret_cast<int64_t>(timeBuf), 0, 0);   // LEFT: COMP's C body takes the time as an integer
+        sm->Tick(&timeBuf, 0, 0);   // 0x1400a9660
     }
     {
         ControllerComponent::Controller* head = sm->current;
@@ -355,10 +355,10 @@ void DestroyComponent::RunStateMachine() {
             sm->pendingState = static_cast<int8_t>(*outState);
         }
     }
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeOutSlot), 0.0f);   // LEFT: as above
+    RtSystem_Time_Ctor(&timeOutSlot, 0.0f);
 
     // Phase 2 (transition slot +0x30 passes the shared slot)
-    SM_RunPhase(sm, outState);
+    SM_RunPhase(sm, &timeOutSlot);
 }
 
 // B4 FORWARD: 1 outside caller (Dialog/upgradeui.cpp) holds the component as an integer.

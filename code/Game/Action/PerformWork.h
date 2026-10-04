@@ -33,7 +33,7 @@ public:
     ~PerformWork() override = default;                         // [0] 0x140022bd0
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c9550
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c9420
-    int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c93c0
+    int  Execute(void* actionStack, const System::Time* time) override;      // [5] 0x1400c93c0
     void Exit(void* actionStack) override;                     // [7] 0x1400c9370
     void CheckEntity() override;                               // [8] 0x1400c9320
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c92d0

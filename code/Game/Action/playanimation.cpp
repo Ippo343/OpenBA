@@ -129,9 +129,9 @@ int  PlayAnimation::AbstractImpl(void* actionStack) {
 //   self->_field38 += *time;
 //   return (self->_field38 < self->_field30);
 // ============================================================
-int  PlayAnimation::Execute(void* actionStack, void* time) {
+int  PlayAnimation::Execute(void* actionStack, const System::Time* time) {
     (void)actionStack;
-    int64_t elapsed = *(int64_t*)time;   // LEFT: Action::Execute's time parameter is void* (Action.h)
+    int64_t elapsed = time->_ticks;
     _field38._ticks += elapsed;
     return (_field38._ticks < _field30._ticks) ? 1 : 0;
 }

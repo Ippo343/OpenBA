@@ -808,9 +808,9 @@ void TornadoComponent::Startup() {
 // Every frame: check the particle is still alive (else self-destruct), advance
 // along the path, integrate the position, damage, then push the new transform and
 // audio position out.
-void TornadoComponent::Tick(void* time) {
+void TornadoComponent::Tick(const System::Time* time) {
     Tornado_ReportArmsOnce();
-    const System::Time* dt = reinterpret_cast<const System::Time*>(time);   // B.3.8 bridge (Tick takes void*)  LEFT: SIG Component::Tick(void* time)
+    const System::Time* dt = time;
     TornadoDescription* desc = TornadoDesc(this);
 
     GameUpdateLoop* gw = GameWorld();

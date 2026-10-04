@@ -356,7 +356,7 @@ void ModelComponent::OnRemove() {
 // If not animating, clears draw flag bit 2 from _flags, notifies entity.
 // NOTE: RDX (time) is forwarded implicitly by the caller.
 
-void ModelComponent::Tick(void* time) {
+void ModelComponent::Tick(const System::Time* time) {
     // The embedded MeshInstance (+0x28) is always constructed (the ctor builds it), so
     // the old null-slot test of its table is gone with the by-name call.
     Graphics::MeshInstance* mesh = &meshInstance;

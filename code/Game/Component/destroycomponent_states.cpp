@@ -952,12 +952,12 @@ using DestroyDispatch = ::ControllerLive::Dispatcher<DestroyCtrlTag>;
 // column, the elapsed Time.
 static char DestroyState3Enter(DestroyComponent* c, StateMachine* sm)  { return c->State3Enter(sm); }   // 0x14011d7b0
 static char DestroyState4Enter(DestroyComponent* c, StateMachine* sm)  { return c->State4Enter(sm); }   // 0x14011cfd0
-static char DestroyState4Tick(DestroyComponent* c, StateMachine* sm, void* /*time*/)   { return c->State4Tick(sm); }    // 0x14011cec0
+static char DestroyState4Tick(DestroyComponent* c, StateMachine* sm, const System::Time* /*time*/)   { return c->State4Tick(sm); }    // 0x14011cec0
 static char DestroyState5Enter(DestroyComponent* c, StateMachine* /*sm*/)            { return c->State5Enter(); }     // 0x14011cc70
-static char DestroyState5Tick(DestroyComponent* c, StateMachine* /*sm*/, void* /*time*/)             { return c->State5Tick(); }      // 0x14011c120
+static char DestroyState5Tick(DestroyComponent* c, StateMachine* /*sm*/, const System::Time* /*time*/)             { return c->State5Tick(); }      // 0x14011c120
 static char DestroyState6Enter(DestroyComponent* c, StateMachine* /*sm*/)            { return c->State6Enter(); }     // 0x14011d4d0
 static char DestroyState6Update(DestroyComponent* c, StateMachine* /*sm*/)           { return c->State6Update(); }    // 0x14011d400
-static char DestroyState6Tick(DestroyComponent* c, StateMachine*, System::Time* t) { return c->State6Tick(t); }   // 0x14011d490
+static char DestroyState6Tick(DestroyComponent* c, StateMachine*, const System::Time* t) { return c->State6Tick(t); }   // 0x14011d490
 static char DestroyState7Rebuild(DestroyComponent* c, StateMachine* sm) { return c->State7Rebuild(sm); }  // 0x14011d2a0
 static char DestroyState7Remove(DestroyComponent* c, StateMachine* sm)  { return c->State7Remove(sm); }   // 0x14011d1a0
 static char DestroyCancel(DestroyComponent* c, StateMachine* sm)        { return c->CancelDemolition(sm); }  // 0x14011bcc0
@@ -974,7 +974,7 @@ extern "C" void DestroyCtrl_PopulateTable() {
 
     // sub_3e50(6, A=d4d0, B=d400, D=d490): A -> enter, B -> update, D -> trans38.
     TableRegisterState(t, 6, &DestroyState6Enter,
-                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<DestroyComponent>::Tick>(&DestroyState6Tick),   // LEFT: its time is System::Time*; Controller::Tick / StateMachine::Tick carry it as void* (ControllerComponent.h, statemachinecomponent.cpp)
+                       nullptr, &DestroyState6Tick,
                        &DestroyState6Update);
     TableAddTransition(t, 7, nullptr);
     // sub_4020(2, d390) — state 6's only event.

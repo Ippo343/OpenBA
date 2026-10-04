@@ -63,7 +63,7 @@ public:
     char EnterWalkIn();                                           // 0x14004faf0 state 0
     char TickWalkIn(StateMachine* sm);                                    // 0x14004f9c0
     char OnLeave(StateMachine* sm);                                       // 0x14004f4a0 event 1
-    char TickLoiter(void* time);                                  // 0x14004f600 state 1
+    char TickLoiter(const System::Time* time);                                 // 0x14004f600 state 1
     char OnDestroy();                                             // 0x14004f420 event 0
     char EnterWalkOut();                                          // 0x14004f5e0 state 2
     char TickWalkOut();                                           // 0x14004f530

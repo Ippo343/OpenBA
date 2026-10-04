@@ -477,7 +477,7 @@ char ClearAreaComponent::State2Enter() {
 // The state table's handler adapters: the controller hands each one its owner
 // (node+0x18), the ClearAreaComponent.
 static char CA_State0Enter(ClearAreaComponent* c, StateMachine* sm)    { return c->State0Enter(sm); }     // 0x140117960
-static char CA_State0PerFrame(ClearAreaComponent* c, StateMachine* sm, void* /*time*/) { return c->State0PerFrame(sm); }  // 0x1401178f0
+static char CA_State0PerFrame(ClearAreaComponent* c, StateMachine* sm, const System::Time* /*time*/) { return c->State0PerFrame(sm); }  // 0x1401178f0
 static char CA_State0Update(ClearAreaComponent* c, StateMachine* /*sm*/)             { return c->State0Update(); }      // 0x140117890
 static char CA_State1Enter(ClearAreaComponent* c, StateMachine* sm)    { return c->State1Enter(sm); }     // 0x140117820
 static char CA_State2Enter(ClearAreaComponent* c, StateMachine* /*sm*/)              { return c->State2Enter(); }       // 0x1401177f0

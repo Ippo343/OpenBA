@@ -472,7 +472,7 @@ void StorageDisplayComponent::OnRemove() {
 // body lays out the w*h pile grid (Draw) and then allocates the pile meshes
 // from the StorageComponent contents (Refresh); both early-out cheaply when
 // unchanged.
-void StorageDisplayComponent::Update(void* /*time*/) {
+void StorageDisplayComponent::Update(const System::Time* /*time*/) {
     StorageDisplayComponent::OnAdded();   // the slot-6 body, called directly
     Refresh();
 }

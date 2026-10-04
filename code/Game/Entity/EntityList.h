@@ -106,7 +106,7 @@ struct EntityList {
     uint8_t         _padE1[7];          // +0xE1
 
     // ---- members (retail addresses; bodies in entitylist.cpp) ----
-    void Update(void* time);                          // 0x1400c4090 (time: a System::Time*)
+    void Update(const System::Time* time);                          // 0x1400c4090 (time: a System::Time*)
     void PreUpdate();                                 // 0x1400c3bd0
     void PostUpdateStaging();                         // 0x1400c3ab0
     void PostUpdate();                                // 0x1400c43d0

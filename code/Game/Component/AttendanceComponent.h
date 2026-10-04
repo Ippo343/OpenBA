@@ -49,7 +49,7 @@ public:
     ~AttendanceComponent() override;                              // [0]  0x140002860
     void          Persist(IO::Stream& stream) override;                 // [3]  0x140044410
     void          OnRemove() override;                            // [7]  0x1400443d0
-    void          Update(void* time) override;                    // [9]  0x140044370
+    void          Update(const System::Time* time) override;                    // [9]  0x140044370
     uint32_t      CommandMask(int command) override;              // [13] 0x140043f10
     void          Command(int command) override;                  // [14] 0x140043e80
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0

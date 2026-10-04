@@ -64,9 +64,9 @@ public:
         // [5] transition action
         virtual void OnTransition(StateMachine* stateMachine, int stateIndex, int transitionIndex) = 0;
         // [6] per-frame handler, StateMachine::Tick useAlt == 0 (column +0x10)
-        virtual char Tick(StateMachine* stateMachine, void* time, int stateIndex) = 0;
+        virtual char Tick(StateMachine* stateMachine, const System::Time* time, int stateIndex) = 0;
         // [7] per-frame handler, StateMachine::Tick useAlt == 1 (column +0x18)
-        virtual char TickAlt(StateMachine* stateMachine, void* time, int stateIndex) = 0;
+        virtual char TickAlt(StateMachine* stateMachine, const System::Time* time, int stateIndex) = 0;
         // [8] retail (Well 0x140010260): `XOR EAX,EAX; CMP [count],EAX; SETNZ AL`
         virtual char HasStates() = 0;
 

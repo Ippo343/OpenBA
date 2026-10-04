@@ -54,17 +54,17 @@ public:
     // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(IO::Stream& stream) override;                   // [3] 0x1400c4b40
     // [4]-[7] B4 P2 S2, LEFT void*: retail's actionStack is the ActionStack at
-    // CharacterComponent +0x48 and `time` a System::Time*, but every caller holds them
-    // untyped (CitizenAI_ActionExecutor_c4c50 takes the stack as int64_t* and the time
-    // as void*; CharacterComponent declares +0x48 as separate fields, not an
-    // ActionStack; Update / Tick receive the time as void*). Typing waits on those.
+    // CharacterComponent +0x48, but every caller holds it untyped
+    // (CitizenAI_ActionExecutor_c4c50 takes the stack as int64_t*; CharacterComponent
+    // declares +0x48 as separate fields, not an ActionStack). `time` is the System::Time*
+    // Component::Tick / Update receive (wave X: typed).
     virtual int  AbstractImpl(void* actionStack) = 0;             // [4] _purecall
-    virtual int  Execute(void* actionStack, void* time);          // [5] 0x1400c4a90 ret 0
+    virtual int  Execute(void* actionStack, const System::Time* time);          // [5] 0x1400c4a90 ret 0
     // [6] args from retail's only caller, Character_UpdateAnimation 0x1400c4f80:
     // RDX = the action stack (CharacterComponent+0x48, `MOV RDX,RSI` 0x1400c4fc4),
     // R8 = the Time* CharacterComponent::Update got in RDX (`MOV R8,RDI` 0x1400c4fbe)
     // before `CALL [RAX+0x30]` 0x1400c4fc7. The bodies read neither.
-    virtual void Enter(void* actionStack, void* time);            // [6] 0x1400c4b90 RET
+    virtual void Enter(void* actionStack, const System::Time* time);            // [6] 0x1400c4b90 RET
     virtual void Exit(void* actionStack);                         // [7] 0x1400c4ba0 RET
     virtual void CheckEntity();                                   // [8] 0x1400c4a30 RET
     // [9] "does this action reference the entity?": RDX = an InternalPtr<ComponentEntity>
