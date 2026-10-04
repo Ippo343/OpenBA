@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class AnimalDescription final : public Description {
     DECLARE_EXE_TYPE(AnimalDescription)
 
@@ -47,7 +49,9 @@ public:
     uint8_t _pad3d[3];                          // +0x3d never written by the ctor
     float _f40;                                 // +0x40
     uint8_t _pad44[4];                          // +0x44 never written by the ctor
-    void* _refs;                                // +0x48 External* array data
+    ComponentDescription** _refs;               // +0x48 Array<ExternalPtr<ComponentDescription>> data (Serialize
+                                                //       0x140107050 -> 0x1400049c0 checks each entry against
+                                                //       ComponentDescription's cell 0x1401c7318)
     int32_t _refCount;                          // +0x50
     int32_t _refCap;                            // +0x54
 };

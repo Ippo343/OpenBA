@@ -272,9 +272,8 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     uint32_t capacity = static_cast<uint32_t>(storage->capacity);
 
     // --- CreateRawMaterial action per template ---
-    // LEFT: AnimalDescription::_refs (block COMP-a's header) is declared void*; its
-    // elements are the raw-material ComponentDescription templates.
-    ComponentDescription* const* templates = static_cast<ComponentDescription* const*>(description->_refs);
+    // AnimalDescription::_refs: the raw-material ComponentDescription templates.
+    ComponentDescription* const* templates = description->_refs;
     if (0 < description->_refCount) {
         int i = 0;
         do {

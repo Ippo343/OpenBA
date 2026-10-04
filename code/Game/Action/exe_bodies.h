@@ -51,7 +51,6 @@ void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
 void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx);  // 0x1400f8e30
 void ActCt_HideTool_1176e0(void* entityV);  // 0x1401176e0
-void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId);  // 0x1401173b0
 
 // ---- action_base_hunt.cpp
 void* ActHunt_FindComponent_5500(uintptr_t entity, void* retIBP);  // 0x140005500
