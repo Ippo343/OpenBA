@@ -79,7 +79,7 @@ NumberEditElement::~NumberEditElement() {}
 // FinalizeText.
 // ---------------------------------------------------------------------------
 void NumberEditElement::FinalizeText() {
-    const int32_t v = System::String::ToInteger(_text);
+    const int32_t v = System::String::ToInteger(_text._data);
 
     int32_t clamped = _min;
     if (_min <= v) {
@@ -91,7 +91,7 @@ void NumberEditElement::FinalizeText() {
     // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns BY VALUE:
     // its hidden return slot is `tmp`.
     new (static_cast<void*>(&tmp)) System::String(System::String::Format("%i", clamped));
-    AssignString(_text, tmp);
+    AssignString(_text._data, tmp);
     ReleaseStringLocal(tmp);
 }
 

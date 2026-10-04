@@ -170,7 +170,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     Element* up = upRaw->IsDerivedFrom(kButtonTypeId)
                   ? upRaw : nullptr;
     {
-        const int32_t v = System::String::ToInteger(edit->_text);
+        const int32_t v = System::String::ToInteger(edit->_text._data);
         up->Enable(v < edit->_max);                          // slot 8
     }
 
@@ -179,7 +179,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     Element* down = downRaw->IsDerivedFrom(kButtonTypeId)
                     ? downRaw : nullptr;
     {
-        const int32_t v = System::String::ToInteger(edit->_text);
+        const int32_t v = System::String::ToInteger(edit->_text._data);
         down->Enable(edit->_min < v);                        // slot 8
     }
 
@@ -193,7 +193,7 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     }
     if (step == 0) return;
 
-    const int32_t v = System::String::ToInteger(edit->_text);
+    const int32_t v = System::String::ToInteger(edit->_text._data);
     // ?SetValue@NumberEditElement@UI@@ (0x1800d4bb0).
     edit->SetValue(step + v);
 

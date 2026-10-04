@@ -394,7 +394,7 @@ int32_t SpinnerElement::GetMaxValue() const {
 int32_t SpinnerElement::GetValue() const {
     const NumberEditElement* child = static_cast<const NumberEditElement*>(
         FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
-    return System::String::ToInteger(child->_text);
+    return System::String::ToInteger(child->_text._data);
 }
 
 // ---- ?IsActive@SpinnerElement@UI@@QEBA_NXZ  0x1800d7c30 --------------------
@@ -427,7 +427,7 @@ void SpinnerElement::SetMinMax(int32_t minValue, int32_t maxValue) {
         FirstChildIfDerived(this, UI::NumberEditElement::TypeId()));
     child->_min = minValue;
     child->_max = maxValue;
-    const int32_t clamped = System::String::ToInteger(child->_text);
+    const int32_t clamped = System::String::ToInteger(child->_text._data);
     child->SetValue(clamped);
 }
 
@@ -633,7 +633,7 @@ void ComboElement::SetCurrentItem(int32_t index) {
 
 // ---- ?GetValue@NumberEditElement@UI@@QEBAHXZ  0x1800d4b50 ------------------
 int32_t NumberEditElement::GetValue() const {
-    return System::String::ToInteger(_text);
+    return System::String::ToInteger(_text._data);
 }
 
 // ---- ?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z  0x1800d4b70 ---------------
@@ -642,7 +642,7 @@ int32_t NumberEditElement::GetValue() const {
 void NumberEditElement::SetMinMax(int32_t minValue, int32_t maxValue) {
     _min = minValue;
     _max = maxValue;
-    const int32_t clamped = System::String::ToInteger(_text);
+    const int32_t clamped = System::String::ToInteger(_text._data);
     SetValue(clamped);
 }
 
@@ -694,12 +694,12 @@ void EditElement::SetText(const System::String& text) {
         // ??9String@System@@QEBA_NAEBV01@@Z  retail 0x18003ffe0 — the body is
         // System::String::operator== negated, so this is the class operator.
         const bool notEqual =
-            *reinterpret_cast<const System::String*>(&_text) != text;   // LEFT: H5 EditElement::_text (see EditElement.h GetText: blocked by an X-GS reader, noiseui.cpp:154)
+            _text != text;
         if (notEqual) {
             MarkNeedsSizeCalcUpToRoot(this);
         }
 
-        char* oldPtr = _text;
+        char* oldPtr = _text._data;
         char* newPtr = text._data;
         if (oldPtr != newPtr) {
             if (oldPtr != nullptr) {
@@ -709,7 +709,7 @@ void EditElement::SetText(const System::String& text) {
                     System::MemoryAllocator::MemFree(oldPtr - 8);
                 }
             }
-            _text = newPtr;
+            _text._data = newPtr;
             if (newPtr != nullptr) {
                 RtSystem::StringRefCount(newPtr) += 1;
             }

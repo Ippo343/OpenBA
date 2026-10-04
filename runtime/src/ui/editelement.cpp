@@ -170,8 +170,9 @@ EditElement::~EditElement() {
     if (_active != 0) {
         --::Input::Configuration::_singleton->_keyMap->_suspendCount;
     }
-    ReleaseString(&_filter);
-    ReleaseString(&_text);
+    // `_filter` (+0xd8) then `_text` (+0xc8) are released by their own
+    // destructors, in reverse declaration order: retail's 0x1800d0e85 /
+    // 0x1800d0ebb order.
 }
 
 // ============================================================================
@@ -189,12 +190,12 @@ void EditElement::ComputeSize() {
     Font* font = _font;
 
     if (_password == 0) {
-        char* text = _text;
+        char* text = _text._data;
         _layoutWidth = 0; _layoutHeight = 0;                 // one qword store
         _layoutWidth  = font->ComputeLineLayout(text, StrLen(text), 0, 0, -1, 0, nullptr);
         _layoutHeight = font->_lineHeight;
     } else {
-        char* masked = BuildMask(StrLen(_text));
+        char* masked = BuildMask(StrLen(_text._data));
         _layoutWidth = 0; _layoutHeight = 0;                 // one qword store
         _layoutWidth  = font->ComputeLineLayout(masked,
                                                 StrLen(masked), 0, 0, -1, 0, nullptr);
@@ -241,9 +242,9 @@ void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     // the end, so the field itself is untouched).
     char* shown = nullptr;
     if (_password != 0) {
-        shown = BuildMask(StrLen(_text));
-    } else if (_text != nullptr) {
-        shown = _text;
+        shown = BuildMask(StrLen(_text._data));
+    } else if (_text._data != nullptr) {
+        shown = _text._data;
         ++RtSystem::StringRefCount(shown);
     }
 
@@ -311,11 +312,11 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         _active = 1;
         _blinkOn = 1;
         _blinkAccumulator = 0;
-        _caret = StrLen(_text);
+        _caret = StrLen(_text._data);
 
         const int relX = st.mouseX - _layoutLeft;
-        for (int i = 0; i < StrLen(_text); ++i) {
-            const int cx = _font->ComputeCharacterPosition(AsString(_text), i + 1);
+        for (int i = 0; i < StrLen(_text._data); ++i) {
+            const int cx = _font->ComputeCharacterPosition(_text, i + 1);
             if (relX >= 0 && relX <= cx) { _caret = i; break; }
         }
     }
@@ -360,28 +361,28 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
     }
     if (Down(kKeyRight)) {
         _caret += 1;
-        const int len = StrLen(_text);
+        const int len = StrLen(_text._data);
         if (_caret > len) _caret = len;
     }
     if (dev->_keyboard[kKeyHome].pressed != 0) _caret = 0;
-    if (dev->_keyboard[kKeyEnd].pressed  != 0) _caret = StrLen(_text);
+    if (dev->_keyboard[kKeyEnd].pressed  != 0) _caret = StrLen(_text._data);
 
     // ---- backspace / delete ----------------------------------------------
     // System::String::RemoveAt (0x1800c86b0, retslot) and operator= (0x1800c9810).
     if (Down(kKeyBack) && _caret > 0) {
         char* tmp = nullptr;
-        new (static_cast<void*>(&tmp)) System::String(Str(&_text).RemoveAt(_caret - 1));
-        Str(&_text) = Str(&tmp);
+        new (static_cast<void*>(&tmp)) System::String(_text.RemoveAt(_caret - 1));
+        _text = Str(&tmp);
         ReleaseString(&tmp);
         _caret -= 1;
         SetNeedsSizeCalc();
     }
 
     if (Down(kKeyDelete)) {
-        if (_caret < StrLen(_text)) {
+        if (_caret < StrLen(_text._data)) {
             char* tmp = nullptr;
-            new (static_cast<void*>(&tmp)) System::String(Str(&_text).RemoveAt(_caret));
-            Str(&_text) = Str(&tmp);
+            new (static_cast<void*>(&tmp)) System::String(_text.RemoveAt(_caret));
+            _text = Str(&tmp);
             ReleaseString(&tmp);
             SetNeedsSizeCalc();
         }
@@ -396,16 +397,16 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         const uint8_t ch = static_cast<uint8_t>(SelectCharacter(k));
         if (ch == 0) continue;
 
-        if (StrLen(_text) >= _maxLength) continue;
+        if (StrLen(_text._data) >= _maxLength) continue;
 
         // The filter: when it is a non-empty String, the character must appear
         // in it. When it is null or empty, anything goes.
-        char* filter = _filter;
+        char* filter = _filter._data;
         const int filterLen = StrLen(filter);
         if (filter != nullptr && filterLen > 0) {
             bool found = false;
             for (int m = 0; m < filterLen; ++m) {
-                if (static_cast<uint8_t>(_filter[m]) == ch) { found = true; break; }
+                if (static_cast<uint8_t>(_filter._data[m]) == ch) { found = true; break; }
             }
             if (!found) continue;
         }
@@ -440,9 +441,9 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
 
         char* ins = nullptr;
         new (static_cast<void*>(&ins)) System::String(                // 0x1800c8510, retslot = &ins
-            Str(&_text).InsertAt(_caret, Str(&one)));
+            _text.InsertAt(_caret, Str(&one)));
         char** ret = &ins;
-        AssignStringInline(&_text, ret);
+        AssignStringInline(&_text._data, ret);
         ReleaseString(&ins);
         ReleaseString(&one);
 
