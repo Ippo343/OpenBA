@@ -53,6 +53,7 @@
 #include "Game/Disease.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/PopulationDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
+#include "video/Context.h"     // Video::Context's submit counters (+0x2150..+0x215C)
 #include "Component/exe_bodies.h"             // B3R: the bodies called by name
 #include "Action/exe_bodies.h"                // B3R: Pf_RecursiveChildSum_123070, Pf_EntityResolvePos_2e20
 #include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
@@ -335,7 +336,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
                     // (RawMaterialComponent_RegisterRawMaterial's member.)
                     // LEFT: the factory walk hands out const Externals; the member takes non-const.
                     GameUpdateLoop::_singleton->m_citizenList->RegisterRawMaterial(
-                        const_cast<ComponentDescription*>(buildEntity));
+                        const_cast<ComponentDescription*>(buildEntity));   // LEFT: CitizenBehavior::RegisterRawMaterial takes ComponentDescription* (Entity/CitizenBehavior.h); the factory walk hands out const
                 }
                 break;
             }
@@ -512,10 +513,10 @@ static void Game_SpawnCitizens_Impl() {
                             float age = randAge * (maxAge - minAge) + minAge;
 
                             // LEFT: the body takes int64_t for its receiver and key (COMP-b's declaration).
-                            CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(citizen), spawnPos,
+                            CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(citizen), spawnPos,   // LEFT: SIG CitizenComp_DeferredInit_117080 (int64_t receiver; citizencomponent_lifecycle.cpp, founding_spawn.cpp)
                                                       genderFlag, '\0',
                                                       age, '\x01', &parentIBP,
-                                                      reinterpret_cast<int64_t>(profList));   // 0x140117080
+                                                      reinterpret_cast<int64_t>(profList));   // 0x140117080   // LEFT: SIG CitizenComp_DeferredInit_117080 (int64_t spawn key)
 
                             // Register entity with entity manager
                             // Use the new entity (the InternalBasePtr value) as the entity ref
@@ -691,15 +692,14 @@ void DebugUI::OnUpdate(const System::Time& /*time*/) {
         // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
         ::Engine::MainLoop* engineObj = ::Engine::MainLoop::_singleton;
         if (!engineObj) return;
-        // LEFT: MainLoop::_context is void* (the Video::Context, R-VIDEO's).
-        uintptr_t engineState = (uintptr_t)engineObj->_context;
+        const Video::Context* engineState = engineObj->_context;
         if (!engineState) return;
 
         // Read and display 4 debug counters from engine state
-        if (numberBatches) numberBatches->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2158)));
-        if (numberDrawCalls) numberDrawCalls->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x215C)));
-        if (numberTriangles) numberTriangles->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2150)));
-        if (numberVertices) numberVertices->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));
+        if (numberBatches) numberBatches->SetValue(engineState->_drawsSubmitted);      // +0x2158
+        if (numberDrawCalls) numberDrawCalls->SetValue(engineState->_objectsSubmitted); // +0x215C
+        if (numberTriangles) numberTriangles->SetValue(engineState->_trianglesSubmitted); // +0x2150
+        if (numberVertices) numberVertices->SetValue(engineState->_verticesSubmitted);  // +0x2154
 
         // Read frame time and total time from engine object (NOT engineState)
         // Original: *(*(exref 0x140151440) + 0x68) and + 0x58

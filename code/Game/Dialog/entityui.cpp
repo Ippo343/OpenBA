@@ -62,7 +62,7 @@ static void EntityTrackingSet_Remove_Impl(TrackedEntityNode** root, ComponentEnt
         } else if (*key <= node->key) {
             // Found the node — delete it
             // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
-            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740
+            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740   // LEFT: SIG PlayerTrade_BSTRemove_25740 (B4 FORWARD; Work/tradework.cpp still calls it)
             return;
         } else {
             node = node->right;

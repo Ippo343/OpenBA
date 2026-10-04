@@ -152,7 +152,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
                  upgradeConfig->_target, static_cast<void*>(destroyComp),
                  reinterpret_cast<void*>(&RemovalCalc_StateMachine_dfa0));   // LEFT: printing a function address
     std::fflush(stderr);
-    RemovalCalc_StateMachine_dfa0(reinterpret_cast<int64_t>(destroyComp));   // 0x14011dfa0  LEFT: takes int64_t (Player/exe_bodies.h)
+    destroyComp->RunStateMachine();   // 0x14011dfa0
 }
 
 // ============================================================

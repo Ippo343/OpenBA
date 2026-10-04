@@ -316,7 +316,7 @@ void ResidenceUI::OnUpdateLayout() {
                     // would fault on garbage. 0 (empty String) is fine.
                     uintptr_t nameBuf = citizen->name;
                     if (textName && (nameBuf == 0 || RUI_OkPtr(reinterpret_cast<const void*>(nameBuf))))  // CAST-OK: ptr_int
-                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&citizen->name));   // LEFT: H5 CitizenComponent::name (CIT-4)
+                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&citizen->name));   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (Component/CitizenComponent.h)
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     int ageYears = (int)(citizen->age * ageMul);

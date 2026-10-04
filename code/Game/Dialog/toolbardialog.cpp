@@ -443,8 +443,8 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
 // Tutorial/tutorialsetuprestrictplayer.cpp, via EntityUI_SetEditMode_Impl the
 // Player tools and standalone harnesses).
 void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
-    reinterpret_cast<PlayerToolManager*>(gameSubsys)->SelectTool(
-        reinterpret_cast<ComponentDescription*>(groupId));
+    reinterpret_cast<PlayerToolManager*>(gameSubsys)->SelectTool(   // LEFT: SIG Toolbar_ShowGroup_Impl (B4 FORWARD: nomadcomponent.cpp, gameupdateloop.cpp, tutorialsetup*.cpp pass void* / int64_t)
+        reinterpret_cast<ComponentDescription*>(groupId));   // LEFT: SIG Toolbar_ShowGroup_Impl (B4 FORWARD: nomadcomponent.cpp, gameupdateloop.cpp, tutorialsetup*.cpp pass void* / int64_t)
 }
 
 // ============================================================
@@ -567,8 +567,8 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
         insertBuf[2] = 0;                                  // flags=0
 
         void* retNode = nullptr;
-        ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&field_0x50), &retNode, insertBuf);   // 0x140014890
-        bstNode = reinterpret_cast<TrackedEntityNode*>(retNode);
+        ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&field_0x50), &retNode, insertBuf);   // 0x140014890   // LEFT: SIG ToolbarUtility_BstInsert_4890 (int64_t* root holder, void** out)
+        bstNode = reinterpret_cast<TrackedEntityNode*>(retNode);   // LEFT: SIG ToolbarUtility_BstInsert_4890 (void** out)
     }
 
     // Set the open flag
@@ -607,11 +607,10 @@ static void HarnessDumpElemTree(UI::Element* elem, int depth, int* counter) {
 // GUI_PLAN Keystone F, Phase 4 — harness entry. Fires the utility-dialog open path
 // (toolbar case 2) headlessly: pass the utility item's Description ptr (item+0x58,
 // e.g. a resolved Template\Utility*.rsc) as `param`. Mirrors the case-2 dispatch.
-// B4 FORWARD: 1 outside caller (standalone/tool_harness.cpp).
-extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
+// Its one caller is standalone/tool_harness.cpp.
+extern "C" void ToolbarUtility_HarnessOpen(PlayerToolManager* gameSubsys, ComponentDescription* param) {
     g_HarnessLastUtilityDialog = nullptr;
-    reinterpret_cast<PlayerToolManager*>(gameSubsys)->ToggleUtilityDialog(
-        reinterpret_cast<ComponentDescription*>(param));
+    gameSubsys->ToggleUtilityDialog(param);
 }
 
 // Harness: fetch a named controller from the just-opened utility dialog and
@@ -742,7 +741,7 @@ UI::DialogInstance* PlayerToolManager::OpenPauseMenu() {
         Math::Transform3 transform3 = viewTransform.AsTransform3();
         // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
         // LEFT: PlayerController::camera is raw storage (B.4 H5, the Game block's).
-        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);
+        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);   // LEFT: H5 PlayerController::camera is raw storage (Game/PlayerToolManager.h)
     }
 
     // Step 4: Load "Dialog/Pause.rsc" resource
@@ -776,7 +775,7 @@ UI::DialogInstance* PlayerToolManager::OpenPauseMenu() {
 
 // B4 FORWARD: 1 outside caller (standalone/pausemenu_harness.cpp).
 extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
-    return reinterpret_cast<PlayerToolManager*>(gameSubsys)->OpenPauseMenu();
+    return reinterpret_cast<PlayerToolManager*>(gameSubsys)->OpenPauseMenu();   // LEFT: SIG EntityUI_OpenPauseMenu (standalone/pausemenu_harness.cpp declares it with void*)
 }
 
 // ============================================================
@@ -987,13 +986,13 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
 
         // Get toolbar item's display string and sprite
         UI::String uiString(Object::ExternalPtr<UI::StringTable>(item->_field20),
-                            *reinterpret_cast<const System::String*>(&item->_field30));
+                            *reinterpret_cast<const System::String*>(&item->_field30));   // LEFT: H5 ToolbarItem::_field30 is void* String storage (Game/Toolbar.h)
 #ifdef _DEBUG
         UI::Sprite uiSprite;
-        Debug_Sprite_Ctor(&uiSprite, item->_field28, reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 the String is raw storage, as on the release arm
+        Debug_Sprite_Ctor(&uiSprite, item->_field28, reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 ToolbarItem::_field38 is void* String storage (Game/Toolbar.h)
 #else
         UI::Sprite uiSprite(Object::ExternalPtr<UI::SpriteSheet>(item->_field28),
-                            *reinterpret_cast<const System::String*>(&item->_field38));
+                            *reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 ToolbarItem::_field38 is void* String storage (Game/Toolbar.h)
 #endif
 
         // --- Configure button element (skip for SpeedDisplay) ---
@@ -1559,7 +1558,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
                 panelController->checkPin->_checked = 1;
 
                 // LEFT: 0x1400666b0's declaration takes the EntityUI as int64_t (PLAYER's header).
-                PlayerTrade_EntityUI_66b0(reinterpret_cast<int64_t>(panelController));   // 0x1400666b0
+                PlayerTrade_EntityUI_66b0(reinterpret_cast<int64_t>(panelController));   // 0x1400666b0   // LEFT: SIG PlayerTrade_EntityUI_66b0 (int64_t; Player/exe_bodies.h)
             }
         }
     }
@@ -1650,7 +1649,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
         Math::Transform3 transform3 = viewTransform.AsTransform3();
         // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
         // LEFT: PlayerController::camera is raw storage (B.4 H5, the Game block's).
-        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);
+        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);   // LEFT: H5 PlayerController::camera is raw storage (Game/PlayerToolManager.h)
     }
 
     // === Section 4: Select entity in EditTool ===
@@ -1685,7 +1684,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
 // B4 FORWARD: outside callers in Dialog/citizenui.cpp, entityui.cpp, townhallui.cpp,
 // workplaceui.cpp and residenceui.cpp's GoToCitizen (its entity is still raw).
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
-    reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(
-        reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),
-        reinterpret_cast<ComponentEntity* const*>(entityPtr));
+    reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(   // LEFT: SIG Toolbar_CenterOnEntity_Impl (B4 FORWARD: townhallui.cpp, workplaceui.cpp and others pass void*)
+        reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),   // LEFT: SIG Toolbar_CenterOnEntity_Impl (B4 FORWARD: townhallui.cpp, workplaceui.cpp and others pass void*)
+        reinterpret_cast<ComponentEntity* const*>(entityPtr));   // LEFT: SIG Toolbar_CenterOnEntity_Impl (B4 FORWARD: townhallui.cpp, workplaceui.cpp and others pass void*)
 }

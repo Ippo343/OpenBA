@@ -99,7 +99,7 @@ extern "C" int   PlacementTool_HarnessPreviewAtCell(PlacementTool* self, int cen
 // Phase 4: fire the utility-dialog open path (toolbar case 2) headlessly.
 //   ToolbarUtility_HarnessOpen(gameSubsys, param) — param = a utility item's
 //   Description ptr (a resolved Template\Utility*.rsc). Opens its management dialog.
-extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param);
+extern "C" void ToolbarUtility_HarnessOpen(PlayerToolManager* gameSubsys, ComponentDescription* param);
 
 // Map-render bring-up: create + upload the minimap GPU ImageBuffers
 // (gameWorld+0x148 +0x08 terrain / +0x10 overlay) from the raw pixel arrays.
@@ -823,7 +823,7 @@ void FireUtilityDialog() {
     const char* tmplName = Opt().utilityTemplate;
     if (!tmplName || tmplName[0] == '\0') tmplName = "Template\\UtilityMap.rsc";
     fprintf(stderr, "[ToolHarness] resolving utility template \"%s\"...\n", tmplName);
-    void* desc = StartTown_ResolveTemplateByPath(tmplName);
+    ComponentDescription* desc = StartTown_ResolveTemplateByPath(tmplName);
     fprintf(stderr, "[ToolHarness] utility Description -> %p\n", desc);
     if (!desc) {
         fprintf(stderr, "[ToolHarness] ERROR: utility template resolve returned null\n");
@@ -876,7 +876,7 @@ void FireUtilityDialog() {
     fprintf(stderr, "[ToolHarness] gameSubsys(gameWorld+0x120)=%p — opening utility dialog "
            "(param=Description %p)...\n", gameSys, desc);
 
-    ToolbarUtility_HarnessOpen(gameSys, reinterpret_cast<uint64_t>(desc));   // LEFT: the harness opener's uint64_t param (Dialog)
+    ToolbarUtility_HarnessOpen(gameSys, desc);
     fprintf(stderr, "[ToolHarness] utility-dialog open returned — dialog should now render "
            "(watch subsequent frames for crashes).\n");
 

@@ -164,8 +164,8 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (dstArray == srcArray) return;
     // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp, DLG-2, hands the
     // addresses of TrackerComponent's +0x38 / +0x28 field triples as void*).
-    TrackerComponent::EntryArray* dst = reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);
-    TrackerComponent::EntryArray* src = reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);
+    TrackerComponent::EntryArray* dst = reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);   // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp passes TrackerComponent's field triples)
+    TrackerComponent::EntryArray* src = reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);   // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp passes TrackerComponent's field triples)
     System::MemoryAllocator::MemFree(dst->data);
     dst->count = 0;          // the old qword store over count | capacity
     dst->capacity = 0;

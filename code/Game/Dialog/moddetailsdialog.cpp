@@ -111,10 +111,10 @@ static const RtIO::ModSetNode* BSTNext(const RtIO::ModSetNode* node) {
 // ============================================================
 static bool BSTContains(const RtIO::ModSetNode* root, const RtIO::ModSetNode* filename) {
     // LEFT: RtSystem::Filename is the POD mirror of System::Filename (R-IO's node).
-    const System::Filename& fnameRef = *reinterpret_cast<const System::Filename*>(&filename->key);
+    const System::Filename& fnameRef = *reinterpret_cast<const System::Filename*>(&filename->key);   // LEFT: POD RtIO::ModSetNode::key is RtSystem::Filename (runtime/types/io)
     const RtIO::ModSetNode* node = root;
     while (node) {
-        const System::Filename& nodeRef = *reinterpret_cast<const System::Filename*>(&node->key);
+        const System::Filename& nodeRef = *reinterpret_cast<const System::Filename*>(&node->key);   // LEFT: POD RtIO::ModSetNode::key is RtSystem::Filename (runtime/types/io)
         if (fnameRef < nodeRef) {
             node = node->left;
         } else if (nodeRef < fnameRef) {
@@ -173,9 +173,9 @@ void ModDetailsDialog::OnOpened() {
     imageIcon->SetSprite(&sprite);
 
     // --- Set text parameters ---
-    textName->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));
+    textName->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
-    textAuthor->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));
+    textAuthor->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
     // Path (the mod's Filename, as a new String)
     {
@@ -193,14 +193,14 @@ void ModDetailsDialog::OnOpened() {
         textVersion->SetParameter(0, formatted);
     }
 
-    textDescription->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));
+    textDescription->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
     // --- Build conflict list markup ---
     int conflictCount = mod.files.size;
     System::String conflictResult("^jl^f0^c0^lb");
     // The conflicting mods' filenames.
     // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
-    const RtSystem::Filename* conflictArray = static_cast<const RtSystem::Filename*>(mod.files.data);
+    const RtSystem::Filename* conflictArray = static_cast<const RtSystem::Filename*>(mod.files.data);   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
     for (int i = 0; i < conflictCount; i++) {
         // Find(const Filename&) takes the ADDRESS of the array element (retail

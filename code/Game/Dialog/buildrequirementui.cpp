@@ -285,7 +285,7 @@ void BuildRequirementUI::OnCreated() {
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8;
             // the new slot is written right after.
             uint32_t newCount = (uint32_t)labelCount + 1;
-            GameColl::ArrayAt<UI::Element*>(&labelData, 0).SetSize((int)newCount);
+            GameColl::ArrayAt<UI::Element*>(&labelData, 0).SetSize((int)newCount);   // LEFT: H5 BuildRequirementUI's +0x40 label Array is raw members (Dialog/BuildRequirementUI.h, row 441)
             labelData[newCount - 1] = wrappedElem;
 
             // Find next label
@@ -320,7 +320,7 @@ void BuildRequirementUI::OnCreated() {
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003600,
             // stride 4 align 4, no init arm (every new slot takes the fill). SetSize
             // writes the new count itself (the tree once double-counted here).
-            GameColl::ArrayAt<int32_t>(&countData, 0).SetSize(countCount + 1, entry.quantity);
+            GameColl::ArrayAt<int32_t>(&countData, 0).SetSize(countCount + 1, entry.quantity);   // LEFT: H5 BuildRequirementUI's count Array is raw members (Dialog/BuildRequirementUI.h, row 441)
 
             // The sub-entity of this entry (its raw material's description)
             ComponentDescription* subEntity = entry.material;

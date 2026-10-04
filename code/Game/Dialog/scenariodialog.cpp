@@ -346,7 +346,7 @@ void ScenarioDialog::LoadSelected() {
         // (runtime/types/io/Persistence.h); the refcounted assignments go
         // through it as a System::String.
         System::String& persistenceDataDir =
-            *reinterpret_cast<System::String*>(&persistence->_savePath);
+            *reinterpret_cast<System::String*>(&persistence->_savePath);   // LEFT: H5 Persistence::_savePath (examined and LEFT, see its header line)
         {
             System::Filename dataDir = ::IO::FileSystem::_singleton->GetDataDirectory();
             persistenceDataDir = dataDir.AsString();

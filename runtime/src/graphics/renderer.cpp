@@ -690,8 +690,7 @@ void MaterialInstance::AddTexture(const System::String& name,
     }
 }
 
-// B4 FORWARD: code/Game/Dialog/mapui.cpp, moddialog.cpp, noiseui.cpp and
-// saveloaddialog.cpp still call this.
+// B4 FORWARD: code/Game/Dialog/saveloaddialog.cpp still calls this.
 void MaterialInstance::AddTexture(const RtSystem::String& name,
                                   Object::ExternalPtr<Video::ImageBuffer> image) {
     AddTexture(RtSystem::Sys(name), image);

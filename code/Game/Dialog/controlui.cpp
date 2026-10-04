@@ -81,7 +81,7 @@ static void Trace(const char* what, ControlUI* self) {
         wantTid ? "ok" : "ZERO", wantTid, (void*)cfg,
         self ? (void*)self->_container : nullptr,
         self ? (void*)self->_dataSource : nullptr,
-        self ? (void*)self->button : nullptr,
+        self ? static_cast<void*>(self->button) : nullptr,
         self ? (void*)self->target : nullptr,
         cmd);
     std::fflush(stderr);

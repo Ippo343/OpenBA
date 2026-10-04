@@ -332,7 +332,7 @@ void CitizenUI::OnUpdateLayout() {
     bool okParam = CitUI_OkTextParam(textName);
     // LEFT: CitizenComponent::name is raw String storage (H5, COMP-b's header).
     if (okName && okParam)
-        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&ai->name));  // B.3.6 bridge
+        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&ai->name));  // B.3.6 bridge   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (Component/CitizenComponent.h)
 
     // --- Age number ---
     float ageFloat = ai->age;
@@ -395,9 +395,8 @@ void CitizenUI::OnUpdateLayout() {
             titled = ai->profession;
         }
         if (CitUI_OkPtr(titled)) {
-            // LEFT: Profession::stringName is raw String storage (H5, W0's header).
             UI::String text(Object::ExternalPtr<UI::StringTable>(titled->stringTable),
-                            *reinterpret_cast<const System::String*>(&titled->stringName));  // B.3.6 bridge
+                            titled->stringName);
             textProfession->SetText(&text);
         }
     }

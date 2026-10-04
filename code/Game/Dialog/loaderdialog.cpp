@@ -82,17 +82,16 @@ void* LoaderDialog::CreateInPlaceObject(void* storage) {
 extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr) {
     if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         if (retInternalBasePtr) {
-            *reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;
-            *(reinterpret_cast<uint64_t*>(retInternalBasePtr) + 1) = 0;
+            *reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;   // LEFT: SIG LoaderDialog_FromSplashDLT (Game/splash_loop_stubs.cpp declares it locally with void*)
+            *(reinterpret_cast<uint64_t*>(retInternalBasePtr) + 1) = 0;   // LEFT: SIG LoaderDialog_FromSplashDLT (Game/splash_loop_stubs.cpp declares it locally with void*)
         }
         return retInternalBasePtr;
     }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(LoaderDialog), 8);
     // LEFT: the C entry's `loop` is the GameLoadDialogLoopT (a DialogLoaderLoopT).
-    Engine::DialogLoaderLoopT* dlt = reinterpret_cast<Engine::DialogLoaderLoopT*>(loop);
-    // LEFT: DialogLoaderLoopT::_dialogExternal is void* (the loop's header).
+    Engine::DialogLoaderLoopT* dlt = reinterpret_cast<Engine::DialogLoaderLoopT*>(loop);   // LEFT: SIG LoaderDialog_FromSplashDLT (void* loop; Game/splash_loop_stubs.cpp)
     LoaderDialog* dlg = ::new (mem) LoaderDialog(&dlt->_ui,
-                                                 static_cast<const UI::Dialog*>(dlt->_dialogExternal),
+                                                 dlt->_dialogExternal,
                                                  Object::InternalPtr<UI::DialogInstance>());
     ::new (retInternalBasePtr) Object::InternalPtr<UI::DialogInstance>(dlg);
     return retInternalBasePtr;

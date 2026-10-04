@@ -139,7 +139,7 @@ void AchievementDialog::OnOpened() {
         // as one. The old hand-rolled copy guarded with `if (newCount != count)` —
         // that is retail's `if (newSize == oldSize) return;` early return, which
         // rtcoll::SetSizeCore already performs, so it is not carried forward.
-        auto& entries = GameColl::ArrayAt<Entry>(&entryData, 0);
+        auto& entries = GameColl::ArrayAt<Entry>(&entryData, 0);   // LEFT: H5 AchievementDialog's entry Array is three raw members (Dialog/AchievementDialog.h)
         entries.SetSize(entries.GetSize() + 1, Entry{imageIcon, imageStar, textTitle, textDesc});
     }
 

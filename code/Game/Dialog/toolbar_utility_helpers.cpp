@@ -123,7 +123,7 @@ extern "C" {
 // B4 FORWARD: the int64_t* / void** / uint64_t* signature is kept for
 // townhallui.cpp (DLG-e, running) and PlayerToolManager::ToggleUtilityDialog.
 void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData) {
-    SetHeader* set = reinterpret_cast<SetHeader*>(rootHolder);   // LEFT: SIG (B4 FORWARD, wave X)
+    SetHeader* set = reinterpret_cast<SetHeader*>(rootHolder);   // LEFT: SIG ToolbarUtility_BstInsert_4890 (int64_t* root holder; townhallui.cpp, toolbardialog.cpp, toolbar_utility.cpp)
     if (set->root == nullptr) {
         // Empty tree — the new node becomes the root.
         SetNode* n = static_cast<SetNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
@@ -175,7 +175,7 @@ void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t
         }
 
         // LEFT: 0x140014b40's declaration (Player/exe_bodies.h) takes int64_t*.
-        TradeWork_impl_4b40(rootHolder, reinterpret_cast<int64_t*>(&node));   // 0x140014b40
+        TradeWork_impl_4b40(rootHolder, reinterpret_cast<int64_t*>(&node));   // 0x140014b40   // LEFT: SIG TradeWork_impl_4b40 (X-G2-WAIT)
         *retNode = newNode;
     }
 
