@@ -60,9 +60,7 @@ void Component::Persist(IO::Stream& stream) {
 // component factories, the *_serialize.cpp bodies), registered in
 // standalone/reg_component_economy.cpp. A qualified (non-virtual) call, so a
 // hand-built receiver runs the same body.
-void Component_SerializeReimpl(void* self, IO::Stream& stream) {
-    reinterpret_cast<Component*>(self)->Component::Persist(stream);   // B.3.8 bridge
-}
+
 
 // 0x140031d10 — Object::ExternalPtr<Description>::Serialize (the Component's
 // +0x18 description reference; registered in standalone/reg_component_gap_B.cpp).
@@ -70,10 +68,9 @@ void Component_SerializeReimpl(void* self, IO::Stream& stream) {
 // to the shared ExternalPtrSerializeGeneric with Description's ti cell
 // 0x1401c72e0, read BY CELL as Description::TypeId() (ENDGAME B.3.9 RF: the
 // abstract base has its record).
-void Component_Helper1d10_Reimpl(void* extRefField, void* serializer) {
+void Component_Helper1d10_Reimpl(Description** extRefField, IO::Serializer* serializer) {
     const uint32_t typeId = Description::TypeId();
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(extRefField), serializer,
-                                &typeId, "Description");
+    ExternalPtrSerializeGeneric(extRefField, serializer, &typeId, "Description");
 }
 
 // [4]-[15]: retail's shared no-op bodies (`RET`; [13] `XOR EAX,EAX; RET`).
