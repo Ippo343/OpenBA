@@ -70,8 +70,7 @@ extern "C" void Region_Seed(void* gameObjV, int dim) {
 
     // 4) region-pair length cache (Map::regionPairCache) — needed by f810's cross-region path (a8ba0).
     void* pcV = Pf_RegionPairCache_Build();
-    // LEFT: Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to 0x1400a5d10's int64_t*).
-    map->regionPairCache = reinterpret_cast<int64_t*>(pcV);
+    map->regionPairCache = reinterpret_cast<RegionPairCache*>(pcV);   // LEFT: SIG Pf_RegionPairCache_Build (Action/exe_bodies.h returns void*)
 
     int regionCount = graph->regions.size;
     fprintf(stderr, "[RegionSeed] region map built: graph@%p coarseDim=%d regionNodes=%d pairCache=%p\n",
