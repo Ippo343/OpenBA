@@ -193,16 +193,14 @@ static void CopyVec1c(RawArray<TerrainPathPoint>* d, const RawArray<TerrainPathP
 // them; each takes ONE typed view of its element (LEFT: the callback signature
 // is Collection.h's). The element is RawArray<TerrainPathPoint>, the zero
 // stores of the header are its three fields (H7: retail's two qword stores).
-static void AssignRgPathVec(uint8_t* d, const uint8_t* s) {
-    RawArray<TerrainPathPoint>* dst = (RawArray<TerrainPathPoint>*)d;              // LEFT: ArraySpec callback (uint8_t*)
-    const RawArray<TerrainPathPoint>* src = (const RawArray<TerrainPathPoint>*)s;  // LEFT: ArraySpec callback (uint8_t*)
+// (reached through rtcoll::AssignAs / DestroyAs, Collection.h: the row's byte view)
+static void AssignRgPathVec(RawArray<TerrainPathPoint>* dst, const RawArray<TerrainPathPoint>* src) {
     dst->data = nullptr;
     dst->size = 0;
     dst->capacity = 0;
     CopyVec1c(dst, src);
 }
-static void DestroyRgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
-    RawArray<TerrainPathPoint>* slots = (RawArray<TerrainPathPoint>*)base;         // LEFT: ArraySpec callback (uint8_t*)
+static void DestroyRgPathVec(RawArray<TerrainPathPoint>* slots, int count) {
     for (int i = 0; i < count; ++i) {
         RawArray<TerrainPathPoint>* slot = &slots[i];
         rtcoll::MemFree(slot->data);                  // null-guarded inside
@@ -217,7 +215,8 @@ static void DestroyRgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
 // zero stores; no site here reaches it) is the value-initialising TInit.
 static const rtcoll::ArraySpec kSpec_RgPathVec = {  // exe 0x140024460
     "Array<Array<PathPoint>>", 0x10, 8,
-    &AssignRgPathVec, &rtcoll::TInit<RawArray<TerrainPathPoint>>, &DestroyRgPathVec, /*byteCopy*/false,
+    &rtcoll::AssignAs<RawArray<TerrainPathPoint>, &AssignRgPathVec>, &rtcoll::TInit<RawArray<TerrainPathPoint>>,
+    &rtcoll::DestroyAs<RawArray<TerrainPathPoint>, &DestroyRgPathVec>, /*byteCopy*/false,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
