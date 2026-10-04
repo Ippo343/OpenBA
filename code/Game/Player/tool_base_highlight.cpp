@@ -250,11 +250,7 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
         GeometryBatch tmpl;
         std::memset(&tmpl, 0, sizeof(tmpl));
         tmpl.slot = -1;
-        // LEFT: 0x14001fa80 is a C door in block ACT-b's Action/exe_bodies.h taking
-        // the array header and the element as integers.
-        Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(&decals),
-                               decals.size + 1,
-                               reinterpret_cast<uint64_t*>(&tmpl));
+        Pf_VectorResize60_fa80(&decals, decals.size + 1, &tmpl);   // 0x14001fa80
         System::MemoryAllocator::MemFree(tmpl.indices.data);
         System::MemoryAllocator::MemFree(tmpl.vertices.data);
         iVar3 = iVar2;

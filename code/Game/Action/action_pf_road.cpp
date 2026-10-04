@@ -964,11 +964,11 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                     for (int b = 0; b < batchCount; b++) {
                         RoadBatch& rec = batches.data[b];
                         if (0 < rec.vertices.size) {
-                            // LEFT: 0x14001fa80's C declaration (action_pf_pools.cpp; its other
-                            // caller is Player/tool_base_highlight.cpp) takes the array and
-                            // the element as integers.
-                            Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(meshBatches), meshBatches->size + 1,   // LEFT: SIG Pf_VectorResize60_fa80
-                                                   reinterpret_cast<uint64_t*>(&rec));   // 0x14001fa80   // LEFT: SIG Pf_VectorResize60_fa80
+                            // 0x14001fa80 resizes a GeometryBatch array; this file's RoadBatch is
+                            // its own copy of that record (+0x00 a source word, not the material;
+                            // RoadVertex, int16 indices), so the two arguments stay cast.
+                            Pf_VectorResize60_fa80(reinterpret_cast<RawArray<GeometryBatch>*>(meshBatches), meshBatches->size + 1,   // LEFT: RoadBatch (this file) is a copy of GeometryBatch: unify the record
+                                                   reinterpret_cast<const GeometryBatch*>(&rec));   // 0x14001fa80   // LEFT: RoadBatch (this file) is a copy of GeometryBatch: unify the record
                         }
                     }
                 }
