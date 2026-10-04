@@ -41,6 +41,8 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/exe_constants.h"   // B3R: kRdata_*
 #include <cstring>   // std::memcpy
+#include "Game/EventLog.h"   // GameUpdateLoop::m_eventNotifier, EventLogEntry
+#include "Game/Map.h"        // GameUpdateLoop::m_game
 
 // ============================================================
 // EventNotifyDialog_CreatePopup — modal popup creation (OnUpdate popup branch)
@@ -167,9 +169,8 @@ void EventNotifyDialog::OnOpened() {
     }
 
     // lastEventIndex = the event log's count (GameUpdateLoop +0x138, its +0x20).
-    // LEFT: the event log has no class (m_eventNotifier is void*, block GAME).
-    uintptr_t eventLog = (uintptr_t)GameUpdateLoop::_singleton->m_eventNotifier;
-    lastEventIndex = *(int32_t*)(eventLog + 0x20);
+    EventLog* eventLog = GameUpdateLoop::_singleton->m_eventNotifier;
+    lastEventIndex = eventLog->entryCount;
 }
 
 // ============================================================
@@ -183,7 +184,7 @@ void EventNotifyDialog::OnOpened() {
 // Trims excess entries beyond the slot count.
 
 void EventNotifyDialog::OnUpdate(const System::Time& time) {
-    uintptr_t eventLogPtr = (uintptr_t)GameUpdateLoop::_singleton->m_eventNotifier;
+    EventLog* eventLogPtr = GameUpdateLoop::_singleton->m_eventNotifier;
 
     // Phase 1: Decrement timers on shown notifications, remove expired ones
     if (entries._size > 0) {
@@ -207,7 +208,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
     float timerDuration;
     std::memcpy(&timerDuration, &kRdata_1401721cc, sizeof timerDuration);
     int lastEventIdx = lastEventIndex;
-    int totalEvents = *(int*)(eventLogPtr + 0x20) - 1;
+    int totalEvents = eventLogPtr->entryCount - 1;
 
     if (lastEventIdx < totalEvents) {
         bool hasNewEvents = false;
@@ -215,16 +216,16 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
         int scanIdx = nextIdx;
 
         if (scanIdx <= totalEvents) {
-            int64_t entryOffset = (int64_t)scanIdx * 0x28;
             int remaining = totalEvents - scanIdx + 1;
 
             do {
-                uintptr_t eventArray = *(uintptr_t*)(eventLogPtr + 0x18);
-                int severity = *(int*)(entryOffset + 0x14 + eventArray);
+                // The entry array is re-read per pass (0x28-byte EventLogEntry records).
+                EventLogEntry* eventArray = eventLogPtr->entries;
+                int severity = eventArray[scanIdx].severity;
 
                 if (severity > 0) {
                     // Map event type to category
-                    int eventType = *(int*)(entryOffset + 0x10 + eventArray);
+                    int eventType = eventArray[scanIdx].eventType;
                     int category;
                     switch (eventType) {
                         case 0: case 1: case 3: case 4:
@@ -244,12 +245,12 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                     }
 
                     // Check category filter flag
-                    if (*(char*)(category + 0x10 + eventLogPtr) != 0 &&
-                        *(int*)(entryOffset + 0x1C + eventArray) >= 0) {
+                    if (eventLogPtr->field_0x10[category] != 0 &&
+                        eventArray[scanIdx].iconIndex >= 0) {
 
                         // Check if popup needed (+0x20 field >= 0 means show popup).
                         // Raise the modal EventPopupDialog for this event-log index.
-                        if (*(int*)(entryOffset + 0x20 + eventArray) >= 0) {
+                        if (eventArray[scanIdx].popup >= 0) {
                             EventNotifyDialog_CreatePopup(this, scanIdx);
                         }
 
@@ -262,7 +263,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                         RtSystem_Time_Ctor(&notifyEntry.timer, timerDuration);
 
                         // icon: "EventIcon%i" on the first slot image's sprite sheet
-                        int iconIndex = *(int*)(entryOffset + 0x1C + eventArray);
+                        int iconIndex = eventArray[scanIdx].iconIndex;
                         System::String iconNameStr = System::String::Format("EventIcon%i", (uint64_t)(uint32_t)iconIndex);
 
                         UI::Sprite slotSprite =
@@ -270,7 +271,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                         notifyEntry.icon = UI::Sprite(slotSprite.GetSpriteSheet(), iconNameStr);
 
                         // color from severity
-                        int sev = *(int*)(entryOffset + 0x14 + eventArray);
+                        int sev = eventArray[scanIdx].severity;
                         uint32_t color;
                         if (sev == 1)      color = 0xFFFFFF00;  // yellow
                         else if (sev == 2) color = 0xFF8080FF;  // pink
@@ -280,10 +281,8 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                         notifyEntry.color = color;
 
                         // text: strip the category prefix before ':'.
-                        // Event text is at eventArray + entryOffset + 0x08.
-                        // LEFT: the event-log entry has no class (block GAME).
-                        uintptr_t eventTextAddr = entryOffset + eventArray + 0x08;
-                        System::String& eventTextStr = *reinterpret_cast<System::String*>(eventTextAddr);
+                        // Event text is the entry's +0x08.
+                        System::String& eventTextStr = eventArray[scanIdx].text;
 
                         int strLen = eventTextStr.GetLength();
                         const char* strData = eventTextStr._data;
@@ -313,7 +312,6 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                 }
 
                 scanIdx++;
-                entryOffset += 0x28;
                 remaining--;
             } while (remaining != 0);
         }
@@ -329,13 +327,12 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
         if (hasNewEvents) {
             System::Time zeroTime;
             RtSystem_Time_Ctor(&zeroTime, 0.0f);
-            // LEFT: GameUpdateLoop::m_audioScene is void* (W0 header).
-            reinterpret_cast<Audio::Scene*>(GameUpdateLoop::_singleton->m_audioScene)->PlayEffect(
+            GameUpdateLoop::_singleton->m_audioScene->PlayEffect(
                 g_gameContainer->warningEffect, static_cast<Audio::Scene::SoundType>(1),
-                zeroTime);   // B.3.7 bridge
+                zeroTime);
         }
 
-        totalEvents = *(int*)(eventLogPtr + 0x20) - 1;
+        totalEvents = eventLogPtr->entryCount - 1;
     }
 
     // Update last processed event index
@@ -403,9 +400,9 @@ void EventNotifyDialog::OnUpdateLayout() {
     // -------------------------------------------------------
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
-    uintptr_t eventLogPtr = (uintptr_t)gameWorld->m_eventNotifier;
+    EventLog* eventLogPtr = gameWorld->m_eventNotifier;
     if (!eventLogPtr) return;  // event log not initialized yet (e.g. during loading)
-    uintptr_t eventArray  = *(uintptr_t*)(eventLogPtr + 0x18);
+    EventLogEntry* eventArray = eventLogPtr->entries;
     if (!eventArray) return;
 
     UI::Element* ribbonElem = ribbonNotify.Get();
@@ -448,9 +445,9 @@ void EventNotifyDialog::OnUpdateLayout() {
             }
         }
 
-        // Popup state: the event log entry's popup field at +0x18.
-        // LEFT: the event-log entry has no class (block GAME).
-        int popupField = *(int*)(eventArray + (uintptr_t)eventIndex * 0x28 + 0x18);
+        // Popup state: the event log entry's +0x18 (EventLogEntry::tileIndex: the
+        // button jumps to the event's cell, so it hides when there is none).
+        int popupField = eventArray[eventIndex].tileIndex;
         bool noPopup   = (popupField < 0);
 
         if (noPopup) {
@@ -537,16 +534,15 @@ void EventNotifyDialog::NavigateToEvent(int32_t index) {
 
     int eventLogEntryIdx = entries._data[index].eventIndex;
 
-    // LEFT: the event log has no class (block GAME).
-    uintptr_t eventLog   = (uintptr_t)game->m_eventNotifier;
-    uintptr_t entryList  = *(uintptr_t*)(eventLog + 0x18);
-    int tileIdx = *(int*)(entryList + 0x18 + (uintptr_t)eventLogEntryIdx * 0x28);
+    EventLog* eventLog = game->m_eventNotifier;
+    EventLogEntry* entryList = eventLog->entries;
+    int tileIdx = entryList[eventLogEntryIdx].tileIndex;
 
     if (tileIdx < 0) return;  // no valid tile position
 
-    // mapGrid = m_game (Map*, LEFT: void* in the W0 header); gridSize = Map::size
-    int* mapGrid = (int*)game->m_game;
-    int gridSize = *mapGrid;
+    // mapGrid = m_game (Map*); gridSize = Map::size
+    Map* mapGrid = game->m_game;
+    int gridSize = mapGrid->size;
     float halfSize = (float)(gridSize >> 1) - 0.5f;  // = (gridSize/2) - 0.5f (DAT_140172114)
     float inXY[3] = {
         (float)(tileIdx % gridSize) - halfSize,  // worldX
@@ -631,8 +627,9 @@ DEFINE_EXE_TYPE(EventNotifyDialog, "UI::DialogInstance")
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP) {
     if (!self) return nullptr;
     Object::InternalPtr<UI::DialogInstance> parent;
+    // LEFT: SIG EventNotifyDialog_Ctor_Standalone (gameupdateloop.cpp declares it locally with void*).
     if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) EventNotifyDialog(static_cast<UI::UserInterface*>(ui),
-                                          static_cast<const UI::Dialog*>(extRes), parent);
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);   // LEFT: SIG
+    return ::new (self) EventNotifyDialog(static_cast<UI::UserInterface*>(ui),   // LEFT: SIG
+                                          static_cast<const UI::Dialog*>(extRes), parent);   // LEFT: SIG
 }
