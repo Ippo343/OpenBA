@@ -802,7 +802,7 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         CHECK_EQ(e->_lineSpacing, 100);
         CHECK_EQ(e->_maxWidth, -1);
         CHECK_EQ(e->_justify, 0);
-        CHECK(e->_cachedText == nullptr);
+        CHECK(e->_cachedText._data == nullptr);
         g_b39DtorCount = 0;
         e->~TextElement();
         CHECK_EQ(g_b39DtorCount, 1);
