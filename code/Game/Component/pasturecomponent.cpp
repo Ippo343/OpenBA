@@ -334,7 +334,7 @@ void PastureComponent::OnEvent(int msgId) {
 
     for (uint32_t i = 0; (int)i < InteractNodeCount(pos, 2); ++i) {   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         float p[3] = {0, 0, 0};
-        Pf_EntityResolvePos_2e20(pos, p, 2, (int)i, nullptr);
+        InteractNodePosition(pos, p, 2, (int)i, nullptr);
         int x = (int)(p[0] + (float)(width >> 1));
         int y = (int)(p[1] + (float)(width >> 1));
         if (x < 0) x = 0; if (x >= width) x = width - 1;

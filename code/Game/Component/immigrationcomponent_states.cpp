@@ -293,7 +293,7 @@ void ImmigrationComponent::Spawn() {
             y = (r == 2) ? edge : (W - edge) - 1;
         }
         float hp[3] = {0, 0, 0};
-        Pf_EntityResolvePos_2e20(pc, hp, 0, 0, nullptr);
+        InteractNodePosition(pc, hp, 0, 0, nullptr);
         int cx = static_cast<int>(hp[0] + static_cast<float>(W >> 1));
         int cy = static_cast<int>(hp[1] + static_cast<float>(W >> 1));
         if (cx < 0) cx = 0;
@@ -352,7 +352,7 @@ void ImmigrationComponent::Spawn() {
         }
         uint32_t ptIdx = rng->Rand(static_cast<uint32_t>(nPts));
         Math::Vector3 meet(0.0f, 0.0f, 0.0f);
-        Pf_EntityResolvePos_2e20(pc, &meet.x, 2, static_cast<int>(ptIdx), nullptr);
+        InteractNodePosition(pc, &meet.x, 2, static_cast<int>(ptIdx), nullptr);
 
         // Clone the nomad template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);

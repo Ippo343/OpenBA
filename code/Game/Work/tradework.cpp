@@ -315,7 +315,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        Pf_EntityResolvePos_2e20(posComp, destPos, 0, rnd, nullptr);
+        InteractNodePosition(posComp, destPos, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
@@ -404,7 +404,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
         float srcPos2[4] = {};                             // local_68
-        Pf_EntityResolvePos_2e20(posComp, srcPos2, 0, rnd, nullptr);
+        InteractNodePosition(posComp, srcPos2, 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2

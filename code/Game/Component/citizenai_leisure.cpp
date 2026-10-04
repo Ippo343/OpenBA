@@ -394,7 +394,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         InteractComponent* posIBP = local_res20->FindComponent<InteractComponent>();   // 0x140002ed0
         InteractComponent** pp = &posIBP;
         float dpos[4] = {0, 0, 0, 0};
-        if (pp) Pf_EntityResolvePos_2e20(*pp, dpos, 0, 0, nullptr);
+        if (pp) InteractNodePosition(*pp, dpos, 0, 0, nullptr);
         int w = piVar5->size;
         int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos[0]);
         int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos[1]);

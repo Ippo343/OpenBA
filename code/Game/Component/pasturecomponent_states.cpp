@@ -459,7 +459,7 @@ void PastureProduce(PastureComponent* self) {
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             float xy[3] = {0, 0, 0};
-            Pf_EntityResolvePos_2e20(pos, xy, 2, c, nullptr);
+            InteractNodePosition(pos, xy, 2, c, nullptr);
             const int dim = grid->size;
             int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
             int gy = static_cast<int>(xy[1] + static_cast<float>(dim >> 1));

@@ -147,7 +147,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
                 bool ok = (stor) ? ResidenceCheck_2ac30(stor) : false;
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    Pf_EntityResolvePos_2e20(pp, dest, 0, 0, nullptr);
+                    InteractNodePosition(pp, dest, 0, 0, nullptr);
                     holderEntity = citizen->home;
                     doPush = true;
                 }
@@ -224,7 +224,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                 int cnt = CitizenComp_Storage_GetResourceCount(stor);
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    Pf_EntityResolvePos_2e20(pp, dest, 0, 0, nullptr);
+                    InteractNodePosition(pp, dest, 0, 0, nullptr);
                     holderCitizen = citizen;
                     flag = 1;
                     holderEntity = holderCitizen->home;
@@ -297,7 +297,7 @@ uint64_t CitizenAIComponent::State_Work() {
             // NavigateTo the home
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             float navDest[4] = {0, 0, 0, 0};
-            Pf_EntityResolvePos_2e20(pp, navDest, 0, 0, nullptr);
+            InteractNodePosition(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen;
             ComponentEntity* holderEntity = holderCitizen->home;
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_Work() {
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             float navDest[4] = {0, 0, 0, 0};
-            Pf_EntityResolvePos_2e20(pp, navDest, 0, 0, nullptr);
+            InteractNodePosition(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen;
             ComponentEntity* holderEntity = holderCitizen->home;
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);

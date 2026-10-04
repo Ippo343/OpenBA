@@ -1735,7 +1735,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             for (int slot = 0; slot < rosterCount; slot++) {
                 if (resIBP->residentSlots[slot].count < 1) {  // free slot
                     float pos[3] = {0.0f, 0.0f, 0.0f};
-                    Pf_EntityResolvePos_2e20(interactIBP, pos, 0, 0, nullptr);
+                    InteractNodePosition(interactIBP, pos, 0, 0, nullptr);
                     int mw = mapInfo->size;
                     int wpX = static_cast<int>(pos[0] + static_cast<float>(mw >> 1));
                     int wpY = static_cast<int>(pos[1] + static_cast<float>(mw >> 1));
@@ -2069,7 +2069,7 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     Map* mapInfo = GameUpdateLoop::_singleton->m_game;
     InteractComponent* posComp = att->_entity->FindComponent<InteractComponent>();
     float pos[3] = {0,0,0};
-    Pf_EntityResolvePos_2e20(posComp, pos, 0, 0, nullptr);
+    InteractNodePosition(posComp, pos, 0, 0, nullptr);
 
     ModelComponent* homeComp = citizen->character->modelComponent.Get();
 

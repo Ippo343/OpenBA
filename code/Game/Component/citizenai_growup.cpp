@@ -260,7 +260,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             InteractComponent* posBuf[2] = {nullptr, nullptr};
             posBuf[0] = entity->FindComponent<InteractComponent>();   // 0x140002ed0
             float wpos[4] = {0, 0, 0, 0};
-            if (posBuf[0]) Pf_EntityResolvePos_2e20(posBuf[0], wpos, 0, 0, nullptr);
+            if (posBuf[0]) InteractNodePosition(posBuf[0], wpos, 0, 0, nullptr);
             int dim = map->size;
             int ix = static_cast<int>(wpos[0] + static_cast<float>(dim >> 1));
             int iy = static_cast<int>(wpos[1] + static_cast<float>(dim >> 1));

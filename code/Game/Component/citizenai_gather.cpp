@@ -436,7 +436,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         // 2) InteractComponent(home) -> 2e20 -> destPos; FindPath
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
         float destPos[4] = {0, 0, 0, 0};  // local_60
-        Pf_EntityResolvePos_2e20(pp, destPos, 0, 0, nullptr);
+        InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen;                         // local_88
         ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
@@ -532,7 +532,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
 
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
         float destPos[4] = {0, 0, 0, 0};  // local_98
-        Pf_EntityResolvePos_2e20(pp, destPos, 0, 0, nullptr);
+        InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen;                         // local_res20
         ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18

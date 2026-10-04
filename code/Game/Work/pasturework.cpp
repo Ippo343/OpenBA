@@ -305,7 +305,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
             int iPvVar20 = 0;
             do {
                 float local_80[3];
-                Pf_EntityResolvePos_2e20(posComp, local_80, 2, iPvVar20, nullptr);
+                InteractNodePosition(posComp, local_80, 2, iPvVar20, nullptr);
 
                 int iVar10map = map->size;
                 int iVar21pos = (int)(local_80[0] + (float)(iVar10map >> 1));

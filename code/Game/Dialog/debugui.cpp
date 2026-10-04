@@ -449,7 +449,7 @@ static void Game_SpawnCitizens_Impl() {
                             float spawnPos[4] = {0};
                             // 0x140122e20 Pf_EntityResolvePos_2e20 (door misnamed
                             // fn_ResidenceComponent_GetSpawnPoint)
-                            Pf_EntityResolvePos_2e20(resComp, spawnPos, 0, spawnedHere, nullptr);
+                            InteractNodePosition(resComp, spawnPos, 0, spawnedHere, nullptr);
 
                             // Check if we've reached the global limit of 4
                             if (spawnedTotal >= 4) {
