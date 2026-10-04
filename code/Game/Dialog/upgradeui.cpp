@@ -69,16 +69,14 @@ void UpgradeUI::OnCreated() {
         ? static_cast<UI::ImageElement*>(child) : nullptr;
 
     // The target template (UpgradeUIConfig +0x20, an ExternalPtr<ComponentDescription>).
-    ComponentDescription* target =
-        reinterpret_cast<ComponentDescription*>(upgradeConfig->_target);   // LEFT: UpgradeUIConfig::_target stays void* (ExternalPtrSerializeGeneric takes void**, Game/serialize_externals.h)
+    ComponentDescription* target = upgradeConfig->_target;
 
     // Find the ToolbarDescription among the template's descriptions.
     ToolbarDescription* toolbar = nullptr;
     if (target && target->_subDescCount > 0) {
         int compCount = target->_subDescCount;
         for (int i = 0; i < compCount; i++) {
-            Object::Base* comp =
-                reinterpret_cast<Object::Base*>(target->_subDescs[i]);   // LEFT: ComponentDescription::_subDescs is void** (COMP-c)
+            Object::Base* comp = target->_subDescs[i];
             if (!comp) continue;
 
             if (comp->Type() == ToolbarDescription::TypeId()) {
@@ -144,7 +142,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         return;
 
     // The upgrade target: DestroyComponent +0x60 = the config's target template.
-    destroyComp->upgradeTarget = reinterpret_cast<ComponentDescription*>(upgradeConfig->_target);   // LEFT: UpgradeUIConfig::_target stays void* (as line 73); DestroyComponent +0x60 typed by COMP-c (merge fix)
+    destroyComp->upgradeTarget = upgradeConfig->_target;
 
     // Start the upgrade: pump the BuildState state machine. 0x14011dfa0 is the
     // generic driver ("StartUpgrade" was a misnomer); the disasm-verified port

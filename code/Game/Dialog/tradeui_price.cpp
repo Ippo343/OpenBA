@@ -73,7 +73,7 @@ constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
     Description* const* arr = entity->_subDescs;   // COMP-c typed _subDescs (merge fix)
     if (!arr || count <= 0) return nullptr;
     for (int32_t i = 0; i < count; ++i) {
-        ::Object::Base* comp = reinterpret_cast<::Object::Base*>(arr[i]);   // LEFT: ComponentDescription::_subDescs is void** (COMP-c)
+        ::Object::Base* comp = arr[i];
         if (!comp) continue;
         if (comp->Type() != typeId) continue;
         // Retail stops at the FIRST id match and then confirms; a failed confirm
@@ -127,10 +127,9 @@ extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEnt
     if (!tradeDesc->_merchants) return 0;
 
     // The merchant entry (0x48 stride): the two category masks at +0x14 / +0x18.
-    const uint32_t* m = reinterpret_cast<const uint32_t*>(tradeDesc->_merchants)
-                        + static_cast<uintptr_t>(merchantIdx) * (0x48 / 4);   // LEFT: TradeDescription::_merchants is void* (COMP-f)
-    const uint32_t mask14 = m[0x14 / 4];
-    const uint32_t mask18 = m[0x18 / 4];
+    const TradeMerchant& m = tradeDesc->_merchants[merchantIdx];
+    const uint32_t mask14 = m.fullPriceFlags;
+    const uint32_t mask18 = m.discountFlags;
 
     const ValueDescription* vd = static_cast<const ValueDescription*>(
         TradeUI_FindValueDescription_ea80(resource));   // 0x14000ea80

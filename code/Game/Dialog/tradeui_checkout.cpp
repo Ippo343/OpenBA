@@ -117,7 +117,7 @@ void* FindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId)
     int    count = entity->_subDescCount;
     if (!objs) return nullptr;
     for (int i = 0; i < count; ++i) {
-        Object::Base* obj = reinterpret_cast<Object::Base*>(objs[i]);   // LEFT: _subDescs is void** (COMP-c)
+        Object::Base* obj = objs[i];
         if (!obj) continue;
         // vtable slot +0x10 = GetTypeId()
         if (obj->Type() != typeId) continue;
@@ -146,27 +146,26 @@ void* FindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId)
 // The erase loop in the decompile looks like it copies 16 bytes per step from
 // puVar3[2]/puVar3[3]; that is the two-qword move of the NEXT entry into the
 // current one, i.e. a plain forward shift.
-extern "C" void TradeComponent_RemoveBuyOrder(void* tradeComp, void* resourceEntity, int qty) {
+extern "C" void TradeComponent_RemoveBuyOrder(TradeComponent* tradeComp,
+                                              const ComponentDescription* resourceEntity, int qty) {
     if (!tradeComp) return;
-    uintptr_t tc = reinterpret_cast<uintptr_t>(tradeComp);
 
-    for (int i = 0; i < *reinterpret_cast<int*>(tc + 0x58); ++i) {
-        uintptr_t base  = *reinterpret_cast<uintptr_t*>(tc + 0x50);
-        uintptr_t entry = base + static_cast<uintptr_t>(i) * 0x10;
-        if (*reinterpret_cast<void**>(entry) != resourceEntity) continue;
+    for (int i = 0; i < tradeComp->manifestCount; ++i) {
+        TradeManifestLine* base  = tradeComp->manifest;
+        TradeManifestLine* entry = base + i;
+        if (entry->good != resourceEntity) continue;
 
-        int* entryQty = reinterpret_cast<int*>(entry + 0x0c);
+        int* entryQty = &entry->stock;
         *entryQty -= qty;
         if (*entryQty != 0) continue;
 
         // Erase: shift every later entry down one slot, then shrink the count.
-        int count = *reinterpret_cast<int*>(tc + 0x58);
+        int count = tradeComp->manifestCount;
         for (int j = i; j + 1 < count; ++j) {
-            uint64_t* dst = reinterpret_cast<uint64_t*>(base + static_cast<uintptr_t>(j) * 0x10);
-            dst[0] = dst[2];
-            dst[1] = dst[3];
+            TradeManifestLine* dst = base + j;
+            dst[0] = dst[1];
         }
-        *reinterpret_cast<int*>(tc + 0x58) = count - 1;
+        tradeComp->manifestCount = count - 1;
         --i;  // re-test this index: a different entry now occupies it
     }
 }
@@ -198,16 +197,16 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     TradeDescription* d = static_cast<TradeDescription*>(desc);
 
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
     if (!town) return;
 
     float weight = d->_f68;
     if (weight > town->field_0x1A8) town->field_0x1A8 = weight;
 
     int32_t units = d->_i6c;
-    int64_t stay = 0;                                  // 8 bytes — the ctor fills all of it
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stay), static_cast<float>(units) * 300.0f);
-    if (town->field_0x1A0 < stay) town->field_0x1A0 = stay;
+    System::Time stay{};                               // 8 bytes — the ctor fills all of it
+    RtSystem_Time_Ctor(&stay, static_cast<float>(units) * 300.0f);
+    if (town->field_0x1A0 < stay._ticks) town->field_0x1A0 = stay._ticks;
 }
 
 // ============================================================
@@ -229,7 +228,7 @@ void TradeUI::OnTradeButton() {
     TradeDescription_ExtendMerchantStay(trade);
 
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
 
     // OUTCOME counters. A click that commits nothing and a click that commits a full
     // basket look identical from outside this function, and "the button did nothing" is
@@ -250,14 +249,14 @@ void TradeUI::OnTradeButton() {
 
             ComponentDescription* resEntity = _sellItems[i].resource;
 
-            ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),
-                                       reinterpret_cast<int64_t>(resEntity), qty);   // 0x14012d150
+            ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),   // LEFT: SIG ActRm_StorageSubtract_d150 (Action/exe_bodies.h)
+                                       reinterpret_cast<int64_t>(resEntity), qty);   // 0x14012d150  LEFT: SIG (same)
 
             // Credit the town's per-category produced-goods tally.
             //   town->professionResources (+0x170): the category array, running total at +0x0c
             {
                 int cat = ActRm_GetResourceCategory_88f90(
-                    storage, reinterpret_cast<uintptr_t>(resEntity));   // 0x140088f90
+                    storage, reinterpret_cast<uintptr_t>(resEntity));   // 0x140088f90  LEFT: SIG ActRm_GetResourceCategory_88f90 (Action/exe_bodies.h)
                 if (cat >= 0) {
                     town->professionResources[cat].field_0x0C += qty;
                 }
@@ -294,8 +293,8 @@ void TradeUI::OnTradeButton() {
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
             if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
-                ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),
-                                      reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000
+                ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),   // LEFT: SIG ActRm_StorageAdd_d000 (Action/exe_bodies.h)
+                                      reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000  LEFT: SIG (same)
                 RawMaterialComponent_RegisterRawMaterial(town, bought);
             }
             // Natural resource (crop / orchard seed): availability only.
