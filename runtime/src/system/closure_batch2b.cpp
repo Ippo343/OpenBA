@@ -137,22 +137,22 @@ extern "C" void* RtSystem_OperatorNew_180011640(uint64_t size) {
 // with the DLL present retail's own Allocate keeps calling its own copy. It is
 // here because the closure reaches it, and at cutover Allocate is ours.
 // ---------------------------------------------------------------------------
-extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* self,
+extern "C" void RtSystem_MemoryAllocator_LinkPrevBlock(uint64_t* header,
                                                        const uint64_t* prev) {
-    *self |= 0x100000000000ull;
+    *header |= 0x100000000000ull;
     const uint64_t prevSize = *prev & 0x1ffffffffffull;
-    const uint64_t hdr = *self;                       // re-read AFTER the OR
+    const uint64_t hdr = *header;                       // re-read AFTER the OR
     if (prevSize > 4ull) {                            // JA — unsigned
-        const int64_t delta = reinterpret_cast<const uint8_t*>(self) -  // LEFT: a ptr_int byte distance, but `self` is a uint64_t* block-header parameter the floor check reads as a receiver (coordinator)
+        const int64_t delta = reinterpret_cast<const uint8_t*>(header) -  // CAST-OK: ptr_int
                               reinterpret_cast<const uint8_t*>(prev);  // CAST-OK: ptr_int
-        self[-1] = static_cast<uint64_t>(delta);
-        *self = hdr & ~0xe0000000000ull;
+        header[-1] = static_cast<uint64_t>(delta);
+        *header = hdr & ~0xe0000000000ull;
         return;
     }
-    const int64_t delta = reinterpret_cast<const uint8_t*>(self) -  // LEFT: a ptr_int byte distance, but `self` is a uint64_t* block-header parameter the floor check reads as a receiver (coordinator)
+    const int64_t delta = reinterpret_cast<const uint8_t*>(header) -  // CAST-OK: ptr_int
                           reinterpret_cast<const uint8_t*>(prev);  // CAST-OK: ptr_int
     const uint64_t packed = static_cast<uint64_t>(delta >> 2) << 0x29;  // SAR then SHL
-    *self = ((packed ^ hdr) & 0xe0000000000ull) ^ hdr;
+    *header = ((packed ^ hdr) & 0xe0000000000ull) ^ hdr;
 }
 
 // ============================================================================

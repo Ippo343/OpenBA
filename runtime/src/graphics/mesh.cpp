@@ -1031,8 +1031,7 @@ Graphics::EdgeMesh::EdgeMesh() {
 // copy constructor -- Geometry's copy ctor in the init list, the stamp the
 // compiler's, then +0xc0 and +0xc8.
 Graphics::EdgeMeshInstance::EdgeMeshInstance(const EdgeMeshInstance& other)
-    : Geometry(other) {
-    _mesh     = other._mesh;
+    : Geometry(other), _mesh(other._mesh) {      // +0xc0 (typed: copied, not zeroed first)
     _followed = other._followed;
 }
 
@@ -2279,9 +2278,7 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
     const int  index     = packed & 0x7fff;
     const bool whichList = ((static_cast<uint32_t>(packed) >> 15) & 1u) != 0;
 
-    // LEFT: `_mesh` is the untyped `RtGraphics::ExternalPtr` handle SetMesh
-    // takes from its code/Game caller.
-    const EdgeMesh* const mesh = static_cast<const EdgeMesh*>(_mesh.p);
+    const EdgeMesh* const mesh = _mesh.Get();
     const GraphicsMesh::TriangleList* const listData =
         whichList ? mesh->_edgeLists._data : mesh->_triangleLists._data;
     const int32_t node = listData[index]._f14;   // plain MOV dword; see the door
@@ -2311,10 +2308,10 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
 // ---------------------------------------------------------------------------
 void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
     _followed = followed;
-    _mesh = mesh;
-
-    // LEFT: the untyped handle its caller holds (see GetInstanceTransform).
-    const EdgeMesh* const em = static_cast<const EdgeMesh*>(mesh.p);
+    // LEFT: SIG EdgeMeshInstance::SetMesh(ExternalPtrHandle) is the untyped
+    // handle its code/Game caller holds; `_mesh` itself is typed.
+    EdgeMesh* const em = static_cast<EdgeMesh*>(mesh.p);
+    _mesh = em;
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_edgeMaterial->_shaderClass) & 0x1f);
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_maskMaterial->_shaderClass) & 0x1f);
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_skinEdgeMaterial->_shaderClass) & 0x1f);
@@ -2341,15 +2338,14 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     const float kOne = 1.0f;                                   // 0x18016169c
 
-    // LEFT: `_mesh` is the untyped handle (see GetInstanceTransform); each of
-    // the four loads below is retail's own reload of it.
+    // Each of the four loads of `_mesh` below is retail's own reload of it.
 
     // ---- pass 1: the triangle lists, sort key 0x2000 -----------------------
     {
-        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a2fe2
+        const EdgeMesh* const em = _mesh.Get();                    // 1800a2fe2
         const int32_t n = em->_triangleLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
-            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+            const EdgeMesh* const emNow = _mesh.Get();
             const GraphicsMesh::TriangleList* const lists = em->_triangleLists._data;
 
             const MaterialInstance* material =
@@ -2367,10 +2363,10 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
     {
-        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a3087 RELOAD  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+        const EdgeMesh* const em = _mesh.Get();                    // 1800a3087 RELOAD
         const int32_t n = em->_edgeLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
-            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+            const EdgeMesh* const emNow = _mesh.Get();
             const GraphicsMesh::TriangleList* const lists = em->_edgeLists._data;
 
             const MaterialInstance* material =
