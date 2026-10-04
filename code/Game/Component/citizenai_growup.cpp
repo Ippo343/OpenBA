@@ -299,7 +299,7 @@ void CitizenComponent::LongTermPlan() {
     StorageComponent* citStor = _entity->FindComponent<StorageComponent>();
 
     // dynamic array A: entity IBPs (stride 8, alloc newCap << 3). base/cap at local_70/local_68.
-    int64_t* arrA = nullptr;  int arrACount = 0; int arrACap = 0;          // local_70 / (int)local_68 / local_68._4_4_
+    ComponentEntity** arrA = nullptr;  int arrACount = 0; int arrACap = 0;  // local_70 / (int)local_68 / local_68._4_4_
     // dynamic array B: float[3] world positions (stride 0xc). base/cap at local_60/local_58.
     float*   arrB = nullptr;  int arrBCount = 0; int arrBCap = 0;          // local_60 / (int)local_58 / local_58._4_4_
 
@@ -325,26 +325,27 @@ void CitizenComponent::LongTermPlan() {
             // CheckPtr BEFORE the read — retail is `CheckPtr(pfVar21); lVar4 = *pfVar21;`.
             // Reading first and refreshing after uses the pre-refresh pointer, which is
             // the stale value CheckPtr exists to replace.
-            int64_t entry = arrA[k];
+            ComponentEntity* entry = arrA[k];
             // find that entry's StorageComponent
-            Component* sc = ScanForType(reinterpret_cast<const ComponentEntity*>(entry), s_tid_StorageComponent);   // LEFT: SIG Pf_PickBestDropTarget_8d590 (int64_t* out entity; Action/exe_bodies.h)
+            Component* sc = ScanForType(entry, s_tid_StorageComponent);
             Component* scIBP = sc;
-            int64_t descComp = reinterpret_cast<int64_t>(rowBase->_resource);   // row entity (RawMaterialDescription)   // LEFT: SIG Pf_StorageCanAccept_cd80 (int64_t; Action/exe_bodies.h)
+            const ComponentDescription* descComp = rowBase->_resource;   // row entity (RawMaterialDescription)
             int amount = rowBase->_count;
-            uint32_t hit = (scIBP) ? Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(scIBP), descComp, amount) : 0;   // LEFT: SIG Pf_StorageCanAccept_cd80 (int64_t)
+            // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder); sc was found by the
+            // StorageComponent type id.
+            uint32_t hit = (scIBP) ? StorageCanAdd(static_cast<StorageComponent*>(scIBP), descComp, amount) : 0;
             if (static_cast<char>(hit) != '\0') { satisfied = true; break; }
         }
         if (satisfied) { committed = true; break; }
 
         // not satisfied by current set: ask d590 for a new storage candidate.
         float    outVec[3] = {0, 0, 0};      // local_80
-        int64_t  matchIBP  = 0;              // local_a8
-        int64_t  outBest   = 0;              // local_98
-        Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(listPair), &outBest, homeCell,   // LEFT: SIG Pf_PickBestDropTarget_8d590 (int64_t** list; Action/exe_bodies.h)
-                           reinterpret_cast<uint64_t>(rowBase->_resource),   // LEFT: SIG Pf_PickBestDropTarget_8d590 (uint64_t resource)
-                           rowBase->_count, '\x01',
-                           reinterpret_cast<uint32_t*>(outVec), &matchIBP);   // LEFT: SIG Pf_PickBestDropTarget_8d590 (uint32_t* position)
-        if (outBest == 0) {
+        ComponentEntity* matchIBP = nullptr;   // local_a8
+        ComponentEntity* outBest  = nullptr;   // local_98
+        // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(listPair), &outBest, homeCell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                           rowBase->_resource, rowBase->_count, '\x01', outVec, &matchIBP);
+        if (outBest == nullptr) {
             // d590 found nothing for this row → treat as committed-with-empty (the original
             // jumps to the no-more-rows path that sets up the action push from whatever was
             // collected). We simply continue; arrays retain prior entries.
@@ -359,7 +360,7 @@ void CitizenComponent::LongTermPlan() {
                     int newCap = newCount;
                     if (arrACount != 0) newCap = newCount * 3;
                     arrACap = newCap;
-                    int64_t* nb = static_cast<int64_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) << 3, 8));
+                    ComponentEntity** nb = static_cast<ComponentEntity**>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) << 3, 8));
                     // copy old
                     // 8-byte stride (one int64 per entry, alloc is newCap << 3) — the
                     // original's pfVar14 += 2 over a float pointer.
@@ -401,7 +402,7 @@ void CitizenComponent::LongTermPlan() {
     // commit: if any candidate collected (arrACount != 0 — the original's `if (uVar16 != 0)`),
     // push a PerformWork(Ctor4) per candidate and run the executor.
     if (arrACount != 0) {
-        int64_t firstIBP = 0;       // local_90
+        ComponentEntity* firstIBP = nullptr;   // local_90
         new (&firstIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         CitizenComponent* selfIBP = this;   // local_98 (the InternalBasePtr ctor: one store)
 
@@ -414,7 +415,7 @@ void CitizenComponent::LongTermPlan() {
 
         // remaining candidates (the original loops uVar16 times over arrA/arrB).
         for (int i = 0; i < arrACount; ++i) {
-            int64_t entIBP = arrA[i];  // local_res8 = *pfVar11
+            ComponentEntity* entIBP = arrA[i];  // local_res8 = *pfVar11
             CitizenComponent* citizenIBP = this;   // local_res10
             float* destB = &arrB[i * 3];
             CitizenAI_PerformWorkCtor4_c1070(&citizenIBP, &entIBP, destB, homeCell, 0, 0);
@@ -460,7 +461,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
 
     // the citizen's own StorageComponent → QueryCount (carrying anything?)
     StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-    int count = (own) ? CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(own)) : 0;   // LEFT: SIG CitizenComp_StorageComponent_QueryCount (wave X)
+    int count = (own) ? CitizenComp_StorageComponent_QueryCount(own) : 0;
 
     if (count >= 1) {
         // Citizen's own storage is non-empty (QueryCount >= 1) → defer to LongTermPlan
@@ -485,18 +486,17 @@ uint64_t CitizenAIComponent::State_GrowUp() {
         bGoal = Pf_EntityAnchorCell_7fb0(&resIBP, nullptr);
     }
 
-    int64_t found = 0;        // local_b0
-    int64_t outComp = 0;      // local_res18
-    CitizenAI_FindBestTarget_dd30(reinterpret_cast<int64_t*>(listPair), &found, homeCell, bGoal, &outComp, destA, 3);   // LEFT: SIG CitizenAI_FindBestTarget_dd30 (int64_t* list; Component/exe_bodies.h)
-    if (found == 0) {
+    ComponentEntity* found = nullptr;          // local_b0
+    ComponentDescription* outComp = nullptr;   // local_res18
+    CitizenAI_FindBestTarget_dd30(listPair, &found, homeCell, bGoal, &outComp, destA, 3);
+    if (found == nullptr) {
         return 0;   // no source → low byte 0
     }
 
-    // found a source entity. find its StorageComponent (local_b8).
-    int64_t target = found;
-    StorageComponent* tStorBuf[2] = {nullptr, nullptr};
-    WorkBase_FindComponent_6270(target, tStorBuf);
-    StorageComponent* tStorNode = tStorBuf[0];
+    // found a source entity. find its StorageComponent (local_b8): 0x140006270 (was its
+    // WorkBase_FindComponent_6270 forwarder).
+    ComponentEntity* target = found;
+    StorageComponent* tStorNode = target->FindComponent<StorageComponent>();
     if (tStorNode == nullptr) {
         return 0;
     }
@@ -548,8 +548,8 @@ uint64_t CitizenAIComponent::State_GrowUp() {
         int stock = rowArrBase[row]._count - rowArrBase[row]._reserve;
         if (stock <= 0) continue;
         if (ordinal == chosen) {
-            int64_t resCountObj = reinterpret_cast<int64_t>(rowArrBase[row]._resource);   // LEFT: SIG CitizenAI_PerformWorkCtor11_bc790 (int64_t resource; Component/exe_bodies.h)
-            if (resCountObj != 0) {
+            ComponentDescription* resCountObj = rowArrBase[row]._resource;
+            if (resCountObj != nullptr) {
                 // f230 → nearest workplace world pos into destB, entity into local_60.
                 ComponentEntity* bestWp[2] = {nullptr, nullptr};   // local_60
                 CitizenAI_Entity_impl_f230(listPair, bestWp, homeCell, destB);
@@ -557,8 +557,8 @@ uint64_t CitizenAIComponent::State_GrowUp() {
                     // Ctor11 holder = the CitizenComponent wrapped
                     // (disasm: local_res8 := param_1; then local_res8 := *(local_res8+0x38)).
                     CitizenComponent* holderCitizen = citizen;
-                    int64_t srcIBP = found;        // local_res18 = lVar4 = local_b0 (food source entity)
-                    int64_t dstIBP = reinterpret_cast<int64_t>(bestWp[0]);    // local_res10 (workplace entity from f230)   // LEFT: SIG CitizenAI_PerformWorkCtor11_bc790 (int64_t* entity IBP)
+                    ComponentEntity* srcIBP = found;       // local_res18 = lVar4 = local_b0 (food source entity)
+                    ComponentEntity* dstIBP = bestWp[0];   // local_res10 (workplace entity from f230)
                     CitizenAI_PerformWorkCtor11_bc790(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
 
                     // success epilogue: flag triplet on the citizen.

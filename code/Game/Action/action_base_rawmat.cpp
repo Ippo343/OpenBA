@@ -451,11 +451,6 @@ void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
     MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70
 }
 
-// B4 FORWARD: outside callers (Action/action_base_cnr.cpp, Component/pasturecomponent_states.cpp)
-void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
-    AutoPickupAppend(reinterpret_cast<AutoPickupComponent*>(self), value);   // LEFT: SIG ActRm_DynArrayPush4_44810
-}
-
 // B4 FORWARD: outside callers in ~8 files; the first argument is never read.
 int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity) {
     return ResourceCategory(reinterpret_cast<const ComponentDescription*>(entity));   // LEFT: SIG ActRm_GetResourceCategory_88f90
@@ -465,14 +460,4 @@ int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity) {
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
     MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0
                              reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0
-}
-
-// B4 FORWARD: 1 outside caller (Component/pasturecomponent_states.cpp)
-void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
-    TrackerUpsert(reinterpret_cast<TrackerComponent*>(self), reinterpret_cast<ComponentDescription*>(key), value);   // LEFT: SIG ActRm_ArrayUpsert_58fd0
-}
-
-// B4 FORWARD: outside callers (Action/createrawmaterial, action_base_cnr; Component files)
-void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
-    PositionRawMaterial(reinterpret_cast<Component*>(param_1), cellIndex, rotation);   // LEFT: SIG ActRm_PositionEntity_9760
 }

@@ -201,7 +201,7 @@ void NaturalResourceComponent::ResetGrowthState() {
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
         ActHunt_NotifyEntityChanged_c3470(_entity);
     }
-    ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(this), 2);   // 0x140126440  LEFT: SIG ActCNR_SetAnimIndex_126440
+    NaturalResourceSetAnimation(this, 2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
 }
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
@@ -237,7 +237,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     if (!placed) return;
 
     int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
-        reinterpret_cast<intptr_t>(cfg), x, y);   // 0x140120c30  LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30
+        cfg, x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = map->size;
@@ -257,10 +257,10 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
     NaturalResourceComponent* acc1 = newEnt->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
-    ActCNR_SetupModelAtCell_126540(reinterpret_cast<int64_t>(acc1), mapWv * y + x);   // 0x140126540  LEFT: SIG ActCNR_SetupModelAtCell_126540
+    NaturalResourcePlaceAtCell(acc1, mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
 
     GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
-    ActCNR_SetGrowthProgress_120db0(reinterpret_cast<int64_t>(acc2), 0.0f);   // 0x140120db0  LEFT: SIG ActCNR_SetGrowthProgress_120db0
+    SetGrowthProgress(acc2, 0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
 
     int64_t acc3 = 0;
     NaturalResourceComponent_FindComponentByType(newEnt, &acc3);   // 0x140005200

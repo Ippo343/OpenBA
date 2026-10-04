@@ -160,6 +160,14 @@ void ForwardRef(void* refField, void* serializer, uint32_t typeId, const char* t
 }
 } // namespace
 
+void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* serializer,
+                                 const uint32_t* typeIdPtr,
+                                 const char* typeName) {
+    if (!refField || !serializer) return;
+    SerializeExternalRefChecked(*refField, *serializer, typeIdPtr ? *typeIdPtr : 0u, typeName,
+                                "ExternalPtr::Serialize");
+}
+
 void ExternalPtrSerializeGeneric(void** refField, void* serializer,
                                  const uint32_t* typeIdPtr,
                                  const char* typeName) {

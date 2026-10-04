@@ -926,6 +926,26 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 }
 
 // ============================================================
+// CitizenComponent_HasVacancy (0x140017050) — the WorkPlaceComponent's roster (+0x60) <
+// the seat capacity (its entity's WorkComponent +0x30, lazily CalcMaxWorkers'd).
+// Byte-faithful to 0x140017050 (FUN_140003050 = fn_FindComponent_Work, FUN_14012e5c0 =
+// fn_StorageCountQuery), plus one SA safety guard the original lacks: a null
+// WorkComponent -> "no vacancy" rather than dereferencing null+0x30. (Moved from
+// Component/exe_bodies.h, where it was an inline body: this file is its only caller.)
+// ============================================================
+static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
+    int roster = workplaceComp->workerCount;
+    WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
+    fn_FindComponent_Work(workplaceComp->_entity, &sl);
+    if (sl == nullptr) return false;
+    if (sl->workState == 0) {
+        int cap = fn_StorageCountQuery(sl);
+        sl->workState = cap;
+    }
+    return roster < sl->workState;
+}
+
+// ============================================================
 // CitizenComponent_ShouldSwitchWorkplace
 // Original: 0x1401109E0 (CitizenComponent_helper_09e0)
 // ============================================================
@@ -993,7 +1013,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
                 continue;
 
             // Check has vacancy
-            if (!fn_CitizenComponent_HasVacancy(reinterpret_cast<uintptr_t>(workplaceComp)))   // LEFT: SIG fn_CitizenComponent_HasVacancy (Component/exe_bodies.h, wave X)
+            if (!fn_CitizenComponent_HasVacancy(workplaceComp))
                 continue;
 
             // Look up this workplace's region (re-read areaMap fresh, matches original asm)
@@ -1008,7 +1028,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
             // If other region has lower priority value, switch
             if (otherRegionDesc->field_24 < currentPriority) {
                 // Double-check vacancy
-                if (fn_CitizenComponent_HasVacancy(reinterpret_cast<uintptr_t>(workplaceComp)))   // LEFT: SIG fn_CitizenComponent_HasVacancy (Component/exe_bodies.h, wave X)
+                if (fn_CitizenComponent_HasVacancy(workplaceComp))
                     return true;
             }
         }
@@ -1400,10 +1420,10 @@ void CitizenComponent::GiveBirth() {
     }
 
     // allocate + copy-construct the child entity
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* child = nullptr;
     if (mem) {
-        child = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), _entity->_description);
+        child = ComponentEntity_CtorFromDescription(mem, _entity->_description);
     }
 
     // Find the newborn's CitizenComponent — retail reads the type id from DAT_1401c7158,
@@ -1513,9 +1533,9 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
     do {
         if (hours <= 0.0f) return;
         ComponentEntity* arg = target;
-        int64_t res10 = 0;
-        CitizenComp_Entity_impl_ef40(entity, &res10, &arg, 0);
-        ComponentDescription* work = reinterpret_cast<ComponentDescription*>(res10);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (Component/exe_bodies.h, wave X)
+        ComponentDescription* work = nullptr;
+        CitizenComp_Entity_impl_ef40(entity, &work, &arg, 0);
+        int64_t res10 = reinterpret_cast<int64_t>(work);   // LEFT: SIG ActRm_StorageSubtract_d150 / ActRm_GetResourceCategory_88f90 (the material as an integer; Action/exe_bodies.h)
         if (res10 == 0) return;
 
         // add `work` to the citizen's consumed-type list (+0x98 array, +0xa0 count, +0xa4 cap)
@@ -1795,7 +1815,8 @@ char CitizenComponent::CanReach(ComponentEntity* target) {
 // random index over them; pass 2 walks the list again returning the chosen slot's IBP.
 // The category selects which bit of the material's +0x5c flags word gates a slot:
 //   0->bit5, 1->bit6, 2->bit9, 3->bit13, 4->bit14.
-int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4) {
+ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2,
+                                                    ComponentEntity* const* param_3, int param_4) {
     (void)param_1;
     uint32_t rawMatTid = RawMaterialDescription::TypeId();
 
@@ -1808,18 +1829,18 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     };
     int shift = catShift(param_4);
 
-    ComponentEntity* storeEntity = *reinterpret_cast<ComponentEntity**>(param_3);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (Component/exe_bodies.h, wave X)
+    ComponentEntity* storeEntity = *param_3;
     StorageComponent* store = storeEntity->FindComponent<StorageComponent>();
     // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
     // null bail: retail asserts the storage exists; in standalone an entity in a
     // town search list may still lack a live StorageComponent — treat as no slot.
     if (store == nullptr)
         store = StandaloneFindStorageComp(storeEntity);
-    if (store == nullptr) { *param_2 = 0; return param_2; }
+    if (store == nullptr) { *param_2 = nullptr; return param_2; }
 
     uint32_t chosen = 0xffffffff;
     int64_t taskCount = store->slotCount;
-    if (taskCount <= 0) { *param_2 = 0; return param_2; }
+    if (taskCount <= 0) { *param_2 = nullptr; return param_2; }
 
     // Find the RawMaterialDescription on a task entity, returning its derived ptr (or null).
     // The material template's sub-descriptions (ComponentDescription +0x28 / +0x30).
@@ -1853,7 +1874,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
             eligible++;
         }
     }
-    if (eligible == 0) { *param_2 = 0; return param_2; }
+    if (eligible == 0) { *param_2 = nullptr; return param_2; }
 
     if (static_cast<int>(chosen) < 0)
         chosen = GameUpdateLoop::_singleton->m_random->Rand(static_cast<uint32_t>(eligible));
@@ -1867,11 +1888,11 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
             ((mat->_flags >> shift) & 1);
         int demand = entryP->_count - entryP->_reserve;
         if (bitSet && demand > 0) {
-            if (chosen == cur) { *param_2 = reinterpret_cast<int64_t>(entryP->_resource); return param_2; }   // LEFT: SIG CitizenComp_Entity_impl_ef40 (int64_t out slot; Component/exe_bodies.h, wave X)
+            if (chosen == cur) { *param_2 = entryP->_resource; return param_2; }
             cur++;
         }
     }
-    *param_2 = 0;
+    *param_2 = nullptr;
     return param_2;
 }
 
@@ -2437,10 +2458,6 @@ DEFINE_EXE_TYPE(CitizenComponent, "Component")
 // still use (B4_RULES W1 "Callers outside your files"); each takes the old signature.
 // ============================================================
 
-// B4 FORWARD: 1 outside caller(s) (standalone/death_harness.cpp)
-void CitizenComp_sub_1fa0(int64_t selfV, void* param2) {
-    reinterpret_cast<CitizenComponent*>(selfV)->SetParent(*reinterpret_cast<CitizenComponent**>(param2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-}
 
 // B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
 // Component/destroycomponent_workerrelease.cpp)
@@ -2458,10 +2475,6 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
     return param_2;
 }
 
-// B4 FORWARD: 1 outside caller(s) (standalone/death_harness.cpp)
-void CitizenComp_helper_1b90(int64_t selfV) {
-    reinterpret_cast<CitizenComponent*>(selfV)->GiveBirth();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-}
 
 // B4 FORWARD: 6 outside caller(s) (Component/destroycomponent_workerrelease.cpp,
 // Component/workplacecomponent.cpp, Dialog/townhall_helpers.cpp, Entity/citizenbehavior.cpp,

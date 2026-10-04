@@ -50,12 +50,12 @@ bool MenuDialogLoopT_LoadScene_PhaseA(MenuDialogLoopT* self);
 // scene-graph fields are populated before chunked PhaseB starts.
 //
 // Returns true on success, false if the MenuScene resource fails to load.
-bool MenuDialogLoopT_LoadSceneA1(void* self);
+bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_LoadSceneA3 — post-PhaseB particle iteration wrapper.
 // Reads menuScene/scene from MenuDLT struct fields and calls
 // LoadParticles_PhaseC. Thin wrapper for symmetry with LoadSceneA1.
-void MenuDialogLoopT_LoadSceneA3(void* self);
+void MenuDialogLoopT_LoadSceneA3(MenuDialogLoopT* self);
 
 // MenuDialogLoopT_LoadStaticMeshes_PhaseB — mirror the static-mesh loop of
 // MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x30 (count =
@@ -95,7 +95,7 @@ struct MenuDialogLoopT_PhaseBState {
 // Sets state->totalCount=0 on any failure so PhaseB_TickChunk early-exits.
 // Caller checks (state->totalCount > 0) to confirm work needs doing.
 void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
-                                      void* self, void* menuScene, void* scene);
+                                      MenuDialogLoopT* self, MenuScene* menuScene, Graphics::Scene* scene);
 
 // Process up to maxElements elements of the PhaseB iteration. Returns the
 // number of elements processed this call. Returns 0 when the loop has fully

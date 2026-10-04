@@ -306,9 +306,9 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 uint32_t spotInfo = ((freeSpot | 0x800) << 4) | emptySlot;
 
                 WorkAct_FishWorkCtor_beae0(
-                    &citizenRef, field_20, reinterpret_cast<int64_t*>(&entityRef),   // LEFT: SIG WorkAct_FishWorkCtor_beae0
+                    &citizenRef, field_20, &entityRef,
                     citizenPos, citizenHeading,
-                    reinterpret_cast<uint64_t>(fishingDesc->_fish),   // LEFT: SIG WorkAct_FishWorkCtor_beae0
+                    fishingDesc->_fish,
                     uvScale, freeSpotMapCell, spotInfo);
 
                 // Mark spot as in-use (state = 1)

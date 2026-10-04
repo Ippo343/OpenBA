@@ -195,15 +195,13 @@ void ZoneComponent::OnAdded() {
     }
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
 
-    // 0x14009d360 takes the Map as int*, the entity ref as int64_t* and the map
-    // description's footprint stamp (+0x28) as int64_t* (Action/exe_bodies.h, wave X).
     // The MapComponent's description is a MapDescription (retail's IsDerivedFrom
     // 0x1401c7a18 above, skipped by the tree).
     MapDescription* mapDesc = static_cast<MapDescription*>(desc);
     Object::InternalPtr<ComponentEntity> entityRef(_entity);
-    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),   // LEFT: SIG ZoneComponent_sub_d360
+    ZoneComponent_sub_d360(world->m_game, &entityRef,
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
-        reinterpret_cast<int64_t*>(&mapDesc->_footprint), kind);   // 0x14009d360 LEFT: SIG ZoneComponent_sub_d360
+        &mapDesc->_footprint, kind);   // 0x14009d360
 
     entityRef = _entity;
     world->m_citizenList->AddZoneEntity(&entityRef);   // 0x140088e20
@@ -241,12 +239,11 @@ void ZoneComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
 
-    // 0x14009d360's untyped parameters (see OnAdded).
     MapDescription* mapDesc = static_cast<MapDescription*>(desc);
     Object::InternalPtr<ComponentEntity> entityRef(nullptr);
-    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),   // LEFT: SIG ZoneComponent_sub_d360
+    ZoneComponent_sub_d360(world->m_game, &entityRef,
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
-        reinterpret_cast<int64_t*>(&mapDesc->_footprint), kind);   // 0x14009d360 LEFT: SIG ZoneComponent_sub_d360
+        &mapDesc->_footprint, kind);   // 0x14009d360
 
     // Walk the zone-map tree (CitizenBehavior +0x160, TemplateBucket nodes) for the
     // owner's description (the entity's +0x28).

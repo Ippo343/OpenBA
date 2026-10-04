@@ -100,7 +100,7 @@
 namespace RtObject {
 // 0x180006250 — ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ, ported in
 // external.cpp. HIDDEN RETURN SLOT: (this in RCX, ret in RDX), returns ret.
-Filename* RtObject_External_GetPath(const External* self, Filename* ret);
+System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret);
 }
 
 namespace RtObjFactoryDtor {
@@ -121,8 +121,6 @@ using rt::io::Serializer;
 using rt::io::Stream;
 using RtObject::ExternalFactory;
 using RtObject::External;
-using RtSystem::Filename;
-using RtSystem::String;
 
 // ---------------------------------------------------------------------------
 // The vtable call shapes, all pinned by the disassembly.
@@ -250,10 +248,8 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
 
                 uint32_t key = id;               // 1800bcc4f [RBP+0x50]
                 rtrefset::Node* outSlot = nullptr;   // [RBP-0x20]
-                // TRANSITIONAL CAST, the class->POD direction: `rtrefset::Insert`
-                // is an unconverted C body whose value parameter is the POD.
                 rtrefset::Insert(reinterpret_cast<rtrefset::Set*>(&refs), &outSlot, &key,  // CAST-OK: elem_stride
-                                 reinterpret_cast<const Filename*>(&keyPath));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                                 &keyPath);
             }                                    // 1800bcc6b — keyPath's release
 
             // Temporary B: a SECOND AddRef'd alias, normalised again, then
@@ -351,8 +347,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                         // the null local must not be constructed twice.
                         System::Filename ret;
                         RtObject_External_GetPath(
-                            n->element.external,
-                            reinterpret_cast<Filename*>(&ret));  // 1800bce3b  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                            n->element.external, &ret);  // 1800bce3b
 
                         // 1800bce41 IS AN ADOPT WITH NO FOLLOWING
                         // AdjustDelimiters, so it is neither the String ctor

@@ -31,7 +31,9 @@ class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
 class TradeUI;         // code/Game/Dialog/TradeUI.h
 
 // ---- autosavedialog.cpp
-extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14005e230
+namespace UI { class UserInterface; class DialogInstance; }
+namespace Object { template <class T> class InternalPtr; }
+extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x14005e230
 
 // ---- citizenui.cpp
 // B.4 P2 DLG-1: fn_FindComponent_CitizenAI (0x140011050) had no caller; deleted
@@ -52,10 +54,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                  uint32_t x, uint32_t y);
 
 // ---- eventnotifydialog.cpp
-extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140068ab0
-
-// ---- messagedialog.cpp
-void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006d300
+extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140068ab0
 
 // ---- optionsdialog.cpp
 // Free: reads the GameContainer (Game/game.h) through its first argument.
@@ -85,7 +84,6 @@ extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNod
 // PlayerToolManager members (SelectTool, ToggleUtilityDialog, OpenPauseMenu,
 // CenterOnEntity; Game/PlayerToolManager.h). These are their forwarders.
 void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60 B4 FORWARD: 6 outside caller files -> PlayerToolManager::SelectTool
-extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param);  // 0x140101a80 B4 FORWARD: 2 outside caller files -> PlayerToolManager::ToggleUtilityDialog
 // toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
 // (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity
@@ -109,7 +107,8 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 // B.4 DLG-e: the fifteen TownHallUI bodies are members (Dialog/TownHallUI.h).
 
 // ---- tradeui_buyentries.cpp
-extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray);  // 0x140059670
+class TradeComponent;
+extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list)
 
 // ---- tradeui_checkout.cpp
 extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp);  // 0x14005a490
@@ -125,7 +124,8 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, Compo
 // B4 P2 DLG-3: TradeUI_StorageTree_Insert_e1c0 (0x14000e1c0) is declared typed in Dialog/TradeUI.h.
 
 // ---- tradeui_price.cpp
-extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity);  // 0x14005a520
+class ComponentDescription;
+extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource);  // 0x14005a520
 
 // ---- tradeui_sort.cpp
 // B4 P2 DLG-3: the two introsort drivers are declared typed in Dialog/TradeUI.h.

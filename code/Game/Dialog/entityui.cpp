@@ -35,7 +35,7 @@
 #include "Component/BuildDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Player/EditTool.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/exe_bodies.h"
-#include "Player/exe_bodies.h"   // B3R: PlayerTrade_BSTRemove_25740, PlayerTrade_Retrace_25920
+#include "Player/exe_bodies.h"   // B3R: PlayerTrade_BSTRemove_25740, Avl38Retrace
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "ui/CheckElement.h"          // B4 DLG-a: EntityUI::checkPin
 #include "Component/StateMachineComponent.h"
@@ -262,7 +262,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                     // Insert as the right child, then rebalance
                     TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
                     cur->right = newNode;
-                    // 0x140025920 (PlayerTrade_Retrace_25920's body, on the typed node)
+                    // 0x140025920 (Avl38Retrace, on the typed node)
                     Avl38Retrace<TrackedEntityNode>(rootPtr, &newNode);
                     break;
                 }

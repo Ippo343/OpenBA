@@ -454,6 +454,9 @@ class PackageFile;
 class FileSystem {
 public:
     // ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z        0x1800ab310
+    bool Exists(const System::Filename& path) const;
+    // B4 FORWARD: code/Game/Game/w2_takescreenshot.cpp still calls this (the
+    // RtSystem::Filename view of its System::Filename); one line, filesystem.cpp.
     bool Exists(const RtSystem::Filename& path) const;
 
     // ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x180007bd0
@@ -507,7 +510,7 @@ public:
 
     // -- filesystem_createfile_win.cpp --------------------------------------
     // ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z     0x1800ae430
-    bool CreatePath(const RtSystem::Filename& path) const;
+    bool CreatePath(const System::Filename& path) const;
     // ?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
     //                                                             0x1800ade60
     // ?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z    0x1800ae020
@@ -568,11 +571,11 @@ public:
 
     // -- filesystem_find_win.cpp --------------------------------------------
     // ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z 0x1800ab180
-    bool ExistsInPackfile(const RtSystem::Filename& path) const;
+    bool ExistsInPackfile(const System::Filename& path) const;
     // ?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z   0x1800adc70
     // `AEBA`, private in retail; the `QEBA` spelling is not an export at all
     // and would resolve NULL forever. Public here for the door reason above.
-    bool PlatformExists(const RtSystem::Filename& path) const;
+    bool PlatformExists(const System::Filename& path) const;
     // ?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z
     //                                                             0x1800ad7a0
     // The out-parameter is `RtIO::FilenameArray`, declared incomplete above;

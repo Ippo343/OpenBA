@@ -89,8 +89,10 @@ uintptr_t* WrapIBP(uintptr_t* out, Work* obj) {
 // resizes to the count of kind-2 children and is then zero-filled. Those are the
 // fishing spots the citizen cycles through, so an unsized pair means a fisherman with
 // nowhere to stand.
-extern "C" uintptr_t* FishingComponent_CreateWork(void* selfV, uintptr_t* out) {
-    FishingComponent* self = reinterpret_cast<FishingComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
+// (The member slot [18] itself: was the C body FishingComponent_CreateWork its one-line
+// member in fishingcomponent.cpp forwarded to.)
+uintptr_t* FishingComponent::CreateWork(uintptr_t* out) {
+    FishingComponent* self = this;
     FishingWork* work = AllocWork<FishingWork>(0x70);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -123,8 +125,10 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* selfV, uintptr_t* out) {
 // ── HuntComponent::CreateWork — retail 0x1401226a0 ────────────────────────────────
 // Retail writes vtable_AutoPickupWork then immediately vtable_HuntWork over it (a
 // compiler artefact of the two-level ctor); only the final store is observable.
-extern "C" uintptr_t* HuntComponent_CreateWork(void* selfV, uintptr_t* out) {
-    HuntComponent* self = reinterpret_cast<HuntComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
+// (The member slot [18] itself: was the C body HuntComponent_CreateWork its one-line
+// member in huntcomponent.cpp forwarded to.)
+uintptr_t* HuntComponent::CreateWork(uintptr_t* out) {
+    HuntComponent* self = this;
     HuntWork* work = AllocWork<HuntWork>(0x58);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -302,8 +306,8 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
     return work;
 }
 
-// LEFT: declared nowhere else (consumeproduce_recipe_dump.cpp, COMP-c).
-extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
+// Declared nowhere else (consumeproduce_recipe_dump.cpp).
+extern "C" void ConsumeProduce_DumpRecipes(const ConsumeProduceDescription* cpDesc, int selected);
 
 extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* selfV, uintptr_t* out) {
     ConsumeProduceComponent* self = reinterpret_cast<ConsumeProduceComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)

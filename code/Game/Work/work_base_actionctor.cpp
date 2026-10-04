@@ -110,7 +110,7 @@ static inline float WA_MoveSpeed() { return kRdata_140172280; }
 static int WA_CitizenCarryCount(CitizenComponent* const* citizenRef) {
     CitizenComponent* e = *citizenRef;
     StorageComponent* storage = e->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: C signature (COMP-b)
+    return CitizenComp_StorageComponent_QueryCount(storage);
 }
 
 // ============================================================
@@ -351,9 +351,8 @@ PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenCo
 // Ghidra-verified constants: ~Hoe = -1 (OR R8D,0xffffffff @0x1400c0b68),
 // ~Axe = -2 (MOV R8D,0xfffffffe @0x1400c0d5b/@0x1400c1024),
 // pathType = QueryCount>0 ? 4 : 1 (MOV EAX,4 / MOV EBX,1 / CMOVNZ @0x1400c0f61).
-void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* targetIBP,
+void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP,
                                     float* worldPos, int cellIdx, uint8_t cancelFirst) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PerformWorkCtor9_c0ad0
 
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character;
@@ -363,7 +362,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
     // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
     // (the targetIBP null arm is the tree's guard)
     // LEFT: SIG WorkAct_PerformWorkCtor9_c0ad0 (the caller hands the pile reference as void*).
-    ComponentEntity* targetInner = targetIBP ? *reinterpret_cast<ComponentEntity* const*>(targetIBP) : nullptr;
+    ComponentEntity* targetInner = targetIBP ? *targetIBP : nullptr;
     float heading = 0.0f;
     {
         ComponentEntity* headingArg = targetInner;
@@ -503,8 +502,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
 //   param_3 = citizenIndex (u32, forwarded to CompleteTask param_5)
 // Builds SendComponentMessage (→ character+0x58), CompleteTask, and an inline
 // PlayAnimation action, appending the latter two to the action stack.
-void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32_t citizenIndex) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PlayAnimationCtor_c2490
+void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex) {
 
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
@@ -569,10 +567,9 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
 //   param_7 = typeId (u32, second SendComponentMessage msg id)
 //   param_8 = u32 (SendComponentMessage param_4)
 //   param_9 = u32 (SendComponentMessage param_6)
-void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* workEntityIBP,
+void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentEntity* const* workEntityIBP,
                                    uint32_t /*unused4*/, float* targetPos, float* srcPos,
                                    uint32_t typeId, uint32_t flag8, uint32_t cellIdx9) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_GrazingWorkCtor_bb0a0
 
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
@@ -632,7 +629,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(void* citizenIBP, uint32_t priority, void* wo
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = typeId;
-        ComponentEntity* entityInner = *reinterpret_cast<ComponentEntity* const*>(workEntityIBP);   // LEFT: SIG WorkAct_GrazingWorkCtor_bb0a0 (the outside callers hand the entity reference as void*)
+        ComponentEntity* entityInner = *workEntityIBP;
         sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, flag8, &innerIbp, cellIdx9);   // 0x1400cb1d0
     }
     ibpResB = sm2;

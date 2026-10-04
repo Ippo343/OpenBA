@@ -10,7 +10,7 @@
 DEFINE_EXE_ABSTRACT_TYPE(Tool, "Object::Internal")
 
 // [10] 0x1400268a0 `XOR AL,AL; RET`.
-bool Tool::IsSelected(uint64_t*) { return false; }
+bool Tool::IsSelected(ComponentEntity* const*) { return false; }
 
 // [11] 0x140004950 `MOV dword [RDX],0; MOV RAX,RDX; RET` — no ToolSetting.
 Object::Type* Tool::GetSettingType(Object::Type* ret) const {

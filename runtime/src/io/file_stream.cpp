@@ -453,10 +453,7 @@ extern "C" void RtIo_TextFileStream_SetObject(::IO::TextFileStream* self,
 bool IO::FileStream::Create(const System::Filename& path) {
     ++RtIO::g_fsc.create;
 
-    // LEFT: CreatePath keeps the POD parameter while
-    // runtime/src/video/save_image_to_file.cpp (R-VIDEO) calls it with one.
-    ::IO::FileSystem::_singleton->CreatePath(
-        *reinterpret_cast<const RtSystem::Filename*>(&path));  // 1800aa919  // LEFT: SIG FileSystem::CreatePath / ExistsInPackfile keep the RtSystem::Filename POD parameter (outside callers: video/save_image_to_file, engine/updateloop_loadresources, object/external_path_win; wave X)
+    ::IO::FileSystem::_singleton->CreatePath(path);  // 1800aa919
 
     // ---- 1800aa91e..1800aa958: this->filename = *path -------------------
     // ENDGAME B.3.1 step 2: this whole block IS `System::String::operator=`

@@ -63,26 +63,31 @@ namespace RtObject {
 // Declared in the files that define them; repeated here rather than pulled in
 // through a header, because several of these have no header of their own (the
 // one-body-one-file rule runtime/src/object/rt_object_port.cpp states).
-Filename* RtObject_External_GetPath(const External* self, Filename* ret);
+System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret);
 // external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
-extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filename* path,
-                                           const Filename* name);
-const External* RtObject_ExternalFactory_Find(const ExternalFactory* self, const Filename* path);
+extern "C" bool RtObject_External_SaveText(::Object::External* self, const System::Filename* path,
+                                           const System::Filename* name);
+const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
+                                              const System::Filename* path);
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
                                                   const External* prev);
 uint32_t  RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const External* e);
-Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
-                                                         Filename* ret, uint32_t id);
+System::Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
+                                                                 System::Filename* ret, uint32_t id);
 void      RtObject_ExternalFactory_Clean(ExternalFactory* self);
-void      RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename* path);
-Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self, Filename* ret);
-Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self, Filename* ret);
+void      RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const System::Filename* path);
+System::Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self,
+                                                                System::Filename* ret);
+System::Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self,
+                                                                 System::Filename* ret);
 // ?ExpandRelativePath@ExternalFactory@Object@@QEBA?AVFilename@System@@AEBV34@_N@Z
 // — the `_N` is a FOURTH parameter, `bool appendIdentifier`, which the class
 // declaration carries too. Reading the mangled name rather than the three-arg
 // shape a reader would expect is what caught it.
-Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self, Filename* ret,
-                                                      const Filename* path, bool appendIdentifier);
+System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
+                                                              System::Filename* ret,
+                                                              const System::Filename* path,
+                                                              bool appendIdentifier);
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
@@ -108,9 +113,6 @@ inline RtObject::External* Pod(External* e) {
 inline const RtObject::External* Pod(const External* e) {
     return reinterpret_cast<const RtObject::External*>(e);           // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
-inline const RtObject::Filename* PodF(const System::Filename& f) {
-    return reinterpret_cast<const RtObject::Filename*>(&f);          // B.3.3 bridge  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-}
 
 // A `System::Filename` returned by value out of an entry point that writes a
 // HIDDEN RETURN SLOT: the slot is raw, uninitialised bytes, so the callee
@@ -120,11 +122,9 @@ inline const RtObject::Filename* PodF(const System::Filename& f) {
 template <class Fn>
 inline System::Filename ByHiddenSlot(Fn call) {
     System::Filename out;                       // born null
-    RtSystem::Filename* slot =
-        reinterpret_cast<RtSystem::Filename*>(&out);                 // B.3.3 bridge  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
     // The callee placement-constructs; `out` is null, so nothing is leaked by
     // overwriting its one pointer field.
-    call(slot);
+    call(&out);
     return out;
 }
 
@@ -141,7 +141,7 @@ inline System::Filename ByHiddenSlot(Fn call) {
 // and keeps its effectiveness counters. Declared on the class by B.3.3 step 6A
 // because a caller batch needed it; nothing about the body moved.
 bool External::SaveText(const System::Filename& path, const System::Filename& name) {
-    return RtObject::RtObject_External_SaveText(this, PodF(path), PodF(name));
+    return RtObject::RtObject_External_SaveText(this, &path, &name);
 }
 
 // ============================================================================
@@ -176,7 +176,7 @@ ExternalFactory* ExternalFactory::Get() {
 
 const External* ExternalFactory::Find(const System::Filename& path) const {
     return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_Find(this, PodF(path)));
+        RtObject::RtObject_ExternalFactory_Find(this, &path));
 }
 
 const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev) const {
@@ -194,21 +194,21 @@ uint32_t ExternalFactory::GetReferenceId(const External* external) const {
 
 System::Filename ExternalFactory::GetPathForReferenceId(uint32_t id) const {
     const ExternalFactory* self = this;
-    return ByHiddenSlot([self, id](RtSystem::Filename* slot) {
+    return ByHiddenSlot([self, id](System::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetPathForReferenceId(self, slot, id);
     });
 }
 
 System::Filename ExternalFactory::GetPathStackFilename() const {
     const ExternalFactory* self = this;
-    return ByHiddenSlot([self](RtSystem::Filename* slot) {
+    return ByHiddenSlot([self](System::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetPathStackFilename(self, slot);
     });
 }
 
 System::Filename ExternalFactory::GetPathStackDirectory() const {
     const ExternalFactory* self = this;
-    return ByHiddenSlot([self](RtSystem::Filename* slot) {
+    return ByHiddenSlot([self](System::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetPathStackDirectory(self, slot);
     });
 }
@@ -216,14 +216,14 @@ System::Filename ExternalFactory::GetPathStackDirectory() const {
 System::Filename ExternalFactory::ExpandRelativePath(const System::Filename& path,
                                                      bool appendIdentifier) const {
     const ExternalFactory* self = this;
-    const RtObject::Filename*        p    = PodF(path);
-    return ByHiddenSlot([self, p, appendIdentifier](RtSystem::Filename* slot) {
+    const System::Filename* p = &path;
+    return ByHiddenSlot([self, p, appendIdentifier](System::Filename* slot) {
         RtObject::RtObject_ExternalFactory_ExpandRelativePath(self, slot, p, appendIdentifier);
     });
 }
 
 void ExternalFactory::PushPath(const System::Filename& path) {
-    RtObject::RtObject_ExternalFactory_PushPath(this, PodF(path));
+    RtObject::RtObject_ExternalFactory_PushPath(this, &path);
 }
 void ExternalFactory::PopPath() {
     RtObject::RtObject_ExternalFactory_PopPath(this);
@@ -237,14 +237,14 @@ void ExternalFactory::Add(External* external) {
 
 const External* ExternalFactory::FindOrLoad(const System::Filename& path) {
     return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_FindOrLoad(this, PodF(path)));
+        RtObject::RtObject_ExternalFactory_FindOrLoad(this, &path));
 }
 
 void ExternalFactory::Clean() {
     RtObject::RtObject_ExternalFactory_Clean(this);
 }
 void ExternalFactory::ForceUnload(const System::Filename& path) {
-    RtObject::RtObject_ExternalFactory_ForceUnload(this, PodF(path));
+    RtObject::RtObject_ExternalFactory_ForceUnload(this, &path);
 }
 // ---------------------------------------------------------------------------
 // `SerializeReferenceTable` (0x1800bcb60) — LANDS HERE, B.3.4 STREAMS (5/6).
@@ -294,8 +294,8 @@ void ExternalFactory::SerializeReferenceTable(IO::Stream& stream) {
 //   return slot and RDX is the path (the arguments do NOT shift the way a
 //   member's do; the C entry point's `(ret, path)` order is that shape).
 System::Filename ExternalFactory::GetCompiledPath(const System::Filename& path) {
-    const RtObject::Filename* p = PodF(path);
-    return ByHiddenSlot([p](RtSystem::Filename* slot) {
+    const System::Filename* p = &path;
+    return ByHiddenSlot([p](System::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetCompiledPath(slot, p);
     });
 }

@@ -47,6 +47,7 @@
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "collection/Collection.h"   // Collection::Array (the typed view of the raw triple)
 
 // ============================================================
 // Reimpl of FUN_140002540 (grow/shrink the 0x28-byte-element entry array)
@@ -57,51 +58,48 @@
 // tail with elem+0x20 = 1 default, free the old block. 1:1 port of the exe helper.
 // Registered at 0x140002540 (reg_component_visuals.cpp) and called by
 // ambient_externalptr_serialize.cpp: a free function, not a member.
-// LEFT (every cast in this body): ERASED Array<entry>::SetSize hand-expanded instance, kept
-// AS IS: its element default writes +0x20 = 1 and it skips MemAlloc with no allocator, so it
-// is not provably SetSizeCore's first allocation / growth; its C signature (void* header) is
-// in Component/exe_bodies.h (wave X).
+// The tree's body keeps ONE step retail's SetSize-shaped body lacks -- it skips MemAlloc when
+// System::MemoryAllocator::_singleton is null (known_port_issues row 570) -- so it is not
+// replaced by the erased core; it is typed by element instead. The new tail writes +0x00
+// (dword), +0x08 / +0x10 / +0x18 (qwords), +0x20 (dword); the two padding dwords stay untouched.
 extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
-    uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
-    int oldCount = *(int*)(arr + 8);
+    // LEFT: H5 AmbientEnvironmentDescription::_entries / _entryCount / _entryCap are a raw Array triple
+    auto* arr = reinterpret_cast<Collection::Array<AmbientEnvironmentBiome>*>(arrayBase);
+    int oldCount = arr->_size;
     if (newCount == oldCount) return;
 
-    void* oldPtr = *(void**)(arr + 0);
-    *(int*)(arr + 8) = newCount;
-    if (*(int*)(arr + 0xc) < newCount) {
-        *(int*)(arr + 0xc) = newCount;
+    AmbientEnvironmentBiome* oldPtr = arr->_data;
+    arr->_size = newCount;
+    if (arr->_capacity < newCount) {
+        arr->_capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            *(int*)(arr + 0xc) = newCount * 3;
+            arr->_capacity = newCount * 3;
         }
         if (::System::MemoryAllocator::_singleton) {
-            void* newPtr = ::System::MemoryAllocator::MemAlloc((uint64_t)(*(int*)(arr + 0xc)) * 0x28, 8);
-            *(void**)(arr + 0) = newPtr;
+            arr->_data = static_cast<AmbientEnvironmentBiome*>(
+                ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity * 0x28, 8));
         }
     }
 
     int start = 0;
-    if (oldPtr == *(void**)(arr + 0)) start = oldCount;  // grown in place: keep existing
+    if (oldPtr == arr->_data) start = oldCount;  // grown in place: keep existing
 
-    uint8_t* base = *(uint8_t**)(arr + 0);
+    AmbientEnvironmentBiome* base = arr->_data;
     for (int i = start; i < newCount; ++i) {
-        uint8_t* dst = base + (intptr_t)i * 0x28;
+        AmbientEnvironmentBiome* dst = base + i;
         if (!dst) continue;
         if (i < oldCount) {
-            // copy old element (5 qwords = 0x28 bytes)
-            const uint8_t* src = reinterpret_cast<const uint8_t*>(oldPtr) + (intptr_t)i * 0x28;
-            for (int q = 0; q < 5; ++q)
-                *(uint64_t*)(dst + q * 8) = *(const uint64_t*)(src + q * 8);
+            *dst = oldPtr[i];                    // the 0x28 bytes, padding members included
         } else {
-            // zero-init new element, +0x20 = 1 default
-            *(uint32_t*)(dst + 0x00) = 0;
-            *(uint64_t*)(dst + 0x08) = 0;
-            *(uint64_t*)(dst + 0x10) = 0;
-            *(uint64_t*)(dst + 0x18) = 0;
-            *(uint32_t*)(dst + 0x20) = 1;
+            dst->terrainMask  = 0;               // +0x00 dword
+            dst->entityFilter = nullptr;         // +0x08
+            dst->daySound     = nullptr;         // +0x10
+            dst->nightSound   = nullptr;         // +0x18
+            dst->weight       = 1;               // +0x20 = 1 default
         }
     }
 
-    if (oldPtr != *(void**)(arr + 0) && oldPtr) {
+    if (oldPtr != arr->_data && oldPtr) {
         ::System::MemoryAllocator::MemFree(oldPtr);
     }
 }

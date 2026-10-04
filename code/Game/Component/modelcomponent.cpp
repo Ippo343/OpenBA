@@ -99,59 +99,8 @@ static Graphics::GraphicsMesh* GetMeshFromDescription(const ModelDescription* de
     return group[meshIndex];
 }
 
-// ============================================================
-// Per-entity model-variant pick (faithful core of FUN_1401253d0)
-// ============================================================
-// Citizens all render identically because ModelComponent::Startup sets the
-// mesh group from a FIXED description field and the per-citizen pick that the
-// original performs in the deferred citizen init (FUN_140117080 -> FUN_1401253d0)
-// is guarded off in standalone. This helper reproduces the safe core of
-// FUN_1401253d0: choose a random mesh group within the description's valid range,
-// then SetMesh the matching mesh into the MeshInstance (+0x28). It touches ONLY the
-// same fields/SetMesh path ModelComponent::Startup already uses for buildings — no
-// risky vtable Draw/Remove calls.
-//
-// MUST be called AFTER the component's Startup (so meshIndex is populated) and
-// BEFORE the entity is registered (so the entity's OnAdded adds the new mesh to
-// the scene). The description's mesh-group count is the same field the building
-// randomize path uses as its Rand range, so the pick is always in-bounds.
-//
-// Returns the chosen group index, or -1 if no change was made. `forceIdx` picks
-// a specific GROUP (e.g. gender: retail uses group=(gender==0)?1:0);
-// pass -1 to keep the original random pick over the group count.
-extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
-    if (!modelComp) return -1;
-    if (GameUpdateLoop::_singleton == nullptr) return -1;
-    // LEFT: starttown.cpp hands the component as void*.
-    ModelComponent* self = reinterpret_cast<ModelComponent*>(modelComp);
-
-    ModelDescription* desc = LinkedModelDescription(self);
-    if (!desc) return -1;
-
-    // Mesh-group count. Nothing to randomize over <= 1 group.
-    uint32_t count = static_cast<uint32_t>(desc->_meshGroupCount);
-    if (count <= 1) return -1;
-
-    int16_t meshGroup;
-    if (forceIdx >= 0) {
-        meshGroup = (int16_t)((uint32_t)forceIdx % count);   // clamp into range
-    } else {
-        System::Random* random = GameUpdateLoop::_singleton->m_random;
-        if (!random) return -1;
-        meshGroup = (int16_t)random->Rand(static_cast<uint32_t>(count));
-    }
-    self->meshGroup = meshGroup;
-
-    // Keep the mesh index Startup already chose; skip if it has no renderable
-    // mesh ( < 0 ).
-    int16_t meshIndex = self->meshIndex;
-    if (meshIndex < 0) return -1;
-
-    Graphics::GraphicsMesh* mesh = GetMeshFromDescription(desc, meshGroup, meshIndex);
-    if (!mesh) return -1;
-    self->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
-    return meshGroup;
-}
+// (ModelComponent_RandomizeVariant, a standalone per-entity mesh-group pick with no
+// retail address, had no caller left: deleted, B4 wave X.)
 
 
 

@@ -208,8 +208,8 @@ namespace IO {
 // that Exists, GetPackfileId and Find deref fields unguarded because retail
 // does; the move changes nothing about that.
 
-bool FileSystem::Exists(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+bool FileSystem::Exists(const System::Filename& pathRef) const {
+    const System::Filename* const path = &pathRef;
 
     // B3R RT-IO: the two arms call ExistsInPackfile / PlatformExists as
     // members (filesystem_find_win.cpp); they were RT_EXPORT_ONCE doors.
@@ -225,6 +225,9 @@ bool FileSystem::Exists(const RtSystem::Filename& pathRef) const {
 
     return ours;
 }
+
+// B4 FORWARD: code/Game/Game/w2_takescreenshot.cpp still calls this.
+bool FileSystem::Exists(const RtSystem::Filename& path) const { return Exists(RtSystem::Sys(path)); }
 
 System::Filename FileSystem::GetDataDirectory() const {
 

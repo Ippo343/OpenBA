@@ -50,7 +50,7 @@ public:
     void Update(void* time, char active) override;                         // [7]  0x1400fcda0
     void Draw(Video::Context*, char) override {}                                     // [8]  0x1400fcd90 RET
     char OnCancel() override { return 0; }                                 // [9]  0x1400fd2d0
-    bool IsSelected(uint64_t* ref) override;                       // [10] 0x1400fd290
+    bool IsSelected(ComponentEntity* const* ref) override;         // [10] 0x1400fd290
     // [11] no setting / [12] cursor 1 (0x140105860): Tool's, inherited. The old
     // hand table put a `return 0` stub in slot 12 (cursor id 0).
     // [13] 0x14002daf0 `MOV RAX,[RCX+0x30]; MOV [RDX],RAX; MOV RAX,RDX; RET`:

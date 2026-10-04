@@ -624,12 +624,12 @@ DEFINE_EXE_TYPE(EventNotifyDialog, "UI::DialogInstance")
 
 // B4 FORWARD: 1 outside caller(s) (code/Game/Game/gameupdateloop.cpp, the
 // ribbon GameUpdateLoop::Startup builds). Forwards to the ctor 0x140068ab0.
-extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP) {
+extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes,
+                                                   const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
     if (!self) return nullptr;
     Object::InternalPtr<UI::DialogInstance> parent;
-    // LEFT: SIG EventNotifyDialog_Ctor_Standalone (gameupdateloop.cpp declares it locally with void*).
     if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);   // LEFT: SIG
-    return ::new (self) EventNotifyDialog(static_cast<UI::UserInterface*>(ui),   // LEFT: SIG
-                                          static_cast<const UI::Dialog*>(extRes), parent);   // LEFT: SIG
+        parent = *parentIBP;
+    return ::new (self) EventNotifyDialog(ui,
+                                          static_cast<const UI::Dialog*>(extRes), parent);   // LEFT: the caller holds the found resource as void* (ExternalList::Find's _ptr, GameUpdateLoop::Startup)
 }

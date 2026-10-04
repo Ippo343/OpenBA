@@ -163,14 +163,12 @@ static void WCP_AppendInline(CharacterComponent* character, Action* ibpVal) {
 //   param_11 [+0x58] u32    CreateRawMaterial p8
 //   param_12 [+0x60] float  produceTime (Time::Time for PerformWork)
 //   param_13 [+0x68] u32    CompleteTask p5
-void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* param_3,
-                                      float* param_4, float param_5, int64_t param_6,
-                                      uint64_t param_7, uint32_t param_8, int* param_9,
+void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint32_t param_2,
+                                      ComponentEntity* const* entityRef,
+                                      float* param_4, float param_5, ComponentDescription* param_6,
+                                      ComponentDescription* rawMatDesc, uint32_t param_8, int* param_9,
                                       uint32_t param_10, uint32_t param_11, float param_12,
                                       uint32_t param_13) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
-    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(param_3);   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
-    ComponentDescription* rawMatDesc = reinterpret_cast<ComponentDescription*>(param_7);   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70 (param_7 is the produced material)
 
     // the action stack = character + 0x48  (0x1400befaf..0x1400befd1)
     CharacterComponent* character = (*citizenRef)->character;
@@ -287,7 +285,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
     if (cVar4 != 0) {
         // 2nd search over param_6 (the caller's ComponentDescription).
         ConsumeProduceDescription* foundComp2 =
-            WCP_FindComponentDerived(reinterpret_cast<ComponentDescription*>(param_6));   // LEFT: the caller hands it as an integer
+            WCP_FindComponentDerived(param_6);
 
         // the ConsumeProduceComponent + weighted random recipe index.
         ConsumeProduceComponent* cp = (*entityRef)->FindComponent<ConsumeProduceComponent>();   // 0x14000b6f0

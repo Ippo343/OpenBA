@@ -165,10 +165,8 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(WorldGeometry* param_1, float* p
         if (cell[0] >= 0 && cell[0] < width && cell[1] >= 0 && cell[1] < width) {
             // 0x1400aaa20 QuarryComponent_helper_aa20 = Pf_CellQuadRay_aa20 (Action/exe_bodies.h);
             // it returns int, the door read AL as the bool.
-            // LEFT: 0x1400aaa20's typed body is file-local to Action/action_pf_road.cpp
-            // (block ACT-a); its B4 FORWARD takes the WorldGeometry as an int64.
             bool hit = static_cast<uint8_t>(Pf_CellQuadRay_aa20(
-                reinterpret_cast<int64_t>(param_1), cell[0], cell[1], param_3, param_2, param_4,
+                param_1, cell[0], cell[1], param_3, param_2, param_4,
                 param_5, param_6, nullptr)) != 0;
             if (hit) return 1;
         }

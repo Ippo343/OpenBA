@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Player/RemovalTool.h"
+#include "Player/edittool_funcs.h"   // RemovalTool_Factory_SA
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/CreateRemovalDescription.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -404,9 +405,7 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
 
 // create 0x14002e7a0: MemAlloc(0x40, 8), then the ctor 0x140104cc0.
 void* RemovalTool::CreateNewObject() {
-    void* p = Object::detail::InternalMemAlloc(sizeof(RemovalTool), 8);
-    if (!p) return nullptr;
-    return static_cast<Object::Base*>(new (p) RemovalTool());
+    return static_cast<Object::Base*>(RemovalTool_Factory_SA());
 }
 // createInPlace 0x14002e7e0: `if (storage) ctor(storage)`.
 void* RemovalTool::CreateInPlaceObject(void* storage) {
@@ -416,6 +415,10 @@ void* RemovalTool::CreateInPlaceObject(void* storage) {
 
 // Kept for standalone/tool_harness.cpp (outside this block's files): the
 // reflected create, by its old name.
-extern "C" void* RemovalTool_Factory_SA(void) { return RemovalTool::CreateNewObject(); }
+extern "C" RemovalTool* RemovalTool_Factory_SA(void) {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RemovalTool), 8);
+    if (!p) return nullptr;
+    return new (p) RemovalTool();
+}
 
 DEFINE_EXE_TYPE(RemovalTool, "DragTool")

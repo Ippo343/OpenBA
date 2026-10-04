@@ -83,10 +83,10 @@
 //   [0x140152b68] System::MemoryAllocator::MemFree  (static 1-arg)
 // B3R: called by name. The REDZONE / ALLOC_STATS instruments sit on the allocator's
 // own hook inside MemAlloc / MemFree (W0-A0), so a direct call is instrumented.
-// 0x140025920 (retrace) is our own PlayerTrade_Retrace_25920, called by name.
+// 0x140025920 (retrace) is the shared Avl38Retrace template, called by name.
 
 #include "Work/marketwork_bst_aaa0.h"
-#include "Player/exe_bodies.h"          // B3R: PlayerTrade_Retrace_25920 (0x140025920)
+#include "Player/exe_bodies.h"          // Avl38Retrace (0x140025920)
 #include "system/MemoryAllocator.h"    // B3R: slot 0x140152b68 = System::MemoryAllocator::MemFree
 #include <cstdint>
 
@@ -246,10 +246,8 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNo
         }
     }
 
-    // ae38: CALL 0x140025920(tree, &cursor). (The retrace takes the header and the
-    // cursor slot as int64_t*: LEFT.)
-    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree),   // LEFT: SIG PlayerTrade_Retrace_25920
-                              reinterpret_cast<int64_t*>(useB ? &cursorB : &cursorA));   // LEFT: SIG PlayerTrade_Retrace_25920
+    // ae38: CALL 0x140025920(tree, &cursor): the shared AVL retrace (Avl38Retrace).
+    Avl38Retrace(tree, useB ? &cursorB : &cursorA);
 }
 
 // ============================================================================

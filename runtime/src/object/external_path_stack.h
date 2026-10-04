@@ -18,10 +18,8 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-
 // ?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z  0x1800bd0e0
-void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* path);
+void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const System::Filename* path);
 
 // ?PopPath@ExternalFactory@Object@@QEAAXXZ                        0x1800bd040
 void RtObject_ExternalFactory_PopPath(ExternalFactory* self);

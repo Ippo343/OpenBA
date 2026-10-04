@@ -290,11 +290,10 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
 // difference: retail's loader SKIPS a duplicate key (it is reading a stream it trusts
 // to be unique), whereas a fixture called every visit has to be able to top a resource
 // back up, so an existing key has its value overwritten.
-// The two parameters stay untyped for the harness's local declaration.
-extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty) {
+extern "C" void TradeStock_SeedForTest(TradeComponent* tradeComp, ComponentDescription* resourceEntity, int qty) {
     if (!tradeComp || !resourceEntity) return;
-    TradeComponent& trade = *reinterpret_cast<TradeComponent*>(tradeComp);
-    ComponentDescription* const key = reinterpret_cast<ComponentDescription*>(resourceEntity);
+    TradeComponent& trade = *tradeComp;
+    ComponentDescription* const key = resourceEntity;
 
     TradeResourceNode* root = trade.stockRoot;
     if (!root) {
@@ -387,9 +386,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
             // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
             if (Loading(ser))
                 GameColl::AsArray<GameColl::Ptr8>(&elem->goods).SetSize(innerCount);
-            // LEFT: 0x1400049c0 takes the array base as an integer (Game block's declaration).
-            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount,
-                reinterpret_cast<long long>(elem->goods), nullptr);
+            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount, elem->goods, nullptr);   // 0x1400049c0
             ser.Serialize(elem->orderKind, nullptr);
         }
     }

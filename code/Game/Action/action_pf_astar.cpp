@@ -988,22 +988,3 @@ void Map::FillZone(uint32_t cell, uint16_t zone) {
     } while (true);
 }
 
-// ===========================================================================
-// B4 FORWARD: the C spellings other blocks' files still call, one line each.
-// ===========================================================================
-// B4 FORWARD: 7 outside callers (cemeterycomponent, citizen_lifeevent_handler,
-// pasturecomponent, quarrycomponent_deform, terraformcomponent, starttown,
-// keystone_a_removalcalcpath)
-void Pf_EnqueueCmd2_a6fe0(int64_t param_1, int cell, int terrainType) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetCellTerrain(cell, terrainType);   // LEFT: SIG Pf_EnqueueCmd2_a6fe0
-}
-// B4 FORWARD: 2 outside callers (Action/keystone_a_zone.cpp, Component/boatcomponent_route.cpp)
-void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattanFlag, uint8_t respectBlocked) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetSearchFlags(diagonal, manhattanFlag, respectBlocked);   // LEFT: SIG Pf_EnqueueCmd4_a68b0
-}
-// B4 FORWARD: 3 outside callers (Action/keystone_a_zone.cpp, Component/boatcomponent_route.cpp,
-// Game/pathfinder_seed.cpp)
-void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost) {
-    reinterpret_cast<PathfinderThread*>(param_1)->SetStepCost(terrainType, cost);   // LEFT: SIG Pf_EnqueueCmd1_a6a30
-}
-

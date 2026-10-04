@@ -40,7 +40,6 @@
 #include "Object/factory_registration.h"
 
 // Slots 18-21: the retail bodies, ported elsewhere and reached through these.
-extern "C" uintptr_t* FishingComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
 
 // 0x14011f130: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
 // `MOV byte [RBX+0x50],0`. Retail leaves +0x54 unwritten; the tree's factory
@@ -70,7 +69,7 @@ void       FishingComponent::Persist(IO::Stream& stream) {
     ser.Serialize(fishingFlag, nullptr);
     ser.Serialize(fishingRate, nullptr);
 }
-uintptr_t* FishingComponent::CreateWork(uintptr_t* out) { return FishingComponent_CreateWork(this, out); }  // [18] 0x14011efe0
+// [18] 0x14011efe0 CreateWork is defined in resourceproduce_creatework.cpp.
 // [19] 0x14011ee80 / [20] 0x14011ee50 / [21] 0x14011ec10: OnEnterProducing,
 // OnExitProducing and ProduceTick live in fishingcomponent_produce.cpp with the
 // coverage helpers they share.

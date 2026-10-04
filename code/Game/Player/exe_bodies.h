@@ -13,6 +13,7 @@
 #include "collection/Collection.h"   // Collection::Array<T> (the overlay record arrays)
 #include "Player/Tool.h"             // ToolTileRecord / ToolSegmentRecord
 #include "Action/PathAvl.h"           // AvlTreeHead (the AVL sets below)
+#include "system/MemoryAllocator.h"   // Avl38FreeSubtree's MemFree
 #include <cstddef>
 namespace Video { class Context; }
 
@@ -42,7 +43,6 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
 extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);  // 0x1400f8d50 B4 FORWARD -> WorkScheduler::FindWorkAtCell: 2 outside callers (Action/action_base_cnr.cpp, Component/destroycomponent_states.cpp)
 extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1);  // 0x14011dfa0 B4 FORWARD -> DestroyComponent::RunStateMachine: 1 outside caller (Dialog/upgradeui.cpp)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
-extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2);  // 0x1400f9ad0 B4 FORWARD -> WorkScheduler::PrioritizeWork: 1 outside caller (Component/firecomponent_ignite.cpp)
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
@@ -92,8 +92,14 @@ static_assert(offsetof(DecalVertexNode, right) == 0x28 && offsetof(DecalVertexNo
 static_assert(offsetof(DecalVertexNode, height) == 0x32, "DecalVertexNode::height @ +0x32");
 DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out, const DecalVertexKey* key);  // 0x14001f6b0
 DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key);  // 0x14001fc00
-extern "C" void TradeWork_helper_14b00(int64_t param_1, void* node);  // 0x140014b00 B4 FORWARD -> Avl38FreeSubtree<Avl38Node>
+
 extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2);  // 0x140014b40 B4 FORWARD -> Avl38Retrace<Avl38Node>
+namespace Graphics { class MaterialInstance; }
+int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
+             int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
+             uint8_t param_9, uint32_t param_10, uint32_t param_11,
+             uint32_t param_12, uint32_t param_13, uint32_t param_14,
+             char param_15, int param_16, int param_17, uint8_t param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
 int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 int Player_HighlightAdd_55430(int64_t param_1, int param_2);  // 0x140055430 B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp)
 
@@ -105,7 +111,6 @@ void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP);  // 0x14000
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP);  // 0x140003ea0
 uint64_t PlayerPath_Sub_11e710(uintptr_t param_1);  // 0x14011e710 B4 FORWARD -> DestroyComponent::InRemovalState: 2 outside callers (Component/firecomponent_ignite.cpp, Component/workplacecomponent.cpp)
 bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, const ComponentDescription* param_10);  // 0x14009f5d0
-bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, int64_t param_10);  // 0x14009f5d0 B4 FORWARD: 3 outside callers (Component/growthcomponent.cpp, Component/spawncomponent.cpp, Work/foresterwork.cpp)
 // 0x140104670 / 0x140104770 / 0x1401048a0 are RemovalTool::CanRemoveBuilding / CanRemoveRoad / CanRemoveField (RemovalTool.h).
 
 // ---- tool_base_place.cpp
@@ -118,7 +123,8 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 // 0x1400fda00 is PlacementTool::GetPlacement (PlacementTool.h).
 
 // ---- tool_base_render.cpp
-extern "C" void HighlightSelect_Impl(void* self);  // 0x1400fc9e0
+class EditTool;
+extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void* self);  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
@@ -140,7 +146,6 @@ extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, V
 extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner, UI::DialogInstance** ret, ComponentDescription* description);  // 0x1400ff9e0
 
 // ---- tool_base_trade.cpp
-extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor);  // 0x140025920 B4 FORWARD -> Avl38Retrace<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg);  // 0x140025740 B4 FORWARD -> Avl38Remove<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP);  // 0x14002c690 B4 FORWARD -> Avl38FindRemove<TrackedEntityNode>
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1);  // 0x1400666b0 B4 FORWARD -> EntityUI::SyncPin
@@ -260,9 +265,16 @@ void Avl38Retrace(Node** root, Node** cursor) {
 }
 
 // 0x140014b00 — free a subtree: its left (+0x20), its right (+0x28), then itself.
-// `context` (RCX) is only passed down.
+// `context` (RCX) is only passed down. 1:1 port of FUN_140014b00; one body in retail
+// serves every 0x38-node set (the callers' node types, B13).
 template <class Node>
-void Avl38FreeSubtree(const void* context, Node* node);
+void Avl38FreeSubtree(const void* context, Node* node) {
+    if (node != nullptr) {
+        Avl38FreeSubtree(context, node->left);
+        Avl38FreeSubtree(context, node->right);
+        System::MemoryAllocator::MemFree(node);
+    }
+}
 
 // The generic node the unconverted sets of other blocks hand to the C forwarders
 // (WORK's TradeWork / MarketWork sets, GAME's / DLG's entity sets): only the

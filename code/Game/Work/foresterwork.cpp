@@ -270,7 +270,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     Map* map = gameWorld->m_game;
     // The map helpers 0x14009c480, 0x14009f5d0 and 0x14009f3e0 take the map as int* /
     // void*: LEFT (0x140008830, 0x14009ccf0, 0x1400a00f0 take the Map).
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG Pf_ZoneRefresh_9c480 takes the Map as int* (Action/exe_bodies.h)
 
     int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;
@@ -284,9 +284,8 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     int cellCol = workplaceCell % mapSize;
 
     // Get the GrowthDescription from the forester description's material ref
-    // (0x14000c3c0 takes the description as an integer: LEFT)
-    void* natResDesc = nullptr;
-    WorkLeaf_FindGrowthDescription_c3c0(reinterpret_cast<intptr_t>(radiusComp->_ref20), &natResDesc);   // LEFT: SIG WorkLeaf_FindGrowthDescription_c3c0
+    GrowthDescription* natResDesc = nullptr;
+    WorkLeaf_FindGrowthDescription_c3c0(radiusComp->_ref20, &natResDesc);
 
     // Get citizen's current position: CharacterComponent (+0x278) -> ModelComponent
     // (+0x68) -> the transform's translation (+0x158)
@@ -405,14 +404,13 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                     bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(map, 0xe1f, testCell, citizenGridCell));   // the door read AL
                     if (canPath) {
                         // Check terrain suitability for planting
-                        bool terrainOk = PlayerPath_CharComp_f5d0(
-                            mapGrid, testCellX, testCellY, 4,
-                            fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, 0);
+                        bool terrainOk = PlayerPath_CharComp_f5d0(   // 0x14009f5d0 (the Map* overload; the int* forwarder went)
+                            map, testCellX, testCellY, 4,
+                            fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, nullptr);
                         if (terrainOk) {
-                            // Check natural resource density limits (0x140120c30 takes
-                            // the description as an integer: LEFT)
+                            // Check natural resource density limits (0x140120c30)
                             bool densityOk = static_cast<uint8_t>(WorkLeaf_FootprintOwnerCheck_120c30(
-                                reinterpret_cast<intptr_t>(natResDesc), testCellX, testCellY));   // the door read AL   // LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30
+                                natResDesc, testCellX, testCellY));   // the door read AL
                             if (densityOk) {
                                 // Reset fail counter
                                 _field58 = 0;
@@ -541,8 +539,8 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                                             "(mirrors RemoveNaturalResource::Main; bypasses MoveTo arrival)\n",
                                             s_harvestCount, (void*)nrc);
                                     fflush(stderr);
-                                    // (0x1401260f0 takes the component as an integer: LEFT)
-                                    ActCNR_RemoveNatRes_1260f0(reinterpret_cast<int64_t>(nrc), workIBPbuf, 1);   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
+                                    // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
+                                    RemoveNaturalResourceCore(nrc, workIBPbuf, 1);
                                     // With BANISHED_PRODUCE_SPAWN_ENTITY the force-produce just
                                     // REMOVED the tree (dirty-list -> freed next EntityList tick).
                                     // Do NOT also queue the real cut sequence on it: its pending
@@ -588,7 +586,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
         // (0x14012cf10 takes the storage as an integer: LEFT)
-        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+        int storageCount = CitizenComp_StorageComponent_QueryCount(storage);
         if (storageCount < 1) {
             return 0;
         }

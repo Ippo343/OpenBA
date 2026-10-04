@@ -83,10 +83,7 @@
 #include "graphics/ParticleInstance.h"   // ENDGAME B.3.9 SS2: ParticleInstance::_frameIndex
 #include "io/FileSystem.h"               // ENDGAME B.3.9 SS2: IO::FileSystem::_singleton
 
-// EventNotify ribbon standalone ctor (code/Game/Dialog/eventnotifydialog.cpp) —
-// builds the ribbon dialog (DialogInstance base + our SA vtable + field init).
-extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
-extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
+// (EventNotifyDialog_Ctor_Standalone / AutoSaveDialog_Ctor_Standalone: Dialog/exe_bodies.h.)
 extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal/buildinggoal.cpp
 // NOTE: the tree's second port of FUN_14008c100 (EventLog_CheckResourceShortages)
 // is gone (B4 GAME-a: it had no caller) — see the retirement note at its former
@@ -97,7 +94,7 @@ extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal
 // so the default build stays byte-identical: build the tool-mode tree at EntityUI
 // startup, tick the active tool each frame (OnKey/Serialize/cursor), draw its footprint.
 extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI);
-extern "C" void EntityUI_OpenRegisteredDialogs_SA(void* entityUI);  // EntityUI::Startup 2nd half
+extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr);  // EntityUI::Startup 2nd half
 extern "C" int  EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time);
 extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFlag);
 // Minimap terrain painter (code/Game/Game/minimap_paint.cpp) — standalone fallback for
@@ -275,7 +272,7 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
 // FUN_1400938d0 — Weather::DrawUpdate(weather, ctx)
 
 // Native time-of-day sun/lighting driver (code/Game/Game/weather_sun.cpp).
-extern "C" void Weather_SunUpdate(void* self, void* ctx);
+extern "C" void Weather_SunUpdate(GameUpdateLoop* self, Video::Context* ctx);   // weather_sun.cpp
 
 // In-game camera controller input: PlayerToolManager::UpdateHotkeys / UpdateCamera
 // (code/Game/Game/camera_input.cpp) drive the PlayerController camera from the
@@ -1747,14 +1744,13 @@ void GameUpdateLoop::Startup() {
 
         // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
         void* mem = System::MemoryAllocator::MemAlloc(0x108, 8);
-        void* toolbar = nullptr;
+        ToolbarDialog* toolbar = nullptr;
         // Retail (0x140097cf1) constructs whenever the allocation succeeded; the
         // `dialogRes != nullptr` skip that sat here coped with a failed type-id
         // resolution, which cannot happen now (ENDGAME B.3.9 CB).
         if (mem != nullptr) {
-            int64_t nullParent[1] = {0};
-            new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            toolbar = ToolbarDialog_Ctor_Impl(mem, m_userInterface, dialogRes, nullParent, nullptr);   // 0x1400b9910
+            ::Object::InternalPtr<UI::DialogInstance> nullParent;   // the InternalBasePtr ctor: one store
+            toolbar = ToolbarDialog_Ctor_Impl(mem, m_userInterface, dialogRes, &nullParent, nullptr);   // 0x1400b9910
         }
 
         // Add to UI (only if the dialog was actually constructed).
@@ -1766,9 +1762,9 @@ void GameUpdateLoop::Startup() {
             m_userInterface->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
             fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
-                    "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", toolbar,
-                    *(int32_t*)((uintptr_t)toolbar + 0xD8), *(int32_t*)((uintptr_t)toolbar + 0xC8),
-                    *(int32_t*)((uintptr_t)toolbar + 0x100));
+                    "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", static_cast<void*>(toolbar),
+                    toolbar->toolbarItems.GetSize(), toolbar->buttonElements.GetSize(),
+                    toolbar->speedValues.GetSize());
         } else {
             fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p) — freeing\n", mem);
             if (mem) System::MemoryAllocator::MemFree(mem);
@@ -1808,10 +1804,10 @@ void GameUpdateLoop::Startup() {
         void* mem = System::MemoryAllocator::MemAlloc(0xF0, 8);
         void* eventNotify = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
-            int64_t parentIBP[1];
-            new (parentIBP) ::Object::InternalBasePtr(
+            ::Object::InternalPtr<UI::DialogInstance> parentIBP;
+            new (&parentIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(g_ribbonParentToolbar));   // B.3.3 bridge
-            eventNotify = EventNotifyDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, parentIBP);
+            eventNotify = EventNotifyDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &parentIBP);
         }
 
         if (eventNotify) {
@@ -1859,9 +1855,8 @@ void GameUpdateLoop::Startup() {
         void* mem = System::MemoryAllocator::MemAlloc(0xD0, 8);
         void* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
-            int64_t nullParent[1] = {0};
-            new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            autoSave = AutoSaveDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, nullParent);
+            ::Object::InternalPtr<UI::DialogInstance> nullParent;   // the InternalBasePtr ctor: one store
+            autoSave = AutoSaveDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &nullParent);
         }
 
         if (autoSave) {

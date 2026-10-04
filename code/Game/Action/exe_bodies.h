@@ -17,7 +17,6 @@
 #include <cstdint>
 
 // ---- action_base_cnr.cpp
-void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP);  // 0x140003f60
 class Map;                    // Game/Map.h
 class GrowthComponent;        // Component/GrowthComponent.h
 class ModelComponent;         // Component/ModelComponent.h
@@ -32,12 +31,8 @@ void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animId
 uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
 void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
 uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex);  // 0x14009cb00
-void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // 0x140120db0
 uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant);  // 0x140125320
 void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant);  // 0x1401253d0
-void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx);  // 0x140126440
-uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex);  // 0x140126540
-void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag);  // 0x1401260f0
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
@@ -86,8 +81,6 @@ class ModelComponent;         // Component/ModelComponent.h
 namespace System { class Time; class Random; }
 bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290
 void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
-bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng);  // 0x1400a9290
-void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 
 // ---- action_base_rawmat.cpp
 class AutoPickupComponent;    // Component/AutoPickupComponent.h
@@ -107,11 +100,8 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x
 void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count);  // 0x14012d150
 void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count);  // 0x14012d000
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
-void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value);  // 0x140044810
 int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity);  // 0x140088f90
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
-void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value);  // 0x140058fd0
-void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation);  // 0x140129760
 
 // ---- action_child_ctors.cpp
 void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType);  // 0x140042890
@@ -120,14 +110,10 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
-void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);  // 0x1400ca230
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
 // ---- action_pf_astar.cpp
-void Pf_EnqueueCmd2_a6fe0(int64_t param_1, int cell, int terrainType);  // 0x1400a6fe0 -> PathfinderThread::SetCellTerrain
-void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattan, uint8_t respectBlocked);  // 0x1400a68b0 -> PathfinderThread::SetSearchFlags
-void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost);  // 0x1400a6a30 -> PathfinderThread::SetStepCost
 
 // ---- action_pf_avl.cpp
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
@@ -154,8 +140,6 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
-void Pf_QuadtreeSubdivide_18880(uintptr_t param_1);  // 0x140018880 B4 FORWARD -> CharacterGridWalker::Subdivide
-uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4);  // 0x140018dd0 B4 FORWARD -> CharacterGridWalker::Init
 class PopulationComponent;    // Component/PopulationComponent.h
 int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
@@ -169,16 +153,14 @@ void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  
 
 // ---- action_pf_road.cpp
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);  // 0x1400acc10 B4 FORWARD -> BuildRoadQuad
-int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6, float* p7, float* p8, uint32_t* p9);  // 0x1400aaa20 B4 FORWARD -> RayTestCell
-float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3);  // 0x1400b0f90 B4 FORWARD -> TerrainHeightUnder
-void Pf_RegionDirty4_b150(int64_t self, int x, int y);  // 0x1400ab150
-void Pf_FineCellDirty_a8c90(int64_t self, int x, int y);  // 0x1400a8c90
+class WorldGeometry;
+int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
+float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
 float* InteractNodePosition(const InteractComponent* self, float* out, int kind, int index, float* heading);  // 0x140122e20
 int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
 int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
-void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);  // 0x1400af370
 
 // ---- action_pf_roots_drop.cpp
 class AnimalDescription;      // Component/AnimalDescription.h
@@ -208,12 +190,14 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
 // B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80 -> StorageCanAdd
-int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3, uint64_t param_4, int param_5, char param_6, uint32_t* param_7, void* param_8);  // 0x14008d590 -> PickBestDropTarget
 
 // ---- keystone_a_zone.cpp
-int RoadTool_helper_6e30(int64_t param_1, unsigned int param_2, uint64_t param_3, void* param_4, int64_t param_5, int param_6);  // 0x1400a6e30
-void ZoneComponent_sub_d360(int* param_1, int64_t* param_2, int param_3, int param_4, unsigned int param_5, int param_6, int64_t* param_7, int param_8);  // 0x14009d360
-int RoadTool_sub_ce00(int64_t param_1, unsigned int param_2, unsigned int param_3, uint64_t param_4, void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8);  // 0x14009ce00
+class PathfinderThread;       // Game/PathfinderThread.h
+namespace Object { template <class T> class InternalPtr; }
+namespace System { class String; }
+int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes, int32_t* path, int maxNodes);  // 0x1400a6e30
+void ZoneComponent_sub_d360(Map* map, const Object::InternalPtr<ComponentEntity>* owner, int x, int y, unsigned int w, int h, const System::String* footprint, int rotation);  // 0x14009d360
+int RoadTool_sub_ce00(Map* map, unsigned int passableTypes, unsigned int start, uint64_t goal, void* unused5, int32_t* path, uint8_t manhattan, uint8_t respectBlocked);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
 

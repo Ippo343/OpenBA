@@ -125,7 +125,7 @@ static void SetCellBlocked(PathfinderThread* pf, uint32_t cell, uint32_t blocked
 //   `rotation` selects the stamp rotation (0x5a / 0xb4 / 0x10e). For a '.' cell the
 //   cell's footprintCount moves by +1 (owner set) or -1 (owner null).
 // ============================================================================
-static void StampZoneFootprint(Map* map, ComponentEntity* const* owner, int x, int y,
+static void StampZoneFootprint(Map* map, const Object::InternalPtr<ComponentEntity>* owner, int x, int y,
                                uint w, int h, const System::String* footprint, int rotation) {
     uint64_t uVar7 = static_cast<uint64_t>(static_cast<uint>(h));
     uint64_t uVar12 = static_cast<uint64_t>(static_cast<uint>(static_cast<int>(w)));
@@ -173,14 +173,14 @@ static void StampZoneFootprint(Map* map, ComponentEntity* const* owner, int x, i
                         stored = nullptr;
                     } else {
 LAB_clear:
-                        stored = *owner;
+                        stored = owner->Get();
                     }
                     map->cells[iVar15].blocker = stored;
                     SetCellBlocked(map->pathfinder, static_cast<uint32_t>(iVar15),
                                    static_cast<uint32_t>(stored != nullptr));   // 0x1400a6f00
                     if (bVar18) {
                         char cVar5 = -1;
-                        if (*owner != nullptr) cVar5 = '\x01';
+                        if (owner->Get() != nullptr) cVar5 = '\x01';
                         uint8_t& count = cellsAtStart[iVar15].footprintCount;
                         count = static_cast<uint8_t>(count + cVar5);
                     }
@@ -229,32 +229,22 @@ static int RoadPathQuery(Map* map, uint passableTypes, uint start, uint64_t goal
 } // namespace
 
 // ============================================================================
-// The exported spellings. B4 FORWARD each: its outside callers hold the old
-// signature (the worker / Map as an integer, the owner and stamp as int64_t*).
+// The exported spellings of the three file-local bodies (callers:
+// Component/boatcomponent_route.cpp, Component/zonecomponent.cpp, Player/roadtool.cpp).
 // ============================================================================
 
-// B4 FORWARD: 1 outside caller (Component/boatcomponent_route.cpp).
-int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
-                         void* param_4, int64_t param_5, int param_6) {
-    return RunPathQuery(reinterpret_cast<PathfinderThread*>(param_1), static_cast<int>(param_2),
-                        static_cast<int>(param_3 & 0xffffffff),
-                        static_cast<int>(reinterpret_cast<uint64_t>(param_4)),
-                        reinterpret_cast<int32_t*>(param_5), param_6);
+int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes,
+                         int32_t* path, int maxNodes) {
+    return RunPathQuery(pf, start, goal, passableTypes, path, maxNodes);
 }
 
-// B4 FORWARD: 2 outside calls (Component/zonecomponent.cpp, OnAdded / OnRemove).
-void ZoneComponent_sub_d360(int* param_1, int64_t* param_2, int param_3, int param_4,
-                            uint param_5, int param_6, int64_t* param_7, int param_8) {
-    StampZoneFootprint(reinterpret_cast<Map*>(param_1),
-                       reinterpret_cast<ComponentEntity* const*>(param_2),
-                       param_3, param_4, param_5, param_6,
-                       reinterpret_cast<const System::String*>(param_7), param_8);
+void ZoneComponent_sub_d360(Map* map, const Object::InternalPtr<ComponentEntity>* owner, int x, int y,
+                            uint w, int h, const System::String* footprint, int rotation) {
+    StampZoneFootprint(map, owner, x, y, w, h, footprint, rotation);
 }
 
-// B4 FORWARD: outside callers (Player/roadtool.cpp, Player/roadtool_calcpath.cpp).
-int RoadTool_sub_ce00(int64_t param_1, uint param_2, uint param_3, uint64_t param_4,
-                       void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8) {
-    (void)param_5;
-    return RoadPathQuery(reinterpret_cast<Map*>(param_1), param_2, param_3, param_4,
-                         reinterpret_cast<int32_t*>(param_6), param_7, param_8);
+int RoadTool_sub_ce00(Map* map, uint passableTypes, uint start, uint64_t goal,
+                      void* unused5, int32_t* path, uint8_t manhattan, uint8_t respectBlocked) {
+    (void)unused5;
+    return RoadPathQuery(map, passableTypes, start, goal, path, manhattan, respectBlocked);
 }
