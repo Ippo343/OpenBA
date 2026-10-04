@@ -69,12 +69,16 @@
 #include "Dialog/ProfessionUI.h"
 #include "Game/Profession.h"
 #include "Game/ProfessionList.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/MapComponent.h"
 
-// LEFT in this file (B4 DLG-c): every read through GameUpdateLoop::m_citizenList
-// (void*, typed by block GAME-a) — the town's citizen array and count, its
-// per-profession building tree at +0x100 — and the reads of the citizens,
-// buildings and components reached through it; Profession's three Strings (H5
-// raw, GAME-b); CalcWorkerSlots_Impl's WorkComponent (reached through them).
+// LEFT in this file (B4 P2 DLG-2): the town's worker functions
+// (CitizenEmploy_Strat_*, FindAvailableBuilding, TownHall_RemoveWorker) take the
+// citizen list and the profession as integers and are called from other blocks'
+// files: one cast per argument, `// LEFT: SIG` (wave X).
 
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
@@ -101,36 +105,41 @@
 //
 // Original: FUN_14012e5c0.
 //
-static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
+// B4 P2 DLG-2: typed. The parameter is the WorkComponent the caller found (the
+// "StorageLocationComponent" / "WorkplaceJobType" / "BuildComponent" names above
+// are the old misnomers: +0x18 is Component::_description, the job type is a
+// WorkDescription, and the footprint is MapComponent's tileX1 / tileY1 — the
+// member WorkComponent::CalcMaxWorkers is the other port of this address; this
+// copy keeps its own null-footprint return, known_port_issues 14d row 450).
+static int CalcWorkerSlots_Impl(WorkComponent* storageLocComp) {
     // Get WorkplaceJobType object from +0x18 (InternalBasePtr)
-    void* jobType = *(void**)(storageLocComp + 0x18);
+    Description* jobType = storageLocComp->_description;
     if (!jobType) return 0;
 
     // IsDerivedFrom check
     bool isJobType = ::Object::IsDerivedFromNullSafe(jobType, WorkDescription::TypeId());
     if (!isJobType) return 0;
 
-    uintptr_t jt = (uintptr_t)jobType;
-    int maxWorkers = *(int*)(jt + 0x24);
+    WorkDescription* jt = static_cast<WorkDescription*>(jobType);
+    int maxWorkers = jt->_i24;
 
     // If no attendance scaling, just return base max
-    if (*(uint8_t*)(jt + 0x34) == 0) {
+    if (jt->_b34 == 0) {
         return maxWorkers;
     }
 
     // Find BuildComponent on the entity at +0x10
-    uintptr_t entity = *(uintptr_t*)(storageLocComp + 0x10);
+    ComponentEntity* entity = storageLocComp->_entity;
 
-    uint64_t buildCompRet = 0;
-    fn_FindComponent_Build((void*)entity, &buildCompRet);
-    uintptr_t buildComp = buildCompRet;
+    MapComponent* buildComp = nullptr;
+    fn_FindComponent_Build(entity, &buildComp);
 
     if (!buildComp) return maxWorkers > 0 ? maxWorkers : 1;
 
     // Scale: (currentOccupants * maxOccupants / totalSlots) * maxWorkers + 1.0f
-    int16_t maxOcc     = *(int16_t*)(buildComp + 0x2c);
-    int16_t curOcc     = *(int16_t*)(buildComp + 0x2e);
-    int     totalSlots = *(int*)(jt + 0x30);
+    int16_t maxOcc     = buildComp->tileX1;
+    int16_t curOcc     = buildComp->tileY1;
+    int     totalSlots = jt->_i30;
     // DAT_14017214c = 1.0f
     int result = (int)(((float)(curOcc * maxOcc) / (float)totalSlots) * (float)maxWorkers + 1.0f);
     if (result > maxWorkers) result = maxWorkers;
@@ -498,18 +507,17 @@ void ProfessionUI::OnOpened() {
         professionIndexCount = professionIndexCount + 1;
 
         // Set text, sprite, tooltip on text/label element from profession description
-        // (LEFT: Profession's Strings are declared as raw storage, GAME-b, H5)
         UI::String uiStr(profDesc->stringTable,
-                         *reinterpret_cast<const System::String*>(&profDesc->stringName));
+                         profDesc->stringName);
         textLabel->SetText(&uiStr);
 
         UI::Sprite sprite(profDesc->spriteSheet,
-                          *reinterpret_cast<const System::String*>(&profDesc->stringName));
+                          profDesc->stringName);
         textLabel->SetSprite(&sprite);
 
         // Tooltip: UI::String from the table + the string name at +0x38
         UI::String tooltip(profDesc->stringTable,
-                           *reinterpret_cast<const System::String*>(&profDesc->stringDesc));
+                           profDesc->stringDesc);
         textLabel->SetToolTip(tooltip);
 
         // Set user data and element ID on spinner
@@ -591,7 +599,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     professionui_sa::Trace("Slot8", this);
 
     GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
-    uintptr_t citizenMgr = (uintptr_t)worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
+    CitizenBehavior* citizenMgr = worldSingleton->m_citizenList;
     ProfessionList* profListPtr = worldSingleton->m_professionList;
     int profCount = profListPtr->professions.GetSize();
 
@@ -601,28 +609,28 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         countsNow[i] = 0;
     }
 
-    // Iterate all citizens (LEFT: through m_citizenList)
-    int citizenCount = *(int*)(citizenMgr + 0xA8);
-    uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
+    // Iterate all citizens
+    int citizenCount = citizenMgr->citizenCount;
+    CitizenComponent** citizenArray = citizenMgr->citizens;
 
     for (int i = 0; i < citizenCount; i++) {
         // CheckPtr on citizen IBP (original does this)
-        uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
+        CitizenComponent* citizen = citizenArray[i];
 
         // Check if citizen is adult: age (float at +0x3C) >= adultAge (float at desc+0x44)
-        uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
-        float birthAge = *(float*)(citizenDesc + 0x44);
-        float currentAge = *(float*)(citizen + 0x3C);
+        CitizenDescription* citizenDesc = citizen->description;
+        float birthAge = citizenDesc->adultAge;
+        float currentAge = citizen->age;
         if (currentAge < birthAge) continue;
 
         // Check if citizen is not a student: school at +0x208 must be 0
-        if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
+        if (citizen->school != nullptr) continue;
 
         // CheckPtr again before reading profession (original does double CheckPtr)
-        citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
+        citizen = citizenArray[i];
 
         // Look up profession in BST
-        void* profKey = *(void**)(citizen + 0x1F0);
+        Profession* profKey = citizen->profession;
 
         // BST search
         ProfNode* node = professionIndexRoot;
@@ -660,21 +668,20 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     Profession** profArrayPtr = worldSingleton->m_professionList->professions.GetData();
 
     for (int p = 0; p < profCount; p++) {
-        uintptr_t profKey = (uintptr_t)profArrayPtr[p];   // LEFT: compared with the tree's raw keys
+        Profession* profKey = profArrayPtr[p];
 
         // Look up profession in world BST at citizenMgr+0x100 to get entity count
-        // (LEFT: through m_citizenList)
-        uint8_t* bstNode = *(uint8_t**)(citizenMgr + 0x100);
+        ProfessionBucket* bstNode = citizenMgr->field_0x100;
         int entityCount = 0;
 
         while (bstNode) {
-            uintptr_t nodeKey = *(uintptr_t*)(bstNode + 0x00);
+            Profession* nodeKey = bstNode->key;
             if (profKey < nodeKey) {
-                bstNode = *(uint8_t**)(bstNode + 0x20);
+                bstNode = bstNode->left;
             } else if (profKey > nodeKey) {
-                bstNode = *(uint8_t**)(bstNode + 0x28);
+                bstNode = bstNode->right;
             } else {
-                entityCount = *(int*)(bstNode + 0x10);
+                entityCount = bstNode->count;
                 break;
             }
         }
@@ -682,34 +689,32 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         int totalWorkers = 0;
         for (int e = 0; e < entityCount; e++) {
             // Re-search BST each iteration (original does this to get fresh entity list)
-            uint8_t* bstNode2 = *(uint8_t**)(citizenMgr + 0x100);
-            uintptr_t freshEntityList = 0;
+            ProfessionBucket* bstNode2 = citizenMgr->field_0x100;
+            ComponentEntity** freshEntityList = nullptr;
             while (bstNode2) {
-                uintptr_t nk = *(uintptr_t*)(bstNode2 + 0x00);
-                if (profKey < nk) { bstNode2 = *(uint8_t**)(bstNode2 + 0x20); }
-                else if (profKey > nk) { bstNode2 = *(uint8_t**)(bstNode2 + 0x28); }
-                else { freshEntityList = *(uintptr_t*)(bstNode2 + 0x08); break; }
+                Profession* nk = bstNode2->key;
+                if (profKey < nk) { bstNode2 = bstNode2->left; }
+                else if (profKey > nk) { bstNode2 = bstNode2->right; }
+                else { freshEntityList = bstNode2->entities; break; }
             }
             if (!freshEntityList) continue;
 
             // CheckPtr on entity IBP (original does this)
-            void** entityIBP = (void**)(freshEntityList + (uintptr_t)e * 8);
-            uintptr_t entityBP = *(uintptr_t*)entityIBP;
+            ComponentEntity* entityBP = freshEntityList[e];
             if (!entityBP) continue;
 
             // Find WorkplaceComponent on entity
-            int compCount = *(int*)(entityBP + 0x38);
-            uintptr_t compArray = *(uintptr_t*)(entityBP + 0x30);
-            uintptr_t workplaceComp = 0;
+            int compCount = entityBP->_componentCount;
+            Object::InternalPtr<Component>* compArray = entityBP->_components;
+            WorkPlaceComponent* workplaceComp = nullptr;
 
             for (int c = 0; c < compCount; c++) {
-                void** compIBP = (void**)(compArray + (uintptr_t)c * 8);
-                uintptr_t comp = *(uintptr_t*)compIBP;
+                Component* comp = compArray[c].Get();
                 if (!comp) continue;
-                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                int typeId = comp->Type();
                 if (typeId == (int)WorkPlaceComponent::TypeId()) {
-                    if (::Object::IsDerivedFromNullSafe((void*)comp, WorkPlaceComponent::TypeId())) {
-                        workplaceComp = comp;
+                    if (::Object::IsDerivedFromNullSafe(comp, WorkPlaceComponent::TypeId())) {
+                        workplaceComp = static_cast<WorkPlaceComponent*>(comp);
                     }
                     break;
                 }
@@ -717,28 +722,25 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
 
             if (workplaceComp) {
                 // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
-                uint64_t wpcIBP = 0;
-                new (&wpcIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>((void*)workplaceComp));   // B.3.3 bridge
-                workplaceComp = (uintptr_t)wpcIBP;
+                Object::InternalPtr<WorkPlaceComponent> wpcIBP(workplaceComp);
+                workplaceComp = wpcIBP.Get();
 
                 // Check if workplace is enabled (+0x50 != 0)
-                if (workplaceComp && *(uint8_t*)(workplaceComp + 0x50) != 0) {
+                if (workplaceComp && workplaceComp->isAccepting != 0) {
                     // Find StorageLocationComponent on parent entity via +0x10
-                    uintptr_t parentEntity = *(uintptr_t*)(workplaceComp + 0x10);
+                    ComponentEntity* parentEntity = workplaceComp->_entity;
                     if (!parentEntity) continue;
-                    int pCompCount = *(int*)(parentEntity + 0x38);
-                    uintptr_t pCompArray = *(uintptr_t*)(parentEntity + 0x30);
-                    uintptr_t storageLocComp = 0;
+                    int pCompCount = parentEntity->_componentCount;
+                    Object::InternalPtr<Component>* pCompArray = parentEntity->_components;
+                    WorkComponent* storageLocComp = nullptr;
 
                     for (int c = 0; c < pCompCount; c++) {
-                        void** compIBP = (void**)(pCompArray + (uintptr_t)c * 8);
-                        uintptr_t comp = *(uintptr_t*)compIBP;
+                        Component* comp = pCompArray[c].Get();
                         if (!comp) continue;
-                        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                        int typeId = comp->Type();
                         if (typeId == (int)WorkComponent::TypeId()) {
-                            if (::Object::IsDerivedFromNullSafe((void*)comp, WorkComponent::TypeId())) {
-                                storageLocComp = comp;
+                            if (::Object::IsDerivedFromNullSafe(comp, WorkComponent::TypeId())) {
+                                storageLocComp = static_cast<WorkComponent*>(comp);
                             }
                             break;
                         }
@@ -746,16 +748,14 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
 
                     if (storageLocComp) {
                         // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
-                        uint64_t slcIBP = 0;
-                        new (&slcIBP) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>((void*)storageLocComp));   // B.3.3 bridge
-                        storageLocComp = (uintptr_t)slcIBP;
+                        Object::InternalPtr<WorkComponent> slcIBP(storageLocComp);
+                        storageLocComp = slcIBP.Get();
 
                         if (storageLocComp) {
-                            int workerSlots = *(int*)(storageLocComp + 0x30);
+                            int workerSlots = storageLocComp->workState;
                             if (workerSlots == 0) {
                                 workerSlots = CalcWorkerSlots_Impl(storageLocComp);
-                                *(int*)(storageLocComp + 0x30) = workerSlots;
+                                storageLocComp->workState = workerSlots;
                             }
                             totalWorkers += workerSlots;
                         }
@@ -804,41 +804,41 @@ void ProfessionUI::HandleSpinner(int profIndex) {
 
     // Add citizens if desired > current
     // (LEFT: the town's worker functions take the citizen list and the profession
-    // as integers — Component/Game exe_bodies.h — and m_citizenList is void*, GAME-a)
+    // as integers — Component/Game exe_bodies.h, wave X: one cast each below)
     if (current < desired) {
         uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
         do {
-            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);
+            int64_t citizenList = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: SIG CitizenEmploy_Strat_* / FindAvailableBuilding
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);   // LEFT: SIG CitizenEmploy_Strat_* / FindAvailableBuilding
 
             // Request a worker slot
             uint64_t retBuf[2] = {0, 0};
-            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
+            FindAvailableBuilding(citizenList, retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             uint64_t slot = retBuf[0];
 
             // Try to find a citizen: idle -> working -> student -> any
-            uint64_t slotCopy = slot;
+            int64_t slotCopy = slot;
             uint8_t findBuf[8] = {0};
-            void* result = CitizenEmploy_Strat_cbf0(reinterpret_cast<int64_t>(citizenList), findBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008cbf0
-            int64_t found = *(int64_t*)result;
+            void* result = CitizenEmploy_Strat_cbf0(citizenList, findBuf, &slotCopy, static_cast<int64_t>(profId));   // 0x14008cbf0
+            int64_t found = *(int64_t*)result;   // LEFT: SIG CitizenEmploy_Strat_cbf0
 
             if (found == 0) {
                 if (slot != 0) {
                     slotCopy = slot;
                     uint8_t fb2[8] = {0};
-                    result = CitizenEmploy_Strat_ca20(reinterpret_cast<int64_t>(citizenList), fb2, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008ca20
-                    found = *(int64_t*)result;
+                    result = CitizenEmploy_Strat_ca20(citizenList, fb2, &slotCopy, static_cast<int64_t>(profId));   // 0x14008ca20
+                    found = *(int64_t*)result;   // LEFT: SIG CitizenEmploy_Strat_ca20
                     if (found != 0) goto next_iter;
                 }
                 slotCopy = slot;
                 uint8_t fb3[8] = {0};
-                result = CitizenEmploy_Strat_c5f0(reinterpret_cast<int64_t>(citizenList), fb3, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c5f0
-                found = *(int64_t*)result;
+                result = CitizenEmploy_Strat_c5f0(citizenList, fb3, &slotCopy, static_cast<int64_t>(profId));   // 0x14008c5f0
+                found = *(int64_t*)result;   // LEFT: SIG CitizenEmploy_Strat_c5f0
 
                 if (found == 0) {
                     slotCopy = slot;
                     uint64_t anyBuf = 0;
-                    CitizenEmploy_Strat_c4b0(reinterpret_cast<int64_t>(citizenList), &anyBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c4b0
+                    CitizenEmploy_Strat_c4b0(citizenList, &anyBuf, &slotCopy, static_cast<int64_t>(profId));   // 0x14008c4b0
                     found = (int64_t)anyBuf;
                 }
             }
@@ -851,8 +851,8 @@ next_iter:
     if (desired < current) {
         uint64_t toRemove = (uint64_t)(uint32_t)(current - desired);
         do {
-            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);
+            CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);   // LEFT: SIG TownHall_RemoveWorker
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
@@ -880,27 +880,26 @@ next_iter:
 void ProfessionUI::HandleButton(int profIndex) {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
-    // LEFT: the citizens are read through m_citizenList (void*, GAME-a).
-    uintptr_t citizenMgr = (uintptr_t)game->m_citizenList;
-    int citizenCount = *(int*)(citizenMgr + 0xA8);
-    uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
+    CitizenBehavior* citizenMgr = game->m_citizenList;
+    int citizenCount = citizenMgr->citizenCount;
+    CitizenComponent** citizenArray = citizenMgr->citizens;
 
     // Get the profession ID for this index (compared with the citizens' raw field)
-    uint64_t profId = reinterpret_cast<uint64_t>(game->m_professionList->professions.GetData()[profIndex]);
+    Profession* profId = game->m_professionList->professions.GetData()[profIndex];
 
     // Count eligible (adult, non-student) citizens
     int eligible = 0;
     for (int i = 0; i < citizenCount; i++) {
-        uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
+        CitizenComponent* citizen = citizenArray[i];
 
         // Check adult: age >= adultAge (desc+0x44)
-        uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
-        float birthAge = *(float*)(citizenDesc + 0x44);
-        float currentAge = *(float*)(citizen + 0x3C);
+        CitizenDescription* citizenDesc = citizen->description;
+        float birthAge = citizenDesc->adultAge;
+        float currentAge = citizen->age;
         if (currentAge < birthAge) continue;
 
         // Check not a student: school at +0x208 must be 0
-        if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
+        if (citizen->school != nullptr) continue;
 
         eligible++;
     }
@@ -919,28 +918,28 @@ void ProfessionUI::HandleButton(int profIndex) {
             *rotIdx = 0;
         }
 
-        uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+        CitizenComponent* citizen = citizenArray[*rotIdx];
 
         // Check if citizen matches this profession
-        if (*(uint64_t*)(citizen + 0x1F0) == profId) {
-            citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+        if (citizen->profession == profId) {
+            citizen = citizenArray[*rotIdx];
 
             // Check adult and not a student
-            uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
-            float birthAge = *(float*)(citizenDesc + 0x44);
-            float currentAge = *(float*)(citizen + 0x3C);
+            CitizenDescription* citizenDesc = citizen->description;
+            float birthAge = citizenDesc->adultAge;
+            float currentAge = citizen->age;
 
-            if (currentAge >= birthAge && *(uintptr_t*)(citizen + 0x208) == 0) {
+            if (currentAge >= birthAge && citizen->school == nullptr) {
                 // Found matching citizen -- check if same profession still (re-read after CheckPtr)
-                citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
-                if (*(uint64_t*)(citizen + 0x1F0) != profId) {
+                citizen = citizenArray[*rotIdx];
+                if (citizen->profession != profId) {
                     // Profession changed between checks -- still go to this citizen
                     return;
                 }
 
                 // Get citizen's entity (at +0x10)
-                citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
-                uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
+                citizen = citizenArray[*rotIdx];
+                ComponentEntity* entityPtr = citizen->_entity;
 
                 // Center camera on this citizen
                 UI::DialogInstance* dialogInst = _dialog;
@@ -952,13 +951,13 @@ void ProfessionUI::HandleButton(int profIndex) {
         if (scanned >= eligible) {
             // Exhausted all eligible citizens without finding a match in this profession
             // Fall through to go to the current rotation citizen anyway
-            citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
-            if (*(uint64_t*)(citizen + 0x1F0) != profId) {
+            citizen = citizenArray[*rotIdx];
+            if (citizen->profession != profId) {
                 return;
             }
 
-            citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
-            uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
+            citizen = citizenArray[*rotIdx];
+            ComponentEntity* entityPtr = citizen->_entity;
 
             UI::DialogInstance* dialogInst = _dialog;
             Toolbar_CenterOnEntity_Impl(game->m_toolManager, &dialogInst, &entityPtr);
