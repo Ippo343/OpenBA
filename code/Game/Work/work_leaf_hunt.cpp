@@ -69,11 +69,10 @@
 //   if (found->+0x48) < 0 -> return true
 //   else                  -> return consumeState (+0x68) < (found->+0x48)
 // (matches FUN_1401193a0 disasm: tail compares dword[R15+0x68] with dword[found+0x48])
-// LEFT: ConsumeProduceDescription +0x48 is read raw (not declared in its header).
 bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
     const uint32_t tid = ConsumeProduceDescription::TypeId(); // 0x1401c7388
 
-    void* found = nullptr;
+    const ConsumeProduceDescription* found = nullptr;
     ComponentDescription* desc = comp->_entity->_description;
     if (desc->_subDescCount > 0) {
         Description** list = desc->_subDescs;
@@ -84,14 +83,14 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
             uint32_t t = sub->Type();
             if (t == tid) {
                 Description* c = list[i];
-                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
+                if (Object::IsDerivedFromNullSafe(c, tid)) found = static_cast<const ConsumeProduceDescription*>(c);
                 break;
             }
             ++i;
             if (i >= n) break;
         }
     }
-    int capacity = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(found) + 0x48);
+    int capacity = found->_i48;   // +0x48 (retail reads it unguarded)
     if (capacity < 0) return true;
     return comp->consumeState < capacity;
 }

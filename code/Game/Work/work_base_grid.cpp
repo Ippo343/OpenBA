@@ -11,6 +11,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"
 #include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode (the id map's node)
 #include "Work/Work.h"   // B.3.x W0: the work tree payload by name
 #include "Component/AutoPickupComponent.h"
 #include "Entity/ComponentEntity.h"
@@ -51,17 +52,8 @@ int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFl
     return best;
 }
 
-// The scheduler's id map (WorkScheduler::trees[0]): an inlined Collection::Set over
-// {int id, Work*} (node key @+0, the work @+8, left @+0x18, right @+0x20).
-namespace {
-struct ScheduledWork {
-    int32_t  id;       // +0x00 the key: the work id
-    uint32_t _pad04;
-    Work*    work;     // +0x08 InternalPtr<Work>
-};
-using ScheduledWorkNode = Collection::Set<ScheduledWork>::Node;
-static_assert(sizeof(ScheduledWorkNode) == 0x30, "the id map's 0x30-byte node");
-}  // namespace
+// The scheduler's id map (WorkScheduler::trees[0]): WorkSchedulerIdNode
+// (Game/WorkSchedulerNodes.h: key @+0, the work @+8, left @+0x18, right @+0x20).
 
 // ============================================================
 // FUN_1400f8620 — TryAssignWorkplace
@@ -73,23 +65,22 @@ static_assert(sizeof(ScheduledWorkNode) == 0x30, "the id map's 0x30-byte node");
 // else stamp the step count. RCX is the WorkScheduler (a member of it; its header is
 // GAME-a's, so this stays free).
 // Caller: uint64_t fn(uintptr_t mgr, void* citizenRef, int cellId, char flag)
-// LEFT: the six outside callers hand the scheduler as an integer, and
-// WorkSchedulerTree::root is untyped (GAME-a's header).
+// LEFT: the six outside callers hand the scheduler as an integer (X-G2-WAIT).
 uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag) {
     WorkScheduler* scheduler = reinterpret_cast<WorkScheduler*>(mgr);
-    ScheduledWorkNode* node = reinterpret_cast<ScheduledWorkNode*>(scheduler->trees[0].root);
+    WorkSchedulerIdNode* node = scheduler->trees[0].root;
     for (;;) {
         for (;;) {
             if (node == nullptr) return 0;
-            if (node->element.id <= cellId) break;
+            if (node->key <= cellId) break;
             node = node->left;
         }
-        if (cellId <= node->element.id) break;
+        if (cellId <= node->key) break;
         node = node->right;
     }
     if (node == nullptr) return 0;
 
-    Work* work = node->element.work;   // IBP
+    Work* work = node->work.Get();   // IBP
     uint32_t mgrGen = scheduler->stepCount;
     if (static_cast<uint32_t>(work->field_2c) == mgrGen)
         return static_cast<uint64_t>(mgrGen & 0xffffff00u);
@@ -139,15 +130,14 @@ int Work::TryAutoPickup(void* citizenRef) {
     if (apComp->field30Count <= 0) return 0;
 
     do {
-        // LEFT: WorkSchedulerTree::root is untyped (GAME-a's header).
-        ScheduledWorkNode* node = reinterpret_cast<ScheduledWorkNode*>(mgr->trees[0].root);
+        WorkSchedulerIdNode* node = mgr->trees[0].root;
         int cellId = apComp->field30[i];
         bool keepElement = false;
         while (node != nullptr) {
-            if (cellId < node->element.id) {
+            if (cellId < node->key) {
                 node = node->left;
             } else {
-                if (cellId <= node->element.id) {   // found
+                if (cellId <= node->key) {   // found
                     void* citizenCopy = *reinterpret_cast<void**>(citizenRef);
                     // LEFT: 0x1400f8620's C signature takes the scheduler as an integer.
                     uint64_t r = WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(mgr), &citizenCopy,
