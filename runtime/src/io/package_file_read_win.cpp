@@ -652,7 +652,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
             String tmp;
             BuildStringFrom(buf60, &tmp);                      // 1800b5ec6..5f3d
             RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<Filename*>(&tmp));            // 1800b5f42
+                reinterpret_cast<Filename*>(&tmp));            // 1800b5f42  // LEFT: SIG RtSystem_Filename_AdjustDelimiters takes the RtSystem::Filename POD (system/, R-SYS)
 
             PackageFileEntry entry;
             entry.name.data = nullptr;                         // 1800b5f4a
@@ -660,9 +660,9 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
             // TWICE. 0x1800b5f95 and 0x1800b5f9e, back to back, on the same
             // object. Idempotent, and reproduced rather than folded.
             RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<Filename*>(&entry.name));     // 1800b5f95
+                reinterpret_cast<Filename*>(&entry.name));     // 1800b5f95  // LEFT: SIG RtSystem_Filename_AdjustDelimiters takes the RtSystem::Filename POD (system/, R-SYS)
             RtSystem_Filename_AdjustDelimiters(
-                reinterpret_cast<Filename*>(&entry.name));     // 1800b5f9e
+                reinterpret_cast<Filename*>(&entry.name));     // 1800b5f9e  // LEFT: SIG RtSystem_Filename_AdjustDelimiters takes the RtSystem::Filename POD (system/, R-SYS)
 
             entry.offset = static_cast<uint32_t>(entryOffset); // 1800b5fa4  §91
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91

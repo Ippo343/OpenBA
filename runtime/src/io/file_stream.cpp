@@ -191,7 +191,7 @@ namespace {
 // System::String is exactly that one pointer).
 void ReleaseStrSlot(char** slot) {
     // ~String (0x180006c80), including retail's release asymmetry (String.h).
-    reinterpret_cast<System::String*>(slot)->~String();
+    reinterpret_cast<System::String*>(slot)->~String();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
 }
 
 // ??0FileStream@IO@@QEAA@XZ (0x1800aaa10): ENDGAME B.3.9 IO (W2) -- the door
@@ -355,7 +355,7 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
     char* cur = *slot;
     if (cur == *incoming) return;                          // 1800ba2a4 / 1800ba2e5
     if (cur != nullptr) {
-        if (--reinterpret_cast<int32_t*>(cur)[-1] == 0) {  // 1800ba2ae
+        if (--reinterpret_cast<int32_t*>(cur)[-1] == 0) {  // 1800ba2ae  // CAST-OK: string_header
             *slot = cur - 8;                               // 1800ba2b7
             RtSystem::RtMemFree(*slot);                    // 1800ba2c0
         } else {
@@ -364,7 +364,7 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
     }
     char* nw = *incoming;                                  // 1800ba2cf
     *slot = nw;
-    if (nw != nullptr) ++reinterpret_cast<int32_t*>(nw)[-1];  // 1800ba2db
+    if (nw != nullptr) ++reinterpret_cast<int32_t*>(nw)[-1];  // 1800ba2db  // CAST-OK: string_header
 }
 
 // ---------------------------------------------------------------------------
@@ -409,14 +409,14 @@ static void TfsReleaseAssign(char** slot, char* const* incoming) {
 // sound instrument; the mirror (corrupting a value that SHOULD differ)
 // exonerates a broken one.  Neither applies here: +0x60 must be EQUAL on both
 // subjects, because both are handed the same incoming pointer.
-extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
-                                              char* const* type,
-                                              char* const* name,
+extern "C" void RtIo_TextFileStream_SetObject(::IO::TextFileStream* self,
+                                              const System::String* type,
+                                              const System::String* name,
                                               int version) {
 
-    TfsReleaseAssign(&self->objectName, name);   // 1800ba294..ba2dd   arg2
-    self->objectVersion = version;               // 1800ba2de          arg3
-    TfsReleaseAssign(&self->objectType, type);   // 1800ba2e1..ba31e   arg1
+    TfsReleaseAssign(&self->_objectName, &name->_data);   // 1800ba294..ba2dd   arg2
+    self->_objectVersion = version;                      // 1800ba2de          arg3
+    TfsReleaseAssign(&self->_objectType, &type->_data);   // 1800ba2e1..ba31e   arg1
 
 }
 
@@ -456,7 +456,7 @@ bool IO::FileStream::Create(const System::Filename& path) {
     // LEFT: CreatePath keeps the POD parameter while
     // runtime/src/video/save_image_to_file.cpp (R-VIDEO) calls it with one.
     ::IO::FileSystem::_singleton->CreatePath(
-        *reinterpret_cast<const RtSystem::Filename*>(&path));  // 1800aa919
+        *reinterpret_cast<const RtSystem::Filename*>(&path));  // 1800aa919  // LEFT: SIG FileSystem::CreatePath / ExistsInPackfile keep the RtSystem::Filename POD parameter (outside callers: video/save_image_to_file, engine/updateloop_loadresources, object/external_path_win; wave X)
 
     // ---- 1800aa91e..1800aa958: this->filename = *path -------------------
     // ENDGAME B.3.1 step 2: this whole block IS `System::String::operator=`
@@ -466,7 +466,7 @@ bool IO::FileStream::Create(const System::Filename& path) {
     // which is exactly the one pointer a String is, so it is reached as one.
     // NOTE there is NO AdjustDelimiters here: retail's Create does not
     // normalise, so this is String's operator=, not Filename's.
-    reinterpret_cast<System::String&>(_filename) = path.AsString();
+    reinterpret_cast<System::String&>(_filename) = path.AsString();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
 
     _direction = 1;                                             // 1800aa959
 
@@ -737,7 +737,7 @@ bool FileStream::Open(const System::Filename& path) {
     // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
     // `System::String::operator=` (0x1800c9810) — the short-circuit that jumps
     // past BOTH halves is the class's, and Open does not normalise either.
-    reinterpret_cast<System::String&>(_filename) = path.AsString();
+    reinterpret_cast<System::String&>(_filename) = path.AsString();  // LEFT: H5 FileStream::_filename is char* raw storage of a System::String
 
     _direction = 0;                                       // 1800aaccd — READING
 
@@ -790,15 +790,13 @@ TextFileStream::TextFileStream(const System::String& type,
       _bufCursor(0) {
     ++RtIO::g_fsc.textCtor;
 
-    void* enc = RtSystem::RtMemAlloc(8, 4);                       // 1800ba3ee
-    if (enc) ::new (enc) TextEncoding();
+    void* encMem = RtSystem::RtMemAlloc(8, 4);                       // 1800ba3ee
+    Encoding* enc = nullptr;
+    if (encMem) enc = ::new (encMem) TextEncoding();
     if (_encoding) RtSystem::RtMemFree(_encoding);
-    _encoding = static_cast<Encoding*>(enc);                      // ..4e
+    _encoding = enc;                      // ..4e
 
-    RtIO::RtIo_TextFileStream_SetObject(                          // 1800ba45e
-        reinterpret_cast<RtIo::TextFileStream*>(this),
-        reinterpret_cast<char* const*>(&type),
-        reinterpret_cast<char* const*>(&name), version);
+    RtIO::RtIo_TextFileStream_SetObject(this, &type, &name, version);   // 1800ba45e
 }
 
 // ============================================================================

@@ -56,11 +56,11 @@ namespace {
 struct BlockDesc12 { uint32_t id, offset, size; };
 static_assert(sizeof(BlockDesc12) == 0xC, "matches kSpec_Blk12's stride");
 
-void ClearBlockDescs(Persistence* p) {
-    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930
+void ClearBlockDescs(::IO::Persistence* p) {
+    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->_blockDescData)->~Array();  // 0x18002a930  // LEFT: H5 Persistence::_blockDescData (raw Array storage; behaviour commit owed)
 }
-void ClearBlockPtrs(Persistence* p) {
-    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();         // 0x180024aa0
+void ClearBlockPtrs(::IO::Persistence* p) {
+    reinterpret_cast<Collection::Array<void*>*>(&p->_blockPtrData)->~Array();         // 0x180024aa0  // LEFT: H5 Persistence::_blockPtrData (as above)
 }
 
 }  // namespace
@@ -110,8 +110,8 @@ bool Persistence::BeginGetSaveGameInfo(const System::String& name, int count) {
     System::Filename fnFile(GetSaveFilename(name));
     const System::String& fn = fnFile.AsString();
 
-    ::ClearBlockDescs(reinterpret_cast<RtIo::Persistence*>(this));
-    ::ClearBlockPtrs(reinterpret_cast<RtIo::Persistence*>(this));
+    ::ClearBlockDescs(this);
+    ::ClearBlockPtrs(this);
 
     _command = 3;
 

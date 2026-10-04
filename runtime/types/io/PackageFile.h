@@ -258,8 +258,8 @@ public:
     // Declared with `void*` for the return slot because the two `Array<T>`
     // instantiations they assign through are still reached by address; the
     // bodies stay in modification_refresh.cpp where their registrations are.
-    void* GetIconData(RtIO::ModArray* ret) const;       // 0x180025530
-    void* GetPreviewData(RtIO::ModArray* ret) const;    // 0x180025580
+    void* GetIconData(RtIO::ModArrayOf<uint32_t>* ret) const;   // 0x180025530
+    void* GetPreviewData(RtIO::ModArrayOf<uint8_t>* ret) const; // 0x180025580
 
     // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z 0x1800b46b0
     bool ReadPackfile(const System::Filename& path);

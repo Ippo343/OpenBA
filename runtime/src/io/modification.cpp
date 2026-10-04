@@ -232,7 +232,8 @@ static void AdoptShared(char** dst, char* src) {
 // 0x1800098d0 / 0x180010b80) are the same six instructions with different
 // element cleanup in front. `[RDI+8]` is ONE eight-byte store covering size AND
 // capacity, so capacity IS reset here.
-static void* ArrayFreeBuffer(ModArray* a) {
+template <class T>
+static void* ArrayFreeBuffer(ModArrayOf<T>* a) {
     ::System::MemoryAllocator::MemFree(a->data);          // retail's `if (p)` lives inside 0x1800c7ad0
     a->data = nullptr;
     a->size = 0;
@@ -242,11 +243,11 @@ static void* ArrayFreeBuffer(ModArray* a) {
 
 // 0x1800111a0 — Collection::Array<int32>::~Array
 void* RtColl_ArrayI32Dtor_1800111a0(void* a) {
-    return ArrayFreeBuffer(static_cast<ModArray*>(a));
+    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: SIG RtColl_ArrayI32Dtor_1800111a0 (void* core entry; PackageFile / vertexlayout callers, wave X)
 }
 // 0x1800112a0 — Collection::Array<uint8>::~Array
 void* RtColl_ArrayU8Dtor_1800112a0(void* a) {
-    return ArrayFreeBuffer(static_cast<ModArray*>(a));
+    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: SIG RtColl_ArrayU8Dtor_1800112a0 (void* core entry; PackageFile / vertexlayout callers, wave X)
 }
 
 // 0x180009af0, already ported by lane FIND (filesystem_find_win.cpp) and
@@ -257,8 +258,8 @@ void DestroyFilenameArray(void* ignoredThis, uint8_t* base, int count);
 // 0x1800098d0 — Collection::Array<Filename>::~Array. Releases every element
 // through 0x180009af0 first, then frees the buffer.
 void* RtColl_ArrayFilenameDtor_1800098d0(void* av) {
-    ModArray* a = static_cast<ModArray*>(av);
-    DestroyFilenameArray(a, static_cast<uint8_t*>(a->data), a->size);
+    ModArray* a = static_cast<ModArray*>(av);   // LEFT: SIG RtColl_ArrayFilenameDtor_1800098d0 (void* core entry: callers hand Collection::Array<Filename>, wave X)
+    DestroyFilenameArray(a, static_cast<uint8_t*>(a->data), a->size);   // CAST-OK: elem_stride
     return ArrayFreeBuffer(a);
 }
 
@@ -278,7 +279,8 @@ void* RtColl_ArrayFilenameDtor_1800098d0(void* av) {
 // The `oldSize` read happens BEFORE the store (`MOV ECX,[RDI+8]` then
 // `MOV EDX,[RBX+8]` then `MOV [RBX+8],ECX`) — the push-one-element case is
 // detected against the size the array had on entry.
-static void ArrayAssignGrow(ModArray* dst, const ModArray* src,
+template <class T>
+static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
                             uint32_t stride, int align) {
     const int32_t oldSize = dst->size;
     dst->size = src->size;
@@ -286,8 +288,8 @@ static void ArrayAssignGrow(ModArray* dst, const ModArray* src,
         dst->capacity = dst->size;
         if (dst->size == oldSize + 1 && oldSize != 0)
             dst->capacity = dst->size + dst->size * 2;
-        dst->data = ::System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(static_cast<int64_t>(dst->capacity)) * stride, align);
+        dst->data = static_cast<T*>(::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(static_cast<int64_t>(dst->capacity)) * stride, align));
     }
 }
 
@@ -298,29 +300,28 @@ static void ArrayAssignGrow(ModArray* dst, const ModArray* src,
 
 // 0x180011110 — Collection::Array<int32>::operator=
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
-    ModArray* dst = static_cast<ModArray*>(dstv);
-    const ModArray* src = static_cast<const ModArray*>(srcv);
+    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (void* core entry, wave X)
+    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: SIG as above
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
     for (int32_t i = 0; i < dst->size; ++i) {
-        int32_t* d = reinterpret_cast<int32_t*>(
-            static_cast<uint8_t*>(dst->data) + static_cast<size_t>(i) * 4);
+        uint32_t* d = dst->data + i;
         if (d == nullptr) continue;
-        d[0] = reinterpret_cast<const int32_t*>(src->data)[i];
+        d[0] = src->data[i];
     }
     return dst;
 }
 
 // 0x180011220 — Collection::Array<uint8>::operator=
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
-    ModArray* dst = static_cast<ModArray*>(dstv);
-    const ModArray* src = static_cast<const ModArray*>(srcv);
+    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (void* core entry, wave X)
+    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: SIG as above
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);
     for (int32_t i = 0; i < dst->size; ++i) {
-        uint8_t* d = static_cast<uint8_t*>(dst->data) + i;
+        uint8_t* d = dst->data + i;
         if (d == nullptr) continue;
-        *d = static_cast<const uint8_t*>(src->data)[i];
+        *d = src->data[i];
     }
     return dst;
 }
@@ -329,22 +330,20 @@ void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
 // carries its own self-assignment early-out (`CMP RCX,RDX; JNZ`), because its
 // callers do not all guard.
 void* RtColl_ArrayFilenameAssign_1800091f0(void* dstv, const void* srcv) {
-    ModArray* dst = static_cast<ModArray*>(dstv);
-    const ModArray* src = static_cast<const ModArray*>(srcv);
+    ModArrayOf<Filename>* dst = static_cast<ModArrayOf<Filename>*>(dstv);   // LEFT: SIG RtColl_ArrayFilenameAssign_1800091f0 (void* core entry, wave X)
+    const ModArrayOf<Filename>* src = static_cast<const ModArrayOf<Filename>*>(srcv);   // LEFT: SIG as above
     if (dst == src) return dst;
     // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
     // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).
-    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();
+    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
     ArrayAssignGrow(dst, src, 8, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
-        Filename* d = reinterpret_cast<Filename*>(
-            static_cast<uint8_t*>(dst->data) + static_cast<size_t>(i) * 8);
+        Filename* d = dst->data + i;
         if (d == nullptr) continue;
         // CALL 0x1800067d0 — Filename::Filename(Filename const&). `d` is inside
         // the buffer ArrayAssignGrow just (re)allocated: raw, uninitialised
         // bytes, so placement-construct into it.
-        new (&Sys(*d)) System::Filename(Sys(*reinterpret_cast<const Filename*>(
-            static_cast<const uint8_t*>(src->data) + static_cast<size_t>(i) * 8)));
+        new (&Sys(*d)) System::Filename(Sys(src->data[i]));
     }
     return dst;
 }
@@ -363,8 +362,8 @@ static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
-    n->w20 = 0;                                           // MOV dword [RDI+0x20],EAX
-    n->w22 = 0;
+    n->balance = 0;                                       // MOV dword [RDI+0x20],EAX
+    n->height = 0;
     return n;
 }
 
@@ -386,20 +385,17 @@ static_assert(offsetof(ModSetT::Node, right)  == offsetof(ModSetNode, right),  "
 // allocation writes through null. Transcribed, not guarded — the project's rule
 // is that a faithful crash names an upstream problem (an exhausted heap here),
 // and a guard would silently produce a half-built tree instead.
-void* RtColl_SetCloneSubtree_1800104f0(void* set, const void* srcv) {
-    const ModSetNode* src = static_cast<const ModSetNode*>(srcv);
+ModSetNode* RtColl_SetCloneSubtree_1800104f0(void* set, const ModSetNode* src) {
     ModSetNode* dup = SetNodeNew(set, &src->key, nullptr);
-    dup->w22 = src->w22;             // copied in THIS order: +0x22 then +0x20
-    dup->w20 = src->w20;
+    dup->height = src->height;       // copied in THIS order: +0x22 then +0x20
+    dup->balance = src->balance;
     if (src->left != nullptr) {
-        ModSetNode* c = static_cast<ModSetNode*>(
-            RtColl_SetCloneSubtree_1800104f0(set, src->left));
+        ModSetNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->left);
         dup->left = c;
         c->parent = dup;
     }
     if (src->right != nullptr) {
-        ModSetNode* c = static_cast<ModSetNode*>(
-            RtColl_SetCloneSubtree_1800104f0(set, src->right));
+        ModSetNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->right);
         dup->right = c;
         c->parent = dup;
     }
@@ -421,7 +417,7 @@ void* RtColl_SetCloneSubtree_1800104f0(void* set, const void* srcv) {
 // signature because retail's 0x180010470 takes it and ignores it.
 void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
     (void)set;
-    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));
+    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));   // LEFT: H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
 }
 
 // ============================================================================
@@ -473,8 +469,7 @@ void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src) {
     dst->set.count = 0;
     if (&src->set != &dst->set) {
         if (src->set.root != nullptr)
-            dst->set.root = static_cast<ModSetNode*>(
-                RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root));
+            dst->set.root = RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root);
         dst->set.count = src->set.count;
     }
 
@@ -521,8 +516,7 @@ void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src) {
             dst->set.count = 0;
         }
         if (src->set.root != nullptr)
-            dst->set.root = static_cast<ModSetNode*>(
-                RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root));
+            dst->set.root = RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root);
         dst->set.count = src->set.count;
     }
 
@@ -541,7 +535,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // trait-derived `Collection::Array<System::Filename>` needs no explicit
     // spec. `files` stays the `ModArray` POD (Mod is not yet a class), so this
     // is the transitional bridge, not a field re-type.
-    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();
+    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
 
     RtColl_SetDestroySubtree_180010470(&self->set, self->set.root);   // +0x60
     self->set.root = nullptr;
@@ -557,8 +551,8 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // `destroy = nullptr` and the class's dtor is exactly `ArrayFreeBuffer`
     // (`MemFree(_data)` then zero the three fields) through the same
     // `rtcoll::MemFree` door (0x1800c7ad0) — no explicit spec needed.
-    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40
-    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30
+    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
 
     char** shared[3] = { &self->description, &self->author, &self->name };
     for (int i = 0; i < 3; ++i) {
@@ -575,8 +569,8 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
 
 // 0x180010b80 — Collection::Array<Mod>::~Array
 void* RtColl_ArrayModDtor_180010b80(void* av) {
-    ModArray* a = static_cast<ModArray*>(av);
-    Mod* p = static_cast<Mod*>(a->data);   // LEFT: ModArray's buffer is untyped (Mod is a POD, H5)
+    ModArrayOf<Mod>* a = static_cast<ModArrayOf<Mod>*>(av);   // LEFT: SIG RtColl_ArrayModDtor_180010b80 (void* core entry, wave X)
+    Mod* p = a->data;
     for (int32_t i = a->size; i > 0; --i, ++p)
         RtIo_Mod_Dtor_180011460(p);
     return ArrayFreeBuffer(a);
@@ -586,16 +580,15 @@ void* RtColl_ArrayModDtor_180010b80(void* av) {
 // fn_ModArrayCopy (engine_funcs.cpp:1747) and again as ModArrayCopy()
 // (runtime/src/engine/loops.cpp:230). Both doors now land here.
 void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
-    ModArray* dst = static_cast<ModArray*>(dstv);
-    const ModArray* src = static_cast<const ModArray*>(srcv);
+    ModArrayOf<Mod>* dst = static_cast<ModArrayOf<Mod>*>(dstv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (void* core entry, wave X)
+    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG as above
     if (dst == src) return dst;
     RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
     ArrayAssignGrow(dst, src, 0x80, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
-        // LEFT: ModArray's buffer is untyped (Mod is a POD, H5).
-        Mod* d = static_cast<Mod*>(dst->data) + i;
+        Mod* d = dst->data + i;
         if (d == nullptr) continue;
-        RtIo_Mod_CopyCtor_1800101e0(d, static_cast<const Mod*>(src->data) + i);
+        RtIo_Mod_CopyCtor_1800101e0(d, src->data + i);
     }
     return dst;
 }
@@ -768,7 +761,7 @@ void Modification::SaveList() {
         // not-yet-converted `Mod`, so it is reached through a cast.
         char* ref;
         {
-            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge
+            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge  // LEFT: H5 Mod::file is the RtSystem::Filename POD
                                      ->GetPathFilename(true));
 
             // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned
