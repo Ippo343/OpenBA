@@ -61,17 +61,6 @@ namespace {
 
 
 
-void ReleaseStringField(char** field) {
-    char* s = *field;
-    if (s == nullptr) return;
-    if (--RtSystem::StringRefCount(s) == 0) {
-        *field = s - 8;
-        System::MemoryAllocator::MemFree(*field);
-    } else {
-        *field = nullptr;
-    }
-}
-
 // One child: create it from `desc` through the dialog, parent it, push it onto
 // the element's child array and dirty the chain. Retail writes this out SIX
 // times in CreateInstance (three fixed children plus two per tab); `slot` is
@@ -106,8 +95,8 @@ namespace {
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
 // B.4 LEFT: the three names are `System::String` fields spelt `char*` (their
 // dtors would start to run as the real type, B4_RULES H5).
-int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const void* nameStr) {
-    return sheet->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
+int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const System::String* name) {
+    return sheet->GetSpriteIndexFromName(*name);
 }
 }  // namespace
 
@@ -150,9 +139,9 @@ bool TabDescription::Serialize(IO::Stream& streamArg) {
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));    // 1800da7c6
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageFrameDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800da7d4
     RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da7e5 ExternalPtr<SpriteSheet>
-    reinterpret_cast<System::String*>(&_edgeLeftName)->Serialize(&ser);           // 1800da7f6
-    reinterpret_cast<System::String*>(&_edgeMiddleName)->Serialize(&ser);         // 1800da807
-    reinterpret_cast<System::String*>(&_edgeRightName)->Serialize(&ser);          // 1800da818
+    _edgeLeftName.Serialize(&ser);           // 1800da7f6
+    _edgeMiddleName.Serialize(&ser);         // 1800da807
+    _edgeRightName.Serialize(&ser);          // 1800da818
 
     rw->SerializeInt(_gap, nullptr);
 
@@ -227,7 +216,7 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
     // The three {sheet, index} pairs. ONE stack slot, written 4 bytes wide and
     // read 8 — the same deliberate width mismatch imagedescription.cpp records.
     uint64_t idxSlot;                                                   // [RSP+0x30]
-    char* const* const names[3] = { &_edgeLeftName, &_edgeMiddleName, &_edgeRightName };
+    const System::String* const names[3] = { &_edgeLeftName, &_edgeMiddleName, &_edgeRightName };
     ::Sprite* const sprites[3] = { &elem->_edgeLeft, &elem->_edgeMiddle, &elem->_edgeRight };
     for (int i = 0; i < 3; ++i) {
         SpriteSheet* sheet = _spriteSheet;                              // RE-READ each time
@@ -262,9 +251,8 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
 // ExternalPtrs at +0x68..+0x80 are not released.
 TabDescription::~TabDescription() {
     rtcoll::RtColl_ArrayDtor_18004cc90(&_tabsData);           // 1800da90c, +0xa8
-    ReleaseStringField(&_edgeRightName);                        // 1800da912, +0x98
-    ReleaseStringField(&_edgeMiddleName);                       // 1800da945, +0x90
-    ReleaseStringField(&_edgeLeftName);                         // 1800da977, +0x88
+    // B4 P2 H5: the three releases (MemFree at 1800da937 / 969 / 99b) are the
+    // members ~String (0x180006c80), run after this body in reverse order.
 }
 
 // ?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ 0x18004c2e0 --

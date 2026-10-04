@@ -884,7 +884,7 @@ UNIT_TEST(b39_uib_c5_spinner_tab) {
     auto* t = ::new (static_cast<void*>(td)) UI::TabDescription();
     CHECK(t->_stripBackdropDescription == nullptr);
     CHECK(t->_spriteSheet == nullptr);
-    CHECK(t->_edgeRightName == nullptr);
+    CHECK(t->_edgeRightName._data == nullptr);
     CHECK_EQ((int)td[0xa0], 0xCD);
     CHECK_EQ((int)td[0xa4], 0xCD);
     CHECK(t->_tabsData == nullptr);
