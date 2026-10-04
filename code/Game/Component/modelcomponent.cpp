@@ -65,12 +65,6 @@ void ComponentEntity::SendEvent(int eventId) {
     }
 }
 
-// B4 FORWARD: 7 outside caller files (action_base_cnr.cpp, buildcomponent_state8.cpp,
-// citizen_assignworkplace.cpp, destroycomponent_state6.cpp, workplacecomponent.cpp,
-// tool_base_tile.cpp; declared in Component/exe_bodies.h).
-extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
-    reinterpret_cast<ComponentEntity*>(entity)->SendEvent(param);   // LEFT: SIG ModelComponentNotify_Reimpl (B4 FORWARD): its callers in seven files (Action, Work, Game) hold the entity as void*
-}
 
 // ============================================================
 // Helper: the linked ModelDescription

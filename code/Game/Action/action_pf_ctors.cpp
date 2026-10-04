@@ -196,12 +196,5 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // ---- action_pf_roots_route.cpp's C spellings (kept here: that file's reinterpret column
 // has no room for them).
 
-// B4 FORWARD: 12 outside callers (citizenai_findhelpers, citizenai_findtarget,
-// citizenai_housing_idle, citizenai_leisure, citizen_assign_citizens,
-// citizen_lifeevent_handler, citizenbehavior, buildstructure, firework_search,
-// marketwork, work_base_reimpl, work_base_walkpos)
-int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
-    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);   // LEFT: SIG Pf_IsDstReachable_f810: citizenai_housing_idle.cpp:340 (COMP) holds the map as int* (&m_game->size)
-}
 
 

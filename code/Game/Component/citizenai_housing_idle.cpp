@@ -310,7 +310,8 @@ void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* co
 void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* const* param_2,
                      ComponentEntity* const* param_3, WorkSchedulerIdNode* const* param_4,
                      WorkCandidateTree* param_5) {
-    int* mapGrid = &GameUpdateLoop::_singleton->m_game->size;
+    Map* map = GameUpdateLoop::_singleton->m_game;
+    int* mapGrid = &map->size;
     // retail's RCX home slot (0x1400f7c95), re-used as the descent node (see 8000)
     WorkCandidateNode* local_res8 = nullptr;
 
@@ -337,7 +338,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
 
         if (doInsert) {
             uint32_t toCell = static_cast<uint32_t>(cur->work->field_28);
-            int cost = Pf_IsDstReachable_f810(mapGrid, fromCell, toCell, '\x01');
+            int cost = map->PathDistance(fromCell, toCell, '\x01');
             if (cost < 0) {
                 // unreachable via path graph -> euclidean fallback on grid coords
                 int gw = *mapGrid;

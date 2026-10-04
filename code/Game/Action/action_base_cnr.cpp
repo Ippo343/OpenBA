@@ -210,7 +210,7 @@ void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant
         model->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
         model->OnAdded();   // slot 6
     }
-    ModelComponentNotify_Reimpl(model->_entity, 0);   // 0x1400c2b70
+    model->_entity->SendEvent(0);   // 0x1400c2b70
 }
 
 // ============================================================
