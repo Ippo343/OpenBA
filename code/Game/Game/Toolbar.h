@@ -25,6 +25,7 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "system/String.h"
 
 namespace UI { class StringTable; class SpriteSheet; }
 class ComponentDescription;
@@ -46,8 +47,8 @@ public:
 public:
     UI::StringTable* _field20;   // +0x20: ExternalPtr<UI::StringTable> (serialized via fn_ExternalPtr_Serialize2; B4 H4: typed, DLG-d -- the button text table)
     UI::SpriteSheet* _field28;   // +0x28: ExternalPtr<UI::SpriteSheet> (serialized via fn_ExternalPtr_Serialize; B4 H4: typed, DLG-d -- the button sprite sheet)
-    void*    _field30;           // +0x30: System::String (serialized)
-    void*    _field38;           // +0x38: System::String (serialized)
+    System::String _field30;     // +0x30: serialized (ctor 0x1400d2130 zeroes it; dtor 0x140024c10 destroys it second)
+    System::String _field38;     // +0x38: serialized (ctor zeroes it; dtor destroys it first)
     uint32_t _field40;           // +0x40: 8 (serialized through the uint door 0x98: retail type uint)
     bool     _field44;           // +0x44: bool (serialized, default 1)
     bool     _field45;           // +0x45: bool (serialized, default 1)
