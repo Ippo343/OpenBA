@@ -150,7 +150,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // LEFT: Device::windowHandle is the HWND held as void* (the type header
     // cannot include <windows.h>).
     HWND gameWnd = videoDev
-        ? reinterpret_cast<HWND>(videoDev->windowHandle)   // +0x90
+        ? reinterpret_cast<HWND>(videoDev->windowHandle)   // +0x90   // CAST-OK: win32
         : nullptr;
     auto logWindow = [&](const char* when) {
         if (!gameWnd) return;
@@ -202,13 +202,13 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
         // LEFT: the XAudio2 interfaces are held as void* (Audio/Device.h); the two
         // calls are IXAudio2MasteringVoice::DestroyVoice and IXAudio2::Release.
         if (void* sub1 = ad->_masteringVoice) {                  // +0xa90
-            void** vt = *reinterpret_cast<void***>(sub1);
-            reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);
+            void** vt = *reinterpret_cast<void***>(sub1);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
+            reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
         }
         ad->_masteringVoice = nullptr;
         if (void* sub2 = ad->_xaudio2) {                         // +0xa88
-            void** vt = *reinterpret_cast<void***>(sub2);
-            reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);
+            void** vt = *reinterpret_cast<void***>(sub2);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
+            reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
         }
         ad->_xaudio2 = nullptr;
     }
@@ -228,7 +228,7 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
         vdev->PlatformShutdown();
         for (Video::Device::InterfaceSlot& slot : vdev->dllSlots) {   // +0xb0, stride 24
             // LEFT: the plugin module is the HMODULE held as void*.
-            HMODULE m = reinterpret_cast<HMODULE>(slot.module);
+            HMODULE m = reinterpret_cast<HMODULE>(slot.module);   // CAST-OK: win32
             if (m) FreeLibrary(m);
             slot.module = nullptr;
             slot.getDeviceName = nullptr;
@@ -332,7 +332,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     EngineStorage engine;
     std::memset(&engine, 0, sizeof(engine));
     // LEFT: the Engine lives in raw stack storage (its ctor is a door, RULE B5-4).
-    ::Engine::Engine* const eng = reinterpret_cast<::Engine::Engine*>(&engine);
+    ::Engine::Engine* const eng = reinterpret_cast<::Engine::Engine*>(&engine);   // LEFT: H5 the Engine lives in raw stack storage (its ctor is a door)
 
     printf("[GameMain] Constructing Engine (storage=%p)...\n", (void*)&engine);
     RtEngine_Engine_Ctor(eng, hInstance);
@@ -566,7 +566,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         MenuDialogLoopT* menuLoop = ::new (menuMem) MenuDialogLoopT(menuStr);
                         StallDebug::Mark("MenuDialogLoopT_Ctor");
                         printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
-                               *reinterpret_cast<void**>(menuLoop));
+                               *reinterpret_cast<void**>(menuLoop));   // CAST-OK: vslot
 
                         // Helper: build a splash GameLoadDialogLoopT (0xb60
                         // bytes, vtable 0x140158800) wrapping `next`. Mirrors
@@ -594,7 +594,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
                                    "delay=%.2fs\n",
-                                   tag, *reinterpret_cast<void**>(dlt), (void*)next, delaySec);
+                                   tag, *reinterpret_cast<void**>(dlt), (void*)next, delaySec);   // CAST-OK: vslot
                             return dlt;
                         };
 
@@ -678,7 +678,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                 ? static_cast<Engine::LoaderLoop*>(::new (mem) InnerLoaderLoop(next, delay))
                                 : static_cast<Engine::LoaderLoop*>(::new (mem) GameLoaderLoop(next, delay));
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p\n",
-                                   tag, *reinterpret_cast<void**>(ll), (void*)next);
+                                   tag, *reinterpret_cast<void**>(ll), (void*)next);   // CAST-OK: vslot
                             return ll;
                         };
 
