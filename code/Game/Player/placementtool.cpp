@@ -946,9 +946,12 @@ extern "C" int PlacementTool_HarnessPlaceAtCell(PlacementTool* self, int centerC
 
     // A harness-owned manager whose +0x80 constraint flag is clear (the ctor
     // 0x1401025c0 zeroes it), so CreateAt skips the constraint block. Static so
-    // it outlives this call; built on first use (the game is up by then).
-    static PlayerToolManager s_harnessOwner;
-    self->dialogPtr = &s_harnessOwner;
+    // it outlives this call; built on first use (the game is up by then). Never
+    // destroyed (as before: its cameraViews Array is not freed at process exit).
+    alignas(PlayerToolManager) static uint8_t s_harnessOwnerStorage[sizeof(PlayerToolManager)];
+    static PlayerToolManager* const s_harnessOwner =
+        ::new (static_cast<void*>(s_harnessOwnerStorage)) PlayerToolManager();
+    self->dialogPtr = s_harnessOwner;
 
     // Expanding Chebyshev-ring scan around the centre; place at the first hit.
     const int kMaxRadius = 48;
