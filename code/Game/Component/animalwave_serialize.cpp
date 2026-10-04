@@ -67,7 +67,7 @@ inline bool Loading(IO::Serializer& ser) {
 // (null the ref when the pointee is not derived from tid). The slots are the
 // Herd/Livestock/Population headers' untyped words (COMP-d / COMP-e).
 inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) {
-    Object::InternalBasePtr* p = reinterpret_cast<Object::InternalBasePtr*>(ibp);   // LEFT: untyped slot
+    Object::InternalBasePtr* p = reinterpret_cast<Object::InternalBasePtr*>(ibp);   // LEFT: the IBP members are declared as plain T* (Herd/Livestock/Population headers; H5 / InternalPtr typing)
     p->Serialize(ser);
     RtObject::Internal* obj = p->Get();
     if (obj && tid && !::Object::IsDerivedFromNullSafe(obj, tid))
@@ -112,7 +112,7 @@ inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) 
 // ============================================================
 extern "C" void PopulationComponent_Serialize_Real(void* selfP, IO::Stream& stream) {
     if (!selfP) return;
-    PopulationComponent* self = reinterpret_cast<PopulationComponent*>(selfP);   // B4 FORWARD receiver
+    PopulationComponent* self = reinterpret_cast<PopulationComponent*>(selfP);   // B4 FORWARD receiver  LEFT: FWD (populationcomponent.cpp's local extern passes void*)
     self->Component::Persist(stream);   // 0x1401189b0
 
     IO::Serializer ser(stream, 0);
@@ -121,7 +121,7 @@ extern "C" void PopulationComponent_Serialize_Real(void* selfP, IO::Stream& stre
     // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
     // (code/Game/Game, out of C1's file set) still wants a pointer.
     const uint32_t tidPopDesc = PopulationDescription::TypeId();
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&self->description), &ser,
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&self->description), &ser,   // LEFT: SIG ExternalPtrSerializeGeneric (void** field, Game/serialize_externals.h)
                                 &tidPopDesc, "PopulationDescription");
     ser.Serialize(self->habitatDim, nullptr);
     ser.Serialize(self->herdDim, nullptr);

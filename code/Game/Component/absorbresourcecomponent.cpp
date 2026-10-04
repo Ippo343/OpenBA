@@ -34,6 +34,8 @@
 #include "Component/MapComponent.h"
 #include "Component/StorageComponent.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -79,14 +81,13 @@ char AbsorbResourceComponent::State0Tick() {
     const int64_t x0 = static_cast<int16_t>(map->tileX0);
     const int64_t yEnd = static_cast<int>(y0) + static_cast<int16_t>(map->tileY1);
     const int64_t xEnd = static_cast<int>(x0) + static_cast<int16_t>(map->tileX1);
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header): the map grid stays by offset.
-    const int* grid = reinterpret_cast<const int*>(GameUpdateLoop::_singleton->m_game);
+    const Map* grid = GameUpdateLoop::_singleton->m_game;
 
     for (int64_t y = y0; y < yEnd; ++y) {
         for (int64_t x = x0; x < xEnd; ++x) {
-            const int64_t cellIndex = static_cast<int64_t>(grid[0]) * y + x;
-            const int64_t cell = *reinterpret_cast<const int64_t*>(grid + 0x20) + cellIndex * 0x30;
-            ComponentEntity* cellEntity = *reinterpret_cast<ComponentEntity**>(cell + 8);
+            const int64_t cellIndex = static_cast<int64_t>(grid->size) * y + x;
+            const MapCell* cell = grid->cells + cellIndex;
+            ComponentEntity* cellEntity = cell->occupant;
             if (cellEntity == nullptr) continue;
 
             RawMaterialComponent* rawMaterial = nullptr;
@@ -102,20 +103,18 @@ char AbsorbResourceComponent::State0Tick() {
             ComponentDescription* item = cellEntity->_description;
             // Retail reads the int32 quantity (0x140105ac9 MOV EDI,dword ptr [RAX+0x28]).
             const int quantity = rawMaterial->quantity;
-            // LEFT: Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 take the storage and
-            // the item as integers (Action/exe_bodies.h, ACT-b's declarations).
-            if (!(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(storage),
-                                           reinterpret_cast<int64_t>(item), quantity) & 0xff)) continue;
-            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage), reinterpret_cast<int64_t>(item),
-                                  rawMaterial->quantity);
+            // Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 are forwarders: their bodies
+            // StorageCanAdd (0x14012cd80) and StorageAdd (0x14012d000) are called.
+            if (!(StorageCanAdd(storage, item, quantity) & 0xff)) continue;
+            StorageAdd(storage, item,
+                       rawMaterial->quantity);
 
-            // LEFT: GameUpdateLoop::m_entityList is void* (W0 header): the removal list stays by offset.
-            const uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
+            EntityList* const entityList = GameUpdateLoop::_singleton->m_entityList;
             if (((cellEntity->_entityFlags >> 10) & 1) != 0) continue;
             ActHunt_MarkEntityRemoval_c2ea0(cellEntity);
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
-                .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &cellEntity);
+            // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+                .SetSizeFill(entityList->removalList.count + 1, &cellEntity);
         }
     }
     return 1;

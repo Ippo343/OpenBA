@@ -37,6 +37,7 @@
 #include "Action/exe_bodies.h"
 #include "Component/pickingcomponent_funcs.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Entity/CitizenBehavior.h"
 
 extern "C" void* g_pConstructionDemoSite;
 
@@ -73,6 +74,9 @@ extern "C" void* g_pConstructionDemoSite;
 // ============================================================
 // param_1 = {void* ptr (+0), int count (+8)}. param_2 = InternalBasePtr* to match.
 // Returns the index of the slot whose pointer equals *param_2, or -1.
+// LEFT (its three casts): SIG BuildComponent_FindInQueue takes the array header and the
+// IBP as void* (Component/exe_bodies.h, wave X); every caller passes the town manager's
+// buildComponents header (CitizenBehavior +0xD0).
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
     int64_t* arr = (int64_t*)arrayBase;
     int count = (int)arr[1];
@@ -263,15 +267,6 @@ void BuildComponent::FillModelLists() {
 
 }
 
-// ============================================================
-// Reimpl of FUN_140026a30 (FindComponent<PickingComponent>)
-// ============================================================
-// Returns retbuf (caller passes &out).
-void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
-    return new (retbuf) ::Object::InternalPtr<PickingComponent>(
-        reinterpret_cast<ComponentEntity*>(compHost)->FindComponent<PickingComponent>());   // B4 FORWARD: 2 outside callers (destroycomponent_state6.cpp, fencedtool_calcpath.cpp)
-}
-
 // ============================================================================
 // ENDGAME B.3.8 MI-A — BuildComponent as a REAL class (BuildComponent.h).
 //
@@ -458,35 +453,33 @@ void BuildComponent::OnRemove() {
     // Create InternalBasePtr on stack — original passes this (component ptr)
     Object::InternalPtr<BuildComponent> ptrBuf(this);
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the CitizenBehavior
-    // reads below stay by offset.
-    void* worldData = GameUpdateLoop::_singleton->m_citizenList;
+    CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
 
-    // Find in removal queue
-    int idx = BuildComponent_FindInQueue((void*)((uintptr_t)worldData + 0xD0), &ptrBuf);
+    // Find in removal queue (CitizenBehavior::buildComponents, +0xD0 / +0xD8)
+    int idx = BuildComponent_FindInQueue(&worldData->buildComponents, &ptrBuf);
 
     if (idx >= 0) {
-        int count = *(int*)((uintptr_t)worldData + 0xD8);
+        int count = worldData->buildComponentCount;
 
         // Shift remaining elements down (each is 8 bytes / InternalBasePtr)
         if (idx < count) {
-            int64_t offset = (int64_t)idx * 8;
+            int64_t offset = (int64_t)idx;   // in elements
             do {
                 int nextIdx = idx + 1;
                 if (nextIdx < count) {
-                    uint64_t* pSlot = (uint64_t*)(*(uintptr_t*)((uintptr_t)worldData + 0xD0) + offset);
+                    BuildComponent** pSlot = worldData->buildComponents + offset;
                     if (pSlot != nullptr) {
-                        *pSlot = 0;
+                        *pSlot = nullptr;
                         *pSlot = pSlot[1];
                     }
                 }
                 idx = nextIdx;
-                offset += 8;
+                offset += 1;
             } while (idx < count);
         }
 
         // Decrement count
-        *(int*)((uintptr_t)worldData + 0xD8) = count - 1;
+        worldData->buildComponentCount = count - 1;
     }
 }
 

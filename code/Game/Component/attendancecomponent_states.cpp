@@ -70,14 +70,15 @@ using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
 
 // The town attendance registry: gameWorld+0xf0 is the town object, +0x60 its array
 // base and +0x68 the element count. Both state 2's enter (append) and the component's
 // vtable slot 7 (erase) operate on it, and AllFull below walks it.
-// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the list stays by offset.
-static uintptr_t AC_TownObject() {
-    if (GameUpdateLoop::_singleton == nullptr) return 0;
-    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+// (CitizenBehavior::attendanceComponents / attendanceComponentCount.)
+static CitizenBehavior* AC_TownObject() {
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return GameUpdateLoop::_singleton->m_citizenList;
 }
 
 // ── AttendanceDescription_helper_3db0 (0x140043db0) — "is every building of my kind
@@ -96,11 +97,11 @@ static uintptr_t AC_TownObject() {
 // the equality test on the line above already established that entry carries this exact
 // description pointer, so the cast cannot fail.
 char AttendanceComponent::AllFull() {
-    const uintptr_t town = AC_TownObject();
+    CitizenBehavior* const town = AC_TownObject();
     if (!town) return 1;
 
-    AttendanceComponent* const* base = *reinterpret_cast<AttendanceComponent* const* const*>(town + 0x60);
-    const int       count = *reinterpret_cast<int32_t*>(town + 0x68);
+    AttendanceComponent* const* base = town->attendanceComponents;
+    const int       count = town->attendanceComponentCount;
     const Description* myDesc = _description;
 
     for (int i = 0; i < count && base; ++i) {
@@ -130,8 +131,7 @@ char AttendanceComponent::State2Frame() {
     // and the finder RETURNS ITS OUT-PARAM ADDRESS, so retail's deref is simply
     // "load the found component". Handing 12c3f0 the component's VTABLE faulted
     // (see reference_outparam_finder_recycled_ibp).
-    // LEFT: CitizenComp_FUN_14012c3f0 takes int64_t* (statusiconcomponent.cpp's declaration)
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 2, full);
+    mesh->SetFlag(2, full);   // 0x14012c3f0 (CitizenComp_FUN_14012c3f0's member)
     return 0;
 }
 
@@ -151,17 +151,18 @@ char AttendanceComponent::State2Frame() {
 // LocationWork, not LocationWork's constructor (that is 0x1400efc60).
 char AttendanceComponent::State2Enter() {
     // 1. register in the town attendance list
-    const uintptr_t town = AC_TownObject();
+    CitizenBehavior* const town = AC_TownObject();
     if (town) {
         Object::InternalPtr<AttendanceComponent> selfIbp(this);
-        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        const int32_t newCount = *reinterpret_cast<int32_t*>(town + 0x68) + 1;
-        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(town + 0x60))
+        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+        const int32_t newCount = town->attendanceComponentCount + 1;
+        GameColl::AsArray<GameColl::Ptr8>(&town->attendanceComponents)
             .SetSizeFill(newCount, &selfIbp);
     }
 
     // 2. mint the LocationWork
     void* work = nullptr;
+    LocationWork* location = nullptr;
     if (::System::MemoryAllocator::_singleton)
         work = ::System::MemoryAllocator::MemAlloc(0x50, 8);
     if (work) {
@@ -169,24 +170,21 @@ char AttendanceComponent::State2Enter() {
         // (0x1400f72e0), the 0x1401616a0 table, +0x48 = 0. ENDGAME B.3.9 OBJ:
         // the real class, not the `??0Internal` door + hand stamp.
         ComponentEntity* entity = _entity;
-        work = ::new (work) LocationWork(&entity);
+        location = ::new (work) LocationWork(&entity);
     }
-    uintptr_t workIbp = 0;
-    new (&workIbp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
+    Object::InternalPtr<LocationWork> workIbp(location);
 
     // 3. post it to the citizen work ledger
     {
         WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
-        // LEFT: CitizenAI_WorkScheduler_Post takes the component as uintptr_t (COMP-b's declaration)
+        // LEFT: SIG CitizenAI_WorkScheduler_Post takes the component as uintptr_t
         CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, '\0', &workIbp);
     }
 
     // 4. open the workplace
     {
         WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's declaration)
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
+        wpc->SetAccepting(true);   // WorkPlaceComponent_SetAccepting's member
     }
 
     return 0;
@@ -207,8 +205,7 @@ char AttendanceComponent::State3Enter() {
 
     {
         WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's declaration)
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), false);
+        wpc->SetAccepting(false);   // WorkPlaceComponent_SetAccepting's member
     }
     return 0;
 }

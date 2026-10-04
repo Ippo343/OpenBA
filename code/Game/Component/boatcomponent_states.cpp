@@ -97,6 +97,7 @@ using BoatDispatch = ::ControllerLive::Dispatcher<BoatCtrlTag>;
 #include "Component/ModelComponent.h"
 #include "Component/StateMachineComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
 
 namespace {
 
@@ -144,15 +145,15 @@ inline const Math::Vector3* ModelPos(ModelComponent* model) {
 // flush in the first half is retail's way of forcing a valid current index before
 // asking, and it matters here because a boat handler can fire on the very tick the
 // machine entered its state.
-// LEFT: the state machine arrives as void* (controller_state_table.h, COMP-c).
+// The state machine arrives as void* (the handler type of controller_state_table.h).
 void RequestTransition(void* smV, int desiredStateId) {
-    uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
+    StateMachine* sm = reinterpret_cast<StateMachine*>(smV);   // LEFT: controller_state_table.h handlers pass the machine as void* (COMP-2)
     if (!sm) return;
-    if (static_cast<int8_t>(sm[9]) < 0) {
+    if (sm->activeState < 0) {
         System::Time zeroTime{0};
         RtSystem_Time_Ctor(&zeroTime, 0.0f);
         // The time argument is the ADDRESS of the Time (retail passes it by reference).
-        StateMachine_TickReimpl(smV, reinterpret_cast<int64_t>(&zeroTime), 0, 0);   // 0x1400a9660
+        sm->Tick(&zeroTime, 0, 0);   // 0x1400a9660
     }
     ::ControllerLive::RequestStateTransition(smV, desiredStateId);
 }
@@ -165,8 +166,9 @@ void RequestTransition(void* smV, int desiredStateId) {
 // smc+0x48 IS the StateMachine struct (its +0x00 is the node), and smc+0x51 is that
 // machine's current node-local index — the same +0x09 byte the node ABI uses one field
 // earlier in the struct.
-// LEFT: StateMachineComponent's +0x48 machine and its +0x51 index byte are untyped
-// (COMP-e's header); the node's slot 2 is read from its table as before.
+// The node's slot 2 is Controller::PostEvent, called by name. The tree's old null tests
+// on the table and the slot it read are gone with the table read (a compiler vtable and
+// its slots are never null; known_port_issues row 352).
 void PostEventToDestination(BoatComponent* boat, int eventId) {
     ComponentEntity* destEntity = boat->destination.Get();
     if (!destEntity) return;
@@ -177,32 +179,28 @@ void PostEventToDestination(BoatComponent* boat, int eventId) {
     }
 
     void* sm   = &smc->stateMachine;
-    void* node = smc->stateMachine.current;
+    ControllerComponent::Controller* node = smc->stateMachine.current;
     if (!node) return;
-    void** vt = *reinterpret_cast<void***>(node);
-    if (!vt || !vt[2]) return;
     const int curIdx = smc->stateMachine.activeState;
-    typedef char (*PostEvent_t)(void*, void*, int, int);
-    reinterpret_cast<PostEvent_t>(vt[2])(node, sm, curIdx, eventId);
+    node->PostEvent(sm, curIdx, eventId);
 }
 
 // Retail's "the boat is finished — delete it" tail, shared verbatim by 5250 and 4c40
 // (0x140045272.. and 0x140044c52..): mark the boat's own entity for removal and push it
 // onto the entity list's removal array at gw+0xE8 -> +0xd0/+0xd8.
-// LEFT: GameUpdateLoop::m_entityList is void* (W0 header): the removal array stays by offset.
 void DeleteBoatEntity(BoatComponent* boat) {
     ComponentEntity* entIBP = boat->_entity;
     if (!entIBP) return;
     if (!GameUpdateLoop::_singleton) return;
-    const uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
+    EntityList* const entityList = GameUpdateLoop::_singleton->m_entityList;
     if (!entityList) return;
 
     if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
     ActHunt_MarkEntityRemoval_c2ea0(entIBP);
     {
-        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        void* arr = reinterpret_cast<void*>(entityList + 0xd0);
-        const int32_t newCount = *reinterpret_cast<int32_t*>(entityList + 0xd8) + 1;
+        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+        void* arr = &entityList->removalList;
+        const int32_t newCount = entityList->removalList.count + 1;
         GameColl::AsArray<GameColl::Ptr8>(arr).SetSizeFill(newCount, &entIBP);
     }
 }
@@ -277,21 +275,20 @@ char BoatComponent::Steer() {
 //
 // Note the argument: retail passes boat+0x50, i.e. the routine reads count/base/index
 // at +0x18/+0x10/+0x20 RELATIVE TO THE WAYPOINT FIELD, which lands on the boat's
-// +0x68/+0x60/+0x70. Same three fields, addressed from a different anchor.
-// LEFT: the receiver is the +0x50 sub-object TornadoComponent shares (0x1400a71e0);
-// it has no class yet.
-extern "C" int BoatCtrl_NextRoutePoint(void* waypointField, const float* ref, float spacing) {
-    const uintptr_t w = reinterpret_cast<uintptr_t>(waypointField);
-    const int   count = *reinterpret_cast<const int32_t*>(w + 0x18);
-    const float* base = *reinterpret_cast<const float* const*>(w + 0x10);
-    int i = *reinterpret_cast<const int32_t*>(w + 0x20);
+// +0x68/+0x60/+0x70. Same three fields, addressed from a different anchor: here the
+// receiver is the boat and the three are read by name (TornadoComponent::Path is the
+// same sub-object's class on the tornado; the boat's header keeps the fields flat).
+extern "C" int BoatCtrl_NextRoutePoint(const BoatComponent* boat, const float* ref, float spacing) {
+    const int   count = boat->routeCount;
+    const Math::Vector3* base = boat->route;
+    int i = boat->routeIndex;
     if (!base) return -1;
     const float r2 = spacing * spacing;
     for (;;) {
         ++i;
         if (i >= count) return -1;
-        const float dx = ref[0] - base[(size_t)i * 3 + 0];
-        const float dy = ref[1] - base[(size_t)i * 3 + 1];
+        const float dx = ref[0] - base[i].x;
+        const float dy = ref[1] - base[i].y;
         const float dz = ref[2] - 0.0f;
         if (dx * dx + dy * dy + dz * dz >= r2) return i;
     }
@@ -300,7 +297,7 @@ extern "C" int BoatCtrl_NextRoutePoint(void* waypointField, const float* ref, fl
 namespace {
 int NextRoutePoint(BoatComponent* boat, const Math::Vector3* ref) {
     const float spacing = kPointSpace;
-    return BoatCtrl_NextRoutePoint(&boat->waypoint, &ref->x, spacing);
+    return BoatCtrl_NextRoutePoint(boat, &ref->x, spacing);
 }
 }  // namespace
 

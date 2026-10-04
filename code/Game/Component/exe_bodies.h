@@ -38,7 +38,6 @@ void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0
 
 // ---- buildcomponent.cpp
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);  // 0x140017550
-void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf);  // 0x140026a30
 
 // ---- cemeterycomponent.cpp
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0
@@ -241,8 +240,6 @@ bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0 B4 FORWARD -> Wor
 void WorkComponent_RegisterWorkSlot(void* selfP);  // 0x14012eb50 B4 FORWARD -> WorkComponent::CancelWork (outside callers)
 
 // ---- workplacecomponent.cpp
-void WorkplaceComponent_Detach(int64_t comp, void* workerIbp);  // 0x14012f7e0 B4 FORWARD -> WorkPlaceComponent::Detach (citizencomponent.cpp)
-void WorkplaceComponent_Attach(int64_t comp, void* workerIbp);  // 0x14012fa20 B4 FORWARD -> WorkPlaceComponent::Attach (citizencomponent.cpp)
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (outside callers)
 void WorkPlaceComponent_OnCreateInit(void* selfP);  // 0x14012ee60 B4 FORWARD -> WorkPlaceComponent::ReleaseWorkers (destroycomponent_workerrelease.cpp)
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)

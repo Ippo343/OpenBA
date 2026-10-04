@@ -66,6 +66,9 @@
 #include "Component/StateMachineComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
+#include "Game/Map.h"
+#include "Game/PathfinderThread.h"
+#include "pathfinding/PointList.h"
 #include "Action/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
@@ -94,9 +97,8 @@
 //     +0x14  float           localYaw
 // The stride and both field offsets come from 1401239d7 (`LEA RDI,[RAX+RAX*2]` = idx*3,
 // then `[RBX+8+RDI*8]`) and 140123a3c (`[RCX+RDI*8+0x14]`) — not guessed.
-extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
+extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System::String* nameStr,
                                           float* outPos, float* outYaw) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     if (!comp) return false;
 
     // The description, IsDerivedFrom-gated exactly as retail. A failed cast yields NULL
@@ -104,22 +106,21 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     // an InteractDescription. The null-check below is on OUR side of that only to keep
     // the recursion honest, and it is the same branch retail takes when the table is
     // empty (count 0 -> no name matched -> recurse).
-    void* descRaw = *reinterpret_cast<void**>(comp + 0x18);
-    void* desc = nullptr;
+    Description* descRaw = comp->_description;
+    InteractDescription* desc = nullptr;
     if (::Object::IsDerivedFromNullSafe(descRaw, InteractDescription::TypeId())) {
-        desc = descRaw;
+        desc = static_cast<InteractDescription*>(descRaw);
     }
 
     int hit = -1;
-    uintptr_t table = 0;
+    const Pathfinding::PointList* table = nullptr;
     if (desc) {
-        table = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
-        const int n = table ? *reinterpret_cast<int*>(table + 0x38) : 0;
+        table = desc->_points;
+        const int n = table ? table->_points._size : 0;
         for (int i = 0; i < n; ++i) {
-            const uintptr_t entry = *reinterpret_cast<uintptr_t*>(table + 0x30) +
-                                    static_cast<uintptr_t>(i) * 0x18;
-            if (*reinterpret_cast<const System::String*>(entry) ==
-                *reinterpret_cast<const System::String*>(nameStr)) {   // B.3.1 bridge
+            const Pathfinding::PointList::Point& entry = table->_points._data[i];
+            if (*reinterpret_cast<const System::String*>(&entry.name) ==   // LEFT: PointList.h Point::name is raw char* storage of a String (runtime header)
+                *nameStr) {   // B.3.1 bridge
                 hit = i;
                 break;
             }
@@ -128,47 +129,41 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
 
     if (hit < 0) {
         // Not on this component — try each child (comp+0x28 array of IBPs, +0x30 count).
-        const int childCount = *reinterpret_cast<int*>(comp + 0x30);
+        const int childCount = comp->useLocationCount;
         for (int i = 0; i < childCount; ++i) {
-            const uintptr_t childSlot = *reinterpret_cast<uintptr_t*>(comp + 0x28) +
-                                        static_cast<uintptr_t>(i) * 8;
-            void* child = *reinterpret_cast<void**>(childSlot);
+            InteractComponent* child = comp->useLocations[i];
             if (BoatRoute_FindAttachPoint(child, nameStr, outPos, outYaw)) return true;
         }
         return false;
     }
 
     // Found the name. Its position is relative to the owning entity's ModelComponent.
-    const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
+    ComponentEntity* const entity = comp->_entity;
     const uint32_t wantedTid = ModelComponent::TypeId();
-    void* model = nullptr;
-    const int compCount = entity ? *reinterpret_cast<int*>(entity + 0x38) : 0;
+    ModelComponent* model = nullptr;
+    const int compCount = entity ? entity->_componentCount : 0;
     for (int i = 0; i < compCount; ++i) {
-        const uintptr_t slot = *reinterpret_cast<uintptr_t*>(entity + 0x30) +
-                               static_cast<uintptr_t>(i) * 8;
-        const uintptr_t obj = *reinterpret_cast<uintptr_t*>(slot);
+        Object::InternalPtr<Component>* const slot = &entity->_components[i];
+        Component* const obj = slot->Get();
         if (!obj) continue;
-        if (reinterpret_cast<Object::Base*>(obj)->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
-            void* cand = *reinterpret_cast<void**>(slot);
-            model = (::Object::IsDerivedFromNullSafe(cand, wantedTid)) ? cand : nullptr;
+        if (obj->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
+            Component* cand = slot->Get();
+            model = (::Object::IsDerivedFromNullSafe(cand, wantedTid)) ? static_cast<ModelComponent*>(cand) : nullptr;
             break;
         }
     }
 
-    uint64_t modelIBP[2] = {0, 0};
-    new (modelIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(model));   // B.3.3 bridge
-    const uintptr_t m = static_cast<uintptr_t>(modelIBP[0]);
+    const Object::InternalPtr<ModelComponent> modelIBP(model);
+    const ModelComponent* const m = modelIBP.Get();
     if (!m) return false;   // no ModelComponent: retail would fault on m+0x148
 
-    const uintptr_t entry = *reinterpret_cast<uintptr_t*>(table + 0x30) +
-                            static_cast<uintptr_t>(hit) * 0x18;
+    const Pathfinding::PointList::Point& entry = table->_points._data[hit];
 
     // worldPos = modelTransform * entry.localPos   (the transform lives at model+0x148)
     // Transform copy-ctor (slot 0x140151418), Transform::operator*(Vector3) (slot 0x140151470).
-    const Math::Transform xform = *reinterpret_cast<const Math::Transform*>(m + 0x148);   // B.3.1 bridge
+    const Math::Transform xform = m->transform;
     const Math::Vector3 worldPos =
-        xform * *reinterpret_cast<const Math::Vector3*>(entry + 0x08);   // B.3.1 bridge
+        xform * Math::Vector3(entry.pos[0], entry.pos[1], entry.pos[2]);
     outPos[0] = worldPos.x;
     outPos[1] = worldPos.y;
     outPos[2] = worldPos.z;
@@ -178,9 +173,10 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     // Quaternion::Rotate the head of that copy, so the rotate sees the quaternion only.
     // Vector3::FromYawPitch slot 0x1401512a0, Quaternion::Rotate slot 0x1401525f0,
     // Vector3::Heading slot 0x1401512d8.
-    const float localYaw  = *reinterpret_cast<const float*>(entry + 0x14);
+    // The yaw is PointList::Point +0x14 (the runtime header names it `radius`).
+    const float localYaw  = entry.radius;
     const float zeroPitch = 0.0f;
-    const Math::Transform rot = *reinterpret_cast<const Math::Transform*>(m + 0x148);   // B.3.1 bridge
+    const Math::Transform rot = m->transform;
     const Math::Vector3 yawVec = Math::Vector3::FromYawPitch(localYaw, zeroPitch);
     const Math::Vector3 rotated = rot.rotation.Rotate(yawVec);
     *outYaw = rotated.Heading();
@@ -188,58 +184,26 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
 }
 
 // ============================================================
-// 0x14000eb20 — Entity::FindComponent(BoatComponent)
-// ============================================================
-// The standard exe FindComponent shape: walk the entity's component array
-// (+0x30 base / +0x38 count, stride 8), compare each object's vtable-slot-2 type id
-// against a .rdata constant, and hand the match back through an InternalBasePtr
-// out-param — which is also the return value.
-//
-// The constant is DAT_1401c4020 = "BoatComponent" (BoatComponent_RegisterType writes it
-// at 14014a8a5; BoatComponent_GetType reads it at 1400036c0). Unregistered it reads 0,
-// nothing matches, and the merchant spawn quietly routes nothing — the exact failure
-// mode of reference_gated_element_typeid_disables_controller. reg_tradeui_typeids.cpp
-// seeds it behind BANISHED_LIVE_TRADE_TIDS.
-// B4 FORWARD: 1 outside caller (tradecomponent_states.cpp) holds the entity as an
-// integer. The null-entity and null-slot guards are the tree's (retail's template has
-// neither); kept, not extended.
-extern "C" void* BoatRoute_FindBoatComponent(int64_t entityI, void* outIBP) {
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityI);
-    const uint32_t wanted = BoatComponent::TypeId();
-    BoatComponent* found = nullptr;
-    const int n = entity ? entity->_componentCount : 0;
-    for (int i = 0; i < n; ++i) {
-        Component* obj = entity->_components[i].Get();
-        if (!obj) continue;
-        if (obj->Type() == wanted) {
-            found = (::Object::IsDerivedFromNullSafe(obj, wanted)) ? static_cast<BoatComponent*>(obj) : nullptr;
-            break;
-        }
-    }
-    return new (outIBP) ::Object::InternalPtr<BoatComponent>(found);
-}
-
-// ============================================================
 // 0x1400a7310 — index of the route point nearest a position
 // ============================================================
-// `arrV` points at BoatComponent+0x50, which is the head of the route's array struct:
-// +0x10 from there is the element pointer (comp+0x60) and +0x18 the count (comp+0x68).
+// Retail's receiver is BoatComponent+0x50, the head of the route sub-object it shares
+// with TornadoComponent: +0x10 from there is the element pointer (comp+0x60) and +0x18
+// the count (comp+0x68). Here it takes the boat and reads the same two fields by name.
 // Retail seeds the running minimum from element 0 and then re-tests element 0 in the
 // loop; kept, because it makes the empty-array case return 0 rather than -1 and the
 // caller indexes with the result unguarded.
-extern "C" int BoatRoute_NearestPointIndex(void* arrV, const float* pt) {
-    const uintptr_t arr = reinterpret_cast<uintptr_t>(arrV);
-    const float* base = *reinterpret_cast<const float* const*>(arr + 0x10);
+extern "C" int BoatRoute_NearestPointIndex(const BoatComponent* boat, const float* pt) {
+    const Math::Vector3* base = boat->route;
     if (!base) return 0;
 
-    float dx = pt[0] - base[0], dy = pt[1] - base[1], dz = pt[2] - base[2];
+    float dx = pt[0] - base[0].x, dy = pt[1] - base[0].y, dz = pt[2] - base[0].z;
     float best = dx * dx + dy * dy + dz * dz;
     int bestIdx = 0;
 
-    const int n = *reinterpret_cast<const int*>(arr + 0x18);
+    const int n = boat->routeCount;
     for (int i = 0; i < n; ++i) {
-        const float* e = *reinterpret_cast<const float* const*>(arr + 0x10) + i * 3;
-        dx = pt[0] - e[0]; dy = pt[1] - e[1]; dz = pt[2] - e[2];
+        const Math::Vector3* e = boat->route + i;
+        dx = pt[0] - e->x; dy = pt[1] - e->y; dz = pt[2] - e->z;
         const float d = dx * dx + dy * dy + dz * dz;
         if (d < best) { best = d; bestIdx = i; }
     }
@@ -260,9 +224,9 @@ extern "C" int BoatRoute_NearestPointIndex(void* arrV, const float* pt) {
 // was declared void for the same reason and is widened to int alongside this file — its
 // own caller discards the value, so nothing else changes.
 // See reference_discarded_return_reenables_gated_branch.
-extern "C" int BoatRoute_FindWaterPath(int64_t terrain, void* /*unused2*/, uint32_t fromCell,
-                                       uint64_t toCell, void* /*unused5*/, int64_t outBuf) {
-    void* pf = *reinterpret_cast<void**>(terrain + 0x68);
+extern "C" int BoatRoute_FindWaterPath(Map* map, void* /*unused2*/, uint32_t fromCell,
+                                       uint64_t toCell, void* /*unused5*/, int* outBuf) {
+    PathfinderThread* pf = map->pathfinder;
     if (!pf) {
         // A missing worker and "no water route" both end as 0 cells at the caller, and
         // they are completely different bugs. Say which one this was.
@@ -273,10 +237,12 @@ extern "C" int BoatRoute_FindWaterPath(int64_t terrain, void* /*unused2*/, uint3
 
     static const int kCost[11] = {10, 10, 10, 10, 10, 10, 10, 5, 1, 5, 10};
     for (int i = 0; i < 11; ++i)   // 0x1400a6a30: the cost rides in R8 (read as an int), the ctx in R9
-        Pf_EnqueueCmd1_a6a30(reinterpret_cast<int64_t>(pf), i, kCost[i]);
-    Pf_EnqueueCmd4_a68b0(reinterpret_cast<int64_t>(pf), 1, 0, 0);   // 0x1400a68b0 (1, 0, 0)
-    const int n = RoadTool_helper_6e30(reinterpret_cast<int64_t>(pf), fromCell, toCell & 0xffffffffu,
-                                       reinterpret_cast<void*>(0x380), outBuf, 0x1000);   // 0x1400a6e30
+        pf->SetStepCost(i, kCost[i]);
+    pf->SetSearchFlags(1, 0, 0);   // 0x1400a68b0 (1, 0, 0)
+    // LEFT: SIG RoadTool_helper_6e30 (the worker, the 0x380 mask and the buffer as integers;
+    // its body RunPathQuery is file-local to keystone_a_zone.cpp).
+    const int n = RoadTool_helper_6e30(reinterpret_cast<int64_t>(pf), fromCell, toCell & 0xffffffffu,   // LEFT: SIG RoadTool_helper_6e30
+                                       reinterpret_cast<void*>(0x380), reinterpret_cast<int64_t>(outBuf), 0x1000);   // 0x1400a6e30 LEFT: SIG RoadTool_helper_6e30
     return n;
 }
 
@@ -349,20 +315,16 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // ── Null destination: RELEASE the boat ───────────────────────────────────────
     // The controller's teardown (0x14005b160) calls in with a null entity to hand the
     // merchant back. Retail finds a component on the boat's own entity and dispatches
-    // its +0x48 owner through vtable slot 2, passing the byte at +0x51.
-    // LEFT: StateMachineComponent's +0x48 machine and +0x51 byte are untyped (COMP-e);
-    // the node's slot 2 is read from its table as before.
+    // its +0x48 owner through vtable slot 2 (Controller::PostEvent), passing the byte at
+    // +0x51 (StateMachine::activeState). The tree's old null test on the slot read from
+    // the table is gone with the table read: a compiler vtable slot is never null.
     if (dest == nullptr) {
         StateMachineComponent* state = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
         if (!state) return;
         StateMachine* ownerSlot = &state->stateMachine;
-        void* owner = ownerSlot->current;
+        ControllerComponent::Controller* owner = ownerSlot->current;
         if (!owner) return;
-        typedef void (*Release_t)(void*, void*, int, int);
-        Release_t release = (*reinterpret_cast<Release_t**>(owner))[2];
-        if (release)
-            release(owner, ownerSlot,
-                    static_cast<int>(state->stateMachine.activeState), 1);
+        owner->PostEvent(ownerSlot, static_cast<int>(state->stateMachine.activeState), 1);
         return;
     }
 
@@ -381,15 +343,15 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header); WorldGeometry's +0x1E0 header
-    // is an untyped {data, size} pair: the polyline reads stay by offset.
-    int* terrain   = reinterpret_cast<int*>(gw->m_game);
+    // WorldGeometry's +0x1E0 header is an untyped {data, size} pair: the polyline reads
+    // stay by offset.
+    Map* terrain   = gw->m_game;
     WorldGeometry* wgeo = gw->m_worldGeometry;
     if (!terrain || !wgeo) return;
 
-    const uintptr_t poly = reinterpret_cast<uintptr_t>(wgeo->_arrays[4].data);   // record 0 — retail
-    const int   polyCount = poly ? *reinterpret_cast<int*>(poly + 8) : 0; // int32 (140045840)
-    const float* polyPts  = poly ? *reinterpret_cast<const float**>(poly) : nullptr;
+    const uintptr_t poly = reinterpret_cast<uintptr_t>(wgeo->_arrays[4].data);   // record 0 — retail  LEFT: WorldGeometry.h _arrays H5 raw storage (GAME-2)
+    const int   polyCount = poly ? *reinterpret_cast<int*>(poly + 8) : 0; // int32 (140045840)  LEFT: WorldGeometry.h _arrays H5 (GAME-2)
+    const float* polyPts  = poly ? *reinterpret_cast<const float**>(poly) : nullptr;   // LEFT: WorldGeometry.h _arrays H5 (GAME-2)
 
     // ── 1. the approach lane: every polyline point before the map ────────────────
     int consumed = 0;      // points examined, including the first in-map one
@@ -402,7 +364,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
             ++consumed;
             entryX = px;
             entryY = py;
-            if (TileInMap(px, py, *terrain)) { resumeIdx = i; break; }
+            if (TileInMap(px, py, terrain->size)) { resumeIdx = i; break; }
             const float pt[3] = {px, py, 0.0f};
             AppendRoutePoint(this, pt);
             entryX = 0.0f;
@@ -421,7 +383,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
             const float px = polyPts[i * 2 + 0];
             const float py = polyPts[i * 2 + 1];
             resumeIdx = i + 1;
-            if (!TileInMap(px, py, *terrain)) break;
+            if (!TileInMap(px, py, terrain->size)) break;
             exitX = px;
             exitY = py;
         }
@@ -431,26 +393,26 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     static int s_cellsIn[4096];
     static int s_cellsOut[4096];
 
-    int mapSize = *terrain;
+    int mapSize = terrain->size;
     const int destTx  = ToTileClamped(destPos[0], mapSize);
     const int destTy  = ToTileClamped(destPos[1], mapSize);
     const int entryTx = ToTileClamped(entryX, mapSize);
     const int entryTy = ToTileClamped(entryY, mapSize);
 
-    const int nIn = BoatRoute_FindWaterPath(reinterpret_cast<int64_t>(terrain), nullptr,
+    const int nIn = BoatRoute_FindWaterPath(terrain, nullptr,
                                             static_cast<uint32_t>(mapSize * entryTy + entryTx),
                                             static_cast<uint64_t>(static_cast<uint32_t>(mapSize * destTy + destTx)),
-                                            nullptr, reinterpret_cast<int64_t>(s_cellsIn));
+                                            nullptr, s_cellsIn);
 
-    mapSize = *terrain;                                   // retail re-reads it
+    mapSize = terrain->size;                                   // retail re-reads it
     const int exitTx  = ToTileClamped(exitX, mapSize);
     const int exitTy  = ToTileClamped(exitY, mapSize);
     const int destTx2 = ToTileClamped(destPos[0], mapSize);
     const int destTy2 = ToTileClamped(destPos[1], mapSize);
-    const int nOut = BoatRoute_FindWaterPath(reinterpret_cast<int64_t>(terrain), nullptr,
+    const int nOut = BoatRoute_FindWaterPath(terrain, nullptr,
                                              static_cast<uint32_t>(mapSize * destTy2 + destTx2),
                                              static_cast<uint64_t>(static_cast<uint32_t>(mapSize * exitTy + exitTx)),
-                                             nullptr, reinterpret_cast<int64_t>(s_cellsOut));
+                                             nullptr, s_cellsOut);
 
     // CONTROL PROBE (BANISHED_BOAT_TRACE only, no behaviour): both real legs end at the
     // dock, which sits on LAND by construction — so "0 cells" there is ambiguous between
@@ -462,18 +424,18 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
 
     // BOTH legs or NEITHER — retail's gate at 140045e60.
     if (nIn > 0 && nOut > 0) {
-        const float bias = static_cast<float>(*terrain >> 1) - kRdata_140172114;
+        const float bias = static_cast<float>(terrain->size >> 1) - kRdata_140172114;
         for (int pass = 0; pass < 2; ++pass) {
             const int* cells = pass == 0 ? s_cellsIn : s_cellsOut;
             const int  n     = pass == 0 ? nIn : nOut;
             for (int i = 0; i < n; ++i) {
-                const float cellPos[3] = {
-                    static_cast<float>(cells[i] % *terrain) - bias,
-                    static_cast<float>(cells[i] / *terrain) - bias,
+                float cellPos[3] = {
+                    static_cast<float>(cells[i] % terrain->size) - bias,
+                    static_cast<float>(cells[i] / terrain->size) - bias,
                     0.0f
                 };
                 float snapped[3] = {0.0f, 0.0f, 0.0f};
-                Reimpl_MapGetTerrainPos(terrain, snapped, const_cast<float*>(cellPos), '\0', nullptr);   // 0x14009f3e0
+                Reimpl_MapGetTerrainPos(terrain, snapped, cellPos, '\0', nullptr);   // 0x14009f3e0
                 AppendRoutePoint(this, snapped);
             }
         }
@@ -495,7 +457,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // two points of a route. Left faithful — a negative index here means the route is
     // degenerate (an empty polyline, or both A* legs failed), and the fix belongs upstream
     // at whichever of those produced it, not in a guard that silently yields a wrong yaw.
-    const int nearest = BoatRoute_NearestPointIndex(&waypoint, destPos);
+    const int nearest = BoatRoute_NearestPointIndex(this, destPos);
     const Math::Vector3* pts = route;
     if (pts) {
         const Math::Vector3& a = pts[nearest];
@@ -513,10 +475,4 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
         *destYaw = dockForward.Heading();   // slot 0x1401512d8
     }
 
-}
-
-// B4 FORWARD: 1 outside caller (tradecomponent_states.cpp)
-extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityIBP) {
-    reinterpret_cast<BoatComponent*>(compI)->SetDestination(
-        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(destEntityIBP));
 }

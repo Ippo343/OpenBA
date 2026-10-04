@@ -58,6 +58,8 @@
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
 #include "graphics/Mesh.h"
 #include <new>
 #include "object/TypeInfo.h"
@@ -128,18 +130,18 @@ namespace {
 // renders that as `*(int*)(grid + 0x20)` because the pointer is typed int* —
 // ELEMENTS, not bytes). Cell stride is 0x30: +0x00 occupant IBP, +0x29 terrain
 // type (0x02 == the grass an animal will stand on).
-// LEFT: GameUpdateLoop::m_game is void* (W0 header): the grid reads stay by offset.
-inline int* MapGrid() {
-    return GameUpdateLoop::_singleton ? reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game) : nullptr;
+// (The cell's +0x00 entity is what Map.h names MapCell::blocker.)
+inline Map* MapGrid() {
+    return GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_game : nullptr;
 }
-inline uintptr_t CellArray(int* grid) {
-    return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
+inline MapCell* CellArray(Map* grid) {
+    return grid->cells;
 }
-inline uint8_t CellTerrain(uintptr_t cells, int64_t index) {
-    return *reinterpret_cast<uint8_t*>(cells + index * 0x30 + 0x29);
+inline uint8_t CellTerrain(const MapCell* cells, int64_t index) {
+    return cells[index].terrainType;
 }
-inline int64_t CellOccupant(uintptr_t cells, int64_t index) {
-    return *reinterpret_cast<int64_t*>(cells + index * 0x30);
+inline ComponentEntity* CellOccupant(const MapCell* cells, int64_t index) {
+    return cells[index].blocker;
 }
 inline System::Random* Rng() {
     return GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_random : nullptr;
@@ -194,14 +196,14 @@ constexpr int kTraceCap = 24;
 // A candidate qualifies when terrain == 0x02 AND the cell has no occupant.
 // ============================================================
 int AnimalComponent::FindHabitat() {
-    int* grid = MapGrid();
+    Map* grid = MapGrid();
     if (!grid) return 0;
 
     const int startCell = habitatCell;
     int side = 3;
 
     for (;;) {
-        int dim = *grid;
+        int dim = grid->size;
         side += 2;
         if (dim <= 0) return startCell;
 
@@ -223,27 +225,27 @@ int AnimalComponent::FindHabitat() {
         const int xMax = static_cast<int>(x0) + w - 1;
         const int yMax = static_cast<int>(y0) + h - 1;
 
-        const uintptr_t cells = CellArray(grid);
+        MapCell* const cells = CellArray(grid);
         if (!cells) return startCell;
 
         // Top and bottom edges.
         for (int x = x0; x <= xMax; ++x) {
-            int64_t top = static_cast<int64_t>(y0) * *grid + x;
+            int64_t top = static_cast<int64_t>(y0) * grid->size + x;
             if (CellTerrain(cells, top) == 0x02 && CellOccupant(cells, top) == 0)
-                return static_cast<int>(y0) * *grid + x;
-            int64_t bottom = static_cast<int64_t>(*grid) * yMax + x;
+                return static_cast<int>(y0) * grid->size + x;
+            int64_t bottom = static_cast<int64_t>(grid->size) * yMax + x;
             if (CellTerrain(cells, bottom) == 0x02 && CellOccupant(cells, bottom) == 0)
-                return *grid * yMax + x;
+                return grid->size * yMax + x;
         }
 
         // Left and right edges, interior rows only.
         for (int y = static_cast<int>(y0) + 1; y <= yMax - 1; ++y) {
-            int64_t left = static_cast<int64_t>(*grid) * y + x0;
+            int64_t left = static_cast<int64_t>(grid->size) * y + x0;
             if (CellTerrain(cells, left) == 0x02 && CellOccupant(cells, left) == 0)
-                return static_cast<int>(x0) + *grid * y;
-            int64_t right = static_cast<int64_t>(*grid) * y + xMax;
+                return static_cast<int>(x0) + grid->size * y;
+            int64_t right = static_cast<int64_t>(grid->size) * y + xMax;
             if (CellTerrain(cells, right) == 0x02 && CellOccupant(cells, right) == 0)
-                return y * *grid + xMax;
+                return y * grid->size + xMax;
         }
 
         if (side > 0x1e) return startCell;
@@ -286,12 +288,6 @@ void AnimalComponent::UpdateBehavior() {
     mesh->_color[3] = vec4.w;
 }
 
-// B4 FORWARD: 2 outside callers (pasturecomponent_spawn.cpp, tradecomponent_livestock.cpp)
-void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
-    if (!self) return;
-    self->UpdateBehavior();
-}
-
 // ============================================================
 // AnimalComponent::SetWanderTimer (0x140106250)
 // ------------------------------------------------------------
@@ -320,9 +316,9 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
     }
 
     if (model && charDesc) {
-        // LEFT: ActMvDep_AnimHelper_50f0 takes the model as uintptr_t (Action/exe_bodies.h, ACT's)
-        ActMvDep_AnimHelper_50f0(reinterpret_cast<uintptr_t>(model), animId, 0.0f,
-                                 charDesc->_turnFilter, ScaleMax());
+        // ActMvDep_AnimHelper_50f0 is a forwarder: its body is PlayModelAnimation.
+        PlayModelAnimation(model, animId, 0.0f,
+                           charDesc->_turnFilter, ScaleMax());   // 0x1401250f0
     }
 
     RtSystem_Time_Ctor(&moveTimer, seconds);
@@ -432,9 +428,9 @@ void AnimalComponent::OnAdded() {
     ModelComponent* model = character->modelComponent;
     if (!model) return;
 
-    int* grid = MapGrid();
+    Map* grid = MapGrid();
     if (!grid) return;
-    const int dim = *grid;
+    const int dim = grid->size;
     if (dim <= 0) return;
 
     const float half = static_cast<float>(dim >> 1);
@@ -458,7 +454,7 @@ void AnimalComponent::OnAdded() {
 // [9] 0x140106420. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void AnimalComponent::Update(void* time) {
-    const System::Time* deltaTime = static_cast<const System::Time*>(time);
+    const System::Time* deltaTime = static_cast<const System::Time*>(time);   // LEFT: SIG Component::Update(void* time) (Component.h, wave X)
     if (!deltaTime) return;
 
     // ---- 1. aging + death ------------------------------------------------
@@ -470,10 +466,8 @@ void AnimalComponent::Update(void* time) {
     const float death = deathAge;
     if (newAge >= death && newAge != death) {
         ComponentEntity* entity = _entity;
-        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header): the corpse list
-        // reads stay by offset.
-        const int64_t corpseOwner = GameUpdateLoop::_singleton
-                                        ? reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_entityList) : 0;
+        EntityList* const corpseOwner = GameUpdateLoop::_singleton
+                                        ? GameUpdateLoop::_singleton->m_entityList : nullptr;
         if (entity == nullptr) return;
 
         if ((entity->_entityFlags >> 10) & 1) return;
@@ -482,8 +476,8 @@ void AnimalComponent::Update(void* time) {
         if (corpseOwner) {
             // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
             // Collection::Array<void*>::SetSize(n, fill).
-            const int newCount = *reinterpret_cast<int*>(corpseOwner + 0xd8) + 1;
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(corpseOwner + 0xd0))
+            const int newCount = corpseOwner->removalList.count + 1;
+            GameColl::AsArray<GameColl::Ptr8>(&corpseOwner->removalList)
                 .SetSizeFill(newCount, &entity);
         }
         // Running total, not a capped sample: at kTraceCap=24 this read as
@@ -570,7 +564,7 @@ void AnimalComponent::Update(void* time) {
     if (moveTimer._ticks > 0) return;
 
     // ---- 5. destination search -------------------------------------------
-    int* grid = MapGrid();
+    Map* grid = MapGrid();
     if (!grid) return;
 
     // Retail re-reads the flag word here (the graze block above may have set
@@ -580,15 +574,14 @@ void AnimalComponent::Update(void* time) {
 
     if (((liveFlags >> 0x14) & 1) == 0) {      // not penned
         if (((liveFlags >> 0x16) & 1) != 0) {  // habitat is revalidated per repath
-            const uintptr_t cells = CellArray(grid);
+            MapCell* const cells = CellArray(grid);
             const int cell = habitatCell;
-            int64_t occupant = cells ? CellOccupant(cells, cell) : 0;
+            ComponentEntity* occupant = cells ? CellOccupant(cells, cell) : nullptr;
 
             bool blocked = false;
-            if (occupant != 0) {
+            if (occupant != nullptr) {
                 int64_t buildingIBP = 0;
-                // LEFT: the map cell's occupant is read by offset (m_game, W0 header)
-                fn_FindComponent_Building(reinterpret_cast<void*>(occupant), &buildingIBP);
+                fn_FindComponent_Building(occupant, &buildingIBP);
                 // ⚠ fn_FindComponent_Building is a MISLABEL — retail 0x140015140
                 // matches DWORD_1401c4b80, which is TradeComponent, not any notion of
                 // "building". Verified at instruction level, and retail's own animal
@@ -612,7 +605,7 @@ void AnimalComponent::Update(void* time) {
         ModelComponent* model = character->modelComponent;
         if (!model) return;
 
-        const int dim = *grid;
+        const int dim = grid->size;
         if (dim <= 0) return;
         const float halfDim = static_cast<float>(dim >> 1);
         int curX = ClampCell(static_cast<int>(ModelTransform(model)->translation.x + halfDim), dim);
@@ -661,9 +654,9 @@ void AnimalComponent::Update(void* time) {
             bool valid   = false;
 
             do {
-                int* g = MapGrid();
+                Map* g = MapGrid();
                 if (!g) return;
-                const int d = *g;
+                const int d = g->size;
                 if (d <= 0) return;
 
                 const uint32_t ry = rng ? rng->Rand(static_cast<uint32_t>(wanderHeight)) : 0;
@@ -698,31 +691,31 @@ void AnimalComponent::Update(void* time) {
                 ++misses;
                 ++attempts;
 
-                const int dim2 = *grid;
+                const int dim2 = grid->size;
                 const float half2 = static_cast<float>(dim2 >> 1);
                 const int cx = ClampCell(static_cast<int>(dest[0] + half2), dim2);
                 const int cy = ClampCell(static_cast<int>(dest[1] + half2), dim2);
-                const uintptr_t cells = CellArray(grid);
+                MapCell* const cells = CellArray(grid);
                 valid = cells && CellTerrain(cells, static_cast<int64_t>(cy) * dim2 + cx) == 0x02;
             } while (!valid && attempts < 100);
 
             // Retail re-derives the final cell from the freshly-read grid rather
             // than reusing the loop's last test.
-            int* g2 = MapGrid();
-            const int dim3 = g2 ? *g2 : 0;
+            Map* g2 = MapGrid();
+            const int dim3 = g2 ? g2->size : 0;
             bool accept = false;
             if (dim3 > 0) {
                 const float half3 = static_cast<float>(dim3 >> 1);
                 const int fx = ClampCell(static_cast<int>(dest[0] + half3), dim3);
                 const int fy = ClampCell(static_cast<int>(dest[1] + half3), dim3);
-                const uintptr_t cells2 = CellArray(g2);
+                MapCell* const cells2 = CellArray(g2);
                 accept = cells2 && CellTerrain(cells2, static_cast<int64_t>(fy) * dim3 + fx) == 0x02;
             }
 
             if (accept) {
                 // LEFT: the action-stack helpers take the Array header as int64_t* / void*
                 // (Work/exe_bodies.h, Action/exe_bodies.h: other blocks' declarations)
-                int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);
+                int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent::actions is a raw Action** triple, not an ActionStack)
                 WorkBase_TaskListCleanup_c5400(stack);
 
                 void* action = nullptr;
@@ -740,7 +733,7 @@ void AnimalComponent::Update(void* time) {
 
                 int64_t actionIBP = 0;
                 new (&actionIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge
+                    reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge  LEFT: SIG Pf_MoveToCtor_9170 returns void*
                 Pf_ActStackPush_54e0(stack, &actionIBP);
                 moveTimer._ticks = 0;
 
