@@ -473,8 +473,8 @@ UNIT_TEST(b39_pickingmesh_ctor_makes_retails_stores) {
     CHECK(m->_refs._data == nullptr);
     CHECK_EQ(m->_refs._size, 0);
     CHECK_EQ(m->_refs._capacity, 0);
-    CHECK(m->_string20.data == nullptr);
-    CHECK(m->_string28.data == nullptr);
+    CHECK(m->_string20._data == nullptr);
+    CHECK(m->_string28._data == nullptr);
     CHECK(!m->_flag30);
     for (int i = 0; i < 7; ++i) CHECK_EQ((int)buf[0x31 + i], 0xCD);
     CHECK(m->_nodes._data == nullptr);

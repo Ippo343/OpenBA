@@ -520,8 +520,8 @@ char DestroyComponent::State4Enter(StateMachine* sm) {
             // four zero qwords), not the `??0Internal` door + hand stamp.
             ComponentEntity* entityTmp = entity;
             ClearStorage* work = ::new (mem) ClearStorage(&entityTmp);
-            ::Object::InternalPtr<ClearStorage> workIBP(work);
-            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 1, 0, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+            ::Object::InternalPtr<Work> workIBP(work);
+            CitizenAI_WorkScheduler_Post(yard, 1, 0, &workIBP);
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -576,7 +576,7 @@ char DestroyComponent::State5Enter() {
                 int64_t workIBP = 0;
                 new (&workIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(mem));   // LEFT: SIG BuildStructure_CreateInPlaceFull (Work/exe_bodies.h) builds into void*
-                CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 0x2001, 0, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+                CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG BuildStructure_CreateInPlaceFull builds into void* (the work held as int64_t)
             }
         }
     } else {

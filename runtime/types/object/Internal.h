@@ -677,6 +677,4 @@ static_assert(offsetof(InternalFactory, _random) ==
 namespace IO { class Serializer; }   // io/Serializer.h
 
 // ---- object/internal_ptr_array_serialize.cpp
-extern "C" void RtObject_InternalPtrArraySerialize_AchievementInstance(::IO::Serializer* ser, int count, RtObject::InternalBasePtr* elems);  // 0x180009a20
-extern "C" void RtObject_InternalPtrArraySerialize_GoalInstance(::IO::Serializer* ser, int count, RtObject::InternalBasePtr* elems);  // 0x180009fa0
 // ==== end B3R W0-P0c ====

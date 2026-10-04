@@ -94,7 +94,7 @@ uint8_t* s_rootOnly = nullptr;
 bool     s_rootOnlyResolved = false;
 long     s_counts[kCntMax];
 std::vector<ModelComponent*> s_culledModels;   // models whose pose was left root-only this frame
-struct DeferredPick { void* model; void* scene; uint32_t id; PickXfCtor_t ctor; PickSetXf_t set; };
+struct DeferredPick { ModelComponent* model; Picking::Scene* scene; uint32_t id; PickXfCtor_t ctor; PickSetXf_t set; };
 std::vector<DeferredPick> s_deferredPicks;   // citizens whose pick transform was not pushed
 struct DeferredReplay { void* obj; void (*fn)(void*); };
 std::vector<DeferredReplay> s_deferredReplays;  // icons etc. whose presentation tick was skipped
@@ -203,8 +203,8 @@ void FlushPicks() {
     if (s_deferredPicks.empty()) return;
     for (const DeferredPick& d : s_deferredPicks) {
         alignas(16) uint8_t xf[136];
-        d.ctor(xf, reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(d.model) + 0x148));   // LEFT: SIG PerfX::PickCullSkip (void* model; perf_experimental.h, callers in code/Game: wave X)
-        d.set(d.scene, d.id, xf);
+        const Math::Transform* built = d.ctor(xf, &d.model->transform);   // +0x148
+        d.set(d.scene, d.id, built);
     }
     if (Cfg().trace)
         std::fprintf(stderr, "[PerfX] flushed %zu deferred pick transforms (sim idle)\n", s_deferredPicks.size());
@@ -397,10 +397,10 @@ bool AnimCullSkip(ModelComponent* model) {
 
 void Count(int what) { if (what >= 0 && what < kCntMax) ++s_counts[what]; }
 
-bool PickCullSkip(void* model, void* scene, uint32_t id, PickXfCtor_t ctor, PickSetXf_t set) {
+bool PickCullSkip(ModelComponent* model, Picking::Scene* scene, uint32_t id, PickXfCtor_t ctor, PickSetXf_t set) {
     if (!Cfg().pickCull || !s_haveFrustum || !ctor || !set) return false;
     if (!s_simRanThisFrame) { s_simRanThisFrame = true; s_culledModels.clear(); s_deferredPicks.clear(); s_deferredReplays.clear(); }
-    const float* pos = reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158);   // LEFT: SIG PerfX::PickCullSkip (void* model; wave X)
+    const float* pos = &model->transform.translation.x;   // +0x158
     if (PointVisible(pos)) return false;
     ++s_counts[kCntPickSkipped];
     s_deferredPicks.push_back(DeferredPick{ model, scene, id, ctor, set });
@@ -438,10 +438,10 @@ bool AnimBatchDecide(ModelComponent* model, const System::Time* time, int64_t* t
     return false;
 }
 
-bool ModelCulled(void* model) {
+bool ModelCulled(ModelComponent* model) {
     if (s_flushing) return false;
     if (!Cfg().animCull || !s_haveFrustum || !model) return false;
-    return !PointVisible(reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158));   // LEFT: SIG PerfX::ModelCulled (void* model; wave X)
+    return !PointVisible(&model->transform.translation.x);   // +0x158
 }
 
 void NoteDeferred(void* obj, void (*replay)(void*)) {

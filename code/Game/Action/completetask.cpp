@@ -182,14 +182,6 @@ void* CompleteTask::CreateInPlaceObject(void* storage) {
 // Base Internal ctor, then Action vtable -> CompleteTask vtable; copies two IBP fields
 // (+0x20 from param_3, +0x28 from param_4) and two int fields (+0x30=param_2, +0x34=param_5).
 // ============================================================
-void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3,
-                                   uint64_t* param_4, uint32_t param_5) {
-    // B4 FORWARD: 10 outside caller files (citizenai_actionctors, the
-    // Work/ action builders) hold the two refs as uint64_t*.
-    return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2,
-        reinterpret_cast<CitizenComponent* const*>(param_3),
-        reinterpret_cast<ComponentEntity* const*>(param_4), param_5));
-}
 
 // 0x1400c5da0: +0x20 = *param_3 ; +0x28 = *param_4 ; +0x30 = param_2 ; +0x34 = param_5.
 CompleteTask::CompleteTask(uint32_t taskIndexArg, CitizenComponent* const* workEntityArg,

@@ -33,6 +33,7 @@
 #include "Component/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Action/exe_bodies.h"
+#include "Action/PathAvl.h"   // AvlRebalance (0x140013480)
 #include "Work/exe_bodies.h"
 #include "Player/exe_bodies.h"
 
@@ -199,10 +200,8 @@ static WorkSchedulerBucketNode** WS_cb50(WorkScheduler* ws, WorkSchedulerBucketN
 // Retail's only direct caller, FUN_14009c960, passes ('\0', -1): the value is dead there.
 // Returns the assigned id.
 // ==================================================================================
-extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code,
+extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::InternalPtr<Work>* workRef, uint32_t code,
                                               char fromExisting, int prio) {
-    WorkScheduler* ws = reinterpret_cast<WorkScheduler*>(sched);   // LEFT: SIG CitizenAI_WorkScheduler_Insert
-    Object::InternalPtr<Work>* workRef = reinterpret_cast<Object::InternalPtr<Work>*>(pWorkIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Insert
 
     // --- assign id (wraps at 0x7ffffffe) ---
     ws->field_0x00 += 1;
@@ -364,7 +363,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
                 }
                 if (linked) {
                     WorkSchedulerIdNode* tmp = parent;
-                    Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&tree->root), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceB_13480
+                    AvlRebalance(&tree->root, &tmp);   // 0x140013480
                 }
             }
             tree->count += 1;   // sub-tree count++
@@ -468,7 +467,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
             }
             if (linked) {
                 WorkSchedulerIdNode* tmp = parent;
-                Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&innerField->root), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceB_13480
+                AvlRebalance(&innerField->root, &tmp);   // 0x140013480
             }
         }
         found->bucket.entries.count += 1;   // profession bucket count++
@@ -487,8 +486,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
 // CitizenAI_impl_ec60 — post wrapper. workComp = the WorkComponent, code = 0x2001,
 // flag = param_3, pWorkIBP = the work IBP.
 // ==================================================================================
-extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, char flag, void* pWorkIBP) {
-    WorkComponent* wc = reinterpret_cast<WorkComponent*>(workComp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP) {
     if (wc->IsWorkPosted()) {          // 0x14012ead0
         wc->CancelWork();              // 0x14012eb50
     }
@@ -503,8 +501,8 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
     if (!sched) return;
 
     // Faithful to ec60: pass a pointer to a local copy of the work-ptr (88a0 only reads it).
-    Object::InternalPtr<Work> localWork = *reinterpret_cast<Object::InternalPtr<Work>*>(pWorkIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
-    int assignedId = CitizenAI_WorkScheduler_Insert(reinterpret_cast<int*>(sched), &localWork, code, prioFlag,   // LEFT: SIG CitizenAI_WorkScheduler_Insert
+    Object::InternalPtr<Work> localWork = *pWorkIBP;
+    int assignedId = CitizenAI_WorkScheduler_Insert(sched, &localWork, code, prioFlag,
                                                     wc->workFlags);
     wc->workId = assignedId;
 
@@ -553,13 +551,10 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
 //
 // Faithful 1:1 port; the erase (ca60) and insert (9a40) helpers maintain the bucket counts
 // themselves, which is why retail never touches +0x10 here.
-extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
-                                              uint64_t oldKey, uint64_t newKey) {
+extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId,
+                                              Profession* const oldProf, Profession* const newProf) {
     // [STANDALONE GUARD] Retail is only ever called from a live world.
-    if (!sched) return;
-    WorkScheduler* ws = reinterpret_cast<WorkScheduler*>(sched);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
-    Profession* const oldProf = reinterpret_cast<Profession*>(oldKey);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
-    Profession* const newProf = reinterpret_cast<Profession*>(newKey);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
+    if (!ws) return;
     const int key = static_cast<int>(workId);
 
     // 1. The id-map entry (sched+0x30) — its +0x08 payload is what gets re-filed. Retail
@@ -632,7 +627,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     // if the allocator failed. Dropping the item is bad, but far better than a write to 0x08.
     if (!newBucket) {
         std::fprintf(stderr, "[WorkScheduler] Rekey: could not create bucket for key %llx — "
-                     "work id %d dropped\n", static_cast<unsigned long long>(newKey), key);
+                     "work id %d dropped\n", reinterpret_cast<unsigned long long>(newProf), key);   // LEFT: the log prints the key as %llx (text kept)
         std::fflush(stderr);
         return;
     }

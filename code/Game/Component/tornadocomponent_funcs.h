@@ -11,5 +11,4 @@
 // first argument: a file-local function.
 extern "C" {
 // B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp) -> ParticleComponent::FadeOutEmitter
-void  Tornado_ParticleReverse_53720(void* particleComp, int index);
 }

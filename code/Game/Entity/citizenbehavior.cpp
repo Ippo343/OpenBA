@@ -36,7 +36,8 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/ProfessionList.h"
 #include "Entity/exe_bodies.h"
-#include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathBST_Insert_25a10, PathPairs_Clear_25b30
+#include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathPairs_Clear_25b30
+#include "Action/PathAvl.h"         // PathCostTreeInsert (0x140025a10)
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing, StorageComponent_DynArrayResize
 #include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x10 / 0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
@@ -258,10 +259,10 @@ bool PathGraph::ProcessPaths() {
             key.value = 0;
 
             PathCostNode* outNode = nullptr;
-            PathBST_Insert_25a10(   // 0x140025a10
-                reinterpret_cast<int64_t*>(&pg->m_bstRoot),   // LEFT: SIG PathBST_Insert_25a10 (Action/exe_bodies.h)
-                reinterpret_cast<uint64_t*>(&outNode),        // LEFT: SIG PathBST_Insert_25a10
-                reinterpret_cast<uint32_t*>(&key));           // LEFT: SIG PathBST_Insert_25a10
+            PathCostTreeInsert(   // 0x140025a10
+                reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
+                reinterpret_cast<AvlNode30**>(&outNode),                     // LEFT: as above
+                &key.high);
             foundNode = outNode;
         }
 
@@ -281,7 +282,7 @@ bool PathGraph::ProcessPaths() {
         // Citizen assignment sweep
         CitizenAssignCitizens(pg);   // 0x1400d43b0
         // Clear the pairs array
-        PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30  LEFT: SIG PathPairs_Clear_25b30 (Action/exe_bodies.h)
+        PathPairs_Clear_25b30(pg);   // 0x140025b30
     }
 
     return true;
@@ -392,7 +393,7 @@ void PathGraph::BuildPathGraph() {
     pg->m_bstCount = 0;
 
     // ---- Step 3: Clear pairs array ----
-    PathPairs_Clear_25b30(reinterpret_cast<int64_t*>(pg));   // 0x140025b30  LEFT: SIG PathPairs_Clear_25b30 (Action/exe_bodies.h)
+    PathPairs_Clear_25b30(pg);   // 0x140025b30
 
     // ---- Step 4: Generate pairs from profession entities x buildings ----
     // The map's cell array, for region lookups
@@ -540,10 +541,10 @@ void PathGraph::BuildPathGraph() {
 
                     {
                         void* dummy = nullptr;
-                        PathBST_Insert_25a10(   // 0x140025a10
-                            reinterpret_cast<int64_t*>(&pg->m_bstRoot),   // LEFT: SIG PathBST_Insert_25a10 (Action/exe_bodies.h)
-                            reinterpret_cast<uint64_t*>(&dummy),          // LEFT: SIG PathBST_Insert_25a10
-                            reinterpret_cast<uint32_t*>(&bstKey));        // LEFT: SIG PathBST_Insert_25a10
+                        PathCostTreeInsert(   // 0x140025a10
+                            reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
+                            reinterpret_cast<AvlNode30**>(&dummy),                       // LEFT: as above
+                            &bstKey.high);
                     }
                 }
             }
@@ -863,7 +864,7 @@ void CitizenBehavior::CountResources() {
 void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
     float notifyInterval = 120.0f; // DAT_140172210 = 120.0f seconds
     // GameUpdateLoop +0x138 is the event notifier (still void* in GameUpdateLoop.h)
-    void* notifMgr = GameUpdateLoop::_singleton->m_eventNotifier;
+    EventLog* notifMgr = GameUpdateLoop::_singleton->m_eventNotifier;
 
     // Part 1: Check profession resource thresholds (21 entries)
     for (int i = 0; i < 21; i++) {
@@ -891,7 +892,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
             if (currentCount < threshold && threshold <= previousCount) {
                 // Fire shortage notification (with a null entity InternalBasePtr)
                 {
-                    void* nullIBP = nullptr;
+                    Object::InternalBasePtr nullIBP(nullptr);
                     EventLog_AddEvent(notifMgr, i + 0x11, 3, &nullIBP);   // 0x140095580
                 }
                 // Reset timer to notification cooldown (120 seconds)
@@ -931,7 +932,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
                 // Notification type: 0x17 for food (entry 0), 0x18 for firewood (entry 1)
                 int notifType = 0x17 + (i != 0 ? 1 : 0);
                 {
-                    void* nullIBP = nullptr;
+                    Object::InternalBasePtr nullIBP(nullptr);
                     EventLog_AddEvent(notifMgr, notifType, 3, &nullIBP);   // 0x140095580
                 }
                 {

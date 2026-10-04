@@ -476,14 +476,15 @@ void* ScenarioDialog::CreateInPlaceObject(void* storage) {
 // back by address any more, so its registration (reg_nullsweep.cpp) is gone.
 
 // B4 FORWARD: mainmenudialog.cpp's two calls, the old signature.
-void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
-                          void* parentMenuIBP, uint8_t difficulty) {
+ScenarioDialog* ScenarioDialog_Ctor(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
+                                    const Object::InternalPtr<UI::DialogInstance>* parentIBP,
+                                    const Object::InternalPtr<UI::DialogInstance>* parentMenuIBP,
+                                    uint8_t difficulty) {
     if (!self) return nullptr;
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) ScenarioDialog(static_cast<UI::UserInterface*>(ui),
-                                       static_cast<const UI::Dialog*>(extRes), parent,
-                                       parentMenuIBP ? static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentMenuIBP)->Get() : nullptr,
+        parent = *parentIBP;
+    return ::new (self) ScenarioDialog(ui, extRes, parent,
+                                       parentMenuIBP ? parentMenuIBP->Get() : nullptr,
                                        difficulty);
 }

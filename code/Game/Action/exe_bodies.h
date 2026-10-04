@@ -109,7 +109,6 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
-void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
@@ -119,20 +118,14 @@ void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattan, 
 void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost);  // 0x1400a6a30 -> PathfinderThread::SetStepCost
 
 // ---- action_pf_avl.cpp
-extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node);  // 0x14000e450
-extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node);  // 0x14000e580
-extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node);  // 0x140013480
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
 extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x14001a4f0
-extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x140025a10
-extern "C" void PathPairs_Clear_25b30(int64_t* param_1);  // 0x140025b30
+struct PathGraph;
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_);  // 0x1400c54e0
-void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3, uint64_t* param_4, uint32_t param_5);  // 0x1400c5da0
-void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4, float* destination, int param_6, int param_7, float speed);  // 0x1400c9170
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
-void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3, uint32_t param_4, uint64_t* param_5, uint32_t param_6);  // 0x1400cb1d0
 class Component;              // Component/Component.h
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
@@ -189,7 +182,6 @@ class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
 void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* point, const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude);  // 0x140092260
 void HerdStartMigration(HerdComponent* herd);  // 0x140122340
-void Pf_HerdStartMigration_122340(void* param_1);  // 0x140122340 B4 FORWARD -> HerdStartMigration
 
 // ---- action_pf_roots_road.cpp
 void Pf_ZoneRefresh_9c480(int* param_1);  // 0x14009c480
@@ -208,7 +200,6 @@ void ZoneComponent_sub_d360(int* param_1, int64_t* param_2, int param_3, int par
 int RoadTool_sub_ce00(int64_t param_1, unsigned int param_2, unsigned int param_3, uint64_t param_4, void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
-int* Pf_RegionGraphCtor_8670(int* param_1, int64_t param_2, int64_t param_3, int64_t param_4, uint32_t param_5, int param_6);  // 0x1400a8670 (local extern in code/Game/Game/region_seed.cpp (reg_region_graph.cpp prototype registers nothing))
 
 // ---- region_paircache.cpp
 extern "C" void* Pf_RegionPairCache_Build();  // no retail address (local extern in code/Game/Game/region_seed.cpp)

@@ -52,6 +52,8 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"
 #include "../../types/system/MemoryAllocator.h"
+#include "../../types/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/ui/StringTable.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -130,8 +132,8 @@ bool TextDescription::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 1);                      // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 18011ee8b ExternalPtr<Font>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-    RtObject_ExternalPtrSerialize_StringTable(reinterpret_cast<RtObject::External**>(&_stringTable2), reinterpret_cast<rt::io::Serializer*>(&ser));  // 18011ee99 ExternalPtr<StringTable>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    Object::SerializeExternal<UI::Font>(ser, _font);          // 18011ee8b ExternalPtr<Font>
+    Object::SerializeExternal<UI::StringTable>(ser, _stringTable2);  // 18011ee99 ExternalPtr<StringTable>
     reinterpret_cast<System::String*>(&_name)->Serialize(&ser);   // 18011eea7 String 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     rw->SerializeBool(_b84, nullptr);

@@ -74,10 +74,6 @@ void AnimalComponent::GetWanderBox(int16_t* outX, int16_t* outY, int16_t* outW, 
 }
 
 // B4 FORWARD: 1 outside caller file (animalcomponent.cpp).
-void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY,
-                                      short* outW, short* outH, int size) {
-    reinterpret_cast<const AnimalComponent*>(selfP)->GetWanderBox(outX, outY, outW, outH, size);   // LEFT: B4 FORWARD (wave X: animalcomponent.cpp)
-}
 
 // 0x140128570: pasture capacity = footprint area / the per-animal area of the
 // livestock template's AnimalDescription (+0x24). 0 with no livestock type.
@@ -109,9 +105,6 @@ int PastureComponent::ComputeCapacity() const {
 }
 
 // B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
-uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
-    return static_cast<uint32_t>(reinterpret_cast<const PastureComponent*>(self)->ComputeCapacity());   // LEFT: B4 FORWARD (wave X: Dialog/debugui.cpp)
-}
 
 // 0x140105ed0: let the animal wander from where it stands. Sets flag bit 0x400000
 // (notifying the entity on a change), records the tile under its model as the habitat

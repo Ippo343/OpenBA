@@ -156,7 +156,7 @@ public:
     char SelectCharacter(int32_t keyIndex) const;
     // The three one-instruction accessors, whole bodies (disassembly above).
     const System::String& GetText() const {                      // 0x18003fc60
-        return *reinterpret_cast<const System::String*>(&_text);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        return *reinterpret_cast<const System::String*>(&_text);   // LEFT: H5 EditElement::_text / _filter: retail ctor 0x1800d0f10 / dtor 0x1800d0e50 order fits two String members, but code/Game/Dialog/noiseui.cpp:154 (X-GS) passes edit->_text to String::ToFloat(const char*) and must read ._data first
     }
     int32_t GetMaxLength() const { return _maxLength; }          // 0x18003fc70
     bool    IsActive() const     { return _active != 0; }        // 0x18003fc80

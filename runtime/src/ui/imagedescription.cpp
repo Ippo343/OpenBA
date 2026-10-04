@@ -109,7 +109,7 @@ bool ImageDescription::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined              // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* rw = ser._readerWriter; // 1801184fa
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));   // 180118508 ExternalPtr<SpriteSheet>
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 180118508 ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);    // 180118516 String
 
     rw->SerializeInt(_width, nullptr);

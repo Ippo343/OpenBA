@@ -80,7 +80,7 @@
 #include "Dialog/exe_bodies.h"
 #include "Component/exe_bodies.h"   // B3R: CitizenEmploy_Strat_*
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
-#include "Action/exe_bodies.h"   // B3R: Pf_AvlRebalanceB_13480
+#include "Action/PathAvl.h"   // AvlRebalance (0x140013480)
 #include "Work/exe_bodies.h"   // B3R: WorkBase_TreeNodeFree_14c30
 #include "Game/Calendar.h"     // GameUpdateLoop::m_dayCounter (year, yearTime)
 
@@ -314,7 +314,7 @@ void TownHallUI::InitProfessions() {
                         }
                         parent->left = newNode;
                         // Rebalance
-                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&professionTree), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480; LEFT: SIG Pf_AvlRebalanceB_13480 (int64_t*, Action/exe_bodies.h)
+                        AvlRebalance(reinterpret_cast<AvlNode30**>(&professionTree), reinterpret_cast<AvlNode30**>(&curNode));   // 0x140013480; LEFT: TownHallUI.h ProfessionNode +0x28 is one int32 where the retrace reads int16 balance / height
                         inserted = true;
                     } else {
                         curNode = curNode->left;
@@ -332,7 +332,7 @@ void TownHallUI::InitProfessions() {
                             newNode->balance = 0;
                         }
                         parent->right = newNode;
-                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&professionTree), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480; LEFT: SIG Pf_AvlRebalanceB_13480 (int64_t*, Action/exe_bodies.h)
+                        AvlRebalance(reinterpret_cast<AvlNode30**>(&professionTree), reinterpret_cast<AvlNode30**>(&curNode));   // 0x140013480; LEFT: TownHallUI.h ProfessionNode +0x28 is one int32 where the retrace reads int16 balance / height
                         inserted = true;
                     } else {
                         curNode = curNode->right;
@@ -1445,7 +1445,7 @@ void TownHallUI::UpdateInventory() {
                 // Get max count
                 int maxCount = workComp->workState;
                 if (maxCount == 0) {
-                    maxCount = fn_StorageCountQuery(workComp);
+                    maxCount = workComp->CalcMaxWorkers();   // 0x14012e5c0
                     workComp->workState = maxCount;
                 }
 

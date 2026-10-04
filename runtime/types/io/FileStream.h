@@ -436,17 +436,17 @@ static_assert(sizeof(VisitorStream) == 0x18,
 // rule names that one `OpenWithFormat` and leaves this one `Open`.
 //
 // ---------------------------------------------------------------------------
-// `_filename` STAYS A `char*`, AND THAT IS THE B33 DOUBLE-FREE RULE
+// `_filename` IS A `System::String` MEMBER (B4 X-RH, H5)
 // ---------------------------------------------------------------------------
-// Retail's field is a `System::String` — which is exactly this one pointer. It
-// is NOT declared as one here, because a real `System::String` member would
-// give `IO::FileStream` a non-trivial implicit destructor that releases the
-// buffer, and the ported `~FileStream` door (0x1800aaab0, file_stream.cpp)
-// already releases it by hand at retail's position. Two releases is the
-// `RtSystem::String` double-free lesson (B33 section 7) with a different name
-// on it. The field converts when the ctor/dtor doors do, which section 4.3 puts
-// at the end of B.3, not in this step. Bodies reach it as a String through
-// `runtime/src/system/pod_bridge.h`, which is the one transitional seam.
+// Retail's ctor 0x1800aaa10 stores +0x18 = 0 (String's default ctor, inlined:
+// `MOV qword ptr [RCX+0x18],R8` at 0x1800aaa43); retail's dtor 0x1800aaab0
+// closes the file (0x1800aaae6), runs ~FileInfo (0x1800aaaf0), releases +0x18
+// with ~String's inlined body (0x1800aaaf6..0x1800aab18), THEN restamps the
+// Stream table and frees the encoding (~Stream). Declared as a String, the
+// member is default-constructed before the ctor body and destroyed after the
+// dtor body and before ~Stream: exactly that order. The dtor body therefore no
+// longer releases it by hand (the B33 double-free rule is met by having ONE
+// release, the compiler's).
 // ===========================================================================
 
 namespace IO {
@@ -465,7 +465,7 @@ public:
     // null, then the FileInfo's handle -1, size/cursor (one qword) 0,
     // baseOffset 0, both names null, winHandle -1. FileInfo::_unk04 (+0x24)
     // and _pad14 are NOT written -- a `= {}` would be a divergence.
-    FileStream() : _filename(nullptr) {
+    FileStream() {
         _file.handle      = -1;                                  // 1800a8243
         _file.size        = 0;                                   // 1800a8249 (qword)
         _file.cursor      = 0;
@@ -500,7 +500,7 @@ public:
     bool Create(const System::Filename& path);
 
     // ---- the 0x50 bytes, at retail's offsets -------------------------------
-    char*          _filename;   // +0x18  a System::String — see the banner
+    System::String _filename;   // +0x18  see the banner (ctor 0x1800aaa43, dtor 0x1800aaaf6)
     RtIO::FileInfo _file;       // +0x20  0x30 bytes, RtIO::FileInfo
 };
 

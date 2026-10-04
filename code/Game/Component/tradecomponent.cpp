@@ -434,9 +434,8 @@ void TradeComponent::Command(int /*command*/) {
             work = new (mem) TradeWork();
             work->InitFromEntity(&entityIBP);
         }
-        Object::InternalPtr<TradeWork> workIBP(work);
-        // 0x14012ec60 takes the WorkComponent as an integer (Component/exe_bodies.h, wave X).
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched), 1, '\0', &workIBP);   // 0x14012ec60 LEFT: SIG CitizenAI_WorkScheduler_Post
+        Object::InternalPtr<Work> workIBP(work);
+        CitizenAI_WorkScheduler_Post(sched, 1, '\0', &workIBP);   // 0x14012ec60
         newState = '\x01';
     } else {
         sched->CancelWork();   // 0x14012eb50

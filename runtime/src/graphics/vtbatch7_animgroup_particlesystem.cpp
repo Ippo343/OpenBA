@@ -214,11 +214,8 @@ using AnimationGroup = ::Graphics::AnimationGroup;
 // stores are the real `AnimationGroup()` (AnimationGroup.h) and the stamps the
 // compiler's; Construct / Reconstruct placement-new the class.
 
-// 0x1800594a0 — Object::ExternalPtr<AnimationEvent>::Serialize, ported as an
-// appended thunk in external_ptr_serialize.cpp (shared 748-byte template).
-// LEFT: declared here in object's POD spellings (`void**`, `rt::io::Serializer*`),
-// the EXTPTR_THUNK_OF shape; External.h (object's header) does not declare it.
-extern "C" void RtObject_ExternalPtrSerialize_AnimationEvent(void** self, rt::io::Serializer* ser);
+// 0x1800594a0 — Object::ExternalPtr<AnimationEvent>::Serialize: the shared
+// 748-byte template, `Object::SerializeExternal<AnimationEvent>` (External.h).
 
 // 0x18005a040 — `Array<Graphics::Animation>::Serialize`'s element loop, called
 // by `AnimationGroup::Serialize` with (Serializer*, int count, Animation* data).
@@ -257,10 +254,7 @@ void RtGraphics_AnimationGroup_SerializeClips(IO::Serializer& ser, int count, vo
         ::Graphics::Animation::Event* e = c->_events._data;
         for (int32_t k = 0; k < n; ++k, ++e) {
             ser._readerWriter->SerializeInt(e->_frame, nullptr);
-            // LEFT: the thunk's POD spellings (declared above).
-            RtObject_ExternalPtrSerialize_AnimationEvent(
-                reinterpret_cast<void**>(&e->_event),
-                reinterpret_cast<rt::io::Serializer*>(&ser));
+            Object::SerializeExternal<Graphics::AnimationEvent>(ser, e->_event);   // 0x1800594a0
         }
 
         ser._readerWriter->SerializeInt  (c->_frameCount, nullptr);

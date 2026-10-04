@@ -272,9 +272,9 @@ void MapComponent::RemoveFromMap() {
 
 // B4 FORWARD: 1 outside caller (cropfieldcomponent_states.cpp).
 // The tree's null test is kept here (the member has none; retail's 0x140124750 has none).
-extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
-    if (!selfV) return;
-    reinterpret_cast<MapComponent*>(selfV)->RemoveFromMap();   // LEFT: SIG MapComponent_DetachOccupancy_4750 (B4 FORWARD, cropfieldcomponent_states.cpp)
+extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self) {
+    if (!self) return;
+    self->RemoveFromMap();
 }
 
 // ============================================================================

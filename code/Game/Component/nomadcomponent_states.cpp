@@ -57,6 +57,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/NomadComponent.h"
+#include "Action/MoveTo.h"   // 0x1400c9170, by name
 
 namespace {
 
@@ -114,8 +115,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
     void* act = nullptr;
     if (mem) {
         CharacterComponent* ownerIBP = chr;
-        // LEFT: 0x1400c9170 takes the destination as float* (ACT's signature).
-        act = Pf_MoveToCtor_9170(mem, &ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);
+        act = ::new (mem) ::MoveTo(&ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);   // 0x1400c9170
     }
     void* actIBP = act;
     Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0  LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent +0x48 is no ActionStack yet, wave X)

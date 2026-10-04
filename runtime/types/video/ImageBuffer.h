@@ -487,15 +487,15 @@ public:
     FilterMode  _filter;       // +0x44  init 1
     // +0x48 is a `System::String`, NOT a pixel buffer — proved by
     // `?Serialize@ImageBuffer@Video@@` handing `this+0x48` to
-    // `?Serialize@String@System@@`. It is spelled `void*` rather than
-    // `System::String` for the reason `Object::External::_path` is spelled as
-    // the POD `RtSystem::Filename`: a real `System::String` member would give
-    // this class a compiler-emitted release that runs IN ADDITION to the by-hand
-    // release retail's `~ImageBuffer` performs (buffers.cpp), which is the
-    // double-free shape B31_RULES records. The POD calls the same eight bytes
-    // `pixelData`, which is the name Wave 18 proved wrong; the real class uses
-    // the proved one.
-    void*       _sourceName;   // +0x48  System::String (refcount at ptr-4)
+    // `?Serialize@String@System@@`. B4 X-RH: a `System::String` member. Retail's
+    // ctor 0x1800f2580 zeroes it before PlatformConstruct; retail's dtor
+    // 0x1800f2610 runs PlatformDestruct (0x1800f2630), THEN the inlined ~String
+    // on +0x48 (0x1800f2636..0x1800f2658), then ~External (0x1800f2672). The
+    // member's ctor runs before InitFields and its dtor after ReleaseFields:
+    // that order, with ONE release (the compiler's; buffers.cpp no longer
+    // releases it by hand). The POD calls the same eight bytes `pixelData`,
+    // which is the name Wave 18 proved wrong; the real class uses the proved one.
+    System::String _sourceName;   // +0x48  ctor 0x1800f2580, dtor 0x1800f2636
     // +0x50 / +0x58 are the links of the `_firstSurface` circular list that
     // PlatformConstruct (0x1800f2f40) splices `this` into and the device-lost
     // sweeps walk (+0x50 is written with the head, +0x58 with the head's old

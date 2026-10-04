@@ -123,7 +123,7 @@ bool BorderDescription::Serialize(IO::Stream& streamv) {
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined: [RSP+0x28], [RSP+0x30]  18010fe62 / 18010fe67
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 18010fe78
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet); // 18010fe78
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
         StringSerialize(&_spriteName[i], &ser);             // 0x1800c9930
 

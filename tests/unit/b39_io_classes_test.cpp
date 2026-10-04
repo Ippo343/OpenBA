@@ -405,7 +405,7 @@ UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
     IO::FileStream* fs = ::new (mem) IO::FileStream();
     CHECK_EQ(fs->_direction, 0);
     CHECK(fs->_encoding == nullptr);
-    CHECK(fs->_filename == nullptr);
+    CHECK(fs->_filename._data == nullptr);
     CHECK_EQ(fs->_file.handle, -1);
     CHECK_EQ(fs->_file.size, 0);
     CHECK_EQ(fs->_file.cursor, 0);

@@ -50,6 +50,7 @@
 #include "../../types/ui/DocumentTextDescription.h"
 #include "../../types/ui/DocumentTextElement.h"
 #include "../../types/ui/StringTable.h"
+#include "../../types/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -107,9 +108,9 @@ bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
     IO::ReaderWriter* rw = ser._readerWriter;
 
 
-    RtObject_ExternalPtrSerialize_StringTable(ExtField(&_documentStringTable), IoSer(&ser));   // 1800cf8ff ExternalPtr<StringTable>
+    Object::SerializeExternal<UI::StringTable>(ser, _documentStringTable);   // 1800cf8ff ExternalPtr<StringTable>
     StringSerialize(&_documentTextName, &ser);      // 1800cf90c System::String
-    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));           // 1800cf919 ExternalPtr<SpriteSheet>
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);           // 1800cf919 ExternalPtr<SpriteSheet>
 
     int32_t n;                                              // [RBP+0x10], the scratch
 
@@ -131,13 +132,13 @@ bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
     rw->SerializeInt(n, nullptr);                           // 1800cfa01
     if (ser._stream->_direction == 0)                              // 1800cfa07
         rtcoll::RtColl_ArraySetSize_18003e600(&_fontsData, n);  // 1800cfa1b
-    RtObject_ExternalPtrArraySerialize_Font(IoSer(&ser), n, ExtArray(_fontsData));
+    Object::SerializeExternalArray<UI::Font>(ser, n, _fontsData);
 
     n = _sheetsCount;                                       // 1800cfa33
     rw->SerializeInt(n, nullptr);                           // 1800cfa4a
     if (ser._stream->_direction == 0)                              // 1800cfa50
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheetsData, n); // 1800cfa64
-    RtObject_ExternalPtrArraySerialize_SpriteSheet(IoSer(&ser), n, ExtArray(_sheetsData));
+    Object::SerializeExternalArray<UI::SpriteSheet>(ser, n, _sheetsData);
 
     n = _colorsCount;                                       // 1800cfa7c
     rw->SerializeInt(n, nullptr);                           // 1800cfa93
@@ -153,7 +154,7 @@ bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
         }
     }
 
-    RtObject_ExternalPtrSerialize_ExternalList(ExtField(&_resourceList), IoSer(&ser));   // 1800cfae9
+    Object::SerializeExternal<Object::ExternalList>(ser, _resourceList);   // 1800cfae9
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800cfb00
     return true;

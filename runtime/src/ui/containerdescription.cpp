@@ -97,9 +97,9 @@ bool ContainerDescription::Serialize(IO::Stream& streamv) {
     rw->SerializeInt(_requestedHeight, nullptr);            // 1800ccf43
     rw->SerializeInt(_barSize, nullptr);                    // 1800ccf58
 
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[0]), IoSer(&ser));   // 1800ccf5e
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[1]), IoSer(&ser));   // 1800ccf6c
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[2]), IoSer(&ser));   // 1800ccf7d
+    Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[0]);   // 1800ccf5e
+    Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[1]);   // 1800ccf6c
+    Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[2]);   // 1800ccf7d
 
     rw->SerializeBool(_clampWidth, nullptr);                 // 1800ccf9d
     rw->SerializeBool(_clampHeight, nullptr);                // 1800ccfaf

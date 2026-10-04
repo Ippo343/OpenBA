@@ -147,9 +147,9 @@ public:
     // Base's and External's vptr (External(), the compiler's), +0x08/+0x10/
     // +0x18 zero (External()), PickingMesh's vptr (the compiler's), +0x20 and
     // +0x28 zero, +0x30 ONE zero byte, +0x38/+0x40 zero (the Array's ctor).
+    // B4 X-RH: the +0x20 / +0x28 zeroes are the two System::String members'
+    // default constructors, run before this body.
     PickingMesh() : Object::External() {
-        _string20.data = nullptr;
-        _string28.data = nullptr;
         _flag30 = false;
     }
 
@@ -209,8 +209,12 @@ public:
 public:
     // ---- the 0x28 bytes PickingMesh adds (public: the doors and the Scene
     // bodies reach them) ----
-    RtSystem::String            _string20;   // +0x20
-    RtSystem::String            _string28;   // +0x28
+    // B4 X-RH: System::String members. Retail's ~PickingMesh 0x1801228a0
+    // destroys +0x38 (0x1801228c4), then +0x28 (0x1801228ca..), then +0x20
+    // (0x1801228f4..), then ~External (0x180122926): the body does +0x38, the
+    // compiler the two Strings in reverse declaration order.
+    System::String              _string20;   // +0x20
+    System::String              _string28;   // +0x28
     bool                        _flag30;     // +0x30  kScalarBool
     uint8_t                     _pad31[7];   // +0x31  never written (one-byte store)
     Collection::Array<SubMesh>  _nodes;      // +0x38  data, size@+0x40, cap@+0x44

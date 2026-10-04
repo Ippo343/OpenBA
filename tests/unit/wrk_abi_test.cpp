@@ -343,7 +343,7 @@ template <typename T, typename... A>
 struct ExaCanNew<std::void_t<ExaNew<T, A...>>, T, A...> : std::true_type {};
 
 UNIT_TEST(wrk_cleararea_parameterised_ctor) {
-    CHECK((ExaCanNew<void, ClearArea, void*, uint64_t, uint8_t, uint8_t, uint8_t>::value));
+    CHECK((ExaCanNew<void, ClearArea, void*, ComponentDescription*, uint8_t, uint8_t, uint8_t>::value));
     CHECK((ExaCanNew<void, ClearArea>::value));
 }
 

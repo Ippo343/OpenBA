@@ -236,6 +236,3 @@ extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src) {
     return dst;
 }
 
-extern "C" void Reimpl_Struct60B_DtorRange(void* /*unused*/, void* first, int count) {
-    GeometryBatch_DestroyRange(reinterpret_cast<GeometryBatch*>(first), count);
-}

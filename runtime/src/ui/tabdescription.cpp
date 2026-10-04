@@ -135,10 +135,10 @@ bool TabDescription::Serialize(IO::Stream& streamArg) {
     IO::Serializer ser(*stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_stripBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));   // 1800da7b8  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));    // 1800da7c6  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageFrameDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800da7d4  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da7e5 ExternalPtr<SpriteSheet>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    Object::SerializeExternal<UI::ElementDescription>(ser, _stripBackdropDescription);   // 1800da7b8
+    Object::SerializeExternal<UI::ElementDescription>(ser, _pageBackdropDescription);    // 1800da7c6
+    Object::SerializeExternal<UI::ElementDescription>(ser, _pageFrameDescription);       // 1800da7d4
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // 1800da7e5 ExternalPtr<SpriteSheet>
     _edgeLeftName.Serialize(&ser);           // 1800da7f6
     _edgeMiddleName.Serialize(&ser);         // 1800da807
     _edgeRightName.Serialize(&ser);          // 1800da818
@@ -157,8 +157,8 @@ bool TabDescription::Serialize(IO::Stream& streamArg) {
     // which is safe here only because SetSize has already finished.
     ElementDescription** tab = _tabsData;
     for (int32_t i = 0; i < n; ++i, tab += 2) {                         // 1800da87d / 1800da8a3, 0x10 per pair
-        RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da889  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-        RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab + 1), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da897  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+        Object::SerializeExternal<UI::ElementDescription>(ser, tab[0]);         // 1800da889
+        Object::SerializeExternal<UI::ElementDescription>(ser, tab[1]);           // 1800da897
     }
 
     // The inlined ~Serializer deletes the ReaderWriter (1800da8ad).

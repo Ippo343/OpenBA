@@ -459,9 +459,8 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(IO::Serializer* ser, int32_
         Audio::SoundEffect::Variant* p = e->variants._data;    // 180053379
         for (int32_t k = 0; k < n; ++k, ++p) {                 // 180053390
             // 0x180052a50: ExternalPtr<SoundBuffer>::Serialize, the template's
-            // member. LEFT: it takes the `rt::io::Serializer` POD (External.h).
-            p->buffer.Serialize(*reinterpret_cast<rt::io::Serializer*>(ser),
-                                &Audio::SoundBuffer::GetTypeInfo());
+            // member.
+            p->buffer.Serialize(*ser);
             ser->_readerWriter->SerializeFloat(p->pitchLow, nullptr);
             ser->_readerWriter->SerializeFloat(p->pitchHigh, nullptr);
             ser->_readerWriter->SerializeFloat(p->volume, nullptr);
