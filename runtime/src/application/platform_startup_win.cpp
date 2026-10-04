@@ -83,7 +83,6 @@
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
-using RtSystem::WideString;
 using rtsetavl::Node;
 
 namespace {
@@ -264,8 +263,8 @@ extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
 // ============================================================================
 bool Application::Application::PlatformStartup() {
 
-    WideString className;
-    RtSystem::RtSystem_WideString_CtorFromChars(&className, kClassName);  // 0x18009fc39
+    // ~WideString at the return is retail's inlined release, 0x18009fd29..fd51.
+    const System::WideString className(kClassName);                 // 0x18009fc39
 
     WNDCLASSW wc;
     wc.style         = 0;                                          // 0x18009fc41
@@ -277,7 +276,7 @@ bool Application::Application::PlatformStartup() {
     wc.hCursor       = nullptr;
     wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));  // 0x180161780  CAST-OK: win32
     wc.lpszMenuName  = nullptr;
-    wc.lpszClassName = className.data;                             // 0x18009fc8a
+    wc.lpszClassName = className._data;                            // 0x18009fc8a
 
     bool ok;
     if (RegisterClassW(&wc) == 0) {                                 // 0x18009fc97
@@ -286,8 +285,8 @@ bool Application::Application::PlatformStartup() {
     } else {
         HWND hwnd = CreateWindowExW(
             0,                              // dwExStyle      ECX  = 0
-            className.data,                 // lpClassName    RDX  = RBX
-            className.data,                 // lpWindowName   R8   = RBX
+            className._data,                // lpClassName    RDX  = RBX
+            className._data,                // lpWindowName   R8   = RBX
             0,                              // dwStyle        R9D  = 0
             static_cast<int>(0x80000000),   // X   [RSP+0x20] CW_USEDEFAULT
             static_cast<int>(0x80000000),   // Y   [RSP+0x28] CW_USEDEFAULT
@@ -308,10 +307,7 @@ bool Application::Application::PlatformStartup() {
         }
     }
 
-    // 0x18009fd29..0x18009fd51 — the inlined WideString release.
-    RtSystem::RtSystem_WideString_Dtor(&className);
-
-    return ok;
+    return ok;   // 0x18009fd29..0x18009fd51 — ~className, the inlined release
 }
 
 // ============================================================================
@@ -378,16 +374,13 @@ void Application::Application::PlatformShutdown() {
         if (!destroyed) destroyErr = GetLastError();             // 0x18009fd8a
     }
 
-    WideString className;
-    RtSystem::RtSystem_WideString_CtorFromChars(&className, kClassName);  // 0x18009fd9c
+    // ~WideString at the end of the body is retail's 0x18009fdb0..fde1 release.
+    const System::WideString className(kClassName);              // 0x18009fd9c
 
     const BOOL unregistered =                                    // 0x18009fda9
-        UnregisterClassW(className.data,
+        UnregisterClassW(className._data,
                          static_cast<HINSTANCE>(_platformHandle));  // CAST-OK: win32
     const DWORD unregisterErr = unregistered ? 0 : GetLastError();
-
-    RtSystem::RtSystem_WideString_Dtor(&className);              // 0x18009fdb0..fde1
-
 }
 
 // ============================================================================

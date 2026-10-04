@@ -93,12 +93,7 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-using RtSystem::String;
-using RtSystem::WideString;
 using RtSystem::Sys;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtSystem_WideString_CtorFromString;
 
 PathCounters g_pc = {};
 

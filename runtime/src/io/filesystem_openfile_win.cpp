@@ -346,23 +346,21 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     RtIO::SysFile(blank._name1).~Filename();   // 1800add45
     RtIO::SysFile(blank._name0).~Filename();   // 1800add75
 
-    // WideString ws(*name); CreateFileW(ws, ...). ??0WideString(const String&),
-    // constructed into the POD slot and released by hand, as before.
-    struct { wchar_t* data; } ws = { nullptr };   // WideString::_data                 // 1800add98
-    ::new (static_cast<void*>(&ws)) System::WideString(       // B.3.x bridge
-        name.AsString());                                    // 1800addad
+    // WideString ws(*name); CreateFileW(ws, ...). ??0WideString(const String&);
+    // the block ends at retail's 1800adde1 release, so ~WideString runs there.
+    HANDLE h;
+    {
+        const System::WideString ws(name.AsString());        // 1800add98 / 1800addad
 
-    // 1800addb3..1800addd7 — the argument block, transcribed rather than named
-    // from habit: dwDesiredAccess 0x80000000 (GENERIC_READ), dwShareMode 1
-    // (FILE_SHARE_READ), lpSecurityAttributes NULL, dwCreationDisposition 3
-    // (OPEN_EXISTING), dwFlagsAndAttributes 0x80 (FILE_ATTRIBUTE_NORMAL),
-    // hTemplateFile NULL.
-    const HANDLE h = ::CreateFileW(ws.data,
-                                   0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
-    fi->winHandle = h;          // 1800adddd
-
-    RtIO::RtString_ReleaseInline(
-        reinterpret_cast<RtSystem::String*>(&ws));           // 1800adde1  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+        // 1800addb3..1800addd7 — the argument block, transcribed rather than named
+        // from habit: dwDesiredAccess 0x80000000 (GENERIC_READ), dwShareMode 1
+        // (FILE_SHARE_READ), lpSecurityAttributes NULL, dwCreationDisposition 3
+        // (OPEN_EXISTING), dwFlagsAndAttributes 0x80 (FILE_ATTRIBUTE_NORMAL),
+        // hTemplateFile NULL.
+        h = ::CreateFileW(ws._data,
+                          0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
+        fi->winHandle = h;      // 1800adddd
+    }                           // 1800adde1
 
     // `LEA RAX,[RCX-1] ; CMP RAX,-3 ; JA fail` — an UNSIGNED test that rejects
     // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0): unsigned

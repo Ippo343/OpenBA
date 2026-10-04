@@ -146,7 +146,6 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::SysFile;  //   "
 using RtSystem::RtSystem_Configuration_GetPlatformName;
 using RtSystem::RtSystem_Configuration_GetBuildName;
-using RtSystem::RtSystem_WideString_CtorFromString;
 using RtSystem::RtSystem_WideString_Set;
 using RtSystem::RtSystem_WideString_AsUTF8;
 

@@ -423,14 +423,14 @@ static System::String* RtSystem_DateTime_FormatPart(const System::DateTime* self
         GetDateFormatW(0x400, 1, &st, nullptr, buf, 0x100);
 
     // Retail zeroes the WideString slot before Set, because Set releases
-    // whatever is there first (0x1800c570b: MOV qword [RSP+0x260],0).
-    RtSystem::WideString ws{};
-    RtSystem::RtSystem_WideString_Set(&ws, buf);
-    // TRANSITIONAL CAST, the class->POD direction: `WideString::AsUTF8` is a
-    // registered C entry point whose hidden return slot is the POD. Same eight
-    // bytes, and it placement-constructs into this raw slot.
-    RtSystem::RtSystem_WideString_AsUTF8(&ws, reinterpret_cast<RtSystem::String*>(ret));  // LEFT: POD String / Filename bridge (H10)
-    RtSystem::RtSystem_WideString_Dtor(&ws);
+    // whatever is there first (0x1800c570b: MOV qword [RSP+0x260],0): that
+    // pair IS ??0WideString(const wchar_t*) (0x18000a6e0). AsUTF8 constructs
+    // into the hidden return slot; ~WideString is the inlined release at
+    // 0x1800c5742..0x1800c5773.
+    {
+        const System::WideString ws(buf);
+        new (ret) System::String(ws.AsUTF8());
+    }
     return ret;   // MOV RAX,RBX
 }
 
