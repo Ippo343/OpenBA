@@ -40,7 +40,7 @@
 #include <cstdint>
 #include <new>
 
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // serialize_externals.cpp
+#include "Game/exe_bodies.h"   // the typed Reimpl_ExternalPtr_Serialize_* wrappers (B4 X7-GAME-A)
 
 // ctor (inlined into create 0x140032970 / createInPlace 0x1400329b0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then

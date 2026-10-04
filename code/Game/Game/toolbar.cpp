@@ -35,7 +35,6 @@
 // FUN_140024c70 — Object::ExternalPtr<Toolbar>::Serialize (serialize_externals.cpp;
 // registered at that address in reg_game_leaf.cpp). Called directly: the old
 // lazily-resolved pointer resolved to it.
-extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(void* refField, void* serializer);
 
 // ============================================================
 // Toolbar::Toolbar (0x1400d2130)

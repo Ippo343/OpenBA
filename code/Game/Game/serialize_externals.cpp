@@ -174,32 +174,22 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
     ForwardRef(refField, serializer, typeIdPtr ? *typeIdPtr : 0u, typeName);
 }
 
-extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(
-    void* refField, void* serializer) {
-    if (!refField || !serializer) return;
-    ForwardRef(refField, serializer, Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh");
+void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh", "ExternalPtr::Serialize");
 }
 
-extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
-    void* refField, void* serializer) {
-    if (!refField || !serializer) return;
-    ForwardRef(refField, serializer, Weather::TypeId(), "Weather");
+void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Weather::TypeId(), "Weather", "ExternalPtr::Serialize");
 }
 
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
-    void* refField, void* serializer) {
-    if (!refField || !serializer) return;
-    ForwardRef(refField, serializer, UI::StringTable::TypeId(), "StringTable");
+void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, UI::StringTable::TypeId(), "StringTable", "ExternalPtr::Serialize");
 }
 
-extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(
-    void* refField, void* serializer) {
-    if (!refField || !serializer) return;
-    ForwardRef(refField, serializer, Toolbar::TypeId(), "Toolbar");
+void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Toolbar::TypeId(), "Toolbar", "ExternalPtr::Serialize");
 }
 
-extern "C" void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(
-    void* refField, void* serializer) {
-    if (!refField || !serializer) return;
-    ForwardRef(refField, serializer, EnvironmentDescription::TypeId(), "EnvironmentDescription");
+void ExternalPtrSerialize_EnvironmentDesc(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, EnvironmentDescription::TypeId(), "EnvironmentDescription", "ExternalPtr::Serialize");
 }

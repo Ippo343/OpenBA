@@ -40,7 +40,9 @@ class WorkComponent;
 extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp);  // 0x14012e5c0  (+ the tree's two guards, tutorial_base.cpp)
 
 // ---- tutorial_wave.cpp
-extern "C" void TutWave_SerializeTutorialRef(void* field, void* serializer);  // 0x1400262b0
+class Tutorial;
+namespace IO { class Serializer; }
+void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer);  // 0x1400262b0 (B4 X7-GAME-A: typed; its two callers hold Tutorial*)
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer);  // 0x140028650
 class PlayerToolManager;
 class ComponentDescription;

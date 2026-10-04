@@ -159,10 +159,38 @@ extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(IO::Serializer* ser
 extern "C" void Reimpl_Array_Serialize_External_Particle(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bff0
 
 // ---- serialize_externals.cpp
-extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(void* refField, void* serializer);  // 0x14001b8e0
-extern "C" void Reimpl_ExternalPtr_Serialize_Weather(void* refField, void* serializer);  // 0x1400196a0
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // 0x14000bf40, 0x14000b7b0, 0x14000bd30, 0x140002340, 0x140018020
-extern "C" void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(void* refField, void* serializer);  // 0x1400192a0
+// ExternalPtr<T>::Serialize, one retail instantiation each (ICF serves several T
+// per address). B4 X7-GAME-A: the cores take the slot as the External* retail
+// serializes; the callers' typed wrappers below hand them a T* field's slot.
+namespace Object { class External; }
+namespace IO { class Serializer; }
+void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer& serializer);     // 0x14001b8e0
+void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& serializer);          // 0x1400196a0
+void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer);      // 0x14000bf40, 0x14000b7b0, 0x14000bd30, 0x140002340, 0x140018020
+void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer);
+void ExternalPtrSerialize_EnvironmentDesc(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400192a0
+void ExternalPtrSerialize_Typed_7140(::Object::External*& ref, IO::Serializer& serializer);       // 0x140007140
+void ExternalPtrSerialize_MapGenerator(::Object::External*& ref, IO::Serializer& serializer);     // 0x140019ec0
+void ExternalPtrSerialize_TerrainGenerator(::Object::External*& ref, IO::Serializer& serializer); // 0x14001a0c0
+void ExternalPtrSerialize_ClimateGenerator(::Object::External*& ref, IO::Serializer& serializer); // 0x1400194a0
+// The field is an ExternalPtr<T> held as `T*` (or as the External* / void* / uint64_t its
+// header still declares): its eight bytes ARE the External* the core serializes.
+// The null test is the old C entry points' (`if (!refField || !serializer) return`).
+template <void (*Core)(::Object::External*&, IO::Serializer&), class T>
+inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
+    static_assert(sizeof(T) == 8, "an ExternalPtr slot is the eight bytes of an External*");
+    if (!refField || !serializer) return;
+    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // LEFT: FLOOR? an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)
+}
+template <class T> inline void Reimpl_ExternalPtr_Serialize_GraphicsMesh(T* f, IO::Serializer* s)     { ExternalPtrSerializeSlot<&ExternalPtrSerialize_GraphicsMesh>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_Weather(T* f, IO::Serializer* s)          { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Weather>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_StringTable(T* f, IO::Serializer* s)      { ExternalPtrSerializeSlot<&ExternalPtrSerialize_StringTable>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_Toolbar(T* f, IO::Serializer* s)          { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Toolbar>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(T* f, IO::Serializer* s)  { ExternalPtrSerializeSlot<&ExternalPtrSerialize_EnvironmentDesc>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_Typed_7140(T* f, IO::Serializer* s)       { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Typed_7140>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_MapGenerator(T* f, IO::Serializer* s)     { ExternalPtrSerializeSlot<&ExternalPtrSerialize_MapGenerator>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_TerrainGenerator(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_TerrainGenerator>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_ClimateGenerator(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_ClimateGenerator>(f, s); }
 
 // ---- serialize_externals_array.cpp
 namespace IO { class Serializer; }
@@ -170,10 +198,7 @@ class ComponentDescription;
 extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* );  // 0x1400049c0
 
 // ---- serialize_externals_typed.cpp
-extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(void* refField, void* serializer);  // 0x140007140
-extern "C" void Reimpl_ExternalPtr_Serialize_MapGenerator(void* refField, void* serializer);  // 0x140019ec0
-extern "C" void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, void* serializer);  // 0x14001a0c0
-extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer);  // 0x1400194a0
+// (the 0x140007140 family's cores are declared with serialize_externals.cpp's above)
 
 // ---- serialize_heightmap_mesh.cpp
 extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)

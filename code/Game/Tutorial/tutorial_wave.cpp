@@ -126,9 +126,8 @@ inline bool HasText(const System::String& s) {
 // ([[reference-unresolved-rdata-const-deletes-guarded-test]] family).
 // LEFT: ExternalPtrSerializeGeneric (Game/serialize_externals.h) takes void**.
 // ===========================================================================
-extern "C" void TutWave_SerializeTutorialRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeTutorialRef's callers hand the slot as void*
-                                nullptr, "Tutorial");
+void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) {
+    ExternalPtrSerializeGeneric(field, serializer, nullptr, "Tutorial");
 }
 
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
