@@ -266,7 +266,7 @@ UNIT_TEST(loop_externals_sizes_match_retail) {
     CHECK_EQ(offsetof(MapGenerator, descRef3),     (size_t)0x158);
     CHECK_EQ(offsetof(MenuScene, transform),       (size_t)0x88);
     CHECK_EQ(offsetof(MenuScene, _field1E8),       (size_t)0x1e8);
-    CHECK_EQ(offsetof(TerrainGenerator, _field80), (size_t)0x80);
+    CHECK_EQ(offsetof(TerrainGenerator, sizeRows), (size_t)0x80);
     CHECK_EQ(offsetof(Weather, sunPitch),          (size_t)0x7c);
 }
 

@@ -847,9 +847,9 @@ void* MainMenuDialog::CreateInPlaceObject(void* storage) {
 // keeps the tree's bare-bones fallback (a default-constructed dialog, no element
 // tree) instead of the Runtime ctor faulting on a null Dialog — a standalone-only
 // guard retail does not have.
-// B4 FORWARD: 1 outside caller (standalone/menudialogloopt_stubs.cpp), which
+// B4 FORWARD: 1 outside caller (Game/menudialogloopt_stubs.cpp), which
 // holds the loop as its `this` and the return slot as void*.
-extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr) {
+extern "C" void* MainMenuDialog_FromMenuDLT(MenuDialogLoopT* loop, void* retInternalBasePtr) {
     if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         if (retInternalBasePtr) {
             ::new (retInternalBasePtr) Object::InternalPtr<UI::DialogInstance>();
@@ -857,7 +857,7 @@ extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr
         return retInternalBasePtr;
     }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(MainMenuDialog), 8);
-    MenuDialogLoopT* menuLoop = static_cast<MenuDialogLoopT*>(loop);   // LEFT: SIG MainMenuDialog_FromMenuDLT (void* loop: standalone/menudialogloopt_stubs.cpp)
+    MenuDialogLoopT* menuLoop = loop;
     const UI::Dialog* rsc = menuLoop ? menuLoop->_dialogExternal : nullptr;
     MainMenuDialog* dlg;
     if (rsc) {

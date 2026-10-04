@@ -56,7 +56,7 @@
 // External. Registered at that address to this body (standalone/reg_game_leaf.cpp);
 // called directly now, as are the two array helpers below (0x1400206b0 /
 // 0x140020870), whose registered bodies live in this file.
-void Game_TerrainResolveMaterial(void* refTriple);   // game_leaf_helpers.cpp
+void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref);   // game_leaf_helpers.cpp
 
 // ============================================================
 // Standalone reimplementations of the +0x80 terrain-data-array helpers.
@@ -90,23 +90,13 @@ void InitTerrainSizeRow(uint8_t* d) {
 }
 // stays explicit: `init` copies the 17-dword default SizeRow template, a
 // patterned fill no element type's value-initialisation can produce.
-const rtcoll::ArraySpec kSpec_TerrainSizeRow = {     // exe 0x1400206b0
+}  // namespace
+const rtcoll::ArraySpec TerrainGeneratorRows::kSpec_TerrainSizeRow = {     // exe 0x1400206b0
     "Array<SizeRow>", 0x44, 4,
     &AssignTerrainSizeRow, &InitTerrainSizeRow, nullptr, /*byteCopy*/true,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
-using TerrainSizeRowArray = Collection::Array<TerrainSizeRow, Collection::DefaultAllocator,
-                                              Collection::ExplicitSpec<&kSpec_TerrainSizeRow>>;
-}  // namespace
-
-// The {data +0x80, count +0x88, capacity +0x8C} triple is raw storage in
-// TerrainGenerator.h (H5: an Array member would make its ctor / dtor run where
-// the tree runs them by hand), so the two Array operations take one view of it.
-static void Reimpl_TerrainDataResize(TerrainSizeRow** arrayField, int newCount) {
-    if (!arrayField) return;
-    reinterpret_cast<TerrainSizeRowArray*>(arrayField)->SetSize(newCount);   // LEFT: H5 raw Array triple (+0x80)
-}
 
 // FUN_140020870 -- serialize `count` rows of 17 ints each. NOTE row[9]
 // (+0x24, erosionIterations) is serialized LAST (after row[16]) -- this field
@@ -148,14 +138,14 @@ static inline int GetSerializerVersion(IO::Serializer* serializer) {
 // ============================================================
 // Pattern from TerrainGenerator Slot5: Filename ctor, String::Serialize,
 // if version==0 resolve filename (FUN_14001fd10), Filename dtor.
-static void SerializeFilenameString(System::String* self_offset, IO::Serializer* serializer) {
+static void SerializeFilenameString(MapGenerator::ExternalRef* ref, IO::Serializer* serializer) {
     System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
     (void)filenameObj;
 
-    self_offset->Serialize(*serializer);
+    ref->strPtr.Serialize(*serializer);
 
     if (GetSerializerVersion(serializer) == 0) {
-        Game_TerrainResolveMaterial(self_offset);
+        Game_TerrainResolveMaterial(ref);
     }
 }
 
@@ -170,19 +160,17 @@ TerrainGenerator::TerrainGenerator() {
     _field30 = 1;                // enabled
 
     // Noise layer 1: String, sentinel, ptr
-    _field40 = -1;
-    _field48 = nullptr;
+    _field38.factoryGen = -1;
+    _field38.resolved = nullptr;
     // Noise layer 2
-    _field58 = -1;
-    _field60 = nullptr;
+    _field50.factoryGen = -1;
+    _field50.resolved = nullptr;
     // Noise layer 3
-    _field70 = -1;
-    _field78 = nullptr;
+    _field68.factoryGen = -1;
+    _field68.resolved = nullptr;
 
-    // Terrain data array at +0x80, count +0x88, capacity +0x8C (retail: one qword zero; H7)
-    _field80 = nullptr;
-    _sizeRowCount = 0;
-    _sizeRowCapacity = 0;
+    // Terrain data array at +0x80, count +0x88, capacity +0x8C: the member's
+    // Array() (retail: one qword zero each; H7)
 }
 
 // ============================================================
@@ -192,12 +180,9 @@ TerrainGenerator::TerrainGenerator() {
 // at +0x80, destroys the 4 Strings at +0x68, +0x50, +0x38, +0x28; then
 // External::~External (the compiler's chain) and MemFree if flags & 1.
 TerrainGenerator::~TerrainGenerator() {
-    // ENDGAME B.3.2 step 2: `~Array` for the +0x80 SizeRow array — MemFree the
-    // block, then zero data and the count/capacity qword (trivial element, so
-    // no destroy step). B.3.2 bridge: +0x80/+0x88 are still two void* fields.
-    reinterpret_cast<TerrainSizeRowArray*>(&_field80)->~Array();   // LEFT: H5 raw Array triple (+0x80)
-
-    // The member Strings are destroyed after this body in reverse order:
+    // The members are destroyed after this empty body in reverse order: the
+    // +0x80 SizeRow array's ~Array (MemFree the block, zero data and the
+    // count/capacity qword; retail 0x140020646..0x14002065c), then the Strings
     // +0x68, +0x50, +0x38, +0x28 (retail 0x140020663..0x140020697).
 }
 
@@ -240,13 +225,13 @@ bool TerrainGenerator::Serialize(IO::Stream& stream) {
 
     // Terrain data array count: read the current count from +0x88, serialize
     // it, resize when reading (FUN_1400206b0), then the rows (FUN_140020870).
-    int32_t count = _sizeRowCount;
+    int32_t count = sizeRows._size;
     s.Serialize(count, nullptr);   // the int overload
 
     if (GetSerializerVersion(serializer) == 0)
-        Reimpl_TerrainDataResize(&_field80, count);
+        sizeRows.SetSize(count);   // FUN_1400206b0
 
-    Reimpl_TerrainDataSerialize(serializer, static_cast<uint32_t>(count), _field80);
+    Reimpl_TerrainDataSerialize(serializer, static_cast<uint32_t>(count), sizeRows._data);
 
     return true;   // ~Serializer
 }

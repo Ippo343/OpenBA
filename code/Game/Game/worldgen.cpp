@@ -693,7 +693,7 @@ static_assert(kHeightfieldAlloc >= sizeof(TerrainHeightfield), "the allocation c
 // ============================================================
 void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t seed) {
     // Size-table row for this map size: gen->sizeTable + sizeIdx*0x44.
-    TerrainSizeRow* sizeTable = gen->_field80;
+    TerrainSizeRow* sizeTable = gen->sizeRows._data;
     TerrainSizeRow* sizeRow   = sizeTable ? &sizeTable[sizeIdx] : nullptr;
     int dim = sizeRow ? sizeRow->mapSize : 0;
 
@@ -718,9 +718,9 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
     _chunkIndexStride = 33 * 33;       // 1089
 
     // Resolve the 3 ground materials (NULL-safe; untextured if unresolved).
-    _terrainMaterial = wg_ResolveMaterial_fd10(&gen->_field38);
-    _waterMaterialA  = wg_ResolveMaterial_fd10(&gen->_field50);
-    _waterMaterialB  = wg_ResolveMaterial_fd10(&gen->_field68);
+    _terrainMaterial = wg_ResolveMaterial_fd10(&gen->_field38.strPtr);
+    _waterMaterialA  = wg_ResolveMaterial_fd10(&gen->_field50.strPtr);
+    _waterMaterialB  = wg_ResolveMaterial_fd10(&gen->_field68.strPtr);
 
     // Allocate + init the heightfield scratch struct (heap; retail's is b0230's
     // 0xA30-byte stack record; the tree allocates 0x10 bytes of margin past it).

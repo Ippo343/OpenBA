@@ -82,7 +82,7 @@ public:
     // [13] 0x140026b60 `MOV RAX,[RCX+0x28]; MOV [RDX],RAX; MOV RAX,RDX; RET`:
     // PathTool's own new virtual — the selected-entity handle, by value through
     // the hidden return slot (B8-11 shape: `this` in RCX, `ret` in RDX).
-    virtual uint64_t* GetSelected(uint64_t* ret) const;                    // [13] 0x140026b60
+    virtual ComponentEntity** GetSelected(ComponentEntity** ret) const;    // [13] 0x140026b60
 
     // SetSelectedEntity 0x1400dd710 (OnKey's pick): a different entity clears
     // the old highlight, stores the entity, highlights it and rebuilds the routes.

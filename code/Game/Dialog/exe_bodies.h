@@ -15,7 +15,6 @@
 //
 // Declared in another header already (not redeclared here):
 //   AutoSaveDialog_Slot4                   0x14005e120  (code/Game/Dialog/AutoSaveDialog.h)
-//   Dialog_FindComponent_d6c0              0x14000d6c0  (code/Game/Dialog/dialog_exe_helpers.h)
 //   ToolbarDialog_Ctor_Impl                0x1400b9910  (code/Game/Dialog/ToolbarDialog.h)
 
 #include <cstdint>

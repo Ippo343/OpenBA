@@ -27,9 +27,6 @@
 // those addresses by address_registry.cpp. ENDGAME B.3.8 (B6-5): called
 // directly instead of through a lazily filled ResolveAddr cache (the menu
 // loader thread builds Scenarios).
-extern "C" void Reimpl_ExternalPtr_Serialize_MapGenerator(void* refField, void* serializer);
-extern "C" void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, void* serializer);
-extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer);
 
 // ============================================================
 // Construction / destruction

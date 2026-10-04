@@ -37,7 +37,7 @@ TutorialGoalGameSpeed::TutorialGoalGameSpeed() : targetSpeed(1), _pad24{} {}
 // ============================================================
 // Original: MOV RAX,[g_pGameWorldSingleton]; MOV ECX,[RCX+0x20];
 //           MOV RDX,[RAX+0x120]; CMP [RDX+0x34],ECX; SETZ AL; RET
-bool TutorialGoalGameSpeed::IsComplete(void* /*time*/, void* /*instance*/) {
+bool TutorialGoalGameSpeed::IsComplete(const System::Time* /*time*/, void* /*instance*/) {
     if (GameUpdateLoop::_singleton == nullptr) return false;
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
 

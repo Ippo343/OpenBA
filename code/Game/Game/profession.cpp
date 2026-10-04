@@ -34,7 +34,6 @@
 // FUN_14000bf40 / FUN_14000bd30 -- the two ExternalPtr serialize variants.
 // Both addresses are registered to this one body (address_registry.cpp); it is
 // called directly (the old lazily-resolved pointers resolved to it).
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
 // ============================================================
 // Profession::Profession (0x1400a9030)

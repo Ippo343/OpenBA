@@ -37,7 +37,6 @@
 // (standalone/address_registry.cpp) to this body in serialize_externals.cpp.
 // Called directly: the old lazily-resolved door (a non-atomic first-call cache,
 // reached on the LOADER thread — B6-5) resolved to exactly this function.
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
 // create 0x14008fd0 — the field defaults (External() and the stamp are the
 // compiler's).

@@ -222,7 +222,7 @@ static T* FindOnEntity(ComponentEntity* entity) {
 // Each int result is answered as `!= 0` (the bool return), exactly as the
 // member delegate did before this fold.
 // [8] 0x1400df290 — the 11-mode count switch; StepExecute reads the result.
-bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
+bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     (void)param2;
     (void)param3;
 

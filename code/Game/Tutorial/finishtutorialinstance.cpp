@@ -193,9 +193,8 @@ void FinishTutorialInstance::Startup() {
 // R9 is whatever the caller left (StepExecute ignores it and R8).
 void FinishTutorialInstance::Update(const System::Time& time, const Achievement::GoalList& list) {
     FinishTutorialInstance* self = this;
-    // LEFT: the setup / goal slots StepExecute forwards these to take void*.
-    void* p2 = const_cast<void*>(static_cast<const void*>(&time));   // LEFT: the setup / goal slots StepExecute forwards these to take void*.
-    void* p3 = const_cast<void*>(static_cast<const void*>(&list));   // LEFT: the setup / goal slots StepExecute forwards these to take void*.
+    const System::Time* p2 = &time;               // RDX, forwarded unchanged
+    const Achievement::GoalList* p3 = &list;      // R8, forwarded unchanged
 
     // Read the TutorialInstance pointer
     TutorialInstance* tutInst = _field20.Get();
@@ -228,7 +227,7 @@ Achievement::Goal::GoalState FinishTutorialInstance::CheckGoalState() const {
     if (tutDef == nullptr) return static_cast<Achievement::Goal::GoalState>(0);
 
     // Compare: totalSteps <= currentStep
-    int totalSteps = tutDef->stepCount;
+    int totalSteps = tutDef->steps._size;
     int currentStep = tutInst->currentStep;
 
     return static_cast<Achievement::Goal::GoalState>((totalSteps <= currentStep) ? 1 : 0);

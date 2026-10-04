@@ -30,19 +30,20 @@
 // 0x140027520): External(), the TutorialGoal and TutorialGoalDialog stamps
 // (the compiler's), then +0x20 = +0x28 = 0, +0x30 = -1, +0x38 = 0.
 TutorialGoalDialog::TutorialGoalDialog()
-    : dialogName(0), target{{}, -1, {}, nullptr} {}
+    : dialogName(), target{{}, -1, {}, nullptr} {}
 
-// LEFT H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor
-// destroys it by hand).
+// B4 X7-GAME-A (H5): the +0x20 String is a member: String() is the qword 0 the
+// ctor stored; its ~String runs after the dtor body, i.e. after target's name,
+// retail's order (0x140027590: ~String +0x28, then +0x20).
 System::String& TutorialGoalDialog::DialogName() {
-    return *reinterpret_cast<System::String*>(&dialogName);   // LEFT: H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor destroys it by hand).
+    return dialogName;
 }
 
 // The dtor inside [0] 0x140027590: ~String on +0x28, then +0x20; the compiler
 // re-stamps TutorialGoal and runs ~External (the tree ran a guarded ~Internal).
 TutorialGoalDialog::~TutorialGoalDialog() {
     target.Name().~String();
-    DialogName().~String();
+    // +0x20: the member's ~String, after this body
 }
 
 // ============================================================
@@ -91,7 +92,7 @@ Object::External* TutorialGoalDialog::Construct() {
 // Finds the open dialog by name (+0x20). Met when it is open and either no
 // target description is named, or the dialog's data source is that
 // description (directly, or through a ComponentEntity's +0x28 Description).
-bool TutorialGoalDialog::IsComplete(void* /*time*/, void* /*instance*/) {
+bool TutorialGoalDialog::IsComplete(const System::Time* /*time*/, void* /*instance*/) {
     Object::InternalPtr<UI::DialogInstance> dialogPtr;
     FindDialogByName_Impl(&dialogPtr, &DialogName());
     if (dialogPtr.Get() == nullptr) return false;   // dialog not open

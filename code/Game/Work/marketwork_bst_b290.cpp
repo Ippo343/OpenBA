@@ -54,7 +54,6 @@
 
 // 0x140002340 (Ghidra: Object_ExternalPtr_BuildComponentRef_Serialize)
 //   serializes one ExternalPtr through the save-file string table.
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
 // ============================================================
 // Dispatch slots (.rdata) — resolved once

@@ -50,7 +50,6 @@
 #include <new>
 #include "system/MemoryAllocator.h"
 
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // serialize_externals.cpp
 
 // ctor (inlined into create 0x14002f320 / createInPlace 0x14002f390):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then

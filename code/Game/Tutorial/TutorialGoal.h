@@ -24,6 +24,7 @@
 #include <cstdint>
 #include "object/External.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
+namespace System { class Time; }
 
 class TutorialGoal : public Object::External {
     DECLARE_EXE_TYPE(TutorialGoal)
@@ -34,7 +35,7 @@ public:
     int32_t       GetFileVersion() const override { return 1; }    // [3] 0x1400dec70
     bool          Serialize(IO::Stream& stream) override;                // [5] 0x1400dec30
     // [6] Reconstruct, [7] Destruct: pure (External's)
-    virtual bool  IsComplete(void* time, void* instance) = 0;      // [8] pure
+    virtual bool  IsComplete(const System::Time* time, void* instance) = 0;      // [8] pure
 
 protected:
     // Retail inlines this into each leaf ctor: `??0External@Object@@` then the

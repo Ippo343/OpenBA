@@ -3,9 +3,6 @@
 // See code/Game/Dialog/dialog_exe_helpers.cpp.
 #include <cstdint>
 
-// FUN_14000d6c0 — FindComponent (type 0x1401c7008). void* fn(entity, retIBP).
-void* Dialog_FindComponent_d6c0(void* entity, void* retIBP);
-
 // FUN_14005dec0 — B4 FORWARD to AutoSaveDialog::Autosave (timer event 0x13).
 void  Dialog_AutoSaveHandler(void* self, void* p2, int p3, int p4);
 

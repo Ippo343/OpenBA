@@ -65,13 +65,13 @@ void TutorialInstance::Persist(IO::Stream& stream) {
         int32_t step = currentStep;
 
         if (tutDef != nullptr) {
-            int32_t totalSteps = tutDef->stepCount;
+            int32_t totalSteps = tutDef->steps._size;
 
             // Only adjust if step is within range and positive
             if (step < totalSteps && step > 0) {
                 // the steps array; each step's completed bool
                 while (step > 0) {
-                    TutorialStep* currentStepObj = tutDef->steps[step];
+                    TutorialStep* currentStepObj = tutDef->steps._data[step];
                     if (currentStepObj->completed) break;
                     step--;
                     currentStep = step;
