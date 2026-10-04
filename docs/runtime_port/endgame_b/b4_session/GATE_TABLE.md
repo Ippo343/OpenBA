@@ -281,3 +281,10 @@ Metric at `360a066f`: **4,584** to remove.
 | 77 | P2-COMP-6+7 | `c8ad99b8` | residence, storage, orchard, pasture, terraform, tornado, state machine components by name; nine dead forwarders and doors deleted (row 430): 239 -> 114 in 48 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
 
 Metric at `c8ad99b8`: **3,876** to remove.
+
+| 78 | P2-GAME-3 | `230aeaa7` | `behaviour:` MapGenerator's `ExternalRef::strPtr` is a `System::String`, its pools `DynArrayHeader` members with destructors (retail ctor 0x1400a3030, dtor 0x14001aea0); the menu loop's tick / draw helpers typed (row 470): 114 -> 80 in 25 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 79 | P2-DLG-2 | `2e525ea1` | professionui, residenceui, productionui, the toolbar dialogs by name; `ToolRegistryNode.h` (0x38, retail 0x14002df10), `TitleDescToolTipData` (rows 450-452): 252 -> 104 in 19 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 80 | P2-GAME-4 | `0b76abe0` | starttown by name (`StartTown_SpawnColonistRetail` returns the entity and the citizen; the founding-house / template / demo-entity globals typed); `behaviour:` TerrainGenerator's four Strings are members (retail ctor 0x1400b1810, dtor 0x140020630): 262 -> 69 in 20 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 81 | P2-DLG-1 | `46fbb17e` | `Map::regionPairCache` typed, `Map::field_0xA2` `uint8_t`, `TrackerComponent::EntryArray`; debugui, eventnotify, follow, citizen, build dialogs by name; `behaviour:` EventLogUI, CitizenUI, HelpUI, BuildUI hold `Collection::Array` members whose dtors free them as retail (rows 440-447): 233 -> 59 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `46fbb17e`: **3,312** to remove.

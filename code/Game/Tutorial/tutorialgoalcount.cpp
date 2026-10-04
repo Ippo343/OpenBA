@@ -357,7 +357,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
 
             // Re-read worldData each iteration (matches original)
             worldData = GameUpdateLoop::_singleton->m_citizenList;
-            ProfessionBucketNode* node = BSTFind(ProfessionTreeRoot(worldData), curProfType);
+            ProfessionBucket* node = BSTFind(worldData->field_0x100, curProfType);
             if (!node) continue;
 
             ComponentEntity* entity = node->entities[i];
@@ -489,7 +489,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
             // Re-resolve the type each iteration (original code does this)
             const ComponentDescription* curTypePtr = ResolveTypePtr<ComponentDescription>(typeRef);
             worldData = GameUpdateLoop::_singleton->m_citizenList;
-            TemplateBucketNode* node = BSTFind(TemplateTreeRoot(worldData), curTypePtr);
+            TemplateBucket* node = BSTFind(worldData->field_0x160, curTypePtr);
 
             ComponentEntity* entity = nullptr;
             if (node) {

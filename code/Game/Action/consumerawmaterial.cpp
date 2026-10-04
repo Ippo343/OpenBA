@@ -298,12 +298,6 @@ void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
 // FUN_1400c6440 — ConsumeRawMaterial_Action_Ctor3 (2-arg variant)
 //   RCX=self, RDX=param_2.  vtable ConsumeRawMaterial; +0x20=*param_2, +0x28=0, +0x30=0.
 // ============================================================
-void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
-    // B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the entity as uint64_t*.
-    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
-        reinterpret_cast<ComponentEntity* const*>(param_2)));
-}
-
 // 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (one qword: count and capacity;
 // +0x38 untouched).
 ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage)
@@ -377,27 +371,11 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
     if (oldArr != _field28) System::MemoryAllocator::MemFree(oldArr);
 }
 
-// B4 FORWARD: 1 outside caller (Work/work_act_consume.cpp) holds the action and the
-// material as integers.
-void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
-    reinterpret_cast<ConsumeRawMaterial*>(self)->AddMaterial(
-        reinterpret_cast<ComponentDescription*>(resType), count);
-}
-
 // ============================================================
 // FUN_1400c63b0 — ConsumeRawMaterial_Action_CopyCtor
 //   RCX=self, RDX=p2, R8=p3(material), R9=p4(u64, unused), [stack]=p5(byte).
 //   +0x20=*p2 ; +0x28=0 ; +0x30=0 ; +0x38=p5(byte); then 64b0(self, p3, 1).
 // ============================================================
-void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
-                                        uint64_t /*p4*/, uint8_t p5) {
-    // B4 FORWARD: 3 outside callers (Component/citizenai_actionctors.cpp,
-    // Work/work_act_perform.cpp) hold the entity as uint64_t* and the material as an integer.
-    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
-        reinterpret_cast<ComponentEntity* const*>(p2),
-        reinterpret_cast<ComponentDescription*>(p3), p5));
-}
-
 // 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 (one qword) ; +0x38 = p5 (byte); then
 // the consume-list append 0x1400c64b0(this, material, 1) (R8D = 1, retail 0x1400c6412).
 ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage,

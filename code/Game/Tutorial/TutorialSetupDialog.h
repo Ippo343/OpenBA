@@ -32,6 +32,8 @@
 #include "Object/exe_type.h"
 #include "Goal/goal_exe_helpers.h"   // NamedExternalRef
 #include "object/Internal.h"         // Object::InternalPtr
+#include "collection/Collection.h"   // Collection::Array
+#include "system/String.h"
 
 namespace System { class String; }
 namespace UI { class Dialog; class DialogInstance; class Element; }
@@ -65,15 +67,13 @@ public:
     System::String& HighlightPath();
 
 public:
-    // Collection::Array<System::String>: element paths ("Dialog.Element") left
-    // visible while everything else is hidden.
-    System::String* shownPaths;  // +0x20: Array<String> data (H5 raw triple)
-    uint32_t shownPathCount;     // +0x28: size
-    uint32_t shownPathCapacity;  // +0x2C: capacity
-    // Collection::Array<System::String>: dialog names Begin() walks.
-    System::String* dialogNames; // +0x30: Array<String> data (H5 raw triple)
-    uint32_t dialogNameCount;    // +0x38: size
-    uint32_t dialogNameCapacity; // +0x3C: capacity
+    // Element paths ("Dialog.Element") left visible while everything else is
+    // hidden. Retail's ctor 0x1400e2cc0 zeroes +0x20 / +0x28 (Array()); its dtor
+    // 0x1400e2bf0 destroys +0x30 then +0x20 after the two Strings, the order the
+    // compiler destroys these members in after ~TutorialSetupDialog's body.
+    Collection::Array<System::String> shownPaths;    // +0x20
+    // Dialog names Begin() walks.
+    Collection::Array<System::String> dialogNames;   // +0x30
     uint64_t highlightPath;      // +0x40: System::String — the element to highlight
     int32_t  arrowRotation;      // +0x48: degrees, lands at highlight +0xD8
     uint8_t  _pad4C[4];          // +0x4C: padding
@@ -86,9 +86,7 @@ public:
 };
 
 static_assert(offsetof(TutorialSetupDialog, shownPaths) == 0x20, "+0x20");
-static_assert(offsetof(TutorialSetupDialog, shownPathCount) == 0x28, "+0x28");
 static_assert(offsetof(TutorialSetupDialog, dialogNames) == 0x30, "+0x30");
-static_assert(offsetof(TutorialSetupDialog, dialogNameCount) == 0x38, "+0x38");
 static_assert(offsetof(TutorialSetupDialog, highlightPath) == 0x40, "+0x40");
 static_assert(offsetof(TutorialSetupDialog, arrowRotation) == 0x48, "+0x48");
 static_assert(offsetof(TutorialSetupDialog, highlightDialog) == 0x50, "+0x50");

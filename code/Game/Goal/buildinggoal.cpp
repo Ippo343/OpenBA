@@ -156,7 +156,7 @@ Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
             refCopy.Name().~String();
 
             // BST lookup in the +0x160 template tree
-            TemplateBucketNode* node = TemplateTreeRoot(worldData);
+            TemplateBucket* node = worldData->field_0x160;
             while (node != nullptr) {
                 const Object::External* nodeKey = node->key;
                 if (lookupKey < nodeKey) {
@@ -239,9 +239,9 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     // --- Dump the world building BST (keyed on resolved description pointer) ---
     // Iterative in-order walk with an explicit stack; the tree is small (one node
     // per distinct built building type).
-    TemplateBucketNode* stack[64];
+    TemplateBucket* stack[64];
     int sp = 0, dumped = 0;
-    TemplateBucketNode* node = TemplateTreeRoot(worldData);
+    TemplateBucket* node = worldData->field_0x160;
     fprintf(stderr, "[GoalProbe] world building BST @ %p:\n",
             static_cast<void*>(&worldData->field_0x160));
     while ((node || sp) && dumped < 64) {

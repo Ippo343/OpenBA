@@ -47,36 +47,9 @@ struct NamedExternalRefArray {
 };
 static_assert(sizeof(NamedExternalRefArray) == 0x10, "Array header is 0x10");
 
-// ============================================================
-// The CitizenBehavior entity-bucket trees (+0x100 keyed by Profession,
-// +0x160 keyed by ComponentDescription): 0x38-byte nodes whose element is an
-// Array<InternalPtr<ComponentEntity>> (0x1400d81b0, 0x1400d7580).
-// ============================================================
-template <class Key>
-struct EntityBucketNode {
-    Key*              key;        // +0x00 compared by address
-    ComponentEntity** entities;   // +0x08 Array<InternalPtr<ComponentEntity>> data
-    int32_t           count;      // +0x10
-    int32_t           capacity;   // +0x14
-    EntityBucketNode* parent;     // +0x18
-    EntityBucketNode* left;       // +0x20
-    EntityBucketNode* right;      // +0x28
-    int32_t           balance;    // +0x30
-    uint8_t           _pad34[4];  // +0x34
-};
-static_assert(sizeof(EntityBucketNode<Profession>) == 0x38, "the CitizenBehavior tree node is 0x38");
-static_assert(offsetof(EntityBucketNode<Profession>, entities) == 0x08, "EntityBucketNode +0x08");
-static_assert(offsetof(EntityBucketNode<Profession>, count) == 0x10, "EntityBucketNode +0x10");
-static_assert(offsetof(EntityBucketNode<Profession>, left) == 0x20, "EntityBucketNode +0x20");
-static_assert(offsetof(EntityBucketNode<Profession>, right) == 0x28, "EntityBucketNode +0x28");
-
-using ProfessionBucketNode = EntityBucketNode<Profession>;
-using TemplateBucketNode   = EntityBucketNode<ComponentDescription>;
-
-// The roots (goal_exe_helpers.cpp; LEFT: CitizenBehavior::field_0x100 /
-// field_0x160 are `void*` in WORK-a's header, no node type declared there).
-ProfessionBucketNode* ProfessionTreeRoot(const CitizenBehavior* cb);
-TemplateBucketNode*   TemplateTreeRoot(const CitizenBehavior* cb);
+// The CitizenBehavior entity-bucket trees (+0x100 keyed by Profession, +0x160 keyed by
+// ComponentDescription) are CitizenBehavior.h's ProfessionBucket / TemplateBucket
+// (CitizenBucketNode<Key>, 0x38 bytes); their roots are field_0x100 / field_0x160.
 
 // FUN_14001b340 - NamedExternalRef array resize (stride 0x18).
 void Goal_RefArray_Resize(NamedExternalRefArray* arr, uint32_t newCount);
