@@ -173,9 +173,9 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int pa
 class CropFieldComponent;
 void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropFieldComponent member; its header is COMP-c's)
 struct WorkEntityAssignment;   // Work/Work.h
-void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* key);  // 0x1400298a0
-void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const WorkEntityAssignment* ins);  // 0x140029920
-void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser);  // 0x140029c10
+void WorkLeaf_BstRemoveByIBP_298a0(Collection::Set<WorkEntityAssignment>* set, ComponentEntity* const* key);  // 0x1400298a0
+void* WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, void* outNode, const WorkEntityAssignment* ins);  // 0x140029920
+void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0

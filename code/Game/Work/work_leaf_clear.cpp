@@ -97,8 +97,7 @@ using EntitySet = Collection::Set<WorkEntityAssignment>;
 // layout).
 // ABI: void fn(longlong* treeRootSlot, InternalBasePtr* key)
 // Closure: 0x14001ca60 (reg) + InternalBasePtr_CheckPtr (engine). SAFE.
-void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* key) {
-    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);  // LEFT: H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)
+void WorkLeaf_BstRemoveByIBP_298a0(EntitySet* set, ComponentEntity* const* key) {
     WorkEntitySetNode* node = set->_root;
     if (node == nullptr) return;
     do {
@@ -107,7 +106,7 @@ void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* k
             node = node->left;       // left (+0x18)
         } else {
             if (*key <= node->element.entity.Get()) {
-                WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(treeRootSlot), node);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF; work_base_cellbst.cpp)
+                WorkCellBST_Remove_ca60(set, node);   // 0x14001ca60
                 return;
             }
             node = node->right;      // right (+0x20)
@@ -144,8 +143,7 @@ static WorkEntitySetNode* WorkLeaf_BstNewNode_9b40(const WorkEntityAssignment* p
 // 0x140013480. The count is incremented on every insert that adds a node.
 // ABI: undefined8* fn(longlong* treeRootSlot, undefined8* outNode, InternalBasePtr* ins)
 // Closure: 0x140029b40 (inlined) + 0x140013480 (reg) + MemAlloc/CheckPtr (engine). SAFE.
-void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const WorkEntityAssignment* ins) {
-    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);  // LEFT: H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)
+void* WorkLeaf_BstInsertByIBP_29920(EntitySet* set, void* outNode, const WorkEntityAssignment* ins) {
     WorkEntitySetNode** out = reinterpret_cast<WorkEntitySetNode**>(outNode);  // LEFT: the out slot is the caller's reused scratch (ClearArea::Execute's Profession* local, retail's one stack slot)
     WorkEntitySetNode* node = set->_root;
     WorkEntitySetNode* result;
@@ -217,8 +215,7 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const Wor
 // ABI: void fn(longlong* treeRootSlot, Serializer* ser)
 // Closure: 9920 (sibling) + Serialize(int)/IBP::Serialize/IsDerivedFrom + type
 //          IDs (all engine globals). SAFE.
-void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser) {
-    EntitySet* set = reinterpret_cast<EntitySet*>(treeRootSlot);  // LEFT: H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)
+void WorkLeaf_BstSerializeIBPpair_29c10(EntitySet* set, IO::Serializer* ser) {
 
     int count = set->_count;
     ser->Serialize(count, nullptr);
@@ -250,7 +247,7 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser)
             }
             // pair {entity, citizen} laid out contiguously for the insert key.
             WorkEntitySetNode* outNode = nullptr;
-            WorkLeaf_BstInsertByIBP_29920(treeRootSlot, &outNode, &pair);
+            WorkLeaf_BstInsertByIBP_29920(set, &outNode, &pair);
             i++;
         } while (i < count);
     } else {
