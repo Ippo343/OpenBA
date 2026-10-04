@@ -97,7 +97,7 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
         // LEFT (the four casts): SIG ResidenceComponent_impl_7230 — CitizenBucketNode +0x30 (Entity/CitizenBehavior.h) is one int32 where the retrace 0x140014b40 reads int16 balance / height.
         void** ret = static_cast<void**>(ResidenceComponent_impl_7230(   // LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30)
             reinterpret_cast<int64_t*>(&field_0x160),   // LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30)
-            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230 LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30)
+            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230 LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30)   // LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30)
         if (ret) found = reinterpret_cast<TemplateBucket*>(*ret);   // LEFT: SIG ResidenceComponent_impl_7230 (CitizenBucketNode +0x30)
         System::MemoryAllocator::MemFree(nullptr);
     }

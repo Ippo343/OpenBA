@@ -471,8 +471,8 @@ void ResidenceUI::GoToCitizen(int citizenIndex) {
         for (int r = 0; r < residentCount; r++) {
             if (flatIdx == citizenIndex) {
                 // Found the target citizen — re-read storageComp after CheckPtr
-                uintptr_t citizenPtr = *(uintptr_t*)(
-                    *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
+                uintptr_t citizenPtr = *(uintptr_t*)(   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
+                    *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
                     + (uintptr_t)r * 8);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
 
                 // Get citizen's InternalBasePtr self-reference at +0x10
