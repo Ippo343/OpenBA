@@ -56,9 +56,7 @@
 #include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "ui/DialogInstance.h"        // B4: the open dialog's controller array
 
-extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
-extern "C" void* EditTool_HarnessAcquire(void* entityUI);
-// EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
+// EditTool_Harness*: Player/edittool_funcs.h. EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
 
 namespace {
 
@@ -143,18 +141,16 @@ Component* FindComp(ComponentEntity* ent, uint32_t tid) {
 // Open ent's info panel, click workerCountUp until the roster stops moving, close it.
 // Returns the number of seats actually gained (0 = the click had no effect, which is a
 // real answer: no idle laborer, or no WorkPlaceUI on this building's panel).
-int SeatViaPanel(void* entityUI, ComponentEntity* ent, WorkPlaceComponent* wpc, int want) {
+int SeatViaPanel(PlayerToolManager* entityUI, ComponentEntity* ent, WorkPlaceComponent* wpc, int want) {
     // Not just "is a tool active" — is it an EDIT tool. A build tool left armed by a
     // placement harness sits in the same slot, and its +0x28/+0x30 are drag state, not
     // dialog/entity refs (the FencedTool crash, 2026-08-19). Acquire switches edit mode
     // back the way a player would.
-    void* tool = EditTool_HarnessAcquire(entityUI);
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) return 0;
 
     EditTool_HarnessSelectEntity(tool, ent);
-    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
-    // (+0x28, the open dialog) is a uint64_t in PLAYER's header.
-    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     if (!dialog) return 0;
 
     int gained = 0;
@@ -196,15 +192,17 @@ int SeatViaPanel(void* entityUI, ComponentEntity* ent, WorkPlaceComponent* wpc, 
             }
         }
     }
-    // LEFT: EditTool_CloseInfoDialog's dialog is a uintptr_t and `tool` is void* (PLAYER).
-    EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool),
-                             reinterpret_cast<uintptr_t>(dialog));
+    EditTool_CloseInfoDialog(tool,
+                             reinterpret_cast<uintptr_t>(dialog));   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t dialog; Player/edittool_funcs.h, wave X)
     return gained;
 }
 
 }  // namespace
 
-extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
+// The tool manager (gameupdateloop.cpp hands its `m_toolManager`; its local
+// declaration still spells the parameter void*).
+extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameNum) {
+
     Init();
     if (s_interval <= 0 || !entityUI) return;
     if (frameNum < kFirstFrame || ((frameNum - kFirstFrame) % s_interval) != 0) return;

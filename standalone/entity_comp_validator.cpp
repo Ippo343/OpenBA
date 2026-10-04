@@ -120,12 +120,12 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
         fflush(stderr);
     }
 
-    // LEFT (both walks below): the IBP array arrives as void* through
-    // componententity.cpp's local declaration of this entry (ENTITY block).
+    // Both walks below read the IBP array's raw slot words (a slot may hold junk:
+    // that is what the validator hunts), probing each for readability first.
     int bad = 0;
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(ibpArr) + static_cast<size_t>(i) * 8);
+        void** slot = reinterpret_cast<void**>(  // CAST-OK: crash_walk
+            reinterpret_cast<uint8_t*>(ibpArr) + static_cast<size_t>(i) * 8);  // CAST-OK: crash_walk
         if (!Readable(slot, 8)) { ++bad; continue; }
         void* obj = *slot;
         // A null slot is legal (IBP::Serialize writes "absent"); only a NON-null
@@ -150,8 +150,8 @@ extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int co
     fprintf(stderr, "[CompValidate] BAD ENTITY ent=%p desc=%p (%s) count=%d badSlots=%d\n",
             entity, desc, TypeNameOf(desc) ? TypeNameOf(desc) : "?", count, bad);
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(ibpArr) + static_cast<size_t>(i) * 8);
+        void** slot = reinterpret_cast<void**>(  // CAST-OK: crash_walk
+            reinterpret_cast<uint8_t*>(ibpArr) + static_cast<size_t>(i) * 8);  // CAST-OK: crash_walk
         void* obj = Readable(slot, 8) ? *slot : reinterpret_cast<void*>(~0ull);  // CAST-OK: ptr_int
         const char* n = obj ? TypeNameOf(obj) : "(null)";
         // Dump the two words IBP::Serialize would read off a bad pointer — those

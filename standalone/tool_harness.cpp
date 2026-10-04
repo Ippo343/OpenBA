@@ -74,19 +74,20 @@
 #include "Component/BuildDescription.h"
 #include "Component/CreateBridgeDescription.h"
 
-// Standalone factory from code/Game/Player/removaltool.cpp (extern "C").
-// Returns a freshly MemAlloc'd RemovalTool (0x40 bytes) with its standalone
-// vtable installed and drag-cell defaults (startCell/endCell/lastEndCell = -1).
-extern "C" void* RemovalTool_Factory_SA(void);
+// Standalone factory from code/Game/Player/removaltool.cpp (extern "C";
+// Player/edittool_funcs.h). Returns a freshly MemAlloc'd RemovalTool (0x40 bytes)
+// with its standalone vtable installed and drag-cell defaults
+// (startCell/endCell/lastEndCell = -1).
+#include "Player/edittool_funcs.h"
 
 // Standalone PlacementTool bring-up (GUI_PLAN Keystone F, Phase 1).
-//   PlacementTool_Factory_SA          — MemAlloc'd 0x70 PlacementTool + std vtable.
+//   PlacementTool_Factory_SA          — MemAlloc'd 0x70 PlacementTool + std vtable
+//                                       (Player/edittool_funcs.h).
 //   PlacementTool_HarnessStartupProbe — logs descriptionPtr's component array +
 //     the 4 *Description type-ids, confirms ModelDescription present, then calls
 //     the faithful Startup (bails safely if Model absent).
 //   StartTown_ResolveTemplateByPath   — resolve "Template\\<Name>.rsc" to a
 //     building DESCRIPTION ComponentEntity for descriptionPtr (+0x20).
-extern "C" void* PlacementTool_Factory_SA(void);
 extern "C" int   PlacementTool_HarnessStartupProbe(void* toolSelf);
 extern "C" class ComponentDescription* StartTown_ResolveTemplateByPath(const char* path);
 // Phase 2: drive the faithful CREATE path (helper_d650) for a chosen centre cell.
@@ -113,14 +114,12 @@ extern "C" void MapParamsDialog_HarnessOpen();
 // resolves PlacementTool from the descriptor's CreatePlacedDescription, CreateObject's
 // it + Startup, installs it at entityUI+0x28. Declared in Dialog/exe_bodies.h.
 
-// GUI: entity-selection (EditTool) harness. Scans the region map near centre and drives
-// the EditTool select path on the first dialog-capable entity (edittool.cpp).
-extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool);
-// Drive the select path on a specific entity (edittool.cpp) — returns 1 if a dialog opened.
-extern "C" int EditTool_HarnessSelectEntity(EditTool* editTool, ComponentEntity* entity);
-extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);
-// Select a citizen recovered from the Picking::Scene (edittool.cpp) — tests CitizenUI.
-extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool);
+// GUI: entity-selection (EditTool) harness (Player/edittool_funcs.h, edittool.cpp):
+// EditTool_HarnessSelectNearby scans the region map near centre and drives the EditTool
+// select path on the first dialog-capable entity; _HarnessSelectEntity drives it on a
+// specific entity (1 if a dialog opened); _HarnessSelectCitizen selects a citizen
+// recovered from the Picking::Scene (tests CitizenUI).
+
 // A captured founding-house building entity (starttown.cpp) — a definitive UIDescription-
 // bearing entity, independent of the region-map/cursor pick.
 extern "C" ComponentEntity* StartTown_GetFoundingHouseEntity(int index);
@@ -256,7 +255,7 @@ void FirePlacementTool() {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
-    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
     if (!tmpl) {
         fprintf(stderr, "[ToolHarness] ERROR: template resolve returned null\n");
@@ -271,7 +270,7 @@ void FirePlacementTool() {
     }
 
     // descriptionPtr (+0x20) = the building description entity Startup searches.
-    tool->descriptionPtr = static_cast<ComponentDescription*>(tmpl);   // LEFT: starttown.cpp's void* return (owner: Game)
+    tool->descriptionPtr = tmpl;
     fprintf(stderr, "[ToolHarness] PlacementTool=%p descriptionPtr(+0x20)=%p — running Startup probe...\n",
            tool, tmpl);
 
@@ -349,7 +348,7 @@ void FireActivatePlacement(PlayerToolManager* entityUI) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
-    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness] ERROR: template resolve returned null\n"); return; }
 
@@ -365,7 +364,7 @@ void FireActivatePlacement(PlayerToolManager* entityUI) {
         PlacementTool* pt = static_cast<PlacementTool*>(tool);
         fprintf(stderr, "[ToolHarness]   tool vtable=%p back-ptr(+0x10)=%p descriptionPtr(+0x20)=%p "
                "descComp(+0x28)=%p meshInstance(+0x68)=%p\n",
-               *reinterpret_cast<void**>(tool),   // LEFT: the vtable word, logged only
+               *reinterpret_cast<void**>(tool),   // the vtable word, logged only  // CAST-OK: crash_walk
                pt->dialogPtr, pt->descriptionPtr, pt->descComponent, pt->meshInstance);
         fprintf(stderr, "[ToolHarness] PlacementTool ACTIVE — per-frame tick (LIVE_TOOLS) now drives "
                "OnKey/Serialize; move the mouse over the map + left-click to place.\n");
@@ -425,7 +424,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
     // means the descriptor carried no road component and CalcPath/CalcCost will bail.
     fprintf(stderr, "[ToolHarness][road]   vtable=%p controller(+0x10)=%p descriptionPtr(+0x20)=%p "
            "roadDesc(+0x38)=%p\n",
-           *reinterpret_cast<void**>(tool),   // LEFT: the vtable word, logged only
+           *reinterpret_cast<void**>(tool),   // the vtable word, logged only  // CAST-OK: crash_walk
            road->dialogPtr, road->descriptionPtr, road->roadDesc);
 
     // Pick a span the road rules can actually accept. CalcCost/CalcPath require BOTH
@@ -474,7 +473,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+            ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
             const int cc = e->_componentCount;
             Object::InternalPtr<Component>* ca = e->_components;
@@ -589,7 +588,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness][pasture] resolving template \"%s\"...\n", kTemplate);
-    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness][pasture]   -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness][pasture] ERROR: template resolve failed\n"); return; }
 
@@ -606,7 +605,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
     FencedTool* fenced = static_cast<FencedTool*>(tool);
     fprintf(stderr, "[ToolHarness][pasture]   vtable=%p fencedDesc(+0x38)=%p areaDesc(+0x40)=%p "
            "fenceDesc(+0x48)=%p\n",
-           *reinterpret_cast<void**>(tool),   // LEFT: the vtable word, logged only
+           *reinterpret_cast<void**>(tool),   // the vtable word, logged only  // CAST-OK: crash_walk
            fenced->fencedDesc, fenced->areaDesc, fenced->fenceDesc);
 
     // Scan outward from the valley centre for a clear 8x8 block (min size is 7).
@@ -664,7 +663,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
         long sumCol = 0, sumRow = 0; int nh = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+            ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
             const int cc = e->_componentCount;
             Object::InternalPtr<Component>* ca = e->_components;
@@ -766,11 +765,11 @@ void FirePreviewPlacement(PlayerToolManager* entityUI) {
     // Log the controller's +0x00 before/after so we can confirm the CreateBar opens.
     {
         PlayerToolManager* controller = tool->dialogPtr;   // = EntityUI (dialog controller)
-        // LEFT (both reads): field_0x00, the dialog IBP, is logged as an integer (%llx).
-        uint64_t before = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
+        // field_0x00, the dialog IBP, is logged as an integer (%llx).
+        uint64_t before = controller ? reinterpret_cast<uint64_t>(controller->field_0x00) : 0;   // +0x00  // CAST-OK: ptr_int
         // EntityUI+0x28 is the active Tool; slot 6 (+0x30) is Tool::OnKey; param 1 -> open CreateBar.
         tool->OnKey(1);
-        uint64_t after = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
+        uint64_t after = controller ? reinterpret_cast<uint64_t>(controller->field_0x00) : 0;   // +0x00  // CAST-OK: ptr_int
         fprintf(stderr, "[ToolHarness] CreateBar open probe: controller(tool+0x10)=%p dialogIBP(+0x00) "
                "before=%llx after=%llx -> %s\n", controller,
                (unsigned long long)before, (unsigned long long)after,
@@ -899,12 +898,12 @@ void FireUtilityDialog() {
         Minimap* mapObj = gameWorld->m_imageCapture;
         fprintf(stderr, "[MapProbe] gameWorld+0x148 (minimap subsystem) = %p\n", mapObj);
         if (mapObj) {
-            // LEFT (q, w): a raw qword / dword dump of the object's bytes, not a field read.
-            uint64_t* q = reinterpret_cast<uint64_t*>(mapObj);
+            // A raw qword / dword dump of the object's bytes, not a field read.
+            uint64_t* q = reinterpret_cast<uint64_t*>(mapObj);   // CAST-OK: crash_walk
             for (int i = 0; i < 8; i++)
                 fprintf(stderr, "[MapProbe]   +0x%02x = 0x%016llx\n", i * 8,
                        (unsigned long long)q[i]);
-            int* w = reinterpret_cast<int*>(mapObj);
+            int* w = reinterpret_cast<int*>(mapObj);   // CAST-OK: crash_walk
             fprintf(stderr, "[MapProbe]   ints +0x00=%d +0x04=%d +0x18=%d +0x1c=%d\n",
                    w[0], w[1], w[6], w[7]);
             // Sample the raw pixel arrays: +0x18 terrain, +0x28 overlay.
@@ -943,7 +942,7 @@ void FireSelectEntity(PlayerToolManager* entityUI) {
     fprintf(stderr, "[ToolHarness] founding houses captured: %d\n", houses);
     int opened = 0;
     for (int i = 0; i < houses && !opened; i++) {
-        ComponentEntity* house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        ComponentEntity* house = StartTown_GetFoundingHouseEntity(i);
         if (!house) continue;
         fprintf(stderr, "[ToolHarness] selecting founding house[%d] entity=%p...\n", i, house);
         opened = EditTool_HarnessSelectEntity(tool, house);
@@ -1134,11 +1133,11 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     int houses = StartTown_GetFoundingHouseCount();
     ComponentEntity* house = nullptr; int opened = 0;
     for (int i = 0; i < houses && !opened; ++i) {
-        house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        house = StartTown_GetFoundingHouseEntity(i);
         if (house) opened = EditTool_HarnessSelectEntity(tool, house);
     }
     if (!opened || !house) { fprintf(stderr, "[PinPanel] no house info dialog opened (houses=%d)\n", houses); return; }
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
 
     // 3. Grab the EntityUI (guard target) + ToolUI (pin flag) controllers.
     UI::DialogController* entCtrl  = GetControllerByType(dialog, EntityUI::TypeId());
@@ -1320,7 +1319,7 @@ void FireHousePanel(PlayerToolManager* entityUI) {
     ComponentEntity* house = nullptr; int opened = 0; int pickedIdx = -1;
     for (int i = 0; i < houses && !opened; ++i) {
         if (want >= 0 && i != want) continue;
-        house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        house = StartTown_GetFoundingHouseEntity(i);
         if (house) {
             DlgSettings_InstallBuffer(house, i);   // no-op unless the route is armed
             opened = EditTool_HarnessSelectEntity(tool, house);
@@ -1331,7 +1330,7 @@ void FireHousePanel(PlayerToolManager* entityUI) {
         fprintf(stderr, "[HousePanel] no house info dialog opened (houses=%d want=%d)\n", houses, want);
         return;
     }
-    void* dialog = reinterpret_cast<void*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     fprintf(stderr, "[HousePanel] OPEN house[%d]=%p dialog=%p — panel stays open; Slot7 now "
            "repopulates rows every frame while the death harness drains the roster\n",
            pickedIdx, house, dialog);
@@ -1344,7 +1343,7 @@ void FireHousePanel(PlayerToolManager* entityUI) {
             ComponentEntity* other = nullptr;
             for (int i = 0; i < houses; ++i) {
                 if (i == pickedIdx) continue;
-                other = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+                other = StartTown_GetFoundingHouseEntity(i);
                 if (other) { DlgSettings_InstallBuffer(other, i); break; }
             }
             if (!other) {
@@ -1546,7 +1545,7 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
     ComponentEntity* B = nullptr;
     const int houses = StartTown_GetFoundingHouseCount();
     for (int i = 0; i < houses && !B; ++i) {
-        ComponentEntity* h = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        ComponentEntity* h = StartTown_GetFoundingHouseEntity(i);
         if (h && h != A) B = h;
     }
     if (!B) {
@@ -1581,7 +1580,8 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
             uint8_t* buf = static_cast<UIComponent*>(comp)->data;
             fprintf(stderr, "[DlgSettings:route] after close, A's buffer=%p "
                     "head=%08x (0xdeadbeef means SaveSettings wrote it)\n",
-                    buf, buf ? *reinterpret_cast<uint32_t*>(buf) : 0u);   // LEFT: the settings buffer's first dword (the magic), byte storage
+                    buf, buf ? *reinterpret_cast<uint32_t*>(buf) : 0u);   // the settings buffer's first dword (the magic), byte storage  // CAST-OK: byte_io
+
             break;
         }
     }
@@ -1650,7 +1650,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     if (!entRef) { fprintf(stderr, "[PasturePanel] pasture[0] has no entity backref\n"); return; }
 
     int opened = EditTool_HarnessSelectEntity(tool, entRef);
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     fprintf(stderr, "[PasturePanel] select pasture ent=%p -> opened=%d dialog=%p "
            "(comp=%p type(+0x28)=%p count(+0x38)=%d max(+0x40)=%d)\n",
            entRef, opened, dialog, pastureComp,
@@ -1771,7 +1771,7 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
     }
 
     int opened = EditTool_HarnessSelectEntity(tool, orchEnt);
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     fprintf(stderr, "[OrchardPanel] select orchard ent=%p -> opened=%d dialog=%p\n",
            orchEnt, opened, dialog);
     if (!dialog) {
@@ -1805,8 +1805,8 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
     // it). Printing it before AND after the select is what turns "the event fired"
     // into "the type actually landed" — see the diagnostics-report-outcomes rule.
     auto orchType = [&]() -> unsigned long long {
-        // LEFT: treeType (a ComponentDescription*) is logged as an integer (%llx).
-        return orchComp ? *reinterpret_cast<unsigned long long*>(&orchComp->treeType) : 0ull;
+        // treeType (a ComponentDescription*) is logged as an integer (%llx).
+        return orchComp ? reinterpret_cast<unsigned long long>(orchComp->treeType) : 0ull;   // +0x60  // CAST-OK: ptr_int
     };
     fprintf(stderr, "[OrchardPanel] OrchardUI=%p combo(+0x30)=%p items=%d yield(+0x38)=%p "
            "comp=%p type(+0x60)=%llx\n",
@@ -1877,7 +1877,7 @@ void FireTradePanel(PlayerToolManager* entityUI) {
     }
 
     int opened = EditTool_HarnessSelectEntity(tool, postEnt);
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     fprintf(stderr, "[TradePanel] select post ent=%p -> opened=%d dialog=%p\n",
            postEnt, opened, dialog);
     if (!dialog) {
@@ -2109,11 +2109,11 @@ void FireClearPlaceOver() {
         }
     if (rcRow < 0) { fprintf(stderr, "[ClearPlaceOver] no resource cell found near centre\n"); return; }
 
-    void* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
     if (!tmpl) { fprintf(stderr, "[ClearPlaceOver] ERROR: WoodHouse template null\n"); return; }
     PlacementTool* tool = static_cast<PlacementTool*>(PlacementTool_Factory_SA());   // LEFT: placementtool.cpp's void* return (owner: Player)
     if (!tool) { fprintf(stderr, "[ClearPlaceOver] ERROR: tool factory null\n"); return; }
-    tool->descriptionPtr = static_cast<ComponentDescription*>(tmpl);   // LEFT: starttown.cpp's void* return (owner: Game)
+    tool->descriptionPtr = tmpl;
     if (!PlacementTool_HarnessStartupProbe(tool)) {
         fprintf(stderr, "[ClearPlaceOver] Startup probe failed\n"); return;
     }
@@ -2271,7 +2271,7 @@ int UpgradeRequired(BuildComponent* bc) {
 // Pick the upgrade subject: the construction-demo house if one was seeded (the only
 // building that ever reaches delivered != 0), else founding house 0 so the run still
 // exercises the click + REMOVE branch instead of doing nothing.
-void* UpgradePickSubject(bool* outIsDemo) {
+ComponentEntity* UpgradePickSubject(bool* outIsDemo) {
     if (g_pConstructionDemoEntity) { *outIsDemo = true;  return g_pConstructionDemoEntity; }
     *outIsDemo = false;
     return StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0)
@@ -2280,8 +2280,8 @@ void* UpgradePickSubject(bool* outIsDemo) {
 
 void FireUpgradeArm(PlayerToolManager* entityUI, int frameNum) {
     bool isDemo = false;
-    // LEFT: g_pConstructionDemoEntity / StartTown_GetFoundingHouseEntity are void* (starttown.cpp, owner: Game).
-    ComponentEntity* subject = static_cast<ComponentEntity*>(UpgradePickSubject(&isDemo));
+    ComponentEntity* subject = UpgradePickSubject(&isDemo);
+
     s_up_entityUI = entityUI;
     s_up_entity   = subject;
     s_up_armFrame = frameNum;
@@ -2320,7 +2320,7 @@ bool UpgradeOpenDialog() {
     }
     s_up_tool = tool;
     int opened = EditTool_HarnessSelectEntity(tool, s_up_entity);
-    void* dialog = reinterpret_cast<void*>(tool->entityRef);   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     fprintf(stderr, "[Upgrade] select entity=%p -> opened=%d dialog=%p\n",
            s_up_entity, opened, dialog);
     return opened != 0 && dialog != nullptr;
@@ -2332,7 +2332,7 @@ bool UpgradeOpenDialog() {
 // (UpgradeUIConfig+0x20) into DestroyComponent+0x60 and pumps the BuildState SM.
 void FireUpgradeClick() {
     UI::DialogInstance* dialog = s_up_tool
-        ? reinterpret_cast<UI::DialogInstance*>(s_up_tool->entityRef) : nullptr;   // LEFT: EditTool::entityRef is uint64_t (Player/EditTool.h)
+        ? s_up_tool->entityRef : nullptr;   // +0x28, the open dialog
     UpgradeUI* ctrl = dialog ? static_cast<UpgradeUI*>(
         GetControllerByType(dialog, UpgradeUI::TypeId())) : nullptr;   // GetController(UpgradeUI's id)
     fprintf(stderr, "[Upgrade] dialog=%p UpgradeUI controller=%p\n", dialog, static_cast<void*>(ctrl));
@@ -2607,7 +2607,7 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+            ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
             const int cc = e->_componentCount;
             Object::InternalPtr<Component>* ca = e->_components;
@@ -2905,9 +2905,10 @@ void BridgeTick(PlayerToolManager* entityUI, int frameNum) {
 
 }  // namespace
 
-extern "C" void ToolHarness_Tick(void* entityUIArg, int frameNum) {
-    // GameUpdateLoop's Update hands its m_toolManager over (gameupdateloop.cpp).
-    PlayerToolManager* entityUI = static_cast<PlayerToolManager*>(entityUIArg);   // LEFT: tool_harness.h's void* (its declaration and gameupdateloop.cpp's are not this block's)
+// GameUpdateLoop's Update hands its m_toolManager over (gameupdateloop.cpp; its local
+// declaration still spells the parameter void*, C linkage).
+extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
+
     Init();
     if (!s_enabled) return;
 

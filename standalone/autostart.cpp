@@ -16,11 +16,16 @@
 extern "C" {
     void* g_StandaloneNewGameDialog = nullptr;
 }
-// Captured by MainMenuDialog_OpenLoad (code/Game/Dialog/mainmenudialog.cpp).
-void* g_StandaloneSaveLoadDialog = nullptr;
-// Captured by MainMenuDialog_OpenTutorial (same file). ScenarioDialog and
-// TutorialDialog are ONE class -- the Tutorial button is the only way to reach it.
-void* g_StandaloneScenarioDialog = nullptr;
+// Captured by MainMenuDialog_OpenLoad (code/Game/Dialog/mainmenudialog.cpp; its local
+// declaration still spells the pointer void*: the same symbol, the stored value is the
+// dialog it creates).
+class SaveLoadDialog;   // Dialog/SaveLoadDialog.h
+SaveLoadDialog* g_StandaloneSaveLoadDialog = nullptr;
+// Captured by MainMenuDialog_OpenTutorial (same file, same void* local declaration).
+// ScenarioDialog and TutorialDialog are ONE class -- the Tutorial button is the only
+// way to reach it.
+class ScenarioDialog;   // Dialog/ScenarioDialog.h
+ScenarioDialog* g_StandaloneScenarioDialog = nullptr;
 
 #include "ui/UserInterface.h"
 #include "runtime/types/ui/DialogInstance.h"
@@ -28,6 +33,7 @@ void* g_StandaloneScenarioDialog = nullptr;
 #include "Game/MenuDialogLoopT.h"     // B4: TickMenu's typed menu loop
 #include "Dialog/ModDialog.h"         // B4: ModDialog::entries
 #include "Dialog/SaveLoadDialog.h"    // B4: SaveLoadDialog list fields
+#include "Dialog/ScenarioDialog.h"    // B4: ScenarioDialog's entries / selectedIndex
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
 extern "C" void* ModDialog_LastOpened();
@@ -49,8 +55,6 @@ constexpr int kEventId_Ok      = 2;   // NewGameDialog "buttonOk" (Start)
 constexpr int kSLD_LoadClick   = 2;   // SaveLoadDialog OnEvent 0x12/2 = buttonLoad
 constexpr int kButtonId_Tutorial = 12;    // MainMenuDialog "buttonTutorial" (kButton_Tutorial)
 constexpr int kSD_LoadClick      = 0x65;  // ScenarioDialog Slot8 0x12/101 = LoadSelected
-constexpr uintptr_t kSD_SelectedIndex = 0xC8;  // ScenarioDialog selectedIndex (i32, ctor seeds -1)
-constexpr uintptr_t kSD_EntryCount    = 0xE0;  // ScenarioDialog entry count (i32)
 
 // State of the driver.
 enum class Phase {
@@ -118,7 +122,7 @@ constexpr int kNewGameTimeoutFrames = 600;   // ~10s at 60fps
 // the old raw 4-argument call; the by-name call passes 0 / nullptr. The four
 // trailing arguments are the harness's choice: retail has no such caller.
 void InjectClick(void* dialog, int msg, int id) {
-    static_cast<UI::DialogInstance*>(dialog)->OnElementEvent(   // B.3.x bridge
+    static_cast<UI::DialogInstance*>(dialog)->OnElementEvent(   // B.3.x bridge  // LEFT: three callers hold their dialog as void* (g_StandaloneNewGameDialog: NewGameDialog.h; ModDialog_LastOpened / ModDetailsDialog_LastOpened: mod_dialog_vtables.cpp, DLG)
         nullptr, msg, id, 0, 0, 0, nullptr);
 }
 
@@ -392,7 +396,7 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
 
     case Phase::WaitLoadDialog: {
         ++s_newGameFrame;
-        void* dlg = g_StandaloneSaveLoadDialog;
+        SaveLoadDialog* dlg = g_StandaloneSaveLoadDialog;
         if (!dlg) {
             if (s_newGameFrame > kNewGameTimeoutFrames) {
                 fprintf(stderr, "[AutoStart] WARN: SaveLoadDialog never appeared — "
@@ -401,8 +405,7 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
             }
             return;
         }
-        // LEFT: g_StandaloneSaveLoadDialog is void* (set in mainmenudialog.cpp, DLG).
-        SaveLoadDialog* d = static_cast<SaveLoadDialog*>(dlg);
+        SaveLoadDialog* d = dlg;
         // Wait for the list scan: refreshFlag (+0xBB) cleared AND saveCount
         // (+0xC4) populated by SaveLoadDialog_Load's refresh pass.
         int saveCount = d->saveCount;
@@ -454,7 +457,7 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
 
     case Phase::WaitTutorialDialog: {
         ++s_newGameFrame;
-        void* dlg = g_StandaloneScenarioDialog;
+        ScenarioDialog* dlg = g_StandaloneScenarioDialog;
         if (!dlg) {
             if (s_newGameFrame > kNewGameTimeoutFrames) {
                 fprintf(stderr, "[AutoStart] WARN: ScenarioDialog never appeared — "
@@ -463,12 +466,10 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
             }
             return;
         }
-        // LEFT: g_StandaloneScenarioDialog is void* (mainmenudialog.cpp, DLG); a typed
-        // read here would raise this file's static_void column.
-        uintptr_t d = reinterpret_cast<uintptr_t>(dlg);
+        ScenarioDialog* d = dlg;
         // Slot4 fills the entry array (+0xD8) and its count (+0xE0) from the
         // scenario resource list. Count > 0 is our proxy that setup finished.
-        int count = *reinterpret_cast<int*>(d + kSD_EntryCount);
+        int count = d->entries.GetSize();   // +0xE0
         if (count <= 0) {
             if (s_newGameFrame > kNewGameTimeoutFrames) {
                 fprintf(stderr, "[AutoStart] WARN: tutorial list never populated "
@@ -486,7 +487,8 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
         }
         // The ctor seeds selectedIndex = -1; LoadSelected indexes the entry array
         // with it unguarded, so it MUST be set before the click.
-        *reinterpret_cast<int*>(d + kSD_SelectedIndex) = pick;
+        d->selectedIndex = pick;   // +0xC8
+
         fprintf(stderr, "[AutoStart] tutorial list ready (%d entries) — selecting #%d "
                 "and injecting Load click\n", count, pick);
         InjectClick(dlg, kMsg_ButtonClick, kSD_LoadClick);

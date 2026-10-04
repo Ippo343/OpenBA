@@ -203,7 +203,7 @@ void FlushPicks() {
     if (s_deferredPicks.empty()) return;
     for (const DeferredPick& d : s_deferredPicks) {
         alignas(16) uint8_t xf[136];
-        d.ctor(xf, reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(d.model) + 0x148));
+        d.ctor(xf, reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(d.model) + 0x148));   // LEFT: SIG PerfX::PickCullSkip (void* model; perf_experimental.h, callers in code/Game: wave X)
         d.set(d.scene, d.id, xf);
     }
     if (Cfg().trace)
@@ -400,7 +400,7 @@ void Count(int what) { if (what >= 0 && what < kCntMax) ++s_counts[what]; }
 bool PickCullSkip(void* model, void* scene, uint32_t id, PickXfCtor_t ctor, PickSetXf_t set) {
     if (!Cfg().pickCull || !s_haveFrustum || !ctor || !set) return false;
     if (!s_simRanThisFrame) { s_simRanThisFrame = true; s_culledModels.clear(); s_deferredPicks.clear(); s_deferredReplays.clear(); }
-    const float* pos = reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158);
+    const float* pos = reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158);   // LEFT: SIG PerfX::PickCullSkip (void* model; wave X)
     if (PointVisible(pos)) return false;
     ++s_counts[kCntPickSkipped];
     s_deferredPicks.push_back(DeferredPick{ model, scene, id, ctor, set });
@@ -414,7 +414,7 @@ void SetIteration(int index, int count) {
 
 bool AnimBatchDecide(ModelComponent* model, const void* time, int64_t* timeOut) {
     // LEFT: `time` is the void* Component::Update hands ModelComponent (COMP's signature).
-    const int64_t tick = *reinterpret_cast<const int64_t*>(time);
+    const int64_t tick = *reinterpret_cast<const int64_t*>(time);   // LEFT: Component::Update's void* time (wave X sweep)
     *timeOut = tick;
     if (s_iterCount <= 1) return false;                       // speed 1: nothing to batch
     const bool last = (s_iterIndex >= s_iterCount - 1);
@@ -442,7 +442,7 @@ bool AnimBatchDecide(ModelComponent* model, const void* time, int64_t* timeOut) 
 bool ModelCulled(void* model) {
     if (s_flushing) return false;
     if (!Cfg().animCull || !s_haveFrustum || !model) return false;
-    return !PointVisible(reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158));
+    return !PointVisible(reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(model) + 0x158));   // LEFT: SIG PerfX::ModelCulled (void* model; wave X)
 }
 
 void NoteDeferred(void* obj, void (*replay)(void*)) {

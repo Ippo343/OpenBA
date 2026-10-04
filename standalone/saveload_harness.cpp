@@ -19,6 +19,7 @@
 #include <cstring>
 #include <windows.h>
 #include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
+#include "Game/GameUpdateLoop.h"   // B4: m_userInterface by name
 
 // code/Game/Dialog/dialog_exe_helpers.cpp — ported retail autosave trigger.
 void Dialog_AutoSaveHandler(void* self, void* p2, int p3, int p4);
@@ -80,7 +81,9 @@ void DumpSaveDir(const char* tag) {
 
 } // namespace
 
-extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
+// gameupdateloop.cpp hands `this`; its local declaration still spells the parameter
+// void* (C linkage, the same symbol).
+extern "C" void SaveLoadHarness_Tick(GameUpdateLoop* gul, int frameNum) {
     const int trigger = TriggerFrame();
     if (trigger < 0) return;
 
@@ -106,7 +109,8 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         // Dialog_AutoSaveHandler only reads self+0x10 (UserInterface*).
         // GameUpdateLoop keeps it at +0x98.
         struct { uint8_t pad[0x10]; void* ui; } fake = {};
-        fake.ui = *(void**)((uintptr_t)gul + 0x98);   // LEFT: gameupdateloop.cpp (GAME) declares this entry with void* gul
+        fake.ui = gul->m_userInterface;   // +0x98
+
         fprintf(stderr, "[SaveTest] frame %d: invoking retail autosave handler "
                         "(SetOperation(4,-4))\n", frameNum);
         fflush(stderr);

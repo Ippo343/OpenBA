@@ -42,6 +42,7 @@
 #include <exception>
 #include <io.h>      // _get_osfhandle, _fileno
 #include <windows.h>
+#include <dxgi.h>    // IDXGISwapChain / DXGI_SWAP_CHAIN_DESC (the swap-chain probes)
 #include <dbghelp.h>
 
 // WAVE 14 LANE SAVEMETA -- runtime/src/save/saveload_meta.cpp.
@@ -659,7 +660,7 @@ static bool RunFactorySelfTest(const char* typeName,
     }
 
     typedef void* (*Factory_t)(void);
-    void* obj = ((Factory_t)match->factoryFn)();
+    void* obj = ((Factory_t)match->factoryFn)();   // LEFT: BaseTypeInfo::factoryFn is void* (runtime/types/object/TypeInfo.h, R-OBJ)
     if (!obj) {
         printf("[SelfTest %s] FAIL: factory returned NULL\n", typeName);
         return false;
@@ -667,7 +668,7 @@ static bool RunFactorySelfTest(const char* typeName,
     printf("[SelfTest %s]   factory returned %p\n", typeName, obj);
 
     // Validate vtable
-    void* actualVt = *(void**)obj;
+    void* actualVt = *(void**)obj;   // the object's vtable word (an identity check)  // CAST-OK: crash_walk
     if (actualVt != expectedVtable) {
         printf("[SelfTest %s] FAIL: vtable %p != expected %p (the class's compiler table)\n",
                typeName, actualVt, expectedVtable);
@@ -681,9 +682,9 @@ static bool RunFactorySelfTest(const char* typeName,
         const FieldCheck& f = fields[i];
         uint32_t actual = 0;
         switch (f.width) {
-        case 1: actual = *(uint8_t*) ((uintptr_t)obj + f.offset); break;
-        case 2: actual = *(uint16_t*)((uintptr_t)obj + f.offset); break;
-        case 4: actual = *(uint32_t*)((uintptr_t)obj + f.offset); break;
+        case 1: actual = *(uint8_t*) ((uintptr_t)obj + f.offset); break;   // CAST-OK: crash_walk
+        case 2: actual = *(uint16_t*)((uintptr_t)obj + f.offset); break;   // CAST-OK: crash_walk
+        case 4: actual = *(uint32_t*)((uintptr_t)obj + f.offset); break;   // CAST-OK: crash_walk
         default:
             printf("[SelfTest %s]   FAIL: bad field width %d for %s\n",
                    typeName, f.width, f.name);
@@ -691,7 +692,7 @@ static bool RunFactorySelfTest(const char* typeName,
         }
         if (actual != f.expected) {
             printf("[SelfTest %s]   FAIL: %s @+0x%llx = 0x%X, expected 0x%X\n",
-                   typeName, f.name, (unsigned long long)f.offset, actual, f.expected);
+                   typeName, f.name, f.offset, actual, f.expected);
             allOk = false;
         }
     }
@@ -773,7 +774,7 @@ static void DumpVideoState() {
                (void*)dx11.getDeviceName, (void*)dx11.createDeviceData);
         printf("[VideoProbe]   slot2 GL:   HMOD=%p\n", gl.module);
         if (activeDD) {
-            void* vtbl = *reinterpret_cast<void**>(activeDD);
+            void* vtbl = *reinterpret_cast<void**>(activeDD);   // the vtable word: logged, then its module looked up  // CAST-OK: crash_walk
             printf("[VideoProbe]   active DeviceData vtable = %p\n", vtbl);
             HMODULE owner = nullptr;
             if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -853,45 +854,14 @@ extern "C" void RunStartupSelfTests() {
 // firing AND whether SetFullscreenState(TRUE) succeeds on refocus.
 // ============================================================
 
-// IDXGISwapChain vtable offsets (from dxgi.h; standard COM layout):
-//   +0x00 QueryInterface  +0x08 AddRef          +0x10 Release
-//   +0x18 SetPrivateData  +0x20 SetPDInterface  +0x28 GetPrivateData
-//   +0x30 GetParent       +0x38 GetDevice
-//   +0x40 Present         +0x48 GetBuffer
-//   +0x50 SetFullscreenState  +0x58 GetFullscreenState  +0x60 GetDesc
-//   +0x68 ResizeBuffers   +0x70 ResizeTarget   +0x78 GetContainingOutput
-//   +0x80 GetFrameStatistics  +0x88 GetLastPresentCount
-
-// Natural alignment (no #pragma pack) — matches dxgi.h. HWND is 8-byte
-// aligned on x64, so the compiler inserts 4 bytes of padding after
-// BufferCount, putting OutputWindow at offset 48 and total size at 72.
-struct ProbeDxgiRational { uint32_t Numerator; uint32_t Denominator; };
-struct ProbeDxgiModeDesc {
-    uint32_t Width;
-    uint32_t Height;
-    ProbeDxgiRational RefreshRate;
-    uint32_t Format;
-    uint32_t ScanlineOrdering;
-    uint32_t Scaling;
-};
-struct ProbeDxgiSampleDesc { uint32_t Count; uint32_t Quality; };
-struct ProbeDxgiSwapChainDesc {
-    ProbeDxgiModeDesc   BufferDesc;       // 28 B (offset 0..27)
-    ProbeDxgiSampleDesc SampleDesc;       // 8 B  (offset 28..35)
-    uint32_t            BufferUsage;      // offset 36
-    uint32_t            BufferCount;      // offset 40
-    // 4 bytes implicit padding here
-    uint64_t            OutputWindow;     // offset 48 (HWND)
-    int32_t             Windowed;         // offset 56
-    uint32_t            SwapEffect;       // offset 60
-    uint32_t            Flags;            // offset 64
-    // 4 bytes implicit trailing padding (alignment to 8)
-};
-static_assert(sizeof(ProbeDxgiSwapChainDesc) == 72,
+// The swap-chain probes call IDXGISwapChain by name (dxgi.h): GetFullscreenState is
+// vtable +0x58, GetDesc +0x60. DXGI_SWAP_CHAIN_DESC is 72 bytes (OutputWindow at 48,
+// Windowed at 56), the layout the probes' former local copy asserted.
+static_assert(sizeof(DXGI_SWAP_CHAIN_DESC) == 72,
               "DXGI_SWAP_CHAIN_DESC layout mismatch (expected 72 bytes)");
-static_assert(offsetof(ProbeDxgiSwapChainDesc, OutputWindow) == 48,
+static_assert(offsetof(DXGI_SWAP_CHAIN_DESC, OutputWindow) == 48,
               "OutputWindow offset mismatch");
-static_assert(offsetof(ProbeDxgiSwapChainDesc, Windowed) == 56,
+static_assert(offsetof(DXGI_SWAP_CHAIN_DESC, Windowed) == 56,
               "Windowed offset mismatch");
 
 static void DumpSwapChainState(const char* tag) {
@@ -907,24 +877,21 @@ static void DumpSwapChainState(const char* tag) {
     }
     // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
     // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
-    void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
+    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: dx11 seam
     if (!swapChain) {
         printf("[SwapProbe %s] swapChain NULL (activeDD+0x18)\n", tag);
         return;
     }
-    void** vt = *reinterpret_cast<void***>(swapChain);
+    [[maybe_unused]] void* vt = *reinterpret_cast<void**>(swapChain);   // the vtable word, logged only  // CAST-OK: crash_walk
 
-    typedef long (__stdcall *GetFullscreenState_t)(void*, int*, void**);
-    typedef long (__stdcall *GetDesc_t)(void*, ProbeDxgiSwapChainDesc*);
+    BOOL fullscreen = -1;
+    IDXGIOutput* output = nullptr;
+    long hr1 = swapChain->GetFullscreenState(&fullscreen, &output);   // vtable +0x58
 
-    int fullscreen = -1;
-    void* output = nullptr;
-    long hr1 = ((GetFullscreenState_t)vt[11])(swapChain, &fullscreen, &output);
+    DXGI_SWAP_CHAIN_DESC desc{};
+    long hr2 = swapChain->GetDesc(&desc);                              // vtable +0x60
 
-    ProbeDxgiSwapChainDesc desc{};
-    long hr2 = ((GetDesc_t)vt[12])(swapChain, &desc);
-
-    HWND hwnd = reinterpret_cast<HWND>(desc.OutputWindow);
+    HWND hwnd = desc.OutputWindow;
     RECT cr{}, wr{};
     if (hwnd) { GetClientRect(hwnd, &cr); GetWindowRect(hwnd, &wr); }
     BOOL visible = hwnd ? IsWindowVisible(hwnd) : FALSE;
@@ -982,12 +949,11 @@ static void CaptureBootFullscreenMode() {
     if (!activeDD) return;
     // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
     // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
-    void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
+    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: dx11 seam
     if (!swapChain) return;
-    void** vt = *reinterpret_cast<void***>(swapChain);
-    typedef long (__stdcall *GetDesc_t)(void*, ProbeDxgiSwapChainDesc*);
-    ProbeDxgiSwapChainDesc desc{};
-    if (((GetDesc_t)vt[12])(swapChain, &desc) == 0) {
+    DXGI_SWAP_CHAIN_DESC desc{};
+    if (swapChain->GetDesc(&desc) == 0) {                              // vtable +0x60
+
         g_bootedExclusiveFullscreen = (desc.Windowed == 0);
         printf("[Standalone] Boot mode: %s\n",
                g_bootedExclusiveFullscreen ? "DXGI EXCLUSIVE FULLSCREEN"

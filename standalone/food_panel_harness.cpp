@@ -60,13 +60,10 @@
 #include "Game/ProfessionList.h"             // B4: GameUpdateLoop::m_professionList
 #include "ui/DialogInstance.h"               // B4: the open dialog's controller array
 
-// Both provided by the existing tool harness / dialog layer.
-extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
-class EditTool;            // Player/EditTool.h (included below)
-class PlayerToolManager;   // Game/PlayerToolManager.h
-extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);   // B4 P2 T1: typed (edittool.cpp)
-extern "C" bool  EditTool_IsEditTool(void* tool);
+#include "Game/PlayerToolManager.h"         // B4: the tool manager's currentTool
+// EditTool_HarnessSelectEntity / _HarnessAcquire / _IsEditTool: Player/edittool_funcs.h.
 extern "C" class ComponentDescription* StartTown_ResolveTemplateByPath(const char* path);
+
 // EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
 // Retail close path (port of Entity_impl_cc90 0x1400fcc90) — destroys the
 // DialogInstance and runs every controller's teardown. C++ linkage taking EditTool*,
@@ -156,7 +153,7 @@ Component* FindCompOnEntity(ComponentEntity* ent, uint32_t tid) {
 }
 
 // Probe one class end to end.
-void ProbeClass(void* entityUI, const FoodClass& fc) {
+void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
     const uint32_t tid = Tid(fc.component);
     if (!tid) {
         std::fprintf(stderr, "[FoodPanel] %-19s TYPE ID UNRESOLVED — cannot probe\n",
@@ -266,16 +263,13 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
 
     // ── open the panel ────────────────────────────────────────────────────────────
     // Must be an EditTool, not merely "a tool" — see EditTool_HarnessAcquire.
-    // LEFT (the argument): ProbeClass holds the tool manager as void* (this file's
-    // FoodPanel_Tick signature, STANDALONE).
-    EditTool* tool = EditTool_HarnessAcquire(static_cast<PlayerToolManager*>(entityUI));
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);
     if (!tool) {
         std::fprintf(stderr, "[FoodPanel]   EditTool activation FAILED — cannot open a panel\n");
         return;
     }
     const int opened = EditTool_HarnessSelectEntity(tool, ent);
-    // LEFT: EditTool::entityRef (+0x28, the open dialog) is a uint64_t (Player/EditTool.h).
-    UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(tool->entityRef);
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     std::fprintf(stderr, "[FoodPanel]   select -> opened=%d dialog=%p\n", opened,
                  static_cast<void*>(dialog));
     if (!dialog) {
@@ -358,13 +352,14 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             GameUpdateLoop* gw2 = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
             CitizenBehavior* townMgr = gw2 ? gw2->m_citizenList : nullptr;     // +0xf0
             if (townMgr && key) {
-                // LEFT: CitizenBehavior::field_0x100 is `void*` (its 0x38-byte node type is
-                // declared nowhere; W0-H1's header), so the node walk stays raw.
-                uint64_t* node = reinterpret_cast<uint64_t*>(townMgr->field_0x100);   // +0x100
+                // The profession bucket tree (0x1400172f0 compares the key as an
+                // unsigned qword: the profession's address).
+                Profession* const prof = wpc->profession;                     // +0x48
+                ProfessionBucket* node = townMgr->field_0x100;                // +0x100
                 while (node) {
-                    if (key < node[0])      node = reinterpret_cast<uint64_t*>(node[4]);
-                    else if (key > node[0]) node = reinterpret_cast<uint64_t*>(node[5]);
-                    else { bucket = static_cast<int>(node[2]); break; }
+                    if (prof < node->key)      node = node->left;             // +0x20
+                    else if (prof > node->key) node = node->right;            // +0x28
+                    else { bucket = node->count; break; }                     // +0x10
                 }
             }
             // WPC+0x48 is seated from `WorkPlaceDescription+0x20`, but only retail's f670
@@ -509,11 +504,8 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
                 std::fprintf(stderr, "[FoodPanel]   teardown: Pasture template unresolved — "
                              "build tool NOT armed\n");
             } else {
-                // LEFT: EntityUI_SetEditMode_Impl takes the template as a uint64_t
-                // (Dialog/exe_bodies.h, DLG); `entityUI` is the tool manager handed in as
-                // void* by gameupdateloop.cpp's declaration of FoodPanel_Tick (GAME).
-                EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
-                void* armed = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+                EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SIG EntityUI_SetEditMode_Impl (uint64_t mode; Dialog/exe_bodies.h, wave X)
+                Tool* armed = entityUI->currentTool;                          // +0x28
                 std::fprintf(stderr, "[FoodPanel]   teardown: armed build tool %p at "
                              "EntityUI+0x28 before the close click\n", armed);
             }
@@ -530,10 +522,9 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             // Re-read the CURRENT active tool: with ARM_BUILDTOOL the EditTool we
             // opened with has been destroyed by SetEditMode, so the captured `tool`
             // pointer is dangling and must not be dereferenced.
-            // LEFT: void* tool manager (above) and EditTool::entityRef uint64_t (PLAYER).
-            void* nowTool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
-            void* afterBtn = (nowTool && EditTool_IsEditTool(nowTool))
-                ? *reinterpret_cast<void**>(static_cast<uint8_t*>(nowTool) + 0x28) : nullptr;
+            Tool* nowTool = entityUI->currentTool;                            // +0x28
+            UI::DialogInstance* afterBtn = (nowTool && EditTool_IsEditTool(nowTool))
+                ? static_cast<EditTool*>(nowTool)->entityRef : nullptr;       // IsDerivedFrom(EditTool); +0x28
             std::fprintf(stderr, "[FoodPanel]   teardown: close button -> activeTool=%p%s "
                          "dialogRef=%p %s\n", nowTool,
                          (nowTool && !EditTool_IsEditTool(nowTool)) ? " (not an EditTool)" : "",
@@ -544,10 +535,8 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
 
     // (b) the real close path.
-    // LEFT: EditTool_CloseInfoDialog takes the dialog as uintptr_t (Player/edittool_funcs.h)
-    // and EditTool::entityRef is a uint64_t (Player/EditTool.h).
-    EditTool_CloseInfoDialog(tool, reinterpret_cast<uintptr_t>(dialog));
-    void* after = reinterpret_cast<void*>(tool->entityRef);
+    EditTool_CloseInfoDialog(tool, reinterpret_cast<uintptr_t>(dialog));   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t dialog; Player/edittool_funcs.h, wave X)
+    UI::DialogInstance* after = tool->entityRef;                       // +0x28
     std::fprintf(stderr, "[FoodPanel]   teardown: CloseInfoDialog -> tool dialog=%p %s\n",
                  after, after ? "STILL OPEN — close path did not take" : "(closed)");
     std::fflush(stderr);
@@ -775,7 +764,10 @@ void FollowUp(int frameNum) {
     std::fflush(stderr);
 }
 
-extern "C" void FoodPanel_Tick(void* entityUI, int frameNum) {
+// The tool manager (gameupdateloop.cpp hands its `m_toolManager`; its local
+// declaration still spells the parameter void*).
+extern "C" void FoodPanel_Tick(PlayerToolManager* entityUI, int frameNum) {
+
     Init();
     if (!s_want[0]) return;
     if (s_fired) {

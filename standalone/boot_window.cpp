@@ -46,7 +46,7 @@ bool ArmDeferredShow(void* videoConfig, HWND hwnd) {
     if (g_armed || g_shown) return g_armed;   // only the first device creation arms
 
     // LEFT: dx11/src/devicedata.cpp (dx11 seam) hands the configuration as void*.
-    static_cast< ::Video::Configuration*>(videoConfig)->field42 = 1;   // +0x42 (kCfgSkipShow)
+    static_cast< ::Video::Configuration*>(videoConfig)->field42 = 1;   // +0x42 (kCfgSkipShow)  // LEFT: dx11 seam (devicedata.cpp hands its cfg as void*)
 
     g_hwnd      = hwnd;
     g_armed     = true;

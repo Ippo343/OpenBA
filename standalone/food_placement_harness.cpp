@@ -236,7 +236,7 @@ void ProbeClass(const FoodClass& fc) {
     // A null slot is NOT reimplemented. (The shared inert stub this used to compare
     // against went with the last hand-built component table at the ENDGAME B.3.8
     // close: every component vtable is the compiler's, so no slot can hold it.)
-    void** vt = *reinterpret_cast<void***>(comp);
+    void** vt = *reinterpret_cast<void***>(comp);   // CAST-OK: crash_walk
     if (!vt) { std::fprintf(stderr, "[FoodPlace]   no vtable?!\n"); return; }
     // `fc.retail[]` is in RETAIL slot order. Retail slot 0 is the one deleting
     // destructor; every later retail slot i sits at compiler slot i + shift,

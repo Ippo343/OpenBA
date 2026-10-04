@@ -343,13 +343,12 @@ Report g_report;
 // common.h:57 forward-declares `struct InputDevice` at global scope — which
 // made the unqualified call at MouseInject::PreUpdate ambiguous. The helper is
 // file-local; only its two call sites move.
-uint8_t* InputDeviceSingleton() {
-    return reinterpret_cast<uint8_t*>(::Input::Device::_singleton);
+::Input::Device* InputDeviceSingleton() {
+    return ::Input::Device::_singleton;
 }
 
-RtInput::State* MouseState(uint8_t* dev, int index) {
-    return reinterpret_cast<RtInput::State*>(
-        dev + RtInput::kMouseOffset + index * (int)sizeof(RtInput::State));
+RtInput::State* MouseState(::Input::Device* dev, int index) {
+    return &dev->_mouse[index];   // +0x1098 (RtInput::kMouseOffset), stride sizeof(State)
 }
 
 // ---------------------------------------------------------------------------
@@ -384,7 +383,7 @@ int16_t SolveRaw(int32_t want, float scale, bool* exact) {
 // ---------------------------------------------------------------------------
 struct Target {
     UI::Element*        elem = nullptr;
-    RtUI::DialogInstance* dlg = nullptr;
+    UI::DialogInstance* dlg = nullptr;
     int32_t             cx = 0, cy = 0;    // the point we will aim at
     bool                tipCapable = false;
 };
@@ -421,7 +420,7 @@ struct Scan {
     bool         dump = false;
 };
 
-void Walk(UI::Element* e, RtUI::DialogInstance* dlg, Scan& sc, int depth) {
+void Walk(UI::Element* e, UI::DialogInstance* dlg, Scan& sc, int depth) {
     if (!e || depth > 24) return;
     ++sc.visited;
     if ((e->_flags & kFlagHidden) == 0) {
@@ -431,7 +430,7 @@ void Walk(UI::Element* e, RtUI::DialogInstance* dlg, Scan& sc, int depth) {
             printf("[MouseInject/probe] %*sname=%-24s id=%-6d flags=%08x rect=(%d,%d)-(%d,%d) "
                    "tipDlg=%p tipTbl=%p tipIdx=%d %s\n",
                    depth * 2, "",
-                   e->_name ? static_cast<const char*>(e->_name) : "(null)",
+                   e->_name ? static_cast<const char*>(e->_name) : "(null)",   // LEFT: Element::_name is H5 String storage (ui/Element.h, R-UI-2)
                    (int)e->_elementId, (unsigned)e->_flags,
                    (int)e->_layoutLeft, (int)e->_layoutTop,
                    (int)e->_layoutRight, (int)e->_layoutBottom,
@@ -449,14 +448,14 @@ void Walk(UI::Element* e, RtUI::DialogInstance* dlg, Scan& sc, int depth) {
             printf("[MouseInject/probe] %*s    tipStr(+0x58)=%p [%s]\n",
                    depth * 2, "", e->_toolTipString,
                    e->_toolTipString
-                       ? static_cast<const char*>(e->_toolTipString)
+                       ? static_cast<const char*>(e->_toolTipString)   // LEFT: Element::_toolTipString is H5 String storage (ui/Element.h, R-UI-2)
                        : "null -> EMPTY arm");
         }
 
         bool candidate = false;
         if (g_cfg.byName) {
             candidate = e->_name &&
-                        !std::strcmp(static_cast<const char*>(e->_name), g_cfg.name) &&
+                        !std::strcmp(static_cast<const char*>(e->_name), g_cfg.name) &&   // LEFT: Element::_name (H5, R-UI-2)
                         HasRect(e);
         } else if (g_cfg.wantTipCapable) {
             candidate = tip && HasRect(e);
@@ -489,7 +488,7 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
         // on _clipRegion, so a degenerate clip makes every hover impossible no
         // matter where the cursor is put -- print it rather than infer it from
         // element rects.
-        uint8_t* dev = InputDeviceSingleton();
+        ::Input::Device* dev = InputDeviceSingleton();
         printf("[MouseInject/probe] ui=%p clip=(%d,%d)-(%d,%d) uiScale=%.4f "
                "rawMouse=(%d,%d) dev=%p" "\n",
                (void*)ui, (int)ui->_clipRegion.left, (int)ui->_clipRegion.top,
@@ -504,9 +503,9 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
     }
 
     for (ListNode* n = head; n; n = n->next) {
-        RtUI::DialogInstance* dlg = reinterpret_cast<RtUI::DialogInstance*>(n->element);   // LEFT: H10 the RtUI::DialogInstance mirror (the list element is typed UI::DialogInstance* since B4 P2 R-UI)
+        UI::DialogInstance* dlg = n->element;   // DialogInstancePtr (UserInterface.h)
         if (!dlg) continue;
-        UI::Element* root = static_cast<UI::Element*>(dlg->_root);
+        UI::Element* root = dlg->_root;   // +0x50
         if (!root) continue;
 
         Scan sc;
@@ -607,9 +606,9 @@ void ApplyToolTipString(UI::Element* elem) {
     printf("[MouseInject/tipstr] elem=%p name=%s  +0x58 %p -> %p [%s]  "
            "(BeginToolTip must now take the NON-EMPTY arm)\n",
            (void*)elem,
-           elem->_name ? static_cast<const char*>(elem->_name) : "(null)",
+           elem->_name ? static_cast<const char*>(elem->_name) : "(null)",   // LEFT: Element::_name (H5, R-UI-2)
            before, elem->_toolTipString,
-           elem->_toolTipString ? static_cast<const char*>(elem->_toolTipString)
+           elem->_toolTipString ? static_cast<const char*>(elem->_toolTipString)   // LEFT: Element::_toolTipString (H5, R-UI-2)
                                 : "?");
     fflush(stdout);
 }
@@ -648,8 +647,8 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     void* elemLocal = t.elem;
 
     int32_t dragX = t.cx, dragY = t.cy;
-    ui->BeginDragDrop(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgLocal),  // B.3.6 bridge
-                      reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemLocal),
+    ui->BeginDragDrop(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgLocal),  // B.3.6 bridge  // LEFT: two raw locals handed where BeginDragDrop takes InternalPtr<>* (an InternalPtr would construct / release)
+                      reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemLocal),   // LEFT: (the same)
                       dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
     ++g_s.dragStarted;
     printf("[MouseInject] BeginDragDrop(dlg=%p, x=%d, y=%d) -> _dragDropDialog=%p\n",
@@ -695,7 +694,7 @@ int  g_stepIndex  = -1;
 int  g_stepFrame  = 0;
 bool g_done       = false;
 UI::Element* g_lastTarget = nullptr;   // handed from PreUpdate to PostUpdate
-RtUI::DialogInstance* g_lastDlg = nullptr;
+UI::DialogInstance* g_lastDlg = nullptr;
 
 void PrintStepBoundary(const char* what) {
     printf("[MouseInject] frame=%d step=%d/%d %s | S1=%llu S2=%llu S3=%llu S4=%llu S5=%llu\n",
@@ -791,8 +790,9 @@ void PreUpdate(UI::UserInterface* ui) {
         StartDrag(ui, t);
 
     // ---- solve, then write ------------------------------------------------
-    uint8_t* dev = InputDeviceSingleton();
+    ::Input::Device* dev = InputDeviceSingleton();
     if (!dev) return;
+
 
     const float scale = ui->_uiScale;
     bool exactX = false, exactY = false;
@@ -861,7 +861,7 @@ void PostUpdate(UI::UserInterface* ui) {
     // The accumulator at +0xa0 is the one EndHover resets. Printing all three
     // says WHICH guard is refusing rather than leaving S4=0 to be guessed at.
     if (g_cfg.trace && g_lastDlg) {
-        const RtUI::DialogInstance* d = g_lastDlg;
+        const UI::DialogInstance* d = g_lastDlg;
         printf("[MouseInject/dwell] f=%d dlg=%p hovering=%d lastPos=(%d,%d) "
                "accum=%lld uiMouseCaptured=%d elemFlags=%08x dragDlg=%p dragElem=%p\n",
                g_frame, (void*)g_lastDlg, (int)g_lastDlg->_hovering,

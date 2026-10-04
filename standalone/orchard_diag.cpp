@@ -329,8 +329,8 @@ void DumpOrchards(int frameNum) {
         // its owner back-pointer (comp+0x40, node+0x18 relative to comp+0x28). Printed
         // raw regardless of whether a StateMachineComponent exists, so InstallLive's
         // writes are visible even on an entity that can never tick them.
-        // LEFT: the node's vtable word has no name (the compiler's vptr); it is printed raw.
-        void* nodeVtbl  = *reinterpret_cast<void**>(&comp->_controller);   // +0x28
+        // The node's vtable word has no name (the compiler's vptr); it is printed raw.
+        void* nodeVtbl  = *reinterpret_cast<void**>(&comp->_controller);   // +0x28  // CAST-OK: crash_walk
         void* nodeOwner = comp->_controller._owner;                    // +0x40 (node+0x18)
         fprintf(stderr, "[OrchardDiag]   node(+0x28).vtable=%p  node(+0x28+0x18)/backptr(+0x40)=%p\n",
                 nodeVtbl, nodeOwner);

@@ -219,7 +219,7 @@ void Fire(int frameNum) {
         const Description* descBase = wpcIBP->_description;     // +0x18
         const WorkPlaceDescription* desc = static_cast<const WorkPlaceDescription*>(descBase);
         // LEFT: CitizenEmploy_SeatWorkers (CIT) takes the town and the profession as integers.
-        uint64_t profKey = desc ? reinterpret_cast<uint64_t>(desc->_profession0) : 0;   // desc+0x20
+        uint64_t profKey = desc ? reinterpret_cast<uint64_t>(desc->_profession0) : 0;   // desc+0x20  // LEFT: SIG CitizenEmploy_SeatWorkers (uint64_t key; citizen_employ_cascade.cpp, wave X)
         if (!profKey) {
             std::fprintf(stderr, "[FoodWorkers] frame=%d: %s comp=%p workplace=%p has no "
                          "profession key (desc=%p) — cannot staff\n",
@@ -229,7 +229,7 @@ void Fire(int frameNum) {
         }
 
         const int32_t before = wpcIBP->workerCount;              // +0x60
-        const int seated = CitizenEmploy_SeatWorkers(reinterpret_cast<int64_t>(townMgr),
+        const int seated = CitizenEmploy_SeatWorkers(reinterpret_cast<int64_t>(townMgr),   // LEFT: SIG CitizenEmploy_SeatWorkers (int64_t town; wave X)
                                                      profKey, s_count);
         const int32_t after = wpcIBP->workerCount;
 
