@@ -1728,7 +1728,7 @@ UNIT_TEST(the_FileStream_pair_is_layout_identical_to_its_PODs) {
                    offsetof(RtIO::FileInfo, winHandle)), 0x38);
 
     streamorder::BinaryFileStreamProbe p;
-    p._filename = nullptr;
+    p._filename._data = nullptr;
     p._file.cursor = 0x99;
     const RtIo::BinaryFileStream* pod =
         reinterpret_cast<const RtIo::BinaryFileStream*>(

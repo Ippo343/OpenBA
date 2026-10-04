@@ -104,21 +104,21 @@ bool CharacterSet::Serialize(IO::Stream& streamv) {
     // [RSP+0x28], [RSP+0x30]; 1800cb7d0..1800cb7ed the factory by _direction.
     IO::Serializer ser(*stream, 0);
 
-    reinterpret_cast<System::String*>(&_string20)->Serialize(&ser);      // 1800cb7fb  LEFT (H5)
+    _string20.Serialize(&ser);                               // 1800cb7fb
 
     // 1800cb806..1800cb813: ~Serializer, `if (rw) delete rw`.
     return true;                                             // 1800cb815 MOV AL,1
 }
 
 // ??1CharacterSet@UI@@UEAA@XZ   0x1800cb840 — retail's body, moved here from
-// the retired `RtUi_CharacterSet_Dtor` door (ENDGAME B.3.9 UI-D): release the
-// String at +0x20 through System::String's own refcount protocol (the count
-// at `s[-4]`, the block at `s[-8]`; retail's asymmetry — the freeing branch
-// leaves the field at `data - 8`, the sharing branch nulls it), then the
-// compiler chains ~External (retail's tail JMP at 0x1800cb892).
+// the retired `RtUi_CharacterSet_Dtor` door (ENDGAME B.3.9 UI-D). Its whole
+// content is the release of the String at +0x20 (1800cb860..1800cb88a:
+// System::String's own refcount protocol, the count at `s[-4]`, the block at
+// `s[-8]`, retail's asymmetry), then the tail JMP to ~External (0x1800cb892).
+// B4 X-RH: `_string20` is a System::String member, so the release is the
+// member's destructor, which the compiler runs after this (empty) body and
+// before ~External: retail's order.
 CharacterSet::~CharacterSet() {
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_string20));    // 1800cb860..1800cb88a  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 }  // namespace UI

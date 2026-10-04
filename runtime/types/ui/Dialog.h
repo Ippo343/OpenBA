@@ -306,7 +306,8 @@ public:
     // store and the next is a QWORD at +0x48).
     Dialog() : Object::External() {
         _spriteSheet           = nullptr;                   // 180112df5
-        _spriteName            = nullptr;                   // 180112df9
+        // 180112df9 (+0x28 = 0): the System::String member's default ctor,
+        // run before this body (B4 X-RH).
         _backgroundColor       = 0xFFFFFFFFu;               // 180112dfd  -1, NOT 0
         _drawLevel             = 0;                         // 180112e04
         _rootDescription       = nullptr;                   // 180112e07
@@ -327,8 +328,9 @@ public:
 
     // [0] 0x180038b20 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
-    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array and the +0x28
-    // String release (dialog_ctor_dtor.cpp), then the compiler chains ~External.
+    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array (dialog_ctor_dtor.cpp),
+    // then the +0x28 String release (the member's destructor, B4 X-RH), then
+    // the compiler chains ~External.
     ~Dialog() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
@@ -380,7 +382,7 @@ public:
 public:
     // ---- the 0x68 bytes Dialog adds (evidence: the POD's banner) ---------
     SpriteSheet* _spriteSheet;         // +0x20  (B4 H4: typed)
-    char*    _spriteName;              // +0x28  System::String's one pointer
+    System::String _spriteName;        // +0x28  ctor 0x180112df9, dtor 0x180112e88
     uint32_t _backgroundColor;         // +0x30  ctor = 0xFFFFFFFF
     int32_t  _drawLevel;               // +0x34
     ElementDescription* _rootDescription; // +0x38  ExternalPtr<ElementDescription> (B4 H4)
