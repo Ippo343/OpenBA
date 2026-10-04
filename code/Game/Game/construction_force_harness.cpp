@@ -42,6 +42,8 @@
 #include "Component/BuildDescription.h"   // the build cost +0x30 (B4 P2 GAME-1)
 #include "Entity/ComponentEntity.h"
 #include "force_work.h"
+#include "Work/BuildStructure.h"   // BuildStructure::field_58 (the build-position count)
+#include "Work/exe_bodies.h"       // BuildStructure_ConstructForSite
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -57,14 +59,8 @@ extern "C" int   GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);
 extern "C" bool  GatherRawMaterials_DepsReady();
 
 // PHASE BUILD — BuildStructure Work wrappers (buildstructure.cpp).
-extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP);
 extern "C" int   BuildStructure_ForceDrive(void* self, void* citizenIBP);
 extern "C" bool  BuildStructure_DepsReady();
-
-// State-1 -> 8 gather predicate (sub_8630, buildcomponent_sub8630.cpp): all raw materials in
-// the site storage? Used as the phase switch (gather -> build), same signal the real state
-// machine uses to transition 1 -> 8.
-extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);
 
 static bool ForceConstructEnvOn() {
     return Opt().forceConstruct;
@@ -112,9 +108,9 @@ static void CreditBuildProgress(BuildComponent* bc) {
 // Driver. Called from the CitizenAI UpdateAdapter for ONE force-worked citizen (same hook as
 // StartTown_ForcePushForesterWork). Returns true if it "owns" the citizen this tick (caller
 // skips the competing AI state machine so the construction work keeps the idle stack).
-extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
+extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen) {
     if (!ForceConstructEnvOn()) return false;
-    ComponentEntity* site = reinterpret_cast<ComponentEntity*>(g_pConstructionDemoEntity);   // LEFT: g_pConstructionDemoEntity is void* (GAME-3 / GAME-4)
+    ComponentEntity* site = g_pConstructionDemoEntity;
     if (!site || !citizen) return false;
     if (GameUpdateLoop::_singleton == nullptr) return false;
     if (!System::MemoryAllocator::_singleton) return false;
@@ -150,7 +146,9 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
         int mult = ForceWork::Readable(s_buildComp, 0x50)
                        ? s_buildComp->costMultiplier : 0;   // +0x4c
 
-        if (mult > 0 && BuildComponent_HaveAllMaterials(s_buildComp)) {
+        // BuildComponent::HaveAllMaterials, sub_8630 (was its BuildComponent_HaveAllMaterials
+        // forwarder, whose null test this arm's s_buildComp test already makes)
+        if (mult > 0 && s_buildComp->HaveAllMaterials()) {
             s_buildPhase = 1;
         }
     }
@@ -204,14 +202,13 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
 
     // Construct the site BuildStructure ONCE (its build-position byte array @+0x50/+0x58 must
     // survive across drives). The faithful full ctor sizes it from the site footprint.
-    static void* s_build = nullptr;
+    static BuildStructure* s_build = nullptr;
     if (!s_build) {
-        int64_t siteIBP = 0;
-        new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge   // LEFT: POD:RtObject::Internal (object/Internal.h)
+        ComponentEntity* siteIBP = site;   // the InternalBasePtr ctor is one store
         s_build = BuildStructure_ConstructForSite(&siteIBP);
         if (!s_build) return true;   // own it, retry construction next tick
         fprintf(stderr, "[ForceBuild] constructed BuildStructure=%p for site=%p (buildPositions=%d)\n",
-                s_build, site, *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_build) + 0x58));   // LEFT: SIG BuildStructure_ConstructForSite returns void* (Work/exe_bodies.h)
+                s_build, site, s_build->field_58);
         fflush(stderr);
     }
 

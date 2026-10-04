@@ -1250,11 +1250,3 @@ void EntityList::Serialize(IO::Stream& stream) {
     // Step 9: the Serializer's destructor runs here
 }
 
-// ============================================================
-// B4 FORWARD: the C entry point of the one member with callers outside this
-// block's files (entitylist_funcs.h). The closing wave rewires the callers and
-// deletes it.
-// ============================================================
-void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
-    self->RemoveEntity(reinterpret_cast<ComponentEntity**>(entityIBP));   // LEFT: forwarder for gameupdateloop_teardown.cpp (wave X)
-}

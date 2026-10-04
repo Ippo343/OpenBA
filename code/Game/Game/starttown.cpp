@@ -3954,7 +3954,7 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
             // = 0, so the citizen is the retail founding default (unemployed laborer) and the
             // citizen-panel Profession button (id 0x227, reads +0x248) correctly greys out.
             ComponentEntity* houseIBPLocal = houseIBP;
-            CitizenComponent_AssignWorkplace(citComp, &houseIBPLocal, 0);
+            citComp->SetHome(houseIBPLocal, 0);   // (0x1401163d0; was its CitizenComponent_AssignWorkplace forwarder)
             const ComponentEntity* home = citComp->home;
             const ComponentEntity* work = citComp->workplace;
             if (home != nullptr) ++housed;

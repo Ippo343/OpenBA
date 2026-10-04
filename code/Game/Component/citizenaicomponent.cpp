@@ -63,7 +63,7 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen);
 // Organic-construction test driver (construction_force_harness.cpp, env
 // BANISHED_FORCE_CONSTRUCT). Same contract: drives ONE citizen's construction Work
 // (gather -> build) at the demo foundation; owns the citizen when active; no-op when unset.
-extern "C" bool StartTown_ForcePushConstructionWork(void* citizen);
+extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen);
 
 // ============================================================
 // Exe helpers, called by name (Component/Work exe_bodies.h):
@@ -395,20 +395,20 @@ void CitizenAIComponent::TransitionState(char param) {
     }
     if (queued < 0 || ok == '\0') {
         int idx = 0;
-        int64_t list[2] = {0, 0};  // {ptr, count(low32)}
-        BuildCandidateStateList(list, param);
-        int* arr = reinterpret_cast<int*>(list[0]);   // LEFT: SIG CitizenAIComponent::BuildCandidateStateList (int64_t* list; citizenai_candidatelist.cpp, CAI-1)
-        int n = static_cast<int>(list[1]);
-        int* p = arr;
+        StateCandidateList list = {nullptr, 0, 0};  // {ptr, count, capacity}
+        BuildCandidateStateList(&list, param);
+        StateCandidate* arr = list.data;
+        int n = list.count;
+        StateCandidate* p = arr;
         if (0 < n) {
             do {
-                ValidateAndEnterState(*p);
+                ValidateAndEnterState(p->id);
                 if (0 < citizen->character->currentAction + 1) {
-                    state = arr[(int64_t)idx * 3];
+                    state = arr[idx].id;
                     break;
                 }
                 idx++;
-                p += 3;
+                p += 1;
             } while (idx < n);
         }
         System::MemoryAllocator::MemFree(arr);

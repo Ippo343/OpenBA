@@ -816,10 +816,10 @@ DEFINE_EXE_TYPE(BuildStructure, "Work")
 // field_58) from the site's PositionComponent footprint — without which Execute's unbuilt-
 // position scan finds nothing (field_58==0) and returns 1 (never assigns labor). buildEntityIBP
 // is an InternalBasePtr* whose *value is the site entity pointer.
-extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP) {
+extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP) {
     void* mem = Object::detail::InternalMemAlloc(sizeof(BuildStructure), 8);
     if (!mem) return nullptr;
-    return static_cast<Object::Base*>(new (mem) BuildStructure(buildEntityIBP, 0));
+    return new (mem) BuildStructure(buildEntityIBP, 0);
 }
 
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the

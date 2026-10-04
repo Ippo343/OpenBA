@@ -2458,10 +2458,6 @@ DEFINE_EXE_TYPE(CitizenComponent, "Component")
 // still use (B4_RULES W1 "Callers outside your files"); each takes the old signature.
 // ============================================================
 
-// B4 FORWARD: 1 outside caller(s) (standalone/death_harness.cpp)
-void CitizenComp_sub_1fa0(int64_t selfV, void* param2) {
-    reinterpret_cast<CitizenComponent*>(selfV)->SetParent(*reinterpret_cast<CitizenComponent**>(param2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-}
 
 // B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
 // Component/destroycomponent_workerrelease.cpp)
@@ -2479,10 +2475,6 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
     return param_2;
 }
 
-// B4 FORWARD: 1 outside caller(s) (standalone/death_harness.cpp)
-void CitizenComp_helper_1b90(int64_t selfV) {
-    reinterpret_cast<CitizenComponent*>(selfV)->GiveBirth();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-}
 
 // B4 FORWARD: 6 outside caller(s) (Component/destroycomponent_workerrelease.cpp,
 // Component/workplacecomponent.cpp, Dialog/townhall_helpers.cpp, Entity/citizenbehavior.cpp,
