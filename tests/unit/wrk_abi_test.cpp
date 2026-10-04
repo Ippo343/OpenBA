@@ -244,8 +244,8 @@ UNIT_TEST(wrk_leaf_herbalistwork) {
 
 UNIT_TEST(wrk_leaf_huntwork) {
     WRK_LEAF_SHAPE(HuntWork, AutoPickupWork, 0x58);
-    CHECK_EQ(offsetof(HuntWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HuntWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HuntWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(HuntWork, _citizens) + offsetof(HuntWork::CitizenSet, _count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_locationwork) {
