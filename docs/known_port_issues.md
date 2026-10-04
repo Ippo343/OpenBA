@@ -551,6 +551,7 @@ TUT (rows 80-84, 88-89):
   `Map.h` declares +0xA2 `bool field_0xA2` (ctor 1). The site stays a byte OR through a cast
   (`// LEFT`); typing it as `bool |=` is value-identical only while the byte holds 0 / 1. Retail's
   instruction not read. SUSPECTED.
+- (P2 DLG-1, row 447) `EventNotifyDialog::OnUpdate` (`eventnotifydialog.cpp`) now reads the category filter `EventLog::field_0x10[category]` by name (`bool[6]` in `Game/EventLog.h`, GAME-a's); at -O2 GCC copies that byte into the local `hasNewEvents` where the old tree stored a literal 1 (`MOV R14D,1` -> `MOV R14D,R13D`). Identical while the byte holds 0 / 1: the ctor writes {0,1,1,1,1,1} and `EventLogUI::ToggleNotification` copies `CheckElement::_checked` (0 / 1). Retail not read. SUSPECTED.
 
 ### 14f. Names that mislead (naming only)
 
