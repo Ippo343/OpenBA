@@ -173,7 +173,7 @@ void SerializeParameters(IO::Serializer& ser, Array<ShaderParameter>* arr) {
         // destructor and make the compiler release every name a SECOND time (the
         // reason is spelled out on the Parameter declaration); the eight bytes are
         // a System::String.
-        reinterpret_cast<System::String&>(e->name).Serialize(&ser);
+        reinterpret_cast<System::String&>(e->name).Serialize(&ser);   // LEFT: H5 Parameter::name is raw storage of a String (a String member would release every name twice)
         rw->SerializeInt(e->dest, nullptr);
         if (rw->GetVersion() >= 1) rw->SerializeBool(e->internal, nullptr);
     }

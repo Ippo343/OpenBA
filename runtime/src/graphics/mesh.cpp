@@ -798,8 +798,8 @@ Graphics::MeshInstance::~MeshInstance() {
 // B.4 LEFT: the `void*` signature is its one outside caller's
 // (code/Game/Player/tool_base_render.cpp); each parameter is viewed once.
 void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
-    TriangleVertex* tv = static_cast<TriangleVertex*>(self);
-    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);
+    TriangleVertex* tv = static_cast<TriangleVertex*>(self);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
+    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: SIG as above
     tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
     tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
     tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));
@@ -825,9 +825,9 @@ void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h), as above.
 void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
     // B.4 LEFT: the outside caller's `void*` signature, as above.
-    EdgeVertex* ev = static_cast<EdgeVertex*>(self);
-    const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);
-    const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);
+    EdgeVertex* ev = static_cast<EdgeVertex*>(self);   // LEFT: SIG as above
+    const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);   // LEFT: SIG as above
+    const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);   // LEFT: SIG as above
 
     ev->a.x = ta->x;  ev->b.x = tb->x;
     ev->a.y = ta->y;  ev->b.y = tb->y;
@@ -2001,7 +2001,7 @@ void MeshInstance::UpdateHierarchy() {
 // ---------------------------------------------------------------------------
 void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
     // LEFT: `ExternalPtrHandle` is the untyped handle its code/Game callers hold.
-    _materials._data[index] = static_cast<MaterialInstance*>(value.p);
+    _materials._data[index] = static_cast<MaterialInstance*>(value.p);   // LEFT: SIG the ExternalPtrHandle parameter keeps its pointee as void* (its code/Game callers hold the handle)
 }
 
 // ---------------------------------------------------------------------------
@@ -2015,7 +2015,7 @@ void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
 void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
     _mesh = mesh;
     // LEFT: the untyped `ExternalPtrHandle` its code/Game callers hold.
-    const GraphicsMesh* const newMesh = static_cast<const GraphicsMesh*>(mesh.p);
+    const GraphicsMesh* const newMesh = static_cast<const GraphicsMesh*>(mesh.p);   // LEFT: SIG ExternalPtrHandle (as SetMaterialInstance)
     rtcoll::RtColl_ArrayAssign_180014c70(&_materials, newMesh->_skinMaterials._data);
 
     if (_materials._size > 0) {
@@ -2032,7 +2032,7 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
     // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
     // MeshAnimationState); the tree's 0x48 class is only its prefix-compatible
     // superset, so the member is reached through a view of the same bytes.
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: POD _animation is the RtGraphics::MeshAnimationState mirror of Graphics::AnimationState
         ->::Graphics::AnimationState::ResetAnimationState();
     rtcoll::Rt_SetSize_18005ac50(&_nodes, newMesh->_nodes._size);
     this->MeshInstance::UpdateHierarchy();
@@ -2066,10 +2066,10 @@ void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
     // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
     // LEFT: the `_animation` view (see SetMesh) and the untyped group handle
     // are this member's declared signature, which its code/Game callers hold.
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: POD as SetMesh
         ->::Graphics::AnimationState::PlayAnimation(
             Object::ExternalPtr<::Graphics::AnimationGroup>(
-                static_cast<::Graphics::AnimationGroup*>(group.p)),
+                static_cast<::Graphics::AnimationGroup*>(group.p)),   // LEFT: SIG ExternalPtrHandle (as SetMaterialInstance)
             index,
             GetMesh()->GetNodes(),
             *startTime,
@@ -2309,7 +2309,7 @@ void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
     _followed = followed;
     // LEFT: SIG EdgeMeshInstance::SetMesh(ExternalPtrHandle) is the untyped
     // handle its code/Game caller holds; `_mesh` itself is typed.
-    EdgeMesh* const em = static_cast<EdgeMesh*>(mesh.p);
+    EdgeMesh* const em = static_cast<EdgeMesh*>(mesh.p);   // LEFT: SIG ExternalPtrHandle (as SetMaterialInstance)
     _mesh = em;
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_edgeMaterial->_shaderClass) & 0x1f);
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_maskMaterial->_shaderClass) & 0x1f);
@@ -2476,9 +2476,9 @@ bool EdgeMesh::Set(int triCount, const void* triLists,
     // code/Game caller (tool_base_render.cpp) holds; retail's are
     // `const GraphicsMesh::TriangleList*`.
     const GraphicsMesh::TriangleList* const tris =
-        static_cast<const GraphicsMesh::TriangleList*>(triLists);
+        static_cast<const GraphicsMesh::TriangleList*>(triLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
     const GraphicsMesh::TriangleList* const edges =
-        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);
+        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);   // LEFT: SIG as above
 
     rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, triCount);
     for (int i = 0; i < _triangleLists._size; ++i)

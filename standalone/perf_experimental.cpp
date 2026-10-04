@@ -109,7 +109,7 @@ void ResolveRootOnly() {
     // the class static (ENDGAME B.3.9 SS2).
     // LEFT: the class static is a bool; the flag pointer is uint8_t* because
     // modelcomponent.cpp (COMP) holds PerfX::RootOnlyFlag() as one.
-    s_rootOnly = reinterpret_cast<uint8_t*>(&::Graphics::MeshInstance::_rootOnlyUpdates);
+    s_rootOnly = reinterpret_cast<uint8_t*>(&::Graphics::MeshInstance::_rootOnlyUpdates);   // LEFT: SIG PerfX::RootOnlyFlag() hands modelcomponent.cpp a uint8_t* to the bool
     g_rootOnlyPtr = s_rootOnly;
 }
 
@@ -139,7 +139,7 @@ void RefreshFrustum(::Graphics::Renderer* renderer) {
     // LEFT: the result slot is raw caller storage the retslot body constructs into
     // (Volume.h's RtVolume_Frustum_MulTransform3, R-CORE).
     RtVolume_Frustum_MulTransform3(camF,
-                                   reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);
+                                   reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);   // LEFT: the retslot body constructs into raw caller storage (Volume.h RtVolume_Frustum_MulTransform3)
     std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
     float mag = 0.0f;
@@ -255,13 +255,13 @@ BatchSlot* BatchEntry(const void* model) {
 bool AnimationHasRootMotion(const uint8_t* anim) {
     RootMotionSlot& e = s_rootMotionTbl[(unsigned)(((reinterpret_cast<uintptr_t>(anim) >> 4) * 2654435761u) & 4095)];  // CAST-OK: hash
     if (e.key == anim) return e.has;
-    const int nodes = *reinterpret_cast<const int*>(anim + 0x4c);
-    const int frames = *reinterpret_cast<const int*>(anim + 0x50);
-    const uint8_t* keys = *reinterpret_cast<const uint8_t* const*>(anim + 0x60);
+    const int nodes = *reinterpret_cast<const int*>(anim + 0x4c);   // LEFT: POD the Animation record's key table is unnamed (R-GFX)
+    const int frames = *reinterpret_cast<const int*>(anim + 0x50);   // LEFT: POD as above
+    const uint8_t* keys = *reinterpret_cast<const uint8_t* const*>(anim + 0x60);   // LEFT: POD as above
     bool has = false;
     if (keys && nodes > 0) {
         for (int f = 0; f < frames && !has; ++f) {
-            const float* pos = reinterpret_cast<const float*>(keys + (size_t)nodes * f * 0x1c + 0x10);
+            const float* pos = reinterpret_cast<const float*>(keys + (size_t)nodes * f * 0x1c + 0x10);   // LEFT: POD as above
             has = pos[0] != 0.0f || pos[1] != 0.0f || pos[2] != 0.0f;
         }
     }
@@ -275,22 +275,22 @@ bool AnimationHasRootMotion(const uint8_t* anim) {
 // records through R-GFX's untyped PODs (MeshAnimationState / MeshAnimationLayer keep
 // `_group` an untyped ExternalPtr and the Animation's key table unnamed).
 bool NeedsPerTickRootUpdate(const void* model) {
-    const uint8_t* state = reinterpret_cast<const uint8_t*>(model) + 0x28 + 0xd8;
-    const int count = *reinterpret_cast<const int*>(state + 0x10);
+    const uint8_t* state = reinterpret_cast<const uint8_t*>(model) + 0x28 + 0xd8;   // LEFT: POD MeshAnimationState / MeshAnimationLayer keep _group untyped (R-GFX)
+    const int count = *reinterpret_cast<const int*>(state + 0x10);   // LEFT: POD as above
     if (count <= 0) return false;                                   // nothing playing
-    const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(state + 0x08);
+    const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(state + 0x08);   // LEFT: POD as above
     if (!layers) return false;
     // Instanced: RootAnimationOffset reads the pool pose -- but only once the state's
     // "instanced" byte (+0x00) is set, which the next Update does. Right after a blend
     // finished the count is 1 with the byte still clear, and the offset would be the
     // last blended +0x100 held for the frame: give that model one more per-tick update.
-    if (count == 1 && *reinterpret_cast<const int*>(layers + 0x0c) >= 0) return state[0] == 0;
+    if (count == 1 && *reinterpret_cast<const int*>(layers + 0x0c) >= 0) return state[0] == 0;   // LEFT: POD as above
     for (int i = 0; i < count; ++i) {
         const uint8_t* layer = layers + (size_t)i * 0x38;
-        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);
-        const int idx = *reinterpret_cast<const int*>(layer + 0x08);
+        const uint8_t* group = *reinterpret_cast<const uint8_t* const*>(layer);   // LEFT: POD as above
+        const int idx = *reinterpret_cast<const int*>(layer + 0x08);   // LEFT: POD as above
         if (!group || idx < 0) continue;
-        const uint8_t* anims = *reinterpret_cast<const uint8_t* const*>(group + 0x20);
+        const uint8_t* anims = *reinterpret_cast<const uint8_t* const*>(group + 0x20);   // LEFT: POD as above
         if (!anims) continue;
         if (AnimationHasRootMotion(anims + (size_t)idx * 0x70)) return true;
     }

@@ -569,7 +569,7 @@ public:
     // `RtGraphics::ExternalPtr` handle because `SetMesh(ExternalPtrHandle)` is
     // the signature ~20 callers in code/Game hold (LEFT).
     Object::ExternalPtr<GraphicsMesh> GetMesh() const {
-        return static_cast<GraphicsMesh*>(_mesh.p);
+        return static_cast<GraphicsMesh*>(_mesh.p);   // LEFT: POD RtGraphics::ExternalPtr keeps its pointee as void* (X-RL left)
     }
     int      GetNodeCount() const;                           // 0x180016a30
     void     SetVisualScale(const Math::Vector4& scale);     // 0x180016fa0

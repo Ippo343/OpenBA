@@ -132,7 +132,7 @@ void RtVideo_VertexLayout_SerializeElements(IO::Serializer& ser, int count,
         // `System::String` member would give Element a non-trivial destructor that
         // runs IN ADDITION to the by-hand release the ported `Array<Element>::~Array`
         // already performs (0x18004fa30); the eight bytes are a System::String.
-        reinterpret_cast<System::String&>(e->name).Serialize(&ser);
+        reinterpret_cast<System::String&>(e->name).Serialize(&ser);   // LEFT: H5 Element::name is raw storage of a String (a String member would release it twice)
         rw->SerializeInt(e->stream, nullptr);
         rw->SerializeInt(e->offset, nullptr);
         uint32_t usage = static_cast<uint32_t>(e->usage);
