@@ -173,7 +173,6 @@ void* FloorComponent_FindResData(void* owner, void* outIBP);  // 0x140004680
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- growthcomponent.cpp
-void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950  B4 FORWARD: Component::ModifyFlags (animalcomponent.cpp)
 
 // ---- happinesscomponent.cpp
 
@@ -196,7 +195,7 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 extern "C" void ModelComponentNotify_Reimpl(void* entity, int param);  // 0x1400c2b70
 
 // ---- naturalresourcecomponent.cpp
-void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  // 0x140005200
+void NaturalResourceComponent_FindComponentByType(ComponentEntity* entity, void* outIBP);  // 0x140005200
 
 // ---- nomadcomponent.cpp
 

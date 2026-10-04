@@ -79,7 +79,7 @@ namespace {
 // readers in other blocks spell them so); the Serialize view is a cast.
 template <class T>
 void SerializeValidatedIBP(T*& field, IO::Serializer& ser, uint32_t tid) {
-    Object::InternalBasePtr* ibp = reinterpret_cast<Object::InternalBasePtr*>(&field);
+    Object::InternalBasePtr* ibp = reinterpret_cast<Object::InternalBasePtr*>(&field);   // LEFT: POD CharacterComponent declares its InternalPtr members as plain T* (header and readers not this set's)
     ibp->Serialize(ser);
     if (field && tid && !::Object::IsDerivedFromNullSafe(field, tid))
         field = nullptr;

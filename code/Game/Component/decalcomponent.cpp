@@ -62,11 +62,11 @@
 // WorldGeometry::RemoveDecal. The 0x60-byte decal element is untyped (WorldGeometry's
 // `_arrays[5]`, GAME-c): its reads below are LEFT.
 void WorldGeometry::RemoveDecal(int decalId) {
-    uintptr_t base = reinterpret_cast<uintptr_t>(_arrays[5].data);   // +0x1F0
+    uintptr_t base = reinterpret_cast<uintptr_t>(_arrays[5].data);   // +0x1F0   // LEFT: POD WorldGeometry::_arrays[5] is an untyped triple of 0x60-byte decal slots (WorldGeometry.h, not this set's)
     uintptr_t slot = base + static_cast<uintptr_t>(decalId) * 0x60;
-    if (*reinterpret_cast<int*>(slot + 0x28) == decalId) {
-        *reinterpret_cast<uint32_t*>(slot + 0x28) = 0xffffffff;
-        *reinterpret_cast<uint64_t*>(slot) = 0;
+    if (*reinterpret_cast<int*>(slot + 0x28) == decalId) {   // LEFT: POD as above (decal slot +0x28 id)
+        *reinterpret_cast<uint32_t*>(slot + 0x28) = 0xffffffff;   // LEFT: POD as above
+        *reinterpret_cast<uint64_t*>(slot) = 0;   // LEFT: POD as above
         // B.3.2 bridge: exe 0x14001ee40 / 0x14001c890 ARE
         // Collection::Array<T>::SetSize(0) — see the note above the (removed)
         // typedefs for why the init-policy mismatch never fires at count 0.
@@ -77,7 +77,7 @@ void WorldGeometry::RemoveDecal(int decalId) {
 
 // B4 FORWARD: radiusui.cpp, placementtool.cpp (they hold the WorldGeometry as void*).
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
-    reinterpret_cast<WorldGeometry*>(terrainDecalSys)->RemoveDecal(decalId);
+    reinterpret_cast<WorldGeometry*>(terrainDecalSys)->RemoveDecal(decalId);   // LEFT: B4 FORWARD radiusui.cpp / placementtool.cpp (other agents') hold the WorldGeometry as void*
 }
 
 // ============================================================
@@ -365,7 +365,7 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entityV) {
     if (!entityV) return;
     uint32_t tid = DecalComponent::TypeId();
     if (!tid) return;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);
+    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // LEFT: B4 FORWARD buildcomponent_state8.cpp / starttown.cpp (other agents') pass the entity as void*
     if (!entity->_components) return;
     for (int i = 0; i < entity->_componentCount; ++i) {
         Component* comp = entity->_components[i].Get();

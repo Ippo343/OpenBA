@@ -285,15 +285,14 @@ void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, floa
     const CharacterDescription* desc = character->characterDescription;
     // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
     PlayModelAnimation(character->modelComponent, animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
-    // LEFT: ModelComponent +0x13c lies inside the embedded Graphics::MeshInstance (+0x28),
-    // at MeshInstance +0x114, which Runtime's header does not name.
-    const uint8_t* model = reinterpret_cast<const uint8_t*>(character->modelComponent);   // LEFT: Graphics::MeshInstance +0x114 unnamed (R-GFX)
-    character->field_0x38 = *reinterpret_cast<const float*>(model + 0x13c) * p4;   // LEFT: Graphics::MeshInstance +0x114 unnamed (R-GFX)
+    // ModelComponent +0x13c is the embedded MeshInstance's (+0x28) +0x114: _color[2]
+    // (Mesh.h's guess name for the four floats the ctor seeds with 1.0).
+    character->field_0x38 = character->modelComponent->meshInstance._color[2] * p4;
 }
 
 // B4 FORWARD: code/Game/Component/citizencomponent_lifecycle.cpp still calls this (X-G1-3's file)
 void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
-    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);   // B4 FORWARD: the old void* receiver
+    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);   // B4 FORWARD: the old void* receiver   // LEFT: B4 FORWARD citizencomponent_lifecycle.cpp (another agent's) passes the receiver as void*
 }
 
 // ============================================================

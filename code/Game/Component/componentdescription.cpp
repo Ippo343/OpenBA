@@ -63,8 +63,8 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
     // The callers (AnimalDescription, HerbalistDescription, ImmigrationDescription,
     // TradeDescription, ComponentDescription) hand in their serializer and their
     // External* array untyped: the two bridges are the one place they are named.
-    IO::Serializer& ser = *reinterpret_cast<IO::Serializer*>(serializer);
-    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);
+    IO::Serializer& ser = *reinterpret_cast<IO::Serializer*>(serializer);   // LEFT: SIG Desc_LoadExternalArray takes void* (callers in animal / herbalist / immigration / trade description, other agents')
+    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // LEFT: SIG as above
 
     const int encState = ser.GetEncoding().GetKind();   // Encoding slot 2 (+0x10)
 
@@ -211,7 +211,7 @@ static_assert(offsetof(NamedDescriptionRef, resolved) == 0x10, "NamedDescription
 
 // B4 FORWARD: founding_spawn.cpp, starttown.cpp hand the reference in untyped.
 void ResolveExternalByName_Impl(void* nameString) {
-    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);
+    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);   // LEFT: SIG ResolveExternalByName_Impl takes void* (callers in Game / Goal / Tutorial, other agents')
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 

@@ -440,10 +440,10 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                 // reading an unrelated dword, not that the stream stalled.
                 uint32_t pos = 0, pos24 = 0;
                 {
-                    void* strm = *(void**)&ser;   // LEFT: IO::Serializer internals (runtime/types/io/Serializer.h, R-IO)
+                    void* strm = ser._stream;
                     if (strm) {
-                        pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
-                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
+                        pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);   // LEFT: the trace probes two stream classes' cursors (CompressedMemoryStream +0x8C, MemoryStream +0x24) on a stream of unknown class
+                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);   // LEFT: as above
                         // Neither documented cursor moves for THIS stream type, so
                         // find the real one instead of guessing a third offset:
                         // snapshot the first 0x100 bytes and report which dwords
@@ -451,7 +451,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                         // one that advances monotonically by each component's size.
                         uint32_t cur[64];
                         for (int k = 0; k < 64; ++k)
-                            cur[k] = *(uint32_t*)((uint8_t*)strm + k * 4);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
+                            cur[k] = *(uint32_t*)((uint8_t*)strm + k * 4);  // CAST-OK: crash_walk
                         if (s_traceHavePrev) {
                             char buf[512]; int n = 0;
                             for (int k = 0; k < 64 && n < 400; ++k)
@@ -486,18 +486,18 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                         // bytes at a desync be read directly instead of inferred.
                         {
                             const int cand[5] = { 0x10, 0x28, 0x30, 0x40, 0x80 };
-                            uint8_t* sb = (uint8_t*)strm;   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
+                            uint8_t* sb = (uint8_t*)strm;  // CAST-OK: crash_walk
                             uint32_t cursor = cur[0x1C / 4];
                             fprintf(stderr, "[CompEnt::Ser]   cur=%u", cursor);
                             for (int c2 = 0; c2 < 5; ++c2) {
-                                uint8_t* base = *(uint8_t**)(sb + cand[c2]);   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
+                                uint8_t* base = *(uint8_t**)(sb + cand[c2]);  // CAST-OK: crash_walk
                                 uint32_t v = 0; bool ok = false;
                                 if (base) {
                                     MEMORY_BASIC_INFORMATION mbi;
                                     if (VirtualQuery(base + cursor, &mbi, sizeof(mbi)) &&
                                         mbi.State == MEM_COMMIT &&
                                         !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
-                                        v = *(uint32_t*)(base + cursor); ok = true;   // LEFT: IO::Serializer / Stream internals (Serializer.h, R-IO)
+                                        v = *(uint32_t*)(base + cursor); ok = true;  // CAST-OK: crash_walk
                                     }
                                 }
                                 fprintf(stderr, "  +0x%02X:%s%08X", cand[c2], ok ? "" : "!", v);

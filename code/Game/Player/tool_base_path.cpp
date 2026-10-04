@@ -52,16 +52,13 @@
 // FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
 // These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
 // ============================================================
-// Reimpl of FUN_140005780 — FindComponent<DestroyComponent> (type-ID DWORD_1401c75f0)
-void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<DestroyComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<DestroyComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
+// (0x140005780 PlayerPath_FindComponent_5780, the FindComponent<DestroyComponent>
+// forwarder, had no caller left: deleted, B4 wave X.)
 
 // Reimpl of FUN_140003ea0 — FindComponent<StateMachineComponent> (type-ID DWORD_1401c7d98)
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<StateMachineComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StateMachineComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StateMachineComponent>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: B4 FORWARD work_leaf_clear.cpp / work_leaf_hunt.cpp (other agents') hold the entity as uintptr_t
 }
 
 // The state a StateMachine reports: the pending state, else the input (+0x52,
@@ -94,7 +91,7 @@ bool DestroyComponent::InRemovalState() {
 // B4 FORWARD: 2 outside callers (Component/firecomponent_ignite.cpp,
 // Component/workplacecomponent.cpp).
 uint64_t PlayerPath_Sub_11e710(uintptr_t param_1) {
-    return reinterpret_cast<DestroyComponent*>(param_1)->InRemovalState() ? 1 : 0;   // B4 FORWARD: the callers' spelling
+    return reinterpret_cast<DestroyComponent*>(param_1)->InRemovalState() ? 1 : 0;   // B4 FORWARD: the callers' spelling   // LEFT: B4 FORWARD firecomponent_ignite.cpp (another agent's) holds the component as uintptr_t
 }
 
 // ============================================================

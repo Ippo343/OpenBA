@@ -124,7 +124,7 @@ void ImmigrationComponent::Persist(IO::Stream& stream) {
     for (int64_t remaining = arrayCount; remaining > 0; --remaining, ++element) {
         // LEFT: the array holds InternalPtr<ComponentEntity>; InternalBasePtr has no
         // typed view of a bare pointer slot.
-        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);
+        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);   // LEFT: POD the array holds InternalPtr<ComponentEntity> declared as ComponentEntity* (ImmigrationComponent.h)
         ComponentEntity* obj = *element;
         if (obj != nullptr && !::Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()))
             *element = nullptr;

@@ -64,7 +64,7 @@
 // (dword), +0x08 / +0x10 / +0x18 (qwords), +0x20 (dword); the two padding dwords stay untouched.
 extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
     // LEFT: H5 AmbientEnvironmentDescription::_entries / _entryCount / _entryCap are a raw Array triple
-    auto* arr = reinterpret_cast<Collection::Array<AmbientEnvironmentBiome>*>(arrayBase);
+    auto* arr = reinterpret_cast<Collection::Array<AmbientEnvironmentBiome>*>(arrayBase);   // LEFT: H5 AmbientEnvironmentDescription::_entries / _entryCount / _entryCap are a raw Array triple
     int oldCount = arr->_size;
     if (newCount == oldCount) return;
 

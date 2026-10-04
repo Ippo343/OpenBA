@@ -201,8 +201,7 @@ void ParticleComponent::Place(int index) {
         const Pathfinding::PointList::Point* arr = points.GetData();
         for (int j = 0; j < n && arr; j++) {
             // System::String::operator==(const String&) — slot 0x140151438.
-            // LEFT: PointList::Point keeps its name / position raw (runtime header).
-            if (*reinterpret_cast<const System::String*>(&arr[j].name) == em.name) {
+            if (arr[j].name == em.name) {
                 const float zero = 0.0f;
                 const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
                     zero, zero, arr[j].pos);

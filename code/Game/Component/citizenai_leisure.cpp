@@ -458,7 +458,7 @@ LAB_14010a846:
                             char ok = citizen->CanReach(cand);
                             if (ok != '\0') {
                                 LeisureHomeNode* outNode = nullptr;   // &local_a0 (out-node, result unused)
-                                { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);   // LEFT: SIG WorkBST_RegisterWork_1a30
+                                { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);   // LEFT: ERASED the WorkBST core takes the set as uintptr_t*; this local set is a raw root + count (a Collection::Set local would add a dtor)
                                                    local_d0 = local_d0 + 1; }
                             }
                         }

@@ -446,10 +446,10 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int varian
     // LEFT: the camera is PlayerController::camera, raw H5 storage (uint8_t[0xD8]) in
     // GAME's header, handed in as const void*; the eye is Camera::_cameraToWorld's
     // translation (+0x64 + 0x24).
-    const uintptr_t c = reinterpret_cast<uintptr_t>(camera);
-    const float camX = *reinterpret_cast<const float*>(c + 0x88);
-    const float camY = *reinterpret_cast<const float*>(c + 0x8c);
-    const float camZ = *reinterpret_cast<const float*>(c + 0x90);
+    const uintptr_t c = reinterpret_cast<uintptr_t>(camera);   // LEFT: H5 PlayerController::camera is raw storage (Game/PlayerController.h), handed in as const void*
+    const float camX = *reinterpret_cast<const float*>(c + 0x88);   // LEFT: H5 as above
+    const float camY = *reinterpret_cast<const float*>(c + 0x8c);   // LEFT: H5 as above
+    const float camZ = *reinterpret_cast<const float*>(c + 0x90);   // LEFT: H5 as above
 
     static std::unordered_map<void*, float> s_scale;   // geometry -> last visualScale.x
     struct MeshVariants { int n; int16_t vi[12]; int16_t mv[12]; int count[12]; };
@@ -558,17 +558,17 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int varian
         // LEFT: MeshInstance::_mesh is the untyped RtGraphics::ExternalPtr POD (R-GFX's
         // header), so the GraphicsMesh's level table (+0x50 / +0x58, stride 0xb0) is
         // read raw from a void*.
-        const uintptr_t m = reinterpret_cast<uintptr_t>(mesh);
+        const uintptr_t m = reinterpret_cast<uintptr_t>(mesh);   // LEFT: POD MeshInstance::_mesh is the untyped RtGraphics::ExternalPtr (X-RL left)
         // BANISHED_FORCE_LOD0=1 — pin every mesh to its highest detail level.
         // Graphics::MeshInstance::AddDrawItems only runs the distance pick when
         // GraphicsMesh+0x58 (the level count) exceeds 1, so clamping it to 1 makes
         // level 0 draw at every distance. The levels array itself is untouched.
         // This is the A/B for "is the detail swap what I am seeing pop?": with it on,
         // the swap cannot happen, so anything still popping is NOT the LOD.
-        if (ForceLod0() && *reinterpret_cast<int*>(m + 0x58) > 1)
-            *reinterpret_cast<int*>(m + 0x58) = 1;
-        const int n = *reinterpret_cast<int*>(m + 0x58);
-        uint8_t* levels = *reinterpret_cast<uint8_t**>(m + 0x50);
+        if (ForceLod0() && *reinterpret_cast<int*>(m + 0x58) > 1)   // LEFT: POD as above
+            *reinterpret_cast<int*>(m + 0x58) = 1;   // LEFT: POD as above
+        const int n = *reinterpret_cast<int*>(m + 0x58);   // LEFT: POD as above
+        uint8_t* levels = *reinterpret_cast<uint8_t**>(m + 0x50);   // LEFT: POD as above
 
         // Which (variantIdx, modelVariant) pair produced this mesh. ModelComponent embeds
         // its MeshInstance at +0x28 (FUN_1401253d0 addresses it as param_1+5), and keeps
@@ -581,9 +581,9 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int varian
             // through its embedded MeshInstance (+0x28), which ModelComponent's header
             // keeps as raw H5 storage (W0-H2); there is no typed way from the instance
             // back to its owner.
-            const uintptr_t g = reinterpret_cast<uintptr_t>(obj);
-            const int16_t vi = *reinterpret_cast<int16_t*>(g + 0x13c);
-            const int16_t mv = *reinterpret_cast<int16_t*>(g + 0x13e);
+            const uintptr_t g = reinterpret_cast<uintptr_t>(obj);   // LEFT: the owning ModelComponent's +0x164 / +0x166 read back from its embedded MeshInstance (no typed instance-to-owner path)
+            const int16_t vi = *reinterpret_cast<int16_t*>(g + 0x13c);   // LEFT: as above
+            const int16_t mv = *reinterpret_cast<int16_t*>(g + 0x13e);   // LEFT: as above
             if (vi >= -1 && vi < 64 && mv >= -1 && mv < 64) {
                 MeshVariants& mvs = s_variants[mesh];
                 bool seen = false;
@@ -605,15 +605,15 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int varian
                 info.dist[k] = 0.0f; info.tris[k] = -1; info.vb[k] = nullptr; info.ib[k] = nullptr;
                 if (k >= n || !Readable(levels)) continue;
                 uint8_t* lv = levels + static_cast<size_t>(k) * 0xb0;
-                info.dist[k] = *reinterpret_cast<float*>(lv + 0x10);
+                info.dist[k] = *reinterpret_cast<float*>(lv + 0x10);   // LEFT: POD the GraphicsMesh level table is read raw (as above, MeshInstance::_mesh)
                 // Graphics::MeshInstance::AddDrawItems emits one draw item per entry of
                 // level+0xa0 — a level whose count is zero emits NOTHING, so the model just
                 // stops being rendered past that level's distance. On screen that is exactly
                 // "the model popped out", and it is invisible to every cull, transform and
                 // membership measurement, all of which stay perfectly healthy.
-                info.tris[k] = *reinterpret_cast<int*>(lv + 0xa0);
-                info.vb[k]   = *reinterpret_cast<void**>(lv + 0x20);
-                info.ib[k]   = *reinterpret_cast<void**>(lv + 0x40);
+                info.tris[k] = *reinterpret_cast<int*>(lv + 0xa0);   // LEFT: POD as above
+                info.vb[k]   = *reinterpret_cast<void**>(lv + 0x20);   // LEFT: POD as above
+                info.ib[k]   = *reinterpret_cast<void**>(lv + 0x40);   // LEFT: POD as above
             }
         }
         ++info.instances;
@@ -687,7 +687,7 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const void* camera, int varian
         int lod = 0;
         bool matched = false;
         for (int k = 0; k < n; ++k) {
-            const float d = *reinterpret_cast<float*>(levels + static_cast<size_t>(k) * 0xb0 + 0x10);
+            const float d = *reinterpret_cast<float*>(levels + static_cast<size_t>(k) * 0xb0 + 0x10);   // LEFT: POD as above
             if (d2 < d * d) { lod = k; matched = true; break; }
         }
         if (!matched) ++fellBack;   // beyond every level: retail draws level 0

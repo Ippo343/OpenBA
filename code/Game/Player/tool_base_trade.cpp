@@ -285,12 +285,12 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
 
 // B4 FORWARD: 2 outside callers (Dialog/entityui.cpp, Work/tradework.cpp)
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
-    Avl38Remove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<Avl38Node*>(nodeArg));   // LEFT: B4 FORWARD
+    Avl38Remove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<Avl38Node*>(nodeArg));   // LEFT: B4 FORWARD entityui.cpp / tradework.cpp (other agents') pass int64_t* / void*
 }
 
 // B4 FORWARD: 2 outside callers (Work/tradework.cpp, Component/nomadcomponent.cpp)
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP) {
-    Avl38FindRemove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<const void* const*>(keyIBP));   // LEFT: B4 FORWARD
+    Avl38FindRemove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<const void* const*>(keyIBP));   // LEFT: B4 FORWARD tradework.cpp (another agent's) and nomadcomponent.cpp pass int64_t* / void*
 }
 
 // ============================================================
@@ -331,7 +331,7 @@ void EntityUI::SyncPin() {
     } else {
         ComponentEntity* key = entity;
         // LEFT: PlayerToolManager (GAME-b) declares retail's +0x60 Set as root + count.
-        Avl38FindRemove(reinterpret_cast<AvlTreeHead<TrackedEntityNode>*>(&manager->field_0x60), &key);
+        Avl38FindRemove(reinterpret_cast<AvlTreeHead<TrackedEntityNode>*>(&manager->field_0x60), &key);   // LEFT: H5 PlayerToolManager (Game/PlayerToolManager.h, not this set's) declares retail's +0x60 Set as root + count
     }
 }
 
@@ -346,5 +346,5 @@ void EntityUI::SetPinned() {
 
 // B4 FORWARD: 1 outside caller (Dialog/toolbardialog.cpp) holds the EntityUI as an integer.
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
-    reinterpret_cast<EntityUI*>(param_1)->SyncPin();   // LEFT: B4 FORWARD
+    reinterpret_cast<EntityUI*>(param_1)->SyncPin();   // LEFT: B4 FORWARD Dialog/toolbardialog.cpp (another agent's) holds the EntityUI as an integer
 }

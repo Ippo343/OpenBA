@@ -222,10 +222,8 @@ Box NodeBoxShadow(const CullStack* st, const CullRecord& r) {
 // (CullStack* self, const Scene* scene, float minZBias, float maxZBias).
 // AddCulledDrawItems is the only caller that passes the Scene it is walking;
 // FUN_18005e750 is the other (unported) caller of this helper.
-extern "C" void* RtGraphics_Scene_CullStackInit(void* selfv, const void* scenev,
-                                                float minZBias, float maxZBias) {
-    CullStack*   self  = static_cast<CullStack*>(selfv);  // LEFT: SIG CullStack door takes void* (outside callers, wave X)
-    const Scene* scene = static_cast<const Scene*>(scenev);  // LEFT: SIG CullStack door takes void* (outside callers, wave X)
+static CullStack* RtGraphics_Scene_CullStackInit(CullStack* self, const Scene* scene,
+                                                 float minZBias, float maxZBias) {
 
     self->top        = -1;
     self->minBias[2] = minZBias;                 // +0x14, written before the pair
@@ -261,8 +259,7 @@ extern "C" void* RtGraphics_Scene_CullStackInit(void* selfv, const void* scenev,
 // Pop the top node and, unless it is already at the deepest level, push its
 // four quadtree children with the (already reduced) mask the caller supplies.
 // Child n gets node index `parent*4 + n`, n in 1..4.
-extern "C" void RtGraphics_Scene_CullStackPushChildren(void* selfv, uint32_t mask) {
-    CullStack* self = static_cast<CullStack*>(selfv);  // LEFT: SIG CullStack door takes void* (outside callers, wave X)
+static void RtGraphics_Scene_CullStackPushChildren(CullStack* self, uint32_t mask) {
 
     const int32_t t = self->top;
     self->top = t - 1;                                   // pop first, always

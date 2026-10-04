@@ -17,9 +17,10 @@
 //   +0x22  int16   height       (leaf = 0; node = max(childHeight)+1 encoded as child.height+1)
 // Tree: the Set's header, _root (+0x00) and _count (+0x08).
 //
-// LEFT (every entry point): the callers in other blocks hand the set as a
-// uintptr_t* and the key / node as void*; each body views them as the Set and
-// its node once, at the top.
+// LEFT (every entry point): ONE retail body serves every 8-byte-key set (the Work
+// leaves' citizen sets, EntityList's two update trees, the leisure scan's local),
+// and every caller holds its set as a raw root + count (H5: Collection::Set has a
+// dtor). Each body views the set, the key and the node once, at the top.
 
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
@@ -149,9 +150,9 @@ static Node* AllocNode_1b40(const uint64_t* key, Node* parent) {
 // function returns outResult. Most callers typedef it `void fn(root, outResult, key)`
 // (ignoring the return); some as `void* fn(treeRoot, outResult, keyData)`.
 void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);
-    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);
-    Node** pOut = reinterpret_cast<Node**>(outResult);
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    Node** pOut = reinterpret_cast<Node**>(outResult);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
     if (set->_root == nullptr) {
         Node* node = AllocNode_1b40(key, nullptr);
         set->_root = node;
@@ -198,8 +199,8 @@ void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) 
 // whose in-order predecessor is spliced in; right child but no left child), then
 // retraces from the splice point. Caller: void fn(void* bstRoot, void* node).
 void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);
-    Node* node = reinterpret_cast<Node*>(nodeArg);
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    Node* node = reinterpret_cast<Node*>(nodeArg);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
     Node* local_res8 = node->parent;
     set->_count -= 1;   // count--
     Node* lVar5 = node->right;
@@ -271,8 +272,8 @@ void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
 // Reimpl of CitizenAI_impl_5520 (FUN_140025520) — find a node by key (uint64 at IBP+0)
 // and remove it. Caller: void fn(void* bstRoot, void* keyIBP).
 void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);
-    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
     Node* node = set->_root;
     if (node == nullptr) return;
     do {
@@ -294,9 +295,8 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
 // path is an iterative in-order traversal using parent pointers, writing each node's
 // IBP (at node+0). Serializer read/write mode = *(int*)(*serializer + 8) == 0 (read).
 // Caller: void fn(void* bstRoot, void* serializer).
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);
+void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* ser) {
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
     int count = set->_count;
     ser->Serialize(count, nullptr);
     bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
@@ -304,12 +304,12 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
 
     if (loading) {
         for (int i = 0; i < count; i++) {
-            CitizenComponent* keyIBP = nullptr;
             // The key is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);
-            if (keyIBP != nullptr && citTid &&
-                !Object::IsDerivedFromNullSafe(keyIBP, citTid))
-                keyIBP = nullptr;
+            Object::InternalPtr<CitizenComponent> keyIBP;
+            keyIBP.InternalBasePtr::Serialize(*ser);
+            if (keyIBP.Get() != nullptr && citTid &&
+                !Object::IsDerivedFromNullSafe(keyIBP.Get(), citTid))
+                keyIBP = Object::InternalPtr<CitizenComponent>();
             Node* out = nullptr;
             WorkBST_RegisterWork_1a30(root, &out, &keyIBP);
         }
@@ -325,9 +325,9 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
 joined:
     while ((pIVar6 = pIVar3) != nullptr) {
         // The key is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-        reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);
+        reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);   // LEFT: ERASED the core's Set<uint64_t> element is the InternalPtr retail serializes (banner)
         if (pIVar6->element != 0 && citTid &&
-            !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(pIVar6->element), citTid))
+            !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(pIVar6->element), citTid))   // LEFT: ERASED as above
             pIVar6->element = 0;
         pIVar1 = pIVar6->right;   // right child
         if (pIVar1 == nullptr) {

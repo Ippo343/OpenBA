@@ -612,7 +612,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // EnumerateVideoModes returns bool and retail does NOT test it.
     // LEFT: `??2Device@Video@@` (0x18000c9b0) is not declared in Video::Device
     // (R-VIDEO's header); its body is RtVideo_Device_OperatorNew.
-    Video::Device* videoDevice = static_cast<Video::Device*>(RtVideo_Device_OperatorNew(0x108));
+    Video::Device* videoDevice = static_cast<Video::Device*>(RtVideo_Device_OperatorNew(0x108));   // LEFT: the class operator-new door returns void* (an allocation result castmetric does not recognise: ledger close)
     if (videoDevice)
         rtengine::Ctor_VideoDevice(videoDevice, 0);                 // 0x1800f7160
     _videoDevice = videoDevice;
@@ -886,7 +886,7 @@ void Engine::Engine::Shutdown() {
     }
     if (IO::Modification* p = _modification) {
         // LEFT: the ??1 body takes the RtIO::Modification POD (Modification.h, R-IO).
-        RtIo::RtIo_Modification_Dtor(reinterpret_cast<RtIO::Modification*>(p));   // 0x1800b0470
+        RtIo::RtIo_Modification_Dtor(reinterpret_cast<RtIO::Modification*>(p));   // 0x1800b0470   // LEFT: POD the ??1 body takes the RtIO::Modification POD (Modification.h, not this set's)
         MemFree(p);
     }
     if (IO::Persistence* p = _persistence) {
