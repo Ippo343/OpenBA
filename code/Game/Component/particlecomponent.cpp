@@ -688,7 +688,7 @@ void ParticleComponent::Tick(void* time) {
     if (!geoArr) return;
     float uvScale = PC_UVScale();
     // LEFT: Component::Tick takes void* (COMP-c's header).
-    const System::Time& elapsed = *reinterpret_cast<const System::Time*>(time);
+    const System::Time& elapsed = *reinterpret_cast<const System::Time*>(time);   // LEFT: SIG Component::Tick(void* time)
 
     for (int i = 0; i < total; i++) {
         ParticleEmitterSlot* ge = &geoArr[i];
