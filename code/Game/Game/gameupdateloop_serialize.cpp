@@ -90,7 +90,7 @@
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
 // code/Game/Game/weather_particles.cpp — ports FUN_1400942c0 (enable half; the
 // ambient-audio entity spawn is not ported there yet — see WeatherSim_Serialize).
-extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable);
+extern "C" void WeatherEffect_SetEnabled(WeatherSimulation* sim, int slot, int enable);
 
 namespace {
 

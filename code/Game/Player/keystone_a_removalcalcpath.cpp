@@ -604,11 +604,6 @@ void WorkScheduler::PrioritizeWork(int workId) {
     }
 }
 
-// B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp) holds the
-// scheduler as an integer.
-extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
-    reinterpret_cast<WorkScheduler*>(param_1)->PrioritizeWork(param_2);   // LEFT: B4 FORWARD
-}
 
 // ============================================================
 // 0x1401035e0  RemovalTool::CalcPath (slot 13)

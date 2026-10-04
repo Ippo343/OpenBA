@@ -62,6 +62,7 @@
 
 #include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"   // PlayerToolManager::OnEntityRemoved (0x140103480)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -232,8 +233,7 @@ void CitizenComponent::OnRemove() {
 
         // ---- 7. trade-work list + any dialog bound to our entity ---------------
         ComponentEntity* ownerIBP = _entity;
-        // NomadComp_FUN_140103480 is the tool manager's body (LEFT free, int64_t receiver).
-        NomadComp_FUN_140103480(reinterpret_cast<int64_t>(gw->m_toolManager), &ownerIBP);   // 0x140103480  LEFT: SIG NomadComp_FUN_140103480 (Component/exe_bodies.h, wave X)
+        gw->m_toolManager->OnEntityRemoved(&ownerIBP);   // 0x140103480
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------
         CitizenComponent* selfIBP = this;

@@ -873,9 +873,7 @@ void CitizenBehavior::PostLoad() {
                         side * side);
                 std::fflush(stderr);
             }
-            // LEFT: the cell-map insert takes the town manager as int64_t
-            // (Component/wellcomponent_funcs.h).
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80   // LEFT: SIG WellComp_AddCellEntry_88a80(int64_t) (wave X)
+            AddCellEntry(cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80
         }
     }
 
@@ -910,7 +908,7 @@ void CitizenBehavior::PostLoad() {
             MapComponent* chosenVal = chosenRef.Get();
             int16_t cx = chosenVal ? static_cast<int16_t>(chosenVal->tileX0) : 0;
             int16_t cy = chosenVal ? static_cast<int16_t>(chosenVal->tileY0) : 0;
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cx, cy, slot);   // 0x140088a80   // LEFT: SIG WellComp_AddCellEntry_88a80(int64_t) (wave X)
+            AddCellEntry(cx, cy, slot);   // 0x140088a80
         }
     }
 }

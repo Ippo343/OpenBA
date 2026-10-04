@@ -172,11 +172,6 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
     }
 }
 
-// B4 FORWARD: 2 outside caller files (citizen_onremove.cpp, destroycomponent_states.cpp).
-void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
-    reinterpret_cast<PlayerToolManager*>(param_1)->OnEntityRemoved(   // LEFT: SIG NomadComp_FUN_140103480 (B4 FORWARD, wave X)
-        reinterpret_cast<ComponentEntity* const*>(param_2));
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — NomadComponent as a REAL class (NomadComponent.h).

@@ -200,7 +200,9 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self);  // 0x140095da0  B4 F
 
 // ---- weather_particles.cpp
 extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
-extern "C" void WeatherParticle_Config(void* geo, void* descriptor);  // 0x1400d3f80
+class WeatherParticleGeometry;
+class Weather;
+extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount);  // 0x1400198a0
 
 // ---- weather_sim.cpp

@@ -190,7 +190,6 @@ extern "C" void ModelComponentNotify_Reimpl(void* entity, int param);  // 0x1400
 void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  // 0x140005200
 
 // ---- nomadcomponent.cpp
-void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 
 // ---- orchardcomponent.cpp
 // B.4 COMP-6: OrchardComponent_ValidateRefs had no caller left: deleted.
