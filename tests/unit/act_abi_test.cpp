@@ -291,7 +291,7 @@ template <typename T, typename... A>
 struct ExaCanNew<std::void_t<ExaNew<T, A...>>, T, A...> : std::true_type {};
 
 UNIT_TEST(act_citizenai_builders_construct_in_place) {
-    CHECK((ExaCanNew<void, PerformWork, void*, float, uint32_t, int64_t, uint8_t, int>::value));
+    CHECK((ExaCanNew<void, PerformWork, CitizenComponent* const*, float, uint32_t, int64_t, bool, int>::value));
     CHECK((ExaCanNew<void, PlayAnimation>::value));
 }
 
