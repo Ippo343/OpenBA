@@ -96,9 +96,7 @@ UI::DialogInstance* PlayerToolManager::FindUtilityDialog(const ComponentDescript
     // iterator is the bare node pointer, so `it.node` is the address retail
     // hands to CheckPtr and `it.node->element` is the DialogInstance.
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        // LEFT: the list's element is the runtime's `DialogInstancePtr`, a void*
-        // (UserInterface.h).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
 
         // GetController(ToolUI tid), narrowed to a ToolUI
         const ToolUI* controller = nullptr;
@@ -116,14 +114,6 @@ UI::DialogInstance* PlayerToolManager::FindUtilityDialog(const ComponentDescript
 
 extern "C" {
 
-// B4 FORWARD: tutorial_wave.cpp (TUT) passes the retail shape — its own object
-// in RCX (unread), the InternalPtr slot, the key as a qword.
-void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
-                                                    void* retBuf, uint64_t param) {
-    *reinterpret_cast<UI::DialogInstance**>(retBuf) =
-        PlayerToolManager::FindUtilityDialog(reinterpret_cast<const ComponentDescription*>(param));  // CAST-OK: ptr_int
-}
-
 // ---- FUN_140014890: BST_Insert_0x14 ----------------------------------------
 // (RCX=rootHolder, RDX=retNode, R8=insertData)
 //   rootHolder: the set header, root node and int32 count
@@ -133,7 +123,7 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
 // B4 FORWARD: the int64_t* / void** / uint64_t* signature is kept for
 // townhallui.cpp (DLG-e, running) and PlayerToolManager::ToggleUtilityDialog.
 void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData) {
-    SetHeader* set = reinterpret_cast<SetHeader*>(rootHolder);
+    SetHeader* set = reinterpret_cast<SetHeader*>(rootHolder);   // LEFT: SIG (B4 FORWARD, wave X)
     if (set->root == nullptr) {
         // Empty tree — the new node becomes the root.
         SetNode* n = static_cast<SetNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));

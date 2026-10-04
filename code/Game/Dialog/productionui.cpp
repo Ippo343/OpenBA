@@ -37,12 +37,12 @@
 #include "Component/TrackerComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Dialog/ProductionUI.h"
+#include "Component/ComponentDescription.h"
+#include "Game/Calendar.h"
 
 // ============================================================
 // ProductionUI layout: Dialog/ProductionUI.h (two Collection::Arrays of
 // ProductionUIRow {labelStorage, numberCount} at +0x30 consumed, +0x40 produced).
-// LEFT (B4 DLG-c): the TrackerComponent's fields (TrackerComponent.h, COMP-e:
-// raw) and the day counter through GameUpdateLoop::m_dayCounter (void*, GAME-a).
 // ============================================================
 
 // ---- element type ids for retail's two casts --------------------------------
@@ -223,9 +223,8 @@ void ProductionUI::UpdateList(int listIndex) {
     ComponentEntity* entityPtr = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
     // Find TrackerComponent via fn_FindComponent_Tracker
-    uint64_t trackerBP = 0;
-    fn_FindComponent_Tracker(entityPtr, &trackerBP);
-    uintptr_t tracker = (uintptr_t)trackerBP;
+    TrackerComponent* tracker = nullptr;
+    fn_FindComponent_Tracker(entityPtr, &tracker);
 
     // STANDALONE DEVIATION (the only guard in this file). Retail derefs
     // tracker+0x48 unguarded because every entity that can reach Dialog/
@@ -241,22 +240,23 @@ void ProductionUI::UpdateList(int listIndex) {
     }
 
     // Check if game world item count changed; rebuild tracker if so
-    int gameItemCount = *(int*)GameUpdateLoop::_singleton->m_dayCounter;   // LEFT: void* (GAME-a)
-    if (gameItemCount != *(int*)(tracker + 0x48)) {
+    int gameItemCount = GameUpdateLoop::_singleton->m_dayCounter->year;
+    if (gameItemCount != tracker->trackerId) {
         // Call tracker rebuild: FUN_14000d9d0 moves data from +0x38 to +0x28
-        fn_TrackerComponent_Rebuild((void*)(tracker + 0x38), (void*)(tracker + 0x28));
-        System::MemoryAllocator::MemFree(*(void**)(tracker + 0x28));
-        *(uint64_t*)(tracker + 0x28) = 0;
-        *(uint64_t*)(tracker + 0x30) = 0;
-        *(int*)(tracker + 0x48) = gameItemCount;
+        fn_TrackerComponent_Rebuild(&tracker->produced, &tracker->displayed);
+        System::MemoryAllocator::MemFree(tracker->displayed);
+        tracker->displayed = nullptr;
+        tracker->displayedCount = 0;      // retail: one qword store over count / capacity
+        tracker->displayedCapacity = 0;
+        tracker->trackerId = gameItemCount;
     }
 
     // Get item count for this list
     int itemCount;
     if (listIndex == 0) {
-        itemCount = *(int*)(tracker + 0x30);
+        itemCount = tracker->displayedCount;
     } else {
-        itemCount = *(int*)(tracker + 0x40);
+        itemCount = tracker->producedCount;
     }
 
     // Get element array for this list (+0x30 consumed, +0x40 produced)
@@ -272,22 +272,22 @@ void ProductionUI::UpdateList(int listIndex) {
         ProductionUIRow& elemPair = elemArray[i];
 
         // Get item array from tracker
-        uintptr_t itemArray;
+        TrackerComponent::Entry* itemArray;
         if (listIndex == 0) {
-            itemArray = *(uintptr_t*)(tracker + 0x28);
+            itemArray = tracker->displayed;
         } else {
-            itemArray = *(uintptr_t*)(tracker + 0x38);
+            itemArray = tracker->produced;
         }
 
-        uintptr_t item = *(uintptr_t*)(itemArray + (uintptr_t)i * 0x10);
+        ComponentDescription* item = itemArray[i]._resource;
 
         // Search sub-entries for ResourceType description
-        int subCount = *(int*)(item + 0x30);
-        uintptr_t subArray = *(uintptr_t*)(item + 0x28);
+        int subCount = item->_subDescCount;
+        Description** subArray = item->_subDescs;
         RawMaterialDescription* resourceDesc = nullptr;
 
         for (int j = 0; j < subCount; j++) {
-            Object::Base* subEntry = *(Object::Base**)(subArray + (uintptr_t)j * 8);
+            Description* subEntry = subArray[j];
             // Call GetTypeId virtual (vtable+0x10)
             int typeId = subEntry->Type();
             if (typeId == (int)RawMaterialDescription::TypeId()) {
@@ -300,11 +300,11 @@ void ProductionUI::UpdateList(int listIndex) {
 
         // Get count from item entry (+0x08 relative to item array base)
         if (listIndex == 0) {
-            itemArray = *(uintptr_t*)(tracker + 0x28);
+            itemArray = tracker->displayed;
         } else {
-            itemArray = *(uintptr_t*)(tracker + 0x38);
+            itemArray = tracker->produced;
         }
-        int count = *(int*)(itemArray + (uintptr_t)i * 0x10 + 0x08);
+        int count = itemArray[i]._count;
         // Create sprite from the RawMaterialDescription
         UI::Sprite sprite(resourceDesc->_spriteSheet, resourceDesc->_name);
 

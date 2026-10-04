@@ -813,16 +813,14 @@ void OptionsDialog::ApplyGameSettings() {
         // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, whose
         // whole body is `*retval = this->_dialogs._head`); the iterator is the
         // bare node pointer, so `it.node` is what retail hands to CheckPtr.
-        // LEFT: the list's element is `DialogInstancePtr`, a `void*` typedef of
-        // runtime/types/ui/UserInterface.h.
         for (auto it = userInterface->_dialogs.GetFirst(); it; ++it) {
-            void* dialog = it.node->element;
-            if (reinterpret_cast<const ::Object::Base*>(dialog)->IsA(typeId)) {   // B.3.x bridge (?IsA@Base@Object@@)
-                void* obj = it.node->element;
+            UI::DialogInstance* dialog = it.node->element;
+            if (dialog->IsA(typeId)) {   // ?IsA@Base@Object@@
+                UI::DialogInstance* obj = it.node->element;
                 bool isDerived = ::Object::IsDerivedFromNullSafe(obj, typeId);
-                void* target = isDerived ? obj : nullptr;
+                UI::DialogInstance* target = isDerived ? obj : nullptr;
                 fprintf(stderr, "[AutoSave]   MATCH obj=%p derived=%d -> restart %s\n",
-                        obj, (int)isDerived, target ? "YES" : "NO(null target)");
+                        static_cast<void*>(obj), (int)isDerived, target ? "YES" : "NO(null target)");
                 fflush(stderr);
                 if (target) AutoSaveDialog_Slot4(static_cast<AutoSaveDialog*>(target));   // 0x14005e120
             }

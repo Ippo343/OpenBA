@@ -44,6 +44,8 @@
 #include "Dialog/ResidenceUI.h"
 #include "Game/Profession.h"
 #include "Game/ProfessionList.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
 #include "runtime/types/ui/TableElement.h"
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
@@ -58,7 +60,8 @@
 // CitizenComponent in standalone can have a garbage description cache (+0x288) or an
 // unset name String; the raw derefs the faithful retail port does would fault (MinGW
 // has no __try/__except to catch it). Same idea as CitUI_OkPtr in citizenui.cpp.
-static inline bool RUI_OkPtr(uintptr_t p) {
+static inline bool RUI_OkPtr(const void* ptr) {
+    uintptr_t p = reinterpret_cast<uintptr_t>(ptr);  // CAST-OK: ptr_int
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }
 
@@ -199,9 +202,6 @@ void ResidenceUI::OnCreated() {
 // Original: 0x1400B51F0.
 
 // [7] 0x1400b51f0
-// LEFT (B4 DLG-c): ResidenceComponent::residentSlots is declared void* (COMP-e's
-// header; each 0x10 slot is a Collection::Array<CitizenComponent*>), so the slot
-// walk and the residents reached through it stay raw.
 void ResidenceUI::OnUpdateLayout() {
     if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
 
@@ -231,11 +231,11 @@ void ResidenceUI::OnUpdateLayout() {
 #endif
 
     if (groupCount > 0) {
-        uintptr_t groupOffset = 0;
+        int64_t groupOffset = 0;   // the family index (retail steps a 0x10 byte offset)
 
         for (int g = 0; g < groupCount; g++) {
-            uintptr_t groupArrayBase = (uintptr_t)residenceComp->residentSlots;   // LEFT: void* (COMP-e)
-            int residentCount = *(int*)(groupArrayBase + 8 + groupOffset);
+            ResidenceComponent::Family* groupArrayBase = residenceComp->residentSlots;
+            int residentCount = groupArrayBase[groupOffset].count;
 
             if (residentCount > 0) {
                 totalResidents += residentCount;
@@ -284,9 +284,9 @@ void ResidenceUI::OnUpdateLayout() {
                     }
                     // Original CheckPtr's the component IBP every iteration
 
-                    // Get citizen ptr from resident list + CheckPtr (LEFT: residentSlots)
-                    uintptr_t residentListPtr = *(uintptr_t*)((uintptr_t)residenceComp->residentSlots + groupOffset);
-                    uintptr_t citizen = *(uintptr_t*)(residentListPtr + r * 8);
+                    // Get citizen ptr from resident list + CheckPtr
+                    Object::InternalPtr<CitizenComponent>* residentListPtr = residenceComp->residentSlots[groupOffset].members;
+                    CitizenComponent* citizen = residentListPtr[r].Get();
 
 #ifdef _DEBUG
 #endif
@@ -295,7 +295,7 @@ void ResidenceUI::OnUpdateLayout() {
                     ResidenceUIRow& row = rows[rowIdx];
 
                     // Check gender: citizen+0x38 != 0 means male
-                    bool isMale = (*(int*)(citizen + 0x38) != 0);
+                    bool isMale = (citizen->gender != 0);
 
                     // Show/hide gender icons — CheckPtr each element IBP in row array
                     UI::Element* imageFemale = row.imageFemale;
@@ -314,12 +314,12 @@ void ResidenceUI::OnUpdateLayout() {
                     // SA safety: the name String buffer (citizen+0x28) may be unset on a
                     // standalone citizen; SetParameter refcounts the source buffer and
                     // would fault on garbage. 0 (empty String) is fine.
-                    uintptr_t nameBuf = *(uintptr_t*)(citizen + 0x28);
-                    if (textName && (nameBuf == 0 || RUI_OkPtr(nameBuf)))
-                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(citizen + 0x28));
+                    uintptr_t nameBuf = citizen->name;
+                    if (textName && (nameBuf == 0 || RUI_OkPtr(reinterpret_cast<const void*>(nameBuf))))  // CAST-OK: ptr_int
+                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&citizen->name));   // LEFT: H5 CitizenComponent::name (CIT-4)
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
-                    int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
+                    int ageYears = (int)(citizen->age * ageMul);
                     System::String ageStr = System::String::Format("%i", (uint64_t)(uint32_t)ageYears);
                     UI::TextElement* textAge = row.textAge;
                     if (textAge) textAge->SetParameter(0, ageStr);
@@ -334,41 +334,42 @@ void ResidenceUI::OnUpdateLayout() {
                     // standalone citizen with a garbage description cache can't fault.
                     UI::TextElement* textProfession = row.textProfession;
 
-                    float age = *(float*)(citizen + 0x3c);
-                    uintptr_t jobEntity = *(uintptr_t*)(citizen + 0x208);
+                    float age = citizen->age;
+                    AttendanceComponent* jobEntity = citizen->school;
 
                     // Child-age threshold from the citizen description (+0x288 cache;
                     // fall back to the component's own description at +0x18 when the
                     // cache is garbage in standalone).
-                    uintptr_t descPtr = *(uintptr_t*)(citizen + 0x288);
-                    if (!RUI_OkPtr(descPtr)) descPtr = *(uintptr_t*)(citizen + 0x18);
+                    // (the fallback is the Component's Description, read as the
+                    // CitizenDescription it is on a citizen: the cache's own class)
+                    const Description* descPtr = citizen->description;
+                    if (!RUI_OkPtr(descPtr)) descPtr = citizen->_description;
                     float oldAgeThreshold = RUI_OkPtr(descPtr)
-                                          ? *(float*)(descPtr + 0x44) : 1e30f;
+                                          ? static_cast<const CitizenDescription*>(descPtr)->adultAge : 1e30f;
 
                     // UI::String ctor needs 3 args: (retbuf, externalPtr at +0x20,
                     // stringName at +0x30). fn_UIString_Ctor passes all three; the
                     // Ghidra decompile drops R8 (the +0x30 name) on the call.
                     UI::String uiStr;
                     bool builtProf = false;
-                    if (age < oldAgeThreshold || jobEntity != 0) {
+                    if (age < oldAgeThreshold || jobEntity != nullptr) {
                         // Child (no job) -> ProfessionList::childProfession (+0x40);
                         // employed -> ProfessionList::studentProfession (+0x48).
                         GameUpdateLoop* world = GameUpdateLoop::_singleton;
                         ProfessionList* profList = world ? world->m_professionList : nullptr;
-                        if (RUI_OkPtr((uintptr_t)profList)) {  // CAST-OK: ptr_int
-                            Profession* entry = (jobEntity == 0) ? profList->childProfession
+                        if (RUI_OkPtr(profList)) {
+                            Profession* entry = (jobEntity == nullptr) ? profList->childProfession
                                                                  : profList->studentProfession;
-                            if (RUI_OkPtr((uintptr_t)entry)) {  // CAST-OK: ptr_int
-                                // LEFT: Profession's Strings are raw storage (GAME-b, H5)
-                                uiStr = UI::String(entry->stringTable, *reinterpret_cast<const System::String*>(&entry->stringName));
+                            if (RUI_OkPtr(entry)) {
+                                uiStr = UI::String(entry->stringTable, entry->stringName);
                                 builtProf = true;
                             }
                         }
                     } else {
                         // Adult laborer: the citizen's own profession object (+0x1f0).
-                        uintptr_t profDesc = *(uintptr_t*)(citizen + 0x1f0);
+                        Profession* profDesc = citizen->profession;
                         if (RUI_OkPtr(profDesc)) {
-                            uiStr = UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profDesc + 0x20))), *reinterpret_cast<const System::String*>(profDesc + 0x30));  // B.3.6 bridge
+                            uiStr = UI::String(Object::ExternalPtr<UI::StringTable>(profDesc->stringTable), profDesc->stringName);
                             builtProf = true;
                         }
                     }
@@ -384,7 +385,7 @@ void ResidenceUI::OnUpdateLayout() {
                     rowIdx++;
                 }
             }
-            groupOffset += 0x10;
+            groupOffset += 1;
         }
     }
 
@@ -461,21 +462,21 @@ void ResidenceUI::GoToCitizen(int citizenIndex) {
 
     // Iterate storage room groups to find citizen at flat index
     int flatIdx = 0;
-    int groupCount = *(int*)(storageComp + 0x58);
+    int groupCount = *(int*)(storageComp + 0x58);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
 
     for (int g = 0; g < groupCount; g++) {
-        uintptr_t groupArrayBase = *(uintptr_t*)(storageComp + 0x50);
-        int residentCount = *(int*)(groupArrayBase + 8 + (uintptr_t)g * 0x10);
+        uintptr_t groupArrayBase = *(uintptr_t*)(storageComp + 0x50);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
+        int residentCount = *(int*)(groupArrayBase + 8 + (uintptr_t)g * 0x10);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
 
         for (int r = 0; r < residentCount; r++) {
             if (flatIdx == citizenIndex) {
                 // Found the target citizen — re-read storageComp after CheckPtr
                 uintptr_t citizenPtr = *(uintptr_t*)(
                     *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
-                    + (uintptr_t)r * 8);
+                    + (uintptr_t)r * 8);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
 
                 // Get citizen's InternalBasePtr self-reference at +0x10
-                uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);
+                uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
                 // The owning dialog (DialogController::_dialog, +0x18)
                 UI::DialogInstance* parentDialog = _dialog;
 

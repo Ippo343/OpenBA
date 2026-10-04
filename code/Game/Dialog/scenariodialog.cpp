@@ -20,6 +20,7 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ScenarioDialog.h"
+#include "Dialog/MainMenuDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "Dialog/dialog_exe_helpers.h"
@@ -303,15 +304,15 @@ void ScenarioDialog::LoadSelected() {
         printf("[ScenarioDialog::LoadSelected] mapGen=%p, terrainGen=%p, climateGen=%p, parentCtrl=%p\n",
                mapGen, terrainGen, climateGen, static_cast<void*>(parentCtrl));
 
-        // 0x1400b4540 StartNewGame_Reg — constructs GameUpdateLoop ->
-        // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop. The door
-        // typedef passed seed / terrainSize as uint32 values; the body takes
-        // pointer-width slots and reads their low dword ((uint32_t)(uintptr_t)),
-        // so the zero-extended value is the same bits (B3R).
-        StartNewGame_Reg(parentCtrl, &displayNameStr,
-                         reinterpret_cast<void*>(static_cast<uintptr_t>(seedVal)),        // CAST-OK: ptr_int
-                         reinterpret_cast<void*>(static_cast<uintptr_t>(terrainSizeVal)), // CAST-OK: ptr_int
-                         disasterOff, mapGen, terrainGen, climateGen,
+        // 0x1400b4540 MainMenuDialog::StartNewGame — constructs GameUpdateLoop ->
+        // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop. Retail hands
+        // seed / terrainSize in pointer-width slots and reads their low dword; the
+        // member takes the two uint32 values (the StartNewGame_Reg forwarder that
+        // did the narrowing is gone). parentMenu is the MainMenuDialog that opened
+        // this dialog (ScenarioDialog.h +0xC0).
+        static_cast<MainMenuDialog*>(parentCtrl)->StartNewGame(
+                         displayNameStr, seedVal, terrainSizeVal,
+                         disasterOff != 0, mapGen, terrainGen, climateGen,
                          scenarioResIdx, &nullIBP);
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {

@@ -12,6 +12,7 @@
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -102,8 +103,7 @@ void RadiusUI::OnOpened() {
 
     // Calculate center tile index from the placement component's footprint rect
     // (tileX0 / tileY0 the corner, tileX1 / tileY1 the extent, int16 each):
-    // LEFT: the map's grid size through GameUpdateLoop::m_game (void*, GAME-a).
-    int gridSize = *(int*)GameUpdateLoop::_singleton->m_game;
+    int gridSize = GameUpdateLoop::_singleton->m_game->size;
     int centerY = (int)buildComp->tileY0 + ((int)buildComp->tileY1 >> 1);
     int centerX = (int)buildComp->tileX0 + ((int)buildComp->tileX1 >> 1);
     int tileIndex = centerY * gridSize + centerX;
@@ -112,7 +112,7 @@ void RadiusUI::OnOpened() {
     // The door was named fn_RadiusCalc; it is bound to 0x140055430
     // Player_HighlightAdd_55430 (B3R: the binding decides, INVENTORY_E §5.8).
     // LEFT: its first parameter is an integer (Player/exe_bodies.h, block PLAYER).
-    this->highlightIndex = Player_HighlightAdd_55430(reinterpret_cast<int64_t>(radiusComp), tileIndex);
+    this->highlightIndex = Player_HighlightAdd_55430(reinterpret_cast<int64_t>(radiusComp), tileIndex);   // LEFT: SIG Player_HighlightAdd_55430
 
 }
 
