@@ -69,29 +69,27 @@ std::atomic<bool> s_tailWarned{false};
 // ============================================================
 // PlayerController::PlayerController() — 0x140098800
 // ============================================================
-// Transform::Transform (the member's), the target qword +0x1C and dword +0x24
-// zeroed (H7: three named stores), then Camera::Camera(+0x34, Frustum(near
-// g_fUVScale = 1, far DAT_140172208 = 100, fovX 90, fovY 90), Transform3::
-// Identity(), true). Yaw / pitch / distance are left unwritten, as retail's.
-PlayerController::PlayerController() {
-    targetX = 0.0f;
-    targetY = 0.0f;
-    targetZ = 0.0f;
-
-    // ?Identity@Transform3@Math@@SA?AV12@XZ  retail 0x1800347f0.
-    Math::Transform3 ident = Math::Transform3::Identity();
-
-    // Frustum ctor takes 4 Scalar* args in order (near, far, fovX, fovY) — the
-    // first two are stored as raw plane distances, the last two are interpreted
-    // as half-FOV angles (in degrees) for sin/cos (Volume::Frustum::Frustum,
-    // Runtime 0x1800fa1e0).
-    const Math::Scalar nearZ(1.0f), farZ(100.0f), fovX(90.0f), fovY(90.0f);
-    ::Frustum frustum = {};
-    RtVolume_Frustum_Ctor_Perspective(&frustum, &nearZ, &farZ, &fovX, &fovY);
-
-    // LEFT: +0x34 is raw storage (H5: Camera's default ctor is protected); the
-    // ctor door takes the POD mirror.
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &ident, true);  // LEFT: POD RtGraphics::Camera: the runtime view-setup door takes the mirror (runtime/types/graphics, outside this set)
+// Transform::Transform (the member's) (0x14009880d), the target qword +0x1C
+// and dword +0x24 zeroed (H7: three named stores), Transform3::Identity()
+// (0x140098859), Frustum(near g_fUVScale = 1, far DAT_140172208 = 100, fovX 90,
+// fovY 90) (0x14009888c), then LAST Camera::Camera(+0x34, frustum, identity,
+// true) (0x14009889f): the camera is the init list's last entry. Yaw / pitch /
+// distance are left unwritten, as retail's.
+PlayerController::PlayerController()
+    : transform(),
+      targetX(0.0f), targetY(0.0f), targetZ(0.0f),
+      camera([] {
+                 // Frustum ctor takes 4 Scalar* args in order (near, far, fovX,
+                 // fovY) — the first two are stored as raw plane distances, the
+                 // last two are interpreted as half-FOV angles (in degrees) for
+                 // sin/cos (Volume::Frustum::Frustum, Runtime 0x1800fa1e0).
+                 const Math::Scalar nearZ(1.0f), farZ(100.0f), fovX(90.0f), fovY(90.0f);
+                 ::Frustum frustum = {};
+                 RtVolume_Frustum_Ctor_Perspective(&frustum, &nearZ, &farZ, &fovX, &fovY);
+                 return frustum;
+             }(),
+             // ?Identity@Transform3@Math@@SA?AV12@XZ  retail 0x1800347f0.
+             Math::Transform3::Identity(), true) {
 }
 
 // ============================================================
