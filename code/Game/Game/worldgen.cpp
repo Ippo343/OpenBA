@@ -599,10 +599,10 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     //     this avoids reimplementing the grow-and-copy dance for a known length.
     {
         const int destCount = hf->paths._size;
-        Reimpl_Array_Resize_ArrayOfArrays(&ContourOutlines(), destCount);
+        Reimpl_Array_Resize_ArrayOfArrays(&_contourOutlines, destCount);
 
         const RawArray<TerrainPathPoint>* srcBase = hf->paths._data;
-        RawArray<Math::Vector2>* destBase = ContourOutlines().data;
+        RawArray<Math::Vector2>* destBase = _contourOutlines.data;
         int pathsCopied = 0, pointsCopied = 0;
 
         s_pathHalfWidthCount = 0;
@@ -754,7 +754,7 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
     fprintf(stderr, "[worldgen]   waterMatA(+0x150)=%p waterMatB(+0x158)=%p "
             "overlayVB(+0x160).size=%d overlayCntA(+0x1c8)=%d overlayCntB(+0x1d8)=%d\n",
             static_cast<void*>(_waterMaterialA), static_cast<void*>(_waterMaterialB),
-            _waterVertexBuffer.size, ContourRangesA().size, ContourRangesB().size);
+            _waterVertexBuffer.size, _contourRangesA.size, _contourRangesB.size);
     fflush(stderr);
 }
 

@@ -149,7 +149,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                                      int param_4, int param_5) {
     const float fUV = kRdata_14017214c;   // g_fUVScale (1.0f in retail)
 
-    GeometryBatch* batch = *reinterpret_cast<GeometryBatch**>(param_1 + 0x1f0) + param_2;   // LEFT: WorldGeometry::_arrays (GAME-2, H5): the decals' data pointer
+    GeometryBatch* batch = *reinterpret_cast<GeometryBatch**>(param_1 + 0x1f0) + param_2;   // LEFT: SIG TradeWork_impl_ace40 takes the WorldGeometry as int64_t (this is _decals.data)
     int iVar24 = (batch->maxX - batch->minX) + 1; // width
     int iVar28 = (batch->maxY - batch->minY) + 1; // height
 

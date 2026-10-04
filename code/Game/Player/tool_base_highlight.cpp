@@ -210,7 +210,7 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 
 // ============================================================
 // 0x1400b0d80 — the decal slot manager: find a free 0x60-byte GeometryBatch in
-// WorldGeometry::Decals() (+0x1F0), or grow the array by one from a zeroed
+// WorldGeometry::_decals (+0x1F0), or grow the array by one from a zeroed
 // template (slot -1); write the decal; tessellate it via 0x1400ace40. Returns the
 // slot index (or -1 if the material is null). 1:1 port (19 args; param_18 is
 // unused/dead). A WorldGeometry member in retail; LEFT free: WorldGeometry.h is
@@ -223,7 +223,7 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              char param_15, int param_16, int param_17, uint8_t param_19) {
     if (material == nullptr) return -1;
 
-    RawArray<GeometryBatch>& decals = geom->Decals();
+    RawArray<GeometryBatch>& decals = geom->_decals;
     int iVar3 = 0;
     int iVar2 = decals.size;                                     // count
     bool grew = false;

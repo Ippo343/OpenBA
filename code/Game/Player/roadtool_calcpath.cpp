@@ -115,15 +115,13 @@ extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDesc
 // system (WorldGeometry, GameUpdateLoop +0x110): the External* array at +0x210
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
 // `index+1` and the new int slots are zeroed.
-// LEFT: WorldGeometry (block GAME-c) declares its nine arrays as raw
-// `{void* data; uint64_t sizeCap}` headers; the two element writes go through them.
 // ============================================================================
 extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* decal) {
     if (!mgr) return;
 
-    WorldGeometry::Header& refs = mgr->_arrays[7];   // +0x210
-    WorldGeometry::Header& ints = mgr->_arrays[8];   // +0x220
-    int oldCount = static_cast<int>(static_cast<uint32_t>(refs.sizeCap));   // +0x218
+    RawArray<Object::External*>& refs = mgr->_batchMaterials;   // +0x210
+    RawArray<int32_t>& ints = mgr->_batchCounters;              // +0x220
+    int oldCount = refs.size;   // +0x218
     int needed   = index + 1;
     if (oldCount < needed) {
         Reimpl_Array_Resize_Stride08(&refs, needed);
@@ -131,8 +129,8 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* d
         // Zero the freshly grown tail of the int array. Retail bounds this by the int
         // array's own dword at +0x228 (0x1400acdd8 / 0x1400ace01: CMP EBX,[RDI+0x228]) -- the
         // low dword of its {data, size|capacity} header, i.e. its size -- NOT by `needed`.
-        int intCount = static_cast<int>(static_cast<uint32_t>(ints.sizeCap));   // +0x228 (low dword)
-        uint32_t* intBase = (uint32_t*)ints.data;  // LEFT: WorldGeometry.h declares its nine arrays as raw {void* data; uint64_t sizeCap} headers (header outside this set)
+        int intCount = ints.size;   // +0x228
+        int32_t* intBase = ints.data;
         if (intBase) {
             for (int i = oldCount; i < intCount; ++i)
                 intBase[i] = 0;
