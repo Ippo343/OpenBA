@@ -322,3 +322,10 @@ Metric at `1b134ba9`: **2,163** to remove.
 | 96 | X-G1-1b | `c57419d5` | `CitizenAIComponent::leisureTimer` a `System::Time`, dialog ctor entries take `const UI::Dialog*`, the tool-registry teardown on `ToolRegistryNode` (row 550 confirmed, rows 552-553): 398 -> 366 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `c57419d5`: **2,009** to remove (of which `dx11/` 240). Wave X round 1 done: 12 gated merges (rows 85-96), 0 problems each.
+
+| 97 | X-G2-2 | `47b3b9be` | six pure forwarders and one callerless finder deleted, the factory dtors, CullStack helpers, `MeshInstance::PlayAnimation`, the WorkBST serializer parameter typed; stale-tag lines converted: 460 -> 421 in 126 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 98 | X-G2-3 | `adc83c33` | the seat cascade and `TownRegistry_RegisterResidence` typed, four storage forwarders and four callerless functions deleted, `StartTown_SpawnStartingHerd` takes `MapGenerator*`: 441 -> 368 in 126 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 99 | X-G2-4 | `57dde4a1` | `CitizenAI_Reg_helper_e360` one template over `LegacyKeyIntNode`, `Pf_VectorResize60`, `ResidenceComponent_impl_95a0`, `CitizenComp_Infect` typed, slot 18 `CreateWork` takes `InternalPtr<Work>*`; three pure forwarders deleted: 395 -> 339 in 126 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 100 | X-G2-1 | `f522f4eb` | `WorkAct_PerformWorkCtor` / `GatherWorkCtor` typed, four forwarders deleted, NameDB / region-pair-cache / AdjustDelimiters / WorkCellBST serializer entry points typed, the erased cores' element copies marked `elem_stride`: 484 -> 428 in 127 files (one conflict in `Game/exe_bodies.h`: two agents typed `GetLoadingSoundString` identically; main's side kept) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `f522f4eb`: **1,785** to remove (of which `dx11/` 240). Wave X round 2 done; every remaining cast outside `dx11/` carries a `// LEFT:` reason or a `// CAST-OK:` marker on its line.
