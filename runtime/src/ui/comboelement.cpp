@@ -204,8 +204,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 // chains ~ButtonElement / ~Element.
 namespace UI {
 ComboElement::~ComboElement() {
-    // LEFT: _openDialog stays void* (widgets_input.cpp, R-UI-b).
-    ComboDialog* const open = static_cast<ComboDialog*>(_openDialog);
+    ComboDialog* const open = _openDialog;
     if (open != nullptr) {
         Object::InternalPtr<DialogInstance> slot(open);
         open->_ui->CloseDialog(&slot);                                   // 0x180120f20

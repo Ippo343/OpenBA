@@ -107,7 +107,7 @@ void TableElement::ComputeSize() {
 // slot 5 — ?ComputeLayout@TableElement@UI@@UEAAXHHHH@Z   0x18011dd10
 // ---------------------------------------------------------------------------
 void TableElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->ComputeLayout(x, y, right, bottom);
 
     ComputeSize();                                            // slot 4, virtual
@@ -163,7 +163,7 @@ void TableElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bo
 // slot 6 — ?Draw@TableElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x18011dc20
 // ---------------------------------------------------------------------------
 void TableElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->Draw(context, alpha);
 
     if ((_flags & kFlagDimColor) != 0) alpha >>= 1;

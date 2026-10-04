@@ -1235,10 +1235,8 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
             Element* child = r->_children._data[i];
             if (child) child->AdjustUpperLeft(dx, dy);          // 0x180115840
         }
-        // LEFT: Element::_border stays void* (tests/unit/ui_element_abi_test.cpp:394
-        // assigns a void* to it).
-        if (void* border = r->_border)
-            static_cast<Element*>(border)->AdjustUpperLeft(dx, dy);
+        if (Element* border = r->_border)
+            border->AdjustUpperLeft(dx, dy);
 
         _upperLeftX = x;
         _upperLeftY = y;

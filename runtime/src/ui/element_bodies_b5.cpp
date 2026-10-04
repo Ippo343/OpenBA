@@ -535,7 +535,7 @@ int32_t ScrollSpriteExtent(const ::Sprite& sprite, bool vertical) {
     const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;                                         // 18011a3a8 JNS / else 0
     // LEFT: UI::Sprite::spriteSheet is void* (Sprite.h, R-UI-b).
-    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
+    const UI::SpriteSheet* sheet = sprite.spriteSheet;
     // `SpriteInfo` lives at GLOBAL scope in runtime/types/ui/SpriteSheet.h, not
     // in namespace UI, and its sizeof is static_asserted there to be 0x38 —
     // which is the stride retail's `IMUL RDX,RDX,0x38` uses.

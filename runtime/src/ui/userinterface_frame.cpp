@@ -335,7 +335,7 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // `DialogInstance::ComputeLayout` (0x180113d90) — non-virtual member of the
     // real class (block B).
     for (Node* n = _dialogs._head; n; n = n->next) {
-        reinterpret_cast<DialogInstance*>(n->element)->ComputeLayout(0, 0, w, h);
+        n->element->ComputeLayout(0, 0, w, h);
     }
 
     // 0x18012161e — a fade in progress swallows the whole input half AND the
@@ -390,7 +390,7 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     Node* n = _dialogs._tail;
     if (n) {
         for (;;) {
-            DialogInstance* const dlg = static_cast<DialogInstance*>(n->element);
+            DialogInstance* const dlg = n->element;
             if (dlg->_parent.Get() == nullptr) {                    // +0x28
                 // `DialogInstance::Update(const Time&, UserInterface*,
                 // Element::UpdateState&)` (0x180113980) — non-virtual member of

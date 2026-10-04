@@ -142,6 +142,7 @@
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/ComboDialog.h"     // ComboElement::_openDialog
 #include "../../types/collection/Collection.h"
 // WAVE 9 LANE UIW2 PART 2. The String primitives the two newly ported
 // address-door bodies call as ordinary C++ rather than through a door:
@@ -612,10 +613,10 @@ void ComboElement::UpdateText() {
 void ComboElement::SetCurrentItem(int32_t index) {
     if (_openDialog != nullptr) {
         // The local slot retail builds at [RSP+0x30] and passes by address.
-        DialogInstance* const open = static_cast<DialogInstance*>(_openDialog);
+        DialogInstance* const open = _openDialog;
         Object::InternalPtr<DialogInstance> dialogSlot(open);
         // B.4 LEFT: DialogInstance::_ui is `void*` (block R-UI-a's header).
-        reinterpret_cast<UserInterface*>(open->_ui)->CloseDialog(&dialogSlot);   // +0x10
+        open->_ui->CloseDialog(&dialogSlot);   // +0x10
         _openDialog = nullptr;
     }
 

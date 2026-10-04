@@ -401,7 +401,7 @@ extern "C" void* RtUi_UserInterface_GetFirstDialog(UserInterface* self, void* re
 // including a header another lane owns.
 bool UI::UserInterface::PausesGame() const {
     for (auto* node = _dialogs._head; node; node = node->next) {
-        const auto* dlg = static_cast<const UI::DialogInstance*>(node->element);
+        const auto* dlg = node->element;
         if (dlg->_flags & 1u) return true;          // DialogInstance +0x20 bit 0
     }
     return false;
@@ -438,7 +438,7 @@ bool UI::UserInterface::PausesGame() const {
 Object::InternalPtr<UI::DialogInstance>
 UI::UserInterface::GetFirstContainedDialog(int32_t x, int32_t y) const {
     for (auto* node = _dialogs._tail; node; node = node->prev) {
-        auto* dlg = static_cast<UI::DialogInstance*>(node->element);
+        auto* dlg = node->element;
         const uint32_t flags = dlg->_flags;                            // +0x20
         if (flags & 0x4u) continue;
 
@@ -448,7 +448,7 @@ UI::UserInterface::GetFirstContainedDialog(int32_t x, int32_t y) const {
             // call dispatches through the element's own (minted) table.
             // `_root` (+0x50) through the dialog's own one-load accessor
             // (0x180045580): DialogInstance.h still spells the field `void*`.
-            hit = dlg->GetRoot()->Contains(x, y, static_cast<UserInterface*>(dlg->_ui)); // +0x10
+            hit = dlg->GetRoot()->Contains(x, y, dlg->_ui); // +0x10
         } else {
             const Object::InternalPtr<UI::Element> e = dlg->GetRoot();
             hit = (x >= e->_layoutLeft) && (x <= e->_layoutRight) &&
@@ -646,7 +646,7 @@ void UI::UserInterface::Play(int32_t id) {
     // B.4 LEFT: `_audioScene` (+0x90) stays `void*` (code/Game assigns it a
     // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158). The body
     // is Audio::Scene::PlayEffect inlined (0x1801223ec..0x180122458).
-    Audio::Scene* const scene = reinterpret_cast<Audio::Scene*>(_audioScene);
+    Audio::Scene* const scene = _audioScene;
     if (!scene) {  return; }
 
     Audio::Scene::Channel* const table = scene->channels._data;   // +0x10
@@ -691,7 +691,7 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
 
     const SpriteSheet* sheet = cursor->_spriteSheet.Get();
     const Graphics::MaterialInstance* const material =
-        reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30);
+        sheet->m_field30;
     void* const image = material->_textures.GetData()[0].image;
 
     backend->SetImageBuffer(image, cursor->_hotSpotX, cursor->_hotSpotY);
@@ -728,7 +728,7 @@ void UI::UserInterface::BringDialogToFront(Object::InternalPtr<DialogInstance>* 
     // list is not ours to fix) — `GetLast()` returns a null-node `Iterator`
     // exactly like the raw `_tail` this used to read, so dereferencing it
     // still faults the same way on an empty list.
-    void* dlg = dialog->Get();
+    DialogInstance* dlg = dialog->Get();
     if (*_dialogs.GetLast() == dlg) {
         return;
     }
@@ -890,8 +890,8 @@ void UiDtorBody(UserInterface* self) {
             }
 
             // RE-READ, at 0x180120c74, after the free. See trap (b).
-            void*& slot = self->_removedDialogs._data[i];
-            UI::DialogInstance* const dlg = reinterpret_cast<UI::DialogInstance*>(slot);
+            UI::DialogInstance*& slot = self->_removedDialogs._data[i];
+            UI::DialogInstance* const dlg = slot;
             // Trap (a): the flag word is read BEFORE the null test, as retail
             // does. Kept in that order deliberately.
             const uint32_t flags = dlg->_flags;
@@ -906,7 +906,7 @@ void UiDtorBody(UserInterface* self) {
 
     // ---- phase 2 ----------------------------------------------------------
     for (Node* node = list._head; node; node = node->next) {
-        UI::DialogInstance* const dlg = reinterpret_cast<UI::DialogInstance*>(node->element);
+        UI::DialogInstance* const dlg = node->element;
         const uint32_t flags = dlg->_flags;
         if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
             delete dlg;
@@ -1006,8 +1006,7 @@ void UI::UserInterface::CleanRemovedDialogs() {
         // keeps this body honest against retail's own instruction order).
         // (A null `_data` here faults on the element load exactly as the
         // tree's `*(nullptr)` read did.)
-        void*& slot = _removedDialogs._data[i];
-        DialogInstance* const dlg = reinterpret_cast<DialogInstance*>(slot);
+        DialogInstance* const dlg = _removedDialogs._data[i];
         const uint32_t flags = dlg->_flags;   // trap (a): read before the null test
         if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
             delete dlg;
@@ -1059,7 +1058,7 @@ void UI::UserInterface::UpdateEvents() {
 // GetMouseCursorIndex starting from its root Element.
 int32_t UI::UserInterface::GetMouseCursorIndex(int32_t x, int32_t y) const {
     for (const auto* node = _dialogs._tail; node; node = node->prev) {
-        DialogInstance* const dlg = reinterpret_cast<DialogInstance*>(node->element);
+        DialogInstance* const dlg = node->element;
         const uint32_t flags = dlg->_flags;
         if ((flags >> 2) & 1) continue;
         // `_root` (+0x50) through the dialog's own accessor (0x180045580, one
@@ -1069,7 +1068,7 @@ int32_t UI::UserInterface::GetMouseCursorIndex(int32_t x, int32_t y) const {
         if ((flags >> 3) & 1) {
             // Element vtable slot 9 (+0x48) `Contains` — VIRTUAL.
             // B.4 LEFT: `DialogInstance::_ui` (+0x10) is `void*` (R-UI-a).
-            hit = root->Contains(x, y, reinterpret_cast<UserInterface*>(dlg->_ui));
+            hit = root->Contains(x, y, dlg->_ui);
         } else {
             const int32_t left   = root->_layoutLeft;     // +0x68
             const int32_t right  = root->_layoutRight;    // +0x70
@@ -1199,7 +1198,7 @@ void UI::UserInterface::SaveAllSettings() {
     if (!node) return;
 
     do {
-        DialogInstance* const dlg = reinterpret_cast<DialogInstance*>(node->element);
+        DialogInstance* const dlg = node->element;
         if (dlg->_userData != nullptr) {
             // ---- 1+2. the inlined IO::MemoryStream and its 8-byte encoding -
             // ENDGAME B.3.9 IO (foreign site, IO's class): retail's inlined

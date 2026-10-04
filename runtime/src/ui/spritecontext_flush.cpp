@@ -345,7 +345,7 @@ void SpriteContext::Flush() {
     }
 
     Video::Context* const ctx = _context;
-    const SpriteSheet* const current = static_cast<const SpriteSheet*>(_currentSheet);
+    const SpriteSheet* const current = _currentSheet;
 
     // --- the scissor push, 0x18011bab3..0x18011bb08 -------------------------
     // Four independent compares that all fall through to the SAME store block:
@@ -367,7 +367,7 @@ void SpriteContext::Flush() {
 
     // --- 0x18011bb37 -------------------------------------------------------
     // `m_field30` is spelt uint64_t (saveload_draw.cpp stores it as an integer).
-    reinterpret_cast<const Graphics::MaterialInstance*>(current->m_field30)
+    current->m_field30
         ->Setup(*ctx, 0);
 
     // --- the chunked walk, 0x18011bb3c..0x18011c5ef ------------------------

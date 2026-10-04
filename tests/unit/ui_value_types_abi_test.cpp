@@ -87,7 +87,7 @@ UNIT_TEST(ui_string_default_ctor_writes_only_what_retail_writes) {
 // Claim 2: `operator=` copies all sixteen bytes, as retail's two qword moves do.
 UNIT_TEST(ui_value_types_assignment_is_retails_two_qword_copy) {
     UI::Sprite a;
-    a.spriteSheet = reinterpret_cast<void*>(uintptr_t(0x1000));
+    a.spriteSheet = reinterpret_cast<UI::SpriteSheet*>(uintptr_t(0x1000));
     a.spriteIndex = 7;
     a.pad0C = 0x11223344;
     UI::Sprite b;
@@ -95,7 +95,7 @@ UNIT_TEST(ui_value_types_assignment_is_retails_two_qword_copy) {
     CHECK(std::memcmp(&a, &b, sizeof a) == 0);
 
     UI::String c;
-    c.table = reinterpret_cast<void*>(uintptr_t(0x2000));
+    c.table = reinterpret_cast<UI::StringTable*>(uintptr_t(0x2000));
     c.index = 3;
     c.pad0C = 0x55667788;
     UI::String d;
@@ -107,7 +107,7 @@ UNIT_TEST(ui_value_types_assignment_is_retails_two_qword_copy) {
 UNIT_TEST(ui_sprite_compare_and_validity_are_retails) {
     int dummy = 0;
     UI::Sprite a;
-    a.spriteSheet = &dummy;
+    a.spriteSheet = reinterpret_cast<UI::SpriteSheet*>(&dummy);
     a.spriteIndex = 2;
     a.pad0C = 1;
     UI::Sprite b = a;
@@ -126,7 +126,7 @@ UNIT_TEST(ui_sprite_compare_and_validity_are_retails) {
     CHECK(!a.IsValid());
 
     UI::String s;
-    s.table = &dummy;
+    s.table = reinterpret_cast<UI::StringTable*>(&dummy);
     s.index = 0;
     CHECK(s.IsValid());                    // table first (0x180035060)
     s.index = -5;

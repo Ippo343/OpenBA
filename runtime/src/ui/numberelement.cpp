@@ -132,7 +132,7 @@ void NumberElement::ComputeSize() {
 
 // slot 5 — 0x180119080
 void NumberElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->ComputeLayout(x, y, right, bottom);            // virtual, slot 5
 
     ComputeSize();                                             // virtual, slot 4
@@ -170,7 +170,7 @@ void NumberElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
 
 // slot 6 — 0x1801191e0
 void NumberElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->Draw(ctx, alpha);                              // virtual, slot 6
 
     const uint32_t flags = _flags;

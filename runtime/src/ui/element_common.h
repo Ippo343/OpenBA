@@ -105,13 +105,13 @@ inline void StoreFlags(UI::Element* self, uint32_t newFlags) {
 inline int SpriteW(const UI::Sprite& sprite) {
     const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;
-    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
+    const UI::SpriteSheet* sheet = sprite.spriteSheet;
     return sheet->m_sprites[idx].width;
 }
 inline int SpriteH(const UI::Sprite& sprite) {
     const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;
-    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
+    const UI::SpriteSheet* sheet = sprite.spriteSheet;
     return sheet->m_sprites[idx].height;
 }
 
@@ -198,10 +198,9 @@ inline void PaddedSizeInline(UI::Element* e, int* outW, int* outH) {
 // 0x18011872a and h is re-spilled to the outgoing slot), not the clamped ones.
 // ---------------------------------------------------------------------------
 inline void ElementComputeAlignedRect(UI::Element* self, int x, int y, int w, int h) {
-    // LEFT: Element::_border stays void* (tests/unit/ui_element_abi_test.cpp:394).
-    void* border = self->_border;
+    UI::Element* border = self->_border;
     if (border != nullptr)
-        static_cast<UI::Element*>(border)->ComputeLayout(x, y, w, h);   // slot 5
+        border->ComputeLayout(x, y, w, h);   // slot 5
 
     self->ComputeSize();                                // slot 4
 

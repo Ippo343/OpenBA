@@ -226,7 +226,7 @@ void EditElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // `top - font.baseline + font.lineHeight`, and the caret — a literal "|" —
 // one pixel LEFT of the character position the caret index resolves to.
 void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))   // LEFT: _border is void*
+    if (Element* border = _border)
         border->Draw(ctx, alpha);                            // virtual, slot 6
 
     const uint32_t flags = _flags;

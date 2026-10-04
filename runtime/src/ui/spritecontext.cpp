@@ -273,7 +273,7 @@ void SpriteContext::FlushDeferredFonts() {
 
     for (int i = 0; i < _deferred.GetSize(); ++i) {
         SpriteDraw* rec   = &_deferred.GetData()[i];
-        void*       sheet = rec->sheet;
+        SpriteSheet* sheet = rec->sheet;
         if (_currentSheet != sheet) {
             if (_currentSheet != nullptr) Flush();
             _currentSheet = sheet;
@@ -296,7 +296,7 @@ void SpriteContext::AddLine(const Sprite& sprite, int32_t x1, int32_t y1,
                             int32_t x2, int32_t y2, uint32_t color) {
     // 0x18011cc09 / 0x18011cc0e: two independent early returns. Note the index
     // test is `< 0`, not `== -1` — `JL`, a SIGNED branch.
-    void* sheet = sprite.spriteSheet;
+    SpriteSheet* sheet = sprite.spriteSheet;
     if (sheet == nullptr || sprite.spriteIndex < 0) return;
 
     if (_currentSheet != sheet) {

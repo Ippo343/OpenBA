@@ -373,8 +373,7 @@ void ModDialog::OnOpened() {
             entry.spriteSheet = sprSheet;
 
             // The sheet's material instance (+0x30).
-            // LEFT: SpriteSheet::m_field30 is uint64_t (R-UI's header).
-            sprSheet->m_field30 = reinterpret_cast<uint64_t>(matInst);
+            sprSheet->m_field30 = matInst;
 
             // operator= empty strings at +0x40 and +0x38 (the two String fields).
             // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).

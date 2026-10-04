@@ -71,7 +71,7 @@ public:
     bool IsValid() const { return (table != nullptr) && (index >= 0); }
 
     // ---- the 0x10 bytes (public: other blocks' bodies read them) -----------
-    void*   table;   // +0x00  ExternalPtr<UI::StringTable> (null = no table)
+    StringTable* table; // +0x00  ExternalPtr<UI::StringTable> (null = no table; B4 P2 H4: typed)
     int32_t index;   // +0x08  index into the table (-1 = unset)
     int32_t pad0C;   // +0x0C  never written by any of the three ctors
 };

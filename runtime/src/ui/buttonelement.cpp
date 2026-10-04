@@ -149,7 +149,7 @@ void ButtonElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // Border, dim, then the STATE BACKGROUND and the LABEL — in that order, so the
 // label paints on top.
 void ButtonElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    const Element* border = static_cast<const Element*>(_border);
+    const Element* border = _border;
     if (border != nullptr) border->Draw(context, alpha);
 
     alpha = DimAlpha(this, alpha);

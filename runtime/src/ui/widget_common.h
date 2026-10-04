@@ -117,7 +117,7 @@ inline float RootUiScale(const ::UI::Element* e) {
     const ::UI::Element* n = e;
     while (n->_parent != nullptr) n = n->_parent;
     const auto* dialog = static_cast<const ::UI::DialogInstance*>(n->_dialogParent);
-    return static_cast<const ::UI::UserInterface*>(dialog->_ui)->_uiScale;
+    return dialog->_ui->_uiScale;
 }
 
 // ---------------------------------------------------------------------------

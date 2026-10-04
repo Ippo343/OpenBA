@@ -226,8 +226,8 @@ void DocumentTextElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t
 //                 type-tested, and given its own Draw. A failed type test
 //                 yields null and retail calls through it.
 void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    if (_border != nullptr)   // LEFT: _border is void* (the unit test)
-        static_cast<const Element*>(_border)->Draw(context, alpha);   // slot 6
+    if (_border != nullptr)
+        _border->Draw(context, alpha);   // slot 6
 
     Font* const* const fonts = _fontsData;
     const int32_t count = _itemsCount;

@@ -167,7 +167,7 @@ void LabelElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // The text's Y is `(font.lineHeight - font.baseline) + placedY`, i.e. the
 // placement computes a top edge and AddFont wants a baseline.
 void LabelElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->Draw(ctx, alpha);                            // virtual, slot 6
 
     const uint32_t baseColor = _color;

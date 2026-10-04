@@ -320,7 +320,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // which appears FIVE times verbatim (0x180121e96, 0x180121f79, 0x180122084,
     // 0x180122168, and inside the deferred drain). Written once because five
     // copies of the same four instructions is how a transcription error hides.
-    auto selectSheet = [&](void* sheet) {
+    auto selectSheet = [&](SpriteSheet* sheet) {
         if (sc->_currentSheet != sheet) {
             if (sc->_currentSheet != nullptr) {
                 sc->Flush();                            // batch key change
@@ -336,7 +336,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
     int32_t maxLayer = 0;
     Node*   topmost  = _dialogs._head;
     for (Node* n = topmost; n != nullptr; n = n->next) {
-        const DialogInstance* const d = static_cast<const DialogInstance*>(n->element);
+        const DialogInstance* const d = n->element;
 
         const uint32_t shifted = d->_flags >> 4;
         if (shifted & 1u) topmost = n;
@@ -366,7 +366,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
             bool pastTopmost = false;
 
             for (Node* n = _dialogs._head; n != nullptr; n = n->next) {
-                DialogInstance* const d = static_cast<DialogInstance*>(n->element);
+                DialogInstance* const d = n->element;
 
                 // ---- 0x180121dbe: the backdrop, FIRST PASS ONLY -----------
                 // `TEST R12,R12; JNZ` — the whole block is gated on the OUTER
@@ -394,7 +394,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
                             const int64_t idx = d->_spriteIndex;
                             if (idx >= 0) {
                                 const SpriteInfo* const tbl =
-                                    static_cast<const SpriteSheet*>(d->_spriteSheet)->m_sprites;
+                                    d->_spriteSheet->m_sprites;
                                 sw = tbl[idx].width;                   // +0x1c
                             }
                         }
@@ -402,7 +402,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
                             const int64_t idx = d->_spriteIndex;
                             if (idx >= 0) {
                                 const SpriteInfo* const tbl =
-                                    static_cast<const SpriteSheet*>(d->_spriteSheet)->m_sprites;
+                                    d->_spriteSheet->m_sprites;
                                 sh = tbl[idx].height;                  // +0x20
                             }
                         }
@@ -434,7 +434,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
                         tint = d->_dialog->_backgroundColor;           // +0x30
                     }
 
-                    void* const sheet = d->_spriteSheet;
+                    SpriteSheet* const sheet = d->_spriteSheet;
                     if (sheet != nullptr && d->_spriteIndex >= 0) {
                         selectSheet(sheet);
 
@@ -514,7 +514,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
                 (static_cast<uint32_t>(static_cast<uint8_t>(a64)) << 24) |
                 (_fadeColor & 0x00ffffffu);
 
-            void* const sheet = _fadeSpriteSheet;
+            SpriteSheet* const sheet = _fadeSpriteSheet;
             if (sheet != nullptr && _fadeSpriteIndex >= 0) {
                 selectSheet(sheet);
 

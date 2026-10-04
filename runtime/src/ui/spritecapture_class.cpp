@@ -306,7 +306,7 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
 
         // A recorded sprite. The Sprite the scissor entries do NOT have.
         const Sprite& sprite = _sprites.data[i];
-        const SpriteSheet* const sheet = static_cast<const SpriteSheet*>(sprite.spriteSheet);
+        const SpriteSheet* const sheet = sprite.spriteSheet;
 
         const int32_t x1 = e.x1 + ox;
         const int32_t y1 = e.y1 + oy;
@@ -323,7 +323,7 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
         // `CMP dword [RCX+0x6c],1`), inlined. `m_field30` is spelt uint64_t
         // (saveload_draw.cpp stores it as an integer).
         const Graphics::MaterialInstance* const instance =
-            reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30);  // 1800d93fb
+            sheet->m_field30;  // 1800d93fb
         const Graphics::Material* const material = instance->_material.Get();       // 1800d9406
         const Video::VideoProgram* const pass0 = material->_passes.GetData()[0].Get();  // 1800d9410 / 1800d9417
         const Video::RenderState* const state = pass0->_renderState.Get();          // 1800d941a

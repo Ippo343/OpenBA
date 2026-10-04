@@ -232,7 +232,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     }
     if (!found) {
         index = oldSize;
-        SpriteSheet* fill = static_cast<SpriteSheet*>(sprite.spriteSheet);
+        SpriteSheet* fill = sprite.spriteSheet;
 
         // Array<void*>::SetSize(oldSize + 1, fill), inlined by retail at
         // 0x1800d8b92..0x1800d8c9f. `newSize != oldSize` is retail's guard and
@@ -292,7 +292,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         // name; now the member. The returned temporary's own reference is
         // released by its destructor at the end of this block, exactly where
         // retail releases the slot.
-        System::String slot = static_cast<const SpriteSheet*>(sprite.spriteSheet)
+        System::String slot = sprite.spriteSheet
                                   ->GetSpriteNameFromIndex(sprite.spriteIndex);
         name = slot._data;
         if (name) { e.name = name; ++StringRc(name); }

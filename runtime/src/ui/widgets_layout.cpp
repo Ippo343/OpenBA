@@ -448,13 +448,9 @@ void GraphElement::RemoveGraphs() {
 //
 // ORACLE: none — a replay would append the point a SECOND time.
 void GraphElement::AddGraphPoint(int32_t graph, int32_t value) {
-    uint8_t* seriesData = static_cast<uint8_t*>(_seriesData);
-    // record = data + graph*0x18; the point Array header sits at record + 8.
-    uint8_t* pointArray = seriesData + static_cast<int64_t>(graph) * 0x18 + 8;
-
-    // ENDGAME B.3.2 step 2 — `kSpec_Fill4` is trait-equivalent for `int32_t`,
-    // so the bridge is a plain `Array<int32_t>` view of the nested header.
-    auto* points = reinterpret_cast<Collection::Array<int32_t>*>(pointArray);
+    // record = data + graph*0x18; the point Array header sits at record + 8
+    // (GraphSeries::points).
+    Collection::Array<int32_t>* points = &_seriesData[static_cast<int64_t>(graph)].points;
     points->SetSize(points->GetSize() + 1, value);
 }
 
@@ -503,8 +499,7 @@ void GraphElement::AddGraph(uint32_t colour) {
 
     reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();
 
-    uint8_t* data = static_cast<uint8_t*>(_seriesData);
-    *reinterpret_cast<uint32_t*>(data + old * 0x18) = colour;
+    _seriesData[old].colour = colour;
 }
 
 // ============================================================

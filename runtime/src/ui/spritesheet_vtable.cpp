@@ -284,7 +284,7 @@ void StringSerialize(char** field, IO::Serializer* ser) {
 // ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name. `m_field30`
 // is spelt uint64_t (saveload_draw.cpp stores it as an integer), and the body
 // takes the rt::io POD view of the Serializer (cursor.cpp does the same).
-void MaterialPtrSerialize(uint64_t* field, IO::Serializer* ser) {
+void MaterialPtrSerialize(Graphics::MaterialInstance** field, IO::Serializer* ser) {
     RtObject_ExternalPtrSerialize_MaterialInstance(
         reinterpret_cast<RtObject::External**>(field),
         reinterpret_cast<rt::io::Serializer*>(ser));
