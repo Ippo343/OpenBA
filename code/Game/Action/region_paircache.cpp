@@ -204,9 +204,8 @@ void RegionPairCache::Expire(const int64_t* dt) {
 
 }
 
-// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp) holds the cache as int64_t*.
-void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
-    if (param_1 == nullptr || param_2 == nullptr) return;
-    // LEFT: GAME-a (Game/gameupdateloop.cpp holds the cache as int64_t*).
-    ((RegionPairCache*)param_1)->Expire(param_2);
+// The null-guarded entry GameUpdateLoop::Update calls (not a pure forwarder: kept, typed).
+void Pf_RegionPairCacheTick_5d10(RegionPairCache* cache, const int64_t* nowTicks) {
+    if (cache == nullptr || nowTicks == nullptr) return;
+    cache->Expire(nowTicks);
 }

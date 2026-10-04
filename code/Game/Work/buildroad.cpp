@@ -87,12 +87,12 @@ BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
 
 // The by-address door RoadTool's commit path calls (roadtool_calcpath.cpp resolves
 // 0x1400e4b50): the real ctor on the caller's memory (B8-5 — the same bytes).
-void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t cellIdx,
-                                uint32_t mapDescVal, uint64_t roadDescExtra,
-                                uint32_t roadTypeExisting, uint32_t roadState,
-                                uint32_t terrainType) {
+BuildRoad* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t cellIdx,
+                                     uint32_t mapDescVal, uint64_t roadDescExtra,
+                                     uint32_t roadTypeExisting, uint32_t roadState,
+                                     uint32_t terrainType) {
     if (!self) return nullptr;
-    return static_cast<Object::Base*>(new (static_cast<void*>(self)) BuildRoad(
+    return (new (static_cast<void*>(self)) BuildRoad(
         ownerIbp, cellIdx, mapDescVal, roadDescExtra, roadTypeExisting, roadState, terrainType));
 }
 

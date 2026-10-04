@@ -38,11 +38,13 @@ class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 // ---- citizen_names.cpp
 class NameDatabase;
 extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db, System::Random* rng, int minLen, int maxLen);  // 0x1400a4b30
-extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  // 0x1400a4c60
+extern "C" System::String* NameDB_PickAndGenerate(System::String* retStr, System::Random* rng, char female);  // 0x1400a4c60
 
 // ---- citizenlist_serialize.cpp
 
 // ---- eventlog.cpp
+struct EventLogEntry;   // Game/EventLog.h
+extern "C" void EventLog_EventArray_Destroy(EventLogEntry** arrBase);  // 0x14000a8a0
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
 // The two below keep their null-log guard (not pure forwarders).
@@ -82,8 +84,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 
 // ---- game_leaf_helpers.cpp
 void Game_DestroyStringArray18(void* arrayHeader);  // 0x14001b030
-void Game_EventNotifierCleanup(void* arrayHeader);  // 0x14000a8a0
-void Game_MusicPlayerDtor(void* self);  // 0x140018220
+class CharacterGrid;   // Component/CharacterGrid.h
+void Game_MusicPlayerDtor(CharacterGrid* self);  // 0x140018220
 void Game_ImageCaptureDtor(Minimap* self);  // 0x1400a4fc0
 void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
@@ -250,7 +252,7 @@ void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* load
 // typedef void* (*fn_GetLoadingSoundString_t)(uint64_t unused, void* retStr,
 //                                              uint64_t unused2, uint64_t unused3);
 // extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
-inline void* GetLoadingSoundString(void* retStr) {
+inline System::String* GetLoadingSoundString(System::String* retStr) {
     uint8_t rng[2520];  // System::Random is large (~2512 bytes)
     // ??0Random@System@@QEAA@XZ 0x1800c7f20, called by name (B3R Leftovers).
     System::Random* random = reinterpret_cast<System::Random*>(rng);   // LEFT: H5 the Random lives in raw stack storage (retail runs its ctor and no dtor)
@@ -266,8 +268,7 @@ inline void* GetLoadingSoundString(void* retStr) {
     if (Opt().menuScene >= 0)
         variant = static_cast<unsigned>(Opt().menuScene) % 12u;
     // ?Format@String@System@@SA?AV12@PEBDZZ  retail 0x1800c9730
-    *reinterpret_cast<System::String*>(retStr) =   // LEFT: SIG GetLoadingSoundString(void* retStr) (callers in other blocks' files)
-
+    *retStr =
         System::String::Format("Dialog/Loading.rsc:gameLoad%i", variant);
     return retStr;
 }

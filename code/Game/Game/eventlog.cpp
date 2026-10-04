@@ -128,9 +128,9 @@ static void EventArray_Grow(EventLogEntry** arrBase, int newCount, const EventLo
 // The matching destructor, FUN_14000a8a0 (retail's EventNotifier cleanup): ~String
 // on each live entry's +0x08, MemFree the buffer, zero the header. Exported for
 // game_leaf_helpers.cpp's Game_EventNotifierCleanup so the element row lives in
-// exactly one place.
-extern "C" void EventLog_EventArray_Destroy(void* arrBase) {
-    reinterpret_cast<EventArray*>(arrBase)->~Array();   // LEFT: SIG EventLog_EventArray_Destroy (Game_EventNotifierCleanup's void* from gameupdateloop.cpp); EventLog.h H5 as above
+// exactly one place. Called by name from GameUpdateLoop::Shutdown (the forwarder is gone).
+extern "C" void EventLog_EventArray_Destroy(EventLogEntry** arrBase) {
+    reinterpret_cast<EventArray*>(arrBase)->~Array();   // LEFT: EventLog.h H5: entries is the Array's three raw fields (gameupdateloop_load.cpp asserts EventLog trivially constructible)
 }
 
 // ============================================================

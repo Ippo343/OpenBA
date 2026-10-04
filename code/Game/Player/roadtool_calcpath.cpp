@@ -36,6 +36,7 @@
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Work/buildroad_funcs.h"
+#include "Work/BuildRoad.h"   // BuildRoad_CtorParams_Impl returns the BuildRoad (a Work)
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
@@ -179,7 +180,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
 
     // Build the BuildRoad work item (0x70 bytes) and hand it to the work scheduler.
     uint64_t ownerIbp = 0;   // retail seeds a null InternalBasePtr
-    void* work = nullptr;
+    Work* work = nullptr;
     BuildRoad* mem = static_cast<BuildRoad*>(System::MemoryAllocator::MemAlloc(0x70, 8));
     if (mem) {
         new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // the IBP ctor 0x140152a90
@@ -194,7 +195,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
         return;
     }
 
-    Object::InternalPtr<Work> workIbp(static_cast<Work*>(work));   // LEFT: SIG BuildRoad_CtorParams_Impl returns void*
+    Object::InternalPtr<Work> workIbp(work);
 
     // Post to the work scheduler (GameUpdateLoop +0x118). code 0x2000 = the road
     // category; retail passes fromExisting='\0' and prio=-1 (the prio is dead here).

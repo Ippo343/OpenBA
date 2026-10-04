@@ -161,7 +161,6 @@ using InitialStructure30Array = Collection::Array<uint8_t, Collection::DefaultAl
 
 }  // namespace
 
-extern "C" void EventLog_EventArray_Destroy(void* arrBase);   // eventlog.cpp
 
 // FUN_14001b030 (mapgenerator.cpp) — String at element+0, stride 0x18.
 void Game_DestroyStringArray18(void* arrayHeader) {
@@ -174,8 +173,8 @@ void Game_DestroyStringArray30(void* arrayHeader) {
 }
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,
-// stride 0x28.
-void Game_EventNotifierCleanup(void* arrayHeader) { EventLog_EventArray_Destroy(arrayHeader); }
+// stride 0x28: EventLog_EventArray_Destroy (eventlog.cpp), called by name; the
+// one-line forwarder Game_EventNotifierCleanup was deleted in B.4 wave X.
 
 // ------------------------------------------------------------------
 // FUN_140018220 (gameupdateloop.cpp, MusicPlayer_Dtor) — frees 5 buffers at
@@ -189,8 +188,8 @@ void Game_EventNotifierCleanup(void* arrayHeader) { EventLog_EventArray_Destroy(
 // (= Array<uint8_t>, the same form runtime/src/collection/array.cpp's
 // ArrayDtorSited uses) is the honest spelling until MusicPlayer is a class.
 // ------------------------------------------------------------------
-void Game_MusicPlayerDtor(void* self) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(self);   // LEFT: SIG Game_MusicPlayerDtor (caller gameupdateloop.cpp passes m_characterGrid; the record is CharacterGrid, whose five arrays Component/CharacterGrid.h declares as raw triples, H5)
+void Game_MusicPlayerDtor(CharacterGrid* self) {
+    uint8_t* b = reinterpret_cast<uint8_t*>(self);   // LEFT: Component/CharacterGrid.h declares the five arrays as raw triples (H5): the ~Array runs over their headers by offset
     static const uint64_t kOffsets[5] = { 0x50, 0x40, 0x30, 0x20, 0x10 };
     for (uint64_t off : kOffsets)
         reinterpret_cast<rtcoll::ArrayHdr*>(b + off)->~Array();   // LEFT: Component/CharacterGrid.h: the arrays are raw triples (H5)
@@ -250,7 +249,7 @@ static_assert(offsetof(MenuSceneTreeMap, count) == 0x18, "MenuSceneTreeMap::coun
 }  // namespace
 
 void Game_MenuSceneArrayDtor(void* self) {
-    MenuSceneTreeMap* map = reinterpret_cast<MenuSceneTreeMap*>(self);   // LEFT: SIG Game_MenuSceneArrayDtor (caller menuscene.cpp declares it locally with void*)
+    MenuSceneTreeMap* map = reinterpret_cast<MenuSceneTreeMap*>(self);   // LEFT: H5 MenuScene.h +0x1C8 / +0x1E8 are raw fields of a {Array, root, count} record (an Array member would make ~MenuScene run ~Array; retail 0x14001b860 is called explicitly)
     MenuSceneTreeNode* node = map->root;  // *(self + 0x10)
     if (node) {
         WorkBase_TreeNodeFree_e320(&map->root, node->left);   // 0x14000e320
@@ -318,7 +317,7 @@ void Game_TerrainResolveMaterial(void* refTriple) {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     // The triple is the {String, generation, External*} record MapGenerator.h
     // names ExternalRef (TerrainGenerator's material ref has the same layout).
-    MapGenerator::ExternalRef* ref = reinterpret_cast<MapGenerator::ExternalRef*>(refTriple);   // LEFT: SIG Game_TerrainResolveMaterial (caller terraingenerator.cpp declares it locally with void*)
+    MapGenerator::ExternalRef* ref = reinterpret_cast<MapGenerator::ExternalRef*>(refTriple);   // LEFT: SIG Game_TerrainResolveMaterial (its caller terraingenerator.cpp SerializeFilenameString holds the record's leading String*, not the record)
     int factoryGen = efactory->_generation;   // factory+8
     if (ref->factoryGen == factoryGen) return;
 

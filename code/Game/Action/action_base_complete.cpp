@@ -421,8 +421,4 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);   // LEFT: SIG ActCt_TaskCleanup_8e30
 }
 
-// B4 FORWARD: outside callers (Action/showtool.cpp; Component files)
-void ActCt_HideTool_1176e0(void* entityV) {
-    HideCitizenTool(reinterpret_cast<CitizenComponent*>(entityV));   // LEFT: SIG ActCt_HideTool_1176e0
-}
 

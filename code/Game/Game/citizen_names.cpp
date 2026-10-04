@@ -254,12 +254,12 @@ extern "C" System::String* NameDB_GenerateName(System::String* retStr, const Nam
 // rendered blank in the trade UI. reg_namedb.cpp used to say this address needed
 // no registration because "nothing resolves them by address"; that stopped being
 // true when the trade lane added the resolve.
-extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female) {
+extern "C" System::String* NameDB_PickAndGenerate(System::String* retStr, System::Random* rng, char female) {
     char buf[0x100];
     buf[0] = 0;
     NameDatabase* db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (db && rng)
-        GenerateName(db, reinterpret_cast<System::Random*>(rng), 3, 10, buf);   // LEFT: SIG NameDB_PickAndGenerate(void* rng) (outside callers)
+        GenerateName(db, rng, 3, 10, buf);
 
     new (retStr) System::String(buf);
     return retStr;

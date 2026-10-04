@@ -775,7 +775,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 TRACE("[GameUpdateLoop::Update] === sim iteration %d/%d ===\n", iteration + 1, speedMultiplier);
 
                 // 3a. Region-pair distance cache staleness sweep
-                int64_t* regionPairCache = reinterpret_cast<int64_t*>(m_game->regionPairCache);   // LEFT: SIG Pf_RegionPairCacheTick_5d10 (Action/exe_bodies.h takes int64_t*)
+                RegionPairCache* regionPairCache = m_game->regionPairCache;
                 TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", (void*)regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
                 Pf_RegionPairCacheTick_5d10(regionPairCache, &time->_ticks);   // 0x1400a5d10
@@ -2087,7 +2087,7 @@ void GameUpdateLoop::Shutdown() {
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
-        Game_EventNotifierCleanup(&m_eventNotifier->entries);   // 0x14000a8a0
+        EventLog_EventArray_Destroy(&m_eventNotifier->entries);   // 0x14000a8a0
         System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 

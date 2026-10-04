@@ -91,10 +91,9 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // queue (002cc0), reset its status icon flag 2 off (12c3f0), null the slot; then
 // if param_2 set, immediately re-roll for a new school (TryFindPartner) and clear the
 // slot again on failure. Closure-safe after the cascade registered TryFindPartner.
-// LEFT: this is a CitizenComponent member in retail (0x140115a50); the class and its
-// header are COMP-b's, so the body stays free on its void* receiver.
-void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);   // LEFT: SIG AttendanceComponent_ReleasePartnerSlot (void*; outside callers, exe_bodies.h)
+// This is a CitizenComponent member in retail (0x140115a50); CitizenComponent.h is not
+// this block's, so the body stays free, on a typed receiver.
+void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll) {
     AttendanceComponent*& slot = self->school;
     if (slot == nullptr) return;
 
