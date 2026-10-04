@@ -129,9 +129,7 @@ bool CompiledResourceExists(const System::Filename& compiled) {
     if (fs == nullptr) return false;
 
     if (fs->_existsInPackfileGate != 0) {
-        // ExistsInPackfile's parameter is still the RtSystem::Filename POD
-        // (FileSystem.h, not this block's).
-        if (fs->ExistsInPackfile(reinterpret_cast<const RtSystem::Filename&>(compiled)))   // 0x1800ab180
+        if (fs->ExistsInPackfile(compiled))   // 0x1800ab180
             return true;
     }
     if (fs->_platformExistsGate == 0) return false;

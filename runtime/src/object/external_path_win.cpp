@@ -439,21 +439,21 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
 
     // MSVC's inlined FileSystem::Exists(candidate), gate and all.
     if (fs->_existsInPackfileGate != 0 &&
-        fs->ExistsInPackfile(                                    // 0x1800ab180
-            *reinterpret_cast<const Filename*>(&candidate))) {  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        fs->ExistsInPackfile(candidate)) {                       // 0x1800ab180
         found = true; decided = true;                            // 0x1800bd7c8
         ++g_pc.hitPackfile;
     }
     if (!decided && fs->_platformExistsGate != 0) {
         ++g_pc.attrProbeEntered;
-        // `System::WideString` has no class yet, so this one stays as C: the
-        // ctor takes the POD String and the release is the POD release.
-        WideString ws{nullptr};                                  // [RBP-0x39]
-        RtSystem_WideString_CtorFromString(
-            &ws, reinterpret_cast<const String*>(&candidate));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-        // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
-        const bool ok = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&ws));  // 0x1800bd7f3  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        // ??0WideString(const String&) (0x1800cab50) over the Filename read AS
+        // a String; the block ends where retail's 0x1800bd7f3 release stands,
+        // so ~WideString (0x18000a730) runs there.
+        bool ok;
+        {
+            const System::WideString ws(candidate.AsString());   // [RBP-0x39]
+            // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
+            ok = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
+        }
         if (ok) {
             found = true; decided = true;                        // 0x1800bd81f
             ++g_pc.hitAttributes;
@@ -480,8 +480,7 @@ System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFact
         // 0x1800bd8cf adopt + 0x1800bd8e2 normalise, onto a null object.
         candidate2 = u6;
 
-        found = fs->ExistsInPackfile(                            // 0x1800bd8fb
-            *reinterpret_cast<const Filename*>(&candidate2));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        found = fs->ExistsInPackfile(candidate2);                // 0x1800bd8fb
         if (found) ++g_pc.hitPackfileRetry; else ++g_pc.notFound;
     }
 

@@ -516,16 +516,16 @@ static void AppendFilename(FilenameArray* out, const System::Filename* value) {
 // a section-D-bound body for no gain.
 namespace IO {
 
-bool FileSystem::ExistsInPackfile(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+bool FileSystem::ExistsInPackfile(const System::Filename& pathRef) const {
+    const System::Filename* const path = &pathRef;
 
     bool ours = false;
 
     // 0x1800ab1a0-0x1800ab1c2. Both lengths come from the allocation header at
     // `data-8` when data is non-null and are 0 otherwise, and the test is
     // `JLE`: proceed only when the path is STRICTLY longer.
-    const char* pathData = path->data;
-    const int pathLen = pathData ? RtIO::Sys(*path).GetLength() : 0;
+    const char* pathData = path->_data;
+    const int pathLen = pathData ? path->GetLength() : 0;
     const int dataDirLen = _dataDirectory.data
                          ? RtIO::Sys(_dataDirectory).GetLength() : 0;
 
@@ -577,14 +577,18 @@ bool FileSystem::ExistsInPackfile(const RtSystem::Filename& pathRef) const {
 // would resolve NULL forever. DIFF: full oracle; GetFileAttributesW is a stat,
 // so running both sides mutates nothing.
 // ============================================================================
-bool FileSystem::PlatformExists(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+bool FileSystem::PlatformExists(const System::Filename& pathRef) const {
+    const System::Filename* const path = &pathRef;
     // retail never reads `this`; RCX is destroyed at 0x1800adc7f
 
-    RtIO::WideString ws{nullptr};
-    RtIO::RtSystem_WideString_CtorFromString(&ws, RtIO::AsString(path));
-    const bool ours = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+    // ??0WideString(const String&) (0x1800cab50) over the Filename read AS a
+    // String, GetFileAttributesW, then the inlined release: ~WideString
+    // (0x18000a730) at the end of the block, the point the release stood.
+    bool ours;
+    {
+        const System::WideString ws(path->AsString());
+        ours = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
+    }
 
     return ours;
 }

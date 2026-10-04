@@ -324,14 +324,15 @@ PathIdNode* SnapshotFind(PathIdNode* node, const char* search) {
 // present, INCLUDING a directory. Retail compares against -1 and nothing else
 // (0x1800aefce `CMP EAX,-0x1 / SETNZ`).
 bool PlatformFileExists(const System::Filename* path) {
-    struct { wchar_t* data; } ws = { nullptr };   // WideString::_data
-    // Filename read AS a String -- the same same-layout cast retail performs
-    // by pointer cast throughout (Filename.h header note); WideString is not
-    // a B.3.1 class, so it still wants the POD String pointer.
-    ::new (static_cast<void*>(&ws)) System::WideString(path->AsString());   // 0x1800aefbf
-    const DWORD attrs = ::GetFileAttributesW(ws.data);
-    const bool ok = (attrs != 0xFFFFFFFFu);                    // 0x1800aefce
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ws));    // 0x1800aefd5  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+    // Filename read AS a String -- the same same-layout conversion retail
+    // performs by pointer cast throughout (Filename.h header note). The block
+    // ends where retail's 0x1800aefd5 release stands: ~WideString (0x18000a730).
+    bool ok;
+    {
+        const System::WideString ws(path->AsString());          // 0x1800aefbf
+        const DWORD attrs = ::GetFileAttributesW(ws._data);
+        ok = (attrs != 0xFFFFFFFFu);                            // 0x1800aefce
+    }                                                           // 0x1800aefd5
     return ok;
 }
 
@@ -468,8 +469,7 @@ void Modification::SetupFileSystem() {
             // banner for why this is not a call to Exists.
             bool present = false;
             if (fsObj->_existsInPackfileGate != 0) {           // 0x1800aef90
-                present = fsObj->ExistsInPackfile(
-                    *reinterpret_cast<const RtSystem::Filename*>(&compiled2));  // LEFT: SIG FileSystem::CreatePath / ExistsInPackfile keep the RtSystem::Filename POD parameter (outside callers: video/save_image_to_file, engine/updateloop_loadresources, object/external_path_win; wave X)
+                present = fsObj->ExistsInPackfile(compiled2);
             }
             if (!present && fsObj->_platformExistsGate != 0)   // 0x1800aefab
                 present = PlatformFileExists(&compiled2);
