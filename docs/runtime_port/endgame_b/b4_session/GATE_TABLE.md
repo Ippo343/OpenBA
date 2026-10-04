@@ -296,3 +296,11 @@ Metric at `46fbb17e`: **3,312** to remove.
 Metric at `3b606e4b`: **3,136** to remove (of which `dx11/` 240). **Waves S, L and R of the second pass are done: every block of `PASS2_FILEMAP.md` is merged (40 gated merges, rows 45-84, 0 problems each).**
 
 `sa-stress` at `3b606e4b`, QUIET machine (no agent building): exit 0, update 1.73 ms/frame, p95 2.21, draw 1.25 (base 1.92 / 2.40 / 1.38). Recorded, not chased.
+
+### Wave X (declaration families; inventory `data/pass2x/`, brief `PASS2X_BRIEF.md`)
+
+| 85 | X-RL | `e09a8631` | runtime lines blocked by nothing outside their file: the `GraphicsMesh::DetailLevel`, `MaterialConstant`, `AnimationGroup::Tag`, `VertexProgram` element bodies by name through `AssignAs` / `InitAs` / `DestroyAs`; `EdgeMeshInstance::_mesh` an `ExternalPtr<EdgeMesh>`, `Video::Device` +0x50 typed: 137 -> 69 in 13 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 86 | X-GS | `044e8fce` | the virtual-slot parameters tree-wide: Controller slots and state handlers take `StateMachine*`, Component / Controller / Action / EntityList ticks `const System::Time*`, Action AbstractImpl / Execute and the executor `ActionStack*`, the ValidateCell / FindCell / CalcDistance trio `Map*` (rows 510-511): 587 -> 513 in 175 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 87 | X-R1 | `bc8b7989` | the ExternalPtr serialize thunks are typed wrappers (`SerializeExternal<T>`, `ExternalPtr<T>::Serialize` / `SerializeArray`) over the one core `Object::ExternalPtrSerializeBody`; 30 per-type thunks, the C shims and the caller bridges deleted; `ExternalList::Serialize` builds the real `IO::Serializer`; `RtObject::ExternalPtr` / `ExternalList` mirrors deleted: 207 -> 81 in 60 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+
+Metric at `bc8b7989`: **2,868** to remove.
