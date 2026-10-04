@@ -126,8 +126,8 @@ using StoragePod16Array = Collection::Array<uint8_t, Collection::DefaultAllocato
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
     // LEFT: its four callers' arrays (StorageComponent::storageSlots, the trade manifest, the
     // notify entries) are raw {data, count, capacity} triples (H5): the one erased core is
-    // reached through the header view.
-    reinterpret_cast<StoragePod16Array*>(arrayBase)->SetSize(newCount);
+    // reached through the header view (the body's original C-style entry cast).
+    ((StoragePod16Array*)arrayBase)->SetSize(newCount);
 }
 
 // ============================================================================
