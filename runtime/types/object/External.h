@@ -272,28 +272,17 @@ static_assert(sizeof(PathStackEntry) == 0x10,
 static_assert(offsetof(PathStackEntry, filename) == 0x08,
               "GetPathStackFilename's extra `ADD RDX,0x8`");
 
-struct ExternalFactory {
-    int32_t      _cleanBitIndex;         // +0x00
-    uint32_t     _cleanBitMask;          // +0x04 — see the note above
-    int32_t      _generation;            // +0x08
-    int32_t      _pad0c;                 // +0x0c
-    ResourceSet  _resources;             // +0x10
-    ReferenceSet _references;            // +0x20
-    // +0x30 _data, +0x38 _size, +0x3c _capacity. The constructor's two zeroed
-    // qwords at +0x30/+0x38 are exactly this container's three fields.
-    Collection::Array<PathStackEntry> _pathStack;
-    bool         _referenceModeEnabled;  // +0x40
-    bool         _loadEnabled;           // +0x41
-    bool         _simpleLoadEnabled;     // +0x42
-};
-static_assert(offsetof(ExternalFactory, _resources)            == 0x10, "_resources @ +0x10");
-static_assert(offsetof(ExternalFactory, _references)           == 0x20, "_references @ +0x20");
-static_assert(offsetof(ExternalFactory, _pathStack)            == 0x30, "_pathStack @ +0x30");
-static_assert(offsetof(ExternalFactory, _pathStack) + offsetof(Collection::Array<PathStackEntry>, _size)
-              == 0x38, "path-stack SIZE @ +0x38 (GetPathStack*'s `CMP dword [RCX+0x38],0`)");
-static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == 0x40, "_referenceMode @ +0x40");
-static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEnabled @ +0x41");
-static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simpleLoad @ +0x42");
+// B.4 P2 wave X (X-R1): the POD that stood here is RETIRED. It was the same
+// 0x43 bytes as `Object::ExternalFactory` below, field for field and asserted
+// so, with no constructor, destructor or virtual of its own, and every body
+// held it by pointer only. The name stays as an ALIAS of the real class so the
+// ported C bodies in `namespace RtObject` keep their spelling and the
+// `reinterpret_cast` bridges between the two spellings go. The layout pins are
+// the real class's (`static_assert`s after `class ExternalFactory`).
+}  // namespace RtObject
+namespace Object { class ExternalFactory; }
+namespace RtObject {
+using ExternalFactory = ::Object::ExternalFactory;
 
 // ============================================================
 // Object::ExternalList — an External whose payload is an array of External*.
@@ -956,17 +945,6 @@ public:
     bool         _loadEnabled;           // +0x41
     bool         _simpleLoadEnabled;     // +0x42
 };
-static_assert(sizeof(ExternalFactory) == sizeof(RtObject::ExternalFactory),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(ExternalFactory, _cleanBitIndex) == offsetof(RtObject::ExternalFactory, _cleanBitIndex), "alias _cleanBitIndex");
-static_assert(offsetof(ExternalFactory, _cleanBitMask)  == offsetof(RtObject::ExternalFactory, _cleanBitMask),  "alias _cleanBitMask");
-static_assert(offsetof(ExternalFactory, _generation)    == offsetof(RtObject::ExternalFactory, _generation),    "alias _generation");
-static_assert(offsetof(ExternalFactory, _resources)     == offsetof(RtObject::ExternalFactory, _resources),     "alias _resources");
-static_assert(offsetof(ExternalFactory, _references)    == offsetof(RtObject::ExternalFactory, _references),    "alias _references");
-static_assert(offsetof(ExternalFactory, _pathStack)     == offsetof(RtObject::ExternalFactory, _pathStack),     "alias _pathStack");
-static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == offsetof(RtObject::ExternalFactory, _referenceModeEnabled), "alias _referenceMode");
-static_assert(offsetof(ExternalFactory, _loadEnabled)          == offsetof(RtObject::ExternalFactory, _loadEnabled),          "alias _loadEnabled");
-static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == offsetof(RtObject::ExternalFactory, _simpleLoadEnabled),    "alias _simpleLoad");
 static_assert(offsetof(ExternalFactory, _resources)  == 0x10, "_resources @ +0x10");
 static_assert(offsetof(ExternalFactory, _references) == 0x20, "_references @ +0x20");
 static_assert(offsetof(ExternalFactory, _pathStack)  == 0x30, "_pathStack @ +0x30");

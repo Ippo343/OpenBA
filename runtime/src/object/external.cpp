@@ -422,79 +422,8 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
 // ============================================================
 // Object::ExternalList
 // ============================================================
-
-// ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z
-//   retail 0x1800bf700                                             — DIFFED
-//
-// HIDDEN RETURN SLOT: (this in RCX, ret in RDX, path in R8, type in R9).
-//
-// *** THE `Type` PARAMETER IS NEVER READ. *** R9 is dead in the whole body: the
-// list is searched by path alone and the first path match is returned whatever
-// its type. A caller that passes a type expecting it to filter gets no filtering.
-//
-// Two more things worth naming:
-//   * The `":resource"` suffix convention again, but through the String&/String&
-//     operator+ (0x1800c9440) rather than the char* overload Find uses.
-//   * The comparison is a LINEAR scan and is **case-SENSITIVE** — length first
-//     (the `str-8` header), then a plain byte strcmp. `ExternalFactory::Find`
-//     over the same kind of path is case-INSENSITIVE. Both are transcribed as
-//     found; do not "harmonise" them.
-ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
-                                                  ExternalPtr<External>* ret,
-                                                  const Filename* path,
-                                                  ::Object::Type /*type — unused by retail*/) {
-
-    bool noIdentifier;
-    {
-        System::Filename ident = Sys(*path).GetPathIdentifer();
-        noIdentifier = (ident.GetLength() == 0);
-    }   // retail releases `ident` here, before the key is built
-
-    // `key` was a raw `char*` holding ONE reference that retail takes by hand
-    // and gives back at the tail. That hand-rolled reference IS a String, and
-    // the tail's `--refcount / MemFree` is its destructor.
-    System::String key;
-    if (noIdentifier) {
-        // Set + AdjustDelimiters on the same object is the `const char*` ctor
-        // (0x180026cf0). Retail builds a whole Filename for the literal so that
-        // the concatenation goes through the String&/String& operator+
-        // (0x1800c9440) rather than the char* overload — see note 1.
-        System::Filename suffix(":resource");
-        // The concatenated buffer is born with refcount 1, which is precisely
-        // the one reference retail's `++StringRefCount(cat.data)` /
-        // `Release(cat)` pair leaves behind.
-        key = Sys(*path).AsString() + suffix.AsString();
-    } else {
-        key = Sys(*path).AsString();
-    }
-
-    ret->ptr = nullptr;
-    for (int i = 0; i < self->_count; ++i) {
-        bool equal;
-        {
-            System::Filename got;   // GetPath's hidden return slot; see above
-            RtObject_External_GetPath(self->_resources[i],
-                                      reinterpret_cast<Filename*>(&got));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-
-            const int keyLen = key.GetLength();
-            const int gotLen = got.GetLength();
-
-            if (keyLen != gotLen) {
-                equal = false;
-            } else if (keyLen == 0) {
-                equal = true;                       // two empty paths match
-            } else if (got._data == nullptr) {
-                equal = false;                      // retail's `iVar8 = 1` arm
-            } else {
-                equal = (std::strcmp(key._data, got._data) == 0);
-            }
-        }   // `got` releases here, as retail does, before the hit is recorded
-
-        if (equal) { ret->ptr = self->_resources[i]; break; }
-    }
-
-    // key's reference goes back in ~String.
-    return ret;
-}
+// ?Find@ExternalList@Object@@ (retail 0x1800bf700) is the member
+// `Object::ExternalList::Find`, external_class_doors.cpp (B.4 P2 wave X: the C
+// body moved there unchanged; its only caller was that member).
 
 }  // namespace RtObject
