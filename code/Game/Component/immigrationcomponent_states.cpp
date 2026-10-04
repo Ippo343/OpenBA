@@ -467,7 +467,7 @@ void ImmigrationComponent::Accept() {
     System::Time dur;
     dur._ticks = 0;
     RtSystem_Time_Ctor(&dur, static_cast<float>(desc->_diseaseMonths) * kSecondsPerMonth);
-    if (tm->field_0x1A0 < dur._ticks) tm->field_0x1A0 = dur._ticks;
+    if (tm->field_0x1A0._ticks < dur._ticks) tm->field_0x1A0._ticks = dur._ticks;
 
     const int n = groupCount;
     TownMgr(gw)->field_0x1B0 += n;

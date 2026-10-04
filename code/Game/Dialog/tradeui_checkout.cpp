@@ -206,7 +206,7 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     int32_t units = d->_i6c;
     System::Time stay{};                               // 8 bytes — the ctor fills all of it
     RtSystem_Time_Ctor(&stay, static_cast<float>(units) * 300.0f);
-    if (town->field_0x1A0 < stay._ticks) town->field_0x1A0 = stay._ticks;
+    if (town->field_0x1A0._ticks < stay._ticks) town->field_0x1A0._ticks = stay._ticks;
 }
 
 // ============================================================

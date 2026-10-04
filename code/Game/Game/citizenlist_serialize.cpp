@@ -323,7 +323,7 @@ void ZeroProfResEntry(ProfessionResourceEntry* e) {
     e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
     e->field_0x0C    = 0;
     e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
-    e->timer         = 0;       // +0x18 u64
+    e->timer._ticks  = 0;       // +0x18 u64
 }
 void InitProfResEntry(uint8_t* d) {
     rtcoll::InitAs<ProfessionResourceEntry, &ZeroProfResEntry>(d);
@@ -708,8 +708,8 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
     }
 
     // LEFT: the three clocks are declared int64_t (CitizenBehavior.h, block WORK-a).
-    reinterpret_cast<System::Time*>(&field_0x190)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): the clocks are int64_t, retail System::Time
-    reinterpret_cast<System::Time*>(&field_0x198)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): the clocks are int64_t, retail System::Time
+    field_0x190.Serialize(*ser);
+    field_0x198.Serialize(*ser);
 
     // "Stats" int-assoc array at +0x150.
     SerializeIntAssocArray(&field_0x150, &field_0x158, ser);
@@ -791,14 +791,14 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
             for (int32_t i = 0; i < sumCount; ++i) {
                 ser->Serialize(entry->current, nullptr);
                 ser->Serialize(entry->maxCapacity, nullptr);
-                reinterpret_cast<System::Time*>(&entry->timer)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): ProfessionResourceEntry::timer is int64_t, retail System::Time
+                entry->timer.Serialize(*ser);
                 ++entry;
             }
         }
     }
 
     ser->Serialize(field_0x1A8, nullptr);
-    reinterpret_cast<System::Time*>(&field_0x1A0)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): the clock is int64_t, retail System::Time
+    field_0x1A0.Serialize(*ser);
 
     if (ser->GetVersion() > 1) {
         ser->Serialize(field_0x1AC, nullptr);

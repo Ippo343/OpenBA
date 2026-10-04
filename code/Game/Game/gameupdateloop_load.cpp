@@ -491,7 +491,7 @@ void ZeroProfResEntry(ProfessionResourceEntry* e) {
     e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
     e->field_0x0C    = 0;
     e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
-    e->timer         = 0;       // +0x18 u64
+    e->timer._ticks  = 0;       // +0x18 u64
 }
 void AssignProfResEntryL(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 4>>(d, s);   // the whole stride, four qwords
