@@ -272,7 +272,7 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
 // FUN_1400938d0 — Weather::DrawUpdate(weather, ctx)
 
 // Native time-of-day sun/lighting driver (code/Game/Game/weather_sun.cpp).
-extern "C" void Weather_SunUpdate(void* self, void* ctx);
+extern "C" void Weather_SunUpdate(GameUpdateLoop* self, Video::Context* ctx);   // weather_sun.cpp
 
 // In-game camera controller input: PlayerToolManager::UpdateHotkeys / UpdateCamera
 // (code/Game/Game/camera_input.cpp) drive the PlayerController camera from the

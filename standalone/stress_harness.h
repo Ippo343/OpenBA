@@ -29,6 +29,7 @@
 #include <cstdint>
 
 class GameUpdateLoop;
+namespace Object { class Base; }
 
 extern "C" {
 
@@ -51,8 +52,8 @@ void StressHarness_DrawEnd();
 extern int g_compProfOn;
 // Begin() looks the component's type up WHILE IT IS STILL ALIVE (its Update may free it)
 // and returns a slot; End() charges the elapsed ticks to that slot.
-int  CompProf_Begin(void* comp);
-int  CompProf_BeginKind(void* comp, int kind);   // kind 1 = per-frame slot-8 tick ("/tree")
+int  CompProf_Begin(Object::Base* comp);
+int  CompProf_BeginKind(Object::Base* comp, int kind);   // kind 1 = per-frame slot-8 tick ("/tree")
 void CompProf_End(int slot, long long tscTicks);   // ticks from CompProf_Now (RDTSC)
 #include <x86intrin.h>
 static inline long long CompProf_Now() { return (long long)__rdtsc(); }

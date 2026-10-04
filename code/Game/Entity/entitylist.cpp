@@ -72,7 +72,6 @@
 // stress harness's COMPPROF report. Only touched when g_compProfOn.
 long long g_elProfDrainTicks = 0, g_elProfPreTicks = 0, g_elProfTreeTicks = 0, g_elProfBucketTicks = 0;
 long long g_elProfTreeNodes = 0, g_elProfBucketVisits = 0, g_elProfBucketTicked = 0;
-extern "C" int  CompProf_BeginKind(void* comp, int kind);
 extern "C" void CompProf_End(int slot, long long qpcTicks);
 
 void ComponentEntity::TickComponents(const System::Time* time) {

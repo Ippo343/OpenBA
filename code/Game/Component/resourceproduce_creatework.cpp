@@ -306,8 +306,8 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
     return work;
 }
 
-// LEFT: declared nowhere else (consumeproduce_recipe_dump.cpp, COMP-c).
-extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
+// Declared nowhere else (consumeproduce_recipe_dump.cpp).
+extern "C" void ConsumeProduce_DumpRecipes(const ConsumeProduceDescription* cpDesc, int selected);
 
 extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* selfV, uintptr_t* out) {
     ConsumeProduceComponent* self = reinterpret_cast<ConsumeProduceComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)

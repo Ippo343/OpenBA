@@ -111,15 +111,14 @@ const char* RecipeLabel(UI::StringTable* stringTable, const System::String& name
 
 // Dump every recipe once per description. `selected` is the component's live
 // consumeResourceId (+0x50) so the chosen row is marked in the output.
-extern "C" void ConsumeProduce_DumpRecipes(void* cpDescV, int selected) {
-    static void* s_done[8] = {};
+extern "C" void ConsumeProduce_DumpRecipes(const ConsumeProduceDescription* cpDescV, int selected) {
+    static const ConsumeProduceDescription* s_done[8] = {};
     static int   s_n = 0;
     if (!cpDescV) return;
     for (int i = 0; i < s_n; ++i) if (s_done[i] == cpDescV) return;
     if (s_n < 8) s_done[s_n++] = cpDescV;
 
-    // B4 FORWARD: the callers hand the description in untyped.
-    const ConsumeProduceDescription* d = reinterpret_cast<const ConsumeProduceDescription*>(cpDescV);
+    const ConsumeProduceDescription* d = cpDescV;
     const int count = d->_recipeCount;
     const ConsumeProduceRecipe* base = d->_recipes;
     fprintf(stderr, "[Recipes] desc=%p count=%d selected(+0x50)=%d\n",
@@ -151,15 +150,5 @@ extern "C" void ConsumeProduce_DumpRecipes(void* cpDescV, int selected) {
     fflush(stderr);
 }
 
-// Public single-entry form of the label reader, for the town-stock cross-reference
-// probe (standalone/tavern_stock_probe.cpp), which matches recipe inputs against
-// stored goods by POINTER and only needs the text to name the row it prints.
-extern "C" const char* ConsumeProduce_RecipeLabelAt(void* cpDescV, int index,
-                                                    char* buf, int cap) {
-    if (cap > 0) buf[0] = 0;
-    if (!cpDescV || index < 0 || cap <= 0) return buf;
-    // B4 FORWARD: tavern_stock_probe.cpp hands the description in untyped.
-    const ConsumeProduceDescription* d = reinterpret_cast<const ConsumeProduceDescription*>(cpDescV);
-    if (!d->_recipes || index >= d->_recipeCount) return buf;
-    return RecipeLabel(d->_stringTable, d->_recipes[index].name, buf, cap);
-}
+// (ConsumeProduce_RecipeLabelAt, the single-entry label reader for a town-stock probe
+// that no longer exists, had no caller left: deleted, B4 wave X.)
