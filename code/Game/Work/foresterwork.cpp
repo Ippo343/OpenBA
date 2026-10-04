@@ -195,7 +195,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     { static int s_tc = 0;
       if (s_tc < 6) { ++s_tc;
         fprintf(stderr, "[ForesterWork::Execute] tick#%d this=%p workArea+0x10=%p cell+0x28=%d\n",
-                s_tc, (void*)this, (void*)field_10.Get(), field_28);
+                s_tc, (void*)this, field_10.Get(), field_28);
         fflush(stderr); } }
 
     // Save citizen ref for later use
