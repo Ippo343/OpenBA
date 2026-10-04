@@ -269,7 +269,7 @@ static Graphics::MeshInstance* ToolMesh(CitizenComponent* citizen) {
 void HideCitizenTool(CitizenComponent* citizen) {
     if (citizen->toolSceneId < 0) return;
 
-    ModelComponent* model = citizen->character->modelComponent;
+    ModelComponent* model = citizen->character->modelComponent.Get();
     model->meshInstance.Detach(ToolMesh(citizen));
 
     if (GameUpdateLoop::_singleton) {
@@ -294,7 +294,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
     if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);
 
-    ModelComponent* model = citizen->character->modelComponent;
+    ModelComponent* model = citizen->character->modelComponent.Get();
 
     void* meshPtr = nullptr;
     float uvScale = 0.0f;

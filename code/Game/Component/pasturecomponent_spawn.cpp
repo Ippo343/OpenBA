@@ -112,7 +112,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
         // Birth: jitter around the parent's model position.
         float jitterY = fn_Random_RandFloatTol(rng);
         float jitterX = fn_Random_RandFloatTol(rng);
-        ModelComponent* model = parentCharacter->modelComponent;
+        ModelComponent* model = parentCharacter->modelComponent.Get();
         if (model) {
             const Math::Vector3& p =
                 model->transform.translation;
@@ -150,9 +150,9 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     int flagged = 0;
     const int total = animalCount;
     for (int i = 0; i < total; ++i) {
-        LivestockComponent** arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals;
         if (!arr) break;
-        LivestockComponent* peerLivestock = arr[i];
+        LivestockComponent* peerLivestock = arr[i].Get();
         if (!peerLivestock) continue;
         AnimalComponent* peerAnimal = peerLivestock->_entity->FindComponent<AnimalComponent>();   // 0x140005500
         if (peerAnimal && !peerAnimal->canGraze)

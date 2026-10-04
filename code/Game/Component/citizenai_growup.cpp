@@ -304,7 +304,7 @@ void CitizenComponent::LongTermPlan() {
     float*   arrB = nullptr;  int arrBCount = 0; int arrBCap = 0;          // local_60 / (int)local_58 / local_58._4_4_
 
     // citizen home cell (model pos) — uVar15 / local_res18
-    const ModelComponent* model = character->modelComponent;
+    const ModelComponent* model = character->modelComponent.Get();
     uint32_t homeCell = ModelCell(model, mapGrid);
 
     // iterate the citizen-storage rows (slotCount, storageSlots: StorageComponent::Item,
@@ -454,7 +454,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
     float destB[4] = {0, 0, 0, 0};   // local_90
 
     // the citizen's ModelComponent (translation.z = walk-time src, local_70)
-    const ModelComponent* model = citizen->character->modelComponent;
+    const ModelComponent* model = citizen->character->modelComponent.Get();
     // model+0x160 (local_70) is read by the original but only the desc->foodInterval*scale
     // path is used for the cooldown below; the raw value is not consumed. home cell from model pos:
     uint32_t homeCell = ModelCell(model, mapGrid);

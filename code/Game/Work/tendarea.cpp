@@ -110,7 +110,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
 
     // Step 3: Get citizen position (the model's translation, character +0x68)
     CitizenComponent* citizen = *citizenRef;
-    ModelComponent* posComp = citizen->character->modelComponent;
+    ModelComponent* posComp = citizen->character->modelComponent.Get();
 
     int mapSize = map->size;
     int citizenCellX = (int)(posComp->transform.translation.x + (float)(mapSize >> 1));

@@ -277,7 +277,7 @@ void AnimalComponent::UpdateBehavior() {
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (!character) return;
 
-    ModelComponent* model = character->modelComponent;
+    ModelComponent* model = character->modelComponent.Get();
     if (!model) return;
 
     const Math::Scalar scaleS(scale);
@@ -426,7 +426,7 @@ void AnimalComponent::OnAdded() {
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (!character) return;
 
-    ModelComponent* model = character->modelComponent;
+    ModelComponent* model = character->modelComponent.Get();
     if (!model) return;
 
     Map* grid = MapGrid();
@@ -603,7 +603,7 @@ void AnimalComponent::Update(const System::Time* time) {
         }
 
         // Current tile from the model's world position.
-        ModelComponent* model = character->modelComponent;
+        ModelComponent* model = character->modelComponent.Get();
         if (!model) return;
 
         const int dim = grid->size;

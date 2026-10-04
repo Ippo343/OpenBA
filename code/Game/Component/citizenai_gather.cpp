@@ -139,7 +139,7 @@ static void EnsureInit() {
 static ModelComponent* CitizenModel(CitizenComponent* citizen) {
     CharacterComponent* ch = citizen->character;
     if (ch == nullptr) return nullptr;
-    return ch->modelComponent;
+    return ch->modelComponent.Get();
 }
 
 // model world pos (transform.translation +0x158/+0x15c) -> clamped grid cell (w*row + col).

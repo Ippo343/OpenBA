@@ -582,7 +582,7 @@ void DiseaseComponent::KillOneAnimal() {
     do {
         uint32_t herd = static_cast<uint32_t>(pasture->animalCount);
         uint32_t idx = rng->Rand(static_cast<uint32_t>(herd));
-        Component* member = pasture->animals[idx];
+        Component* member = pasture->animals[idx].Get();
 
         // Retail inlines this scan; 0x140005500 is the same scan on the same type id.
         AnimalComponent* animal = member->_entity->FindComponent<AnimalComponent>();

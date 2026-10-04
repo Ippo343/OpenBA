@@ -291,7 +291,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     if (home == nullptr) {
         CharacterComponent* ch = character;
         if (ch) {   // [STANDALONE GUARD] retail derefs unguarded
-            ModelComponent* homeEnt = ch->modelComponent;
+            ModelComponent* homeEnt = ch->modelComponent.Get();
             if (homeEnt) {
                 pos[0] = homeEnt->transform.translation.x;   // +0x158
                 pos[1] = homeEnt->transform.translation.y;   // +0x15c

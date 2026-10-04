@@ -178,7 +178,7 @@ bool CitizenAIComponent::State_Wander() {
     if (!grid) return false;
 
     // --- cell coords from `target` model position ---
-    const ModelComponent* tModel = target->character->modelComponent;
+    const ModelComponent* tModel = target->character->modelComponent.Get();
     int mapSize = grid->size;
     int half = mapSize >> 1;
     int tx = static_cast<int>(tModel->transform.translation.x + static_cast<float>(half));
@@ -189,7 +189,7 @@ bool CitizenAIComponent::State_Wander() {
     if (mapSize <= ty) ty = mapSize - 1;
 
     // --- cell coords from the citizen's model position ---
-    const ModelComponent* sModel = citizen->character->modelComponent;
+    const ModelComponent* sModel = citizen->character->modelComponent.Get();
     int sx = static_cast<int>(sModel->transform.translation.x + static_cast<float>(half));
     int sy = static_cast<int>(sModel->transform.translation.y + static_cast<float>(half));
     if (sx < 0) sx = 0;

@@ -118,7 +118,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     Map* mapGrid = map;
 
     CitizenComponent* citizen = *citizenRef;
-    ModelComponent* posComp = citizen->character->modelComponent;
+    ModelComponent* posComp = citizen->character->modelComponent.Get();
 
     int mapSz = map->size;
     int citizenCellX = (int)(posComp->transform.translation.x + (float)(mapSz >> 1));

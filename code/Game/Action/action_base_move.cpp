@@ -233,7 +233,7 @@ void ActMv_UpdateFacing_c8d20(MoveTo* self) {
     // The character's model (character +0x68), whose transform translation (+0x148 + 0x10)
     // is the current world position.
     const CharacterComponent* character = self->character.Get();
-    const ModelComponent* model = character->modelComponent;
+    const ModelComponent* model = character->modelComponent.Get();
 
     float curX = model->transform.translation.x;   // +0x158
     float curY = model->transform.translation.y;   // +0x15C
@@ -284,7 +284,7 @@ void ActMv_UpdateFacing_c8d20(MoveTo* self) {
 void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4) {
     const CharacterDescription* desc = character->characterDescription;
     // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
-    PlayModelAnimation(character->modelComponent, animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
+    PlayModelAnimation(character->modelComponent.Get(), animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
     // ModelComponent +0x13c is the embedded MeshInstance's (+0x28) +0x114: _color[2]
     // (Mesh.h's guess name for the four floats the ctor seeds with 1.0).
     character->field_0x38 = character->modelComponent->meshInstance._color[2] * p4;

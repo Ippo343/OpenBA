@@ -308,8 +308,8 @@ static void PickRegFail(const char* why) {
 }
 
 static int RegisterCitizenPickMesh(CharacterComponent* self) {
-    ModelComponent*   model    = self->modelComponent;     // +0x68
-    PickingComponent* pickComp = self->pickingComponent;   // +0x70
+    ModelComponent*   model    = self->modelComponent.Get();     // +0x68
+    PickingComponent* pickComp = self->pickingComponent.Get();   // +0x70
     if (model == nullptr || pickComp == nullptr) { PickRegFail("model/pickComp null"); return -1; }
 
     int16_t variantIdx   = model->meshGroup;   // sVar1 (+0x164)
@@ -378,7 +378,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     // slot 0x140151f30; the class static is that byte (ENDGAME B.3.9 SS2).
     uint8_t rootOnly = ::Graphics::MeshInstance::_rootOnlyUpdates ? 1 : 0;
 
-    ModelComponent* model = self->modelComponent;
+    ModelComponent* model = self->modelComponent.Get();
     float fx = model->transform.translation.x;   // +0x158
     float fy = model->transform.translation.y;   // +0x15c
     float fz = model->transform.translation.z;   // +0x160
@@ -510,7 +510,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     xform.translation.x = pos[0]; xform.translation.y = pos[1];
     xform.translation.z = pos[2];
 
-    model = self->modelComponent;
+    model = self->modelComponent.Get();
     model->transform = xform;   // Transform::operator=
     model->yaw = fVar14;
     // [PerfX GEOMXF_LASTONLY -- NON-RETAIL] retail pushes the transform into the

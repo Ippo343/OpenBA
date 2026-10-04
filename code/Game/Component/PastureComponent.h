@@ -75,7 +75,7 @@ public:
     // 0x140127f40 (ExternalPtr +0x28; the +0x30 InternalPtr array validated against
     // LivestockComponent; int +0x40, int +0x44).
     ComponentDescription* livestockType;    // +0x28 ExternalPtr: the template the pasture keeps (Startup clears it)
-    LivestockComponent**  animals;          // +0x30 Array<InternalPtr<LivestockComponent>> data (freed by the dtor)
+    Object::InternalPtr<LivestockComponent>* animals;   // +0x30 Array<InternalPtr<LivestockComponent>> data (freed by the dtor)
     int32_t               animalCount;      // +0x38
     int32_t               animalCapacity;   // +0x3c
     int32_t               capacity;         // +0x40 ComputeCapacity (OnAdded); not written by the ctor

@@ -296,7 +296,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // fetch source cell from the citizen's model (character +0x68, translation):
         CitizenComponent* c2 = *citizenRef;
-        ModelComponent* nav = c2->character->modelComponent;
+        ModelComponent* nav = c2->character->modelComponent.Get();
         int mapSize = gw ? gw->m_game->size : 0;
         int cellX = TW_ClampCell(nav->transform.translation.x, mapSize);
         int cellY = TW_ClampCell(nav->transform.translation.y, mapSize);
@@ -338,7 +338,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // fetch destination cell from the citizen's model (character +0x68, translation):
         CitizenComponent* c2 = *citizenRef;
-        ModelComponent* nav = c2->character->modelComponent;
+        ModelComponent* nav = c2->character->modelComponent.Get();
         int mapSize = gw ? gw->m_game->size : 0;
         int cellX = TW_ClampCell(nav->transform.translation.x, mapSize);
         int cellY = TW_ClampCell(nav->transform.translation.y, mapSize);

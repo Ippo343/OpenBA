@@ -317,7 +317,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
     // citizen model cell (clamped row*w+col) -> uVar11
     CitizenComponent* cz = *param_2;
     CharacterComponent* ch = cz->character;
-    ModelComponent* model = ch->modelComponent;
+    ModelComponent* model = ch->modelComponent.Get();
     int w = *mapGrid;
     int col = static_cast<int>(model->transform.translation.x + static_cast<float>(w >> 1));
     int row = static_cast<int>(model->transform.translation.y + static_cast<float>(w >> 1));

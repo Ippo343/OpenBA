@@ -120,12 +120,10 @@ void ImmigrationComponent::Persist(IO::Stream& stream) {
         // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
         GameColl::AsArray<GameColl::Ptr8>(&group).SetSize(arrayCount);
     }
-    ComponentEntity** element = group;
+    Object::InternalPtr<ComponentEntity>* element = group;
     for (int64_t remaining = arrayCount; remaining > 0; --remaining, ++element) {
-        // LEFT: the array holds InternalPtr<ComponentEntity>; InternalBasePtr has no
-        // typed view of a bare pointer slot.
-        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);   // LEFT: POD the array holds InternalPtr<ComponentEntity> declared as ComponentEntity* (ImmigrationComponent.h)
-        ComponentEntity* obj = *element;
+        element->InternalBasePtr::Serialize(ser);
+        ComponentEntity* obj = element->Get();
         if (obj != nullptr && !::Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()))
             *element = nullptr;
     }

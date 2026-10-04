@@ -523,7 +523,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                 const MapCell* tiles = mapInfo ? mapInfo->cells : nullptr;
                 int mapW = mapInfo ? mapInfo->size : 0, half = mapW >> 1;
                 CharacterComponent* ch = character;
-                ModelComponent* model = ch ? ch->modelComponent : nullptr;
+                ModelComponent* model = ch ? ch->modelComponent.Get() : nullptr;
                 float cx = model ? model->transform.translation.x : -9999.f;
                 float cy = model ? model->transform.translation.y : -9999.f;
                 int tx = (int)(cx + (float)half), ty = (int)(cy + (float)half);
@@ -1367,7 +1367,7 @@ char CitizenComponent::CanFindHousing() {
     }
     CharacterComponent* mc = character;
     if (mc == nullptr) return 0;
-    ModelComponent* geom = mc->modelComponent;
+    ModelComponent* geom = mc->modelComponent.Get();
     // [STANDALONE BRING-UP GUARD] mc+0x68 is the citizen's geometry/transform IBP,
     // populated only once the CharacterComponent position pipeline is live (Brick 4).
     // Until then it is null; bail "can't find housing" rather than deref geom+0x158.
@@ -1457,7 +1457,7 @@ void CitizenComponent::GiveBirth() {
     // parent world position from ModelComponent (+0x278 -> +0x68 -> +0x158..0x160:
     // the +0x148 transform's translation)
     CharacterComponent* mc = character;
-    ModelComponent* geom = mc->modelComponent;
+    ModelComponent* geom = mc->modelComponent.Get();
     float pos[3];
     pos[0] = geom->transform.translation.x;
     pos[1] = geom->transform.translation.y;
@@ -1700,7 +1700,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     if (count > 0) {
         CharacterComponent* homeEntity = character;
         if (homeEntity == nullptr) return nullptr;
-        ModelComponent* homeComp = homeEntity->modelComponent;
+        ModelComponent* homeComp = homeEntity->modelComponent.Get();
         if (homeComp == nullptr) return nullptr;
         int mapW = mapInfo->size;
         int homeX = static_cast<int>(homeComp->transform.translation.x + static_cast<float>(mapW >> 1));
@@ -1788,7 +1788,7 @@ char CitizenComponent::CanReach(ComponentEntity* target) {
 
     // CheckPtr on the CharacterComponent IBP (+0x278), read its ModelComponent (+0x68).
     CharacterComponent* homeEntity = character;
-    ModelComponent* homeComp = homeEntity->modelComponent;
+    ModelComponent* homeComp = homeEntity->modelComponent.Get();
 
     int mapW = map->size;
     int halfW = mapW >> 1;
@@ -2071,7 +2071,7 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     float pos[3] = {0,0,0};
     Pf_EntityResolvePos_2e20(posComp, pos, 0, 0, nullptr);
 
-    ModelComponent* homeComp = citizen->character->modelComponent;
+    ModelComponent* homeComp = citizen->character->modelComponent.Get();
 
     int mapW = mapInfo->size;
     float half = (float)(mapW >> 1);

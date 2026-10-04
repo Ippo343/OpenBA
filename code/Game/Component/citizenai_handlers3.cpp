@@ -94,7 +94,7 @@ static inline Map* MapGrid() { return GameUpdateLoop::_singleton->m_game; }
 
 // the citizen's ModelComponent; its transform's translation is the world pos.
 static const ModelComponent* CitizenModel(CitizenComponent* citizen) {
-    return citizen->character->modelComponent;
+    return citizen->character->modelComponent.Get();
 }
 
 // model world pos (translation x / y) -> clamped grid cell (row*w + col).

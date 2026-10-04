@@ -214,7 +214,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
             int slotIdx = WorkLeaf_Pasture_8350(local_a8);
             if (slotIdx >= 0) {
                 // The livestock at that slot, its entity's AnimalComponent (0x140005500)
-                LivestockComponent* livestock = local_a8->animals[slotIdx];
+                LivestockComponent* livestock = local_a8->animals[slotIdx].Get();
 
                 AnimalComponent* natResIBP = livestock->_entity->FindComponent<AnimalComponent>();
 

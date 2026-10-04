@@ -125,7 +125,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // Character mesh holder = CharacterComponent (+0x278) -> its ModelComponent (+0x68).
     CharacterComponent* smComp = citizen->character;
     if (!smComp) return;
-    ModelComponent* charMeshHolder = smComp->modelComponent;
+    ModelComponent* charMeshHolder = smComp->modelComponent.Get();
     if (!charMeshHolder) return;
 
     // --- Storage scan: pick the highest-count item in the citizen's storage. ---

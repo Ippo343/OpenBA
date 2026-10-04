@@ -113,7 +113,7 @@ int WorkLeaf_Pasture_8350(const PastureComponent* pasture) {
     if (n <= 0) return -1;
 
     for (int outer = 0; outer < n; ++outer) {
-        LivestockComponent* livestock = pasture->animals[outer];
+        LivestockComponent* livestock = pasture->animals[outer].Get();
 
         // The AnimalComponent (0x1401c6f98) of the animal's entity.
         AnimalComponent* sub = livestock->_entity->FindComponent<AnimalComponent>();

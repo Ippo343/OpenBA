@@ -387,9 +387,9 @@ void ImmigrationComponent::Spawn() {
 // ============================================================
 void ImmigrationComponent::Dismiss() {
     int n = groupCount;
-    ComponentEntity** arr = group;
+    Object::InternalPtr<ComponentEntity>* arr = group;
     for (int i = 0; i < n; ++i) {
-        PostEventToEntity(arr[i], 1);
+        PostEventToEntity(arr[i].Get(), 1);
     }
     if (arr) System::MemoryAllocator::MemFree(arr);
     group = nullptr;
@@ -472,9 +472,9 @@ void ImmigrationComponent::Accept() {
     const int n = groupCount;
     TownMgr(gw)->field_0x1B0 += n;
 
-    ComponentEntity** arr = group;
+    Object::InternalPtr<ComponentEntity>* arr = group;
     auto nomadAt = [&](int i) -> ComponentEntity* {
-        return arr[i];
+        return arr[i].Get();
     };
     auto convert = [&](int i, CitizenComponent* const* parent, int gender, char child) -> CitizenComponent* {
         ComponentEntity* ent = nomadAt(i);
@@ -557,7 +557,7 @@ char ImmigrationComponent::TickWaiting(StateMachine* sm, const System::Time* tim
 // state 0x10 ARRIVING — enter 0x14004d090: reset the group and spawn it
 char ImmigrationComponent::EnterArriving() {
     arrivedCount = 0;
-    ComponentEntity** old = group;
+    Object::InternalPtr<ComponentEntity>* old = group;
     if (old) System::MemoryAllocator::MemFree(old);
     group = nullptr;
     groupCount = 0;

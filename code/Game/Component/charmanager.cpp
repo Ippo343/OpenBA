@@ -75,7 +75,7 @@ inline float RadiusEps() { float f; const uint32_t b = kRdata_1401720b8; std::me
 // ===========================================================================
 static float* CharMgr_helper_28c0(const Object::InternalPtr<CharacterComponent>* slotPtr, float* outRect) {
     CharacterComponent* ch = slotPtr->Get();
-    ModelComponent* model = ch->modelComponent;
+    ModelComponent* model = ch->modelComponent.Get();
     const Math::Vector3& pos = model->transform.translation;
     float px = pos.x;
     float py = pos.y;

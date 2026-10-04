@@ -149,7 +149,7 @@ uint64_t CitizenAIComponent::State_Education() {
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
     // citizen ModelComponent world pos -> grid cell
-    const ModelComponent* model = citizen->character->modelComponent;
+    const ModelComponent* model = citizen->character->modelComponent.Get();
     int mapSize = GameUpdateLoop::_singleton->m_game->size;
     int half = mapSize >> 1;
     int cx = static_cast<int>(model->transform.translation.x + static_cast<float>(half));
@@ -214,7 +214,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
     ComponentDescription* local_res8 = nullptr;   // dd30 out: found component (Ctor5 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
-    const ModelComponent* model = citizen->character->modelComponent;
+    const ModelComponent* model = citizen->character->modelComponent.Get();
     int mapSize = GameUpdateLoop::_singleton->m_game->size;
     int half = mapSize >> 1;
     int cx = static_cast<int>(model->transform.translation.x + static_cast<float>(half));
@@ -320,7 +320,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
     float outVec[3] = { 0.0f, 0.0f, 0.0f };   // local_58 (target out)
 
     // citizen ModelComponent world pos -> local_48 vec3 (x,y,z packed)
-    const ModelComponent* model = citizen->character->modelComponent;
+    const ModelComponent* model = citizen->character->modelComponent.Get();
     float pos[3];
     pos[0] = model->transform.translation.x;
     pos[1] = model->transform.translation.y;

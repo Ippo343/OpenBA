@@ -223,9 +223,9 @@ void PastureComponent::Reproduce() {
     const int limit = ComputeCapacity() + 3;
 
     for (int i = 0; i < animalCount; ++i) {
-        LivestockComponent** arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals;
         if (!arr) return;
-        LivestockComponent* livestock = arr[i];
+        LivestockComponent* livestock = arr[i].Get();
         if (!livestock) continue;
         ComponentEntity* owner = livestock->_entity;
         AnimalComponent* animal = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
@@ -272,11 +272,11 @@ void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uin
     const int count = animalCount;
     if (count == 0) return;
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    LivestockComponent** arr = animals;
+    Object::InternalPtr<LivestockComponent>* arr = animals;
     if (!w || !arr) return;
 
     uint32_t idx = w->m_random->Rand(static_cast<uint32_t>(count));
-    LivestockComponent* livestock = arr[idx];
+    LivestockComponent* livestock = arr[idx].Get();
     if (!livestock) return;
 
     AnimalComponent* animal = livestock->_entity->FindComponent<AnimalComponent>();   // 0x140005500
@@ -316,9 +316,9 @@ void PastureComponent::ReleaseAllAnimals() {
             std::fflush(stderr);
             break;
         }
-        LivestockComponent** arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals;
         if (!arr) break;
-        LivestockComponent* animal = arr[animalCount - 1];
+        LivestockComponent* animal = arr[animalCount - 1].Get();
         if (!animal) break;
         PastureComponent* cur = animal->pasture;
         if (cur == nullptr) break;                  // already free: retail would spin here
@@ -726,7 +726,7 @@ void PastureComponent::Command(int cmd) {
     auto transferInto = [&](PastureComponent* dst) {
         while (keep < animalCount) {
             if (dst->ComputeCapacity() <= dst->animalCount) break;
-            LivestockComponent** arr = animals;
+            Object::InternalPtr<LivestockComponent>* arr = animals;
             if (!arr) break;                        // standalone guard
             if (!arr[0]) break;                     // standalone guard
             PastureComponent* dstRef = dst;

@@ -342,7 +342,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         ? static_cast<CitizenDescription*>(descRaw) : nullptr;
 
     // citizen ModelComponent transform translation -> grid cell (uVar37=srcCell).
-    ModelComponent* model = citizen->character->modelComponent;
+    ModelComponent* model = citizen->character->modelComponent.Get();
     int w0 = piVar5->size;
     int colC = static_cast<int>(static_cast<float>(w0 >> 1) + model->transform.translation.x);
     int rowC = static_cast<int>(static_cast<float>(w0 >> 1) + model->transform.translation.y);
