@@ -75,7 +75,7 @@ static Audio::Scene* WorldAudioScene() {
 // row 570) -- so it is not replaced by the erased core; it is typed by element instead.
 extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
     // LEFT: H5 AmbientEmitterComponent::slots / slotCount / slotCapacity are a raw Array triple
-    auto* arr = reinterpret_cast<Collection::Array<AmbientEmitterSlot>*>(arrayBase);
+    auto* arr = reinterpret_cast<Collection::Array<AmbientEmitterSlot>*>(arrayBase);   // LEFT: H5 AmbientEmitterComponent::slots / slotCount / slotCapacity are a raw Array triple (its callers pass &slots)
     int oldCount = arr->_size;
     if (newCount == oldCount) return;
 

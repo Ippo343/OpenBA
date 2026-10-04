@@ -78,11 +78,11 @@ extern "C" void* g_pConstructionDemoSite;
 // IBP as void* (Component/exe_bodies.h, wave X); every caller passes the town manager's
 // buildComponents header (CitizenBehavior +0xD0).
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
-    int64_t* arr = (int64_t*)arrayBase;
+    int64_t* arr = (int64_t*)arrayBase;   // LEFT: SIG BuildComponent_FindInQueue takes the array and the IBP as void* (Component/exe_bodies.h; caller buildcomponent_state8.cpp is another agent's)
     int count = (int)arr[1];
     for (int i = 0; i < count; i++) {
         int64_t base = arr[0];
-        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {
+        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {   // LEFT: SIG as above
             return i;
         }
     }

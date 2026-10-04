@@ -240,7 +240,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     NaturalResourceComponent_FindComponentByType(_entity, &parentIBP);   // 0x140005200
     // LEFT: retail calls FindComponent<ModelComponent> (0x140003f60) here and below, the tree
     // the ParticleComponent finder (known_port_issues 14, row 400): +0x164 is no ParticleComponent field.
-    int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);
+    int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);   // LEFT: row 400 (the ParticleComponent finder's result read at the ModelComponent's +0x164)
 
     // Allocate + copy-construct the new ComponentEntity from this entity's description.
     ComponentEntity* mem = (System::MemoryAllocator::_singleton)

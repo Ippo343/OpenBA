@@ -53,6 +53,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/InteractComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7900 cell class
 #include "Component/TombstoneComponent.h"    // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
+#include "Component/ComponentDescription.h"   // _category (+0x20)
 #include "Component/CemeteryDescription.h"   // ENDGAME B.3.9 C1: 0x1401c40c8 cell class
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
@@ -260,7 +261,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     if (!cemDescBase) cemDescBase = desc;
     if (!cemDescBase) return;
     CemeteryDescription* cemDesc = static_cast<CemeteryDescription*>(cemDescBase);
-    void* tombDesc = cemDesc->_ref20;                            // +0x20
+    ComponentDescription* tombDesc = cemDesc->_ref20;            // +0x20
     if (!tombDesc) return;   // [STANDALONE GUARD]
     ComponentEntity* built = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
@@ -272,7 +273,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     if (tsIBP) Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
     ComponentEntity* regIBP = entIBP;
     EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
-                                   *reinterpret_cast<int*>(reinterpret_cast<int64_t>(tombDesc) + 0x20));   // LEFT: CemeteryDescription::_ref20 is void* (Component/CemeteryDescription.h, not this block's)
+                                   static_cast<int>(tombDesc->_category));   // +0x20
 }
 
 // ---------------------------------------------------------------- 0x140116dd0

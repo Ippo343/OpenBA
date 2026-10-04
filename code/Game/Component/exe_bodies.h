@@ -195,7 +195,7 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 extern "C" void ModelComponentNotify_Reimpl(void* entity, int param);  // 0x1400c2b70
 
 // ---- naturalresourcecomponent.cpp
-void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  // 0x140005200
+void NaturalResourceComponent_FindComponentByType(ComponentEntity* entity, void* outIBP);  // 0x140005200
 
 // ---- nomadcomponent.cpp
 

@@ -124,8 +124,7 @@ bool InteractDescription::Serialize(IO::Stream& stream) {
             node.offset = Math::Vector3(child.pos.x, child.pos.y, child.pos.z);
             node.direction = Math::Vector3::FromYawPitch(yaw, pitch);
 
-            // LEFT: PointList::Point keeps its name raw (runtime header).
-            const System::String& name = *reinterpret_cast<const System::String*>(&child.name);
+            const System::String& name = child.name;
             if (name == "use") {
                 AppendNode(&_useNodes, node);
             } else if (name == "build") {

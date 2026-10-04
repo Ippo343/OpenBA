@@ -483,7 +483,7 @@ static char CA_State2Enter(ClearAreaComponent* c, StateMachine* /*sm*/)         
 // B4 FORWARD: tool_harness.cpp drives state 0's enter directly.
 extern "C" char ClearArea_State0Enter(void* data, StateMachine* sm) {
     if (!data) return 1;
-    return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);   // LEFT: B4 FORWARD (tool_harness.cpp)
+    return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);   // LEFT: B4 FORWARD standalone/tool_harness.cpp still passes void*
 }
 
 // ============================================================

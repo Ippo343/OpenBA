@@ -145,16 +145,16 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
 // LEFT: ERASED, the one erase body every 8-byte-pointer town list shares (callers in
 // nine files hand it their Array as void*; wave X types the signature).
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
-    int64_t* list = reinterpret_cast<int64_t*>(listBase);
+    int64_t* list = reinterpret_cast<int64_t*>(listBase);   // LEFT: ERASED the one erase body every 8-byte-pointer town list shares (callers in 15 other agents' files pass void*)
     int i = 0;
     while (i < (int)list[1]) {
         int64_t arr = list[0];
-        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {
+        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {   // LEFT: ERASED as above
             for (int j = i + 1; j < (int)list[1]; ++j) {
-                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);
+                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);   // LEFT: ERASED as above
                 if (slot) slot[0] = slot[1];
             }
-            *(int*)(list + 1) = (int)list[1] - 1;
+            *(int*)(list + 1) = (int)list[1] - 1;   // LEFT: ERASED as above
             --i;
         }
         ++i;

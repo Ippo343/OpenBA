@@ -108,7 +108,7 @@ void InteractComponent::Persist(IO::Stream& stream) {
     for (int i = 0; i < count; i++) {
         // LEFT: the array holds InternalPtr<InteractComponent>; InternalBasePtr has no
         // typed view of a bare pointer slot.
-        reinterpret_cast<Object::InternalBasePtr*>(&arrayBase[i])->Serialize(ser);
+        reinterpret_cast<Object::InternalBasePtr*>(&arrayBase[i])->Serialize(ser);   // LEFT: POD InteractComponent::useLocations holds InternalPtr<InteractComponent> declared as InteractComponent*
 
         // Validate with IsDerivedFrom
         InteractComponent* ptr = arrayBase[i];
