@@ -112,7 +112,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
     orchard->ValidateRefs();   // 0x140051830
 
     // Step 3: Check max workers
-    int treeCount = field_50;
+    int treeCount = _cells._count;
     if (workComp->workState == 0) {
         int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         workComp->workState = maxWorkers;
@@ -150,7 +150,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
             }
 
             // Check if cell is already assigned (in the set)
-            if (FindCell(field_48, i) != nullptr) {
+            if (FindCell(_cells._root, i) != nullptr) {
                 continue;
             }
 
@@ -229,7 +229,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
             insertKey.cell = i;
             insertKey._pad04 = 0;
             insertKey.citizen = *citizenRef;
-            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Insert_9a40(&_cells, &insertResult, &insertKey);
 
             // Mark cell as planted (not available)
             validityArray[i] = 1;
@@ -253,14 +253,14 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
 // ============================================================
 int PlantOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the set for the cell index and remove it
-    WorkCellSetNode* node = field_48;
+    WorkCellSetNode* node = _cells._root;
     while (node != nullptr) {
         if (param4 < node->element.cell) {
             node = node->left;
         } else if (param4 > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&_cells, node);
             break;
         }
     }
@@ -278,14 +278,14 @@ int PlantOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*
 // ============================================================
 int PlantOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param3*/, int param4) {
     // Search the set for the cell and remove it
-    WorkCellSetNode* node = field_48;
+    WorkCellSetNode* node = _cells._root;
     while (node != nullptr) {
         if (param4 < node->element.cell) {
             node = node->left;
         } else if (param4 > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+            WorkCellBST_Remove_ca60(&_cells, node);
             break;
         }
     }
@@ -303,10 +303,10 @@ int PlantOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*pa
 // action stack of the citizen of its leftmost entry.
 // ============================================================
 int PlantOrchard::Cleanup() {
-    int count = field_50;
+    int count = _cells._count;
 
     while (count > 0) {
-        WorkCellSetNode* node = field_48;
+        WorkCellSetNode* node = _cells._root;
         WorkCellSetNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -316,7 +316,7 @@ int PlantOrchard::Cleanup() {
         CitizenComponent* citizen = leftmost->element.citizen;
         WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
 
-        count = field_50;
+        count = _cells._count;
     }
     return 0;
 }
@@ -332,7 +332,7 @@ int PlantOrchard::Validate() {
     uint32_t collectCount = 0;
     uint32_t collectCapacity = 0;
 
-    WorkCellSetNode* node = field_48;
+    WorkCellSetNode* node = _cells._root;
 
     if (node == nullptr) {
         goto cleanup;
@@ -417,14 +417,14 @@ int PlantOrchard::Validate() {
 cleanup:
     if ((int)collectCount > 0) {
         for (uint32_t k = 0; k < collectCount; k++) {
-            WorkCellSetNode* bstNode = field_48;
+            WorkCellSetNode* bstNode = _cells._root;
             while (bstNode != nullptr) {
                 if (collectArray[k] < bstNode->element.cell) {
                     bstNode = bstNode->left;
                 } else if (collectArray[k] > bstNode->element.cell) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+                    WorkCellBST_Remove_ca60(&_cells, bstNode);
                     break;
                 }
             }
@@ -452,7 +452,7 @@ Profession** PlantOrchard::GetTarget(Profession** outPtr) {
 // PlantOrchard::GetPriority [11] -- shared 0x140029860
 // ============================================================
 int PlantOrchard::GetPriority() {
-    return field_50 > 0 ? 1 : 0;
+    return _cells._count > 0 ? 1 : 0;
 }
 
 
@@ -465,7 +465,7 @@ void PlantOrchard::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
+    WorkCellBST_Serialize_9de0(&_cells, &ser);
 
     int cellCountBuf[2] = { field_60, 0 };
     ser.Serialize(cellCountBuf[0], nullptr);
@@ -504,14 +504,7 @@ PlantOrchard::~PlantOrchard() {
     field_60 = 0;   // retail: one qword store over the count and the capacity
     field_64 = 0;
 
-    WorkCellSetNode* bstRoot = field_48;
-    if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_e320(&field_48, bstRoot->left);
-        WorkBase_TreeNodeFree_e320(&field_48, bstRoot->right);
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-    field_48 = nullptr;
-    field_50 = 0;
+    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400f5010).
 
 }
 
@@ -523,7 +516,7 @@ PlantOrchard::~PlantOrchard() {
 // stamps are the compiler's). The orchard diagnostic counts the construction (the old
 // factory ctor did the same).
 PlantOrchard::PlantOrchard()
-    : Work(), field_48(nullptr), field_50(0), field_58(nullptr), field_60(0), field_64(0),
+    : Work(), field_58(nullptr), field_60(0), field_64(0),
       field_68(nullptr) {
     OrchardDiag_NotePlantConstructed();
 }

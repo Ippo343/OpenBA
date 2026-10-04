@@ -32,9 +32,9 @@
 
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
+// The +0x48 set's root / count zeroes are the `_citizens` member's ctor (retail 0x1400f5ac6 /
+// 0x1400f5ac9, recorded as the EH member state).
 TendArea::TendArea(void** entityIBP, int kind) : Work(entityIBP) {
-    bstRoot = nullptr;
-    workerCount = 0;
     tendMode = kind;
 }
 

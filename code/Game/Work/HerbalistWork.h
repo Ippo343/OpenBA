@@ -37,7 +37,7 @@ class HerbalistWork final : public AutoPickupWork {
 public:
     HerbalistWork();                                                 // (Work_GenericCtor shape)
 
-    // frees the +0x48 citizen BST
+    // 0x1400eec40: the +0x48 citizen Set's ~Set (its Clear), then the base stamps
     ~HerbalistWork() override;                                      // [0]  0x14002a640
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400eebb0
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400ee3b0
@@ -49,12 +49,15 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- HerbalistWork fields (+0x48) ---
-    // +0x48: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
-    // Cleanup 0x1400eeae0 reads the element's +0x278). The container stays raw (H5).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* _field48;    // +0x48: zeroed
-    int32_t  _field50;           // +0x50: assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node; Cleanup 0x1400eeae0
+    // reads the element's +0x278): the assigned citizens. A real member: the ctor (0x14004b160)
+    // zeroes root (qword) and count (dword) under an EH state, the dtor 0x1400eec40 runs its
+    // inlined Clear before the AutoPickupWork / Work stamps. `_citizens._count` (+0x50) is
+    // the assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`). The Set ctor also zeroes
+    // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    CitizenSet _citizens;
     int32_t  _field58;           // +0x58: the failed-search count (Persist 0x1400eebb0 int&;
                                  //        Execute 0x1400ee3b0 compares it signed)
     uint8_t  _pad5C[4];          // +0x5C: padding
@@ -62,6 +65,6 @@ public:
 
 static_assert(sizeof(HerbalistWork) == 0x60, "HerbalistWork is 0x60 (retail create MemAlloc)");
 static_assert(alignof(HerbalistWork) == 8, "HerbalistWork is 8-aligned");
-static_assert(offsetof(HerbalistWork, _field48) == 0x48, "HerbalistWork +0x48");
-static_assert(offsetof(HerbalistWork, _field50) == 0x50, "HerbalistWork +0x50");
+static_assert(offsetof(HerbalistWork, _citizens) == 0x48, "HerbalistWork +0x48");
+static_assert(offsetof(HerbalistWork, _citizens) + offsetof(HerbalistWork::CitizenSet, _count) == 0x50, "HerbalistWork +0x50");
 static_assert(offsetof(HerbalistWork, _field58) == 0x58, "HerbalistWork +0x58");

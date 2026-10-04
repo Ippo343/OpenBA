@@ -373,7 +373,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     // constructed Graphics::MeshInstance; in standalone a builder/worker showing its first
     // tool has never had that slot initialized (zeroed vtable). Default-construct it in
     // place with sceneId(+0x120) = -1 — the same guard showtool.cpp uses for carried items.
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
         ::new (citizen->meshInstance) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         citizen->toolId = -1;   // +0x1D8 = +0xb8 + 0x120: sceneId = -1
     }
@@ -396,7 +396,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     model->meshInstance.Attach(tool, nodeIdx);
 
     // MeshInstance::Update(time=0) via slot 1 (skip if the instance has no vtable)
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
         System::Time timeVal;
         RtSystem_Time_Ctor(&timeVal, 0.0f);   // slot 0x140152b00
         static_cast<Graphics::Geometry*>(tool)->Update(timeVal);

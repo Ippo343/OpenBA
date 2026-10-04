@@ -195,7 +195,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     // Step 6: Check max workers vs current count (the tree's port of 0x14012e5c0
     // called here takes the component as an integer: LEFT)
     // -------------------------------------------------------
-    int huntCount = _field50;
+    int huntCount = _citizens._count;
 
     if (matDesc->workState == 0) {
         int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
@@ -360,7 +360,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     }
 
     // (the tree helper takes the container as uintptr_t*: LEFT)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_RegisterWork_1a30(&_citizens, &workEnt, citizenIBP);
     return 2;
 }
 
@@ -372,7 +372,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
 // (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int HuntWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return false;
 }
 
@@ -383,7 +383,7 @@ int HuntWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, 
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HuntWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
     return 0;
 }
 
@@ -394,11 +394,11 @@ int HuntWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, in
 // For each leftmost node, cancels the work item via engine call.
 // ============================================================
 int HuntWork::Cleanup() {
-    int count = _field50;
+    int count = _citizens._count;
 
     while (count > 0) {
         // Find leftmost node in BST (following the left child, +0x10)
-        AssignmentNode* node = _field48;
+        AssignmentNode* node = _citizens._root;
         AssignmentNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -409,7 +409,7 @@ int HuntWork::Cleanup() {
         CitizenComponent* citizenEntity = leftmost->element;
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
-        count = _field50;
+        count = _citizens._count;
     }
     return 0;
 }
@@ -423,7 +423,7 @@ int HuntWork::Cleanup() {
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
 int HuntWork::Validate() {
-    AssignmentNode* root = _field48;
+    AssignmentNode* root = _citizens._root;
     CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
@@ -506,13 +506,13 @@ int HuntWork::Validate() {
     // the container as uintptr_t*: LEFT)
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            AssignmentNode* searchNode = _field48;
+            AssignmentNode* searchNode = _citizens._root;
             while (searchNode != nullptr) {
                 if (removeArr[i] < searchNode->element) {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->element) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&_citizens, searchNode);
                         break;
                     }
                     searchNode = searchNode->right;
@@ -540,12 +540,12 @@ Profession** HuntWork::GetTarget(Profession** outPtr) {
 
 // ============================================================
 // HuntWork::GetPriority [11] 0x140029860 (shared by 13 tables) / HasWorkers.
-// Returns (this->_field50 > 0). Slot 5 is Work's (0x1400f7540): the old dead
+// Returns (this->_citizens._count > 0). Slot 5 is Work's (0x1400f7540): the old dead
 // HuntWork_Execute_Impl copy of it is gone.
 // ============================================================
 int HuntWork::GetPriority() {
     // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
-    return _field50 > 0 ? 1 : 0;
+    return _citizens._count > 0 ? 1 : 0;
 }
 
 
@@ -567,7 +567,7 @@ void HuntWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer2(stream, 0);
 
     // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(&_citizens, &serializer2);
 }
 
 
@@ -577,28 +577,10 @@ void HuntWork::Persist(IO::Stream& stream) {
 // AutoPickupWork -> Work -> Internal dtor chain.
 // ============================================================
 // HuntWork dtor (retail 0x1400ef680, called by slot 0 0x14002a700). The stamps and the `~Internal` call are the compiler's chain.
-HuntWork::~HuntWork() {
-    // Free BST nodes at +0x48
-    AssignmentNode* bstRoot = _field48;
-    if (bstRoot != nullptr) {
-        // Clean up left subtree
-        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->left);
-        // Clean up right subtree
-        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->right);
-        // Free root node
-        {
-            System::MemoryAllocator::MemFree(bstRoot);
-        }
-    }
-
-    // Zero out BST root and count
-    _field48 = nullptr;
-    _field50 = 0;
-
-}
+HuntWork::~HuntWork() = default;   // the member's ~Set is retail's inlined Clear (0x1400ef680)
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
-HuntWork::HuntWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
+HuntWork::HuntWork() : AutoPickupWork() {
 }
 
 // ============================================================

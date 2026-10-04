@@ -7,8 +7,8 @@
 //
 // Fields:
 //   +0x48: int   _field48   -- max fire workers capacity
-//   +0x50: void* _field50   -- BST root (tracks entity -> citizen assignments)
-//   +0x58: int   _field58   -- number of currently assigned fire workers
+//   +0x50: Set   _citizens  -- the assigned citizens (root +0x50, count +0x58: the
+//                              number of currently assigned fire workers)
 //
 // Slot4 (0x1400e9620): Fire suppression work assignment.
 //   Finds a burning building, checks pathfinding, sets up citizen action queue.
@@ -79,7 +79,7 @@ static uint32_t WorldToCell(int gridSize, float x, float z) {
 // Slot4 (0x1400e9620): Fire suppression work assignment.
 //
 // Algorithm:
-// 1. Check if at capacity (_field48 >= _field58)
+// 1. Check if at capacity (_field48 >= _citizens._count)
 // 2. Get citizen position, compute grid cell
 // 3. Call FireWork_helper_81d0 to find a burning entity in spiral
 // 4. Check pathfinding accessibility (FUN_140122be0/FUN_140122b00)
@@ -92,11 +92,11 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // CheckPtr on the entity IBP at +0x10; its InteractComponent
     InteractComponent* posCompIBP = field_10->FindComponent<InteractComponent>();
 
-    // Check capacity: _field48 (max capacity) vs _field58 (assigned count)
+    // Check capacity: _field48 (max capacity) vs _citizens._count (assigned count)
     // Original: if ((int)param_1[9] <= (int)param_1[0xb]) return 1;
     // i.e. if max_capacity <= assigned_count, we're at capacity.
     int32_t maxCap   = _field48;
-    int32_t assigned = _field58;
+    int32_t assigned = _citizens._count;
     if (maxCap <= assigned) {
         return 1;
     }
@@ -234,7 +234,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     }
 
     // Register with citizen AI BST at +0x50 (the tree helpers take the root as uintptr_t*)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field50), &targetIBP, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_RegisterWork_1a30(&_citizens, &targetIBP, citizenIBP);
 
     return 2;
 }
@@ -253,7 +253,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 // ============================================================
 int FireWork::Validate() {
     // BST root is at +0x50
-    AssignmentNode* root = _field50;
+    AssignmentNode* root = _citizens._root;
 
     // Dynamic array of entities to remove
     CitizenComponent** removeArr = nullptr;
@@ -358,7 +358,7 @@ int FireWork::Validate() {
     if ((int)removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
             // Find the BST node matching this entity key
-            AssignmentNode* bstNode = _field50;
+            AssignmentNode* bstNode = _citizens._root;
             while (bstNode != nullptr) {
                 CitizenComponent* nodeKey = bstNode->element;
                 if (removeArr[i] < nodeKey) {
@@ -366,7 +366,7 @@ int FireWork::Validate() {
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found -- remove it (the tree helpers take the root as uintptr_t*)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field50), bstNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&_citizens, bstNode);
                         break;
                     }
                     bstNode = bstNode->right; // right
@@ -394,7 +394,7 @@ int FireWork::Validate() {
 
 int FireWork::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/, int /*arg3*/) {
     // Remove citizen entry from BST at +0x50
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, citizenIBP);
     return 0;
 }
 
@@ -408,7 +408,7 @@ int FireWork::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*arg2
 // ============================================================
 int FireWork::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/, int /*arg3*/) {
     // Remove citizen entry from BST at +0x50
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BSTFindRemove_25520(&_citizens, citizenIBP);
     return 0;
 }
 
@@ -427,7 +427,7 @@ int FireWork::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/
 
 int FireWork::Cleanup() {
     while (true) {
-        AssignmentNode* root = _field50;
+        AssignmentNode* root = _citizens._root;
         if (root == nullptr) return 0;
 
         // Find leftmost node in BST
@@ -485,14 +485,13 @@ Profession** FireWork::GetTarget(Profession** retbuf) {
 // reg_work_bst.cpp:19), so this is a plain transcription. ENDGAME B.3.8: the two
 // function-local lazy pointer caches are gone — the base call is the qualified
 // Work::Persist, the BST body is called by name (B38 D7).
-extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);
 void FireWork::Persist(IO::Stream& stream) {
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     IO::Serializer ser(stream, 0);
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field50), &ser);   // 0x1400296b0 (work_base_bst.cpp)   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+    WorkBST_BST_Serialize_296b0(&_citizens, &ser);
     ser.Serialize(_field48, nullptr);
 }
 
@@ -506,20 +505,20 @@ void FireWork::Persist(IO::Stream& stream) {
 // which is why work_base_standalone.h's Work_Slot11_HasActiveTasks helper is
 // explicitly documented as unusable here.
 int FireWork::GetPriority() {
-    return _field58 > 0 ? 1 : 0;
+    return _citizens._count > 0 ? 1 : 0;
 }
 
 // ============================================================
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The stamps are the compiler's.
 // ============================================================
-FireWork::FireWork() : Work(), _field48(0), _field4C(0), _field50(nullptr), _field58(0) {
+FireWork::FireWork() : Work(), _field48(0), _field4C(0) {
 }
 
 // 0x1400e9bd0: `MOV dword [RDI+0x48],EBX` -- a DWORD store; +0x4C keeps whatever
 // the allocation held (retail's).
 FireWork::FireWork(void* pEntityIBP, uint32_t capacity)
-    : Work(pEntityIBP), _field48(static_cast<int32_t>(capacity)), _field50(nullptr), _field58(0) {
+    : Work(pEntityIBP), _field48(static_cast<int32_t>(capacity)) {
 }
 
 // ============================================================

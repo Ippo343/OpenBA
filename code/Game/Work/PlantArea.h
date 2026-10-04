@@ -47,9 +47,15 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- PlantArea fields (+0x48) ---
-    WorkCellSetNode* field_48;   // +0x48: the cell -> citizen set (0x140029a40 / 0x14001ca60 / 0x140029de0)
-    int32_t  field_50;           // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: Collection::Set<WorkCellAssignment> (0x30-byte nodes: the cell-BST helpers 0x140029a40 /
+    // 0x14001ca60 / 0x140029de0). A real member: the ctor 0x1400f4770 zeroes root (qword) and
+    // count (dword) under an EH state; the dtor 0x1400f4600 frees the +0x58 array, THEN runs the
+    // set's inlined Clear (0x14000e320 on the root's +0x18 / +0x20, MemFree, zero root /
+    // count): the dtor body, then this member's ~Set. `_cells._count` (+0x50) is the
+    // claim count (0x140029860 `CMP [RCX+0x50]; SETG`: signed). The Set ctor also zeroes
+    // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
+    using CellSet = Collection::Set<WorkCellAssignment>;
+    CellSet _cells;
     // +0x58 / +0x60 / +0x64 are one byte Collection::Array {data, count, capacity}
     // (SetSize 0x14000a590; Persist streams it through the bool-array overload
     // 0x140151458): one byte per CropFieldComponent slot, 1 = still to plant.
@@ -63,8 +69,8 @@ public:
 
 static_assert(sizeof(PlantArea) == 0x70, "PlantArea is 0x70 (retail create MemAlloc)");
 static_assert(alignof(PlantArea) == 8, "PlantArea is 8-aligned");
-static_assert(offsetof(PlantArea, field_48) == 0x48, "PlantArea +0x48");
-static_assert(offsetof(PlantArea, field_50) == 0x50, "PlantArea +0x50");
+static_assert(offsetof(PlantArea, _cells) == 0x48, "PlantArea +0x48");
+static_assert(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count) == 0x50, "PlantArea +0x50");
 static_assert(offsetof(PlantArea, field_58) == 0x58, "PlantArea +0x58");
 static_assert(offsetof(PlantArea, field_60) == 0x60, "PlantArea +0x60");
 static_assert(offsetof(PlantArea, field_68) == 0x68, "PlantArea +0x68");
