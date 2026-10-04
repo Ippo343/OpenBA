@@ -56,7 +56,7 @@ bool ImageBuffer::Create(ImageType, Usage, Format, uint32_t, int32_t, int32_t,
 ImageBuffer::~ImageBuffer() { ReleaseFields(); }   // buffers.cpp's shape
 void ImageBuffer::InitFields() {
     ++g_init; g_initVptr = VptrOf(this);
-    _kind = 2; _filter = 1; _sourceName = nullptr;
+    _kind = 2; _filter = 1; _sourceName._data = nullptr;
 }
 void ImageBuffer::ReleaseFields() { ++g_rel; g_relVptr = VptrOf(this); }
 }  // namespace Video
@@ -146,7 +146,7 @@ UNIT_TEST(b39_vs_imagebuffer_ctor_stores_and_table) {
     }
     CHECK_EQ(ib->_kind, 2);
     CHECK_EQ(ib->_filter, 1);
-    CHECK(ib->_sourceName == nullptr);
+    CHECK(ib->_sourceName._data == nullptr);
     // retail slot 0 with flags 0 (Reconstruct's arm) is the complete destructor:
     // destroy in place, keep the storage.
     ib->~ImageBuffer();

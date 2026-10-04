@@ -95,8 +95,6 @@ UNIT_TEST(object_external_layout_matches_the_alias_pods) {
     CHECK(sizeof(Object::ExternalList) == 0x30);
     CHECK(offsetof(Object::ExternalList, _resources) == 0x20);
     CHECK(offsetof(Object::ExternalList, _count) == 0x28);
-    CHECK(offsetof(Object::ExternalList, _resources) ==
-          offsetof(RtObject::ExternalList, _resources));
 
     // CompiledExternal adds no data: RT_DELDTOR's element size is 0x20, the
     // same as External's.

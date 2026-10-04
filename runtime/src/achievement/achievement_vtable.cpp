@@ -249,9 +249,7 @@ void AchievementInstance::Persist(IO::Stream& streamv) {
         return;
     }
 
-    RtObject_ExternalPtrSerialize_Achievement(                      // 0x180006d10, +0x20
-        reinterpret_cast<RtObject::External**>(&_achievement),
-        reinterpret_cast<rt::io::Serializer*>(&outer));              // POD views (object/External.h)
+    _achievement.Serialize(outer);                                  // 0x180006d10, +0x20
 
     // The INNER codec, version 0 (XOR R8D,R8D at 0x18009e522).
     IO::Serializer inner(stream, 0);
@@ -263,9 +261,8 @@ void AchievementInstance::Persist(IO::Stream& streamv) {
         // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
         _goalList._goals.SetSize(count);
     }
-    RtObject_InternalPtrArraySerialize_GoalInstance(                // 0x180009fa0
-        &inner, count,
-        reinterpret_cast<RtObject::InternalBasePtr*>(_goalList._goals.GetData()));
+    Object::InternalPtr<GoalInstance>::SerializeArray(               // 0x180009fa0
+        inner, count, _goalList._goals.GetData(), GoalInstance::TypeId());
 }   // ~inner, then ~outer: the two ReaderWriters deleted in retail's order
 
 }  // namespace Achievement

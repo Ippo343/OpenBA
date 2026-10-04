@@ -58,6 +58,7 @@
 #include "description_common.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
+#include "../../types/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include <new>
 
 namespace {
@@ -133,7 +134,7 @@ bool NumberEditDescription::Serialize(IO::Stream& streamv) {
 
     IO::ReaderWriter* rw = ser._readerWriter;                                     // 1800d4f2a
 
-    RtObject_ExternalPtrSerialize_Font(rtdesc::ExtField(&_font), rtdesc::IoSer(&ser));          // 1800d4f38
+    Object::SerializeExternal<UI::Font>(ser, _font);          // 1800d4f38
 
     rw->SerializeInt(_i70, nullptr);
     rw->SerializeInt(_i78, nullptr);

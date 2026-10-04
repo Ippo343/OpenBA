@@ -69,7 +69,7 @@
 #include "../../types/io/Stream.h"               // IO::Stream, IO::kReading
 #include "../../types/video/ShaderProgram.h"
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
-#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_*
+#include "../../types/object/External.h"         // Object::SerializeExternal<T>
 #include "../../types/system/MemoryAllocator.h"
 
 namespace {
@@ -100,17 +100,14 @@ void SerializeLegacyV0(IO::Serializer& ser) {
     IO::ReaderWriter* rw = ser._readerWriter;
     const bool reading = (ser._stream->GetDirection() == IO::kReading);
 
-    RtObject::External* droppedVertexProgram = nullptr;   // ExternalPtr<VertexProgram>
+    Video::VertexProgram* droppedVertexProgram = nullptr;   // ExternalPtr<VertexProgram>
     StringArray    strings8 = { nullptr, 0, 0 };   // stride 8, one String each
     StringArray    namesA   = { nullptr, 0, 0 };   // Array<System::String>
     StringArray    namesB   = { nullptr, 0, 0 };   // Array<System::String>
     V0SamplerArray samplers = { nullptr, 0, 0 };   // stride 0x10 {String, int, 3 bools}
     int32_t  n = 0;
 
-    // LEFT (B.4 R-VIDEO): the ExternalPtr bodies (R-OBJ, External.h) still take
-    // the `rt::io::Serializer` POD; the two are asserted interchangeable.
-    RtObject_ExternalPtrSerialize_VertexProgram(                          // 0x1800542a0
-        &droppedVertexProgram, reinterpret_cast<rt::io::Serializer*>(&ser));
+    Object::SerializeExternal<Video::VertexProgram>(ser, droppedVertexProgram);   // 0x1800542a0
 
     n = 0;
     rw->SerializeInt(n, nullptr);

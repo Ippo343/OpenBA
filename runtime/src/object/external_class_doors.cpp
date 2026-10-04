@@ -44,6 +44,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>   // ExternalList::Find's strcmp
 #include <new>
 
 #include "../../types/object/External.h"
@@ -64,7 +65,7 @@ namespace RtObject {
 // one-body-one-file rule runtime/src/object/rt_object_port.cpp states).
 Filename* RtObject_External_GetPath(const External* self, Filename* ret);
 // external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
-extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
+extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filename* path,
                                            const Filename* name);
 const External* RtObject_ExternalFactory_Find(const ExternalFactory* self, const Filename* path);
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
@@ -82,9 +83,6 @@ Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* 
 // shape a reader would expect is what caught it.
 Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self, Filename* ret,
                                                       const Filename* path, bool appendIdentifier);
-ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
-                                                  ExternalPtr<External>* ret,
-                                                  const Filename* path, ::Object::Type type);
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
@@ -102,12 +100,8 @@ namespace {
 
 // B.3.3 bridge — the class and the POD are asserted field for field in
 // External.h; these two spell the cast once instead of at thirty call sites.
-inline RtObject::ExternalFactory* Pod(ExternalFactory* f) {
-    return reinterpret_cast<RtObject::ExternalFactory*>(f);          // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
-inline const RtObject::ExternalFactory* Pod(const ExternalFactory* f) {
-    return reinterpret_cast<const RtObject::ExternalFactory*>(f);    // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
+// (B.4 P2 wave X: `RtObject::ExternalFactory` is an alias of this class now,
+// so the factory needs no bridge; `this` is passed as itself.)
 inline RtObject::External* Pod(External* e) {
     return reinterpret_cast<RtObject::External*>(e);                 // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
 }
@@ -147,7 +141,7 @@ inline System::Filename ByHiddenSlot(Fn call) {
 // and keeps its effectiveness counters. Declared on the class by B.3.3 step 6A
 // because a caller batch needed it; nothing about the body moved.
 bool External::SaveText(const System::Filename& path, const System::Filename& name) {
-    return RtObject::RtObject_External_SaveText(Pod(this), PodF(path), PodF(name));
+    return RtObject::RtObject_External_SaveText(this, PodF(path), PodF(name));
 }
 
 // ============================================================================
@@ -182,12 +176,12 @@ ExternalFactory* ExternalFactory::Get() {
 
 const External* ExternalFactory::Find(const System::Filename& path) const {
     return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_Find(Pod(this), PodF(path)));
+        RtObject::RtObject_ExternalFactory_Find(this, PodF(path)));
 }
 
 const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev) const {
     return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_FindNext(Pod(this), typeId, Pod(prev)));
+        RtObject::RtObject_ExternalFactory_FindNext(this, typeId, Pod(prev)));
 }
 
 // *** RETAIL DEREFERENCES THE FOUND NODE WITHOUT A NULL CHECK *** and the
@@ -195,25 +189,25 @@ const External* ExternalFactory::FindNext(uint32_t typeId, const External* prev)
 // reading +0x14; a guard here would not restore the behaviour, it would skip it
 // (CLAUDE.md's hard rule, and external.cpp:372-381 has the disassembly).
 uint32_t ExternalFactory::GetReferenceId(const External* external) const {
-    return RtObject::RtObject_ExternalFactory_GetReferenceId(Pod(this), Pod(external));
+    return RtObject::RtObject_ExternalFactory_GetReferenceId(this, Pod(external));
 }
 
 System::Filename ExternalFactory::GetPathForReferenceId(uint32_t id) const {
-    const RtObject::ExternalFactory* self = Pod(this);
+    const ExternalFactory* self = this;
     return ByHiddenSlot([self, id](RtSystem::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetPathForReferenceId(self, slot, id);
     });
 }
 
 System::Filename ExternalFactory::GetPathStackFilename() const {
-    const RtObject::ExternalFactory* self = Pod(this);
+    const ExternalFactory* self = this;
     return ByHiddenSlot([self](RtSystem::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetPathStackFilename(self, slot);
     });
 }
 
 System::Filename ExternalFactory::GetPathStackDirectory() const {
-    const RtObject::ExternalFactory* self = Pod(this);
+    const ExternalFactory* self = this;
     return ByHiddenSlot([self](RtSystem::Filename* slot) {
         RtObject::RtObject_ExternalFactory_GetPathStackDirectory(self, slot);
     });
@@ -221,7 +215,7 @@ System::Filename ExternalFactory::GetPathStackDirectory() const {
 
 System::Filename ExternalFactory::ExpandRelativePath(const System::Filename& path,
                                                      bool appendIdentifier) const {
-    const RtObject::ExternalFactory* self = Pod(this);
+    const ExternalFactory* self = this;
     const RtObject::Filename*        p    = PodF(path);
     return ByHiddenSlot([self, p, appendIdentifier](RtSystem::Filename* slot) {
         RtObject::RtObject_ExternalFactory_ExpandRelativePath(self, slot, p, appendIdentifier);
@@ -229,28 +223,28 @@ System::Filename ExternalFactory::ExpandRelativePath(const System::Filename& pat
 }
 
 void ExternalFactory::PushPath(const System::Filename& path) {
-    RtObject::RtObject_ExternalFactory_PushPath(Pod(this), PodF(path));
+    RtObject::RtObject_ExternalFactory_PushPath(this, PodF(path));
 }
 void ExternalFactory::PopPath() {
-    RtObject::RtObject_ExternalFactory_PopPath(Pod(this));
+    RtObject::RtObject_ExternalFactory_PopPath(this);
 }
 
 // THE ADD PATH. See the file banner: spelling only, body untouched, race
 // neither papered over nor removed.
 void ExternalFactory::Add(External* external) {
-    RtObject::RtObject_ExternalFactory_Add(Pod(this), Pod(external));
+    RtObject::RtObject_ExternalFactory_Add(this, Pod(external));
 }
 
 const External* ExternalFactory::FindOrLoad(const System::Filename& path) {
     return reinterpret_cast<const External*>(                        // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        RtObject::RtObject_ExternalFactory_FindOrLoad(Pod(this), PodF(path)));
+        RtObject::RtObject_ExternalFactory_FindOrLoad(this, PodF(path)));
 }
 
 void ExternalFactory::Clean() {
-    RtObject::RtObject_ExternalFactory_Clean(Pod(this));
+    RtObject::RtObject_ExternalFactory_Clean(this);
 }
 void ExternalFactory::ForceUnload(const System::Filename& path) {
-    RtObject::RtObject_ExternalFactory_ForceUnload(Pod(this), PodF(path));
+    RtObject::RtObject_ExternalFactory_ForceUnload(this, PodF(path));
 }
 // ---------------------------------------------------------------------------
 // `SerializeReferenceTable` (0x1800bcb60) — LANDS HERE, B.3.4 STREAMS (5/6).
@@ -276,7 +270,7 @@ void ExternalFactory::ForceUnload(const System::Filename& path) {
 //     no reordering, no null check, and no silent removal of whatever makes the
 //     race reproduce. **This commit changes ZERO lines of external_reftable.cpp.**
 //
-// THE BRIDGE CAST is the class->POD direction, exactly like `Pod(this)`:
+// THE BRIDGE CAST is the class->POD direction, exactly like `this`:
 // `IO::Stream` and `rt::io::Stream` are cross-asserted field for field and
 // `sizeof`-for-`sizeof` in runtime/types/io/Stream.h, so it is exact by
 // construction. It goes when the entry point itself takes `IO::Stream*`, which
@@ -291,7 +285,7 @@ void ExternalFactory::ForceUnload(const System::Filename& path) {
 // from the STREAMS commits will look for the `Class::` and wonder.
 void ExternalFactory::SerializeReferenceTable(IO::Stream& stream) {
     RtObject::RtObject_ExternalFactory_SerializeReferenceTable(
-        Pod(this),
+        this,
         reinterpret_cast<rt::io::Stream*>(&stream));                 // B.3.4 bridge  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
 }
 
@@ -381,13 +375,64 @@ External* ExternalList::Construct() {
 //   filter gets no filtering. The comparison is a LINEAR scan and is
 //   case-SENSITIVE, where `ExternalFactory::Find` over the same kind of path is
 //   case-INSENSITIVE; both are transcribed as found and must not be harmonised.
-ExternalPtr<External> ExternalList::Find(const System::Filename& path, uint32_t type) const {
-    RtObject::ExternalPtr<RtObject::External> raw;
-    raw.ptr = nullptr;
-    RtObject::RtObject_ExternalList_Find(
-        reinterpret_cast<const RtObject::ExternalList*>(this),       // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        &raw, PodF(path), ::Object::Type(type));
-    return ExternalPtr<External>(reinterpret_cast<External*>(raw.ptr));  // B.3.3 bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+//
+// HIDDEN RETURN SLOT: (this in RCX, ret in RDX, path in R8, type in R9); the
+// slot is zeroed first and written again on a hit, as retail does.
+//
+// Two more things worth naming:
+//   * The `":resource"` suffix convention again, but through the String&/String&
+//     operator+ (0x1800c9440) rather than the char* overload Find uses.
+//   * The comparison is length first (the `str-8` header), then a plain byte
+//     strcmp.
+// B.4 P2 wave X: the body of the retired `RtObject_ExternalList_Find`
+// (external.cpp), moved here unchanged; `self->` became `this`.
+ExternalPtr<External> ExternalList::Find(const System::Filename& path, uint32_t /*type — unused by retail*/) const {
+    bool noIdentifier;
+    {
+        System::Filename ident = path.GetPathIdentifer();
+        noIdentifier = (ident.GetLength() == 0);
+    }   // retail releases `ident` here, before the key is built
+
+    // `key` was a raw `char*` holding ONE reference that retail takes by hand
+    // and gives back at the tail. That hand-rolled reference IS a String, and
+    // the tail's `--refcount / MemFree` is its destructor.
+    System::String key;
+    if (noIdentifier) {
+        // Set + AdjustDelimiters on the same object is the `const char*` ctor
+        // (0x180026cf0). Retail builds a whole Filename for the literal so that
+        // the concatenation goes through the String&/String& operator+
+        // (0x1800c9440) rather than the char* overload.
+        System::Filename suffix(":resource");
+        key = path.AsString() + suffix.AsString();
+    } else {
+        key = path.AsString();
+    }
+
+    ExternalPtr<External> ret(nullptr);
+    for (int i = 0; i < _count; ++i) {
+        bool equal;
+        {
+            System::Filename got = _resources[i]->GetPath();   // 0x180006250
+
+            const int keyLen = key.GetLength();
+            const int gotLen = got.GetLength();
+
+            if (keyLen != gotLen) {
+                equal = false;
+            } else if (keyLen == 0) {
+                equal = true;                       // two empty paths match
+            } else if (got._data == nullptr) {
+                equal = false;                      // retail's `iVar8 = 1` arm
+            } else {
+                equal = (std::strcmp(key._data, got._data) == 0);
+            }
+        }   // `got` releases here, as retail does, before the hit is recorded
+
+        if (equal) { ret = _resources[i]; break; }
+    }
+
+    // key's reference goes back in ~String.
+    return ret;
 }
 
 }  // namespace Object

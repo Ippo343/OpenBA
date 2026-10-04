@@ -52,7 +52,7 @@ using IntPtr  = Object::InternalPtr<RtObject::Internal>;
 UNIT_TEST(object_ptr_sizeof_is_one_pointer) {
     CHECK_EQ(sizeof(ExtPtr), sizeof(void*));
     CHECK_EQ(sizeof(ExtPtr), (size_t)8);
-    CHECK_EQ(sizeof(Object::ExternalPtr<RtObject::ExternalList>), (size_t)8);
+    CHECK_EQ(sizeof(Object::ExternalPtr<Object::ExternalList>), (size_t)8);
     CHECK_EQ(sizeof(BasePtr), (size_t)8);
     CHECK_EQ(sizeof(IntPtr), (size_t)8);   // the typed wrapper adds nothing
     CHECK_EQ(alignof(ExtPtr), alignof(void*));

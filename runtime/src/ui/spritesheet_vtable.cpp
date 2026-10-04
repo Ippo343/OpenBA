@@ -90,6 +90,7 @@
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
+#include "../../types/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38Z
 
 
@@ -285,9 +286,7 @@ void StringSerialize(char** field, IO::Serializer* ser) {
 // is spelt uint64_t (saveload_draw.cpp stores it as an integer), and the body
 // takes the rt::io POD view of the Serializer (cursor.cpp does the same).
 void MaterialPtrSerialize(Graphics::MaterialInstance** field, IO::Serializer* ser) {
-    RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(field),   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-        reinterpret_cast<rt::io::Serializer*>(ser));   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    Object::SerializeExternal<Graphics::MaterialInstance>(*ser, *field);
 }
 
 }  // namespace

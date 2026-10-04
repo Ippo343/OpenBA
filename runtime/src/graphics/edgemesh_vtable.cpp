@@ -69,7 +69,9 @@
 #include "../../types/io/Serializer.h"    // IO::Serializer, IO::ReaderWriter (B3X W0)
 #include "../../types/io/Stream.h"        // B.4: IO::Stream (the slot's parameter)
 #include "../../types/video/CompanionData.h"  // B.4: Video::{Index,Vertex}BufferData::Serialize
-#include "../../types/object/External.h"  // RtObject_ExternalPtrSerialize_*
+#include "../../types/object/External.h"  // Object::SerializeExternal<T>
+#include "../../types/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/graphics/GraphicsMesh.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../collection/array_internal.h"
 
 namespace {
@@ -165,15 +167,10 @@ inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
 // object/external_ptr_serialize.cpp (declared in types/object/External.h), and
 // RtGraphics_EdgeMesh_SerializeTriangleListArray (0x180014850,
 // graphics/closure_batch2b.cpp, declared in types/graphics/Mesh.h).
-// LEFT: both take object's POD spellings (`RtObject::External**`,
-// `rt::io::Serializer*`, External.h -- not this block's header).
-inline void ExtBase(void* slot, IO::Serializer& ser) {
-    RtObject_ExternalPtrSerialize_GraphicsMesh(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));  // LEFT: POD ExternalPtr serialize thunk (External.h, R-OBJ / wave X)
-}
-inline void ExtMat(void* slot, IO::Serializer& ser) {
-    RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));  // LEFT: POD ExternalPtr serialize thunk (External.h, R-OBJ / wave X)
+// B.4 P2 wave X: the two are `Object::SerializeExternal<T>` / the
+// ExternalPtr<T> member (External.h). The +0x20 slot is still `void*` in Mesh.h.
+inline void ExtBase(void*& slot, IO::Serializer& ser) {
+    Object::SerializeExternal<Graphics::GraphicsMesh>(ser, reinterpret_cast<Graphics::GraphicsMesh*&>(slot));  // LEFT: Mesh.h (X-RL) declares EdgeMesh::_reserved20 as void*
 }
 // 0x1800136f0, the TriangleList `Array<>::SetSize`, is called by its body
 // name `rtcoll::RtColl_ArraySetSize_1800136f0` (Collection.h), on the typed
@@ -316,11 +313,11 @@ bool EdgeMesh::Serialize(IO::Stream& stream) {
     // The +0x20 qword no getter names, then the four materials IN FIELD ORDER
     // (mask, skinMask, edge, skinEdge — see Mesh.h's note; the FIELD order and
     // the SetMaterials ARGUMENT order are two groupings of the same four).
-    ExtBase(&_reserved20,      ser);
-    ExtMat (&_maskMaterial,     ser);
-    ExtMat (&_skinMaskMaterial, ser);
-    ExtMat (&_edgeMaterial,     ser);
-    ExtMat (&_skinEdgeMaterial, ser);
+    ExtBase(_reserved20,      ser);
+    _maskMaterial.Serialize(ser);
+    _skinMaskMaterial.Serialize(ser);
+    _edgeMaterial.Serialize(ser);
+    _skinEdgeMaterial.Serialize(ser);
 
     IO::ReaderWriter* const rw = ser._readerWriter;
 

@@ -76,20 +76,9 @@ inline void* MemAlloc(uint64_t bytes, int align) {
     return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
-// ---- B3R RT-UI: the argument bridges of the direct field-serializer calls ---
-// The `Object::ExternalPtr<T>::Serialize` bodies (runtime/types/object/External.h,
-// block R-IO) take the field as `RtObject::External**` and the PAIR as
-// `rt::io::Serializer*`; every caller here holds them as the typed field and an
-// `IO::Serializer`. LEFT until External.h takes the real types.
-inline RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-}
-inline RtObject::External** ExtArray(void* data) {
-    return reinterpret_cast<RtObject::External**>(data);                   // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-}
-inline rt::io::Serializer* IoSer(IO::Serializer* ser) {
-    return reinterpret_cast<rt::io::Serializer*>(ser);                     // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-}
+// ---- the direct field-serializer calls ---------------------------------------
+// `Object::ExternalPtr<T>::Serialize` is `Object::SerializeExternal<T>(ser, field)`
+// over the typed field and the real `IO::Serializer` (External.h, B.4 P2 wave X).
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) on a
 // System::String field held as raw char* storage (H5).
 inline void StringSerialize(char** field, IO::Serializer* ser) {

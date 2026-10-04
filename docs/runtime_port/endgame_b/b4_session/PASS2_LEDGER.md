@@ -408,3 +408,30 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - SA: the boot factory self-test's vtable / field-default probes in main.cpp are marked `crash_walk` (FLOOR §5
   says factory self-test reads are not floor); stress_harness.cpp's profiler keys on the vtable word (no
   category): decide at the audit.
+
+## Wave X round 0 hand-ins (X-RL, X-GS, X-R1)
+### Facts
+- Typed now: Controller slots / handlers `StateMachine*`; ticks `const System::Time*` (a POINTER: the tree's null
+  tests and `nullptr` callers keep their object code); Action [4] / [5] and the executor `ActionStack*`; the
+  ValidateCell trio `Map*`. `SerializeExternal<T>` / `ExternalPtr<T>::Serialize` / `SerializeArray` over
+  `Object::ExternalPtrSerializeBody`; `InternalPtr<T>::SerializeArray`.
+### Left for later rounds
+- `CharacterComponent` +0x48 as an embedded `ActionStack` (about 47 files): then Action [6] Enter / [7] Exit and
+  the executor's two callers (citizenai_executor.cpp:365, citizenai_growup.cpp:432).
+- `Component::OnMessage` data (a type per message: stays). `StateMachine_TickReimpl`'s four callers pass an
+  integer tick where retail passes a `Time*` (row 510); `HuntComponent::Update` treats the pointer bits as ticks
+  (row 511, a real defect, recorded not fixed).
+- code side of the thunk family: `ExternalPtrSerializeGeneric` (Game/serialize_externals.h, 8 casts);
+  `InternalBasePtr::_ptr` is still `RtObject::Internal*` (retyping changes `Get()` in about 100 code files:
+  its own sweep, 12 + 2 casts); `ResourceEntry::external` -> `Object::External*` (cascades through eight C
+  bodies incl. external_load.cpp); `EdgeMesh::_reserved20`.
+- X-RL FIELD left: `MeshInstance::_mesh` (readers in action_base_complete.cpp:415, storagedisplaycomponent.cpp:304,
+  scene_watch.cpp:488), `Context::_renderBuffer` / `_imageBuffers` / `_pixelConstantStaging`,
+  `ParamArray::_data`, the `ExternalPtrHandle` parameters of `SetMesh` / `SetMaterialInstance` / `PlayAnimation`,
+  `PixelProgram::Sampler` (no type), `ReloadEntry` (file-local in modification_setupfilesystem.cpp).
+### Close / audit
+- castmetric's allocation shape does not recognise `RtMemAlloc`, class `operator new`, `InternalMemAlloc`,
+  `RtVideo_Device_OperatorNew` results (16 genuine allocation casts in X-RL's files): decide tier-I shape.
+- thread_win.cpp's four vtable slot calls: FLOOR §5 says not floor; the inventory tagged them `FLOOR:vslot`.
+- Mirror types still named (X-R1's table): `RtObject::External` (15 files), `Internal` (code x11 + 6),
+  `InternalBasePtr`, `InternalFactory`, `BaseTypeInfo` (8), `Factory` / `TypeNode` (11).

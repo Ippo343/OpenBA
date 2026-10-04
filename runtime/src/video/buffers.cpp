@@ -214,7 +214,7 @@ void ImageBuffer::InitFields() {
     _addressV = 0;
     _addressW = 0;
     _filter = 1;       // LINEAR
-    _sourceName = nullptr;
+    // +0x48 = 0 is the System::String member's own ctor, run before this (B4 X-RH).
     // +0x50/+0x58 are not written by the ctor.
     PlatformConstruct();
 }
@@ -233,22 +233,12 @@ Object::Base* ImageBuffer::CreateInPlaceObject(void* storage) {
     return storage ? ::new (storage) ImageBuffer() : nullptr;
 }
 
-// ??1ImageBuffer 0x1800f2610 steps 2 and 3 (see above). `_sourceName` is a
-// `System::String`'s data pointer kept as `void*` (H5, see the header), so its
-// refcount and allocation base are reached through the marked header views.
+// ??1ImageBuffer 0x1800f2610 step 2 (see above). Step 3, the release of
+// `_sourceName` (0x1800f2636..0x1800f2658), is the System::String member's
+// destructor, which the compiler runs after ~ImageBuffer's body and before
+// ~External (B4 X-RH).
 void ImageBuffer::ReleaseFields() {
     PlatformDestruct();
-
-    if (_sourceName != nullptr) {
-        int32_t* refcount = static_cast<int32_t*>(_sourceName) - 1;   // CAST-OK: string_header
-        *refcount -= 1;
-        if (*refcount == 0) {
-            _sourceName = static_cast<uint8_t*>(_sourceName) - 8;     // CAST-OK: string_header
-            System::MemoryAllocator::MemFree(_sourceName);
-        } else {
-            _sourceName = nullptr;
-        }
-    }
 }
 
 // ?Width@ImageBuffer@Video@@QEBAHXZ  0x1800f2530
