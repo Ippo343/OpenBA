@@ -270,7 +270,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     Map* map = gameWorld->m_game;
     // The map helpers 0x14009c480, 0x14009f5d0 and 0x14009f3e0 take the map as int* /
     // void*: LEFT (0x140008830, 0x14009ccf0, 0x1400a00f0 take the Map).
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG Pf_ZoneRefresh_9c480 takes the Map as int* (Action/exe_bodies.h)
 
     int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;
@@ -404,9 +404,9 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                     bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(map, 0xe1f, testCell, citizenGridCell));   // the door read AL
                     if (canPath) {
                         // Check terrain suitability for planting
-                        bool terrainOk = PlayerPath_CharComp_f5d0(
-                            mapGrid, testCellX, testCellY, 4,
-                            fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, 0);
+                        bool terrainOk = PlayerPath_CharComp_f5d0(   // 0x14009f5d0 (the Map* overload; the int* forwarder went)
+                            map, testCellX, testCellY, 4,
+                            fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, nullptr);
                         if (terrainOk) {
                             // Check natural resource density limits (0x140120c30)
                             bool densityOk = static_cast<uint8_t>(WorkLeaf_FootprintOwnerCheck_120c30(

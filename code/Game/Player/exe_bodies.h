@@ -112,7 +112,6 @@ void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP);  // 0x14000
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP);  // 0x140003ea0
 uint64_t PlayerPath_Sub_11e710(uintptr_t param_1);  // 0x14011e710 B4 FORWARD -> DestroyComponent::InRemovalState: 2 outside callers (Component/firecomponent_ignite.cpp, Component/workplacecomponent.cpp)
 bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, const ComponentDescription* param_10);  // 0x14009f5d0
-bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, int64_t param_10);  // 0x14009f5d0 B4 FORWARD: 3 outside callers (Component/growthcomponent.cpp, Component/spawncomponent.cpp, Work/foresterwork.cpp)
 // 0x140104670 / 0x140104770 / 0x1401048a0 are RemovalTool::CanRemoveBuilding / CanRemoveRoad / CanRemoveField (RemovalTool.h).
 
 // ---- tool_base_place.cpp
