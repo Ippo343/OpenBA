@@ -161,7 +161,6 @@ extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIB
 
 // ---- floorcomponent.cpp
 void* FloorComponent_FindResData(void* owner, void* outIBP);  // 0x140004680
-void FloorComponent_SubF390(void* selfV);  // 0x14011f390  B4 FORWARD: FloorComponent::PlaceFloor (multiobjectcomponent.cpp)
 
 // ---- frustumoutlineelement.cpp
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
