@@ -234,7 +234,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     }
 
     // Register with citizen AI BST at +0x50 (the tree helpers take the root as uintptr_t*)
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field50), &targetIBP, citizenIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field50), &targetIBP, citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     return 2;
 }
@@ -366,7 +366,7 @@ int FireWork::Validate() {
                 } else {
                     if (removeArr[i] <= nodeKey) {
                         // Found -- remove it (the tree helpers take the root as uintptr_t*)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field50), bstNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field50), bstNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         break;
                     }
                     bstNode = bstNode->right; // right
@@ -394,7 +394,7 @@ int FireWork::Validate() {
 
 int FireWork::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/, int /*arg3*/) {
     // Remove citizen entry from BST at +0x50
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -408,7 +408,7 @@ int FireWork::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*arg2
 // ============================================================
 int FireWork::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*arg2*/, int /*arg3*/) {
     // Remove citizen entry from BST at +0x50
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -492,7 +492,7 @@ void FireWork::Persist(IO::Stream& stream) {
     Work::Persist(stream);
 
     IO::Serializer ser(stream, 0);
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field50), &ser);   // 0x1400296b0 (work_base_bst.cpp)  // LEFT: SIG WorkBST_BST_Serialize_296b0
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field50), &ser);   // 0x1400296b0 (work_base_bst.cpp)   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     ser.Serialize(_field48, nullptr);
 }
 

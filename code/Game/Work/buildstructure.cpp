@@ -117,7 +117,7 @@ BuildStructure::~BuildStructure() {
 // OnComplete (0x1400e4f80)
 // ============================================================
 int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     field_50[slotIndex] = 0;
     return 0;
 }
@@ -126,7 +126,7 @@ int BuildStructure::OnComplete(CitizenComponent** citizenIBP, ComponentEntity** 
 // OnCancel (0x1400e4f40)
 // ============================================================
 int BuildStructure::OnCancel(CitizenComponent** citizenIBP, ComponentEntity** /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     field_50[slotIndex] = 0;
     return 0;
 }
@@ -185,7 +185,7 @@ void BuildStructure::Persist(IO::Stream& stream) {
     ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);   // LEFT: SIG WorkBST_BST_Serialize_296b0
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     // Serialize count (+0x58), resize array on load
     int count = field_58;
@@ -507,7 +507,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                     }
 
                     // Insert claimed position into BST at +0x60
-                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);   // LEFT: SIG WorkBST_RegisterWork_1a30
+                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
                     // Mark build position as claimed
                     field_50[chosenIndex] = 1;
@@ -621,7 +621,7 @@ int BuildStructure::Validate() {
     int slotCap = 0;
 
     // (the tree-helper signatures take the root slot as uintptr_t*)
-    uintptr_t* treeRootPtr = reinterpret_cast<uintptr_t*>(&field_60);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    uintptr_t* treeRootPtr = reinterpret_cast<uintptr_t*>(&field_60);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     // BST in-order traversal: find leftmost node first
     AssignmentNode* root = field_60;

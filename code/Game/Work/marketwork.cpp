@@ -318,7 +318,7 @@ void MarketWork::Persist(IO::Stream& stream) {
 
         // In-order traverse temp BST
         // For each entry, re-insert into MarketWork's BST using market insert
-        SimpleNode* tempRoot = reinterpret_cast<SimpleNode*>(tempBST[0]);   // LEFT: SIG WorkBST_BST_Serialize_296b0 (the root slot is a uintptr_t)
+        SimpleNode* tempRoot = reinterpret_cast<SimpleNode*>(tempBST[0]);   // LEFT: ERASED the WorkBST core takes the set as uintptr_t*; this local set is its raw root + count (a Collection::Set local would add a dtor)
         if (tempRoot != nullptr) {
             // Find leftmost in temp
             SimpleNode* node = tempRoot;

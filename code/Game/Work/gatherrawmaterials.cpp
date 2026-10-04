@@ -161,7 +161,7 @@ void GatherRawMaterials::Persist(IO::Stream& stream) {
     serializer.Serialize(field_60, field_58, nullptr);
 
     // --- Serialize tree at +0x68 (the helper takes the container as uintptr_t*: LEFT) ---
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_68), &serializer);   // LEFT: SIG WorkBST_BST_Serialize_296b0
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_68), &serializer);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 }
 
 // ============================================================
@@ -403,7 +403,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 }
 
                 // (the tree helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);   // LEFT: SIG WorkBST_RegisterWork_1a30
+                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
                 // Increment build count for this slot
                 field_58[slotIdx] += remaining;
@@ -431,7 +431,7 @@ int GatherRawMaterials::OnComplete(CitizenComponent** param2, ComponentEntity** 
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     // Extract slot index (low byte) and amount (high 24 bits, shifted right by 8)
     uint32_t slotIdx = param4 & 0xFF;
@@ -459,7 +459,7 @@ int GatherRawMaterials::OnCancel(CitizenComponent** param2, ComponentEntity** /*
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 
     // Extract slot index and amount
     uint32_t slotIdx = param4 & 0xFF;
@@ -611,7 +611,7 @@ int GatherRawMaterials::Validate() {
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node (the helper takes the container as
                         // uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_68), treeNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_68), treeNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         break;
                     }
                     treeNode = treeNode->right;

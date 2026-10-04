@@ -249,7 +249,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         }
 
         // Register work with citizen AI (the tree helpers take the root as uintptr_t*)
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);   // LEFT: SIG WorkBST_RegisterWork_1a30
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
         return 2;
     }
 
@@ -371,7 +371,7 @@ phase2:
                 } else {
                     if (key <= nodeKey) {
                         // Found it, remove (the tree helpers take the root as uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field58), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field58), searchNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                         break;
                     }
                     searchNode = searchNode->right;
@@ -413,7 +413,7 @@ ClearStorage::~ClearStorage() {
 // entry from the work tracking tree.
 int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -430,7 +430,7 @@ int ClearStorage::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2
 // citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
 int ClearStorage::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: SIG WorkBST_BSTFindRemove_25520
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
     return 0;
 }
 
@@ -523,7 +523,7 @@ void ClearStorage::Persist(IO::Stream& stream) {
     Work::Persist(stream);
 
     IO::Serializer ser(stream, 0);
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)  // LEFT: SIG WorkBST_BST_Serialize_296b0
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)   // LEFT: H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
 }
 
 // ============================================================
