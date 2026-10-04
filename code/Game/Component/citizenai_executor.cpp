@@ -357,8 +357,7 @@ static inline float fabs_f(float v) {
 
 extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // character_trig.cpp
 
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* selfBytes, const System::Time* time) {
-    CharacterComponent* self = reinterpret_cast<CharacterComponent*>(selfBytes);   // LEFT: SIG CharacterComponent_MoveTick_1094c0 (charactercomponent.cpp's extern)
+extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, const System::Time* time) {
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
     if (-1 < self->currentAction) {
