@@ -36,7 +36,7 @@ inline bool Reading(IO::Serializer& ser) {
 }
 }  // namespace
 
-extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
+extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x140006bb0 / createInPlace 0x140006c20):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then

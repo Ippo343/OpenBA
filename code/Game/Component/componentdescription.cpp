@@ -53,7 +53,7 @@ static inline bool Reading(IO::Serializer& ser) {
 // at namespace scope (was a function-local plain bool).
 static std::atomic<bool> s_warnedUnwired{false};
 
-extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase) {
+extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
     if (!::Object::ExternalFactory::_singleton) {
         if (!s_warnedUnwired.exchange(true)) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); }
@@ -61,10 +61,9 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
     }
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     // The callers (AnimalDescription, HerbalistDescription, ImmigrationDescription,
-    // TradeDescription, ComponentDescription) hand in their serializer and their
-    // External* array untyped: the two bridges are the one place they are named.
-    IO::Serializer& ser = *reinterpret_cast<IO::Serializer*>(serializer);   // LEFT: SIG Desc_LoadExternalArray takes void* (callers in animal / herbalist / immigration / trade description, other agents')
-    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // LEFT: SIG Desc_LoadExternalArray takes the external array as void* (callers in animal / herbalist / immigration / trade description pass raw triples)
+    // TradeDescription, ComponentDescription) hand in their External* array untyped.
+    IO::Serializer& ser = *serializer;
+    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // LEFT: FLOOR? the one load body's view of five callers' arrays of different External-derived pointers (AnimalDescription::_refs, HerbalistDescription::_herbs, ImmigrationDescription::_requiredBuildings, TradeDescription goods, ComponentDescription::_subDescs); it stores the loaded External* into each slot
 
     const int encState = ser.GetEncoding().GetKind();   // Encoding slot 2 (+0x10)
 
