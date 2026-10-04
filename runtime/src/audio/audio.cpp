@@ -242,12 +242,11 @@ void* RtAudio_Scene_Ctor(void* selfPtr) {
 // owned per-slot `positions` buffers first (FUN_180052110), then both outer
 // buffers, matching retail's order (+0x20 torn down before +0x10).
 // ============================================================================
-void RtAudio_Scene_Dtor(void* selfPtr) {
-    // B.3.7: the IMPLICIT destructor IS retail's body (Audio.h banner):
-    // ~Array<AttenutedEffect> (each slot's `positions`, then the buffer, +0x20)
-    // then ~Array<Channel> (+0x10), reverse declaration order.
-    reinterpret_cast<Audio::Scene*>(selfPtr)->~Scene();   // B.3.7 bridge   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
-}
+// B.3.7: the IMPLICIT destructor IS retail's body (Audio.h banner):
+// ~Array<AttenutedEffect> (each slot's `positions`, then the buffer, +0x20)
+// then ~Array<Channel> (+0x10), reverse declaration order. B.4 wave X: the
+// one caller (GameUpdateLoop::Shutdown) runs it by name; the void* forwarder
+// RtAudio_Scene_Dtor is gone.
 
 // ============================================================================
 // void Audio::Scene::AddEmitter(uint id, const Vector3& pos, float volume)
