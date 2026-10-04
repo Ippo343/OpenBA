@@ -539,8 +539,8 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                                             "(mirrors RemoveNaturalResource::Main; bypasses MoveTo arrival)\n",
                                             s_harvestCount, (void*)nrc);
                                     fflush(stderr);
-                                    // (0x1401260f0 takes the component as an integer: LEFT)
-                                    ActCNR_RemoveNatRes_1260f0(reinterpret_cast<int64_t>(nrc), workIBPbuf, 1);   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
+                                    // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
+                                    RemoveNaturalResourceCore(nrc, workIBPbuf, 1);
                                     // With BANISHED_PRODUCE_SPAWN_ENTITY the force-produce just
                                     // REMOVED the tree (dirty-list -> freed next EntityList tick).
                                     // Do NOT also queue the real cut sequence on it: its pending

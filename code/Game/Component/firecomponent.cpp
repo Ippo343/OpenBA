@@ -120,7 +120,7 @@ void FireComponent::Update(const System::Time* time) {
         System::Random* rng = gw->m_random;
         float* pair = desc->igniteChance;
 
-        const bool fired = ActMvDep_TimeCheck_a9290(&igniteAccum, pair, rng);
+        const bool fired = BreakTimeCheck(&igniteAccum, pair, rng);   // 0x1400a9290 (was its ActMvDep_TimeCheck_a9290 forwarder)
         if (fired) {
             Ignite();
             return;

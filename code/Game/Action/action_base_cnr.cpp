@@ -82,18 +82,8 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 
 }  // namespace
 
-// Forward decl: ActCNR_SetAnimIndex_126440 tail-calls RemoveNatRes (defined below).
-void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag);
-
-// ============================================================
-// Reimpl of Entity_ClearPathQueue (FUN_140003f60) — FindComponent, type 0x1401c7a50.
-// (Called from createnaturalresource.cpp as FindComponent_NR and from
-// animatenaturalresource.cpp as GetModelComp.)
-// ============================================================
-void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<ModelComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ModelComponent>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: SIG ActCNR_FindComponent_3f60
-}
+// (0x140003f60 ActCNR_FindComponent_3f60, the B4 FORWARD forwarder to
+// ComponentEntity::FindComponent<ModelComponent>, had no caller left: deleted, B4 wave X.)
 
 
 // ============================================================
@@ -451,10 +441,6 @@ uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
     return CheckCellTerrain(reinterpret_cast<const Map*>(mapGrid), cellIndex);   // LEFT: SIG ActCNR_CheckTerrain_cb00
 }
 
-// B4 FORWARD: outside callers (Component/growthcomponent.cpp)
-void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
-    SetGrowthProgress(reinterpret_cast<GrowthComponent*>(self), progress);   // LEFT: SIG ActCNR_SetGrowthProgress_120db0
-}
 
 
 // B4 FORWARD: outside callers (Action/createnaturalresource.cpp)
@@ -467,18 +453,4 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
     ModelSelectMesh(reinterpret_cast<ModelComponent*>(comp), variant, subVariant);   // LEFT: SIG ActCNR_NR_SetVariant_1253d0
 }
 
-// B4 FORWARD: outside callers (Action/animatenaturalresource.cpp; Component files)
-void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
-    NaturalResourceSetAnimation(reinterpret_cast<NaturalResourceComponent*>(self), animIdx);   // LEFT: SIG ActCNR_SetAnimIndex_126440
-}
 
-// B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Game/starttown.cpp)
-uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
-    return NaturalResourcePlaceAtCell(reinterpret_cast<NaturalResourceComponent*>(self), cellIndex);   // LEFT: SIG ActCNR_SetupModelAtCell_126540
-}
-
-// B4 FORWARD: outside callers (Action/removenaturalresource.cpp; Component, Work files)
-void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag) {
-    RemoveNaturalResourceCore(reinterpret_cast<NaturalResourceComponent*>(self),   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
-                              reinterpret_cast<ComponentEntity* const*>(citizenIBP), harvestFlag);   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
-}
