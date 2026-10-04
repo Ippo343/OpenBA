@@ -49,6 +49,7 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "collection/Collection.h"   // Collection::Array (the typed view of the raw triple)
 #include <cstdint>
 #include <new>
 #include "Component/exe_bodies.h"
@@ -62,46 +63,47 @@
 // via RegisterExeAddr so the other resolve-by-address callers pick it up.
 // 1:1 port of the disassembly; closure = MemAlloc/MemFree + String copy-ctor/dtor,
 // all of which resolve in standalone.
-// LEFT (every cast in this body): ERASED hand-expanded Array<System::String>::SetSize; its
-// callers (here and Tutorial/tutorialsetupdialog.cpp) hand the array in as void* (wave X;
-// policy: typed wrappers over the one core, never a container swap).
+// B4 X-G1-3: kept as the tree's body, not replaced by the erased core: it counts unsigned and
+// tests the BASE pointer (`buf`) where SetSizeCore counts signed and tests the computed
+// element address, so it is not provably the same SetSize. Typed by element.
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(hdr);
-    unsigned oldCount = *reinterpret_cast<unsigned*>(h + 8);
+    // LEFT: H5 the callers' String arrays (ToolbarDescription::_entries, TutorialSetupDialog's
+    // two) are raw {data, count, capacity} triples
+    auto* arr = reinterpret_cast<Collection::Array<System::String>*>(hdr);
+    unsigned oldCount = static_cast<unsigned>(arr->_size);
     if (newCount == oldCount) return;
-    uint8_t* oldBuf = *reinterpret_cast<uint8_t**>(h);
-    *reinterpret_cast<unsigned*>(h + 8) = newCount;
-    if (*reinterpret_cast<int*>(h + 0xc) < static_cast<int>(newCount)) {   // grow capacity
-        *reinterpret_cast<unsigned*>(h + 0xc) = newCount;
+    System::String* oldBuf = arr->_data;
+    arr->_size = static_cast<int32_t>(newCount);
+    if (arr->_capacity < static_cast<int>(newCount)) {   // grow capacity
+        arr->_capacity = static_cast<int32_t>(newCount);
         // First single-element grow from non-empty triples the capacity (exe pattern).
         if (newCount == oldCount + 1 && oldCount != 0)
-            *reinterpret_cast<unsigned*>(h + 0xc) = newCount * 3;
-        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*reinterpret_cast<unsigned*>(h + 0xc)) << 3, 8);
-        *reinterpret_cast<void**>(h) = nb;
+            arr->_capacity = static_cast<int32_t>(newCount * 3);
+        arr->_data = static_cast<System::String*>(System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(static_cast<unsigned>(arr->_capacity)) << 3, 8));
     }
-    uint8_t* buf = *reinterpret_cast<uint8_t**>(h);
+    System::String* buf = arr->_data;
     // If no realloc happened, elements [0..oldCount) stay in place → only init the
     // tail. If realloc'd, copy-construct all surviving elements into the new buffer.
     unsigned start = (oldBuf == buf) ? oldCount : 0;
     for (unsigned i = start; i < newCount; ++i) {
         if (i < oldCount) {
             if (buf)
-                ::new (static_cast<void*>(buf + static_cast<size_t>(i) * 8))
-                    System::String(*reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8));  // B.3.1 bridge
+                ::new (static_cast<void*>(&buf[i])) System::String(oldBuf[i]);
         } else if (buf) {
-            *reinterpret_cast<void**>(buf + static_cast<size_t>(i) * 8) = nullptr;
+            buf[i]._data = nullptr;
         }
     }
     if (oldBuf == buf) {
         // In-place shrink: destroy the trimmed tail [newCount..oldCount).
         if (static_cast<int>(newCount) < static_cast<int>(oldCount)) {
             for (unsigned i = newCount; i < oldCount; ++i)
-                reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8)->~String();  // B.3.1 bridge
+                oldBuf[i].~String();
         }
     } else {
         // Realloc'd: destroy every old element, then free the old buffer.
         for (unsigned i = 0; i < oldCount; ++i)
-            reinterpret_cast<System::String*>(oldBuf + static_cast<size_t>(i) * 8)->~String();  // B.3.1 bridge
+            oldBuf[i].~String();
         if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
 }
