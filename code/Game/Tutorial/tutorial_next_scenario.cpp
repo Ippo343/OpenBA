@@ -239,7 +239,7 @@ void TutorialInstance::LoadNextScenario() {
         fprintf(stderr, "[TutNext] SaveLoad pump finished after %d iterations\n", loopCount);
         fflush(stderr);
 
-        // LEFT: as above.
+        // LEFT: POD IO::Persistence::_savePath is the RtSystem::String POD (Persistence.h, outside this set)
         *reinterpret_cast<System::String*>(&::IO::Persistence::_singleton->_savePath) = savePathBuf;  // LEFT: POD IO::Persistence::_savePath is the RtSystem::String POD (Persistence.h, outside this set)
 
         Save::SavedState* savedState = saveLoad->GetSaveState();

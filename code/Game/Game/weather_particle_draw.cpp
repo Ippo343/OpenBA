@@ -336,7 +336,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                 void*& idxCur = *reinterpret_cast<void**>(&videoCtx._unknown20f0);   // LEFT: Video::Context::_unknown20f0 (R-VIDEO)
                 size_t idxBytes = static_cast<size_t>(indexCount) * 2;
                 std::memcpy(idxCur, _indices.data, idxBytes);   // +0xD0
-                idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;   // LEFT: as above
+                idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;   // LEFT: Video::Context::_unknown20f0 (R-VIDEO)
 
                 videoCtx.EndInstancedIndexedVertices(0);
             }
