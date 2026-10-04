@@ -383,8 +383,8 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         }
 
         // gate: can the trade-post building storage accept this resource+qty?
-        if (static_cast<char>(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(bldgStor),
-                                                       reinterpret_cast<int64_t>(resType), qtyMove)) == 0)   // LEFT: C signature; the door read AL
+        // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder; the door read AL)
+        if (static_cast<char>(StorageCanAdd(bldgStor, resType, qtyMove)) == 0)
             continue;
 
         // source position from the trade post's interact component (+ its parts):
@@ -619,9 +619,9 @@ void TradeWork::Persist(IO::Stream& stream) {
 TradeWork::~TradeWork() {
     Node* root = bstRoot;
     if (root != nullptr) {
-        // LEFT: 0x140014b00's C signature (PLAYER) takes the set as an integer.
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(&bstRoot), root->left);
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(&bstRoot), root->right);
+        // 0x140014b00 (was its TradeWork_helper_14b00 forwarder)
+        Avl38FreeSubtree(&bstRoot, root->left);
+        Avl38FreeSubtree(&bstRoot, root->right);
         System::MemoryAllocator::MemFree(root);
     }
 

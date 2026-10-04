@@ -519,12 +519,12 @@ static void MW_ReportTreeMiss(const char* site, int entityIdx, const void* entit
 // subtree frees plus the root) and the record array, then return. Stage 2 runs
 // it on its own exit path because retail runs it on EVERY exit path from
 // 0x1400f021f onward -- skipping it would leak a tree and an array per call.
-// (0x140014b00 takes the tree header as an integer: LEFT.)
+// (0x140014b00 is Avl38FreeSubtree, Player/exe_bodies.h; was its TradeWork_helper_14b00 forwarder.)
 static void MW_Stage2Teardown(MW_SupplyTree* tree, MarketWork::DemandList* records) {
     MW_SupplyNode* root = tree->root;
     if (root != nullptr) {
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(tree), root->left);    // LEFT: SIG TradeWork_helper_14b00
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(tree), root->right);   // LEFT: SIG TradeWork_helper_14b00
+        Avl38FreeSubtree(tree, root->left);
+        Avl38FreeSubtree(tree, root->right);
         System::MemoryAllocator::MemFree(root);
     }
     tree->root = nullptr;

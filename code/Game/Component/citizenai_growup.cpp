@@ -329,9 +329,11 @@ void CitizenComponent::LongTermPlan() {
             // find that entry's StorageComponent
             Component* sc = ScanForType(entry, s_tid_StorageComponent);
             Component* scIBP = sc;
-            int64_t descComp = reinterpret_cast<int64_t>(rowBase->_resource);   // row entity (RawMaterialDescription)   // LEFT: SIG Pf_StorageCanAccept_cd80 (int64_t; Action/exe_bodies.h)
+            const ComponentDescription* descComp = rowBase->_resource;   // row entity (RawMaterialDescription)
             int amount = rowBase->_count;
-            uint32_t hit = (scIBP) ? Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(scIBP), descComp, amount) : 0;   // LEFT: SIG Pf_StorageCanAccept_cd80 (int64_t)
+            // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder); sc was found by the
+            // StorageComponent type id.
+            uint32_t hit = (scIBP) ? StorageCanAdd(static_cast<StorageComponent*>(scIBP), descComp, amount) : 0;
             if (static_cast<char>(hit) != '\0') { satisfied = true; break; }
         }
         if (satisfied) { committed = true; break; }

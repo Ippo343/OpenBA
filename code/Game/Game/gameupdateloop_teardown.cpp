@@ -381,8 +381,8 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
                           EntitySet{&self->field_0x50, &self->field_0x58}}) {
         TrackedEntityNode* root = *set.root;
         if (root) {
-            TradeWork_helper_14b00(reinterpret_cast<int64_t>(set.root), root->left);   // LEFT: SIG TradeWork_helper_14b00
-            TradeWork_helper_14b00(reinterpret_cast<int64_t>(set.root), root->right);   // LEFT: SIG TradeWork_helper_14b00
+            Avl38FreeSubtree(set.root, root->left);    // 0x140014b00 (was its TradeWork_helper_14b00 forwarder)
+            Avl38FreeSubtree(set.root, root->right);
             MemFree(root);
         }
         *set.root = nullptr;

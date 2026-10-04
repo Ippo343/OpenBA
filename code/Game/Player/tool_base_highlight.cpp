@@ -42,25 +42,8 @@
 // DecalVertexNode (Player/exe_bodies.h); its rotations / retrace are the shared
 // Avl38 templates (0x140015000 / 0x140014ed0 / 0x140014b40).
 
-// ============================================================
-// 0x140014b00 — recursive BST free: free left (+0x20), right (+0x28), then self.
-// 1:1 port of FUN_140014b00.
-// ============================================================
-template <class Node>
-void Avl38FreeSubtree(const void* context, Node* node) {
-    if (node != nullptr) {
-        Avl38FreeSubtree(context, node->left);
-        Avl38FreeSubtree(context, node->right);
-        System::MemoryAllocator::MemFree(node);
-    }
-}
+// 0x140014b00 — recursive BST free: Avl38FreeSubtree (Player/exe_bodies.h).
 template void Avl38FreeSubtree<DecalVertexNode>(const void*, DecalVertexNode*);
-
-// B4 FORWARD: outside callers (Game/gameupdateloop_teardown.cpp, Work/marketwork.cpp,
-// Work/tradework.cpp) hold their sets as integers / void*.
-extern "C" void TradeWork_helper_14b00(int64_t param_1, void* node) {
-    Avl38FreeSubtree(reinterpret_cast<const void*>(param_1), reinterpret_cast<Avl38Node*>(node));   // LEFT: B4 FORWARD
-}
 
 namespace {
 
