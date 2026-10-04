@@ -38,6 +38,8 @@
 #include "../../types/object/External.h"         // the ExternalPtr serializers
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"
+#include "../../types/video/ImageBuffer.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -92,12 +94,6 @@ void StringSerialize(void* str, IO::Serializer& ser) {
     static_cast<System::String*>(str)->Serialize(&ser);
 }
 
-// LEFT: the ExternalPtr serializers take object's POD `rt::io::Serializer*`
-// (External.h, not this block's header); the two describe the same 0x10 bytes
-// (Serializer.h asserts it).
-rt::io::Serializer* PodSerializer(IO::Serializer& ser) {
-    return reinterpret_cast<rt::io::Serializer*>(&ser);
-}
 
 // `?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z` —
 // retail 0x1800a48e0. **PORTED** (runtime/src/graphics/batchc_gfx_leaves.cpp,
@@ -513,9 +509,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
             rw->SerializeFloat(e->_distance, nullptr);
             StringSerialize(&e->_name, ser);
-            // LEFT: object's POD `RtObject::External**` (External.h).
-            RtObject_ExternalPtrSerialize_ImageBuffer(                    // 0x18005d0f0
-                reinterpret_cast<RtObject::External**>(&e->_image), PodSerializer(ser));
+            e->_image.Serialize(ser);                                     // 0x18005d0f0
             if (rw->GetVersion() == 0)
                 RtGraphics_GraphicsMeshTriangleList_Serialize(e, ser);
         }
@@ -532,9 +526,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
             int32_t m = e->_size;
             rw->SerializeInt(m, nullptr);
             if (reading) rtcoll::RtColl_ArraySetSize_18005cc60(e, m);
-            // LEFT: object's POD `RtObject::External**` (External.h).
-            RtObject_ExternalPtrArraySerialize_MaterialInstance(          // 0x18005d4a0
-                PodSerializer(ser), m, reinterpret_cast<RtObject::External**>(e->_data));
+            Object::ExternalPtr<MaterialInstance>::SerializeArray(ser, m, e->_data);   // 0x18005d4a0
         }
     }
 

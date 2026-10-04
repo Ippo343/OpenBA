@@ -70,6 +70,9 @@
 #include "../../types/io/Stream.h"      // IO::Stream, IO::kReading
 #include "../../types/object/External.h"
 #include "../../types/video/VideoProgram.h"
+#include "../../types/video/VertexLayout.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/video/ShaderProgram.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/video/RenderState.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -170,18 +173,11 @@ bool VideoProgram::Serialize(IO::Stream& streamv) {
     IO::Stream& stream = streamv;
     IO::Serializer ser(stream, 0);
 
-    // LEFT (B.4 R-VIDEO): the four thunks (R-OBJ, External.h) still take the
-    // `rt::io::Serializer` POD (asserted interchangeable with IO::Serializer) and
-    // an `External**` over each ExternalPtr<T> field (one External* each).
-    rt::io::Serializer* const pod = reinterpret_cast<rt::io::Serializer*>(&ser);
-    RtObject_ExternalPtrSerialize_VertexLayout(
-        reinterpret_cast<RtObject::External**>(&_vertexLayout), pod);    // 0x180055090
-    RtObject_ExternalPtrSerialize_VertexProgram(
-        reinterpret_cast<RtObject::External**>(&_vertexProgram), pod);   // 0x1800542a0  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
-    RtObject_ExternalPtrSerialize_PixelProgram(
-        reinterpret_cast<RtObject::External**>(&_pixelProgram), pod);    // 0x180055380  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
-    RtObject_ExternalPtrSerialize_RenderState(
-        reinterpret_cast<RtObject::External**>(&_renderState), pod);     // 0x180055670  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
+    // The four ExternalPtr<T>::Serialize instantiations, as members (B.4 P2 X).
+    _vertexLayout.Serialize(ser);    // 0x180055090
+    _vertexProgram.Serialize(ser);   // 0x1800542a0
+    _pixelProgram.Serialize(ser);    // 0x180055380
+    _renderState.Serialize(ser);     // 0x180055670
 
     if ((_vertexLayout.Get() || _vertexProgram.Get() || _pixelProgram.Get() || _renderState.Get())
         && stream.GetDirection() == IO::kReading) {

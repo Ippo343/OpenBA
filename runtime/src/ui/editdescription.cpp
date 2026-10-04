@@ -32,6 +32,7 @@
 #include "description_common.h"
 #include "../../types/ui/EditDescription.h"
 #include "../../types/ui/EditElement.h"
+#include "../../types/ui/Font.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -97,7 +98,7 @@ bool EditDescription::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_Font(ExtField(&_ptr68), IoSer(&ser));       // 1800d1168
+    Object::SerializeExternal<UI::Font>(ser, _ptr68);       // 1800d1168
     StringSerialize(&_string70, &ser);    // 1800d1176
 
     rw->SerializeInt(_word78, nullptr);                      // 1800d118a

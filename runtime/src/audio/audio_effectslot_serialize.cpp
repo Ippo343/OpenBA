@@ -146,10 +146,7 @@ extern "C" void RtAudio_Scene_SerializeEffectSlots(IO::Serializer* ser, int32_t 
         ser->_readerWriter->SerializeUInt(s->soundType, nullptr);        // 0x180052683 +0x98
 
         // 0x18005268f — the ExternalPtr<SoundEffect> at +0x10, `(this, ser)`.
-        // LEFT: the template's member takes the `rt::io::Serializer` POD
-        // (External.h, the object block's).
-        s->soundEffectRef.Serialize(*reinterpret_cast<rt::io::Serializer*>(ser),
-                                    &Audio::SoundEffect::GetTypeInfo());
+        s->soundEffectRef.Serialize(*ser);   // ExternalPtr<Audio::SoundEffect>
 
         ser->_readerWriter->SerializeInt64(s->startTime._ticks, nullptr);  // 0x1800526a2 +0x90
 

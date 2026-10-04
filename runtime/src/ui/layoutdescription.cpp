@@ -141,9 +141,7 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int
     auto rw = [ser]() { return ser->_readerWriter; };
 
     for (int32_t i = 0; i < count; ++i, ++e) {
-        RtObject_ExternalPtrSerialize_ElementDescription(                       // 180043f77
-            rtdesc::ExtField(&e->desc),                   // B.3.x bridge
-            rtdesc::IoSer(ser));
+        Object::SerializeExternal<UI::ElementDescription>(*ser, e->desc);   // 180043f77
         rtdesc::StringSerialize(&e->name, ser);                // 180043f83
         rtdesc::StringSerialize(&e->relativeToX, ser);         // 180043f8e
         rtdesc::StringSerialize(&e->relativeToY, ser);         // 180043f9a

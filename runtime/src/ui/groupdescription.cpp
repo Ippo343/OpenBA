@@ -136,7 +136,7 @@ bool GroupDescription::Serialize(IO::Stream& streamv) {
         rtcoll::RtColl_ArraySetSize_1800492d0(&_children, n);   // 180117d7f
     }
 
-    RtObject_ExternalPtrArraySerialize_ElementDescription(IoSer(&ser), n, ExtArray(_children._data));
+    Object::SerializeExternalArray<UI::ElementDescription>(ser, n, _children._data);
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                    // 180117d9c
     return true;                                               // MOV AL,1

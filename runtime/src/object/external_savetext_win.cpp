@@ -135,12 +135,12 @@ namespace {
 // not a disagreement about the slot.
 // B3X W0: both by name -- `Object::Base::Type()` (slot 2, +0x10) and
 // `Object::External::Serialize` (slot 5, +0x28).
-uint32_t ExternalGetTypeId(External* self) {
-    return reinterpret_cast<const ::Object::Base*>(self)->Type();        // B.3.x bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+uint32_t ExternalGetTypeId(::Object::External* self) {
+    return self->Type();
 }
 
-bool ExternalSerialize(External* self, IO::Stream& stream) {
-    return reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+bool ExternalSerialize(::Object::External* self, IO::Stream& stream) {
+    return self->Serialize(stream);
 }
 
 // `if (fi->handle != -1) FileSystem::CloseFile(_singleton, fi);`
@@ -202,7 +202,7 @@ SaveTextCounters g_st{};
 // ============================================================================
 // Object::External::SaveText — the body.                 retail 0x1800bb9d0
 // ============================================================================
-extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
+extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filename* path,
                                            const Filename* name) {
     ++g_st.calls;
 
