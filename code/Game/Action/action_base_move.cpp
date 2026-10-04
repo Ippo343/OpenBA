@@ -94,7 +94,7 @@ CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
     return found;
 }
 
-// B4 FORWARD: outside callers in ~20 files (Action, Component, Work)
+// B4 FORWARD: code/Game/Work/pasturework.cpp still calls this (X-G1-1's file)
 void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<CharacterComponent>(
         FindCharacterComponent(reinterpret_cast<const ComponentEntity*>(entity)));   // LEFT: SIG ActMv_FindComponentFamily_12d0
@@ -128,10 +128,8 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //   0x140152a58 Serializer::Serialize(bool*) -> local resolve
 //   0x140151238 String::Serialize            -> System::String::Serialize (B.3.1)
 //   0x1401c70b0 type-ID                       -> local resolve (NOT in engine_funcs.h)
-void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
+void ActMv_ExternalPtrSerialize_22970(CharacterDescription** pSlot, IO::Serializer* ser) {
     // The one caller (MoveTo::Persist, moveto.cpp) hands &description and the Serializer.
-    CharacterDescription** pSlot = reinterpret_cast<CharacterDescription**>(extPtrSlot);   // LEFT: SIG ActMv_ExternalPtrSerialize_22970
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);                   // LEFT: SIG ActMv_ExternalPtrSerialize_22970
     uint32_t typeId = CharacterDescription::TypeId();
 
     // GetEncoding -> encoding->GetKind() (slot 2, +0x10) == 3 ?
@@ -248,8 +246,7 @@ void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir)
 //   CharacterComponent_impl_f3e0 (0x14009f3e0, Reimpl_MapGetTerrainPos) = grid->world
 //   conversion. DAT_140172114 = 0.5f (kRdata_140172114).
 // Caller signature: void fn(void* self)
-void ActMv_UpdateFacing_c8d20(void* selfp) {
-    MoveTo* self = reinterpret_cast<MoveTo*>(selfp);   // LEFT: SIG ActMv_UpdateFacing_c8d20
+void ActMv_UpdateFacing_c8d20(MoveTo* self) {
     Map* grid = GameUpdateLoop::_singleton->m_game;    // +0xF8
     float halfCell = kRdata_140172114;   // 0x140172114
 
@@ -314,9 +311,9 @@ void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, floa
     character->field_0x38 = *reinterpret_cast<const float*>(model + 0x13c) * p4;   // LEFT: Graphics::MeshInstance +0x114 unnamed (R-GFX)
 }
 
-// B4 FORWARD: outside callers (Action/moveto.cpp, performwork.cpp, playanimation.cpp; Component files)
+// B4 FORWARD: code/Game/Component/citizencomponent_lifecycle.cpp still calls this (X-G1-3's file)
 void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
-    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);   // LEFT: SIG ActMv_SetAnimation_a1f0
+    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);   // B4 FORWARD: the old void* receiver
 }
 
 // ============================================================
@@ -548,9 +545,7 @@ PathTicket* Map::RequestPath(PathTicket* out, uint64_t flags, uint32_t destCell,
 //   self+0x470 = movement profile, self+0x5c = terrain flags, self+0x20 = result store.
 // Caller signature: void* fn(void* self, void* worldPos, void* param3, void* param4)
 //   (returns a truthy nonzero; original returns (1 in low byte) | high garbage.)
-void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void* /*param4*/) {
-    MoveTo* self = reinterpret_cast<MoveTo*>(selfp);          // LEFT: SIG ActMv_PathSetup_c8c10
-    float* worldPos = reinterpret_cast<float*>(worldPosp);    // LEFT: SIG ActMv_PathSetup_c8c10
+bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void* /*param3*/, ActionStack* /*param4*/) {
     Map* grid = GameUpdateLoop::_singleton->m_game;
     int width = grid->size;
     float center = static_cast<float>(width >> 1);
@@ -584,7 +579,7 @@ void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void
         PathTicket* res = grid->RequestPath(&scratch, self->passFlags, destCell, srcCell);   // 0x14009cfb0
         self->ticket = *res;
     }
-    return reinterpret_cast<void*>(static_cast<uintptr_t>(1));   // LEFT: SIG ActMv_PathSetup_c8c10 returns void* (retail: AL = 1)
+    return true;   // retail: AL = 1 (the one caller ignores it)
 }
 
 // ============================================================

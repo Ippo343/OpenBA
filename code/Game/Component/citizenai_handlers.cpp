@@ -120,8 +120,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     void* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
-        CharacterComponent* familyOut = nullptr;   // the InternalPtr the finder writes
-        ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(citizen->_entity), &familyOut);   // LEFT: SIG ActMv_FindComponentFamily_12d0 (uintptr_t entity; Action/exe_bodies.h)
+        CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity);   // 0x1400012d0 (the InternalPtr the finder writes)
         if (familyOut == nullptr) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
