@@ -120,8 +120,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
             act = ::new (mem) SendComponentMessage(&targetEntity, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         if (character->field_0x58 != nullptr)
-            reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(   // LEFT: CharacterComponent::field_0x58 declared Action*, not InternalPtr<Action> (WORK-3)
-                );   // B.3.3 bridge
+            character->field_0x58.DeletePtr();
         character->field_0x58 = act;
     }
 
