@@ -2291,7 +2291,9 @@ GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
 // stamp (the compiler's), then every field below — the same stores the three
 // door-then-stamp construction sites outside this block write by hand
 // (newgamedialog.cpp, saveloaddialog.cpp, tutorial_next_scenario.cpp).
-GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
+GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState,
+                               const Object::InternalPtr<Achievement::AchievementInstance>& scenarioIbp,
+                               int32_t scenarioIndex,
                                const System::String& saveName, int32_t seed,
                                int32_t mapSize, bool disasters, MapGenerator* mapConfig,
                                TerrainGenerator* terrainConfig, ClimateGenerator* climateConfig)
@@ -2336,7 +2338,7 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIb
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;
-    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor takes the scenario IBP's 8 bytes by value where retail takes a const InternalPtr<AchievementInstance>& (0x140098085; known_port_issues row 663)
+    m_scenarioInstance  = scenarioIbp.Get();   // *param_3
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }

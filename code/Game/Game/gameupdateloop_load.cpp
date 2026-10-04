@@ -50,6 +50,8 @@
 #include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
 #include "Minimap.h"                 // m_imageCapture's class (B.4 GAME-a)
 #include "MapGenerator.h"            // m_mapConfig's class (B.4 GAME-a)
+#include "Game/TerrainGenerator.h"     // m_terrainConfig->_field80
+#include "Game/TerrainHeightfield.h"  // TerrainSizeRow
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -497,13 +499,13 @@ static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->field_0x1C[3] = 0.0f;
     w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
     w->field_0x30 = 0.0f;
-    uint8_t rng1[2520];
-    uint8_t rng2[2520];
+    System::Random rng1;   // trivial class: no code until the ctor door below
+    System::Random rng2;
     uint32_t seed1 = 0, seed2 = 0;
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng1));   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
-    seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
-    seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
+    RtSystem_Random_Ctor(&rng1);
+    seed1 = rng1.Rand();
+    RtSystem_Random_Ctor(&rng2);
+    seed2 = rng2.Rand();
     RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
     w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
     w->field_0x48 = 0.0f;
@@ -590,11 +592,10 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
         fovX = atanf(halfW / den) * kTwo * kRad2Deg;
     }
     const Math::Scalar nearS(nearZ), farS(farZ), fovXS(fovX), fovYS(fovY);
-    uint8_t frustum[0xC0];
-    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
+    ::Frustum frustum;
+    const ::Frustum* fr = RtVolume_Frustum_Ctor_Perspective(&frustum,
         &nearS, &farS, &fovXS, &fovYS);
-    camera.SetFrustum(
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge  // LEFT: SIG RtVolume_Frustum_Ctor_Perspective returns void* here and fills a 0xC0 stack buffer wider than ::Frustum (0x64)
+    camera.SetFrustum(fr ? *fr : frustum);
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
@@ -822,8 +823,8 @@ void GameUpdateLoop::Load() {
         PlayerController* pc = nullptr;
         if (mem) {
             const Math::Scalar nearZ(2.0f), farZ(70.0f), fovX(60.0f), fovY(aspect * 60.0f);
-            uint8_t frustum[0xC0] = {};
-            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
+            ::Frustum frustum = {};
+            ::Frustum* fr = &frustum;
             RtVolume_Frustum_Ctor_Perspective(fr, &nearZ, &farZ, &fovX, &fovY);
             pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
@@ -1177,8 +1178,8 @@ void GameUpdateLoop::Load() {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
             // Map dimension from the terrain size-table row (sizeRow[0]).
-            int32_t* sizeTable = *(int32_t**)((uint8_t*)terrainGen + 0x80);   // LEFT: TerrainGenerator.h (GAME-4) H5 _field80
-            uint32_t dim = sizeTable ? *(uint32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : 0;   // LEFT: TerrainGenerator.h (GAME-4) H5 _field80 (0x44-byte rows)
+            const TerrainSizeRow* sizeTable = terrainGen->_field80;   // +0x80, 0x44-byte rows
+            uint32_t dim = sizeTable ? sizeTable[sizeIdx].mapSize : 0;
 
             // Retail call site 0x1400975c7, immediately after the map dimension is
             // read and BEFORE the +0x148 tile arrays: size the TownManager's coarse

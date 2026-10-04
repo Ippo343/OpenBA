@@ -32,6 +32,7 @@
 #include <cstddef>
 #include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::UpdateLoop
 #include "system/String.h"       // -Iruntime/types: System::String (by value at +0x28)
+#include "object/Internal.h"     // -Iruntime/types: Object::InternalPtr (the ctor's scenario reference)
 
 // B.4 W0-H2 / GAME-a (H4): every pointer member is typed; forward declarations
 // only (layout-neutral, proven by the offset asserts below). The member names
@@ -67,9 +68,12 @@ namespace IO          { class Stream; }
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
-    // 0x140098060. `scenarioIbp` is the InternalBasePtr's 8 bytes (retail copies
-    // `*param_3`); `disasters` is retail's char p8: +0xD0 = p8 ? 0 : 0xF0.
-    GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
+    // 0x140098060. `scenarioIbp` arrives by reference (R8, 0x140098085 `MOV RDI,R8`);
+    // retail copies `*param_3` into +0x150. `disasters` is retail's char p8:
+    // +0xD0 = p8 ? 0 : 0xF0.
+    GameUpdateLoop(Save::SavedState* savedState,
+                   const Object::InternalPtr<Achievement::AchievementInstance>& scenarioIbp,
+                   int32_t scenarioIndex,
                    const System::String& saveName, int32_t seed,
                    int32_t mapSize, bool disasters, MapGenerator* mapConfig,
                    TerrainGenerator* terrainConfig, ClimateGenerator* climateConfig);
