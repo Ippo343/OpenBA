@@ -196,11 +196,11 @@ bool PackageFile::Serialize(IO::Stream& streamv) {
     Serializer ser(streamv, 0);          // 1800b60ca..e6
     ReaderWriter* const rw = ser._readerWriter;
 
-    _name.Serialize(&ser);                                      // 1800b60ea
-    _author.Serialize(&ser);                                    // 1800b60ff
-    _description.Serialize(&ser);                               // 1800b610c
-    _string58.Serialize(&ser);                                  // 1800b6119
-    _string60.Serialize(&ser);                                  // 1800b6126
+    _name.Serialize(ser);                                      // 1800b60ea
+    _author.Serialize(ser);                                    // 1800b60ff
+    _description.Serialize(ser);                               // 1800b610c
+    _string58.Serialize(ser);                                  // 1800b6119
+    _string60.Serialize(ser);                                  // 1800b6126
 
     RecInt(rw, &_userVersion);                // 1800b6139
     RecInt(rw, &_priority);                   // 1800b614d

@@ -91,7 +91,7 @@ using Graphics::GraphicsMesh;
 // (GraphicsMesh.h keeps both trivially destructible; see its `_name` note), so
 // the one view of either as the real `System::String` is here.
 void StringSerialize(void* str, IO::Serializer& ser) {
-    static_cast<System::String*>(str)->Serialize(&ser);   // LEFT: SIG the Serialize(void*) helper family (String / Vector / Transform: ledger, Serializer-typed family)
+    static_cast<System::String*>(str)->Serialize(ser);   // LEFT: H5 the caller's field is the RtSystem::String / Filename POD, viewed as the real System::String (GraphicsMesh.h keeps it trivially destructible)
 }
 
 

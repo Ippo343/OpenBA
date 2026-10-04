@@ -175,7 +175,7 @@ void ActMv_ExternalPtrSerialize_22970(CharacterDescription** pSlot, IO::Serializ
             }   // ~Filename releases pathBuf
             // Retail serializes the Filename through String::Serialize (the two
             // classes are layout-identical and it casts between them).
-            fnLocal.AsString().Serialize(ser);
+            fnLocal.AsString().Serialize(*ser);
             didFind = true;
         }
     }

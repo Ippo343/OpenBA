@@ -81,7 +81,7 @@ bool StatGoal::Serialize(IO::Stream& stream) {
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        statA.Name().Serialize(&ser);
+        statA.Name().Serialize(ser);
 
         // If loading (mode == 0), resolve the reference. Original (0x1400da960):
         // RAX = *(serializer+0) [the stream], then *(int*)(RAX+8) == 0.
@@ -94,7 +94,7 @@ bool StatGoal::Serialize(IO::Stream& stream) {
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        statB.Name().Serialize(&ser);
+        statB.Name().Serialize(ser);
 
         if (ser._stream && static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
             statB.Resolve();

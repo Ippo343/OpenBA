@@ -231,8 +231,8 @@ bool PointList::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
-    _meshName.Serialize(&ser);
-    _string28.Serialize(&ser);
+    _meshName.Serialize(ser);
+    _string28.Serialize(ser);
 
     // SerializeInt +0xa0, SerializeFloat +0x80, SerializeFloatArray +0x28.
     IO::ReaderWriter* rwc = ser._readerWriter;
@@ -243,7 +243,7 @@ bool PointList::Serialize(IO::Stream& stream) {
         if (stream._direction == rt::io::kDirectionReading) PointArraySetSize(arr, n);
         for (int32_t i = 0; i < n; ++i) {
             Point* p = &arr->_data[i];
-            p->name.Serialize(&ser);
+            p->name.Serialize(ser);
             rwc->SerializeFloatArray(3, &p->pos.x, nullptr);   // Vector3::Serialize 0x1800150e0, inlined
             rwc->SerializeFloat(p->radius, nullptr);
         }

@@ -359,7 +359,7 @@ namespace {
 // `System::String` member would make the element non-trivial and change its
 // array's lifecycle rows), so the String is viewed at the field.
 inline void SerString(void* field, IO::Serializer& ser) {
-    static_cast<System::String*>(field)->Serialize(&ser);   // LEFT: SIG the Serialize(void*) helper family (String / Vector / Transform: ledger, Serializer-typed family)
+    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: H5 the caller's field is raw storage of a System::String (MaterialTexture::name / MaterialConstant::_head: a String member changes the element array's lifecycle rows)
 }
 
 }  // namespace

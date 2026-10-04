@@ -95,7 +95,7 @@ bool BuildingGoal::Serialize(IO::Stream& stream) {
             (void)filenameBuf;
 
             // String::Serialize — the entry's name (+0x00)
-            entry->Name().Serialize(&serializer);
+            entry->Name().Serialize(serializer);
 
             // On load: resolve the entry's description reference (0x14001b1d0,
             // ResolveExternalByName_Impl). Writes +0x10 (resolved) and +0x08

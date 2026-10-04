@@ -93,7 +93,7 @@ namespace {
 // LEFT (H5): the four Strings are held as RtSystem::String raw storage, so
 // System::String's member is reached through a view of that storage.
 void StringSerialize(System::String& str, IO::Serializer* ser) {
-    str.Serialize(ser);
+    str.Serialize(*ser);
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z — 0x1800c7ad0. Retail inlines the

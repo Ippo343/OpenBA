@@ -130,7 +130,7 @@ bool ConsumeProduceDescription::Serialize(IO::Stream& stream) {
             }
             Reimpl_ExternalPtr_Serialize_StringTable(&e.product, &ser);      // ExternalPtr +0x10
             ser.Serialize(e.materialType, nullptr);                          // enum +0x18
-            e.name.Serialize(&ser);                                          // String +0x20
+            e.name.Serialize(ser);                                          // String +0x20
         }
     }
     ser.Serialize(_i40, nullptr);

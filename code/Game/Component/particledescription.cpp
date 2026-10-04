@@ -113,7 +113,7 @@ bool ParticleDescription::Serialize(IO::Stream& stream) {
 
     for (int i = 0; i < count; ++i, ++e) {
         Reimpl_ExternalPtr_Serialize_Typed_7140(&e->particle, &ser);   // elem+0
-        e->name.Serialize(&ser);                                       // elem+8
+        e->name.Serialize(ser);                                       // elem+8
         ser.Serialize(e->followNode, nullptr);
         ser.Serialize(e->autoStart, nullptr);
         ser.Serialize(e->eventToggled, nullptr);

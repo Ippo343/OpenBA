@@ -56,14 +56,14 @@ bool TutorialGoalDialog::Serialize(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    DialogName().Serialize(&ser);
+    DialogName().Serialize(ser);
 
     // Filename temp retail's compiler emitted for this scope; only ever
     // constructed and destroyed.
     System::Filename tempFilename;
     (void)tempFilename;
 
-    target.Name().Serialize(&ser);
+    target.Name().Serialize(ser);
 
     // On load (direction 0): resolve the ExternalRef at +0x28 by name.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210

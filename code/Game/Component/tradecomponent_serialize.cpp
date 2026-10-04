@@ -379,7 +379,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
     {
         TradeMerchantOrder* elem = merchantOrders;
         for (int32_t i = 0; i < nameCount && elem; ++i, ++elem) {
-            elem->merchantName.Serialize(&ser);
+            elem->merchantName.Serialize(ser);
             int32_t innerCount = elem->goodsCount;
             ser.Serialize(innerCount, nullptr);
             // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,

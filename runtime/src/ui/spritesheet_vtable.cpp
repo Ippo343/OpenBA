@@ -279,7 +279,7 @@ namespace {
 // members are spelt `char*` (H5: a System::String member would run a ctor/dtor
 // the retail class does not), so each is viewed as the String it is.
 void StringSerialize(char** field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    reinterpret_cast<System::String*>(field)->Serialize(*ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name. `m_field30`

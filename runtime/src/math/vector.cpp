@@ -121,8 +121,8 @@ Vector2 Vector2::Normalize(Scalar& mag) const {
 // +0x28 is rw_vtbl::kArrayFloat — "serialize N floats", which is why the count
 // (2/3/4 for Vector2/3/4) is arg 2. The old three-argument form left the
 // ignored `const char* name` register unset; passing nullptr is wire-identical.
-void Vector2::Serialize(void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(2, &x, nullptr);   // B.3.4 bridge  (0x28 = float-array door)  // LEFT: Serialize(void*) is reserved for the closing wave
+void Vector2::Serialize(::IO::Serializer& serializer) {
+    serializer.Serialize(2, &x, nullptr);   // +0x28, the float-array door
 }
 
 // ============================================================
@@ -210,8 +210,8 @@ Vector3 Vector3::Normalize() const {
 
 // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 3.
-void Vector3::Serialize(void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(3, &x, nullptr);   // B.3.4 bridge  (0x28 = float-array door)  // LEFT: Serialize(void*) is reserved for the closing wave
+void Vector3::Serialize(::IO::Serializer& serializer) {
+    serializer.Serialize(3, &x, nullptr);   // +0x28, the float-array door
 }
 
 // ============================================================
@@ -224,8 +224,8 @@ void Vector3::Serialize(void* serializer) {
 
 // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 4.
-void Vector4::Serialize(void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(4, &x, nullptr);   // B.3.4 bridge  (0x28 = float-array door)  // LEFT: Serialize(void*) is reserved for the closing wave
+void Vector4::Serialize(::IO::Serializer& serializer) {
+    serializer.Serialize(4, &x, nullptr);   // +0x28, the float-array door
 }
 
 }  // namespace Math

@@ -122,11 +122,11 @@ WorldGeometry::WorldGeometry() {
 void PlayerController::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x180059b90
-    transform.Serialize(&ser);                                         // +0x00 Math::Transform
+    transform.Serialize(ser);                                         // +0x00 Math::Transform
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    retail 0x1800150e0
     // LEFT: the target is three named floats (GAME-a's readers spell
     // targetX / targetY / targetZ); retail serializes them as one Math::Vector3.
-    reinterpret_cast<Math::Vector3*>(&targetX)->Serialize(&ser);      // +0x1c Math::Vector3   // LEFT: the target is three named floats (GAME-a's readers spell targetX / targetY / targetZ); retail serializes them as one Math::Vector3.
+    reinterpret_cast<Math::Vector3*>(&targetX)->Serialize(ser);      // +0x1c Math::Vector3   // LEFT: the target is three named floats (GAME-a's readers spell targetX / targetY / targetZ); retail serializes them as one Math::Vector3.
     ser.Serialize(yaw, nullptr);        // +0x28
     ser.Serialize(pitch, nullptr);      // +0x2c
     ser.Serialize(distance, nullptr);   // +0x30

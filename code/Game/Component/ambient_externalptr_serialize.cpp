@@ -74,7 +74,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, I
         if (present) {
             if (*field != nullptr)
                 pathBuf = (*field)->GetPath();                // save: fill path from object
-            pathBuf.AsString().Serialize(serializer);        // read/write the path string
+            pathBuf.AsString().Serialize(*serializer);        // read/write the path string
             doLoad = true;
         }
     }

@@ -104,7 +104,7 @@ bool CharacterSet::Serialize(IO::Stream& streamv) {
     // [RSP+0x28], [RSP+0x30]; 1800cb7d0..1800cb7ed the factory by _direction.
     IO::Serializer ser(*stream, 0);
 
-    _string20.Serialize(&ser);                               // 1800cb7fb
+    _string20.Serialize(ser);                               // 1800cb7fb
 
     // 1800cb806..1800cb813: ~Serializer, `if (rw) delete rw`.
     return true;                                             // 1800cb815 MOV AL,1

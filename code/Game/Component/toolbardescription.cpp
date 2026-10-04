@@ -145,11 +145,11 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     // layout (only the validated typeId differs, trusted in standalone). Use the
     // registered Serialize2 for both.
     Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // 1. _spriteSheet
-    _name.Serialize(&ser);                        // 2. _name
+    _name.Serialize(ser);                        // 2. _name
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);   // 3. _stringTable
-    _str1.Serialize(&ser);                        // 4.
-    _str2.Serialize(&ser);                        // 5.
-    _str3.Serialize(&ser);                        // 6.
+    _str1.Serialize(ser);                        // 4.
+    _str2.Serialize(ser);                        // 5.
+    _str3.Serialize(ser);                        // 6.
     
     // 7. count — serialize through a LOCAL, exactly like the exe (local_res8), NOT
     //    straight into +0x58. +0x58 is the resize's own count field: if we wrote the
@@ -187,7 +187,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     System::String* buf = _entries;
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            buf[i].Serialize(&ser);
+            buf[i].Serialize(ser);
         }
     }
     

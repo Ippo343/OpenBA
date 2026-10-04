@@ -152,7 +152,7 @@ static void SerializeFilenameString(System::String* self_offset, IO::Serializer*
     System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
     (void)filenameObj;
 
-    self_offset->Serialize(serializer);
+    self_offset->Serialize(*serializer);
 
     if (GetSerializerVersion(serializer) == 0) {
         Game_TerrainResolveMaterial(self_offset);
@@ -228,7 +228,7 @@ bool TerrainGenerator::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
 
     // Serialize String at +0x28
-    _field28.Serialize(serializer);
+    _field28.Serialize(*serializer);
 
     // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
     s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8 (a bool field would normalise the byte)

@@ -259,8 +259,8 @@ bool CollisionMesh::Serialize(IO::Stream& stream) {
     // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
     // (0x1800c9930) is a member now, so the name door is gone. The registry row
     // at that name registers the shim, and the shim is one line over this member.
-    self->_name1.Serialize(&ser);
-    self->_name2.Serialize(&ser);
+    self->_name1.Serialize(ser);
+    self->_name2.Serialize(ser);
 
     // SerializeInt is +0xa0, SerializeFloatArray +0x28.
     IO::ReaderWriter* rwc = ser._readerWriter;

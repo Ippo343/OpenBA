@@ -94,6 +94,7 @@
 #include "../system/Value.h"                // System::Time (the two startTime fields)
 
 namespace System { class Time; class Random; }
+namespace IO { class Serializer; }
 
 namespace Audio {
 
@@ -213,8 +214,7 @@ public:
     bool     IsEffectPlaying(uint32_t handle) const;                               // 0x1800df680
     bool     Update(System::Time delta, System::Time now, System::Random& rng,
                     const Vector3& listener, float radiusBias);                     // 0x1800df6c0
-    // `void*` is an IO::Serializer&.
-    void     Serialize(void* serializer);                                          // 0x1800e0050
+    void     Serialize(IO::Serializer& serializer);                                // 0x1800e0050
     // Retail's are PRIVATE (`AEBA`); public here because their doors call them.
     int32_t  FindFree3DEffect(Object::ExternalPtr<SoundEffect> effect, const System::Time& time,
                               const Vector3& pos) const;                           // 0x1800deae0

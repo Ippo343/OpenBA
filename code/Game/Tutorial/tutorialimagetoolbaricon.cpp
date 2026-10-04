@@ -92,7 +92,7 @@ bool TutorialImageToolbarIcon::Serialize(IO::Stream& stream) {
     (void)filenameBuf;
 
     // String::Serialize on +0x30
-    _toolbarRef.Name().Serialize(&serializer2);
+    _toolbarRef.Name().Serialize(serializer2);
 
     // If loading (serializer stream mode == 0), resolve toolbar
     if (serializer2._stream) {

@@ -162,7 +162,7 @@ bool ElementDescription::Serialize(IO::Stream& streamArg) {
     Object::SerializeExternal<UI::ElementDescription>(ser, _childDesc);   // +0x48 0x180038f90
     Object::SerializeExternal<UI::Dialog>(ser, _toolTipDialog);           // +0x50 0x180076610
     Object::SerializeExternal<UI::StringTable>(ser, _stringTable);        // +0x58 0x1800042a0
-    reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    reinterpret_cast<System::String*>(&_textName)->Serialize(ser);                  // +0x60 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     return true;                    // ~Serializer: the ReaderWriter's slot 0, flags 1
 }

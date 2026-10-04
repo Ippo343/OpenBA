@@ -82,8 +82,8 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_field28, serializer);
 
     // String fields
-    reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);   // LEFT: H5 raw String storage
-    reinterpret_cast<System::String*>(&_field38)->Serialize(serializer);   // LEFT: H5 raw String storage
+    reinterpret_cast<System::String*>(&_field30)->Serialize(*serializer);   // LEFT: H5 raw String storage
+    reinterpret_cast<System::String*>(&_field38)->Serialize(*serializer);   // LEFT: H5 raw String storage
 
     // Encoding vcall 0x98 (the uint door) for +0x48
     serializer->Serialize(_field48, nullptr);

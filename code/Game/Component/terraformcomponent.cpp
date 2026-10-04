@@ -357,7 +357,7 @@ void TerraformComponent::Persist(IO::Stream& stream) {
     Math::Vector3* vec = heightRecord;
     if (localCount > 0) {
         for (uint32_t i = 0; i < static_cast<uint32_t>(localCount); i++) {
-            vec->Serialize(&ser);
+            vec->Serialize(ser);
             ++vec;
         }
     }

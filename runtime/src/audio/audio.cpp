@@ -673,10 +673,8 @@ bool Configuration::Startup() {
 // (a real per-element copy-assign and destroy-range, not a byte trait), so it
 // stays a hand-derived `rtcoll::AsArray<&kSpec_EffectSlot>` bridge rather than
 // a plain `.SetSize(n)`. The row stays registered in array.cpp.
-void Scene::Serialize(void* serializer) {
-    // LEFT: the parameter is retail's `IO::Serializer&`; the one caller
-    // (code/Game/Game/gameupdateloop_serialize.cpp) still hands a `void*`.
-    auto* ser = static_cast<IO::Serializer*>(serializer);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+void Scene::Serialize(IO::Serializer& serializer) {
+    IO::Serializer* ser = &serializer;
 
     // Retail's stack-local Serializer: the caller's Stream, a null ReaderWriter
     // until the Encoding's factory (+0x20 writing, +0x18 reading, version 0)

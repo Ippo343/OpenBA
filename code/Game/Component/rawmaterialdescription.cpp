@@ -65,8 +65,8 @@ bool RawMaterialDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
-    _name.Serialize(&ser);
-    _nameSmall.Serialize(&ser);
+    _name.Serialize(ser);
+    _nameSmall.Serialize(ser);
     ser.Serialize(_lowCreateCount, nullptr);
     ser.Serialize(_highCreateCount, nullptr);
     ser.Serialize(_weight, nullptr);

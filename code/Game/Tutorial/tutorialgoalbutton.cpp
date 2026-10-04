@@ -63,7 +63,7 @@ bool TutorialGoalButton::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // elementPath (+0x20)
-    ElementPath().Serialize(&ser);
+    ElementPath().Serialize(ser);
 
     // invertCheck (+0x28) — bool
     ser.Serialize(invertCheck, nullptr);

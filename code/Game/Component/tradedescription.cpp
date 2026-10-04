@@ -128,7 +128,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
         TradeMerchant* m = _merchants;
         for (int i = 0; i < merchN && m; ++i, ++m) {
             Reimpl_ExternalPtr_Serialize_StringTable(&m->stringTable, &ser);   // ExternalPtr
-            m->name.Serialize(&ser);
+            m->name.Serialize(ser);
             // goods: ExternalPtr array (count @ +0x28)
             ser.Serialize(m->goodsCount, nullptr);
             int extN = m->goodsCount;
@@ -174,8 +174,8 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
         TradeGoodsCategory* sp = _pairs;
         for (int i = 0; i < spN && sp; ++i, ++sp) {
             ser.Serialize(sp->rawMaterialFlags, nullptr);   // enum @+0x00
-            sp->spriteName.Serialize(&ser);                 // String @+0x08
-            sp->textName.Serialize(&ser);                   // String @+0x10
+            sp->spriteName.Serialize(ser);                 // String @+0x08
+            sp->textName.Serialize(ser);                   // String @+0x10
         }
     }
     ser.Serialize(_f68, nullptr);

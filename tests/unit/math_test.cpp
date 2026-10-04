@@ -70,8 +70,11 @@ Math::Vector3 RowVecTimesMatrix(const Math::Vector3& v, const Math::Matrix& m) {
 // destructor, so it reads the COMPILER slot, retail 0x28 + 8 (D1 and D0 take
 // slots 0 and 1); the entry is placed through RetailSlot<IO::ReaderWriter>.
 // ---------------------------------------------------------------------------
+struct FakeSink;
+// Every fake slot has the float-array slot's shape (only that one is filled).
+using FakeSlot = void (*)(FakeSink* self, int count, const float* data);
 struct FakeSink {
-    void*   vtable;      // +0x00, points at gFakeVtable
+    FakeSlot* vtable;    // +0x00, points at gFakeVtable
     int     lastCount;
     const float* lastData;
     int     calls;
@@ -82,20 +85,20 @@ struct FakeSerializer {
 };
 
 FakeSink  gSink;
-void*     gFakeVtable[8];          // retail 0x28 == index 5 -> compiler index 6
+FakeSlot  gFakeVtable[8];          // retail 0x28 == index 5 -> compiler index 6
 constexpr long kFakeFloatArraySlot = RetailSlot<::IO::ReaderWriter>(0x28 / 8);
 static_assert(kFakeFloatArraySlot == 6, "retail slot 5 behind the D1/D0 pair");
 
-void FakeSerializeFloats(void* self, int count, void* data) {
-    FakeSink* s = static_cast<FakeSink*>(self);
+// The slot's own shape: (ReaderWriter* this, int n, float* arr, name).
+void FakeSerializeFloats(FakeSink* s, int count, const float* data) {
     s->lastCount = count;
-    s->lastData  = static_cast<const float*>(data);
+    s->lastData  = data;
     ++s->calls;
 }
 
 FakeSerializer MakeFakeSerializer() {
     for (int i = 0; i < 8; ++i) gFakeVtable[i] = nullptr;
-    gFakeVtable[kFakeFloatArraySlot] = reinterpret_cast<void*>(&FakeSerializeFloats);
+    gFakeVtable[kFakeFloatArraySlot] = &FakeSerializeFloats;
 
     gSink.vtable = gFakeVtable;
     gSink.lastCount = 0;
@@ -105,6 +108,13 @@ FakeSerializer MakeFakeSerializer() {
     ser.unusedStreamSlot = nullptr;
     ser.sink = &gSink;
     return ser;
+}
+
+// The bodies take retail's `IO::Serializer&`; FakeSerializer is a layout double
+// of it (IO::Serializer has no default ctor and builds its ReaderWriter from a
+// Stream's Encoding), so the test hands the double in as the class.
+IO::Serializer& AsSerializer(FakeSerializer& f) {
+    return reinterpret_cast<IO::Serializer&>(f);   // LEFT: test double of IO::Serializer (16 bytes: stream, readerWriter)
 }
 
 }  // namespace
@@ -214,7 +224,7 @@ UNIT_TEST(vector2_normalize_zero_vector_passes_through) {
 UNIT_TEST(vector2_serialize_uses_slot_0x28_with_count_2) {
     FakeSerializer ser = MakeFakeSerializer();
     Vector2 v(1.0f, 2.0f);
-    v.Serialize(&ser);
+    v.Serialize(AsSerializer(ser));
     CHECK_EQ(gSink.calls, 1);
     CHECK_EQ(gSink.lastCount, 2);
     CHECK(gSink.lastData == &v.x);
@@ -305,7 +315,7 @@ UNIT_TEST(vector3_equality) {
 UNIT_TEST(vector3_serialize_uses_count_3) {
     FakeSerializer ser = MakeFakeSerializer();
     Vector3 v(1.0f, 2.0f, 3.0f);
-    v.Serialize(&ser);
+    v.Serialize(AsSerializer(ser));
     CHECK_EQ(gSink.calls, 1);
     CHECK_EQ(gSink.lastCount, 3);
     CHECK(gSink.lastData == &v.x);
@@ -329,7 +339,7 @@ UNIT_TEST(vector4_ctors) {
 UNIT_TEST(vector4_serialize_uses_count_4) {
     FakeSerializer ser = MakeFakeSerializer();
     Vector4 v(1.0f, 2.0f, 3.0f, 4.0f);
-    v.Serialize(&ser);
+    v.Serialize(AsSerializer(ser));
     CHECK_EQ(gSink.calls, 1);
     CHECK_EQ(gSink.lastCount, 4);
     CHECK(gSink.lastData == &v.x);
@@ -712,7 +722,7 @@ UNIT_TEST(transform_serialize_writes_quaternion_then_translation) {
     FakeSerializer ser = MakeFakeSerializer();
     Transform t;
     t.translation = Vector3(1.0f, 2.0f, 3.0f);
-    t.Serialize(&ser);
+    t.Serialize(AsSerializer(ser));
     // Two calls: count 4 over the quaternion, then count 3 over the translation.
     CHECK_EQ(gSink.calls, 2);
     CHECK_EQ(gSink.lastCount, 3);

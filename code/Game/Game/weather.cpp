@@ -91,7 +91,7 @@ bool Weather::Serialize(IO::Stream& stream) {
 
     Reimpl_ExternalPtr_Serialize_Typed_7140(&material, &ser);   // ExternalPtr material (+0x20)
     ser.Serialize(particleCount, nullptr);        // +0x28
-    velocityDir.Serialize(&ser);                  // +0x2C Vector3
+    velocityDir.Serialize(ser);                  // +0x2C Vector3
     ser.Serialize(velocity, nullptr);             // +0x38
     ser.Serialize(velocityTolerence, nullptr);    // +0x3C
     ser.Serialize(velocityStretch, nullptr);      // +0x40

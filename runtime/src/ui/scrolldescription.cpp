@@ -102,7 +102,7 @@ bool ScrollDescription::Serialize(IO::Stream& streamv) {
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 18011a998
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
-        reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(&ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     rw->SerializeBool(_vertical, nullptr);
     rw->SerializeInt(_inset, nullptr);

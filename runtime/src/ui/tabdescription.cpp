@@ -139,9 +139,9 @@ bool TabDescription::Serialize(IO::Stream& streamArg) {
     Object::SerializeExternal<UI::ElementDescription>(ser, _pageBackdropDescription);    // 1800da7c6
     Object::SerializeExternal<UI::ElementDescription>(ser, _pageFrameDescription);       // 1800da7d4
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // 1800da7e5 ExternalPtr<SpriteSheet>
-    _edgeLeftName.Serialize(&ser);           // 1800da7f6
-    _edgeMiddleName.Serialize(&ser);         // 1800da807
-    _edgeRightName.Serialize(&ser);          // 1800da818
+    _edgeLeftName.Serialize(ser);           // 1800da7f6
+    _edgeMiddleName.Serialize(ser);         // 1800da807
+    _edgeRightName.Serialize(ser);          // 1800da818
 
     rw->SerializeInt(_gap, nullptr);
 

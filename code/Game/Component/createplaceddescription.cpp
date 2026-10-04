@@ -148,7 +148,7 @@ bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
     for (int i = 0; i < count && arr; ++i) {
         ser.Serialize(arr[i], nullptr);   // enum element
     }
-    _name.Serialize(&ser);
+    _name.Serialize(ser);
     ser.Serialize(_i44, nullptr);
     ser.Serialize(_i48, nullptr);
     ser.Serialize(_i40, nullptr);

@@ -100,9 +100,9 @@ bool Profession::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&spriteSheet, &serializer);  // +0x28 (0x14000bd30)
 
     // Serialize String fields
-    stringName.Serialize(&serializer);  // +0x30
-    stringDesc.Serialize(&serializer);  // +0x38
-    stringTool.Serialize(&serializer);  // +0x40
+    stringName.Serialize(serializer);  // +0x30
+    stringDesc.Serialize(serializer);  // +0x38
+    stringTool.Serialize(serializer);  // +0x40
 
     // Serialize numeric fields
     serializer.Serialize(field48, nullptr);      // +0x48 int
