@@ -425,7 +425,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // LEFT: a vptr identity compare (GameUpdateLoop is unreflected: no type id).
     bool worldReady = true;
     if (_nextLoop &&
-        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {   // LEFT: a vptr identity compare (GameUpdateLoop is unreflected: no type id).
+        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {   // LEFT: FLOOR? vtable probe (a vptr identity compare: GameUpdateLoop is unreflected, no type id)
         worldReady = GameUpdateLoop_IsWorldBuilt(_nextLoop);
     }
 

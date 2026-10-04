@@ -547,18 +547,17 @@ extern "C" void StressHarness_DrawEnd() {
     s_drawMsSum += QpcMs(QpcNow() - s_drawT0); ++s_drawN;
 }
 
-static void CompProf_WatchBegin(void* comp, uint32_t tid) {
+static void CompProf_WatchBegin(Object::Base* comp, uint32_t tid) {
     if (!s_tidResolved) {
         s_tidResolved = true;
         s_tidCitizen   = CitizenComponent::TypeId();
         s_tidCitizenAI = CitizenAIComponent::TypeId();
     }
     s_curComp = comp; s_curTid = tid; s_curCitizen = nullptr; s_curHome = nullptr;
-    // LEFT: `comp` is void* (entitylist.cpp declares CompProf_Begin* itself, ENTITY);
-    // the type id just matched names the class.
+    // The type id just matched names the class (B10 downcast).
     CitizenComponent* cz = nullptr;
-    if (tid == s_tidCitizen) cz = reinterpret_cast<CitizenComponent*>(comp);   // LEFT: SIG CompProf_BeginKind (void* comp)
-    else if (tid == s_tidCitizenAI) cz = reinterpret_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38  // LEFT: SIG CompProf_BeginKind (void* comp)
+    if (tid == s_tidCitizen) cz = static_cast<CitizenComponent*>(comp);
+    else if (tid == s_tidCitizenAI) cz = static_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38
     if (cz && Readable(cz)) {
         s_curCitizen = cz;
         s_curHome = cz->home;                                            // +0x238
@@ -566,7 +565,7 @@ static void CompProf_WatchBegin(void* comp, uint32_t tid) {
 }
 
 extern "C" int CompProf_BeginKind(Object::Base* comp, int kind) {
-    void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: the profiler keys its table on the vtable word (no floor category names it: coordinator)
+    void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: FLOOR? vtable probe (the profiler keys its table on the vtable word)
     uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);  // CAST-OK: hash
     for (int probe = 0; probe < kCompSlots; ++probe) {
         const int idx = (int)((h + probe) & (kCompSlots - 1));
