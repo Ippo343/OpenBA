@@ -546,8 +546,7 @@ void Modification::SetupFileSystem() {
 
         System::Filename compiled(                            // 0x1800af3c0  [RBP+0x6f]
             ::Object::ExternalFactory::GetCompiledPath(Sys(e->file)));
-        RtObject::RtObject_External_Load(                      // 0x1800af3cc
-            reinterpret_cast<const RtSystem::Filename*>(&compiled), ext);  // LEFT: SIG RtObject_External_Load takes the RtSystem::Filename POD (object/, R-OBJ)
+        RtObject::RtObject_External_Load(&compiled, ext);      // 0x1800af3cc
         // ~compiled releases here, retail's 0x1800af3d2 release
     }
 

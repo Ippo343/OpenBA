@@ -103,7 +103,7 @@ static_assert(sizeof(EntryValue) == 0x10, "0x18002ca00 copies exactly two qwords
 // three fields as every other Array in this engine; pinned here by
 // `0x18002dff0` reading `[self]`, `[self+8]` and `[self+0xc]`.
 struct FilenameArray {
-    RtSystem::Filename* data;      // +0x00
+    System::Filename*   data;      // +0x00 — raw storage; ArrayResize constructs, ArrayDestroyRange destroys
     int32_t             size;      // +0x08
     int32_t             capacity;  // +0x0c
 };
@@ -148,15 +148,15 @@ Node*  AllocNode    (void* ignored, const RtObject::ResourceEntry* src,
                      Node* parent);                                       // 0x18002e740
 Node** InsertCore   (Set* set, Node** out,
                      const RtObject::ResourceEntry* pair);                // 0x18002ce60
-Node** Insert       (Set* set, Node** out, const RtSystem::Filename* key,
+Node** Insert       (Set* set, Node** out, const System::Filename* key,
                      const EntryValue* value);                            // 0x18002ca00
 void   FreeEntryNode(void* ignored, Node* node);                          // 0x18002ee40
 void   Erase        (Set* set, Node* z);                                  // 0x18002cf60
-Node*  Find         (const Set* set, const RtSystem::Filename* key);      // 0x18002dd70
+Node*  Find         (const Set* set, const System::Filename* key);        // 0x18002dd70
 
-void   ArrayDestroyRange(void* ignored, RtSystem::Filename* first, int count); // 0x18002e3d0
+void   ArrayDestroyRange(void* ignored, System::Filename* first, int count); // 0x18002e3d0
 void   ArrayResize      (FilenameArray* self, int newSize,
-                         const RtSystem::Filename* fill);                     // 0x18002dff0
+                         const System::Filename* fill);                       // 0x18002dff0
 
 }  // namespace rtresset
 

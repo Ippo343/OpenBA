@@ -175,14 +175,13 @@ const char* kResource   = "resource";
 //     returns the NULL Filename, not an empty one. Those two are different
 //     values to every caller: `ExpandRelativePath` tests `data == null`.
 // ============================================================================
-Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret) {
+System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
+                                                     System::Filename* ret) {
     ++g_pc.extCalls;
 
-    // ENDGAME B.3.1 step 2. `self` and `ret` are the registered entry point's
-    // POD parameters, so they come through the one transitional bridge; `ret`
-    // is the hidden return slot, i.e. RAW BYTES, and every arm below therefore
-    // CONSTRUCTS into it rather than assigning.
-    const System::Filename& s = Sys(*self);
+    // `ret` is the hidden return slot, i.e. RAW BYTES, and every arm below
+    // therefore CONSTRUCTS into it rather than assigning.
+    const System::Filename& s = *self;
     const char* const d = s._data;
 
     // 0x1800c6514: `MOV RDX,[RCX] ; TEST RDX,RDX ; JNZ`
@@ -262,8 +261,8 @@ Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret
 // here is transcription plus `stackEmpty`/`stackNonEmpty`, which prove the body
 // ran and which branch it took.
 // ============================================================================
-Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self,
-                                                        Filename* ret) {
+System::Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self,
+                                                                System::Filename* ret) {
     // 0x1800bcf7c: `CMP dword ptr [RCX + 0x38],EAX` with EAX = 0
     if (self->_pathStack._size == 0) {
         new (ret) System::Filename();           // 0x1800bcf81
@@ -279,8 +278,8 @@ Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* s
     return ret;
 }
 
-Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self,
-                                                         Filename* ret) {
+System::Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self,
+                                                                 System::Filename* ret) {
     if (self->_pathStack._size == 0) {
         new (ret) System::Filename();
         ++g_pc.stackEmpty;
@@ -333,17 +332,16 @@ Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* 
 // through the DETOUR TRAMPOLINE, never through GetProcAddress — see the
 // `RtResPathTrampoline` note at the top of this file.
 // ============================================================================
-Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
-                                                      Filename* ret,
-                                                      const Filename* path,
-                                                      bool appendIdentifier) {
+System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
+                                                              System::Filename* ret,
+                                                              const System::Filename* path,
+                                                              bool appendIdentifier) {
     ResLoadGuard resGuard;   // see THE RESOURCE-LOAD LOCK at the top
     ++g_pc.expandCalls;
 
-    // ENDGAME B.3.1 step 2. `path` and `ret` are the registered entry point's
-    // POD parameters; `ret` is the hidden return slot, so every write to it
-    // below CONSTRUCTS rather than assigns.
-    const System::Filename& in = Sys(*path);
+    // `ret` is the hidden return slot, so every write to it below CONSTRUCTS
+    // rather than assigns.
+    const System::Filename& in = *path;
 
     // ---- 0x1800bd3a3: `if (path->data == null || length == 0) return null` --
     // `GetLength` (0x1800063c0) returns 0 for a null buffer, so it is retail's
@@ -387,7 +385,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
         // The reader's hidden return slot again: constructed into, not assigned.
         System::Filename stackFile;                              // [RBP-0x59]
         RtObject_ExternalFactory_GetPathStackFilename(
-            self, reinterpret_cast<Filename*>(&stackFile));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+            self, &stackFile);
 
         System::Filename tmp = stackFile.GetPathFilename(true);  // [RBP-0x61]
         // 0x1800bd4ca + 0x1800bd507 is `Filename::operator=`, one normalise.
@@ -411,7 +409,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
 
     System::Filename stackDir;                                   // [RBP+0x0f]
     RtObject_ExternalFactory_GetPathStackDirectory(
-        self, reinterpret_cast<Filename*>(&stackDir));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        self, &stackDir);
 
     // ---- 0x1800bd5f7-0x1800bd68d: candidate =
     //      <dataDir><stackDir><dir><fname>_<ident>.crs

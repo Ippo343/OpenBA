@@ -56,8 +56,8 @@ static inline const System::Filename* AsSys(const Filename* f) {
 // `Filename::GetPathExtension`'s body lives in external_path_win.cpp; see the
 // comment on that member below.
 namespace RtObject {
-RtSystem::Filename* RtSystem_Filename_GetPathExtension(const RtSystem::Filename* self,
-                                                       RtSystem::Filename* ret);
+System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
+                                                     System::Filename* ret);
 }
 
 namespace System {
@@ -454,11 +454,10 @@ Filename Filename::GetPathDirectory() const {
 // reports, and it is not this batch's file; the body comes here when
 // `Object::ExternalFactory` is converted.
 Filename Filename::GetPathExtension() const {
-    RtSystem::Filename raw{nullptr};
-    RtObject::RtSystem_Filename_GetPathExtension(
-        reinterpret_cast<const RtSystem::Filename*>(this), &raw);  // LEFT: POD String / Filename bridge (H10)
+    // `out` is born null and the C body CONSTRUCTS into it (its hidden return
+    // slot), so nothing is leaked and no refcount is touched.
     Filename out;
-    out._data = raw.data;   // the C body built the value; take it whole, no refcount edit
+    RtObject::RtSystem_Filename_GetPathExtension(this, &out);
     return out;
 }
 

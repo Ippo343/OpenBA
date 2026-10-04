@@ -139,6 +139,6 @@ Node*  AllocNode  (void* ignored, const RtObject::ReferenceEntry* src,
 Node** InsertCore (Set* set, Node** out,
                    const RtObject::ReferenceEntry* pair);                 // 0x18002d180
 Node** Insert     (Set* set, Node** out, const uint32_t* key,
-                   const RtSystem::Filename* value);                      // 0x18002cb90
+                   const System::Filename* value);                        // 0x18002cb90
 
 }  // namespace rtrefset
