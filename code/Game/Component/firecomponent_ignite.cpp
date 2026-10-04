@@ -189,10 +189,8 @@ void FireComponent::MarkDanger(short delta) {
 // 0x10; the sound ref is lazily copied from the AmbientEmitterDescription's
 // (+0x28) sound array. SoundType 3 = ambient looping.
 // (An AmbientEmitterComponent body, COMP-a's class; its reads stay as they were.)
-extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientCompV, int idx) {
-    if (!ambientCompV) return;
-    // B4 FORWARD: the callers (and citizen_assignworkplace.cpp) hand the component in untyped.
-    AmbientEmitterComponent* ac = reinterpret_cast<AmbientEmitterComponent*>(ambientCompV);   // LEFT: B4 FORWARD signature (void*)
+extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, int idx) {
+    if (!ac) return;
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     Audio::Scene* scene = gw->m_audioScene;   // +0x78
@@ -297,7 +295,7 @@ void FireComponent::Ignite() {
     const float   burnSecs = burnFullTime.AsSeconds();
     const System::Time burnHalf = {MakeTime(burnSecs * kRdata_140172114)};
 
-    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf._ticks)) {
+    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
         return;
     }
 

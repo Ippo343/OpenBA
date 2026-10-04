@@ -161,16 +161,15 @@ void DestroyComponent::StopBurning() {
 
 // ---- B4 FORWARD: 1 outside caller file (Component/tornadocomponent.cpp); the
 // closing wave rewires it. The null tests are the tree's (kept, B9).
-extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp) {
+extern "C" bool FireComponent_IsBeingDemolished_11e690(DestroyComponent* destroyComp) {
     if (!destroyComp) return false;
-    return reinterpret_cast<DestroyComponent*>(destroyComp)->IsBeingDemolished();   // LEFT: B4 FORWARD (tornadocomponent.cpp)
+    return destroyComp->IsBeingDemolished();
 }
-extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* time) {
+extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp, const System::Time* time) {
     if (!destroyComp) return false;
-    return reinterpret_cast<DestroyComponent*>(destroyComp)->BeginBurning(
-        reinterpret_cast<const System::Time*>(time));   // LEFT: B4 FORWARD (tornadocomponent.cpp)
+    return destroyComp->BeginBurning(time);
 }
-extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp) {
+extern "C" void FireComponent_StopBurning_11ea10(DestroyComponent* destroyComp) {
     if (!destroyComp) return;
-    reinterpret_cast<DestroyComponent*>(destroyComp)->StopBurning();   // LEFT: B4 FORWARD (tornadocomponent.cpp)
+    destroyComp->StopBurning();
 }

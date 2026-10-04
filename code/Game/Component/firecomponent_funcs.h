@@ -17,13 +17,15 @@
 // (FireComponent.h). B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
 extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
 // 0x14009fa80 is Map::StampDanger (Game/Map.h), defined in firecomponent_ignite.cpp.
-extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx);
+class AmbientEmitterComponent; class DestroyComponent;
+namespace System { class Time; }
+extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ambientComp, int idx);
 
 // ---- shared with the TORNADO lane, firecomponent_smstate.cpp ----
 // DestroyComponent::IsBeingDemolished / BeginBurning / StopBurning (DestroyComponent.h).
-// B4 FORWARD: 1 outside caller file (Component/tornadocomponent.cpp).
-extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp);   // 0x14011e690
-extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp,
-                                                  const int64_t* burnTime);  // 0x14011e7b0
-extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp);         // 0x14011ea10
+// The three keep the tree's null tests (not pure forwarders).
+extern "C" bool FireComponent_IsBeingDemolished_11e690(DestroyComponent* destroyComp);   // 0x14011e690
+extern "C" bool FireComponent_BeginBurning_11e7b0(DestroyComponent* destroyComp,
+                                                  const System::Time* burnTime);  // 0x14011e7b0
+extern "C" void FireComponent_StopBurning_11ea10(DestroyComponent* destroyComp);         // 0x14011ea10
 
