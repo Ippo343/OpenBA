@@ -744,7 +744,7 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
 
     // Selected-entity IBP at EditTool+0x30 (the outline-follow target).
     if (tool->lastEntityRef == 0) return;
-    uintptr_t ent = tool->lastEntityRef;
+    uintptr_t ent = reinterpret_cast<uintptr_t>(tool->lastEntityRef);   // CAST-OK: ptr_int (the tree's address-range probe below)
     if (ent < 0x10000 || ent > 0x00007FFFFFFFFFFFULL) return;
     if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;   // LEFT: EditTool.h lastEntityRef is uint64_t (SA)
 

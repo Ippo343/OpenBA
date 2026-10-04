@@ -37,6 +37,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+namespace Graphics { class EdgeMesh; }
+
 class HighlightComponent final : public Component {
     DECLARE_EXE_TYPE(HighlightComponent)
 
@@ -54,7 +56,7 @@ public:
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint8_t  edgeMeshInstance[0xD0]; // +0x28 Graphics::EdgeMeshInstance (built lazily by the tool side)
-    void*    fieldF8;                // +0xF8 (ctor 0)
+    Graphics::EdgeMesh* fieldF8;     // +0xF8 the built outline mesh (ctor 0; Impl_b930 0x14004b930 MemAlloc(0x180) + EdgeMesh ctor; dtor 0x14004c8c0 deletes it)
     uint8_t  transform[0x1C];        // +0x100 Math::Transform
     uint8_t  highlightFlag;          // +0x11C (ctor 0)
     uint8_t  _pad11D[3];             // +0x11D

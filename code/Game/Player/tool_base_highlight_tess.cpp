@@ -17,12 +17,12 @@
 // (see reference_standalone_rdata_null_fallback), so the .rdata constants below are
 // embedded here as their retail values.
 //
-// Slot layout (lVar16 = param_1+0x1f0 + param_2*0x60):
-//   +0x08 vertex-buffer  {void* base, int count, int cap}        (plVar30 == lVar16+8)
-//   +0x18 index-buffer   {void* base @+0x18, int count @+0x20, int cap @+0x24}
-//   +0x2c minX  +0x30 minY  +0x34 maxX  +0x38 maxY  +0x40 yawDeg(int)
-//   +0x3c byte (passed to cc10)  +0x44 char modeFlag (cVar1)
-//   +0x48..0x58 float UV params (when modeFlag==0)
+// The slot is a GeometryBatch (Game/WorldGeometryElements.h, the 0x60-byte decal
+// element at WorldGeometry +0x1F0; batch = decals.data + param_2):
+//   vertices (+0x08, 0x14-byte GeometryBatchVertex)   indices (+0x18, uint16)
+//   minX / minY / maxX / maxY (+0x2c..+0x38)   field_0x40 yawDeg (int)
+//   field_0x3C byte (passed to cc10)   field_0x44 modeFlag (cVar1)
+//   field_0x48[0..4] float UV params (when modeFlag==0)
 
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Player/exe_bodies.h"
+#include "Game/WorldGeometryElements.h"   // GeometryBatch / GeometryBatchVertex (0x14001fa80 / 0x14001ee40)
 
 // ---- engine .rdata constants (retail values; see header) -------------------------
 namespace {
@@ -83,9 +84,9 @@ inline void* T2MulVec(const void* self, void* ret, const void* v) {   // B.3.x b
     return ret;
 }
 
-// The two growable lists inside a highlight slot:
-//   +0x08 {data, size, cap}  vertex records, 0x14 bytes each (the pool -> buffer
-//                            copy at the end of TessellateSlot moves them 8+8+4);
+// The two growable lists inside a highlight slot (GeometryBatch::vertices / indices):
+//   +0x08 {data, size, cap}  GeometryBatchVertex records, 0x14 bytes each (the pool ->
+//                            buffer copy at the end of TessellateSlot moves them 8+8+4);
 //   +0x18 {data, size, cap}  uint16 triangle indices.
 // ENDGAME B.3.2 step 2: AppendIndex WAS a verbatim copy of rtcoll::SetSizeCore for
 // the +0x18 list (exact-equal early return; size stored before the capacity test;
@@ -96,32 +97,30 @@ inline void* T2MulVec(const void* self, void* ret, const void* v) {   // B.3.x b
 // free the old block when it moved). The trait-derived Array<uint16_t> row
 // (stride 2, align 2, byteCopy, init == nullptr, destroy == nullptr) is that
 // exactly. The vertex list is only ever destroyed here (its grow is 0x14001ee40,
-// outside this file); its element is a trivially destructible 0x14-byte record
-// whose fields are not modelled, so the dtor is MemFree + zero regardless.
-struct TessVertex14 { uint8_t bytes[0x14]; };
-static_assert(sizeof(TessVertex14) == 0x14, "highlight slot vertex record is 0x14 bytes");
-using TessVertexArray = Collection::Array<TessVertex14>;
+// outside this file); its element is the trivially destructible GeometryBatchVertex,
+// so the dtor is MemFree + zero regardless.
+using TessVertexArray = Collection::Array<GeometryBatchVertex>;
 using TessIndexArray  = Collection::Array<uint16_t>;
 
 // AppendIndex — inlined "append one short index to the growable index buffer at
 // slot+0x18/+0x20/+0x24" block (orig emits it verbatim per triangle vertex).
-inline void AppendIndex(int64_t lVar16, uint16_t idx) {
-    // B.3.2 bridge: the slot is still an untyped exe struct.
-    TessIndexArray* a = reinterpret_cast<TessIndexArray*>(lVar16 + 0x18);
+inline void AppendIndex(GeometryBatch* batch, uint16_t idx) {
+    TessIndexArray* a = reinterpret_cast<TessIndexArray*>(&batch->indices);   // LEFT: GeometryBatch::indices is a RawArray, not a Collection::Array (Game/WorldGeometryElements.h, not PLAYER's)
     a->SetSize(a->_size + 1, idx);
 }
 
 // EmitVertex — resolve ONE corner descriptor to a vertex index (find/insert/append),
 // then append that index to the index buffer.
-inline void EmitVertex(int64_t lVar16, AvlTreeHead<DecalVertexNode>* set, int64_t* pool,
+inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
+                       RawArray<GeometryBatchVertex>* pool,
                        uint32_t* desc, DecalVertexNode** outNode) {
-    // LEFT: the corner records are raw dwords of this body's stack block (the
-    // 0x14-byte vertex record is not modelled, TessVertex14 below); the set reads
-    // their first 0x14 bytes as the key.
+    // LEFT: the corner records are raw dwords of this body's 0x60-byte stack block
+    // (cc10 writes them through an int64_t); the set reads their first 0x14 bytes as
+    // the key.
     DecalVertexNode* node = DecalVertexSetFind(set, reinterpret_cast<const DecalVertexKey*>(desc));   // 0x14001fc00
     uint16_t idx;
     if (node == nullptr) {
-        int curCount = *reinterpret_cast<int*>((char*)pool + 8);    // pool.count
+        int curCount = pool->size;
         uint32_t rec[6];
         rec[0] = desc[0]; rec[1] = desc[1]; rec[2] = desc[2];
         rec[3] = desc[3]; rec[4] = desc[4];
@@ -134,11 +133,11 @@ inline void EmitVertex(int64_t lVar16, AvlTreeHead<DecalVertexNode>* set, int64_
         // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
         // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
         DecalVertexSetInsert(set, outNode, reinterpret_cast<const DecalVertexKey*>(rec));   // 0x14001f6b0 (key = rec) LEFT: as above
-        Pf_VectorResize14Fill_f8d0(pool, curCount + 1, reinterpret_cast<uint64_t*>(desc));   // 0x14001f8d0 (vertex = desc)
+        Pf_VectorResize14Fill_f8d0(reinterpret_cast<int64_t*>(pool), curCount + 1, reinterpret_cast<uint64_t*>(desc));   // 0x14001f8d0 (vertex = desc) LEFT: SIG Pf_VectorResize14Fill_f8d0
     } else {
         idx = (uint16_t)node->key.index;   // the low word (retail reads a word at node+0x14)
     }
-    AppendIndex(lVar16, idx);
+    AppendIndex(batch, idx);
 }
 
 } // namespace
@@ -150,9 +149,9 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                                      int param_4, int param_5) {
     const float fUV = kRdata_14017214c;   // g_fUVScale (1.0f in retail)
 
-    int64_t lVar16 = (int64_t)param_2 * 0x60 + *reinterpret_cast<int64_t*>(param_1 + 0x1f0);
-    int iVar24 = (*reinterpret_cast<int*>(lVar16 + 0x34) - *reinterpret_cast<int*>(lVar16 + 0x2c)) + 1; // width
-    int iVar28 = (*reinterpret_cast<int*>(lVar16 + 0x38) - *reinterpret_cast<int*>(lVar16 + 0x30)) + 1; // height
+    GeometryBatch* batch = *reinterpret_cast<GeometryBatch**>(param_1 + 0x1f0) + param_2;   // LEFT: WorldGeometry::_arrays (GAME-2, H5): the decals' data pointer
+    int iVar24 = (batch->maxX - batch->minX) + 1; // width
+    int iVar28 = (batch->maxY - batch->minY) + 1; // height
 
     // four scratch Vector2 (local_1d8..local_1c0); ctor x4.
     uint8_t cornerBuf[0x20];
@@ -162,7 +161,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     }
 
     float fVar3 = fUV;
-    char  cVar1 = *reinterpret_cast<char*>(lVar16 + 0x44);   // modeFlag
+    char  cVar1 = batch->field_0x44;   // modeFlag
 
     uint32_t uVar8 = 0;
     float fVar33 = 0.0f;
@@ -171,12 +170,12 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     float local_290_hi;
 
     if (cVar1 == '\0') {
-        float fVar_div = *reinterpret_cast<float*>(lVar16 + 0x48);
+        float fVar_div = batch->field_0x48[0];
         local_288 = 0.0f;
-        fVar33 = *reinterpret_cast<float*>(lVar16 + 0x4c) / fVar_div;
-        fVar31 = (*reinterpret_cast<float*>(lVar16 + 0x54) - *reinterpret_cast<float*>(lVar16 + 0x4c)) / fVar_div;
-        fVar32 = (*reinterpret_cast<float*>(lVar16 + 0x58) - *reinterpret_cast<float*>(lVar16 + 0x50)) / fVar_div;
-        fVar34 = *reinterpret_cast<float*>(lVar16 + 0x50) / fVar_div;
+        fVar33 = batch->field_0x48[1] / fVar_div;
+        fVar31 = (batch->field_0x48[3] - batch->field_0x48[1]) / fVar_div;
+        fVar32 = (batch->field_0x48[4] - batch->field_0x48[2]) / fVar_div;
+        fVar34 = batch->field_0x48[2] / fVar_div;
         fVar35 = kDAT_140172260;
         fStack_284 = fUV;
         local_290_hi = kDAT_140172280;
@@ -185,8 +184,8 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     } else {
         fVar36 = (float)iVar24;
         local_290_hi = (float)iVar28;
-        local_288 = (float)*reinterpret_cast<int*>(lVar16 + 0x2c);
-        fStack_284 = (float)*reinterpret_cast<int*>(lVar16 + 0x30);
+        local_288 = (float)batch->minX;
+        fStack_284 = (float)batch->minY;
         fVar31 = fUV;
         fVar32 = fUV;
         fVar34 = fVar33;     // 0
@@ -194,7 +193,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     }
 
     int   local_2a0 = 0;
-    float local_29c = (float)*reinterpret_cast<int*>(lVar16 + 0x40);
+    float local_29c = (float)batch->field_0x40;
     int   local_2b0_0 = 0;
 
     uint64_t local_208 = (uint64_t)(uint32_t&)fVar35;
@@ -277,37 +276,37 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     corner[3] = mulVec(0x3f80000000000000ULL); // {0,1}
 
     // dedup pool + BST.
-    struct VPool { int64_t base; int32_t count; int32_t cap; } pool = {0, 0, 0};
+    RawArray<GeometryBatchVertex> pool = {nullptr, 0, 0};
     AvlTreeHead<DecalVertexNode> bst = {nullptr, 0, {}};
 
     int iVar13 = (int)kDAT_1401c23cf;
-    fVar33 = (float)((*reinterpret_cast<int*>(lVar16 + 0x34) + *reinterpret_cast<int*>(lVar16 + 0x2c)) >> 1);
-    int iVar25 = (*reinterpret_cast<int*>(lVar16 + 0x38) + *reinterpret_cast<int*>(lVar16 + 0x30)) >> 1;
-    int64_t* plVar30 = reinterpret_cast<int64_t*>(lVar16 + 8);
+    fVar33 = (float)((batch->maxX + batch->minX) >> 1);
+    int iVar25 = (batch->maxY + batch->minY) >> 1;
+    int64_t* plVar30 = reinterpret_cast<int64_t*>(&batch->vertices);   // LEFT: SIG Pf_VectorResize14_ee40 takes int64_t*
     local_2b0_0 = iVar13;
     local_2a0   = iVar25;
     local_29c   = fVar33;
-    local_228   = (uint64_t)plVar30;
+    // (retail spills plVar30 to the local_228 slot here and reloads it at the end of
+    // each row; the round trip computes nothing and is not modelled.)
 
     // free + reset the slot's vertex and index buffers.
     // ENDGAME B.3.2 step 2: both WERE inlined Collection::Array<T>::~Array bodies
     // for a trivially destructible T (MemFree the buffer — null-guarded in both —
     // then zero _data and the _size/_capacity qword). Now the dtor itself, in place.
-    // B.3.2 bridge ×2: the headers live in the untyped slot struct. ppvVar9 keeps the
-    // pre-free index pointer because the fnE180 call below still feeds its upper
-    // bytes through a register-passthrough byte argument (unchanged from before).
-    void** ppvVar9 = *reinterpret_cast<void***>(lVar16 + 0x18);
-    reinterpret_cast<TessVertexArray*>(lVar16 + 0x08)->~Array();
-    reinterpret_cast<TessIndexArray*>(lVar16 + 0x18)->~Array();
+    // ppvVar9 keeps the pre-free index pointer because the fnE180 call below still
+    // feeds its upper bytes through a register-passthrough byte argument.
+    uint16_t* ppvVar9 = batch->indices.data;
+    reinterpret_cast<TessVertexArray*>(&batch->vertices)->~Array();   // LEFT: GeometryBatch's lists are RawArray, not Collection::Array (Game/WorldGeometryElements.h)
+    reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();     // LEFT: as above
 
     DecalVertexNode* outNode;
 
     // main tile loop (y = minY..maxY, x = minX..maxX).
-    int iVar18 = *reinterpret_cast<int*>(lVar16 + 0x30);
-    if (iVar18 <= *reinterpret_cast<int*>(lVar16 + 0x38)) {
+    int iVar18 = batch->minY;
+    if (iVar18 <= batch->maxY) {
         do {
-            int iVar22 = *reinterpret_cast<int*>(lVar16 + 0x2c);
-            int iVar11 = *reinterpret_cast<int*>(lVar16 + 0x34);
+            int iVar22 = batch->minX;
+            int iVar11 = batch->maxX;
             if (iVar22 <= iVar11) {
                 do {
                     bool doTile;
@@ -321,19 +320,19 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
 
                     if (doTile) {
                         if (cVar1 != '\0') {
-                            int iVar25b = *reinterpret_cast<int*>(lVar16 + 0x2c);
+                            int iVar25b = batch->minX;
                             int iVar13b = iVar22 - 1;
                             int iVar14  = iVar22 + 1;
                             char cVar26, cVar23, cVar17, cVar12;
-                            cVar26 = ((iVar13b < iVar25b) && (*reinterpret_cast<int*>(lVar16 + 0x38) < iVar18 + 1)) ? '\0' : '\x01';
-                            cVar23 = ((iVar11   < iVar14 ) && (*reinterpret_cast<int*>(lVar16 + 0x38) < iVar18 + 1)) ? '\0' : '\x01';
-                            cVar17 = ((iVar13b < iVar25b) && (iVar18 - 1 < *reinterpret_cast<int*>(lVar16 + 0x30))) ? '\0' : '\x01';
-                            cVar12 = ((iVar11   < iVar14 ) && (iVar18 - 1 < *reinterpret_cast<int*>(lVar16 + 0x30))) ? '\0' : '\x01';
-                            bool bVar2 = iVar18 + 1 <= *reinterpret_cast<int*>(lVar16 + 0x38);
+                            cVar26 = ((iVar13b < iVar25b) && (batch->maxY < iVar18 + 1)) ? '\0' : '\x01';
+                            cVar23 = ((iVar11   < iVar14 ) && (batch->maxY < iVar18 + 1)) ? '\0' : '\x01';
+                            cVar17 = ((iVar13b < iVar25b) && (iVar18 - 1 < batch->minY)) ? '\0' : '\x01';
+                            cVar12 = ((iVar11   < iVar14 ) && (iVar18 - 1 < batch->minY)) ? '\0' : '\x01';
+                            bool bVar2 = iVar18 + 1 <= batch->maxY;
                             iVar13 = Pf_TileShapeLut_ae180(
                                 reinterpret_cast<void*>((uint64_t)((uintptr_t)ppvVar9 & ~0xffULL) | (uint8_t)bVar2),
                                 (char)(iVar25b <= iVar13b), (char)(iVar14 <= iVar11),
-                                (char)(*reinterpret_cast<int*>(lVar16 + 0x30) <= iVar18 - 1),
+                                (char)(batch->minY <= iVar18 - 1),
                                 (char)bVar2, cVar12, cVar17, cVar23, cVar26);
                             local_2b0_0 = iVar13;
                         }
@@ -341,7 +340,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                         // cc10: emit the 4 corner descriptors into descBlock.
                         uint8_t descBlock[0x60];
                         Pf_RoadQuad_cc10(param_1, iVar22, iVar18, (int64_t)descBlock, iVar13,
-                                         *reinterpret_cast<uint8_t*>(lVar16 + 0x3c));
+                                         batch->field_0x3C);
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.
                         {
@@ -352,9 +351,9 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                             *reinterpret_cast<uint64_t*>(&yOff[2]) = 0x100000001ULL;  // {1,1}
                             int16_t* puVar19 = reinterpret_cast<int16_t*>(descBlock + 0xA);
                             for (int64_t k = 0; k < 4; ++k) {
-                                float u = (float)((xOff[k] - *reinterpret_cast<int*>(lVar16 + 0x2c)) + iVar22)
+                                float u = (float)((xOff[k] - batch->minX) + iVar22)
                                           * (fVar3 / (float)iVar24);
-                                float v = (float)((yOff[k] - *reinterpret_cast<int*>(lVar16 + 0x30)) + iVar18)
+                                float v = (float)((yOff[k] - batch->minY) + iVar18)
                                           * (fVar3 / (float)iVar28);
                                 local_2a8 = ((uint64_t)(uint32_t&)v << 32) | (uint32_t&)u;
                                 T2MulVec(T_1f0, local_298, &local_2a8);
@@ -370,8 +369,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                         uint32_t* c3 = reinterpret_cast<uint32_t*>(descBlock + 0x3c);
 
                         auto emit = [&](uint32_t* desc) {
-                            EmitVertex(lVar16, &bst, reinterpret_cast<int64_t*>(&pool),
-                                       desc, &outNode);
+                            EmitVertex(batch, &bst, &pool, desc, &outNode);
                         };
 
                         if (((iVar22 + iVar18) & 1U) == 0) {
@@ -387,19 +385,18 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                     } // doTile
 
                     iVar22 = iVar22 + 1;
-                    iVar11 = *reinterpret_cast<int*>(lVar16 + 0x34);
+                    iVar11 = batch->maxX;
                 } while (iVar22 <= iVar11);
             }
             iVar18 = iVar18 + 1;
-            plVar30 = reinterpret_cast<int64_t*>(local_228);
-        } while (iVar18 <= *reinterpret_cast<int*>(lVar16 + 0x38));
+        } while (iVar18 <= batch->maxY);
     }
 
     // finalize: copy pooled vertices into the slot's vertex buffer.
-    Pf_VectorResize14_ee40(plVar30, pool.count);
-    int     total   = pool.count;
+    Pf_VectorResize14_ee40(plVar30, pool.size);
+    int     total   = pool.size;
     int64_t vbBase  = *plVar30;
-    int64_t srcBase = pool.base;
+    int64_t srcBase = reinterpret_cast<int64_t>(pool.data);   // LEFT: the 8+8+4 record copy below is retail's (0x1400ace40); a GeometryBatchVertex assignment would change its store widths
     for (int64_t off = 0, i = 0; i < total; ++i, off += 0x14) {
         *reinterpret_cast<int64_t*>(off + vbBase)        = *reinterpret_cast<int64_t*>(off + srcBase);
         *reinterpret_cast<int64_t*>(off + 8 + vbBase)    = *reinterpret_cast<int64_t*>(off + 8 + srcBase);
@@ -414,7 +411,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     }
     bst.root  = nullptr;
     bst.count = 0;
-    if (pool.base) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(pool.base));
+    if (pool.data) System::MemoryAllocator::MemFree(pool.data);
 
     (void)local_208; (void)local_200; (void)local_1f8; (void)local_280; (void)local_220;
     (void)local_218; (void)local_210; (void)local_290_lo; (void)local_2e8; (void)uStack_2e0;

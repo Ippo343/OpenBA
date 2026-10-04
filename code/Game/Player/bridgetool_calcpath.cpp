@@ -355,7 +355,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         else if (rawSize == 4) tplIdx = 3;
         else if (rawSize == 8) tplIdx = 4;
 
-        void* tpl = desc->_refs[tplIdx];
+        ComponentDescription* tpl = desc->_refs[tplIdx];
         ComponentEntity* seg = CloneEntity(tpl);
         if (seg) {
             ComponentEntity* segIBP = seg;   // the InternalBasePtr's eight bytes
@@ -385,9 +385,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
             SeatSegmentPickOwner(segIBP, master, gameWorld);
 
             if (entityList && tpl) {
-                // LEFT: CreateBridgeDescription::_refs (block COMP-c) is `void*[5]`.
-                const int categoryId = static_cast<int>(
-                    reinterpret_cast<const ComponentDescription*>(tpl)->_category);
+                const int categoryId = static_cast<int>(tpl->_category);
                 EntityList_RegisterEntity_Impl(entityList, &segIBP, categoryId);
             }
 
