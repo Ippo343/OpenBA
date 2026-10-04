@@ -91,5 +91,7 @@ static_assert(alignof(ScenarioDialog) == 8, "ScenarioDialog is qword-aligned");
 
 // B4 FORWARD: 1 outside caller file (mainmenudialog.cpp, two calls) -> the
 // ScenarioDialog ctor (retail 0x1400786b0).
-void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
-                          void* parentMenuIBP, uint8_t difficulty);
+ScenarioDialog* ScenarioDialog_Ctor(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
+                                    const Object::InternalPtr<UI::DialogInstance>* parentIBP,
+                                    const Object::InternalPtr<UI::DialogInstance>* parentMenuIBP,
+                                    uint8_t difficulty);
