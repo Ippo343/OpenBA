@@ -76,7 +76,6 @@
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 #include "../../types/volume/Volume.h"           // RtVolume_Frustum_Projection
 #include "../../types/system/MemoryAllocator.h"
-#include "../system/pod_bridge.h"                 // B4 FORWARD AddTexture(RtSystem::String)
 
 using RtGraphics::Camera;
 using RtGraphics::MaterialInstance;
@@ -695,12 +694,6 @@ void MaterialInstance::AddTexture(const System::String& name,
         int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);  // CAST-OK: string_header
         if (--*refCount == 0) RtMemFree(local.name - 8);
     }
-}
-
-// B4 FORWARD: code/Game/Dialog/saveloaddialog.cpp still calls this.
-void MaterialInstance::AddTexture(const RtSystem::String& name,
-                                  Object::ExternalPtr<Video::ImageBuffer> image) {
-    AddTexture(RtSystem::Sys(name), image);
 }
 
 }  // namespace Graphics

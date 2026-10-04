@@ -466,9 +466,6 @@ class FileSystem {
 public:
     // ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z        0x1800ab310
     bool Exists(const System::Filename& path) const;
-    // B4 FORWARD: code/Game/Game/w2_takescreenshot.cpp still calls this (the
-    // RtSystem::Filename view of its System::Filename); one line, filesystem.cpp.
-    bool Exists(const RtSystem::Filename& path) const;
 
     // ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x180007bd0
     System::Filename GetDataDirectory() const;
