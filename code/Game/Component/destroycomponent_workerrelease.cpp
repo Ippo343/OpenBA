@@ -147,12 +147,12 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
         // [STANDALONE GUARD] Retail derefs citizen+0x1f0 (the profession record) unguarded;
         // a standalone worker can still be professionless, which reads through null+0x4c.
         Profession* profession = citizen->profession;
-        int64_t targetIBP = 0;
+        ComponentEntity* targetIBP = nullptr;   // the InternalPtr<ComponentEntity> the finders return
         if (profession) {
             if (!profession->field4C) {
-                CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(citizen), &targetIBP);   // LEFT: SIG CitizenComp_sub_ffc0 (the int64_t IBP CitizenComp_AssignHousing takes)
+                targetIBP = citizen->FindWorkplace();         // 0x14010ffc0
             } else {
-                CitizenComp_sub_0470(reinterpret_cast<int64_t>(citizen), &targetIBP);   // LEFT: SIG CitizenComp_sub_0470 (as above)
+                targetIBP = citizen->FindRankedWorkplace();   // 0x140110470
             }
         }
 
@@ -162,7 +162,7 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
         if (!Plausible(rosterNow)) break;
         if (!Plausible(rosterNow[0].Get())) break;
 
-        CitizenComp_AssignHousing(rosterNow[0].Get(), &targetIBP);
+        rosterNow[0].Get()->SetWorkplace(targetIBP);   // 0x140111ee0
 
         // [STANDALONE GUARD] Retail's `while` assumes the finder never hands back THIS
         // workplace. If it did, an unterminated loop here is an in-world FREEZE rather than

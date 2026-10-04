@@ -136,8 +136,6 @@ int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self);  // 0
 int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0
 
 // ---- citizencomponent.cpp
-int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2);  // 0x14010ffc0
-int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2);  // 0x140110470
 ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  // 0x140111ee0
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2);  // 0x140111840

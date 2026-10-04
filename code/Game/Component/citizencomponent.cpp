@@ -2458,32 +2458,18 @@ DEFINE_EXE_TYPE(CitizenComponent, "Component")
 // ============================================================
 
 
-// B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
-// Component/destroycomponent_workerrelease.cpp)
-int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
-    *reinterpret_cast<ComponentEntity**>(param_2) =   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-        reinterpret_cast<CitizenComponent*>(param_1)->FindWorkplace();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-    return param_2;
-}
-
-// B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
-// Component/destroycomponent_workerrelease.cpp)
-int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
-    *reinterpret_cast<ComponentEntity**>(param_2) =   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-        reinterpret_cast<CitizenComponent*>(param_1)->FindRankedWorkplace();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-    return param_2;
-}
+// B4 X3-COMP: CitizenComp_sub_ffc0 (0x14010ffc0) and CitizenComp_sub_0470 (0x140110470):
+// their one caller calls FindWorkplace / FindRankedWorkplace; deleted.
 
 
-// B4 FORWARD: 6 outside caller(s) (Component/destroycomponent_workerrelease.cpp,
-// Component/workplacecomponent.cpp, Dialog/townhall_helpers.cpp, Entity/citizenbehavior.cpp,
-// Game/gameupdateloop.cpp, Game/starttown.cpp) and the town-manager bodies of this block
+// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp:1969, whose null InternalBasePtr is
+// an int64_t local of X3-GAME's file).
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
-    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
+    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));   // LEFT: SIG CitizenComp_AssignHousing: gameupdateloop.cpp:1964 holds the InternalBasePtr as int64_t[1]
 }
 
-// B4 FORWARD: 2 outside caller(s) (Component/attendancecomponent.cpp,
-// standalone/food_panel_harness.cpp)
+// B4 FORWARD: 1 outside caller (standalone/food_panel_harness.cpp:740, whose InternalBasePtr
+// is an int64_t local of X3-GAME's file).
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
-    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
+    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));   // LEFT: SIG CitizenComp_TryEnrolInSchool: food_panel_harness.cpp:740 holds the InternalBasePtr as int64_t
 }
