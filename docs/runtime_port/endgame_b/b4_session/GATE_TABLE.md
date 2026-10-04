@@ -344,3 +344,8 @@ Metric at `2ba6e08f`: **1,588** to remove (of which `dx11/` 240). Wave X round 3
 | 107 | X4-COMP | `8ac8fef0` | `behaviour:` EntityList is a real class: arrays `Collection::Array<ComponentEntity*>`, trees `Collection::Set`, ctor / dtor in retail's sequence (0x1400c3f90 / 0x1400c3e60), the memset construct and hand-written teardown deleted; three forwarders deleted, `ComponentEntity_CtorFromDescription` typed (rows 650-651): 173 -> 163 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `8ac8fef0`: **1,479** to remove (of which `dx11/` 240).
+
+| 108 | X4-RT | `HEAD` | `Graphics::Camera(Frustum, Transform3, bool)` a defined member (retail 0x1800fe960); `behaviour:` `GetSunCamera` builds in the return slot as retail; `InternalBasePtr::_ptr` is `Object::Internal*`, `ResourceEntry::external` `Object::External*`; `behaviour:` `EditElement::_text` / `_filter` String members (0x1800d0f10 / 0x1800d0e50); two leftover `RtSystem` overloads deleted: 1228 -> 1204 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Wave X round 4 done (rows 105-108).
+Metric after round 4: # castmetric total: 1451

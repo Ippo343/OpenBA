@@ -1,17 +1,15 @@
 file	line	class	left_tag	snippet
-code/Game/Action/action_base_cnr.cpp	338	SIG	SIG WorkAcc_FindComponent_6330	reinterpret_cast<uintptr_t>(material), &raw);
-code/Game/Action/action_base_complete.cpp	104	SIG	SIG WorkCellBST_Remove_ca60 (ICF over five node types) / WorkBST_BSTRemove_a6e0 (wave X family across two agents)	reinterpret_cast<uintptr_t*>(tree);
-code/Game/Action/action_base_complete.cpp	201	SIG	SIG WorkBST_BSTRemove_a6e0 (wave X family across two agents)	reinterpret_cast<uintptr_t*>(&sched->field_0x10),
+code/Game/Action/action_base_complete.cpp	104	FLOOR?	FLOOR? the scheduler's WorkSchedulerTree {root, count} handed to the one erased WorkCellBST core (ICF over five node / header types)	reinterpret_cast<uintptr_t*>(tree);
+code/Game/Action/action_base_complete.cpp	201	SIG	SIG WorkBST_BSTRemove_a6e0: WorkScheduler +0x10 / +0x18 is a raw root + count pair (Game/WorkScheduler.h, GAME), handed to the one erased core	reinterpret_cast<uintptr_t*>(&sched->field_0x10),
 code/Game/Action/action_base_complete.cpp	262	H5	H5 CitizenComponent::meshInstance (+0xB8) is raw storage for a Graphics::MeshInstance (CitizenComponent.h; declaring it makes its ctor / dtor run)	reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);
 code/Game/Action/action_base_complete.cpp	345	OTHER	known_port_issues entry 14 (the tree's read differs from retail 0x1401173b0)	reinterpret_cast<void* const* const*>(&fenceComp->_meshGroupCount);
 code/Game/Action/action_base_complete.cpp	376	H5	H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls whe	reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {
 code/Game/Action/action_base_complete.cpp	394	OTHER	FIELD MeshInstance::_mesh is an ExternalPtrHandle (X-RL left it: readers in three sets)	static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);
 code/Game/Action/action_base_complete.cpp	399	H5	H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls whe	reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {
-code/Game/Action/action_base_complete.cpp	421	SIG	SIG ActCt_TaskCleanup_8e30 (wave X family across two agents)	reinterpret_cast<WorkScheduler*>(selfV), taskIdx);
-code/Game/Action/action_base_hunt.cpp	161	SIG	SIG ActHunt_DynArraySetCount_3110 (wave X family across two agents)	reinterpret_cast<RawArray<void*>*>(arrV), newCount,
-code/Game/Action/action_base_hunt.cpp	162	SIG	SIG ActHunt_DynArraySetCount_3110 (wave X family across two agents)	reinterpret_cast<void* const*>(valuePtr));
-code/Game/Action/action_base_hunt.cpp	167	SIG	SIG ActHunt_MarkEntityRemoval_c2ea0 (wave X family across two agents)	reinterpret_cast<ComponentEntity*>(self));
-code/Game/Action/action_base_hunt.cpp	172	SIG	SIG ActHunt_NotifyEntityChanged_c3470 (wave X family across two agents)	reinterpret_cast<ComponentEntity*>(self));
+code/Game/Action/action_base_hunt.cpp	161	SIG	SIG ActHunt_DynArraySetCount_3110: 22 call sites in 15 files hand the qword array as void* (raw triples in their owners' headers)	reinterpret_cast<RawArray<void*>*>(arrV), newCount,
+code/Game/Action/action_base_hunt.cpp	162	SIG	SIG ActHunt_DynArraySetCount_3110: the fill value arrives as void* from the same 22 call sites	reinterpret_cast<void* const*>(valuePtr));
+code/Game/Action/action_base_hunt.cpp	167	SIG	SIG ActHunt_MarkEntityRemoval_c2ea0: 17 call sites in 15 files (B4 FORWARD) still hand the entity as void*	reinterpret_cast<ComponentEntity*>(self));
+code/Game/Action/action_base_hunt.cpp	172	SIG	SIG ActHunt_NotifyEntityChanged_c3470: 17 call sites in 11 files (B4 FORWARD) still hand the entity as void*	reinterpret_cast<ComponentEntity*>(self));
 code/Game/Action/action_base_move.cpp	170	OTHER	H8 the byte is read back raw (`!= 0`), a bool local would normalise it	reinterpret_cast<bool*>(&present), nullptr);
 code/Game/Action/action_base_move.cpp	191	CONST	CONST FindOrLoad returns const (S3: floor decision at the close)	const_cast<::Object::External*>(found));
 code/Game/Action/action_base_move.cpp	295	FORWARD	B4 FORWARD citizencomponent_lifecycle.cpp (another agent's) passes the receiver as void*	reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);
@@ -20,11 +18,10 @@ code/Game/Action/action_base_rawmat.cpp	309	OTHER	Component/TrackerComponent.h p
 code/Game/Action/action_base_rawmat.cpp	441	SIG	SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is 	reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);
 code/Game/Action/action_base_rawmat.cpp	446	SIG	SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)	reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),
 code/Game/Action/action_base_rawmat.cpp	447	SIG	SIG ActRm_VectorClone_d9d0: one retail body over the 16-byte {material, count} triples of TrackerComponent.h and MarketWork.h (other owners' headers)	reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));
-code/Game/Action/action_child_ctors.cpp	95	SIG	SIG ActChild_Entity29a0_c29a0 (wave X family across two agents)	reinterpret_cast<ComponentEntity* const*>(param_2));
-code/Game/Action/action_pf_ctors.cpp	198	SIG	SIG Pf_ActStackPush_54e0	reinterpret_cast<ActionStack*>(param_1),
-code/Game/Action/action_pf_ctors.cpp	199	SIG	SIG Pf_ActStackPush_54e0	reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));
-code/Game/Action/action_pf_ctors.cpp	204	SIG	SIG Pf_RecursiveChildSum_123070	reinterpret_cast<const InteractComponent*>(param_1), param_2);
-code/Game/Action/action_pf_ctors.cpp	215	SIG	SIG Pf_IsDstReachable_f810	reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);
+code/Game/Action/action_child_ctors.cpp	95	SIG	SIG ActChild_Entity29a0_c29a0: 9 call sites in 6 files (B4 FORWARD) still hand the entity reference as void*	reinterpret_cast<ComponentEntity* const*>(param_2));
+code/Game/Action/action_pf_ctors.cpp	198	SIG	SIG Pf_ActStackPush_54e0: its callers hold &CharacterComponent::actions (CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentActi	reinterpret_cast<ActionStack*>(param_1),
+code/Game/Action/action_pf_ctors.cpp	199	SIG	SIG Pf_ActStackPush_54e0: its 10 callers hold the action as void* / int64_t / Action* locals, not InternalPtr<Action>	reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));
+code/Game/Action/action_pf_ctors.cpp	212	SIG	SIG Pf_IsDstReachable_f810: citizenai_housing_idle.cpp:340 (COMP) holds the map as int* (&m_game->size)	reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);
 code/Game/Action/action_pf_region.cpp	836	SIG	SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF); the region index is an AvlTreeHead<AvlNode30>	reinterpret_cast<uintptr_t*>(&index), &piVar6->key0);
 code/Game/Action/action_pf_road.cpp	423	OTHER	Game/WorldGeometry.h +0xE8 / +0xF0 are two members, not one AvlTreeHead<AvlNode28>	reinterpret_cast<AvlTreeHead<AvlNode28>*>(&_dirtyTreeRoot);
 code/Game/Action/action_pf_road.cpp	808	OTHER	Game/WorldGeometry.h _arrays raw headers (GAME-2, H5)	reinterpret_cast<RawArray<RoadBatch>*>(&_arrays[6]);
@@ -34,12 +31,11 @@ code/Game/Action/action_pf_road.cpp	970	OTHER	RoadBatch (this file) is a copy of
 code/Game/Action/action_pf_road.cpp	971	OTHER	RoadBatch (this file) is a copy of GeometryBatch: unify the record	reinterpret_cast<const GeometryBatch*>(&rec));
 code/Game/Action/action_pf_road.cpp	1006	SIG	SIG Pf_RoadQuad_cc10 — its one caller (tool_base_highlight_tess.cpp) holds the geometry as TradeWork_impl_ace40's int64_t and the quad as a byte buffer; RoadVertex (this file) is a copy of GeometryBat	reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirI
 code/Game/Action/action_pf_road.cpp	1006	SIG	SIG Pf_RoadQuad_cc10 — its one caller (tool_base_highlight_tess.cpp) holds the geometry as TradeWork_impl_ace40's int64_t and the quad as a byte buffer; RoadVertex (this file) is a copy of GeometryBat	reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);
-code/Game/Action/action_pf_road.cpp	1022	SIG	SIG Pf_EntityResolvePos_2e20	reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);
-code/Game/Action/action_pf_road.cpp	1028	SIG	SIG Pf_EntityAnchorCell_7fb0	reinterpret_cast<ComponentEntity* const*>(param_1IBP), param_2);
+code/Game/Action/action_pf_road.cpp	1022	SIG	SIG Pf_EntityResolvePos_2e20: callers hand a Component* (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253), a void* (citizenai_leisure.cpp:397) and a BuildComponent* (clearstorage.cpp:2	reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);
 code/Game/Action/action_pf_roots_drop.cpp	197	OTHER	Entity/CitizenBehavior.h field_0x00 raw (ENT)	reinterpret_cast<const RawArray<ComponentEntity*>*>(&world->m_citizenList->field_0x00),
 code/Game/Action/action_pf_roots_drop.cpp	235	OTHER	Component/CharacterComponent.h keeps +0x48 as raw fields (WORK-3)	reinterpret_cast<ActionStack*>(&character->actions);
 code/Game/Action/action_pf_roots_road.cpp	122	OTHER	the PerfX instrument (standalone/perf_terrain.h, outside this set) takes the cell as bytes	reinterpret_cast<const uint8_t*>(lVar3));
-code/Game/Action/action_pf_roots_road.cpp	220	SIG	SIG WorkBST_BSTRemove_a6e0 (wave X family across two agents)	reinterpret_cast<uintptr_t*>(&field_0xE8), piVar1);
+code/Game/Action/action_pf_roots_road.cpp	220	SIG	SIG WorkBST_BSTRemove_a6e0: Map +0xE8 / +0xF0 is a raw root + count pair (Game/Map.h, GAME), handed to the one erased core	reinterpret_cast<uintptr_t*>(&field_0xE8), piVar1);
 code/Game/Action/consumerawmaterial.cpp	94	SIG	SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is 	reinterpret_cast<int64_t*>(&_field28), matCount);
 code/Game/Action/moveto.cpp	431	SIG	SIG PerfX::TerrainGet — its slow path TerrainGetSlow and g_terrainSCBase (standalone/perf_terrain.cpp) hold the cell array as bytes	reinterpret_cast<const uint8_t*>(map->cells),
 code/Game/Action/performwork.cpp	254	SIG	SIG PerformWork(void* entity, ...): the outside callers' overload hands the citizen reference as void*	reinterpret_cast<CitizenComponent* const*>(entity), animIndex, actionType, time,
@@ -55,33 +51,22 @@ code/Game/Work/build_actions.cpp	102	OTHER	CharacterComponent::actions is raw fi
 code/Game/Work/buildroad.cpp	79	SIG	SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t	reinterpret_cast<ComponentDescription*>(roadDescExtra)),
 code/Game/Work/buildroad.cpp	123	OTHER	InternalPtr member declared T*, streamed through InternalBasePtr::Serialize	reinterpret_cast<Object::InternalBasePtr*>(&field_48)->Serialize(serializer);
 code/Game/Work/buildroad.cpp	269	OTHER	the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)	static_cast<Profession**>(actionIBP));
-code/Game/Work/buildroad.cpp	324	SIG	SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)	(uintptr_t)gameWorld->m_tutorial;
 code/Game/Work/buildroad.cpp	434	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(citizenList), &foundEntity,
 code/Game/Work/buildroad.cpp	436	OTHER	the scratch slot is reused for three types	reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));
+code/Game/Work/buildroad.cpp	441	OTHER	the scratch slot is reused for three types (the exclude entity, this out, the source entity)	(RawMaterialDescription**)&foundStorageIBP);
 code/Game/Work/buildroad.cpp	450	OTHER	the scratch slot is reused for three types	(int32_t*)(foundStorageIBP + 0x48)) {
 code/Game/Work/buildroad.cpp	455	OTHER	the scratch slot is reused for three types	(uint64_t)foundEntity;
 code/Game/Work/buildroad.cpp	468	OTHER	the scratch slot is reused for three types	reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));
-code/Game/Work/buildstructure.cpp	120	H5	H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a mem	reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
-code/Game/Work/buildstructure.cpp	129	H5	H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a mem	reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
-code/Game/Work/buildstructure.cpp	185	OTHER	H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it	reinterpret_cast<bool*>(&field_48), nullptr);
-code/Game/Work/buildstructure.cpp	188	H5	H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a mem	reinterpret_cast<uintptr_t*>(&field_60), &ser);
-code/Game/Work/buildstructure.cpp	510	H5	H5 the +0x60 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x50 array; retail 0x1400e5920 clears the set FIRST, then frees +0x50 (the array must become a mem	reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);
-code/Game/Work/buildstructure.cpp	624	H5	H5 the class holds its citizen Set as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>	reinterpret_cast<uintptr_t*>(&field_60);
-code/Game/Work/buildstructure.cpp	828	UNTAGGED		reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenC
-code/Game/Work/buildstructure.cpp	828	UNTAGGED		reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);
+code/Game/Work/buildstructure.cpp	175	OTHER	H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it	reinterpret_cast<bool*>(&field_48), nullptr);
+code/Game/Work/buildstructure.cpp	815	UNTAGGED		reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenC
+code/Game/Work/buildstructure.cpp	815	UNTAGGED		reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);
 code/Game/Work/cleararea.cpp	118	OTHER	H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it	reinterpret_cast<bool*>(&field_70), nullptr);
 code/Game/Work/cleararea.cpp	127	OTHER	H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it	reinterpret_cast<bool*>(&field_71), nullptr);
 code/Game/Work/cleararea.cpp	130	OTHER	H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it	reinterpret_cast<bool*>(&field_72), nullptr);
 code/Game/Work/cleararea.cpp	583	OTHER	the zeroed 12-byte position is built as {int64, int32} (two integer stores); a Math::Vector3 local would store three floats (B11)	reinterpret_cast<float*>(&clearInfo), &nullIBP);
-code/Game/Work/cleararea.cpp	639	SIG	SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)	reinterpret_cast<uintptr_t>(gatherSys), &citizenRef,
 code/Game/Work/cleararea.cpp	701	OTHER	known_port_issues row 220 (the removal list holds the citizen)	reinterpret_cast<uintptr_t>(citizen);
 code/Game/Work/cleararea.cpp	818	OTHER	known_port_issues row 220 (compared with the collected citizens)	reinterpret_cast<uintptr_t>(bstNode->element.entity);
 code/Game/Work/clearstorage.cpp	177	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(worldArray),
-code/Game/Work/clearstorage.cpp	252	H5	H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in th	reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);
-code/Game/Work/clearstorage.cpp	374	H5	H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in th	reinterpret_cast<uintptr_t*>(&_field58), searchNode);
-code/Game/Work/clearstorage.cpp	416	H5	H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in th	reinterpret_cast<uintptr_t*>(&_field58), param2);
-code/Game/Work/clearstorage.cpp	433	H5	H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in th	reinterpret_cast<uintptr_t*>(&_field58), param2);
-code/Game/Work/clearstorage.cpp	526	H5	H5 the +0x58 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees +0x48; retail 0x1400e73b0 clears the set FIRST, then frees +0x48 (that block must become a member in th	reinterpret_cast<uintptr_t*>(&_field58), &ser);
 code/Game/Work/consumeproduce.cpp	150	H5	H5 field_58 holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (a typed Array would run its dtor)	reinterpret_cast<Object::InternalBasePtr*>(&ibpArray[i])->Serialize(serializer);
 code/Game/Work/consumeproduce.cpp	195	OTHER	H8 (the byte stays uint8_t; Persist's bool& overload)	reinterpret_cast<bool*>(&field_48), nullptr);
 code/Game/Work/consumeproduce.cpp	243	OTHER	the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)	static_cast<Profession**>(actionIBP));
@@ -93,24 +78,17 @@ code/Game/Work/consumeproduce.cpp	511	OTHER	row 260	(float*)&foundEntity)[1];
 code/Game/Work/consumeproduce.cpp	512	OTHER	row 260	(float*)&foundEntity)[2];
 code/Game/Work/consumeproduce.cpp	537	OTHER	row 260 (the 8-byte slot doubles as the float[3] position out)	reinterpret_cast<ComponentEntity* const*>(&destEntity),
 code/Game/Work/consumeproduce.cpp	591	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList), &foundStorage,
-code/Game/Work/consumeproduce.cpp	731	SIG	SIG WorkGrid_TryAssignWorkplace_f8620	(uintptr_t)gameWorld->m_tutorial;
 code/Game/Work/fishingwork.cpp	321	OTHER	slot 10 writes into this reused entity slot (scratch shared with the action ctor)	(Profession**)&entityRef);
 code/Game/Work/fishingwork.cpp	346	OTHER	slot 10 writes into this reused entity slot (scratch shared with the action ctor)	(Profession**)&citizenRef2);
-code/Game/Work/fishingwork.cpp	496	SIG	SIG WorkGrid_TryAssignWorkplace_f8620	(uintptr_t)gameWorld->m_tutorial;
 code/Game/Work/fishingwork.cpp	655	H5	H5 citizenRefs holds InternalPtr<CitizenComponent> elements, declared CitizenComponent** (FishingWork.h; a typed Array would run its dtor)	reinterpret_cast<Object::InternalBasePtr*>(ibpPtr)->Serialize(serializer);
 code/Game/Work/foresterwork.cpp	119	UNTAGGED		reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(static_cast<CitizenComponent*
 code/Game/Work/foresterwork.cpp	119	UNTAGGED		static_cast<CitizenComponent**>(citizenIBP), nullptr);
-code/Game/Work/gatherrawmaterials.cpp	164	H5	H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arra	reinterpret_cast<uintptr_t*>(&field_68), &serializer);
 code/Game/Work/gatherrawmaterials.cpp	252	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),
 code/Game/Work/gatherrawmaterials.cpp	362	OTHER	retail hands the reused param3 slot (it holds the WorkPlaceComponent) as the Time	reinterpret_cast<const System::Time*>(param3));
-code/Game/Work/gatherrawmaterials.cpp	406	H5	H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arra	reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);
-code/Game/Work/gatherrawmaterials.cpp	434	H5	H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arra	reinterpret_cast<uintptr_t*>(&field_68), param2);
-code/Game/Work/gatherrawmaterials.cpp	462	H5	H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arra	reinterpret_cast<uintptr_t*>(&field_68), param2);
-code/Game/Work/gatherrawmaterials.cpp	614	H5	H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arra	reinterpret_cast<uintptr_t*>(&field_68), treeNode);
-code/Game/Work/gatherrawmaterials.cpp	743	UNTAGGED		reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute((CitizenComponent
-code/Game/Work/gatherrawmaterials.cpp	743	UNTAGGED		(CitizenComponent**)citizenIBP, nullptr);
-code/Game/Work/harvestorchard.cpp	240	SIG	SIG WorkAcc_FindComponent_6330 (wave X family across two agents)	reinterpret_cast<uintptr_t>(rawMatRef), &rawMatIBP);
-code/Game/Work/harvestorchard.cpp	300	OTHER	FruitDescription::_ref30 is void* (FruitDescription.h; its Serialize takes &_ref30 untyped)	reinterpret_cast<ComponentDescription*>(rawMatRef),
+code/Game/Work/gatherrawmaterials.cpp	719	UNTAGGED		reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute((CitizenComponent
+code/Game/Work/gatherrawmaterials.cpp	719	UNTAGGED		(CitizenComponent**)citizenIBP, nullptr);
+code/Game/Work/harvestorchard.cpp	239	OTHER	FruitDescription::_ref30 is declared void* (Component/FruitDescription.h, COMP)	reinterpret_cast<ComponentDescription*>(rawMatRef), &rawMatIBP);
+code/Game/Work/harvestorchard.cpp	299	OTHER	FruitDescription::_ref30 is void* (FruitDescription.h; its Serialize takes &_ref30 untyped)	reinterpret_cast<ComponentDescription*>(rawMatRef),
 code/Game/Work/locationwork.cpp	71	H5	H5 the slot is an InternalPtr declared as a bare pointer	reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(serializer);
 code/Game/Work/marketwork.cpp	321	ERASED	ERASED the WorkBST core takes the set as uintptr_t*; this local set is its raw root + count (a Collection::Set local would add a dtor)	reinterpret_cast<SimpleNode*>(tempBST[0]);
 code/Game/Work/marketwork.cpp	940	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(town),
@@ -128,38 +106,29 @@ code/Game/Work/marketwork_bst_b290.cpp	162	OTHER	the claim Set is two raw Market
 code/Game/Work/marketwork_bst_b290.cpp	185	H5	H5 the key is InternalPtr<CitizenComponent> declared CitizenComponent*	reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);
 code/Game/Work/marketwork_bst_b290.cpp	257	H5	H5 Claim::citizen is InternalPtr<CitizenComponent> declared CitizenComponent*	reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*serializer)
 code/Game/Work/marketwork_bst_b290.cpp	270	SIG	SIG ActRm_ArrayResize16_da70: one retail body over four 16-byte element types (Tracker / Consume / PickupStored Entry, MarketWork::Carry) held as raw triples in other owners' headers; a typed core is 	reinterpret_cast<int64_t*>(&node->element.carries), count);
-code/Game/Work/pasturework.cpp	333	SIG	SIG WorkGrid_TryAssignWorkplace_f8620	reinterpret_cast<uintptr_t>(storageWorkMgr), &local_90_val,
 code/Game/Work/pasturework.cpp	700	OTHER	the ctor's entity slot is void* (its callers' ABI)	(ComponentEntity**)entityIBP;
 code/Game/Work/pickup.cpp	78	H5	H5 the slot is InternalPtr<CitizenComponent> declared CitizenComponent*	reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(serializer);
 code/Game/Work/pickup.cpp	319	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(townMgr),
 code/Game/Work/pickup.cpp	515	OTHER	the port's freed-self probe reads the vptr word (a port guard retail lacks)	reinterpret_cast<uintptr_t*>(this) == 0) {
-code/Game/Work/plantorchard.cpp	201	SIG	SIG WorkAct_PlantWorkCtor_be6e0 (wave X family across two agents)	reinterpret_cast<int64_t*>(&entityRef),
 code/Game/Work/tradework.cpp	309	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,
-code/Game/Work/tradework.cpp	315	OTHER	C signature	reinterpret_cast<int64_t>(posComp), 0);
 code/Game/Work/tradework.cpp	351	H5	CitizenBehavior's sixteen lists are raw triples (ENT, H5)	reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,
-code/Game/Work/tradework.cpp	401	OTHER	C signature	reinterpret_cast<int64_t>(parts[k]), 0);
 code/Game/Work/tradework.cpp	433	OTHER	both slots: 0x14002c690's C signature (PLAYER) takes the set as int64_t*.	reinterpret_cast<int64_t*>(&bstRoot), param2);
 code/Game/Work/tradework.cpp	442	SIG	SIG PlayerTrade_BSTFindRemove_2c690 (Player/exe_bodies.h) takes the set as int64_t*	reinterpret_cast<int64_t*>(&bstRoot), param2);
 code/Game/Work/tradework.cpp	565	OTHER	0x140025740's C signature (PLAYER) takes the set as int64_t*.	reinterpret_cast<int64_t*>(&bstRoot), searchNode);
 code/Game/Work/tradework_serialize.cpp	124	OTHER	TradeWork's assignment citizen is a raw CitizenComponent* (TradeWork.h); retail serializes the slot as an InternalBasePtr	reinterpret_cast<Object::InternalBasePtr*>(&rec.citizen)->Serialize(ser);
 code/Game/Work/tradework_serialize.cpp	150	OTHER	TradeWork's assignment citizen is a raw CitizenComponent* (TradeWork.h); retail serializes the slot as an InternalBasePtr	reinterpret_cast<Object::InternalBasePtr*>(&node->value.citizen)->Serialize(ser);
-code/Game/Work/work_act_clear.cpp	196	OTHER	CharacterComponent +0x48 is declared as fields, not an ActionStack (wave X)	reinterpret_cast<ActionStack*>(plVar15), &ibpB);
-code/Game/Work/work_act_clear.cpp	208	OTHER	CharacterComponent +0x48 is declared as fields, not an ActionStack (wave X)	reinterpret_cast<ActionStack*>(plVar15), &ibpA);
-code/Game/Work/work_act_consume.cpp	86	OTHER	CharacterComponent declares its +0x48 action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.	static_cast<ActionStack*>(list), ibp);
+code/Game/Work/work_act_clear.cpp	196	OTHER	CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)	reinterpret_cast<ActionStack*>(plVar15), &ibpB);
+code/Game/Work/work_act_clear.cpp	208	OTHER	CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)	reinterpret_cast<ActionStack*>(plVar15), &ibpA);
+code/Game/Work/work_act_consume.cpp	86	OTHER	CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction), so the callers hand the stack as void*	static_cast<ActionStack*>(list), ibp);
 code/Game/Work/work_act_consume.cpp	265	OTHER	the null-receiver read is spelled as the address it faults on.	reinterpret_cast<uint32_t*>(0x50);
 code/Game/Work/work_act_consume.cpp	299	OTHER	the null-receiver read is spelled as the address it faults on.	reinterpret_cast<ConsumeProduceRecipe**>(0x28);
-code/Game/Work/work_act_hunt.cpp	70	OTHER	CharacterComponent declares its +0x48 action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.	static_cast<ActionStack*>(list), ibp);
-code/Game/Work/work_act_path.cpp	71	OTHER	CharacterComponent declares its +0x48 action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.	static_cast<ActionStack*>(list), ibp);
+code/Game/Work/work_act_hunt.cpp	70	OTHER	CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction), so the callers hand the stack as void*	static_cast<ActionStack*>(list), ibp);
+code/Game/Work/work_act_path.cpp	71	OTHER	CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction), so the callers hand the stack as void*	static_cast<ActionStack*>(list), ibp);
 code/Game/Work/work_act_perform.cpp	91	OTHER	CharacterComponent.h declares the +0x48 action stack as separate fields, not an ActionStack (ledger: a later round)	static_cast<ActionStack*>(list), ibp);
 code/Game/Work/work_act_rawmat.cpp	73	OTHER	CharacterComponent.h declares the +0x48 action stack as separate fields, not an ActionStack (ledger: a later round)	static_cast<ActionStack*>(list), ibp);
-code/Game/Work/work_base_accessor.cpp	44	SIG	SIG WorkAcc_FindComponent_6330 (X-G2-WAIT): its callers hand the description as an integer	reinterpret_cast<ComponentDescription*>(compList);
-code/Game/Work/work_base_accessor.cpp	58	SIG	SIG WorkAcc_FindComponent_6330 (X-G2-WAIT): the out slot arrives as void*	reinterpret_cast<RawMaterialDescription**>(retOut) = found;
 code/Game/Work/work_base_actionctor.cpp	98	OTHER	CharacterComponent.h keeps the +0x48 ActionStack as separate fields (not this set's header)	static_cast<ActionStack*>(list), ibp);
 code/Game/Work/work_base_actionctor.cpp	130	SIG	SIG WorkAct_PerformWorkCtor_c1eb0	reinterpret_cast<CitizenComponent* const*>(citizenIBP);
 code/Game/Work/work_base_actionctor.cpp	131	SIG	SIG WorkAct_PerformWorkCtor_c1eb0	reinterpret_cast<Component* const*>(targetIBP);
-code/Game/Work/work_base_actionctor.cpp	692	SIG	SIG WorkAct_PlantWorkCtor_be6e0	reinterpret_cast<CitizenComponent* const*>(citizenIBP);
-code/Game/Work/work_base_actionctor.cpp	695	SIG	SIG WorkAct_PlantWorkCtor_be6e0	reinterpret_cast<ComponentDescription*>(workEntityInner);
-code/Game/Work/work_base_actionctor.cpp	696	SIG	SIG WorkAct_PlantWorkCtor_be6e0	reinterpret_cast<ComponentEntity* const*>(condPtr8);
 code/Game/Work/work_base_bst.cpp	153	ERASED	ERASED one body over every caller's 8-byte-key set (banner)	reinterpret_cast<KeySet*>(root);
 code/Game/Work/work_base_bst.cpp	154	ERASED	ERASED one body over every caller's 8-byte-key set (banner)	reinterpret_cast<const uint64_t*>(keyIBP);
 code/Game/Work/work_base_bst.cpp	155	ERASED	ERASED one body over every caller's 8-byte-key set (banner)	reinterpret_cast<Node**>(outResult);
@@ -169,27 +138,21 @@ code/Game/Work/work_base_bst.cpp	275	ERASED	ERASED one body over every caller's 
 code/Game/Work/work_base_bst.cpp	276	ERASED	ERASED one body over every caller's 8-byte-key set (banner)	reinterpret_cast<const uint64_t*>(keyIBP);
 code/Game/Work/work_base_bst.cpp	299	ERASED	ERASED one body over every caller's 8-byte-key set (banner)	reinterpret_cast<KeySet*>(root);
 code/Game/Work/work_base_bst.cpp	328	ERASED	ERASED the core's Set<uint64_t> element is the InternalPtr retail serializes (banner)	reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);
-code/Game/Work/work_base_bst.cpp	330	ERASED	ERASED as above	reinterpret_cast<void*>(pIVar6->element), citTid))
+code/Game/Work/work_base_bst.cpp	330	ERASED	ERASED the core's Set<uint64_t> element is the InternalPtr<CitizenComponent> retail type-checks after loading it	reinterpret_cast<void*>(pIVar6->element), citTid))
 code/Game/Work/work_base_cellbst.cpp	145	SIG	SIG WorkCellBST_*: one body over the area works' raw field pairs (H5) and the scheduler's WorkSchedulerTree (ICF)	reinterpret_cast<CellSet*>(root);
 code/Game/Work/work_base_cellbst.cpp	146	SIG	SIG WorkCellBST_Insert_9a40: the scheduler inserts {id, pad, InternalPtr<Work>} through the same body (ICF)	reinterpret_cast<const WorkCellAssignment*>(keyRec);
-code/Game/Work/work_base_cellbst.cpp	147	SIG	SIG as above (the scheduler's out slot is its own node type)	reinterpret_cast<Node**>(outResult);
+code/Game/Work/work_base_cellbst.cpp	147	FLOOR?	FLOOR? the erased core's view of its out slot: one body (ICF) hands back the inserted node of the area works' cell sets and of the scheduler's WorkSchedulerTree	reinterpret_cast<Node**>(outResult);
 code/Game/Work/work_base_cellbst.cpp	187	SIG	SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF: cell, entity, scheduler id / bucket, region pair, goals)	reinterpret_cast<CellSet*>(root);
-code/Game/Work/work_base_cellbst.cpp	188	SIG	SIG as above	reinterpret_cast<Node*>(nodeArg);
+code/Game/Work/work_base_cellbst.cpp	188	FLOOR?	FLOOR? the erased core's view of the node it unlinks: one body (ICF) over five node types (cell, entity, scheduler id / bucket, region pair, goals)	reinterpret_cast<Node*>(nodeArg);
 code/Game/Work/work_base_cellbst.cpp	261	SIG	SIG WorkCellBST_*: the area works hold the set as two raw fields (ClearArea.h / PlantArea.h / PlantOrchard.h / HarvestArea.h / HarvestOrchard.h, H5: a Collection::Set member would run its dtor)	reinterpret_cast<CellSet*>(root);
 code/Game/Work/work_base_cellbst.cpp	273	OTHER	WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr	reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);
-code/Game/Work/work_base_cellbst.cpp	294	OTHER	as above	reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);
-code/Game/Work/work_base_grid.cpp	70	OTHER	the six outside callers hand the scheduler as an integer (X-G2-WAIT).	reinterpret_cast<WorkScheduler*>(mgr);
-code/Game/Work/work_base_grid.cpp	91	SIG	SIG WorkGrid_TryAssignWorkplace_f8620 (X-G2-WAIT): the citizen slot arrives as void*	reinterpret_cast<CitizenComponent**>(citizenRef);
-code/Game/Work/work_base_grid.cpp	100	SIG	SIG WorkGrid_TryAssignWorkplace_f8620 (X-G2-WAIT): the citizen slot arrives as void*	reinterpret_cast<CitizenComponent**>(citizenRef);
-code/Game/Work/work_base_grid.cpp	141	SIG	SIG WorkGrid_TryAssignWorkplace_f8620 (X-G2-WAIT): the citizen slot travels as void*	reinterpret_cast<void**>(citizenRef);
-code/Game/Work/work_base_grid.cpp	143	OTHER	0x1400f8620's C signature takes the scheduler as an integer.	reinterpret_cast<uintptr_t>(mgr), &citizenCopy,
-code/Game/Work/work_base_reimpl.cpp	60	SIG	SIG WorkBase_FindComponent_2ed0: its callers (citizenai_growup.cpp, citizenai_leisure.cpp, destroycomponent_workerrelease.cpp: X3-COMP) hand the entity as uintptr_t	reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>());
-code/Game/Work/work_base_reimpl.cpp	85	SIG	SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (X3-COMP: resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference un	reinterpret_cast<ComponentEntity* const*>(pEntityIBP);
-code/Game/Work/work_base_reimpl.cpp	145	SIG	SIG WorkBase_TreeNodeFree_14c30	reinterpret_cast<const FreeNodeLinks10*>(node);
-code/Game/Work/work_base_reimpl.cpp	155	SIG	SIG WorkBase_TreeNodeFree_e320	reinterpret_cast<const FreeNodeLinks18*>(node);
-code/Game/Work/work_base_reimpl.cpp	178	SIG	SIG WorkBase_TaskListCleanup_c5400(void*): CharacterComponent declares its +0x48 ActionStack as separate fields (Component/CharacterComponent.h, X3-COMP); ~30 callers hand &character->actions	reinterpret_cast<ActionStack*>(self);
-code/Game/Work/work_base_reimpl.cpp	225	H5	H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBase	reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);
-code/Game/Work/work_base_reimpl.cpp	230	H5	H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBase	reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);
+code/Game/Work/work_base_cellbst.cpp	294	OTHER	WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr	reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);
+code/Game/Work/work_base_reimpl.cpp	67	SIG	SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (X3-COMP: resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference un	reinterpret_cast<ComponentEntity* const*>(pEntityIBP);
+code/Game/Work/work_base_reimpl.cpp	127	SIG	SIG WorkBase_TreeNodeFree_14c30	reinterpret_cast<const FreeNodeLinks10*>(node);
+code/Game/Work/work_base_reimpl.cpp	137	SIG	SIG WorkBase_TreeNodeFree_e320	reinterpret_cast<const FreeNodeLinks18*>(node);
+code/Game/Work/work_base_reimpl.cpp	160	SIG	SIG WorkBase_TaskListCleanup_c5400(void*): CharacterComponent declares its +0x48 ActionStack as separate fields (Component/CharacterComponent.h, X3-COMP); ~30 callers hand &character->actions	reinterpret_cast<ActionStack*>(self);
+code/Game/Work/work_base_reimpl.cpp	207	H5	H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBase	reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);
+code/Game/Work/work_base_reimpl.cpp	212	H5	H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBase	reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);
 code/Game/Work/work_leaf_clear.cpp	101	H5	H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)	reinterpret_cast<EntitySet*>(treeRootSlot);
 code/Game/Work/work_leaf_clear.cpp	110	SIG	SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF; work_base_cellbst.cpp)	static_cast<uintptr_t*>(treeRootSlot), node);
 code/Game/Work/work_leaf_clear.cpp	148	H5	H5 ClearArea.h holds the set as two raw fields (+0x48 root, +0x50 count) where retail has a Collection::Set (its dtor would run)	reinterpret_cast<EntitySet*>(treeRootSlot);
