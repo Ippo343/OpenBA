@@ -141,14 +141,13 @@ void ConsumeProduceUI::OnCreated() {
             }
         }
         int entryCount = cpComp->_recipeCount;
-        // LEFT: the recipe entries (0x28 stride: +0x10 the raw material's
-        // ComponentDescription, +0x20 its name String) have no type in COMP-c's header.
-        const uint8_t* entriesBase = (const uint8_t*)cpComp->_recipes;
+        // The recipe entries (ConsumeProduceRecipe, 0x28 stride: +0x10 the raw
+        // material's ComponentDescription, +0x20 its name String).
+        const ConsumeProduceRecipe* entriesBase = cpComp->_recipes;
 
         for (int i = 0; i < entryCount; i++) {
             // The recipe's raw-material description (entry +0x10)
-            ComponentDescription* entryPtr =
-                *(ComponentDescription* const*)(entriesBase + (uintptr_t)i * 0x28 + 0x10);
+            ComponentDescription* entryPtr = entriesBase[i].product;
 
             // Search its sub-descriptions for the RawMaterialDescription
             int subCount = entryPtr->_subDescCount;
@@ -156,8 +155,7 @@ void ConsumeProduceUI::OnCreated() {
             RawMaterialDescription* resourceDesc = nullptr;
 
             for (int j = 0; j < subCount; j++) {
-                // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-                Object::Base* subEntry = reinterpret_cast<Object::Base*>(subArray[j]);
+                Object::Base* subEntry = subArray[j];
                 // Call GetTypeId virtual (vtable+0x10) and compare
                 int typeId = subEntry->Type();
                 if (typeId == (int)RawMaterialDescription::TypeId()) {
@@ -172,8 +170,7 @@ void ConsumeProduceUI::OnCreated() {
             // UI::String from the description's string table (+0x20) and the
             // recipe's name (entry +0x20). From disasm: LEA RCX,[RSI+RCX*8] where
             // RCX = RSI + RSI*4 = i * 5, so address = base + i*0x28 + 0x20.
-            const System::String* name =
-                (const System::String*)(entriesBase + (uintptr_t)i * 0x28 + 0x20);
+            const System::String* name = &entriesBase[i].name;
             // COMP-c typed ConsumeProduceDescription +0x20 as UI::StringTable* (merge fix).
             UI::String uiStr(Object::ExternalPtr<UI::StringTable>(cpComp->_stringTable), *name);
 

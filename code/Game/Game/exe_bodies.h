@@ -177,10 +177,17 @@ extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount
 extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src);  // 0x14001f5e0
 extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
 
+// ---- town_storage_seed.cpp
+class Component; class MapGenerator;
+extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);  // 0x14012d230
+extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity);  // 0x140107ff0
+extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 0x1400a1f00
+
 // ---- town_workplace_registry.cpp
 extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3);  // 0x1400895a0
 extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey);  // 0x140089470
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);  // 0x14008d100
+extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h

@@ -236,16 +236,14 @@ static RawArray<TerrainPathPoint>* coastline_DeepCopyPath_24ac0(RawArray<Terrain
 // them; each takes ONE typed view of its element (LEFT: the callback signature
 // is Collection.h's). The element is RawArray<TerrainPathPoint>; retail's qword
 // zero of {size, capacity} is the two named stores (H7).
-static void AssignWgPathVec(uint8_t* d, const uint8_t* s) {
-    RawArray<TerrainPathPoint>* dst = (RawArray<TerrainPathPoint>*)d;              // LEFT: ArraySpec callback (uint8_t*)
-    const RawArray<TerrainPathPoint>* src = (const RawArray<TerrainPathPoint>*)s;  // LEFT: ArraySpec callback (uint8_t*)
+// (reached through rtcoll::AssignAs / DestroyAs, Collection.h: the row's byte view)
+static void AssignWgPathVec(RawArray<TerrainPathPoint>* dst, const RawArray<TerrainPathPoint>* src) {
     dst->data = nullptr;                            // zero the dst header first
     dst->size = 0;
     dst->capacity = 0;
     coastline_DeepCopyPath_24ac0(dst, src);
 }
-static void DestroyWgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
-    RawArray<TerrainPathPoint>* slots = (RawArray<TerrainPathPoint>*)base;         // LEFT: ArraySpec callback (uint8_t*)
+static void DestroyWgPathVec(RawArray<TerrainPathPoint>* slots, int count) {
     for (int i = 0; i < count; ++i) {
         RawArray<TerrainPathPoint>* slot = &slots[i];
         rtcoll::MemFree(slot->data);                // null-guarded inside
@@ -260,7 +258,8 @@ static void DestroyWgPathVec(void* /*ignoredThis*/, uint8_t* base, int count) {
 extern const rtcoll::ArraySpec kSpec_WgPathVec;
 const rtcoll::ArraySpec kSpec_WgPathVec = {         // exe 0x140024460 (grow), 0x1400175d0 (dtor)
     "Array<Array<PathPoint>>", 0x10, 8,
-    &AssignWgPathVec, &rtcoll::TInit<RawArray<TerrainPathPoint>>, &DestroyWgPathVec, /*byteCopy*/false,
+    &rtcoll::AssignAs<RawArray<TerrainPathPoint>, &AssignWgPathVec>, &rtcoll::TInit<RawArray<TerrainPathPoint>>,
+    &rtcoll::DestroyAs<RawArray<TerrainPathPoint>, &DestroyWgPathVec>, /*byteCopy*/false,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };

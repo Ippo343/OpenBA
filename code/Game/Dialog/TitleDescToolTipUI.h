@@ -16,6 +16,20 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "system/String.h"
+
+// The record the tooltip's data-source element carries as its user data: two
+// consecutive System::Strings. OnCreated 0x14007b730 hands `userData` and
+// `userData + 8` to TextElement::SetParameter(0, ...) for "textTitle" and
+// "textDesc". Only ever viewed through the element's Object::Base* user-data
+// slot, never constructed by the tree (its producer is not ported).
+struct TitleDescToolTipData {
+    System::String title;   // +0x00
+    System::String desc;    // +0x08
+};
+static_assert(sizeof(TitleDescToolTipData) == 0x10, "two Strings (0x14007b730 reads +0 / +8)");
+static_assert(offsetof(TitleDescToolTipData, title) == 0x00, "");
+static_assert(offsetof(TitleDescToolTipData, desc) == 0x08, "");
 
 class TitleDescToolTipUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(TitleDescToolTipUI)

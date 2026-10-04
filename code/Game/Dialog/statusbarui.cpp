@@ -227,13 +227,11 @@ void StatusBarUI::OnOpened() {
     // and the InternalPtr to the group element by address.
     {
         Object::InternalPtr<UI::Element> group(FindNamed<UI::Element>(this, "groupHearts"));
-        CitizenUI_BuildIconArray_Impl(reinterpret_cast<uintptr_t>(&heartsWhole),  // CAST-OK: ptr_int
-                                      reinterpret_cast<uintptr_t>(&group));       // CAST-OK: ptr_int
+        CitizenUI_BuildIconArray_Impl(heartsWhole, heartsHalf, &group);
     }
     {
         Object::InternalPtr<UI::Element> group(FindNamed<UI::Element>(this, "groupStars"));
-        CitizenUI_BuildIconArray_Impl(reinterpret_cast<uintptr_t>(&starsWhole),   // CAST-OK: ptr_int
-                                      reinterpret_cast<uintptr_t>(&group));       // CAST-OK: ptr_int
+        CitizenUI_BuildIconArray_Impl(starsWhole, starsHalf, &group);
     }
 
     // --- Title label ---
@@ -311,7 +309,7 @@ void StatusBarUI::OnUpdateLayout() {
     // --- Update hearts (health) icon display ---
     float maxHappy = kMaxHealth;  // default if no citizens
     if (citizenCount == 0) {
-        CitizenUI_UpdateIconDisplay_Impl(reinterpret_cast<uintptr_t>(&heartsWhole), 0.0f, kMaxHealth);  // CAST-OK: ptr_int
+        CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf, 0.0f, kMaxHealth);
         happySum = 0.0f;
     } else {
         // The first citizen's description (Component::_description, checked)
@@ -319,7 +317,7 @@ void StatusBarUI::OnUpdateLayout() {
         const CitizenDescription* citizenDesc =
             ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
                 ? static_cast<const CitizenDescription*>(desc) : nullptr;
-        CitizenUI_UpdateIconDisplay_Impl(reinterpret_cast<uintptr_t>(&heartsWhole),  // CAST-OK: ptr_int
+        CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf,
                                         healthSum / (float)citizenCount,
                                         citizenDesc->maxHealth);
 
@@ -332,7 +330,7 @@ void StatusBarUI::OnUpdateLayout() {
     }
 
     // --- Update stars (happiness) icon display ---
-    CitizenUI_UpdateIconDisplay_Impl(reinterpret_cast<uintptr_t>(&starsWhole), happySum, maxHappy);  // CAST-OK: ptr_int
+    CitizenUI_UpdateIconDisplay_Impl(starsWhole, starsHalf, happySum, maxHappy);
 
     // --- Update status icon visibility and counts ---
     UI::Element* const statusIcons[6] = { imageStatusHome, imageStatusFood, imageStatusCold,

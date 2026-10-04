@@ -145,7 +145,7 @@ extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity);
 
 // buildcomponent_state1.cpp — the construction-demo site/owner (standalone test scaffold).
 extern "C" void* g_pConstructionDemoSite;
-extern "C" void* g_pConstructionDemoEntity;
+extern "C" ComponentEntity* g_pConstructionDemoEntity;
 
 // Drop the construction-demo pointers when the building being retired owns them; they
 // would otherwise dangle at a freed BuildComponent, and a reused heap block landing on

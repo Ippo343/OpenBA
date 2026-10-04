@@ -676,7 +676,7 @@ void NewGameDialog::StartGame() {
 // to the running game (or to the owning menu loop) as the next loop.
 //
 // Two callers: NewGameDialog's Start (the path BANISHED_AUTOSTART drives) and
-// ScenarioDialog::LoadSelected (through the StartNewGame_Reg forwarder below).
+// ScenarioDialog::LoadSelected.
 // A new sandbox game passes scenarioResIdx = -1 and a null saved-state IBP, while a
 // scenario passes its resource index and (for a saved scenario) the restored state.
 void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, uint32_t terrainSize,
@@ -749,19 +749,6 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
         fflush(stderr);
         return pOuterLoop;
     }
-}
-
-// B4 FORWARD: 1 outside caller (code/Game/Dialog/scenariodialog.cpp), which calls
-// 0x1400b4540 with retail's 10-argument ABI: param_3 / param_4 arrive as
-// pointer-width slots carrying ints.
-extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed,
-                                 void* terrainSize, char disastersOff, void* mapGen,
-                                 void* terrainGen, void* climateGen, unsigned scenarioResIdx,
-                                 void* savedStateIBP) {
-    static_cast<MainMenuDialog*>(worldSetup)->StartNewGame(
-        *static_cast<const System::String*>(nameStr), (uint32_t)(uintptr_t)seed,
-        (uint32_t)(uintptr_t)terrainSize, disastersOff != 0,
-        mapGen, terrainGen, climateGen, scenarioResIdx, savedStateIBP);
 }
 
 void NewGameDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
