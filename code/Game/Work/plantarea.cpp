@@ -431,7 +431,7 @@ int PlantArea::Cleanup() {
         }
 
         // Cancel work via the citizen's action stack
-        CitizenComponent* citizen = leftmost->element.citizen;
+        CitizenComponent* citizen = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
         count = _cells._count;
@@ -470,7 +470,7 @@ int PlantArea::Validate() {
 
     // In-order traversal
     while (node != nullptr) {
-        CitizenComponent* ibpData = node->element.citizen;
+        CitizenComponent* ibpData = node->element.citizen.Get();
 
         uint8_t valid = ValidateTask(nullptr, &ibpData, nullptr);
 

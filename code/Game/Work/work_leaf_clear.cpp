@@ -103,10 +103,10 @@ void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, ComponentEntity* const* k
     if (node == nullptr) return;
     do {
         ComponentEntity* keyVal = *key;
-        if (keyVal < node->element.entity) {
+        if (keyVal < node->element.entity.Get()) {
             node = node->left;       // left (+0x18)
         } else {
-            if (*key <= node->element.entity) {
+            if (*key <= node->element.entity.Get()) {
                 WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(treeRootSlot), node);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF; work_base_cellbst.cpp)
                 return;
             }
@@ -168,14 +168,14 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const Wor
         set->_root = result;
         *out = result;
     } else {
-        ComponentEntity* insKey = ins->entity;
+        ComponentEntity* insKey = ins->entity.Get();
         WorkEntitySetNode* newChildSlotOwner = nullptr;  // = local_res8 / pivot for rebalance
         for (;;) {
             // descend-left while key < node key (re-reading key each step via CheckPtr)
             while (true) {
                 newChildSlotOwner = node;
-                insKey = ins->entity;
-                if (insKey >= node->element.entity) break;
+                insKey = ins->entity.Get();
+                if (insKey >= node->element.entity.Get()) break;
                 WorkEntitySetNode* left = node->left;  // +0x18
                 if (left == nullptr) {
                     result = WorkLeaf_BstNewNode_9b40(ins, node);
@@ -184,7 +184,7 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, const Wor
                 }
                 node = left;
             }
-            if (ins->entity <= node->element.entity) {
+            if (ins->entity.Get() <= node->element.entity.Get()) {
                 // duplicate found — return existing node; early return, NO insert,
                 // NO rebalance, and NO count increment (matches exe early `return`).
                 *out = node;
@@ -240,12 +240,12 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser)
             WorkEntityAssignment pair;
             pair.entity = nullptr;
             pair.citizen = nullptr;
-            reinterpret_cast<Object::InternalBasePtr*>(&pair.entity)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
-            if (pair.entity != nullptr && !Object::IsDerivedFromNullSafe(pair.entity, tidEntity)) {
+            pair.entity.InternalBasePtr::Serialize(*ser);
+            if (pair.entity.Get() != nullptr && !Object::IsDerivedFromNullSafe(pair.entity.Get(), tidEntity)) {
                 pair.entity = nullptr;
             }
-            reinterpret_cast<Object::InternalBasePtr*>(&pair.citizen)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
-            if (pair.citizen != nullptr && !Object::IsDerivedFromNullSafe(pair.citizen, tidCitizenAI)) {
+            pair.citizen.InternalBasePtr::Serialize(*ser);
+            if (pair.citizen.Get() != nullptr && !Object::IsDerivedFromNullSafe(pair.citizen.Get(), tidCitizenAI)) {
                 pair.citizen = nullptr;
             }
             // pair {entity, citizen} laid out contiguously for the insert key.
@@ -264,14 +264,14 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, IO::Serializer* ser)
         }
         while (node != nullptr) {
             // IBP A at node+0x00
-            reinterpret_cast<Object::InternalBasePtr*>(&node->element.entity)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
-            ComponentEntity* a = node->element.entity;
+            node->element.entity.InternalBasePtr::Serialize(*ser);
+            ComponentEntity* a = node->element.entity.Get();
             if (a != nullptr && !Object::IsDerivedFromNullSafe(a, tidEntity)) {
                 node->element.entity = nullptr;
             }
             // IBP B at node+0x08
-            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*ser);  // LEFT: WorkEntityAssignment's two slots are raw pointers (Work.h); retail serializes each as an InternalBasePtr
-            CitizenComponent* b = node->element.citizen;
+            node->element.citizen.InternalBasePtr::Serialize(*ser);
+            CitizenComponent* b = node->element.citizen.Get();
             if (b != nullptr && !Object::IsDerivedFromNullSafe(b, tidCitizenAI)) {
                 node->element.citizen = nullptr;
             }

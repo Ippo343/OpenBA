@@ -57,7 +57,7 @@ public:
     // +0x48: the citizen standing here, an InternalPtr<CitizenComponent> (Persist
     // 0x1400efba0 checks it IsDerivedFrom CitizenComponent; Cleanup 0x1400efaf0 reads
     // its +0x278). Raw storage (H5).
-    CitizenComponent* _field48;  // +0x48: zeroed
+    Object::InternalPtr<CitizenComponent> _field48;  // +0x48: zeroed (the assigned citizen)
 };
 
 static_assert(sizeof(LocationWork) == 0x50, "LocationWork is 0x50 (retail create MemAlloc)");

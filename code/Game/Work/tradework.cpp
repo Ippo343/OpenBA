@@ -460,7 +460,7 @@ int TradeWork::Cleanup() {
         }
 
         // Cancel the work item
-        CitizenComponent* citizen = leftmost->value.citizen;
+        CitizenComponent* citizen = leftmost->value.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
@@ -490,7 +490,7 @@ int TradeWork::Validate() {
 
     // In-order traversal
     while (node != nullptr) {
-        CitizenComponent* citizen = node->value.citizen;   // local_res8
+        CitizenComponent* citizen = node->value.citizen.Get();   // local_res8
 
         // Validate this entry (retail passes its stale RDX, which the body never reads)
         bool stillValid = ValidateTask(nullptr, &citizen, nullptr);
@@ -557,10 +557,10 @@ int TradeWork::Validate() {
         for (uint32_t i = 0; i < removeCount; i++) {
             Node* searchNode = bstRoot;
             while (searchNode != nullptr) {
-                if (removeArr[i] < searchNode->value.citizen) {
+                if (removeArr[i] < searchNode->value.citizen.Get()) {
                     searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= searchNode->value.citizen) {
+                    if (removeArr[i] <= searchNode->value.citizen.Get()) {
                         // LEFT: 0x140025740's C signature (PLAYER) takes the set as int64_t*.
                         PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(&bstRoot), searchNode);   // LEFT: 0x140025740's C signature (PLAYER) takes the set as int64_t*.
                         break;

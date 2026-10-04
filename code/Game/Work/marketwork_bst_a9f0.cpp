@@ -184,8 +184,8 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
     for (;;) {
         retraceSlot = cur;
 
-        CitizenComponent* curKey = cur->element.citizen;   // abaa
-        CitizenComponent* srcKey = src->citizen;           // abad (CMP [RBX],RAX)
+        CitizenComponent* curKey = cur->element.citizen.Get();   // abaa
+        CitizenComponent* srcKey = src->citizen.Get();           // abad (CMP [RBX],RAX)
 
         if (srcKey < curKey) {                             // abb0 JC — UNSIGNED
             MarketWork::ClaimNode* left = cur->left;       // abd6
@@ -198,10 +198,10 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
             continue;
         }
 
-        srcKey = src->citizen;                             // abbb — re-read AFTER
+        srcKey = src->citizen.Get();                             // abbb — re-read AFTER
                                                            // CheckPtr, which may
                                                            // have resolved the ref
-        curKey = cur->element.citizen;                     // abbe (CMP [RDI],RAX)
+        curKey = cur->element.citizen.Get();                     // abbe (CMP [RDI],RAX)
 
         if (curKey >= srcKey) {                            // abc1 JNC — key present
             *out = cur;                                    // abfa

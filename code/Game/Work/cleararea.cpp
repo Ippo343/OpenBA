@@ -215,7 +215,7 @@ int ClearArea::Cleanup() {
 
         // prev is the leftmost node; its value (+0x08) is the citizen's
         // InternalPtr<CitizenComponent>
-        CitizenComponent* citizen = prev->element.citizen;
+        CitizenComponent* citizen = prev->element.citizen.Get();
 
         // Remove the pending action from the citizen's CharacterComponent action list (+0x48)
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
@@ -235,7 +235,7 @@ int ClearArea::Cleanup() {
         }
 
         // The node's citizen (+0x08); remove its pending action
-        CitizenComponent* citizen = prev->element.citizen;
+        CitizenComponent* citizen = prev->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
     return 0;
@@ -407,7 +407,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 WorkEntitySetNode* bstNode = _entities._root;
                 bool alreadyTracked = false;
                 while (bstNode != nullptr) {
-                    ComponentEntity* nodeKey = bstNode->element.entity;
+                    ComponentEntity* nodeKey = bstNode->element.entity.Get();
                     if (treeEntity < nodeKey) {
                         bstNode = bstNode->left;
                     } else {
@@ -695,7 +695,7 @@ int ClearArea::Validate() {
         // In-order traversal
         while (node != nullptr) {
             // The node's citizen (+0x08)
-            CitizenComponent* citizen = node->element.citizen;
+            CitizenComponent* citizen = node->element.citizen.Get();
             // The tree collects the citizen; retail 0x1400e5c25..0x1400e5c34 collects the node's
             // key (the entity, +0x00): known_port_issues row 220.
             uintptr_t entityIBP = reinterpret_cast<uintptr_t>(citizen);   // LEFT: known_port_issues row 220 (the removal list holds the citizen)
@@ -777,7 +777,7 @@ int ClearArea::Validate() {
 
         // In-order traversal
         while (node != nullptr) {
-            CitizenComponent* citizen = node->element.citizen;
+            CitizenComponent* citizen = node->element.citizen.Get();
 
             uint8_t valid = ValidateTask(nullptr, &citizen, nullptr);
             if (valid == 0) {
@@ -815,7 +815,7 @@ int ClearArea::Validate() {
         for (uint32_t i = 0; i < removeCount; i++) {
             WorkEntitySetNode* bstNode = _entities._root;
             while (bstNode != nullptr) {
-                uintptr_t nodeKey = reinterpret_cast<uintptr_t>(bstNode->element.entity);   // LEFT: known_port_issues row 220 (compared with the collected citizens)
+                uintptr_t nodeKey = reinterpret_cast<uintptr_t>(bstNode->element.entity.Get());   // LEFT: known_port_issues row 220 (compared with the collected citizens)
                 if (removeArr[i] < nodeKey) {
                     bstNode = bstNode->left;
                 } else {

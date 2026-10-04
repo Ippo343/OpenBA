@@ -277,10 +277,10 @@ extern "C" void MarketBst_aaa0(MarketWork::ClaimNode** tree, CitizenComponent** 
     if (node == nullptr) return;
 
     do {
-        if (*key < node->element.citizen) {
+        if (*key < node->element.citizen.Get()) {
             node = node->left;
         } else {
-            if (node->element.citizen >= *key) {
+            if (node->element.citizen.Get() >= *key) {
                 MarketBst_ac40(tree, node);   // ab07
                 return;
             }

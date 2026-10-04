@@ -68,7 +68,7 @@ public:
     // The element of the claim tree (0x18): the claiming citizen (the unsigned sort key)
     // and its carry list, an Array<Carry> {data, count, capacity} (node ctor 0x14002ae50).
     struct Claim {
-        CitizenComponent* citizen;       // +0x00 InternalPtr<CitizenComponent> (Cleanup 0x1400f1ca0 reads its +0x278)
+        Object::InternalPtr<CitizenComponent> citizen;   // +0x00 (Cleanup 0x1400f1ca0 reads its +0x278)
         CarryList         carries;       // +0x08 Array<Carry> {data, count, capacity}
     };
     // Execute's (0x1400eff80) function-local arrays.

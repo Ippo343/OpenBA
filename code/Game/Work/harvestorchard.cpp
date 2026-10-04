@@ -435,7 +435,7 @@ int HarvestOrchard::Cleanup() {
             node = node->left;
         }
 
-        CitizenComponent* citizenEntity = leftmost->element.citizen;
+        CitizenComponent* citizenEntity = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         count = _cells._count;
@@ -472,7 +472,7 @@ int HarvestOrchard::Validate() {
     }
 
     while (node != nullptr) {
-        CitizenComponent* ibpData = node->element.citizen;
+        CitizenComponent* ibpData = node->element.citizen.Get();
 
         uint8_t valid = ValidateTask(nullptr, &ibpData, nullptr);
 

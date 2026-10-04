@@ -54,7 +54,7 @@ public:
     // keyed on the citizen (insert 0x14002c710 copies these 0x18 bytes into the
     // node; serialize 0x14002c8a0 streams them).
     struct Assignment {
-        CitizenComponent*     citizen;   // +0x00 InternalPtr, the key (0x14002c8a0 validates it
+        Object::InternalPtr<CitizenComponent> citizen;   // +0x00 the key (0x14002c8a0 validates it
                                          //       against CitizenComponent)
         ComponentDescription* resource;  // +0x08 ExternalPtr (serialized by 0x140002340)
         int32_t               quantity;  // +0x10 < 0 carried out of the post, > 0 carried in

@@ -268,11 +268,11 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser) {
         for (int i = 0; i < count; i++) {
             WorkCellAssignment rec; rec.cell = 0; rec._pad04 = 0; rec.citizen = nullptr;
             ser->Serialize(rec.cell, nullptr);
-            CitizenComponent* keyIBP = nullptr;
+            Object::InternalPtr<CitizenComponent> keyIBP = nullptr;
             // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);  // LEFT: WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr
-            if (keyIBP != nullptr && citTid &&
-                !Object::IsDerivedFromNullSafe(keyIBP, citTid))
+            keyIBP.InternalBasePtr::Serialize(*ser);
+            if (keyIBP.Get() != nullptr && citTid &&
+                !Object::IsDerivedFromNullSafe(keyIBP.Get(), citTid))
                 keyIBP = nullptr;
             rec.citizen = keyIBP;
             Node* out = nullptr;
@@ -291,9 +291,9 @@ joined:
     while ((pIVar5 = pIVar7) != nullptr) {
         ser->Serialize(pIVar5->element.cell, nullptr);   // key @+0
         // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8  // LEFT: WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr
+        pIVar5->element.citizen.InternalBasePtr::Serialize(*ser);
         if (pIVar5->element.citizen != nullptr && citTid &&
-            !Object::IsDerivedFromNullSafe(pIVar5->element.citizen, citTid))
+            !Object::IsDerivedFromNullSafe(pIVar5->element.citizen.Get(), citTid))
             pIVar5->element.citizen = nullptr;
         pIVar3 = pIVar5->right;   // right child
         if (pIVar3 == nullptr) {

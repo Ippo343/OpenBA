@@ -68,11 +68,11 @@ void LocationWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // Serialize InternalBasePtr at +0x48 (the member is raw storage, H5: LEFT)
-    reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(serializer);   // B.3.4 bridge   // LEFT: H5 the slot is an InternalPtr declared as a bare pointer
+    _field48.InternalBasePtr::Serialize(serializer);
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
-    if (_field48 != nullptr) {
-        if (!Object::IsDerivedFromNullSafe(_field48, CitizenComponent::TypeId())) {
+    if (_field48.Get() != nullptr) {
+        if (!Object::IsDerivedFromNullSafe(_field48.Get(), CitizenComponent::TypeId())) {
             _field48 = nullptr;
         }
     }
@@ -93,7 +93,7 @@ void LocationWork::Persist(IO::Stream& stream) {
 // ============================================================
 int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) {
     // Step 1: Already has target?
-    if (_field48 != nullptr) {
+    if (_field48.Get() != nullptr) {
         return 1;
     }
 
@@ -217,11 +217,11 @@ int LocationWork::OnCancel(CitizenComponent** /*arg1*/, ComponentEntity** /*arg2
 // If the target at +0x48 exists, cancels its action list (CharacterComponent +0x48).
 // ============================================================
 int LocationWork::Cleanup() {
-    if (_field48 == nullptr) {
+    if (_field48.Get() == nullptr) {
         return 0;
     }
 
-    CitizenComponent* targetEntity = _field48;
+    CitizenComponent* targetEntity = _field48.Get();
     WorkBase_TaskListCleanup_c5400(&targetEntity->character->actionStack);
     return 0;
 }
@@ -234,7 +234,7 @@ int LocationWork::Cleanup() {
 // Returns true if valid (or no target).
 // ============================================================
 int LocationWork::Validate() {
-    CitizenComponent* targetIBP = _field48;
+    CitizenComponent* targetIBP = _field48.Get();
 
     if (targetIBP == nullptr) {
         return true;  // No target — considered valid (nothing to invalidate)
@@ -280,7 +280,7 @@ void LocationWork::Slot12(int /*version*/) {}
 // Too small to hook (10 bytes).
 // ============================================================
 int LocationWork::GetPriority() {
-    return _field48 != nullptr ? 1 : 0;
+    return _field48.Get() != nullptr ? 1 : 0;
 }
 // ~LocationWork is defaulted: the LocationWork then Work stamps and `~Internal` are the
 // compiler's chain — all retail's 0x14002a850 does before the free.
