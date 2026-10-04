@@ -49,21 +49,41 @@ static_assert(offsetof(WorkSchedulerTree, root) == 0x00, "WorkSchedulerTree::roo
 static_assert(offsetof(WorkSchedulerTree, count) == 0x08, "WorkSchedulerTree::count @ +0x08");
 static_assert(offsetof(WorkSchedulerTree, _pad0C) == 0x0C, "WorkSchedulerTree +0x0C");
 
+// The node of the {root, count} tree at WorkScheduler +0x20 / +0x28. Retail: the
+// ctor 0x1400f9180 zeroes +0x20 / +0x28, Serialize 0x1400f9240 does not touch them,
+// the dtor 0x1400f8ff0 (0x1400f90ce..) frees the root's children +0x18 / +0x20
+// through the generic link free 0x14000e320 (recurses on +0x18 / +0x20, MemFree, no
+// element dtor) and MemFree's the root. No other reader or writer was found (the
+// scheduler insert 0x1400f88a0 touches +0x10 / +0x30 / +0x120 only), so only the two
+// links the free walks are named; the rest of the node, and its allocation size, are
+// unknown. 0x14000e320 is shared by many node types (the id trees' 0x14000dcb0, the
+// work walk's candidate tree 0x1400f79b0 ...): it does not identify the element.
+struct WorkSchedulerNode20 {
+    uint8_t              _unknown00[0x18];   // +0x00 element / parent: no retail reader found
+    WorkSchedulerNode20* left;               // +0x18 freed first by 0x14000e320
+    WorkSchedulerNode20* right;              // +0x20
+};
+static_assert(sizeof(WorkSchedulerNode20) == 0x28, "the links 0x14000e320 walks end at +0x28");
+static_assert(offsetof(WorkSchedulerNode20, left) == 0x18, "WorkSchedulerNode20::left @ +0x18 (0x14000e320)");
+static_assert(offsetof(WorkSchedulerNode20, right) == 0x20, "WorkSchedulerNode20::right @ +0x20 (0x14000e320)");
+
 class WorkScheduler {
 public:
-    int32_t           field_0x00;       // +0x00 (Serialize int)
-    int32_t           field_0x04;       // +0x04 (Serialize int)
+    // Better names (CAI-6, from the code; NOT renamed: readers in other blocks' files
+    // spell the field_0x.. names; known_port_issues 14f):
+    int32_t           field_0x00;       // +0x00 (Serialize int) the work-id counter (wraps at 0x7ffffffe)
+    int32_t           field_0x04;       // +0x04 (Serialize int) the queue-order counter
     uint32_t          stepCount;        // +0x08 ctor 1 (Serialize uint); +1 per simulation step
     uint8_t           _pad0C[4];        // +0x0C
-    WorkSchedulerCountNode* field_0x10; // +0x10 tree root (int key; rebuilt on load)
-    int32_t           field_0x18;       // +0x18 tree count
+    WorkSchedulerCountNode* field_0x10; // +0x10 tree root (int key; rebuilt on load) the queue-order tree
+    int32_t           field_0x18;       // +0x18 tree count (the queue-order tree's)
     uint8_t           _pad1C[4];        // +0x1C
-    void*             field_0x20;       // +0x20 ctor 0
-    int32_t           field_0x28;       // +0x28 ctor 0
+    WorkSchedulerNode20* field_0x20;    // +0x20 ctor 0; tree root (freed by the dtor only)
+    int32_t           field_0x28;       // +0x28 ctor 0; its count
     uint8_t           _pad2C[4];        // +0x2C
     WorkSchedulerTree trees[15];        // +0x30 (TradeDescription_impl_d060: 14 before version 3)
-    WorkSchedulerBucketNode* field_0x120; // +0x120 tree root (TradeWork_impl_d5f0)
-    int32_t           field_0x128;      // +0x128 tree count
+    WorkSchedulerBucketNode* field_0x120; // +0x120 tree root (TradeWork_impl_d5f0) the per-profession bucket tree
+    int32_t           field_0x128;      // +0x128 tree count (the bucket tree's)
     uint8_t           _pad12C[4];       // +0x12C
     System::Time      time;             // +0x130 the scheduler clock (+= dt per step)
 

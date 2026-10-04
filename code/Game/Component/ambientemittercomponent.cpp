@@ -54,10 +54,10 @@ static AmbientEmitterDescription* GetBuildingData(AmbientEmitterComponent* self)
     return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
 }
 
-// The world Audio::Scene. LEFT: GameUpdateLoop::m_audioScene is void* (W0 header).
+// The world Audio::Scene.
 static Audio::Scene* WorldAudioScene() {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    return reinterpret_cast<Audio::Scene*>(GameUpdateLoop::_singleton->m_audioScene);
+    return GameUpdateLoop::_singleton->m_audioScene;
 }
 
 // ============================================================
@@ -68,9 +68,10 @@ static Audio::Scene* WorldAudioScene() {
 // non-empty array), MemAlloc(cap*0x10, 8), copy existing elements (2 qwords each),
 // zero-init the new tail with element layout [u32 0][f32 1.0][u64 0]. The exe body
 // is hand-unrolled x4; this is the equivalent scalar 1:1 port.
-// LEFT: a Collection::Array<AmbientEmitterSlot>::SetSize instance whose element
-// default is {0, 1.0f, null}; the template's SetSize zero-fills, so it is not the
-// template's body.
+// LEFT (every cast in this body): ERASED Array<AmbientEmitterSlot>::SetSize hand-expanded
+// instance, kept AS IS. Its element default is {0, 1.0f, null} and it skips MemAlloc when
+// there is no allocator, so it is not provably the core's (SetSizeCore) first allocation /
+// growth; its C signature (void* header) is in Component/exe_bodies.h (wave X).
 extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
     uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
     int oldCount = *(int*)(arr + 8);
@@ -281,7 +282,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
         AmbientEmitterSlot* arrayBase = slots;
         for (int i = 0; i < localCount; i++) {
             AmbientExternalPtrSerialize_Reimpl(&arrayBase[i].sound, &serializer);   // 0x1400019a0
-            serializer.Serialize(*reinterpret_cast<int*>(&arrayBase[i].handle), nullptr);   // retail's int door for the uint
+            serializer.Serialize(arrayBase[i].handle, nullptr);   // retail's int overload (0x1800061d0)
             serializer.Serialize(arrayBase[i].volume, nullptr);
         }
     }

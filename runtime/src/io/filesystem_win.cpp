@@ -150,7 +150,7 @@ System::Filename FileSystem::GetSaveDirectory() const {
     }
 
     RtIO::WideStringHandle ws{nullptr};
-    reinterpret_cast<System::WideString*>(&ws)->Set(buf);          // B.3.x bridge
+    reinterpret_cast<System::WideString*>(&ws)->Set(buf);          // B.3.x bridge  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
 
     // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
     // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
@@ -158,7 +158,7 @@ System::Filename FileSystem::GetSaveDirectory() const {
     // null and exactly one release happens, `utf8`'s destructor.
     RtSystem::String utf8Pod{nullptr};
     new (&RtSystem::Sys(utf8Pod)) System::String(                 // B.3.x bridge
-        reinterpret_cast<const System::WideString*>(&ws)->AsUTF8());
+        reinterpret_cast<const System::WideString*>(&ws)->AsUTF8());  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
     System::String utf8(std::move(RtSystem::Sys(utf8Pod)));
 
     System::String formatted = System::String::Format(

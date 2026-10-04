@@ -73,7 +73,7 @@ bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng) 
 
 // B4 FORWARD: the time arrives as an int64_t* / void* from the callers.
 bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
-    return BreakTimeCheck(reinterpret_cast<System::Time*>(timeV), pair, reinterpret_cast<System::Random*>(rng));
+    return BreakTimeCheck(reinterpret_cast<System::Time*>(timeV), pair, reinterpret_cast<System::Random*>(rng));   // LEFT: SIG ActMvDep_TimeCheck_a9290
 }
 
 // ============================================================
@@ -137,5 +137,5 @@ void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float 
 // B4 FORWARD: outside callers (Component/animalcomponent.cpp, Component/firecomponent.cpp,
 // Action/action_base_cnr.cpp)
 void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5) {
-    PlayModelAnimation(reinterpret_cast<ModelComponent*>(self), animId, p3, p4, p5);
+    PlayModelAnimation(reinterpret_cast<ModelComponent*>(self), animId, p3, p4, p5);   // LEFT: SIG ActMvDep_AnimHelper_50f0
 }

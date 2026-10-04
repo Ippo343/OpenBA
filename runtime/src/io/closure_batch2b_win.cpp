@@ -65,10 +65,10 @@ struct WideStr { wchar_t* data; };
 // the WideStr slot (B3R RT-IO: by name, it was a door).
 inline void WideRelease(WideStr* w) {
     if (!w->data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;
+    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;  // CAST-OK: string_header
     --*rc;
     if (*rc == 0) {
-        w->data = reinterpret_cast<wchar_t*>(reinterpret_cast<uint8_t*>(w->data) - 8);
+        w->data = reinterpret_cast<wchar_t*>(reinterpret_cast<uint8_t*>(w->data) - 8);  // CAST-OK: string_header
         ::System::MemoryAllocator::MemFree(w->data);   // 0x1800c7ad0
     } else {
         w->data = nullptr;

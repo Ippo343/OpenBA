@@ -156,7 +156,7 @@ void RecInt(::IO::ReaderWriter* rw, int32_t* v) {
 }
 
 void RecBool(::IO::ReaderWriter* rw, void* v) {
-    rw->SerializeBool(*static_cast<bool*>(v), nullptr);          // +0x78
+    rw->SerializeBool(*static_cast<bool*>(v), nullptr);          // +0x78  // LEFT: H8 PackageFile::_overridable is uint8_t, retail serializes the byte through SerializeBool (bool&)
 }
 
 // `SerializeUIntArray` is (count, uint*, name) — EDX, R8, R9 at 0x1800b624c-0x1800b6259.

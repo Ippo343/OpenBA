@@ -525,8 +525,8 @@ public:
     // Fields at the retail offsets `rt::io::ReaderWriter` already pins.
     uint8_t allowCustomSerialize;   // +0x08
     uint8_t _pad09[7];              // +0x09
-    void*   serializer;             // +0x10  the IO::Serializer that owns it
-    void*   stream;                 // +0x18  == serializer->stream
+    Serializer* serializer;         // +0x10  the IO::Serializer that owns it
+    Stream*     stream;             // +0x18  == serializer->stream
 
 protected:
     // ENDGAME B.3.9 IO -- the inlined base constructor every concrete ctor
@@ -952,10 +952,10 @@ namespace IO {
 // runtime/src/io/serializer_class.cpp, because `IO::Stream` is only forward-
 // declared in this header.
 namespace rw_stream {
-bool    Write(void* s, int32_t n, void* src);   // IO::Stream::Write          +0x10
-bool    Read(void* s, int32_t n, void* dst);    // IO::Stream::Read           +0x18
-void    SetPos(void* s, int32_t pos);           // IO::Stream::SetCurrentPos  +0x20
-int32_t GetPos(void* s);                        // IO::Stream::GetCurrentPos  +0x28
+bool    Write(Stream* s, int32_t n, void* src);   // IO::Stream::Write          +0x10
+bool    Read(Stream* s, int32_t n, void* dst);    // IO::Stream::Read           +0x18
+void    SetPos(Stream* s, int32_t pos);           // IO::Stream::SetCurrentPos  +0x20
+int32_t GetPos(Stream* s);                        // IO::Stream::GetCurrentPos  +0x28
 }  // namespace rw_stream
 
 inline ReaderWriter::ReaderWriter(Serializer& ser)
@@ -967,7 +967,7 @@ inline ReaderWriter::ReaderWriter(Serializer& ser)
 // stack slot and never inspected.
 inline BinaryReader::BinaryReader(Serializer& ser, int ver)
     : ReaderWriter(ser), word20(0), word24(0), version(ver) {
-    void* s = stream;
+    Stream* s = stream;
     int32_t magic;
     rw_stream::Read(s, 4, &magic);
     rw_stream::Read(s, 4, &word20);
@@ -978,7 +978,7 @@ inline BinaryReader::BinaryReader(Serializer& ser, int ver)
 // 0x1800a82f0. Four bytes read and discarded: the mirror of the writer's
 // 0xBBBBBBBB trailer.
 inline BinaryReader::~BinaryReader() {
-    void* s = stream;
+    Stream* s = stream;
     int32_t scratch = 0;
     rw_stream::Read(s, 4, &scratch);
 }
@@ -988,7 +988,7 @@ inline BinaryReader::~BinaryReader() {
 // positions the dtor back-patches through.
 inline BinaryWriter::BinaryWriter(Serializer& ser, int ver)
     : ReaderWriter(ser), word20(0), word24(-1), version(ver) {
-    void* s = stream;
+    Stream* s = stream;
     int32_t magic = static_cast<int32_t>(0xaaaaaaaau);
     rw_stream::Write(s, 4, &magic);
     word20 = rw_stream::GetPos(s);           // where the placeholder lands
@@ -1000,7 +1000,7 @@ inline BinaryWriter::BinaryWriter(Serializer& ser, int ver)
 // 0x1800a8980. The length is everything written after the placeholder,
 // VERSION DWORD INCLUDED; trailer, then seek back, patch, seek forward.
 inline BinaryWriter::~BinaryWriter() {
-    void* s = stream;
+    Stream* s = stream;
     const int32_t len = rw_stream::GetPos(s) - word24;
     int32_t trailer = static_cast<int32_t>(0xbbbbbbbbu);
     rw_stream::Write(s, 4, &trailer);
@@ -1022,5 +1022,5 @@ inline Visitor::Visitor(Serializer& ser, int ver) : ReaderWriter(ser), version(v
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- io/text_codec.cpp
-extern "C" void RtIo_SerializeStringArray(void* serv, int32_t count, void* datav, void*);  // 0x180029bb0
+extern "C" void RtIo_SerializeStringArray(IO::Serializer* ser, int32_t count, void* datav, void*);  // 0x180029bb0
 // ==== end B3R W0-P0c ====

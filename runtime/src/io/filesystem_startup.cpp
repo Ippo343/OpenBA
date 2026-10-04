@@ -103,9 +103,9 @@ bool FileSystem::Startup() {
     //
     // The find itself (0x18002ace0) has NO export name in either build; it is
     // `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp).
-    void* map = reinterpret_cast<uint8_t*>(::System::Configuration::_singleton) + 0x10;
+    void* map = &::System::Configuration::_singleton->_mapRoot;   // Configuration + 0x10
     bool found = RtSystem_ConfigMap_Find(
-                map, reinterpret_cast<const RtSystem::String*>(&tmp)) != nullptr;   // B.3.x bridge
+                map, reinterpret_cast<const RtSystem::String*>(&tmp)) != nullptr;   // B.3.x bridge  // LEFT: SIG RtSystem_ConfigMap_Find takes void* map / the RtSystem::String POD (system/Configuration.h, R-SYS-1)
 
     if (found) _platformExistsGate = 0;
 

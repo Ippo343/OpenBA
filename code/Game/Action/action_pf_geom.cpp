@@ -518,14 +518,10 @@ int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int param_
 // ===========================================================================
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
-// B4 FORWARD: 1 outside caller (Work/buildstructure.cpp)
-int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
-    return reinterpret_cast<Map*>(param_1)->NearestRegionId(param_2);
-}
 
 // B4 FORWARD: 1 outside caller (Component/citizen_updatehealth.cpp)
 void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
-    reinterpret_cast<CharacterGridWalker*>(param_1)->Subdivide();
+    reinterpret_cast<CharacterGridWalker*>(param_1)->Subdivide();   // LEFT: SIG Pf_QuadtreeSubdivide_18880
 }
 
 // B4 FORWARD: 1 outside caller (Component/citizen_updatehealth.cpp); the two floats
@@ -535,6 +531,6 @@ uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t para
     float hi;
     __builtin_memcpy(&lo, &param_3, 4);
     __builtin_memcpy(&hi, &param_4, 4);
-    reinterpret_cast<CharacterGridWalker*>(param_1)->Init(reinterpret_cast<const CharacterGrid*>(param_2), lo, hi);
+    reinterpret_cast<CharacterGridWalker*>(param_1)->Init(reinterpret_cast<const CharacterGrid*>(param_2), lo, hi);   // LEFT: SIG Pf_QuadtreeInit_18dd0
     return param_1;
 }

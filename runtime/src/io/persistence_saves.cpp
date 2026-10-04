@@ -249,8 +249,8 @@ Persistence::~Persistence() {
     ::Sys(_savePath).~String();
     // ENDGAME B.3.9 IO (W2): the embedded worker's destructor (0x1800b7740),
     // called directly where retail calls it -- the class's own, not a door.
-    reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();
-    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(this));        // 0x18000f7d0  B.3.x bridge
+    reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();  // LEFT: H5 Persistence::_workerVtable is the embedded PersistenceWorker held as loose fields
+    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(this));        // 0x18000f7d0  B.3.x bridge  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
 }
 
 }  // namespace IO

@@ -445,8 +445,8 @@ AvlNode30** PathCostTreeInsert(AvlTreeHead<AvlNode30>* tree, AvlNode30** out, co
 LAB_140025afa:
         // LEFT: 0x14000e360's C declaration (Component/exe_bodies.h, block COMP) takes
         // int64_t*; the two arguments are the tree root slot and the cursor.
-        CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(&tree->root),
-                                  reinterpret_cast<int64_t*>(&local_res8));   // 0x14000e360
+        CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(&tree->root),   // LEFT: SIG CitizenAI_Reg_helper_e360 (CAI-4)
+                                  reinterpret_cast<int64_t*>(&local_res8));   // 0x14000e360 LEFT: SIG CitizenAI_Reg_helper_e360 (CAI-4)
         *out = nn;
     }
     tree->count = tree->count + 1;
@@ -458,37 +458,29 @@ LAB_140025afa:
 // ===========================================================================
 // B4 FORWARD: 1 outside caller (Component/citizenai_housing_idle.cpp)
 extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node) {
-    return reinterpret_cast<int64_t>(AvlRotateLeft(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));
+    return reinterpret_cast<int64_t>(AvlRotateLeft(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));   // LEFT: SIG Pf_AvlRotateB_e450
 }
 // B4 FORWARD: 1 outside caller (Component/citizenai_housing_idle.cpp)
 extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node) {
-    return reinterpret_cast<int64_t>(AvlRotateRight(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));
-}
-// B4 FORWARD: 1 outside caller (Player/pathtool_setselected.cpp)
-extern "C" int64_t Pf_AvlRotateL_14c70(int64_t* root, int64_t node) {
-    return reinterpret_cast<int64_t>(AvlRotateLeft(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28*>(node)));
-}
-// B4 FORWARD: 1 outside caller (Player/pathtool_setselected.cpp)
-extern "C" int64_t Pf_AvlRotateR_14da0(int64_t* root, int64_t node) {
-    return reinterpret_cast<int64_t>(AvlRotateRight(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28*>(node)));
+    return reinterpret_cast<int64_t>(AvlRotateRight(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));   // LEFT: SIG Pf_AvlRotateB_e580
 }
 // B4 FORWARD: 4 outside callers (citizenai_work_scheduler.cpp, townhallui.cpp,
 // goals_serialize.cpp, work_leaf_clear.cpp)
 extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node) {
-    AvlRebalance(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30**>(node));
+    AvlRebalance(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30**>(node));   // LEFT: SIG Pf_AvlRebalanceB_13480
 }
 // B4 FORWARD: 4 outside callers (citizenai_leisure.cpp, citizenai_work_scheduler.cpp,
 // goals_serialize.cpp, keystone_a_removalcalcpath.cpp)
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node) {
-    AvlRebalance(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28**>(node));
+    AvlRebalance(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28**>(node));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
 }
 // B4 FORWARD: 2 outside callers (Component/terraformcomponent.cpp, Player/roadtool_calcpath.cpp)
 extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
-    return reinterpret_cast<uint64_t*>(AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1), reinterpret_cast<AvlNode28**>(param_2), reinterpret_cast<const int32_t*>(param_3)));
+    return reinterpret_cast<uint64_t*>(AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1), reinterpret_cast<AvlNode28**>(param_2), reinterpret_cast<const int32_t*>(param_3)));   // LEFT: SIG Pf_AvlInsertA_a4f0
 }
 // B4 FORWARD: 1 outside caller (Entity/citizenbehavior.cpp)
 extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
-    return reinterpret_cast<uint64_t*>(PathCostTreeInsert(reinterpret_cast<AvlTreeHead<AvlNode30>*>(param_1), reinterpret_cast<AvlNode30**>(param_2), reinterpret_cast<const int32_t*>(param_3)));
+    return reinterpret_cast<uint64_t*>(PathCostTreeInsert(reinterpret_cast<AvlTreeHead<AvlNode30>*>(param_1), reinterpret_cast<AvlNode30**>(param_2), reinterpret_cast<const int32_t*>(param_3)));   // LEFT: SIG PathBST_Insert_25a10
 }
 
 // 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
@@ -502,5 +494,5 @@ extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, u
 // int64_t*.
 extern "C" void PathPairs_Clear_25b30(int64_t* param_1)
 {
-    reinterpret_cast<PathGraph*>(param_1)->m_pairCount = 0;
+    reinterpret_cast<PathGraph*>(param_1)->m_pairCount = 0;   // LEFT: SIG PathPairs_Clear_25b30
 }

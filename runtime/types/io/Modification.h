@@ -44,12 +44,25 @@ namespace RtIO {
 // Collection::Array<T> header, 16 bytes and T-independent (Collection.h in the
 // Wave 2 tree static_asserts the same thing). Spelled locally so this header
 // stays includable from engine/ without dragging the collection tree in.
-struct ModArray {
-    void*   data;       // +0x00
+//
+// B.4 P2 R-IO: a TYPED view of the one header (the container policy: typed
+// template wrappers over the one erased core). `ModArrayOf<T>` is the same 16
+// bytes for every T -- a POD, trivially constructible and destructible, so no
+// ctor or dtor runs that did not run before -- and `data` carries the element
+// type the owning member's retail operator= / ~Array strides by (Mod's +0x30
+// int32, +0x40 uint8, +0x70 Filename; the copy ctor 0x1800101e0 names each).
+// `ModArray` is the erased spelling the void* core entry points still take.
+template <class T>
+struct ModArrayOf {
+    T*      data;       // +0x00
     int32_t size;       // +0x08
     int32_t capacity;   // +0x0c
 };
+using ModArray = ModArrayOf<void>;
 static_assert(sizeof(ModArray) == 0x10, "Collection::Array is 16 bytes");
+static_assert(offsetof(ModArray, size)     == 0x08, "Array::_size @ +0x08");
+static_assert(offsetof(ModArray, capacity) == 0x0c, "Array::_capacity @ +0x0c");
+static_assert(sizeof(ModArrayOf<int32_t>) == sizeof(ModArray), "one header for every T");
 
 // One node of the Filename-keyed set at Mod+0x60. Allocated at 0x180010570
 // (`MOV EDX,0x28` size, `LEA R8D,[RDX-0x20]` align 8) and cloned at 0x1800104f0.
@@ -58,14 +71,20 @@ struct ModSetNode {
     ModSetNode*        parent;   // +0x08
     ModSetNode*        left;     // +0x10
     ModSetNode*        right;    // +0x18
-    uint16_t           w20;      // +0x20 — copied verbatim by the clone
-    uint16_t           w22;      // +0x22 — ditto
+    // +0x20 / +0x22: the AVL balance factor and height. SIGNED: the retrace
+    // (0x1800274c0) tests them with `CMP CX,1 / JLE`, `CMP word [RDX+0x20],-1 /
+    // JGE` and `TEST CX,CX / JS`, and AvlUpdate writes +0x20 = rh - lh, +0x22 =
+    // max(lh, rh) (0x180027529 / 0x180027525). The clone copies both verbatim.
+    int16_t            balance;  // +0x20
+    int16_t            height;   // +0x22
     uint32_t           _pad24;   // +0x24
 };
 static_assert(sizeof(ModSetNode) == 0x28, "node alloc at 0x180010570 asks for 0x28");
 static_assert(offsetof(ModSetNode, parent) == 0x08, "0x1800105e8 MOV [RDI+8],RSI");
 static_assert(offsetof(ModSetNode, left)   == 0x10, "0x180010535 MOV [RBX+0x10],RAX");
 static_assert(offsetof(ModSetNode, right)  == 0x18, "0x18001054e MOV [RBX+0x18],RAX");
+static_assert(offsetof(ModSetNode, balance) == 0x20, "0x180027529 MOV [RDX+0x20],CX");
+static_assert(offsetof(ModSetNode, height)  == 0x22, "0x180027525 MOV [RDX+0x22],AX");
 
 struct ModSet {
     ModSetNode* root;    // +0x00
@@ -87,8 +106,8 @@ struct Mod {
     int32_t  i28;           // +0x28
     int32_t  i2c;           // +0x2c
 
-    ModArray ints;          // +0x30 — Array<int32>
-    ModArray bytes;         // +0x40 — Array<uint8>
+    ModArrayOf<uint32_t> ints;   // +0x30 — Array<uint> (op= 0x180011110, stride 4; filled from ?GetIconData@ `?$Array@I`)
+    ModArrayOf<uint8_t> bytes;   // +0x40 — Array<uint8> (op= 0x180011220, stride 1)
 
     uint8_t  enabled;       // +0x50 — Enable() writes this byte
     uint8_t  _pad51[7];
@@ -96,7 +115,7 @@ struct Mod {
     RtSystem::Filename file;   // +0x58 — the mod's .pkm path; Find()'s key
 
     ModSet   set;           // +0x60 — Filename-keyed set
-    ModArray files;         // +0x70 — Array<Filename>
+    ModArrayOf<RtSystem::Filename> files;   // +0x70 — Array<Filename> (op= 0x1800091f0, stride 8)
 };
 static_assert(sizeof(Mod) == 0x80,
               "Find() 0x1800aea10: `lVar3 = lVar3 + 0x80` strides the array by this");
