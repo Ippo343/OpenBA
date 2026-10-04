@@ -1,0 +1,767 @@
+file	line	family	note
+code/Game/Dialog/achievementdialog.cpp	142	H5:AchievementDialog::entryData	ArrayAt view of raw Array storage
+code/Game/Dialog/autosavedialog.cpp	261	SIG:AutoSaveDialog_Ctor_Standalone	C entry takes self/ui/extRes/parentIBP as void*
+code/Game/Dialog/autosavedialog.cpp	262	SIG:AutoSaveDialog_Ctor_Standalone	C entry takes self/ui/extRes/parentIBP as void*
+code/Game/Dialog/autosavedialog.cpp	263	SIG:AutoSaveDialog_Ctor_Standalone	C entry takes self/ui/extRes/parentIBP as void*
+code/Game/Dialog/buildrequirementui.cpp	232	SIG:Debug_Sprite_Ctor	debug arm: sheet passed as uint64_t
+code/Game/Dialog/buildrequirementui.cpp	288	H5:BuildRequirementUI::labelData/countData	ArrayAt view of raw Array storage
+code/Game/Dialog/buildrequirementui.cpp	323	H5:BuildRequirementUI::labelData/countData	ArrayAt view of raw Array storage
+code/Game/Dialog/buildrequirementui.cpp	339	SIG:Debug_Sprite_Ctor	debug arm: sheet passed as uint64_t
+code/Game/Dialog/buildui.cpp	279	SIG:Debug_Sprite_Ctor	debug arm: sheet passed as uint64_t
+code/Game/Dialog/citizenui.cpp	335	H5:CitizenComponent::name	raw String storage
+code/Game/Dialog/citizenui.cpp	400	LOCAL:redundant String cast Profession::stringName	redundant cast: the member is already typed (stale LEFT: Profession.h:54 declares System::String stringName)
+code/Game/Dialog/controlui.cpp	84	FLOOR:ptr_int	trace printf of widget pointers
+code/Game/Dialog/debugui.cpp	338	CONST:FindOrLoad	factory walk hands out const Externals; member takes non-const
+code/Game/Dialog/debugui.cpp	491	SIG:ComponentEntity_CtorFromDescription	description passed through const_cast (void* in the C ctor)
+code/Game/Dialog/debugui.cpp	516	SIG:CitizenComp_DeferredInit_117080	receiver int64_t
+code/Game/Dialog/debugui.cpp	519	SIG:CitizenComp_DeferredInit_117080	receiver int64_t
+code/Game/Dialog/debugui.cpp	630	SIG:ComponentEntity_CtorFromDescription	description passed through const_cast
+code/Game/Dialog/debugui.cpp	696	FIELD:MainLoop::_context	void* Video::Context; engine counters read by raw offset 0x2150..0x215C
+code/Game/Dialog/debugui.cpp	700	FIELD:MainLoop::_context	void* Video::Context; engine counters read by raw offset 0x2150..0x215C
+code/Game/Dialog/debugui.cpp	701	FIELD:MainLoop::_context	void* Video::Context; engine counters read by raw offset 0x2150..0x215C
+code/Game/Dialog/debugui.cpp	702	FIELD:MainLoop::_context	void* Video::Context; engine counters read by raw offset 0x2150..0x215C
+code/Game/Dialog/debugui.cpp	703	FIELD:MainLoop::_context	void* Video::Context; engine counters read by raw offset 0x2150..0x215C
+code/Game/Dialog/dialog_exe_helpers.cpp	46	SIG:Dialog_FindComponent_d6c0	defined with void* entity (B4 FORWARD); caller workplaceui.cpp
+code/Game/Dialog/dialog_exe_helpers.cpp	54	SIG:Dialog_AutoSaveHandler	defined with void* self; caller standalone/saveload_harness.cpp
+code/Game/Dialog/dialog_exe_helpers.cpp	103	CONST:FindOrLoad	
+code/Game/Dialog/entityui.cpp	65	SIG:PlayerTrade_BSTRemove_25740	shared AVL helper takes the root as int64_t*
+code/Game/Dialog/entityui.cpp	224	SIG:EntityUI_SelectEntity_Impl	receiver and key arrive as void*
+code/Game/Dialog/entityui.cpp	225	SIG:EntityUI_SelectEntity_Impl	receiver and key arrive as void*
+code/Game/Dialog/eventlogui.cpp	201	FIELD:EventLog::field_0x10	bool[6] header field; retail stores the raw byte (a bool store would normalise)
+code/Game/Dialog/eventnotifydialog.cpp	632	SIG:EventNotifyDialog_Ctor_Standalone	C entry takes void*
+code/Game/Dialog/eventnotifydialog.cpp	633	SIG:EventNotifyDialog_Ctor_Standalone	C entry takes void*
+code/Game/Dialog/eventnotifydialog.cpp	634	SIG:EventNotifyDialog_Ctor_Standalone	C entry takes void*
+code/Game/Dialog/exe_bodies.h	166	SIG:fn_TrackerComponent_Rebuild	dst/src arrays as void*
+code/Game/Dialog/exe_bodies.h	167	SIG:fn_TrackerComponent_Rebuild	dst/src arrays as void*
+code/Game/Dialog/followdialog.cpp	118	H5:CitizenComponent::name	raw String storage
+code/Game/Dialog/followdialog.cpp	182	LOCAL:redundant String cast Profession::stringName	redundant cast: the member is already typed (stale LEFT: Profession.h:54 declares System::String stringName)
+code/Game/Dialog/loaderdialog.cpp	85	SIG:LoaderDialog_FromSplashDLT	retInternalBasePtr and loop are void*
+code/Game/Dialog/loaderdialog.cpp	86	SIG:LoaderDialog_FromSplashDLT	retInternalBasePtr and loop are void*
+code/Game/Dialog/loaderdialog.cpp	92	SIG:LoaderDialog_FromSplashDLT	retInternalBasePtr and loop are void*
+code/Game/Dialog/loaderdialog.cpp	95	FIELD:DialogLoaderLoopT::_dialogExternal	void*
+code/Game/Dialog/mainmenudialog.cpp	91	CONST:FindOrLoad	
+code/Game/Dialog/mainmenudialog.cpp	216	LOCAL:redundant cast MenuDialogLoopT::_saveLoad	redundant cast: the member is already typed (stale LEFT: MenuDialogLoopT.h:72 declares Save::SaveLoad*; the void* local is only for MemFree)
+code/Game/Dialog/mainmenudialog.cpp	313	SIG:ScenarioDialog_Ctor	return void* cast to DialogInstance*
+code/Game/Dialog/mainmenudialog.cpp	368	SIG:ScenarioDialog_Ctor	return void* cast to DialogInstance*
+code/Game/Dialog/mainmenudialog.cpp	861	SIG:MainMenuDialog_FromMenuDLT	C entry takes the loop as void*
+code/Game/Dialog/mainmenudialog.cpp	863	FIELD:DialogLoopT::_dialogExternal	void* (runtime Engine header)
+code/Game/Dialog/mapparamsdialog.cpp	47	FIELD:TerrainGenerator::_field20	only TerrainGenerator::_field20 is still void* (MapGenerator / ClimateGenerator type it UI::StringTable*)
+code/Game/Dialog/mapparamsdialog.cpp	48	LOCAL:redundant String cast Generator::_field28	redundant cast: the member is already typed (stale LEFT: all three generators declare System::String _field28)
+code/Game/Dialog/mapparamsdialog.cpp	193	H5:EditElement::_text	String is raw char*
+code/Game/Dialog/mapparamsdialog.cpp	222	CONST:FindOrLoad	
+code/Game/Dialog/mapparamsdialog.cpp	274	H5:EditElement::_text	String is raw char*
+code/Game/Dialog/mapui.cpp	93	CONST:FindOrLoad	ExternalPtr<Material> wraps non-const
+code/Game/Dialog/mapui.cpp	100	POD:RtSystem::String	AddTexture takes the RtSystem::String POD
+code/Game/Dialog/mapui.cpp	126	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/mapui.cpp	127	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/messagedialog.cpp	111	SIG:MessageDialog_Ctor_Standalone	C entry takes void*
+code/Game/Dialog/messagedialog.cpp	112	SIG:MessageDialog_Ctor_Standalone	C entry takes void*
+code/Game/Dialog/messagedialog.cpp	113	SIG:MessageDialog_Ctor_Standalone	C entry takes void*
+code/Game/Dialog/mod_dialog_vtables.cpp	314	FLOOR:ptr_int	2 casts; -1 sentinel handed as a pointer
+code/Game/Dialog/moddetailsdialog.cpp	114	POD:RtSystem::Filename	POD mirror of System::Filename (R-IO node)
+code/Game/Dialog/moddetailsdialog.cpp	117	POD:RtSystem::Filename	POD mirror of System::Filename (R-IO node)
+code/Game/Dialog/moddetailsdialog.cpp	176	POD:RtIO::Mod	Mod name/author/description are char* in the POD
+code/Game/Dialog/moddetailsdialog.cpp	178	POD:RtIO::Mod	Mod name/author/description are char* in the POD
+code/Game/Dialog/moddetailsdialog.cpp	196	POD:RtIO::Mod	Mod name/author/description are char* in the POD
+code/Game/Dialog/moddetailsdialog.cpp	203	LOCAL:redundant cast RtIO::Mod::files.data	redundant cast: the member is already typed (stale LEFT: Modification.h:119)
+code/Game/Dialog/moddialog.cpp	142	LOCAL:redundant cast RtIO::Mod::files.data	redundant cast: the member is already typed (stale LEFT: Modification.h:119 declares ModArrayOf<RtSystem::Filename>, data is Filename*)
+code/Game/Dialog/moddialog.cpp	156	POD:RtIO::Mod	Mod name/author/description are char* in the POD
+code/Game/Dialog/moddialog.cpp	158	POD:RtIO::Mod	Mod name/author/description are char* in the POD
+code/Game/Dialog/moddialog.cpp	160	POD:RtIO::Mod	Mod name/author/description are char* in the POD
+code/Game/Dialog/moddialog.cpp	353	CONST:FindOrLoad	ExternalPtr<Material> wraps non-const
+code/Game/Dialog/moddialog.cpp	361	POD:RtSystem::String	AddTexture takes the RtSystem::String POD
+code/Game/Dialog/moddialog.cpp	381	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/moddialog.cpp	382	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/moddialog.cpp	425	CONST:FindOrLoad	ExternalPtr<T> wraps non-const T
+code/Game/Dialog/moddialog.cpp	616	FLOOR:ptr_int	2 casts; -1 sentinel handed as a pointer
+code/Game/Dialog/newgamedialog.cpp	122	FIELD:TerrainGenerator::_field20	only TerrainGenerator::_field20 is still void*
+code/Game/Dialog/newgamedialog.cpp	123	LOCAL:redundant String cast Generator::_field28	redundant cast: the member is already typed (stale LEFT: all three generators declare System::String _field28)
+code/Game/Dialog/newgamedialog.cpp	154	CONST:FindOrLoad	
+code/Game/Dialog/newgamedialog.cpp	275	LOCAL:redundant cast MapGenerator::_field20/_field30	redundant cast: the member is already typed (stale LEFT: MapGenerator.h:89-91 types _field20 UI::StringTable*, _field28/_field30 System::String)
+code/Game/Dialog/newgamedialog.cpp	276	LOCAL:redundant cast MapGenerator::_field20/_field30	redundant cast: the member is already typed (stale LEFT: MapGenerator.h:89-91)
+code/Game/Dialog/newgamedialog.cpp	284	LOCAL:redundant cast MapGenerator::_field20/_field30	redundant cast: the member is already typed (stale LEFT: MapGenerator.h:90)
+code/Game/Dialog/newgamedialog.cpp	653	H5:EditElement::_text	String is raw char*
+code/Game/Dialog/newgamedialog.cpp	703	SIG:GameUpdateLoop::GameUpdateLoop	ctor takes the scenario IBP as its 8 raw bytes (uint64_t)
+code/Game/Dialog/newgamedialog.cpp	708	SIG:MainMenuDialog::StartNewGame	3 casts; mapGen / terrainGen / climateGen arrive as void*
+code/Game/Dialog/newgamedialog.cpp	744	SIG:SetEngineNextLoop	loop passed as uintptr_t
+code/Game/Dialog/newgamedialog.cpp	746	SIG:SetDialogLoaderNextLoop	loop passed as uintptr_t
+code/Game/Dialog/newgamedialog.cpp	797	H5:EditElement::_text	String is raw char*
+code/Game/Dialog/noiseui.cpp	81	CONST:FindOrLoad	ExternalPtr<Material> wraps non-const
+code/Game/Dialog/noiseui.cpp	87	POD:RtSystem::String	AddTexture takes the RtSystem::String POD
+code/Game/Dialog/noiseui.cpp	112	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/noiseui.cpp	113	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/optionsdialog.cpp	492	H5:RtVideo::Adapter::name	Adapter::name is the String data pointer (gfxIface POD)
+code/Game/Dialog/optionsdialog.cpp	520	H5:RtVideo::Adapter::name	Adapter::name is the String data pointer (gfxIface POD)
+code/Game/Dialog/professionui.cpp	812	SIG:CitizenEmploy_Strat_cbf0	receiver/profession as int64_t; the same two values feed _ca20 and _c5f0
+code/Game/Dialog/professionui.cpp	813	SIG:CitizenEmploy_Strat_cbf0	receiver/profession as int64_t; the same two values feed _ca20 and _c5f0
+code/Game/Dialog/professionui.cpp	824	SIG:CitizenEmploy_Strat_cbf0	result void* read as int64_t
+code/Game/Dialog/professionui.cpp	831	SIG:CitizenEmploy_Strat_ca20	result void* read as int64_t
+code/Game/Dialog/professionui.cpp	837	SIG:CitizenEmploy_Strat_c5f0	result void* read as int64_t
+code/Game/Dialog/professionui.cpp	856	SIG:TownHall_RemoveWorker	profession as uint64_t
+code/Game/Dialog/radiusui.cpp	115	SIG:Player_HighlightAdd_55430	receiver int64_t
+code/Game/Dialog/residenceui.cpp	319	H5:CitizenComponent::name	raw String storage
+code/Game/Dialog/residenceui.cpp	465	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	468	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	469	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	474	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	475	OTHER:retail StorageComponent over-read	2 casts; retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	479	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/saveloaddialog.cpp	253	CONST:FindOrLoad	SetMaterial takes non-const
+code/Game/Dialog/saveloaddialog.cpp	260	POD:RtSystem::String	AddTexture takes the RtSystem::String POD
+code/Game/Dialog/saveloaddialog.cpp	284	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/saveloaddialog.cpp	285	H5:SpriteSheet::m_groupName/m_textureName	char* storage
+code/Game/Dialog/saveloaddialog.cpp	329	FIELD:SaveInfo::sortKey	uint64_t holding a System::DateTime
+code/Game/Dialog/saveloaddialog.cpp	703	SIG:SetEngineNextLoop	loop passed as uintptr_t (SetDialogLoaderNextLoop on the menu arm)
+code/Game/Dialog/saveloaddialog.cpp	705	SIG:SetEngineNextLoop	loop passed as uintptr_t (SetDialogLoaderNextLoop on the menu arm)
+code/Game/Dialog/scenariodialog.cpp	349	POD:RtSystem::String	Persistence::_savePath is the runtime String POD
+code/Game/Dialog/scenariodialog.cpp	484	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/scenariodialog.cpp	485	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/scenariodialog.cpp	486	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/scenariodialog.cpp	487	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/titledesctooltipui.cpp	53	FIELD:UI::Element::_userData	user data is Object::Base*; producer not ported
+code/Game/Dialog/toolbar_utility_helpers.cpp	126	SIG:ToolbarUtility_BstInsert_4890	defined with int64_t* root; the shared Set insert
+code/Game/Dialog/toolbar_utility_helpers.cpp	178	SIG:TradeWork_impl_4b40	shared AVL retrace (0x140014b40) takes int64_t*
+code/Game/Dialog/toolbardialog.cpp	446	SIG:Toolbar_ShowGroup_Impl	receiver void*, group id int64_t
+code/Game/Dialog/toolbardialog.cpp	447	SIG:Toolbar_ShowGroup_Impl	receiver void*, group id int64_t
+code/Game/Dialog/toolbardialog.cpp	570	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, result void*
+code/Game/Dialog/toolbardialog.cpp	571	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, result void*
+code/Game/Dialog/toolbardialog.cpp	594	SIG:Toolbar_Utility_Reg	C entry: gameSubsys void*, param uint64_t, retBuf void*
+code/Game/Dialog/toolbardialog.cpp	595	SIG:Toolbar_Utility_Reg	C entry: gameSubsys void*, param uint64_t, retBuf void*
+code/Game/Dialog/toolbardialog.cpp	596	SIG:Toolbar_Utility_Reg	C entry: gameSubsys void*, param uint64_t, retBuf void*
+code/Game/Dialog/toolbardialog.cpp	624	SIG:ToolbarUtility_HarnessOpen	C entry: gameSubsys void*, param uint64_t
+code/Game/Dialog/toolbardialog.cpp	625	SIG:ToolbarUtility_HarnessOpen	C entry: gameSubsys void*, param uint64_t
+code/Game/Dialog/toolbardialog.cpp	756	H5:PlayerController::camera	raw Camera storage
+code/Game/Dialog/toolbardialog.cpp	790	SIG:EntityUI_OpenPauseMenu	C entry: gameSubsys void*
+code/Game/Dialog/toolbardialog.cpp	1001	H5:Toolbar::_field30/_field38	Toolbar Strings are raw storage (void* fields); _field28 sheet passed as uint64_t to the debug Sprite ctor
+code/Game/Dialog/toolbardialog.cpp	1004	SIG:Debug_Sprite_Ctor	item sheet passed as uint64_t to the debug Sprite ctor
+code/Game/Dialog/toolbardialog.cpp	1007	H5:Toolbar::_field30/_field38	Toolbar Strings are raw storage (void* fields); _field28 sheet passed as uint64_t to the debug Sprite ctor
+code/Game/Dialog/toolbardialog.cpp	1044	SIG:Debug_Sprite_Ctor	debug arm: sheet passed as uint64_t
+code/Game/Dialog/toolbardialog.cpp	1173	SIG:ToolbarDialog_Ctor_Impl	C entry: self/ui/dialog/parent/toolbarData as void*
+code/Game/Dialog/toolbardialog.cpp	1174	SIG:ToolbarDialog_Ctor_Impl	C entry: self/ui/dialog/parent/toolbarData as void*
+code/Game/Dialog/toolbardialog.cpp	1175	SIG:ToolbarDialog_Ctor_Impl	C entry: self/ui/dialog/parent/toolbarData as void*
+code/Game/Dialog/toolbardialog.cpp	1176	SIG:ToolbarDialog_Ctor_Impl	C entry: self/ui/dialog/parent/toolbarData as void*
+code/Game/Dialog/toolbardialog.cpp	1573	SIG:PlayerTrade_EntityUI_66b0	EntityUI receiver passed as int64_t
+code/Game/Dialog/toolbardialog.cpp	1664	H5:PlayerController::camera	raw Camera storage
+code/Game/Dialog/toolbardialog.cpp	1699	SIG:Toolbar_CenterOnEntity_Impl	C entry: controller/dialog/entity as void*
+code/Game/Dialog/toolbardialog.cpp	1700	SIG:Toolbar_CenterOnEntity_Impl	C entry: controller/dialog/entity as void*
+code/Game/Dialog/toolbardialog.cpp	1701	SIG:Toolbar_CenterOnEntity_Impl	C entry: controller/dialog/entity as void*
+code/Game/Dialog/townhall_helpers.cpp	79	SIG:TownHall_GroupRatingInit	
+code/Game/Dialog/townhall_helpers.cpp	81	SIG:TownHall_GroupRatingInit	
+code/Game/Dialog/townhall_helpers.cpp	102	SIG:TownHall_GroupRatingUpdate	
+code/Game/Dialog/townhall_helpers.cpp	179	SIG:TownHall_ProfArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	180	SIG:TownHall_ProfArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	226	SIG:TownHall_ProdArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	227	SIG:TownHall_ProdArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	305	SIG:TownHall_AvlRebalance28	
+code/Game/Dialog/townhall_helpers.cpp	306	SIG:TownHall_AvlRebalance28	
+code/Game/Dialog/townhall_helpers.cpp	338	SIG:TownHall_QueryProductionStat	
+code/Game/Dialog/townhall_helpers.cpp	417	SIG:TownHall_InventorySortAsc	
+code/Game/Dialog/townhall_helpers.cpp	420	SIG:TownHall_InventorySortDesc	
+code/Game/Dialog/townhall_helpers.cpp	464	SIG:TownHall_RemoveWorker	citizenList void*, professionId uint64_t
+code/Game/Dialog/townhallui.cpp	175	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	181	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	317	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Dialog/townhallui.cpp	335	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Dialog/townhallui.cpp	448	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	531	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	1086	FLOOR:ptr_int	2 casts; STANDALONE pointer-range guard
+code/Game/Dialog/townhallui.cpp	1090	FLOOR:vslot	STANDALONE vtable-null guard
+code/Game/Dialog/townhallui.cpp	1541	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Dialog/townhallui.cpp	1542	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Dialog/townhallui.cpp	1650	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Dialog/townhallui.cpp	1651	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Dialog/townhallui.cpp	1685	SIG:TownHall_RemoveWorker	profession as uint64_t
+code/Game/Dialog/tradeui_buyentries.cpp	137	SIG:TradeUI_GetBuyEntries_59670	tradeState / outArray as void*
+code/Game/Dialog/tradeui_buyentries.cpp	145	SIG:TradeUI_GetBuyEntries_59670	tradeState / outArray as void*
+code/Game/Dialog/tradeui_checkout.cpp	191	SIG:TradeDescription_ExtendMerchantStay	tradeComp as void*
+code/Game/Dialog/tradeui_checkout.cpp	252	SIG:ActRm_StorageSubtract_d150	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	253	SIG:ActRm_StorageSubtract_d150	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	259	SIG:ActRm_StorageSubtract_d150	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	296	SIG:ActRm_StorageAdd_d000	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	297	SIG:ActRm_StorageAdd_d000	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_leaves.cpp	260	FIELD:TradeComponent::stockRoot	+0x60 tree header is root + count in the header; read as a pair
+code/Game/Dialog/tradeui_leaves.cpp	317	SIG:CitizenAI_Reg_helper_e360	one retail helper serves several node types; int64_t / int64_t*
+code/Game/Dialog/tradeui_leaves.cpp	318	SIG:CitizenAI_Reg_helper_e360	one retail helper serves several node types; int64_t / int64_t*
+code/Game/Dialog/tradeui_price.cpp	104	SIG:TradeUI_GetResourcePrice_a520	tradeState / resourceEntity as void*
+code/Game/Dialog/tradeui_price.cpp	106	SIG:TradeUI_GetResourcePrice_a520	tradeState / resourceEntity as void*
+code/Game/Dialog/upgradeui.cpp	155	FLOOR:ptr_int	function address printed
+code/Game/Dialog/upgradeuiconfig.cpp	59	POD:ExternalPtr-thunk	ExternalPtrSerializeGeneric(void** field)
+code/Game/Dialog/workplaceui.cpp	237	SIG:WorkPlaceComponent_SetMaxWorkers	receiver int64_t
+code/Game/Dialog/workplaceui.cpp	456	SIG:Pf_RecursiveChildSum_123070	receiver int64_t
+code/Game/Dialog/workplaceui.cpp	459	SIG:Pf_RecursiveChildSum_123070	receiver int64_t
+code/Game/Dialog/workplaceui.cpp	483	FLOOR:vslot	diagnostic prints the vptr
+code/Game/Dialog/workplaceui.cpp	549	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Dialog/workplaceui.cpp	550	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Game/MenuDialogLoopT.h	62	FIELD:MenuDialogLoopT::_audioScene	void* -> Audio::Scene*
+code/Game/Game/citizen_names.cpp	64	FIELD:NameDatabase::field_0x00	4-gram declared uint8_t[4], retail reads/writes it as one dword
+code/Game/Game/citizen_names.cpp	65	FIELD:NameDatabase::field_0x00	4-gram declared uint8_t[4], retail reads/writes it as one dword
+code/Game/Game/citizen_names.cpp	101	FIELD:NameDatabase::field_0x00	4-gram declared uint8_t[4], retail reads it as one dword
+code/Game/Game/citizen_names.cpp	168	FIELD:NameDatabase::_array3	reject pool is an Array<uint8_t> read as chars
+code/Game/Game/citizen_names.cpp	204	CONST:FindOrLoad	
+code/Game/Game/citizen_names.cpp	216	SIG:GenerateCitizenName	rng void*
+code/Game/Game/citizen_names.cpp	238	SIG:NameDB_GenerateName	2 casts; retStr/db/rng void*
+code/Game/Game/citizen_names.cpp	262	SIG:NameDB_PickAndGenerate	rng void*
+code/Game/Game/citizenlist_serialize.cpp	210	OTHER:IBP slot held as T*	InternalBasePtr view of a raw T* slot (generic SerializeIBPArray)
+code/Game/Game/citizenlist_serialize.cpp	374	SIG:ResizeStride0x10	hdr void*; CitizenBehavior +0x140/+0x150 raw headers (H5); caller Entity/citizenbehavior.cpp
+code/Game/Game/citizenlist_serialize.cpp	384	SIG:ResizeStride0x20	hdr void*; CitizenBehavior +0x170 raw header (H5); caller Entity/citizenbehavior.cpp
+code/Game/Game/citizenlist_serialize.cpp	395	SIG:ResizeStride08Pair	hdr void*; CitizenBehavior +0x130 raw header (H5)
+code/Game/Game/citizenlist_serialize.cpp	500	SIG:SerializeCompRefTree	rootField void* (CitizenBehavior::field_0x100 is already ProfessionBucket*, field_0x160 TemplateBucket*: stale LEFT)
+code/Game/Game/citizenlist_serialize.cpp	545	SIG:TradeWork_impl_4b40	int64_t* root and node slot
+code/Game/Game/citizenlist_serialize.cpp	546	SIG:TradeWork_impl_4b40	int64_t* root and node slot
+code/Game/Game/citizenlist_serialize.cpp	612	SIG:SerializeLegacyKeyIntTree	rootField void* (CitizenBehavior::field_0x160 is already TemplateBucket*: stale LEFT)
+code/Game/Game/citizenlist_serialize.cpp	647	SIG:CitizenAI_Reg_helper_e360	2 casts; int64_t* root and node slot
+code/Game/Game/citizenlist_serialize.cpp	708	SIG:Reimpl_ExternalPtrArray_Serialize	array base as long long
+code/Game/Game/citizenlist_serialize.cpp	717	SIG:Reimpl_ExternalPtrArray_Serialize	array base as long long
+code/Game/Game/citizenlist_serialize.cpp	721	FIELD:CitizenBehavior::field_0x190/field_0x198	clock is int64_t, retail System::Time
+code/Game/Game/citizenlist_serialize.cpp	722	FIELD:CitizenBehavior::field_0x190/field_0x198	clock is int64_t, retail System::Time
+code/Game/Game/citizenlist_serialize.cpp	786	FIELD:ProfessionResourceEntry::_field14	int64_t, retail System::Time
+code/Game/Game/citizenlist_serialize.cpp	804	FIELD:ProfessionResourceEntry::timer	int64_t, retail System::Time
+code/Game/Game/citizenlist_serialize.cpp	811	FIELD:CitizenBehavior::field_0x1A0	clock is int64_t, retail System::Time
+code/Game/Game/citizenlist_serialize.cpp	878	SIG:WellComp_AddCellEntry_88a80	receiver int64_t
+code/Game/Game/citizenlist_serialize.cpp	913	SIG:WellComp_AddCellEntry_88a80	receiver int64_t
+code/Game/Game/climategenerator.cpp	93	H8:ClimateGenerator::_field30	raw byte serialized as bool
+code/Game/Game/climategenerator.cpp	104	H5:ClimateGenerator::_climateData	uint8_t[0xC0] serialized as floats; weather_sim.cpp indexes it as bytes
+code/Game/Game/construction_force_harness.cpp	117	SIG:StartTown_ForcePushConstructionWork	citizen void*; g_pConstructionDemoEntity is a void* global
+code/Game/Game/construction_force_harness.cpp	177	POD:RtObject::Internal	InternalPtr built via the RtObject::Internal POD
+code/Game/Game/construction_force_harness.cpp	210	POD:RtObject::Internal	InternalPtr built via the RtObject::Internal POD
+code/Game/Game/construction_force_harness.cpp	214	SIG:BuildStructure_ConstructForSite	2 casts; returns void* (Work/exe_bodies.h); +0x58 read by offset
+code/Game/Game/eventlog.cpp	125	H5:EventLog::entries	three raw fields, not a Collection::Array
+code/Game/Game/eventlog.cpp	133	SIG:EventLog_EventArray_Destroy	arrBase void*; EventLog H5 entries
+code/Game/Game/eventlog.cpp	212	SIG:EventLog_TileIndex_Reg	entityIBP void*
+code/Game/Game/eventlog.cpp	302	OTHER:raw stack EventLogEntry	H5 stack block: a real local would run String ctor/dtor
+code/Game/Game/eventlog.cpp	347	SIG:EventLog_AddEvent	eventLog / entityIBP void*
+code/Game/Game/eventlog.cpp	348	SIG:EventLog_AddEvent	eventLog / entityIBP void*
+code/Game/Game/eventlog.cpp	386	SIG:EventLog_AddCitizenEvent	eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	387	SIG:EventLog_AddCitizenEvent	eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	388	SIG:EventLog_AddCitizenEvent	2 casts; eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	389	SIG:EventLog_AddCitizenEvent	eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	404	SIG:EventLog_ArrayGrow_Reg	arrBase / newEntry void*
+code/Game/Game/eventlog.cpp	405	SIG:EventLog_ArrayGrow_Reg	arrBase / newEntry void*
+code/Game/Game/eventlog.cpp	410	SIG:EventLog_YearString_Reg	gameWorld void*
+code/Game/Game/eventlog.cpp	414	SIG:EventLog_SeasonString_Reg	gameWorld / eventLog void*
+code/Game/Game/eventlog.cpp	415	SIG:EventLog_SeasonString_Reg	gameWorld / eventLog void*
+code/Game/Game/exe_bodies.h	226	SIG:SetEngineNextLoop	enginePtr as uintptr_t; engine +0x98 UI / +0xC8 loop read by offset
+code/Game/Game/exe_bodies.h	228	SIG:SetEngineNextLoop	enginePtr as uintptr_t; engine +0x98 UI / +0xC8 loop read by offset
+code/Game/Game/exe_bodies.h	231	SIG:SetEngineNextLoop	enginePtr as uintptr_t; engine +0x98 UI / +0xC8 loop read by offset
+code/Game/Game/exe_bodies.h	233	SIG:SetEngineNextLoop	enginePtr as uintptr_t; engine +0x98 UI / +0xC8 loop read by offset
+code/Game/Game/exe_bodies.h	242	SIG:SetDialogLoaderNextLoop	dialogLoaderLoop as uintptr_t; +0x40 UI / +0xb68 loop by offset
+code/Game/Game/exe_bodies.h	244	SIG:SetDialogLoaderNextLoop	dialogLoaderLoop as uintptr_t; +0x40 UI / +0xb68 loop by offset
+code/Game/Game/exe_bodies.h	256	OTHER:raw stack System::Random	H5: retail runs the ctor and no dtor
+code/Game/Game/exe_bodies.h	269	SIG:GetLoadingSoundString	retStr void*
+code/Game/Game/force_work.cpp	145	SIG:StartTown_ForcePushConstructionWork	citizen void* (shared with StartTown_ForcePushForesterWork)
+code/Game/Game/force_work.cpp	157	SIG:StartTown_ForcePushConstructionWork	citizen void* (shared with StartTown_ForcePushForesterWork)
+code/Game/Game/forester_force_harness.cpp	134	SIG:StartTown_ForcePushForesterWork	citizen void*; g_pForceWorkBuilding is a void* global
+code/Game/Game/forester_force_harness.cpp	186	SIG:ForesterWork_Factory	returns void* (Work/exe_bodies.h)
+code/Game/Game/forester_force_harness.cpp	189	POD:RtObject::Internal	InternalPtr built via the RtObject::Internal POD
+code/Game/Game/founding_spawn.cpp	150	SIG:FoundingCitizenDescription	template passed as void* by starttown.cpp
+code/Game/Game/founding_spawn.cpp	262	SIG:ComponentEntity_CtorFromDescription	self as raw MemAlloc void*
+code/Game/Game/founding_spawn.cpp	322	SIG:CitizenComp_DeferredInit_117080	profession / component as int64
+code/Game/Game/founding_spawn.cpp	329	SIG:CitizenComp_DeferredInit_117080	profession / component as int64
+code/Game/Game/founding_spawn.cpp	337	FIELD:MapGenerator::ExternalRef::resolved	template comes back as the cached void*
+code/Game/Game/game.cpp	140	OTHER:CitizenBehavior::RemoveEntity takes non-const	const_cast of a ComponentDescription
+code/Game/Game/game.cpp	150	SIG:Game_SpawnResources_Impl	citizenListPtr void*; caller Dialog/debugui.cpp
+code/Game/Game/game.cpp	166	SIG:Pf_StorageCanAccept_cd80	description as int64_t (also ActRm_StorageAdd_d000)
+code/Game/Game/game.cpp	289	SIG:Pf_StorageCanAccept_cd80	storage component as int64_t (also ActRm_StorageAdd_d000)
+code/Game/Game/game_leaf_helpers.cpp	168	SIG:Game_DestroyStringArray18	arrayHeader void*
+code/Game/Game/game_leaf_helpers.cpp	173	SIG:Game_DestroyStringArray30	arrayHeader void*
+code/Game/Game/game_leaf_helpers.cpp	193	SIG:Game_MusicPlayerDtor	self void* (really CharacterGrid)
+code/Game/Game/game_leaf_helpers.cpp	196	H5:CharacterGrid::<five arrays>	raw triples
+code/Game/Game/game_leaf_helpers.cpp	217	H5:Minimap::overlayPixels/terrainPixels	raw Array triples
+code/Game/Game/game_leaf_helpers.cpp	218	H5:Minimap::overlayPixels/terrainPixels	raw Array triples
+code/Game/Game/game_leaf_helpers.cpp	253	SIG:Game_MenuSceneArrayDtor	self void*
+code/Game/Game/game_leaf_helpers.cpp	297	H5:WeatherSimulation::emitters/effects	raw Array triples
+code/Game/Game/game_leaf_helpers.cpp	298	H5:WeatherSimulation::emitters/effects	raw Array triples
+code/Game/Game/game_leaf_helpers.cpp	321	SIG:Game_TerrainResolveMaterial	refTriple void*
+code/Game/Game/game_leaf_helpers.cpp	326	CONST:FindOrLoad	
+code/Game/Game/game_main.cpp	205	FIELD:Audio::Device::<xaudio sub-interfaces>	XAudio2 interfaces are void*; vtable called by slot index
+code/Game/Game/game_main.cpp	206	FIELD:Audio::Device::<xaudio sub-interfaces>	XAudio2 interfaces are void*; vtable called by slot index
+code/Game/Game/game_main.cpp	210	FIELD:Audio::Device::<xaudio sub-interfaces>	XAudio2 interfaces are void*; vtable called by slot index
+code/Game/Game/game_main.cpp	211	FIELD:Audio::Device::<xaudio sub-interfaces>	XAudio2 interfaces are void*; vtable called by slot index
+code/Game/Game/game_main.cpp	280	FLOOR:win32	HMODULE stored as void*
+code/Game/Game/game_main.cpp	335	OTHER:raw stack Engine::Engine	H5: ctor is a door
+code/Game/Game/game_settings_persist.cpp	94	H8:GameSettings flags	uint8_t flag handed to Get(bool&)
+code/Game/Game/gamegrid_serialize.cpp	117	FIELD:MapCell::field_0x1C	2 casts; uint8_t[9] copied as qword + byte
+code/Game/Game/gamegrid_serialize.cpp	135	FIELD:MapCell::field_0x1C	uint8_t[9] copied as qword + byte
+code/Game/Game/gamegrid_serialize.cpp	168	H5:Map::cells	three raw fields, not a Collection::Array
+code/Game/Game/gamegrid_serialize.cpp	186	OTHER:IBP slot held as T*	cell blocker/occupant are raw ComponentEntity* slots serialized as InternalBasePtr
+code/Game/Game/gamegrid_serialize.cpp	192	OTHER:IBP slot held as T*	cell blocker/occupant are raw ComponentEntity* slots serialized as InternalBasePtr
+code/Game/Game/gamegrid_serialize.cpp	262	SIG:CreateNaturalResource_helper_e2c0	map passed as int*
+code/Game/Game/gamegrid_serialize.cpp	318	SIG:Pf_ZoneRefresh_9c480	map passed as int*
+code/Game/Game/gamegrid_serialize.cpp	327	SIG:Pf_RoadMeshRebuild_f370	geometry int64_t, map uint32_t*
+code/Game/Game/gamegrid_serialize.cpp	328	SIG:Pf_RoadMeshRebuild_f370	geometry int64_t, map uint32_t*
+code/Game/Game/gameupdateloop.cpp	537	OTHER:const_cast System::Time	callees take Time* / int64_t* (EntityList::Update, CitizenBehavior::Update)
+code/Game/Game/gameupdateloop.cpp	779	SIG:Pf_RegionPairCacheTick_5d10	root int64_t*
+code/Game/Game/gameupdateloop.cpp	1003	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/gameupdateloop.cpp	1101	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/gameupdateloop.cpp	1204	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/gameupdateloop.cpp	1430	FIELD:Video::Context::_pixelConstantStaging	+0x288 lies inside the undivided staging bytes
+code/Game/Game/gameupdateloop.cpp	1481	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/gameupdateloop.cpp	1513	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/gameupdateloop.cpp	1732	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop.cpp	1765	POD:RtObject::Internal	dialog/toolbar InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	1767	POD:RtObject::Internal	dialog/toolbar InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	1770	LOCAL:Toolbar offset debug print	4 casts; [HUD] fprintf reads Toolbar +0xC8/+0xD8/+0x100 by offset
+code/Game/Game/gameupdateloop.cpp	1771	LOCAL:Toolbar offset debug print	2 casts; [HUD] fprintf reads Toolbar +0xC8/+0xD8/+0x100 by offset
+code/Game/Game/gameupdateloop.cpp	1796	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop.cpp	1813	POD:RtObject::Internal	dialog InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	1820	POD:RtObject::Internal	dialog InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	1822	POD:RtObject::Internal	dialog InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	1851	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop.cpp	1870	POD:RtObject::Internal	dialog InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	1872	POD:RtObject::Internal	dialog InternalPtr via the RtObject::Internal POD
+code/Game/Game/gameupdateloop.cpp	2017	FIELD:GameUpdateLoop::m_scenarioInstance	held as a raw IBP slot
+code/Game/Game/gameupdateloop.cpp	2039	POD:RtGraphics::Renderer	dtor door takes the POD mirror
+code/Game/Game/gameupdateloop.cpp	2110	POD:RtGraphics::Scene	dtor door takes the POD mirror
+code/Game/Game/gameupdateloop.cpp	2146	POD:RtGraphics::AnimationManager	dtor door takes the POD mirror
+code/Game/Game/gameupdateloop.cpp	2210	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/gameupdateloop.cpp	2365	FIELD:GameUpdateLoop::m_scenarioInstance	scenario IBP stored as an AchievementInstance* from uint64_t
+code/Game/Game/gameupdateloop_load.cpp	156	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	200	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	228	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	281	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	402	SIG:Reimpl_FUN_1400191f0	hdr void*; callers hold raw {data,count,cap} triples
+code/Game/Game/gameupdateloop_load.cpp	409	SIG:Reimpl_FUN_14002e000	hdr void* (PlayerToolManager cameraViews raw header)
+code/Game/Game/gameupdateloop_load.cpp	537	SIG:Reimpl_FUN_140017640	hdr void*
+code/Game/Game/gameupdateloop_load.cpp	544	SIG:Reimpl_TradeComponent_sub_77c0	hdr void*
+code/Game/Game/gameupdateloop_load.cpp	551	SIG:Reimpl_FUN_14000f090	hdr void*
+code/Game/Game/gameupdateloop_load.cpp	591	POD:RtGraphics::Camera	Camera ctor door takes the POD mirror; +0x34 raw storage
+code/Game/Game/gameupdateloop_load.cpp	684	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	685	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	686	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	687	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	775	OTHER:raw stack Frustum buffer	0xC0-byte stack buffer wider than ::Frustum (0x64)
+code/Game/Game/gameupdateloop_load.cpp	778	H5:PlayerController::camera	raw Camera storage (default ctor protected)
+code/Game/Game/gameupdateloop_load.cpp	779	H5:PlayerController::camera	raw Camera storage (default ctor protected)
+code/Game/Game/gameupdateloop_load.cpp	872	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	1008	OTHER:raw stack Frustum buffer	0xC0-byte stack buffer wider than ::Frustum (0x64)
+code/Game/Game/gameupdateloop_load.cpp	1018	POD:RtGraphics::Renderer	ctor door takes the POD mirror
+code/Game/Game/gameupdateloop_load.cpp	1101	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	1133	POD:RtGraphics::Scene	ctor door takes the POD mirror
+code/Game/Game/gameupdateloop_load.cpp	1162	POD:RtGraphics::AnimationManager	ctor door takes the POD mirror
+code/Game/Game/gameupdateloop_load.cpp	1265	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	1364	H5:TerrainGenerator::_field80	2 casts; raw Array triple of 0x44-byte rows
+code/Game/Game/gameupdateloop_load.cpp	1365	H5:TerrainGenerator::_field80	2 casts; raw Array triple of 0x44-byte rows
+code/Game/Game/gameupdateloop_serialize.cpp	245	SIG:EventLog_Resize_199a0	hdrVoid void*; EventLog entries raw triple (H5)
+code/Game/Game/gameupdateloop_serialize.cpp	269	H8:EventLog::Entry::color	colour serialized through the uint overload
+code/Game/Game/gameupdateloop_serialize.cpp	303	FIELD:WeatherSimulation::field_0x1C	float[4] that is a Math::Vector4
+code/Game/Game/gameupdateloop_serialize.cpp	337	SIG:CamViewArray_Resize_e000	hdrVoid void*; PlayerToolManager cameraViews raw triple (H5)
+code/Game/Game/gameupdateloop_serialize.cpp	367	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Game/gameupdateloop_serialize.cpp	368	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Game/gameupdateloop_serialize.cpp	421	OTHER:IBP slot held as T*	key is an InternalPtr raw slot
+code/Game/Game/gameupdateloop_serialize.cpp	474	SIG:PlayerTrade_Retrace_25920	root and node slot int64_t*
+code/Game/Game/gameupdateloop_serialize.cpp	475	SIG:PlayerTrade_Retrace_25920	root and node slot int64_t*
+code/Game/Game/gameupdateloop_serialize.cpp	484	OTHER:IBP slot held as T*	key is an InternalPtr raw slot
+code/Game/Game/gameupdateloop_serialize.cpp	605	POD:RtObject::Internal	entity IBP via the RtObject::Internal POD (EntityList::_entityList is void*)
+code/Game/Game/gameupdateloop_serialize.cpp	612	POD:RtObject::Internal	entity IBP via the RtObject::Internal POD (EntityList::_entityList is void*)
+code/Game/Game/gameupdateloop_serialize.cpp	644	OTHER:IBP slot held as T*	slot is an InternalBasePtr raw pointer
+code/Game/Game/gameupdateloop_serialize.cpp	769	FIELD:GameUpdateLoop::m_scenarioInstance	raw IBP slot
+code/Game/Game/gameupdateloop_serialize.cpp	885	FLOOR:crt	malloc result
+code/Game/Game/gameupdateloop_serialize.cpp	913	OTHER:destructor-less stack SavedState twin	
+code/Game/Game/gameupdateloop_serialize.cpp	918	OTHER:destructor-less stack SavedState twin	
+code/Game/Game/gameupdateloop_teardown.cpp	67	OTHER:teardown accessor helpers B/P/I32/Arr	local void*-base offset accessors; vanish when the raw headers they serve are typed
+code/Game/Game/gameupdateloop_teardown.cpp	68	OTHER:teardown accessor helpers B/P/I32/Arr	local void*-base offset accessors; vanish when the raw headers they serve are typed
+code/Game/Game/gameupdateloop_teardown.cpp	69	OTHER:teardown accessor helpers B/P/I32/Arr	local void*-base offset accessors; vanish when the raw headers they serve are typed
+code/Game/Game/gameupdateloop_teardown.cpp	74	OTHER:teardown accessor helpers B/P/I32/Arr	local void*-base offset accessors; vanish when the raw headers they serve are typed
+code/Game/Game/gameupdateloop_teardown.cpp	75	OTHER:teardown accessor helpers B/P/I32/Arr	local void*-base offset accessors; vanish when the raw headers they serve are typed
+code/Game/Game/gameupdateloop_teardown.cpp	92	H5:EntityList::UpdateBucket	Array8_Clear_1740(void* hdrV): three raw fields
+code/Game/Game/gameupdateloop_teardown.cpp	106	H5:CitizenBehavior::bucket entity Array	TreeNodeFree_174e0 / Tree_Clear_173d0: three raw fields
+code/Game/Game/gameupdateloop_teardown.cpp	119	H5:CitizenBehavior::bucket entity Array	TreeNodeFree_174e0 / Tree_Clear_173d0: three raw fields
+code/Game/Game/gameupdateloop_teardown.cpp	133	H5:CitizenBehavior::field_0x140/field_0x150	ArrayOfArrays_Clear_175d0(void* hdrV); also WorldGeometry::_arrays[4]
+code/Game/Game/gameupdateloop_teardown.cpp	149	H5:PathGraph::m_pairs	three raw fields
+code/Game/Game/gameupdateloop_teardown.cpp	201	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	TreeNodeFree_2df90(void* hdrV, void* nodeV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	202	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	TreeNodeFree_2df90(void* hdrV, void* nodeV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	203	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	TreeNodeFree_2df90(void* hdrV, void* nodeV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	204	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	TreeNodeFree_2df90(void* hdrV, void* nodeV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	212	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	214	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	215	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	216	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	217	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	220	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	221	FIELD:ToolRegistryNode (file-local to Dialog/toolbardialog.cpp)	IbpTree_Clear_2de90(void* hdrV): node read by offset
+code/Game/Game/gameupdateloop_teardown.cpp	281	H5:EntityList::removalList/IBPArray members	IBPArray is not a Collection::Array
+code/Game/Game/gameupdateloop_teardown.cpp	299	H5:EntityList::removalList/IBPArray members	IBPArray is not a Collection::Array
+code/Game/Game/gameupdateloop_teardown.cpp	300	H5:EntityList::removalList/IBPArray members	IBPArray is not a Collection::Array
+code/Game/Game/gameupdateloop_teardown.cpp	301	H5:EntityList::removalList/IBPArray members	IBPArray is not a Collection::Array
+code/Game/Game/gameupdateloop_teardown.cpp	328	H5:EntityList::removalList/IBPArray members	IBPArray is not a Collection::Array
+code/Game/Game/gameupdateloop_teardown.cpp	372	OTHER:IBP slot held as T*	PlayerToolManager::currentTool is a Tool*; DeletePtr is called on its InternalBasePtr view
+code/Game/Game/gameupdateloop_teardown.cpp	376	H5:PlayerToolManager::cameraViews	three raw fields
+code/Game/Game/gameupdateloop_teardown.cpp	384	SIG:TradeWork_helper_14b00	receiver int64_t
+code/Game/Game/gameupdateloop_teardown.cpp	385	SIG:TradeWork_helper_14b00	receiver int64_t
+code/Game/Game/gameupdateloop_teardown.cpp	445	LOCAL:WorkScheduler::field_0x20 node read by offset	redundant cast: the member is already typed (stale LEFT: WorkScheduler.h:81 declares WorkSchedulerNode20*)
+code/Game/Game/gameupdateloop_teardown.cpp	446	LOCAL:WorkScheduler::field_0x20 node read by offset	redundant cast: the member is already typed (stale LEFT: WorkScheduler.h:81)
+code/Game/Game/geometry_draw.cpp	79	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	82	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	85	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	88	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	91	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	94	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	97	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	100	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	103	H5:WorldGeometry::_arrays	nine untyped {data,size|cap} headers
+code/Game/Game/geometry_draw.cpp	195	LOCAL:const_cast WorldGeometry	_arrays accessors are non-const; the method is const
+code/Game/Game/geometry_draw.cpp	336	LOCAL:const_cast WorldGeometry	_arrays accessors are non-const; the method is const
+code/Game/Game/geometry_draw.cpp	349	FIELD:WorldGeometry::_transform	Transform viewed as InterpolatedState<Transform> for Lerp
+code/Game/Game/geometry_draw.cpp	382	FIELD:Video::Context::_unknown20f0	dynamic index cursor is an integer
+code/Game/Game/geometry_serialize.cpp	176	FIELD:WorldGeometry::_arrayD8	untyped array pointer serialized as uint16_t*
+code/Game/Game/goals_serialize.cpp	76	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Game/goals_serialize.cpp	79	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Game/goals_serialize.cpp	82	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Game/goals_serialize.cpp	85	SIG:WorkCellBST_Remove_ca60	uintptr_t* tree
+code/Game/Game/goals_serialize.cpp	88	SIG:WorkBST_BSTRemove_a6e0	uintptr_t* root
+code/Game/Game/inputbindings.cpp	196	CONST:FindOrLoad	
+code/Game/Game/keystone_a_gamedtor.cpp	218	POD:RtSystem::CriticalSection	dtor door on the POD mirror
+code/Game/Game/keystone_a_gamedtor.cpp	282	LOCAL:redundant cast Map::regionPairCache	redundant cast: the member is already typed (stale LEFT: Map.h:115 declares RegionPairCache*)
+code/Game/Game/keystone_a_gamedtor.cpp	316	H5:Map::pickingScene	raw storage: Picking::Scene dtor would run
+code/Game/Game/mapgenerator.cpp	344	SIG:MG_Resize	DynArrayHeader is not a Collection::Array
+code/Game/Game/mapgenerator.cpp	345	SIG:MG_Resize	DynArrayHeader is not a Collection::Array
+code/Game/Game/mapgenerator.cpp	346	SIG:MG_Resize	DynArrayHeader is not a Collection::Array
+code/Game/Game/mapquery.cpp	181	SIG:Reimpl_MapGetTerrainPos	outTri void* (~150 callers)
+code/Game/Game/mapquery.cpp	208	H5:Map::pickingScene	raw storage
+code/Game/Game/maptilegrid.cpp	63	SIG:MapTileGrid_Build	gameVoid void*
+code/Game/Game/menudialogloopt.cpp	73	SIG:MenuDialogLoopT C entries (Loop(void*) helper)	chunked_scene_loader.cpp holds the loop as void*
+code/Game/Game/menudialogloopt.cpp	136	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/menudialogloopt.cpp	153	H5:MenuDialogLoopT::<array storage>	AppendToDynArray / LoopArray view raw uint8_t* array storage
+code/Game/Game/menudialogloopt.cpp	160	H5:MenuDialogLoopT::<array storage>	AppendToDynArray / LoopArray view raw uint8_t* array storage
+code/Game/Game/menudialogloopt.cpp	264	SIG:MenuDialogLoopT_PhaseB_InitState	menuScene / scene as void*
+code/Game/Game/menudialogloopt.cpp	265	SIG:MenuDialogLoopT_PhaseB_InitState	menuScene / scene as void*
+code/Game/Game/menudialogloopt.cpp	556	CONST:FindOrLoad	
+code/Game/Game/menudialogloopt.cpp	569	POD:RtGraphics::Renderer	ctor door takes the POD mirror (Scene on 574)
+code/Game/Game/menudialogloopt.cpp	574	POD:RtGraphics::Renderer	ctor door takes the POD mirror (Scene on 574)
+code/Game/Game/menudialogloopt.cpp	743	FIELD:Video::Context::_pixelConstantStaging	2 casts; +0x288 lies inside the staging bytes
+code/Game/Game/menudialogloopt.cpp	761	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/menudialogloopt.cpp	814	H5:PlayerController::camera	raw Camera storage
+code/Game/Game/menudialogloopt.cpp	901	CONST:FindOrLoad	
+code/Game/Game/menudialogloopt_stubs.cpp	107	CONST:FindOrLoad	
+code/Game/Game/menudialogloopt_stubs.cpp	161	CONST:FindOrLoad	
+code/Game/Game/menudialogloopt_stubs.cpp	208	CONST:FindOrLoad	
+code/Game/Game/menudialogloopt_stubs.cpp	269	H5:MenuDialogLoopT::<three arrays>	raw storage
+code/Game/Game/menudialogloopt_stubs.cpp	270	H5:MenuDialogLoopT::<three arrays>	raw storage
+code/Game/Game/menudialogloopt_stubs.cpp	271	H5:MenuDialogLoopT::<three arrays>	raw storage
+code/Game/Game/menudialogloopt_stubs.cpp	459	FIELD:MenuDialogLoopT::_dlcShip	void* built by MemAlloc(0xf0)
+code/Game/Game/menudialogloopt_stubs.cpp	467	H5:MenuDialogLoopT::_instanceArray/_sceneIdArray	raw storage
+code/Game/Game/menudialogloopt_stubs.cpp	468	H5:MenuDialogLoopT::_instanceArray/_sceneIdArray	raw storage
+code/Game/Game/menudialogloopt_stubs.cpp	470	H5:MenuDialogLoopT::_instanceArray/_sceneIdArray	raw storage
+code/Game/Game/menudialogloopt_stubs.cpp	477	POD:RtGraphics::Scene	dtor doors take the POD mirrors (Renderer on 482)
+code/Game/Game/menudialogloopt_stubs.cpp	482	POD:RtGraphics::Scene	dtor doors take the POD mirrors (Renderer on 482)
+code/Game/Game/menudialogloopt_stubs.cpp	506	OTHER:const_cast System::Time	standalone first-tick clamp writes MainLoop Time
+code/Game/Game/menuscene.cpp	94	POD:RtGraphics::Camera	Camera ctor door takes the POD mirror; +0x34 raw storage
+code/Game/Game/minimap_paint.cpp	137	POD:RtGraphics::Camera	Camera ctor door takes the POD mirror
+code/Game/Game/minimap_paint.cpp	139	OTHER:raw stack Camera/Renderer/Scene storage	typed view of raw stack storage (default ctor protected)
+code/Game/Game/minimap_paint.cpp	175	POD:RtGraphics::Renderer	ctor door takes the POD mirror (Scene on 176)
+code/Game/Game/minimap_paint.cpp	176	POD:RtGraphics::Renderer	ctor door takes the POD mirror (Scene on 176)
+code/Game/Game/minimap_paint.cpp	177	POD:RtGraphics::Renderer	ctor door takes the POD mirror (Scene on 176)
+code/Game/Game/minimap_paint.cpp	178	OTHER:raw stack Camera/Renderer/Scene storage	typed view of raw stack storage
+code/Game/Game/minimap_paint.cpp	193	FIELD:Video::Context::_pixelConstantStaging	+0x288 lies inside the staging bytes
+code/Game/Game/minimap_paint.cpp	194	FIELD:Video::Context::_pixelConstantStaging	+0x288 lies inside the staging bytes
+code/Game/Game/minimap_paint.cpp	195	FIELD:Video::Context::_pixelConstantStaging	+0x288 lies inside the staging bytes
+code/Game/Game/minimap_paint.cpp	196	FIELD:Video::Context::_pixelConstantStaging	+0x288 lies inside the staging bytes
+code/Game/Game/minimap_paint.cpp	197	FIELD:Video::Context::_pixelConstantStaging	+0x288 lies inside the staging bytes
+code/Game/Game/minimap_paint.cpp	244	POD:RtGraphics::Scene	dtor doors take the POD mirrors (Renderer on 245)
+code/Game/Game/minimap_paint.cpp	245	POD:RtGraphics::Scene	dtor doors take the POD mirrors (Renderer on 245)
+code/Game/Game/minimap_upload.cpp	123	SIG:Minimap_CreateAndUpload	mapObj void*
+code/Game/Game/pathfinder_seed.cpp	125	SIG:Pathfinder_Seed	gameObjV void*
+code/Game/Game/pathfinder_seed.cpp	137	POD:RtSystem::CriticalSection	ctor door on the POD mirror
+code/Game/Game/professionlist.cpp	152	CONST:FindOrLoad	FindNext result
+code/Game/Game/region_seed.cpp	48	SIG:Region_Seed	gameObjV void*
+code/Game/Game/region_seed.cpp	61	SIG:Pf_RegionGraphCtor_8670	2 casts; graph int*, map int64_t
+code/Game/Game/region_seed.cpp	73	SIG:Pf_RegionPairCache_Build	returns void*
+code/Game/Game/serialize_arrays.cpp	129	FIELD:PlayerController::targetX	three named floats serialized as one Math::Vector3
+code/Game/Game/serialize_arrays.cpp	263	SIG:Reimpl_Array_Resize_Stride20	arrayHeader void*
+code/Game/Game/serialize_arrays.cpp	287	SIG:Reimpl_Array_Resize_Stride08	arrayHeader void*
+code/Game/Game/serialize_arrays.cpp	293	SIG:Reimpl_Array_Resize_Stride14	arrayHeader void*
+code/Game/Game/serialize_arrays.cpp	318	SIG:Reimpl_Array_Resize_Stride10_Spawn	arrayHeader void*
+code/Game/Game/serialize_arrays.cpp	340	OTHER:word view of a mesh record	7 dwords of a record read as words (known_port_issues 14 row 63)
+code/Game/Game/serialize_arrays.cpp	399	SIG:ArraySerializeExternalGeneric	arrayBase void*; callers hold typed reference arrays
+code/Game/Game/serialize_externals.cpp	98	CONST:FindOrLoad	IsDerivedFromOrTrust takes non-const void*
+code/Game/Game/serialize_externals.cpp	113	CONST:FindOrLoad	IsDerivedFromOrTrust takes non-const void*
+code/Game/Game/serialize_externals.cpp	157	POD:ExternalPtr-thunk	ForwardRef(void* refField, void* serializer)
+code/Game/Game/serialize_externals.cpp	158	POD:ExternalPtr-thunk	ForwardRef(void* refField, void* serializer)
+code/Game/Game/serialize_externals_array.cpp	56	SIG:Reimpl_ExternalPtrArray_Serialize	arrayBase as long long (callers hold void** arrays)
+code/Game/Game/serialize_externals_typed.cpp	37	POD:ExternalPtr-thunk	ForwardRef7140(void* refField, void* serializer)
+code/Game/Game/serialize_externals_typed.cpp	38	POD:ExternalPtr-thunk	ForwardRef7140(void* refField, void* serializer)
+code/Game/Game/serialize_heightmap_mesh.cpp	521	SIG:Reimpl_TradeWork_sub_c1e0	self void* (WorldGeometry)
+code/Game/Game/serialize_image_upload.cpp	220	SIG:Reimpl_TradeWork_sub_c780	self void* (WorldGeometry)
+code/Game/Game/serialize_resize_helpers.cpp	58	SIG:ByteHeader	arrayHeader void* (resize helper view)
+code/Game/Game/serialize_resize_helpers.cpp	310	SIG:Reimpl_Array_Resize_ArrayOfArrays	arrayHeader void*
+code/Game/Game/serialize_struct60b.cpp	229	SIG:Reimpl_Struct60B_Resize	arrayHeader void*
+code/Game/Game/serialize_struct60b.cpp	234	SIG:Reimpl_Struct60B_CopyCtor	dst / src void*
+code/Game/Game/serialize_struct60b.cpp	235	SIG:Reimpl_Struct60B_CopyCtor	dst / src void*
+code/Game/Game/serialize_struct60b.cpp	240	SIG:Reimpl_Struct60B_DtorRange	first void*
+code/Game/Game/splash_loop_stubs.cpp	265	OTHER:const_cast System::Time	standalone first-tick clamp
+code/Game/Game/splash_loop_stubs.cpp	428	FLOOR:vslot	vptr identity compare
+code/Game/Game/starttown.cpp	445	SIG:TownRegistry_RegisterWorkplace	town manager int64_t
+code/Game/Game/starttown.cpp	582	FIELD:MapGenerator::ExternalRef::resolved	one ref type for every pool; resolved is void*; name String raw
+code/Game/Game/starttown.cpp	588	FIELD:MapGenerator::ExternalRef::resolved	one ref type for every pool; resolved is void*; name String raw
+code/Game/Game/starttown.cpp	591	CONST:FindOrLoad	
+code/Game/Game/starttown.cpp	671	H5:CitizenBehavior::field_0x120	raw {data,count,cap}
+code/Game/Game/starttown.cpp	1104	SIG:WorkBase_ValidateCell_a00f0	map int*
+code/Game/Game/starttown.cpp	1110	SIG:WorkGrid_FindCell_9ccf0	map int*
+code/Game/Game/starttown.cpp	1219	SIG:WorkGrid_FindCell_9ccf0	map int*
+code/Game/Game/starttown.cpp	1823	OTHER:WorkPlaceComponent::workers read as a count	2 casts; tree defect (known_port_issues 14); dead while StartTown_I...
+code/Game/Game/starttown.cpp	2453	LOCAL:redundant String cast PointList::Point::name	redundant cast: the member is already typed (stale LEFT: PointList.h:97 declares System::String name since b4p2-R-SYS)
+code/Game/Game/starttown.cpp	3597	CONST:FindOrLoad	
+code/Game/Game/starttown.cpp	3799	SIG:WorkBase_FindComponent_6270	entity uintptr_t
+code/Game/Game/starttown.cpp	4217	SIG:CitizenComp_Storage_GetResourceCount	receiver int64_t
+code/Game/Game/starttown.cpp	4605	SIG:PerfX::TerrainNoteWrite	standalone perf_terrain.h takes the cell as bytes
+code/Game/Game/terraingenerator.cpp	108	H5:TerrainGenerator::_field80	raw Array triple
+code/Game/Game/terraingenerator.cpp	198	H5:TerrainGenerator::_field80	raw Array triple
+code/Game/Game/terraingenerator.cpp	234	H8:TerrainGenerator::_field30	raw byte serialized as bool
+code/Game/Game/toolbar.cpp	67	H5:Toolbar::_field30/_field38	raw String storage
+code/Game/Game/toolbar.cpp	68	H5:Toolbar::_field30/_field38	raw String storage
+code/Game/Game/toolbar.cpp	85	H5:Toolbar::_field30/_field38	raw String storage
+code/Game/Game/toolbar.cpp	86	H5:Toolbar::_field30/_field38	raw String storage
+code/Game/Game/town_storage_seed.cpp	212	SIG:TownRegistry_RegisterStorageLocation	storageLocationComp void*
+code/Game/Game/town_workplace_registry.cpp	101	SIG:TownRegistry_RegisterWorkplace	TownOf(int64_t) helper shared with FindAvailableBuilding / ResidenceComponent_impl_95a0
+code/Game/Game/town_workplace_registry.cpp	104	LOCAL:ProfessionTreeNode vs ProfessionBucket	redundant cast: the member is already typed (stale LEFT: CitizenBehavior.h:287 declares ProfessionBucket* field_0x100; the local ProfessionTreeNode type should be unified with it)
+code/Game/Game/town_workplace_registry.cpp	139	SIG:ResidenceComponent_impl_7230	root int64_t*, returns node as void*
+code/Game/Game/town_workplace_registry.cpp	141	SIG:ResidenceComponent_impl_7230	root int64_t*, returns node as void*
+code/Game/Game/town_workplace_registry.cpp	149	SIG:ResidenceComponent_impl_95a0	param_2 void*
+code/Game/Game/town_workplace_registry.cpp	168	SIG:TownRegistry_RegisterWorkplace	workplaceComp void*
+code/Game/Game/town_workplace_registry.cpp	301	SIG:FindAvailableBuilding	wcPtr uintptr_t receiver (TUT block forwarder)
+code/Game/Game/uifade.cpp	33	SIG:UiOf (uifade.cpp C entries)	userInterface void* of the STANDALONE loop stubs
+code/Game/Game/uifade.cpp	36	SIG:UiOf (uifade.cpp C entries)	userInterface void* of the STANDALONE loop stubs
+code/Game/Game/unreg_lane5_musicplayer.cpp	148	CONST:FindOrLoad	
+code/Game/Game/w2_takescreenshot.cpp	110	SIG:GameUpdateLoop_TakeScreenshot	self void*
+code/Game/Game/w2_takescreenshot.cpp	162	POD:RtSystem::Filename	Exists takes the RtSystem::Filename mirror
+code/Game/Game/water_contour_mesh.cpp	204	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	207	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	231	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	272	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	273	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	274	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	365	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	426	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	486	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	487	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	535	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	536	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/water_contour_mesh.cpp	546	FLOOR:crt	malloc/realloc scratch buffers
+code/Game/Game/weather_particle_draw.cpp	336	FIELD:Video::Context::_unknown20f0	dynamic index cursor is an integer
+code/Game/Game/weather_particle_draw.cpp	339	FIELD:Video::Context::_unknown20f0	dynamic index cursor is an integer
+code/Game/Game/weather_particles.cpp	268	SIG:WeatherParticle_Config	2 casts; geo / descriptor void*
+code/Game/Game/weather_particles.cpp	396	SIG:WeatherEffect_SetEnabled	sim void*
+code/Game/Game/weather_particles.cpp	425	SIG:Reimpl_WeatherArray_Resize	hdr void* raw triple
+code/Game/Game/weather_sim.cpp	173	H5:ClimateGenerator::_climateData	uint8_t[0xC0] indexed as floats
+code/Game/Game/weather_sun.cpp	117	SIG:Weather_SunUpdate	self / ctx void*
+code/Game/Game/weather_sun.cpp	229	SIG:Weather_SunUpdate	self / ctx void*
+code/Game/Game/worldgen.cpp	473	CONST:FindOrLoad	Find result
+code/Game/Game/worldgen.cpp	772	SIG:WorldGen_BuildTerrain	2 casts; wg / gen void*
+code/Game/Game/worldgen_f390_ranges.cpp	231	LOCAL:DeepAppendAoA twin spec row	TerrainPathList kSpec_RgPathVec vs kSpec_WgPathVec
+code/Game/Game/worldgen_f390_shims.cpp	24	SIG:fn_Random_RandFloatTol	self void*
+code/Game/Game/worldsetup_reload.cpp	58	SIG:WorldSetup_LoadFromSave	worldSetup / savedState / ibp as void*; receiver class unsettled
+code/Game/Game/worldsetup_reload.cpp	73	SIG:WorldSetup_LoadFromSave	worldSetup / savedState / ibp as void*; receiver class unsettled
+code/Game/Game/worldsetup_reload.cpp	88	SIG:WorldSetup_LoadFromSave	worldSetup / savedState / ibp as void*; receiver class unsettled
+code/Game/Game/worldsetup_reload.cpp	125	SIG:WorldSetup_LoadFromSave	worldSetup / savedState / ibp as void*; receiver class unsettled
+code/Game/Game/worldsetup_reload.cpp	127	SIG:WorldSetup_LoadFromSave	worldSetup / savedState / ibp as void*; receiver class unsettled
+code/Game/Goal/buildinggoal.cpp	263	OTHER:vptr-less stack image of BuildingGoal	diagnostic probe, not retail
+code/Game/Goal/goal_exe_helpers.cpp	40	H5:NamedExternalRef::name	raw String
+code/Game/Goal/goal_exe_helpers.cpp	43	H5:NamedExternalRef::name	raw String
+code/Game/Goal/goal_exe_helpers.cpp	87	CONST:FindOrLoad	
+code/Game/Goal/goal_exe_helpers.cpp	135	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	136	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	148	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	155	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	179	ERASED:Goal_RefArray_Resize	typed SetSize reached through the uint8_t ArraySpec row
+code/Game/Goal/statvaluedispatch.cpp	699	FIELD:WorldGeometry::_arrays	+0x220 untyped {data,count|cap} header read as uint32_t[]
+code/Game/Object/exe_type.h	101	OTHER:member-function pointer to FactoryFn/InPlaceFn	CreateNewObject / CreateInPlaceObject registration macro
+code/Game/Object/exe_type.h	102	OTHER:member-function pointer to FactoryFn/InPlaceFn	CreateNewObject / CreateInPlaceObject registration macro
+code/Game/Player/bridgetool_calcpath.cpp	87	FLOOR:alloc_header	MemAlloc result
+code/Game/Player/bridgetool_calcpath.cpp	376	H5:BridgeTool::multi (+0x48 array)	ArrayAt view of a raw array
+code/Game/Player/edittool.cpp	79	SLOT:Tool::IsSelected	slot 10 takes the handle as uint64_t*
+code/Game/Player/edittool.cpp	203	FIELD:EditTool::entityRef	holds the dialog InternalPtr as an integer
+code/Game/Player/edittool.cpp	224	FIELD:DialogInstance::_ui	void* (runtime/types/ui/DialogInstance.h)
+code/Game/Player/edittool.cpp	334	SIG:EditTool_CloseInfoDialog	uintptr_t; standalone callers
+code/Game/Player/edittool.cpp	416	FIELD:DialogInstance::_ui	void*
+code/Game/Player/edittool.cpp	592	FIELD:Picking::Scene::userData	void* user data
+code/Game/Player/edittool.cpp	668	SIG:EditTool_CloseInfoDialog	uintptr_t; standalone callers
+code/Game/Player/edittool.cpp	766	FIELD:Picking::Scene::userData	void* user data
+code/Game/Player/keystone_a_removalcalcpath.cpp	187	SIG:RemovalCalc_helper_8d50	param_1 int64_t receiver (WorkScheduler)
+code/Game/Player/keystone_a_removalcalcpath.cpp	303	OTHER:Time/int out slot union	retail one slot is both the Time and the int out
+code/Game/Player/keystone_a_removalcalcpath.cpp	335	OTHER:Time/int out slot union	as above
+code/Game/Player/keystone_a_removalcalcpath.cpp	345	OTHER:Time/int out slot union	as above
+code/Game/Player/keystone_a_removalcalcpath.cpp	348	SIG:StateMachine_TickReimpl	time as int64_t
+code/Game/Player/keystone_a_removalcalcpath.cpp	358	OTHER:Time/int out slot union	as above
+code/Game/Player/keystone_a_removalcalcpath.cpp	366	SIG:RemovalCalc_StateMachine_dfa0	param_1 int64_t receiver (DestroyComponent)
+code/Game/Player/keystone_a_removalcalcpath.cpp	435	SIG:WorkBST_BSTRemove_a6e0	uintptr_t* root
+code/Game/Player/keystone_a_removalcalcpath.cpp	453	SIG:PerfX::TerrainNoteWrite	standalone perf_terrain.h takes the cell as bytes
+code/Game/Player/keystone_a_removalcalcpath.cpp	458	SIG:Pf_FineCellDirty_a8c90	region graph int64_t
+code/Game/Player/keystone_a_removalcalcpath.cpp	462	SIG:Pf_EnqueueCmd2_a6fe0	pathfinder int64_t
+code/Game/Player/keystone_a_removalcalcpath.cpp	474	SIG:Pf_RoadMeshRebuild_f370	geometry int64_t, map uint32_t*
+code/Game/Player/keystone_a_removalcalcpath.cpp	475	SIG:Pf_RoadMeshRebuild_f370	geometry int64_t, map uint32_t*
+code/Game/Player/keystone_a_removalcalcpath.cpp	530	SIG:WorkBST_BSTRemove_a6e0	uintptr_t* root
+code/Game/Player/keystone_a_removalcalcpath.cpp	599	SIG:Pf_AvlRebalanceA_a8c0	root int64_t*, cursor int64_t
+code/Game/Player/keystone_a_removalcalcpath.cpp	600	SIG:Pf_AvlRebalanceA_a8c0	root int64_t*, cursor int64_t
+code/Game/Player/keystone_a_removalcalcpath.cpp	613	SIG:RemovalCalc_CitizenAI_9ad0	param_1 int64_t receiver (WorkScheduler)
+code/Game/Player/keystone_a_removalcalcpath.cpp	839	SIG:Pf_RoadMeshRebuild_f370	decal system int64_t, map uint32_t*
+code/Game/Player/keystone_a_removalcalcpath.cpp	840	SIG:Pf_RoadMeshRebuild_f370	decal system int64_t, map uint32_t*
+code/Game/Player/pathtool.cpp	143	FIELD:Picking::Scene::userData	void* user data
+code/Game/Player/pathtool.cpp	243	SLOT:Tool::IsSelected	slot 10 takes the handle as uint64_t (GetSelected on 248)
+code/Game/Player/pathtool.cpp	248	SLOT:Tool::IsSelected	slot 10 takes the handle as uint64_t (GetSelected on 248)
+code/Game/Player/pathtool_setselected.cpp	70	FIELD:AvlNode28::key	8-byte PathSegment element declared as an integer
+code/Game/Player/pathtool_setselected.cpp	160	FIELD:AvlNode28::key	8-byte PathSegment element declared as an integer
+code/Game/Player/pathtool_setselected.cpp	453	FIELD:AvlNode28::key	8-byte PathSegment element declared as an integer
+code/Game/Player/placementtool.cpp	774	SIG:PlacementTool_HarnessStartupProbe	toolSelf void*
+code/Game/Player/placementtool.cpp	930	SIG:PlacementTool_HarnessPlaceAtCell	toolSelf void*
+code/Game/Player/placementtool.cpp	989	SIG:PlacementTool_HarnessPreviewAtCell	toolSelf void*
+code/Game/Player/roadtool.cpp	51	SIG:RoadTool_sub_ce00	map int64_t, pathBuf int64_t
+code/Game/Player/roadtool.cpp	52	SIG:RoadTool_sub_ce00	map int64_t, pathBuf int64_t
+code/Game/Player/roadtool_calcpath.cpp	134	FIELD:WorldGeometry::_arrays	+0x220/+0x230 untyped headers read as uint32_t* / void**
+code/Game/Player/roadtool_calcpath.cpp	140	FIELD:WorldGeometry::_arrays	+0x220/+0x230 untyped headers read as uint32_t* / void**
+code/Game/Player/roadtool_calcpath.cpp	206	SIG:CitizenAI_WorkScheduler_Insert	scheduler int*
+code/Game/Player/roadtool_calcpath.cpp	216	FIELD:Map::field_0xE8	Set header typed as AvlTreeHead<AvlNode28>
+code/Game/Player/roadtool_calcpath.cpp	290	SIG:RoadTool_PlaceRoadSegment_9c960	roadDescExtra as uint64_t
+code/Game/Player/tool_activation_standalone.cpp	121	SIG:TradeWork_impl_4b40	shared AVL retrace takes int64_t / int64_t*
+code/Game/Player/tool_activation_standalone.cpp	122	SIG:TradeWork_impl_4b40	shared AVL retrace takes int64_t / int64_t*
+code/Game/Player/tool_activation_standalone.cpp	169	SIG:EntityUI_OpenRegisteredDialogs_SA	entityUI void* (shared Manager(void*) helper with EntityUI_BuildToolModeTree_SA)
+code/Game/Player/tool_activation_standalone.cpp	205	FIELD:ToolRegistryNode::key	declared ComponentEntity*, read as uint64_t
+code/Game/Player/tool_activation_standalone.cpp	239	FIELD:PlayerToolManager::field_0x10	+0x10/+0x18 root + count viewed as ToolModeTree
+code/Game/Player/tool_base_createbar.cpp	407	SIG:UpdateToolUI_fc60	param_1 / param_4 / param_11 / param_12 as void*
+code/Game/Player/tool_base_createbar.cpp	408	SIG:UpdateToolUI_fc60	param_1 / param_4 / param_11 / param_12 as void*
+code/Game/Player/tool_base_createbar.cpp	410	SIG:UpdateToolUI_fc60	param_1 / param_4 / param_11 / param_12 as void*
+code/Game/Player/tool_base_createbar.cpp	411	SIG:UpdateToolUI_fc60	param_1 / param_4 / param_11 / param_12 as void*
+code/Game/Player/tool_base_drag.cpp	63	SIG:DragTool_FindDescription_5160	descList uintptr_t, retval void*
+code/Game/Player/tool_base_drag.cpp	64	SIG:DragTool_FindDescription_5160	descList uintptr_t, retval void*
+code/Game/Player/tool_base_highlight.cpp	62	SIG:TradeWork_helper_14b00	2 casts; param_1 int64_t, node void*
+code/Game/Player/tool_base_highlight.cpp	91	SIG:TradeWork_impl_4b40	2 casts; param_1/param_2 int64_t*
+code/Game/Player/tool_base_highlight.cpp	273	SIG:Pf_VectorResize60_fa80	array header int64_t*, element uint64_t*
+code/Game/Player/tool_base_highlight.cpp	275	SIG:Pf_VectorResize60_fa80	array header int64_t*, element uint64_t*
+code/Game/Player/tool_base_highlight.cpp	295	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	298	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	299	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	300	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	301	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	302	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	304	FIELD:GeometryDecal::field_0x44/field_0x48..	bool / float fields stored as raw bytes / dwords (WorldGeometryElements.h)
+code/Game/Player/tool_base_highlight.cpp	306	SIG:TradeWork_impl_ace40	geometry int64_t
+code/Game/Player/tool_base_highlight.cpp	319	SIG:TradeWork_impl_0d80	param_1 / param_8 as int64_t / void* (B4 FORWARD)
+code/Game/Player/tool_base_highlight.cpp	321	SIG:TradeWork_impl_0d80	param_1 / param_8 as int64_t / void* (B4 FORWARD)
+code/Game/Player/tool_base_highlight.cpp	359	SIG:Player_HighlightAdd_55430	receiver int64_t
+code/Game/Player/tool_base_highlight_tess.cpp	67	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	68	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	72	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	73	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	77	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	78	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	82	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	83	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	108	H5:GeometryBatch::indices	RawArray, not a Collection::Array
+code/Game/Player/tool_base_highlight_tess.cpp	120	OTHER:raw stack decal corner block	corner records are raw dwords of a 0x60-byte stack block
+code/Game/Player/tool_base_highlight_tess.cpp	135	SIG:Pf_VectorResize14Fill_f8d0	pool int64_t*, vertex uint64_t* (desc)
+code/Game/Player/tool_base_highlight_tess.cpp	136	SIG:Pf_VectorResize14Fill_f8d0	2 casts; pool int64_t*, vertex uint64_t* (desc)
+code/Game/Player/tool_base_highlight_tess.cpp	152	H5:WorldGeometry::_arrays	decals data pointer read at +0x1f0
+code/Game/Player/tool_base_highlight_tess.cpp	160	H5:WorldGeometry::_arrays	decals data pointer read at +0x1f0
+code/Game/Player/tool_base_highlight_tess.cpp	199	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	200	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	203	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	205	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	206	FLOOR:float_bits	2 casts; float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	215	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	217	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	218	FLOOR:float_bits	2 casts; float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	267	OTHER:raw stack decal corner block	qword views of corner buffers
+code/Game/Player/tool_base_highlight_tess.cpp	270	OTHER:raw stack decal corner block	qword views of corner buffers
+code/Game/Player/tool_base_highlight_tess.cpp	285	SIG:Pf_VectorResize14_ee40	vertices header int64_t*
+code/Game/Player/tool_base_highlight_tess.cpp	299	H5:GeometryBatch::vertices/indices	RawArray, not a Collection::Array
+code/Game/Player/tool_base_highlight_tess.cpp	300	H5:GeometryBatch::vertices/indices	RawArray, not a Collection::Array
+code/Game/Player/tool_base_highlight_tess.cpp	333	FLOOR:ptr_int	2 casts; tagged pointer (low byte flag)
+code/Game/Player/tool_base_highlight_tess.cpp	342	SIG:Pf_RoadQuad_cc10	descBlock as int64_t
+code/Game/Player/tool_base_highlight_tess.cpp	348	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	349	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	350	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	351	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	352	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	358	OTHER:raw stack decal corner block	2 casts; 0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	366	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	367	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	368	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	369	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	399	OTHER:retail 8+8+4 vertex record copy	kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_highlight_tess.cpp	401	OTHER:retail 8+8+4 vertex record copy	2 casts; kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_highlight_tess.cpp	402	OTHER:retail 8+8+4 vertex record copy	2 casts; kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_highlight_tess.cpp	403	OTHER:retail 8+8+4 vertex record copy	2 casts; kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_path.cpp	58	SIG:PlayerPath_FindComponent_5780	entity uintptr_t, retIBP void*
+code/Game/Player/tool_base_path.cpp	64	SIG:PlayerPath_FindComponent_3ea0	entity uintptr_t, retIBP void*
+code/Game/Player/tool_base_path.cpp	97	SIG:PlayerPath_Sub_11e710	param_1 uintptr_t
+code/Game/Player/tool_base_path.cpp	175	SIG:PlayerPath_CharComp_f5d0	param_1 int*, param_10 void*
+code/Game/Player/tool_base_path.cpp	178	SIG:PlayerPath_CharComp_f5d0	param_1 int*, param_10 void*
+code/Game/Player/tool_base_ray.cpp	171	SIG:Pf_CellQuadRay_aa20	geometry as int64_t
+code/Game/Player/tool_base_ray.cpp	228	H5:PlayerController::camera	raw Camera storage
+code/Game/Player/tool_base_render.cpp	282	H5:HighlightComponent::transform	+0x100 transform raw storage
+code/Game/Player/tool_base_render.cpp	311	H5:HighlightComponent::transform	2 casts; +0x100 transform raw storage
+code/Game/Player/tool_base_render.cpp	312	H5:HighlightComponent::transform	+0x100 transform raw storage
+code/Game/Player/tool_base_render.cpp	313	H5:HighlightComponent::transform	+0x100 transform raw storage
+code/Game/Player/tool_base_render.cpp	314	H5:HighlightComponent::transform	+0x100 transform raw storage
+code/Game/Player/tool_base_render.cpp	419	LOCAL:index buffer data cast	fillIdx/edgeIdx _data to uint16_t*
+code/Game/Player/tool_base_render.cpp	423	LOCAL:index buffer data cast	fillIdx/edgeIdx _data to uint16_t*
+code/Game/Player/tool_base_render.cpp	442	FIELD:HighlightDescription::_ref0/_ref1	void* MaterialInstance refs
+code/Game/Player/tool_base_render.cpp	443	FIELD:HighlightDescription::_ref0/_ref1	void* MaterialInstance refs
+code/Game/Player/tool_base_render.cpp	467	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 edgeMeshInstance raw storage (placement-new on it)
+code/Game/Player/tool_base_render.cpp	476	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 edgeMeshInstance raw storage (placement-new on it)
+code/Game/Player/tool_base_render.cpp	477	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 edgeMeshInstance raw storage (placement-new on it)
+code/Game/Player/tool_base_render.cpp	543	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	546	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	547	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	550	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	551	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	554	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	609	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	624	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	629	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	630	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	632	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance read by offset
+code/Game/Player/tool_base_render.cpp	661	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	667	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	683	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	684	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	702	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	745	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	755	LOCAL:ReportBadSelectionRef/ReportDeadSelectedEntity diagnostics	int64_t self/ref reported
+code/Game/Player/tool_base_render.cpp	873	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance raw storage
+code/Game/Player/tool_base_render.cpp	874	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance raw storage
+code/Game/Player/tool_base_render.cpp	875	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance raw storage
+code/Game/Player/tool_base_render.cpp	881	H5:HighlightComponent::edgeMeshInstance/transform	+0x28 embedded EdgeMeshInstance raw storage
+code/Game/Player/tool_base_render.cpp	896	SIG:HighlightSelect_Impl	self void* (HighlightClear_Impl on 897)
+code/Game/Player/tool_base_render.cpp	897	SIG:HighlightSelect_Impl	self void* (HighlightClear_Impl on 897)
+code/Game/Player/tool_base_screenrect.cpp	153	H5:PlayerController::camera	raw Camera storage
+code/Game/Player/tool_base_screenrect.cpp	362	SIG:PlayerScreenRect_Entity_0380	param_2 void*, param_3 void*
+code/Game/Player/tool_base_screenrect.cpp	363	SIG:PlayerScreenRect_Entity_0380	param_2 void*, param_3 void*
+code/Game/Player/tool_base_tile.cpp	75	SIG:ToolTile_SetTransformFromYaw_3870	self uintptr_t, offset void*
+code/Game/Player/tool_base_tile.cpp	76	SIG:ToolTile_SetTransformFromYaw_3870	self uintptr_t, offset void*
+code/Game/Player/tool_base_tile.cpp	195	FIELD:ModelComponent::_description	void*
+code/Game/Player/tool_base_tile.cpp	281	SIG:ComponentEntity_CtorFromDescription	self as raw MemAlloc void*
+code/Game/Player/tool_base_tilerender.cpp	235	SIG:Pf_CellQuadRayWrap_0f90	heightfield int64_t
+code/Game/Player/tool_base_tilerender.cpp	242	SIG:Pf_CellQuadRayWrap_0f90	heightfield int64_t
+code/Game/Player/tool_base_trade.cpp	289	SIG:PlayerTrade_Retrace_25920	2 casts; root / cursor int64_t*
+code/Game/Player/tool_base_trade.cpp	294	SIG:PlayerTrade_BSTRemove_25740	2 casts; root int64_t*, node void*
+code/Game/Player/tool_base_trade.cpp	299	SIG:PlayerTrade_BSTFindRemove_2c690	2 casts; root int64_t*, key void*
+code/Game/Player/tool_base_trade.cpp	340	FIELD:PlayerToolManager::field_0x60	Set declared root + count
+code/Game/Player/tool_base_trade.cpp	355	SIG:PlayerTrade_EntityUI_66b0	param_1 int64_t
+code/Game/Tutorial/finishtutorialinstance.cpp	197	SLOT:TutorialSetup::Update	slot [9] Update(void* time); StepExecute forwards the Time as void*
+code/Game/Tutorial/finishtutorialinstance.cpp	198	SLOT:TutorialGoal::IsComplete	slot [8] IsComplete(void* time, void* instance); StepExecute forwards the GoalList as void*
+code/Game/Tutorial/tutorial.cpp	48	H5:Tutorial::steps	raw Array triple destroyed as Array<void*>
+code/Game/Tutorial/tutorial_base.cpp	58	POD:ExternalPtr-thunk	SerOne(void* field, void* serializer)
+code/Game/Tutorial/tutorial_base.cpp	70	LOCAL:SerArray uint8_t* walk	local helper
+code/Game/Tutorial/tutorial_base.cpp	159	CONST:FindOrLoad	
+code/Game/Tutorial/tutorial_base.cpp	222	SIG:WorkComponent_CalcMaxWorkers	workComp uintptr_t
+code/Game/Tutorial/tutorial_next_scenario.cpp	227	POD:RtSystem::String	Persistence::_savePath is the runtime String POD
+code/Game/Tutorial/tutorial_next_scenario.cpp	243	POD:RtSystem::String	Persistence::_savePath is the runtime String POD
+code/Game/Tutorial/tutorial_wave.cpp	130	POD:ExternalPtr-thunk	ExternalPtrSerializeGeneric(void** field)
+code/Game/Tutorial/tutorial_wave.cpp	135	POD:ExternalPtr-thunk	ExternalPtrSerializeGeneric(void** field)
+code/Game/Tutorial/tutorial_wave.cpp	177	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Tutorial/tutorial_wave.cpp	178	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Tutorial/tutorialgoalbutton.cpp	45	H5:TutorialGoalButton::elementPath	raw String
+code/Game/Tutorial/tutorialgoalcount.cpp	135	H5:TutorialGoalCount::elementName	raw String
+code/Game/Tutorial/tutorialgoaldialog.cpp	38	H5:TutorialGoalDialog::dialogName	raw String
+code/Game/Tutorial/tutorialhighlightdialog.cpp	349	SIG:PlayerScreenRect_Entity_0380	rectangle as uintptr_t / uint64_t*
+code/Game/Tutorial/tutorialhighlightdialog.cpp	350	SIG:PlayerScreenRect_Entity_0380	rectangle as uintptr_t / uint64_t*
+code/Game/Tutorial/tutorialimagetoolbaricon.cpp	171	H5:Toolbar::_field30/_field38	Toolbar +0x38 String is void*
+code/Game/Tutorial/tutorialimagetoolbaricon.cpp	204	H5:Toolbar::_field30/_field38	Toolbar +0x38 String is void*
+code/Game/Tutorial/tutorialsetupdialog.cpp	46	H5:TutorialSetupDialog::highlightPath	raw String
+code/Game/Tutorial/tutorialsetupdialog.cpp	129	CONST:FindOrLoad	
+code/Game/Tutorial/tutorialsetuprestrictplayer.cpp	107	CONST:FindOrLoad	
+code/Game/Tutorial/tutorialstep.cpp	59	H5:TutorialStep::goals/setups/images	raw Array triples
+code/Game/Tutorial/tutorialstep.cpp	60	H5:TutorialStep::goals/setups/images	raw Array triples
+code/Game/Tutorial/tutorialstep.cpp	61	H5:TutorialStep::goals/setups/images	raw Array triples
+code/Game/Tutorial/tutorialstep.cpp	94	H5:TutorialStep::titleStr/descStr	raw Strings
+code/Game/Tutorial/tutorialstep.cpp	97	H5:TutorialStep::titleStr/descStr	raw Strings

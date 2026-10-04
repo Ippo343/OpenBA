@@ -1,0 +1,193 @@
+file	line	family	note
+runtime/src/achievement/achievement_state.cpp	217	OTHER:const_cast-this store	retail stores const this into the instance (faithful)
+runtime/src/audio/audio_play_platform.cpp	360	FIELD:Audio::SoundBuffer::_data	void* data pointer read as BYTE*
+runtime/src/collection/array.cpp	852	FIELD:ExternalArrayElement::owned	owned is char* (External.h) but retail copies a Filename
+runtime/src/collection/array.cpp	853	FIELD:ExternalArrayElement::owned	owned is char* (External.h) but retail copies a Filename
+runtime/src/collection/array.cpp	1487	LOCAL:MaterialConstant-typed	MaterialConstant {String name; float value[4]} exists (graphics/Material.h:87)
+runtime/src/collection/array.cpp	2135	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2136	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2139	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2140	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2141	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2919	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast [2 casts on the line]
+runtime/src/collection/array.cpp	2921	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast [2 casts on the line]
+runtime/src/collection/array.cpp	2923	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast
+runtime/src/collection/array.cpp	2924	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast
+runtime/src/collection/array.cpp	3122	OTHER:PixelProgram::Sampler-untyped	no type for PixelProgram::Sampler in any header [2 casts on the line]
+runtime/src/collection/array.cpp	3148	LOCAL:VertexProgram::Element-typed	VertexProgram::Element exists (video/ShaderProgram.h:342) [2 casts on the line]
+runtime/src/collection/array.cpp	3149	LOCAL:VertexProgram::Element-typed	VertexProgram::Element exists (video/ShaderProgram.h:342) [2 casts on the line]
+runtime/src/collection/array.cpp	3173	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349)
+runtime/src/collection/array.cpp	3174	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349)
+runtime/src/collection/array_destroy.cpp	1392	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1398	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1399	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1402	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1403	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_graphics_mesh.cpp	76	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	79	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	82	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	85	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	117	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	119	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	120	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	121	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	126	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	132	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	133	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	134	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	159	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	160	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	162	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	163	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	165	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	166	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	169	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]"
+runtime/src/collection/array_graphics_mesh.cpp	170	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]"
+runtime/src/collection/array_graphics_mesh.cpp	172	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]"
+runtime/src/collection/array_graphics_mesh.cpp	174	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	175	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	178	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]"
+runtime/src/collection/array_graphics_mesh.cpp	213	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	215	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	216	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	223	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/collection/array_graphics_mesh.cpp	226	LOCAL:GraphicsMesh::DetailLevel-typed	"the 0xb0 ""TriangleList"" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain"
+runtime/src/engine/engine.cpp	489	FIELD:Video::Device::gap50	callback table read through gap50 bytes
+runtime/src/engine/engine_lifecycle.cpp	615	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtVideo_Device_OperatorNew(0x108) cast to Video::Device*
+runtime/src/graphics/animationstate_transforms.cpp	704	FIELD:ExternalPtrHandle::p	_mesh.p void* read as GraphicsMesh*
+runtime/src/graphics/animationstate_transforms.cpp	964	H5:AnimationState::tmpStorage	raw stack storage never constructed
+runtime/src/graphics/batchc_gfx_leaves.cpp	668	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RenderBuffer::operator new(0x30)
+runtime/src/graphics/batchc_gfx_leaves.cpp	805	FIELD:ExternalPtrHandle::p	ExternalPtrHandle{ const_cast<MaterialInstance*> }
+runtime/src/graphics/imagebuffer_derived.cpp	459	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/graphics/imagebuffer_derived.cpp	487	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/graphics/mesh.cpp	2005	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2019	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2036	H5:MeshInstance::_animation	raw storage of Graphics::AnimationState
+runtime/src/graphics/mesh.cpp	2071	H5:MeshInstance::_animation	raw storage of Graphics::AnimationState
+runtime/src/graphics/mesh.cpp	2074	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2284	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2317	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2349	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2352	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2370	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2373	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/meshinstance_draw.cpp	355	FIELD:ExternalPtrHandle::p	_mesh.p void* read as EdgeMesh*
+runtime/src/graphics/meshinstance_draw.cpp	403	FIELD:ExternalPtrHandle::p	_mesh.p void* read as EdgeMesh*
+runtime/src/graphics/meshinstance_draw.cpp	412	FIELD:ExternalPtrHandle::p	_mesh.p void* read as EdgeMesh*
+runtime/src/graphics/renderer.cpp	258	OTHER:memcpy-store-width	retail moves 25 dwords incl pad; FLOOR candidate byte_io/elem_stride
+runtime/src/graphics/sunlight.cpp	198	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	NewRenderBuffer: void* p -> RenderBuffer*
+runtime/src/graphics/wave21_lane_gfxbody.cpp	324	FIELD:Video::Context::_pixelConstantStaging	Context::_pixelConstantStaging bytes as float*
+runtime/src/graphics/wave27_lane_gfxbig.cpp	1074	FIELD:Graphics::RendererDrawItem::_object	void* _object read as Light*
+runtime/src/graphics/wave27_lane_gfxbig.cpp	1121	FIELD:Graphics::RendererDrawItem::_object	void* _object read as Light*
+runtime/src/graphics/wave9_lane_gfx.cpp	399	FIELD:Graphics::RendererDrawGroup::<pass arrays at +0x1c0 stride 0x10>	indexed pass array via byte offset
+runtime/src/graphics/wave9_lane_gfx.cpp	400	FIELD:Graphics::RendererDrawGroup::<pass arrays at +0x1c0 stride 0x10>	indexed pass array via byte offset
+runtime/src/io/file_stream.cpp	194	H5:FileStream::_filename	char* raw storage of a System::String
+runtime/src/io/file_stream.cpp	469	H5:FileStream::_filename	char* raw storage of a System::String
+runtime/src/io/file_stream.cpp	740	H5:FileStream::_filename	char* raw storage of a System::String
+runtime/src/io/filesystem_createfile_win.cpp	625	H5:FileSystem::_packfiles	raw storage of Array<PackageFile*>
+runtime/src/io/filesystem_openfile_win.cpp	402	FLOOR:byte_io	retail reads the top byte of the tag (MOVZX [+3])
+runtime/src/io/filesystem_packages.cpp	383	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/io/filesystem_setupdirs_win.cpp	362	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/io/modification.cpp	338	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	420	H5:Mod::set	ModSet POD, not a Collection::Set<Filename>
+runtime/src/io/modification.cpp	538	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	554	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	555	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	764	H5:Mod::file	RtSystem::Filename POD member
+runtime/src/io/modification_refresh.cpp	610	H5:IO::Modification::_mods	_mods/_count/_capacity as ModArrayOf<Mod>
+runtime/src/io/modification_refresh.cpp	792	H5:Mod::set	ModSet POD
+runtime/src/io/package_file_dtor.cpp	242	H5:PackageFile::_stringArray20/_stringArray30	raw storage of Array<System::String>
+runtime/src/io/package_file_dtor.cpp	243	H5:PackageFile::_stringArray20/_stringArray30	raw storage of Array<System::String>
+runtime/src/io/package_file_serialize.cpp	159	H8:bool-byte	SerializeBool of uint8_t _overridable
+runtime/src/io/persistence_saves.cpp	252	H5:Persistence::_workerVtable	embedded PersistenceWorker / set root as raw fields
+runtime/src/io/persistence_saves.cpp	253	H5:Persistence::_workerVtable	embedded PersistenceWorker / set root as raw fields
+runtime/src/io/persistence_saves_win.cpp	60	H5:Persistence::_blockDescData/_blockPtrData	raw Array storage
+runtime/src/io/persistence_saves_win.cpp	63	H5:Persistence::_blockDescData/_blockPtrData	raw Array storage
+runtime/src/io/persistence_worker_win.cpp	281	OTHER:PersistenceWorker void* door	static_cast of void* worker
+runtime/src/object/external_load.cpp	362	H8:uint-overload	int depCount through SerU32
+runtime/src/object/external_load.cpp	373	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	376	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	377	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	378	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/picking/pickingmesh.cpp	171	H5:PickingMesh (SubMesh::_name, _string20, _string28)	String held as raw char*
+runtime/src/picking/pickingmesh.cpp	259	H5:PickingMesh (SubMesh::_name, _string20, _string28)	String held as raw char*
+runtime/src/picking/pickingmesh.cpp	260	H5:PickingMesh (SubMesh::_name, _string20, _string28)	String held as raw char*
+runtime/src/save/saveload_draw.cpp	618	FIELD:Video::Context::_contextData/_renderBuffer	void* platform data / render buffer
+runtime/src/save/saveload_draw.cpp	680	OTHER:memset-of-raw-stack-SpriteContext	sc + 0x58 memset
+runtime/src/save/saveload_draw.cpp	689	FIELD:Video::Context::_contextData/_renderBuffer	void* platform data / render buffer
+runtime/src/system/closure_batch2b.cpp	146	FLOOR:alloc_header	MemoryAllocator::LinkPrevBlock block-header byte distance (uint64_t* self)
+runtime/src/system/closure_batch2b.cpp	152	FLOOR:alloc_header	MemoryAllocator::LinkPrevBlock block-header byte distance (uint64_t* self)
+runtime/src/system/compression.cpp	469	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	127	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	660	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	988	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	990	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/thread_win.cpp	285	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/thread_win.cpp	287	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/thread_win.cpp	289	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/thread_win.cpp	290	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/value_types.cpp	227	H8:uint-overload	int32 _index through the uint overload
+runtime/src/system/widestring.cpp	291	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/widestring.cpp	370	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/ui/characterset.cpp	107	H5:CharacterSet::_string20	a System::String / Array held as raw char* storage
+runtime/src/ui/characterset.cpp	121	H5:CharacterSet::_string20	a System::String / Array held as raw char* storage
+runtime/src/ui/combodialog_ctor.cpp	406	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	InternalMemAlloc result cast to ChildNode*
+runtime/src/ui/comboelement.cpp	141	H5:ComboElement::_params	a System::String / Array held as raw char* storage
+runtime/src/ui/comboelement.cpp	142	H5:ComboElement::_strings	a System::String / Array held as raw char* storage
+runtime/src/ui/dialog_ctor_dtor.cpp	205	H5:DialogInstance::_references	Array<void*> triple viewed as Array
+runtime/src/ui/dialog_ctor_dtor.cpp	220	H5:Dialog::_spriteName	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttext.cpp	155	H5:documenttext::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttext.cpp	157	H5:documenttext::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttext.cpp	159	H5:documenttext::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttextelement.cpp	245	H5:DocumentTextElement::_sourceText	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttextelement.cpp	249	H5:DocumentTextElement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/editelement.cpp	87	H5:editelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/editelement.cpp	110	H5:editelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/element_bodies_b5.cpp	635	H5:TextDescription::_name	a System::String / Array held as raw char* storage
+runtime/src/ui/labelelement.cpp	64	H5:labelelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/numberelement.cpp	187	H5:NumberElement::_cachedText	a System::String / Array held as raw char* storage
+runtime/src/ui/spritecapture.cpp	167	H5:SpriteCapture::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/spritecapture.cpp	185	H5:SpriteCapture::_sprites	raw Array storage
+runtime/src/ui/spritecapture.cpp	320	H5:SpriteCapture::_sprites	raw Array storage
+runtime/src/ui/spritecontext.cpp	177	FIELD:Video::Context::_renderBuffer	void* _renderBuffer read as RenderBufferPrefix*
+runtime/src/ui/spritecontext.cpp	372	FIELD:Video::Context::_renderBuffer	void* _renderBuffer read as RenderBufferPrefix*
+runtime/src/ui/spritecontext_flush.cpp	305	FIELD:Video::Device::deviceData / Context platform data	void* deviceData / contextData
+runtime/src/ui/spritecontext_flush.cpp	382	FIELD:Video::Device::deviceData / Context platform data	void* deviceData / contextData
+runtime/src/ui/spritecontext_flush.cpp	505	FIELD:Video::Device::deviceData / Context platform data	void* deviceData / contextData
+runtime/src/ui/stringtable_factory.cpp	177	H5:StringTable::name	a System::String / Array held as raw char* storage
+runtime/src/ui/stringtable_factory.cpp	178	H5:StringTable::text	a System::String / Array held as raw char* storage
+runtime/src/ui/textelement.cpp	56	H5:textelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/textelement.cpp	72	H5:TextElement::_cachedText	a System::String / Array held as raw char* storage
+runtime/src/ui/textelement_cachetext.cpp	163	FIELD:TextElement::ParamArray::_data	char** data viewed as const Str*
+runtime/src/ui/userinterface.cpp	690	FIELD:Video::Device::deviceData	void* deviceData
+runtime/src/ui/userinterface.cpp	1230	OTHER:IO::Serializer-null-encoding-guard	tree guards a null Encoding before CreateWriter
+runtime/src/ui/userinterface.cpp	1255	OTHER:IO::Serializer-null-encoding-guard	tree guards a null Encoding before CreateWriter
+runtime/src/ui/userinterface_draw.cpp	287	H5:UserInterface::SpriteContext-stack-storage	raw stack storage
+runtime/src/ui/userinterface_draw.cpp	317	FIELD:UserInterface::_captureViewport	raw bytes (Video::Viewport)
+runtime/src/ui/widgets_input.cpp	291	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_input.cpp	292	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_input.cpp	697	H5:EditElement::_text	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	92	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	93	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	337	H5:DocumentTextElement::text	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	489	H5:GraphSeries-stack-fill	raw stack bytes of a GraphSeries local
+runtime/src/ui/widgets_layout.cpp	490	H5:GraphSeries-stack-fill	raw stack bytes of a GraphSeries local
+runtime/src/ui/widgets_layout.cpp	500	H5:GraphSeries-stack-fill	raw stack bytes of a GraphSeries local
+runtime/src/video/context.cpp	335	FLOOR:dx11_seam	dx11/src/contextdata.cpp hands the setters void*
+runtime/src/video/context.cpp	348	FLOOR:dx11_seam	dx11/src/contextdata.cpp hands the setters void*
+runtime/src/video/context_bind.cpp	255	FIELD:Video::Context::_imageBuffers	void* array read as ImageBuffer*
+runtime/src/video/context_bind.cpp	319	FIELD:Video::Context::_pixelConstantStaging	staging bytes hold a VideoProgram*
+runtime/src/video/context_ctor.cpp	396	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/video/context_ctor.cpp	408	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/video/context_ctor.cpp	413	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/video/imagebuffer_platform_serialize.cpp	337	H5:ImageBuffer::levels	raw header of Array<Level>
+runtime/src/video/imagebuffer_vtable.cpp	393	H5:ImageBuffer::_sourceName	String held as raw char*
+runtime/src/video/shaderprogram.cpp	176	H5:ShaderProgram entry::name	String held as raw char*
+runtime/src/video/vertexlayout.cpp	135	H5:VertexLayout::Element::name	String held as raw char*
+runtime/src/video/video_program.cpp	183	FIELD:Video::Context::_pixelConstantStaging	Context +0x200 videoProgram lives in _pixelConstantStaging
+runtime/src/video/video_program.cpp	187	FIELD:Video::Context::_pixelConstantStaging	Context +0x200 videoProgram lives in _pixelConstantStaging
+runtime/types/graphics/AnimationGroup.h	159	H5:AnimationGroup::_clips	Animation has no C++ dtor body; array typed Array<Animation> raw
+runtime/types/graphics/GraphicsMesh.h	439	H5:GraphicsMesh::_nodes	raw header viewed as Array<Node>
+runtime/types/graphics/Mesh.h	572	FIELD:ExternalPtrHandle::p	_mesh.p void* read as GraphicsMesh*
+runtime/types/ui/EditElement.h	159	H5:EditElement::_text	a System::String / Array held as raw char* storage
+runtime/types/ui/UserInterface.h	361	OTHER:forward-declared InternalPtr	header only forward-declares InternalPtr (unit test links this inline body alone)

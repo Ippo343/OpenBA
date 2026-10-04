@@ -1,0 +1,705 @@
+file	line	family	note
+runtime/src/achievement/achievement_serialize.cpp	108	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (achievement_serialize.cpp)
+runtime/src/achievement/achievement_serialize.cpp	132	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (achievement_serialize.cpp)
+runtime/src/achievement/achievement_serialize.cpp	176	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (achievement_serialize.cpp)
+runtime/src/achievement/achievement_state.cpp	217	OTHER:const_cast-this store	retail stores const this into the instance (faithful)
+runtime/src/achievement/achievement_vtable.cpp	253	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (achievement_vtable.cpp)
+runtime/src/achievement/achievement_vtable.cpp	254	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (achievement_vtable.cpp)
+runtime/src/achievement/achievement_vtable.cpp	268	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (achievement_vtable.cpp)
+runtime/src/achievement/goal_serialize.cpp	115	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (goal_serialize.cpp)
+runtime/src/achievement/goal_serialize.cpp	148	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (goal_serialize.cpp)
+runtime/src/achievement/goal_serialize.cpp	170	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (goal_serialize.cpp)
+runtime/src/application/application_win.cpp	224	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/application_win.cpp	231	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	129	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	130	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	187	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	194	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	195	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	212	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/message_callbacks.cpp	248	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/platform_startup_win.cpp	169	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/application/platform_startup_win.cpp	181	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/audio/audio.cpp	217	SIG:RtAudio_Scene_Ctor(void*)	selfPtr void* -> Scene*
+runtime/src/audio/audio.cpp	249	SIG:RtAudio_Scene_Dtor(void*)	selfPtr void* -> Scene*
+runtime/src/audio/audio.cpp	680	SIG:Audio::Scene::Serialize(void*)	void* serializer -> IO::Serializer*
+runtime/src/audio/audio_effectslot_serialize.cpp	151	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (audio_effectslot_serialize.cpp)
+runtime/src/audio/audio_play_platform.cpp	360	FIELD:Audio::SoundBuffer::_data	void* data pointer read as BYTE*
+runtime/src/audio/audio_stream_win.cpp	322	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array dtor core on _buffers
+runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp	463	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (vtbatch7_soundbuffer_soundeffect.cpp)
+runtime/src/audio/wave29_lane_avbody.cpp	325	SIG:Audio::Scene::OnSoundEnded(void* userData)	retail callback user data is void*
+runtime/src/collection/array.cpp	852	FIELD:ExternalArrayElement::owned	owned is char* (External.h) but retail copies a Filename
+runtime/src/collection/array.cpp	853	FIELD:ExternalArrayElement::owned	owned is char* (External.h) but retail copies a Filename
+runtime/src/collection/array.cpp	1086	POD:RtSystem::Filename	PackageFileEntry::name is RtSystem::String (io/FileSystem.h:158); retail copies it with the Filename ctor, so the Filename mirror cast stays
+runtime/src/collection/array.cpp	1087	POD:RtSystem::Filename	PackageFileEntry::name is RtSystem::String (io/FileSystem.h:158); retail copies it with the Filename ctor, so the Filename mirror cast stays
+runtime/src/collection/array.cpp	1487	LOCAL:MaterialConstant-typed	MaterialConstant {String name; float value[4]} exists (graphics/Material.h:87)
+runtime/src/collection/array.cpp	2004	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	RendererDrawGroup arrays at +0x1c0/+0x1d0/+0x1e0 destroyed through ArrayHdr*
+runtime/src/collection/array.cpp	2005	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	RendererDrawGroup arrays at +0x1c0/+0x1d0/+0x1e0 destroyed through ArrayHdr*
+runtime/src/collection/array.cpp	2006	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	RendererDrawGroup arrays at +0x1c0/+0x1d0/+0x1e0 destroyed through ArrayHdr*
+runtime/src/collection/array.cpp	2135	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2136	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2139	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2140	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2141	LOCAL:AnimationGroup::Tag-typed	AnimationGroup::Tag exists (graphics/AnimationGroup.h:216); element ops still raw offsets
+runtime/src/collection/array.cpp	2303	ERASED:RtColl_ArraySetSize*/SetSizeFill*/Reserve (void* doors)	void* door cast to ArrayHdr* (SetSizeCore)
+runtime/src/collection/array.cpp	2456	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door -> Array<int32_t>*
+runtime/src/collection/array.cpp	2457	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door -> Array<int32_t>*
+runtime/src/collection/array.cpp	2857	ERASED:RtColl_ArraySetSize*/SetSizeFill*/Reserve (void* doors)	void* door cast to ArrayHdr* (RtColl_ArrayReserve_18005f980)
+runtime/src/collection/array.cpp	2919	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast [2 casts on the line]
+runtime/src/collection/array.cpp	2921	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast [2 casts on the line]
+runtime/src/collection/array.cpp	2923	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast
+runtime/src/collection/array.cpp	2924	OTHER:IO::Mod-external-element	element {uint32,External*,Filename} untyped (R-IO Modification); Filename mirror cast
+runtime/src/collection/array.cpp	3122	OTHER:PixelProgram::Sampler-untyped	no type for PixelProgram::Sampler in any header [2 casts on the line]
+runtime/src/collection/array.cpp	3148	LOCAL:VertexProgram::Element-typed	VertexProgram::Element exists (video/ShaderProgram.h:342) [2 casts on the line]
+runtime/src/collection/array.cpp	3149	LOCAL:VertexProgram::Element-typed	VertexProgram::Element exists (video/ShaderProgram.h:342) [2 casts on the line]
+runtime/src/collection/array.cpp	3173	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349)
+runtime/src/collection/array.cpp	3174	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349)
+runtime/src/collection/array.cpp	3253	ERASED:RtColl_ArraySetSize*/SetSizeFill*/Reserve (void* doors)	void* door (D1_J1 macro) cast to ArrayHdr*
+runtime/src/collection/array.cpp	3369	ERASED:RtColl_ArraySetSize*/SetSizeFill*/Reserve (void* doors)	void* door cast to ArrayHdr* (RtColl_ArraySetSize_18003d430)
+runtime/src/collection/array_destroy.cpp	473	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	element destroyer takes uint8_t* base from void* (ReleaseStringsCounted)
+runtime/src/collection/array_destroy.cpp	535	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	element destroyer takes uint8_t* base from void* (A_ENTRY)
+runtime/src/collection/array_destroy.cpp	723	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	element destroyer takes uint8_t* base from void* (B_ENTRY)
+runtime/src/collection/array_destroy.cpp	926	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayDtorElem_18005bf60)
+runtime/src/collection/array_destroy.cpp	1069	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_180003970)
+runtime/src/collection/array_destroy.cpp	1070	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_180003970)
+runtime/src/collection/array_destroy.cpp	1214	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (ArrayClearMetaEntry20)
+runtime/src/collection/array_destroy.cpp	1215	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (ArrayClearMetaEntry20)
+runtime/src/collection/array_destroy.cpp	1247	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_18001cd30)
+runtime/src/collection/array_destroy.cpp	1248	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_18001cd30)
+runtime/src/collection/array_destroy.cpp	1252	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayCopyCtor_18001c620)
+runtime/src/collection/array_destroy.cpp	1269	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_18001b1a0)
+runtime/src/collection/array_destroy.cpp	1270	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_18001b1a0)
+runtime/src/collection/array_destroy.cpp	1329	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayAssign_18001b1a0)
+runtime/src/collection/array_destroy.cpp	1344	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	element destroyer takes uint8_t* base from void* (D1_A_ENTRY)
+runtime/src/collection/array_destroy.cpp	1363	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	element destroyer takes uint8_t* base from void* (D1_B_ENTRY)
+runtime/src/collection/array_destroy.cpp	1392	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1398	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1399	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1402	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1403	LOCAL:VertexProgram::Stream-typed	VertexProgram::Stream exists (video/ShaderProgram.h:349); RtColl_DestroyVtxStream_180056cb0 reads +0x00/+0x08 raw
+runtime/src/collection/array_destroy.cpp	1417	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayDtorAnim_18001c1e0)
+runtime/src/collection/array_destroy.cpp	1462	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayDtorAnim_18001c1e0)
+runtime/src/collection/array_destroy.cpp	1463	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayDtorAnim_18001c1e0)
+runtime/src/collection/array_destroy.cpp	1514	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	macro entry D1_J4_ENTRY
+runtime/src/collection/array_destroy.cpp	1560	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	element destroyer takes uint8_t* base from void* (RtColl_DestroySubMesh_180073ee0)
+runtime/src/collection/array_destroy.cpp	1567	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayDtorElem_180065d40)
+runtime/src/collection/array_destroy.cpp	1574	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (RtColl_ArrayDtorElem_180073720)
+runtime/src/collection/array_destroy.cpp	1640	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (ArrayClearVPParam18)
+runtime/src/collection/array_destroy.cpp	1641	ERASED:RtColl_Array{Dtor,DtorElem,Assign,CopyCtor}_*(void*)	void* door cast to ArrayHdr* (ArrayClearVPParam18)
+runtime/src/collection/array_graphics_anim.cpp	383	ERASED:Rt_ArrayDtor/Assign_*(void*) graphics-anim doors	void* door cast to ArrayHdr*
+runtime/src/collection/array_graphics_anim.cpp	384	ERASED:Rt_ArrayDtor/Assign_*(void*) graphics-anim doors	void* door cast to ArrayHdr*
+runtime/src/collection/array_graphics_anim.cpp	415	ERASED:Rt_ArrayDtor/Assign_*(void*) graphics-anim doors	void* door cast to ArrayHdr* [2 casts on the line]
+runtime/src/collection/array_graphics_anim.cpp	419	ERASED:Rt_ArrayDtor/Assign_*(void*) graphics-anim doors	void* door cast to ArrayHdr* [2 casts on the line]
+runtime/src/collection/array_graphics_anim.cpp	423	ERASED:Rt_ArrayDtor/Assign_*(void*) graphics-anim doors	void* door cast to ArrayHdr* [2 casts on the line]
+runtime/src/collection/array_graphics_anim.cpp	427	ERASED:Rt_ArrayDtor/Assign_*(void*) graphics-anim doors	void* door cast to ArrayHdr* [2 casts on the line]
+runtime/src/collection/array_graphics_mesh.cpp	76	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	79	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	82	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	85	LOCAL:GraphicsMesh::DetailLevel-typed	DetailLevel now embeds Video::VertexBuffer/IndexBuffer (GraphicsMesh.h:311); cast from raw p
+runtime/src/collection/array_graphics_mesh.cpp	117	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	119	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	120	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	121	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	126	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	132	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	133	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	134	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	159	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	160	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	162	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	163	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	165	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	166	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	169	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]
+runtime/src/collection/array_graphics_mesh.cpp	170	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]
+runtime/src/collection/array_graphics_mesh.cpp	172	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]
+runtime/src/collection/array_graphics_mesh.cpp	174	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	175	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	178	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain [2 casts on the line]
+runtime/src/collection/array_graphics_mesh.cpp	213	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	215	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	216	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	223	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_graphics_mesh.cpp	226	LOCAL:GraphicsMesh::DetailLevel-typed	the 0xb0 "TriangleList" element IS GraphicsMesh::DetailLevel (GraphicsMesh.h:311); raw offsets remain
+runtime/src/collection/array_internal.h	64	ERASED:rtcoll::ArrayHdr-door	AsArray bridge void* -> ArrayWithSpec<SPEC>*
+runtime/src/collection/avl_trees.cpp	268	ERASED:PtrArrayDtor(void*) (Array<T*> dtor door)	void* self cast to PtrArrayHdr*
+runtime/src/collection/avl_trees.cpp	296	LOCAL:RtObject::TypeNode-balance/height	TypeNode::balance/height exist (object/TypeInfo.h:209) +0x48/+0x4a; read raw [2 casts on the line]
+runtime/src/collection/avl_trees.cpp	299	LOCAL:RtObject::TypeNode-balance/height	TypeNode::balance/height exist (object/TypeInfo.h:209) +0x48/+0x4a; read raw [2 casts on the line]
+runtime/src/collection/avl_trees.cpp	701	SIG:StringInsertCore/StringMapInsert (avl_trees)	map/outSlot erased to KeyedSet<StringPairNode> [2 casts on the line]
+runtime/src/collection/avl_trees.cpp	830	SIG:FilenameSetInsert	key const void*, set/outSlot erased
+runtime/src/collection/avl_trees.cpp	834	SIG:FilenameSetInsert	key const void*, set/outSlot erased [2 casts on the line]
+runtime/src/collection/avl_trees.cpp	883	SIG:SubtreeFree (avl_trees)	erased rtsetavl::Node* -> FilenamePairNode*
+runtime/src/collection/introsort.cpp	104	SIG:rtsort::SortByKey70	element void* read +0x70 (IO::PackageFile) [2 casts on the line]
+runtime/src/collection/introsort.cpp	353	ERASED:rtsort::Array16Assign(void*,const void*)	void* door; audio.cpp:947 and audio_scene_update.cpp:277 call it
+runtime/src/collection/introsort.cpp	354	ERASED:rtsort::Array16Assign(void*,const void*)	void* door; audio.cpp:947 and audio_scene_update.cpp:277 call it
+runtime/src/collection/set_avl_e24.cpp	328	SIG:rtsetavl24::AllocNode	element passed as const void*
+runtime/src/collection/set_avl_pathid.cpp	303	SIG:rtpathid::Insert	set/outSlot erased [2 casts on the line]
+runtime/src/collection/set_avl_pathid.cpp	334	SIG:rtpathid::SubtreeFree	erased node -> PathIdNode*
+runtime/src/collection/set_clear.cpp	209	SIG:rtsetclear::Clear	erased rtsetavl::Set* -> PairSet*
+runtime/src/collision2d/collisionmesh.cpp	301	POD:ExternalPtr-thunk	ExternalPtr<Surface> array serialize through the External** door
+runtime/src/collision2d/collisionmesh.cpp	302	POD:ExternalPtr-thunk	ExternalPtr<Surface> array serialize through the External** door
+runtime/src/engine/engine.cpp	489	FIELD:Video::Device::gap50	callback table read through gap50 bytes
+runtime/src/engine/engine_lifecycle.cpp	615	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtVideo_Device_OperatorNew(0x108) cast to Video::Device*
+runtime/src/engine/engine_lifecycle.cpp	889	POD:RtIO::Modification-storage	RtIo_Modification_Dtor takes the RtIO::Modification POD
+runtime/src/engine/engine_platform.cpp	192	SIG:rtsetclear::Clear	erased rtsetavl::Set*
+runtime/src/engine/loops.cpp	911	FIELD:Video::Context::_pixelConstantStaging	staging bytes read as float*
+runtime/src/engine/loops.cpp	1105	FIELD:MainLoopCallback::_func	void* _func cast to PostDrawFunc
+runtime/src/engine/mainloop_frame.cpp	449	FIELD:MainLoopCallback::_func	void* _func cast to PostUpdateFunc
+runtime/src/engine/mainloop_video.cpp	346	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	AssignVideoResource element op (VideoResourceEntry)
+runtime/src/engine/mainloop_video.cpp	347	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	AssignVideoResource element op (VideoResourceEntry)
+runtime/src/engine/mainloop_video.cpp	490	CONST:FindOrLoad	const_cast of External* stored in VideoResourceEntry::_object
+runtime/src/engine/mainloop_video.cpp	668	FIELD:RtObject::BaseTypeInfo::inPlaceFactoryFn	void* inPlaceFactoryFn called
+runtime/src/engine/mainloop_video.cpp	704	POD:RtSystem::Filename	RtObject_External_Load takes the Filename POD
+runtime/src/engine/mainloop_video.cpp	705	POD:RtObject-mirror	RtObject::External POD
+runtime/src/engine/mainloop_video.cpp	712	ERASED:rtcoll::ElemDestroy(ignoredThis,base,count) callbacks	RtEngine_VideoResourceDestroyRange(ignoredThis, uint8_t* base, count) element destroyer
+runtime/src/engine/singleton_ctors.cpp	271	H5:InternalFactory::_random	System::Random held as raw storage; RtSystem_Random_Ctor
+runtime/src/engine/singleton_ctors.cpp	363	H5:Persistence::_workerVtable	placement-new of the embedded PersistenceWorker at its offset
+runtime/src/engine/updateloop_loadresources.cpp	134	POD:RtSystem::Filename	ExistsInPackfile(Filename POD)
+runtime/src/graphics/animation.cpp	223	POD:RtGraphics-views	AnimationManager ctor door builds the RtGraphics view
+runtime/src/graphics/animationstate.cpp	123	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (animationstate.cpp)
+runtime/src/graphics/animationstate.cpp	124	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (animationstate.cpp)
+runtime/src/graphics/animationstate.cpp	153	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_MeshNode_CopyCtor element op
+runtime/src/graphics/animationstate.cpp	169	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_AnimState_CopyCtor element op
+runtime/src/graphics/animationstate.cpp	170	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_AnimState_CopyCtor element op
+runtime/src/graphics/animationstate.cpp	202	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_AnimInstance_CopyCtor element op
+runtime/src/graphics/animationstate.cpp	204	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_AnimInstance_CopyCtor element op
+runtime/src/graphics/animationstate.cpp	279	H5:GraphicsMesh::Node::_name	RtSystem::String POD _name serialized via System::String
+runtime/src/graphics/animationstate_transforms.cpp	704	FIELD:ExternalPtrHandle::p	_mesh.p void* read as GraphicsMesh*
+runtime/src/graphics/animationstate_transforms.cpp	964	H5:AnimationState::tmpStorage	raw stack storage never constructed
+runtime/src/graphics/batchc_gfx_leaves.cpp	299	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_Animation_{CopyCtor,Dtor} element op
+runtime/src/graphics/batchc_gfx_leaves.cpp	300	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_Animation_{CopyCtor,Dtor} element op
+runtime/src/graphics/batchc_gfx_leaves.cpp	365	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_Animation_{CopyCtor,Dtor} element op
+runtime/src/graphics/batchc_gfx_leaves.cpp	668	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RenderBuffer::operator new(0x30)
+runtime/src/graphics/batchc_gfx_leaves.cpp	805	FIELD:ExternalPtrHandle::p	ExternalPtrHandle{ const_cast<MaterialInstance*> }
+runtime/src/graphics/closure_batch2b.cpp	252	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_DrawGroup_CopyCtor element op (void* self/src)
+runtime/src/graphics/closure_batch2b.cpp	253	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_DrawGroup_CopyCtor element op (void* self/src)
+runtime/src/graphics/cull.cpp	227	SIG:RtGraphics_Scene_CullStack{Init,PushChildren}(void* self, void* scene)	CullStack door takes void* (outside callers)
+runtime/src/graphics/cull.cpp	228	SIG:RtGraphics_Scene_CullStack{Init,PushChildren}(void* self, void* scene)	CullStack door takes void* (outside callers)
+runtime/src/graphics/cull.cpp	265	SIG:RtGraphics_Scene_CullStack{Init,PushChildren}(void* self, void* scene)	CullStack door takes void* (outside callers)
+runtime/src/graphics/edgemesh_vtable.cpp	172	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (edgemesh_vtable.cpp) [2 casts on the line]
+runtime/src/graphics/edgemesh_vtable.cpp	176	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (edgemesh_vtable.cpp) [2 casts on the line]
+runtime/src/graphics/graphicsmesh_vtable.cpp	92	SIG:Serialize(void*) family	StringSerialize callback: void* str -> System::String*, Serialize(&ser)
+runtime/src/graphics/graphicsmesh_vtable.cpp	99	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (graphicsmesh_vtable.cpp)
+runtime/src/graphics/graphicsmesh_vtable.cpp	518	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (graphicsmesh_vtable.cpp)
+runtime/src/graphics/graphicsmesh_vtable.cpp	537	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (graphicsmesh_vtable.cpp)
+runtime/src/graphics/graphicsmesh_vtable.cpp	547	H5:GraphicsMesh::_nodes	raw header viewed as Node*
+runtime/src/graphics/imagebuffer_derived.cpp	459	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/graphics/imagebuffer_derived.cpp	487	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/graphics/imagebuffer_derived.cpp	617	CONST:const_cast-this	retail const slot writes _generation
+runtime/src/graphics/imagebuffer_derived.cpp	622	SLOT:ImageBuffer::Render(void* renderer, const void* scene, const void* camera, ...)	GeneratedImageBuffer.h slot takes void*
+runtime/src/graphics/imagebuffer_derived.cpp	623	SLOT:ImageBuffer::Render(void* renderer, const void* scene, const void* camera, ...)	GeneratedImageBuffer.h slot takes void*
+runtime/src/graphics/imagebuffer_derived.cpp	655	SLOT:ImageBuffer::Render(void* renderer, const void* scene, const void* camera, ...)	GeneratedImageBuffer.h slot takes void*
+runtime/src/graphics/lights_vtable.cpp	439	POD:RtGraphics-views	Camera POD viewed as Camera
+runtime/src/graphics/material.cpp	127	H8:uint-overload	enum _type through SerializeUInt
+runtime/src/graphics/material.cpp	136	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (material.cpp)
+runtime/src/graphics/material.cpp	137	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (material.cpp)
+runtime/src/graphics/mesh.cpp	801	SIG:RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, void* vec3)	void* door
+runtime/src/graphics/mesh.cpp	802	SIG:RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, void* vec3)	void* door
+runtime/src/graphics/mesh.cpp	828	SIG:RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, void* a, void* b)	void* door
+runtime/src/graphics/mesh.cpp	829	SIG:RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, void* a, void* b)	void* door
+runtime/src/graphics/mesh.cpp	830	SIG:RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, void* a, void* b)	void* door
+runtime/src/graphics/mesh.cpp	2005	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2019	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2036	H5:MeshInstance::_animation	raw storage of Graphics::AnimationState
+runtime/src/graphics/mesh.cpp	2071	H5:MeshInstance::_animation	raw storage of Graphics::AnimationState
+runtime/src/graphics/mesh.cpp	2074	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2077	SIG:MeshInstance::PlayAnimation(void* startTime, void* blendTime)	time params void* (Mesh.h)
+runtime/src/graphics/mesh.cpp	2078	SIG:MeshInstance::PlayAnimation(void* startTime, void* blendTime)	time params void* (Mesh.h)
+runtime/src/graphics/mesh.cpp	2284	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2317	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2349	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2352	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2370	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2373	FIELD:ExternalPtrHandle::p	ExternalPtrHandle::p void* read as typed pointer
+runtime/src/graphics/mesh.cpp	2484	SIG:EdgeMesh::Set(void* triLists, void* edgeLists)	list params void* (Mesh.h)
+runtime/src/graphics/mesh.cpp	2486	SIG:EdgeMesh::Set(void* triLists, void* edgeLists)	list params void* (Mesh.h)
+runtime/src/graphics/meshinstance_draw.cpp	355	FIELD:ExternalPtrHandle::p	_mesh.p void* read as EdgeMesh*
+runtime/src/graphics/meshinstance_draw.cpp	403	FIELD:ExternalPtrHandle::p	_mesh.p void* read as EdgeMesh*
+runtime/src/graphics/meshinstance_draw.cpp	412	FIELD:ExternalPtrHandle::p	_mesh.p void* read as EdgeMesh*
+runtime/src/graphics/renderer.cpp	240	POD:RtGraphics-views	Camera ctor door extern "C" void* self
+runtime/src/graphics/renderer.cpp	258	OTHER:memcpy-store-width	retail moves 25 dwords incl pad; FLOOR candidate byte_io/elem_stride
+runtime/src/graphics/scene.cpp	302	SIG:rtpickgrid::BoxTransform	returns void* / takes float[6] (picking/)
+runtime/src/graphics/scene.cpp	527	POD:RtGraphics-views	RtScene grid helpers take RtGraphics::Scene* / Geometry*
+runtime/src/graphics/scene.cpp	597	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array ClearCallback core
+runtime/src/graphics/scene.cpp	1191	SIG:rtpickgrid::BoxTransform	returns void* / takes float[6] (picking/)
+runtime/src/graphics/scene.cpp	1322	POD:RtGraphics-views	RtScene grid helpers take RtGraphics::Scene* / Geometry*
+runtime/src/graphics/scene.cpp	1323	POD:RtGraphics-views	RtScene grid helpers take RtGraphics::Scene* / Geometry*
+runtime/src/graphics/scene.cpp	1347	POD:RtGraphics-views	RtScene grid helpers take RtGraphics::Scene* / Geometry*
+runtime/src/graphics/scene.cpp	1427	POD:RtGraphics-views	RtScene grid helpers take RtGraphics::Scene* / Geometry*
+runtime/src/graphics/sun_camera.cpp	345	POD:RtGraphics-views	camera slot viewed as Camera
+runtime/src/graphics/sunlight.cpp	198	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	NewRenderBuffer: void* p -> RenderBuffer*
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	182	SIG:Serialize(void*) family	StrSer callback: void* str -> System::String*
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	237	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_AnimationGroup_SerializeClips datav callback
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	262	POD:ExternalPtr-thunk	event slot via POD thunk
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	263	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (vtbatch7_animgroup_particlesystem.cpp)
+runtime/src/graphics/wave21_lane_gfxbody.cpp	324	FIELD:Video::Context::_pixelConstantStaging	Context::_pixelConstantStaging bytes as float*
+runtime/src/graphics/wave23_lane_gfxbody.cpp	620	CONST:const_cast-this	FrameCopyImageBuffer const slot writes _generation
+runtime/src/graphics/wave24_lane_gfxmat.cpp	359	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (wave24_lane_gfxmat.cpp)
+runtime/src/graphics/wave24_lane_gfxmat.cpp	367	SIG:Serialize(void*) family	SerString callback: void* field -> System::String*
+runtime/src/graphics/wave24_lane_gfxmat.cpp	434	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (wave24_lane_gfxmat.cpp)
+runtime/src/graphics/wave24_lane_gfxmat.cpp	447	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (wave24_lane_gfxmat.cpp)
+runtime/src/graphics/wave24_lane_gfxmat.cpp	504	H5:MeshInstance::_animation	raw storage of Graphics::AnimationState
+runtime/src/graphics/wave24_lane_gfxmat.cpp	518	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (wave24_lane_gfxmat.cpp)
+runtime/src/graphics/wave27_lane_gfxbig.cpp	236	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	PassAssign/MaterialParameterSet element op
+runtime/src/graphics/wave27_lane_gfxbig.cpp	237	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	PassAssign/MaterialParameterSet element op
+runtime/src/graphics/wave27_lane_gfxbig.cpp	252	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	PassAssign/MaterialParameterSet element op
+runtime/src/graphics/wave27_lane_gfxbig.cpp	263	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	PassAssign/MaterialParameterSet element op
+runtime/src/graphics/wave27_lane_gfxbig.cpp	1074	FIELD:Graphics::RendererDrawItem::_object	void* _object read as Light*
+runtime/src/graphics/wave27_lane_gfxbig.cpp	1121	FIELD:Graphics::RendererDrawItem::_object	void* _object read as Light*
+runtime/src/graphics/wave27_lane_gfxpart.cpp	258	H8:bool-byte	SerializeBool of _active
+runtime/src/graphics/wave27_lane_gfxpart.cpp	267	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (wave27_lane_gfxpart.cpp)
+runtime/src/graphics/wave27_lane_gfxpart.cpp	268	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (wave27_lane_gfxpart.cpp)
+runtime/src/graphics/wave27_lane_gfxpart.cpp	507	FIELD:ExternalPtrHandle::p	particle.p void*
+runtime/src/graphics/wave27_lane_gfxpart.cpp	617	FIELD:ExternalPtrHandle::p	particle.p void*
+runtime/src/graphics/wave27_lane_gfxpart.cpp	632	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtGraphics_Emitter_OperatorNew
+runtime/src/graphics/wave27_lane_gfxpart.cpp	825	FIELD:Video::Context::_unknown20f0	uint64_t cursor viewed as uint16_t*
+runtime/src/graphics/wave27_lane_gfxpart.cpp	834	FIELD:Video::Context::_unknown20f0	uint64_t cursor viewed as uint16_t*
+runtime/src/graphics/wave27_lane_gfxpart.cpp	915	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtGraphics_ParticlePoolRecord_Ctor recv
+runtime/src/graphics/wave29_lane_slots.cpp	124	H5:g_identityTable	raw static storage viewed as Math::Transform[]
+runtime/src/graphics/wave29_lane_slots.cpp	291	H5:MeshInstance::_animation	raw storage of Graphics::AnimationState
+runtime/src/graphics/wave9_lane_gfx.cpp	399	FIELD:Graphics::RendererDrawGroup::<pass arrays at +0x1c0 stride 0x10>	indexed pass array via byte offset
+runtime/src/graphics/wave9_lane_gfx.cpp	400	FIELD:Graphics::RendererDrawGroup::<pass arrays at +0x1c0 stride 0x10>	indexed pass array via byte offset
+runtime/src/graphics/wave9_lane_gfxd.cpp	269	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	SceneEntryAssign/DrawItemInit/AddScene element op
+runtime/src/graphics/wave9_lane_gfxd.cpp	271	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	SceneEntryAssign/DrawItemInit/AddScene element op
+runtime/src/graphics/wave9_lane_gfxd.cpp	290	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	SceneEntryAssign/DrawItemInit/AddScene element op
+runtime/src/graphics/wave9_lane_gfxd.cpp	334	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	SceneEntryAssign/DrawItemInit/AddScene element op
+runtime/src/graphics/wave9_lane_gfxd.cpp	351	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	SceneEntryAssign/DrawItemInit/AddScene element op
+runtime/src/graphics/wave9_lane_gfxd.cpp	581	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	SceneEntryAssign/DrawItemInit/AddScene element op
+runtime/src/input/input.cpp	121	ERASED:rtsetavl24::Set/Node-bridge	keymap set viewed as rtsetavl24::Set/Node
+runtime/src/input/input.cpp	124	ERASED:rtsetavl24::Set/Node-bridge	keymap set viewed as rtsetavl24::Set/Node
+runtime/src/input/input.cpp	245	ERASED:rtsetavl24::Set/Node-bridge	keymap set viewed as rtsetavl24::Set/Node
+runtime/src/input/input.cpp	249	ERASED:rtsetavl24::Set/Node-bridge	keymap set viewed as rtsetavl24::Set/Node
+runtime/src/input/input_platform_shutdown_win.cpp	207	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/input/keymap_save.cpp	309	ERASED:rtsetavl24::Set/Node-bridge	keymap set viewed as rtsetavl24::Set/Node
+runtime/src/io/file_stream.cpp	194	H5:FileStream::_filename	char* raw storage of a System::String
+runtime/src/io/file_stream.cpp	459	SIG:FileSystem::CreatePath/ExistsInPackfile (RtSystem::Filename POD parameter)	CreatePath(Filename POD)
+runtime/src/io/file_stream.cpp	469	H5:FileStream::_filename	char* raw storage of a System::String
+runtime/src/io/file_stream.cpp	740	H5:FileStream::_filename	char* raw storage of a System::String
+runtime/src/io/filesystem_createfile_win.cpp	396	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_createfile_win.cpp	404	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_createfile_win.cpp	615	ERASED:rtsetavl::Node-element-read	packfile index root as rtsetavl::Node*
+runtime/src/io/filesystem_createfile_win.cpp	625	H5:FileSystem::_packfiles	raw storage of Array<PackageFile*>
+runtime/src/io/filesystem_find_win.cpp	401	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_find_win.cpp	403	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_find_win.cpp	587	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_find_win.cpp	629	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_find_win.cpp	656	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_find_win.cpp	669	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_find_win.cpp	695	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_openfile_win.cpp	365	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_openfile_win.cpp	402	FLOOR:byte_io	retail reads the top byte of the tag (MOVZX [+3])
+runtime/src/io/filesystem_packages.cpp	383	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/io/filesystem_packages.cpp	655	ERASED:rtsetavl::Node-element-read	PackfileIndexSet::Node view
+runtime/src/io/filesystem_packages.cpp	758	SIG:rtsort::SortByKey70	void** list
+runtime/src/io/filesystem_packages.cpp	835	SIG:rtavl::StringMapInsert	set/outSlot erased; PackfileIndexSet insert
+runtime/src/io/filesystem_packages.cpp	836	SIG:rtavl::StringMapInsert	set/outSlot erased; PackfileIndexSet insert
+runtime/src/io/filesystem_setupdirs_win.cpp	291	POD:RtSystem::String	WideString POD slot
+runtime/src/io/filesystem_setupdirs_win.cpp	329	SIG:FileSystem::CreatePath/ExistsInPackfile (RtSystem::Filename POD parameter)	ExistsInPackfile(Filename POD)
+runtime/src/io/filesystem_setupdirs_win.cpp	339	SIG:RtSystem_WideString_CtorFromString(RtSystem::String POD)	String POD parameter
+runtime/src/io/filesystem_setupdirs_win.cpp	342	POD:RtSystem::String	WideString POD slot
+runtime/src/io/filesystem_setupdirs_win.cpp	362	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/io/filesystem_timestamp_win.cpp	134	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_win.cpp	153	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/filesystem_win.cpp	161	POD:RtSystem::String	WideString POD slot / String POD
+runtime/src/io/modification.cpp	246	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	250	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	261	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	303	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	304	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	317	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	318	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	333	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	334	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	338	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	420	H5:Mod::set	ModSet POD, not a Collection::Set<Filename>
+runtime/src/io/modification.cpp	538	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	554	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	555	H5:Mod::files/bytes/ints	ModArrayOf<T> raw storage of Collection::Array<T>
+runtime/src/io/modification.cpp	572	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	583	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	584	ERASED:RtColl_Array{I32,U8,Filename,Mod}{Dtor,Assign}_* (modification.cpp void* doors)	void* core entry cast to ModArray
+runtime/src/io/modification.cpp	764	H5:Mod::file	RtSystem::Filename POD member
+runtime/src/io/modification_refresh.cpp	344	ERASED:PortedRetrace8(void*,void**)	Retrace8 with erased root/cursor
+runtime/src/io/modification_refresh.cpp	345	ERASED:PortedRetrace8(void*,void**)	Retrace8 with erased root/cursor
+runtime/src/io/modification_refresh.cpp	610	H5:IO::Modification::_mods	_mods/_count/_capacity as ModArrayOf<Mod>
+runtime/src/io/modification_refresh.cpp	792	H5:Mod::set	ModSet POD
+runtime/src/io/modification_setupfilesystem.cpp	252	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	255	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	334	POD:RtSystem::String	WideString POD slot
+runtime/src/io/modification_setupfilesystem.cpp	384	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	413	SIG:rtpathid::Insert	set/outSlot erased
+runtime/src/io/modification_setupfilesystem.cpp	414	SIG:rtpathid::SubtreeFree	erased node
+runtime/src/io/modification_setupfilesystem.cpp	472	SIG:FileSystem::CreatePath/ExistsInPackfile (RtSystem::Filename POD parameter)	CreatePath(Filename POD)
+runtime/src/io/modification_setupfilesystem.cpp	480	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	481	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	523	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	537	POD:RtObject-mirror	Object::External / Factory / Base view of the POD
+runtime/src/io/modification_setupfilesystem.cpp	550	POD:RtSystem::Filename	RtObject_External_Load takes the Filename POD
+runtime/src/io/modification_setupfilesystem.cpp	573	SIG:rtpathid::SubtreeFree	erased node
+runtime/src/io/modification_setupfilesystem.cpp	574	SIG:rtpathid::SubtreeFree	erased node
+runtime/src/io/package_file_dtor.cpp	242	H5:PackageFile::_stringArray20/_stringArray30	raw storage of Array<System::String>
+runtime/src/io/package_file_dtor.cpp	243	H5:PackageFile::_stringArray20/_stringArray30	raw storage of Array<System::String>
+runtime/src/io/package_file_read_win.cpp	655	SIG:RtSystem_Filename_AdjustDelimiters(RtSystem::Filename POD)	Filename POD parameter
+runtime/src/io/package_file_read_win.cpp	663	SIG:RtSystem_Filename_AdjustDelimiters(RtSystem::Filename POD)	Filename POD parameter
+runtime/src/io/package_file_read_win.cpp	665	SIG:RtSystem_Filename_AdjustDelimiters(RtSystem::Filename POD)	Filename POD parameter
+runtime/src/io/package_file_serialize.cpp	159	H8:bool-byte	SerializeBool of uint8_t _overridable
+runtime/src/io/persistence.cpp	60	SIG:rtavl::StringMapInsert	map erased to rtsetavl::Set*
+runtime/src/io/persistence.cpp	62	SIG:rtavl::StringMapInsert	node returned as SettingsMapNode*
+runtime/src/io/persistence.cpp	112	SIG:Persistence Get/Set void* self forwarders	void* self (outside callers in input/ declare it locally)
+runtime/src/io/persistence.cpp	116	SIG:Persistence Get/Set void* self forwarders	void* self (outside callers in input/ declare it locally)
+runtime/src/io/persistence.cpp	120	SIG:Persistence Get/Set void* self forwarders	void* self (outside callers in input/ declare it locally)
+runtime/src/io/persistence.cpp	124	SIG:Persistence Get/Set void* self forwarders	void* self (outside callers in input/ declare it locally)
+runtime/src/io/persistence_registry_win.cpp	234	SIG:rtsetclear::Clear	erased rtsetavl::Set*
+runtime/src/io/persistence_registry_win.cpp	241	SIG:rtavl::StringMapInsert	map erased to rtsetavl::Set*
+runtime/src/io/persistence_registry_win.cpp	243	SIG:rtavl::StringMapInsert	node returned as SettingsMapNode*
+runtime/src/io/persistence_savelist_job.cpp	191	POD:RtIO::Modification-storage	FilenameArray POD (RtIO::FilenameArray)
+runtime/src/io/persistence_saves.cpp	252	H5:Persistence::_workerVtable	embedded PersistenceWorker / set root as raw fields
+runtime/src/io/persistence_saves.cpp	253	H5:Persistence::_workerVtable	embedded PersistenceWorker / set root as raw fields
+runtime/src/io/persistence_saves_win.cpp	60	H5:Persistence::_blockDescData/_blockPtrData	raw Array storage
+runtime/src/io/persistence_saves_win.cpp	63	H5:Persistence::_blockDescData/_blockPtrData	raw Array storage
+runtime/src/io/persistence_worker_win.cpp	281	OTHER:PersistenceWorker void* door	static_cast of void* worker
+runtime/src/io/serializer.cpp	166	SIG:RtSerializer_* forwarders (rt::io::Serializer POD)	exe import-slot forwarders
+runtime/src/io/text_codec.cpp	488	SIG:RtIo_SerializeStringArray	datav void* -> char**
+runtime/src/io/text_codec.cpp	507	SIG:RtString_SetLength(RtSystem::String POD)	String POD parameter
+runtime/src/io/text_codec.cpp	538	SIG:RtString_SetLength(RtSystem::String POD)	String POD parameter
+runtime/src/math/transform.cpp	767	SIG:Math::Transform::Serialize(void*)	void* serializer
+runtime/src/math/vector.cpp	125	SIG:Math::Vector{2,3,4}::Serialize(void*)	void* serializer
+runtime/src/math/vector.cpp	214	SIG:Math::Vector{2,3,4}::Serialize(void*)	void* serializer
+runtime/src/math/vector.cpp	228	SIG:Math::Vector{2,3,4}::Serialize(void*)	void* serializer
+runtime/src/object/external.cpp	267	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external.cpp	371	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external.cpp	392	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external.cpp	477	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_add.cpp	111	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_add.cpp	196	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_add.cpp	283	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_class_doors.cpp	106	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	109	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	112	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	115	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	118	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_class_doors.cpp	130	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_class_doors.cpp	184	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	189	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	245	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	295	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_class_doors.cpp	388	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_class_doors.cpp	390	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_compiled.cpp	221	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_compiled.cpp	224	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_compiled.cpp	242	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_compiled.cpp	243	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_compiled.cpp	254	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_find.cpp	158	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_forceunload.cpp	160	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_list.cpp	80	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_list.cpp	91	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_list.cpp	99	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_list.cpp	103	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_list.cpp	112	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (external_list.cpp)
+runtime/src/object/external_list.cpp	113	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (external_list.cpp)
+runtime/src/object/external_list.cpp	116	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_load.cpp	178	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_load.cpp	179	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_load.cpp	182	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_load.cpp	183	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_load.cpp	256	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_load.cpp	266	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_load.cpp	280	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_load.cpp	282	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_load.cpp	329	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_load.cpp	349	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_load.cpp	362	H8:uint-overload	int depCount through SerU32
+runtime/src/object/external_load.cpp	373	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	376	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	377	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	378	FIELD:ExternalArrayElement::opaque	opaque qword split into two int32 + String at the serializer
+runtime/src/object/external_load.cpp	385	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views [2 casts on the line]
+runtime/src/object/external_load.cpp	394	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_path_stack.cpp	354	POD:RtObject-mirror	PathStackElement POD over the array data (Filename halves)
+runtime/src/object/external_path_stack.cpp	361	POD:RtObject-mirror	PathStackElement POD over the array data (Filename halves)
+runtime/src/object/external_path_stack.cpp	366	POD:RtObject-mirror	PathStackElement POD over the array data (Filename halves)
+runtime/src/object/external_path_stack.cpp	393	POD:RtObject-mirror	PathStackElement POD over the array data (Filename halves)
+runtime/src/object/external_path_stack.cpp	395	POD:RtObject-mirror	PathStackElement POD over the array data (Filename halves)
+runtime/src/object/external_path_win.cpp	390	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_path_win.cpp	414	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_path_win.cpp	445	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_path_win.cpp	455	POD:RtSystem::String	Filename/String POD API
+runtime/src/object/external_path_win.cpp	458	POD:RtSystem::String	Filename/String POD API
+runtime/src/object/external_path_win.cpp	486	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_ptr_serialize.cpp	207	POD:RtObject-mirror	Object::Base / ExternalFactory view of the POD
+runtime/src/object/external_ptr_serialize.cpp	221	POD:RtObject-mirror	Object::Base / ExternalFactory view of the POD
+runtime/src/object/external_ptr_serialize.cpp	240	POD:RtIo-views	rt::io Encoding/ReaderWriter views
+runtime/src/object/external_ptr_serialize.cpp	251	POD:RtIo-views	rt::io Encoding/ReaderWriter views
+runtime/src/object/external_ptr_serialize.cpp	256	POD:RtIo-views	rt::io Encoding/ReaderWriter views
+runtime/src/object/external_ptr_serialize.cpp	316	POD:RtSystem::Filename	ExternalPtr serialize path expansion
+runtime/src/object/external_ptr_serialize.cpp	318	POD:RtSystem::Filename	ExternalPtr serialize path expansion
+runtime/src/object/external_ptr_serialize.cpp	322	SIG:ExternalPtr<T>::Serialize(const void* typeInfo)	typeInfo read as the type-id dword
+runtime/src/object/external_ptr_serialize.cpp	358	POD:RtSystem::Filename	ExternalPtr serialize path expansion
+runtime/src/object/external_ptr_serialize.cpp	375	POD:RtSystem::Filename	ExternalPtr serialize path expansion
+runtime/src/object/external_ptr_serialize.cpp	388	POD:RtSystem::Filename	ExternalPtr serialize path expansion
+runtime/src/object/external_ptr_serialize.cpp	391	SIG:ExternalPtr<T>::Serialize(const void* typeInfo)	typeInfo read as the type-id dword
+runtime/src/object/external_ptr_serialize.cpp	396	CONST:FindOrLoad	const_cast of FindOrLoad result
+runtime/src/object/external_ptr_serialize.cpp	423	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize shared body typed over the RtObject::External POD
+runtime/src/object/external_ptr_serialize.cpp	549	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize shared body typed over the RtObject::External POD
+runtime/src/object/external_reftable.cpp	143	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_reftable.cpp	147	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_reftable.cpp	209	POD:RtIo-views	rt::io Encoding/ReaderWriter/Stream views
+runtime/src/object/external_reftable.cpp	256	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_reftable.cpp	355	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/external_savetext_win.cpp	139	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_savetext_win.cpp	143	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_savetext_win.cpp	252	POD:RtSystem::String	Filename/String POD API
+runtime/src/object/external_savetext_win.cpp	253	POD:RtSystem::String	Filename/String POD API
+runtime/src/object/external_savetext_win.cpp	258	POD:RtSystem::String	Filename/String POD API
+runtime/src/object/external_savetext_win.cpp	259	POD:RtSystem::String	Filename/String POD API
+runtime/src/object/external_savetext_win.cpp	269	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/external_set.cpp	801	POD:RtObject-mirror	Object::External/Base/Factory view of the RtObject POD
+runtime/src/object/factory_dtors.cpp	206	SIG:RtObject_{Factory,InternalFactory,ExternalFactory}_Dtor(void*)	void* self
+runtime/src/object/factory_dtors.cpp	296	SIG:RtObject_{Factory,InternalFactory,ExternalFactory}_Dtor(void*)	void* self
+runtime/src/object/factory_dtors.cpp	391	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/factory_dtors.cpp	420	POD:RtSystem::Filename	Filename/String POD API
+runtime/src/object/factory_dtors.cpp	450	SIG:RtObject_{Factory,InternalFactory,ExternalFactory}_Dtor(void*)	void* self
+runtime/src/object/internal.cpp	146	POD:ExternalPtr-thunk	InternalBasePtr POD <-> Object::InternalBasePtr
+runtime/src/object/internal.cpp	149	POD:ExternalPtr-thunk	InternalBasePtr POD <-> Object::InternalBasePtr
+runtime/src/object/internal.cpp	242	H8:bool-byte	SerializeBool(bool&) of a char
+runtime/src/object/internal.cpp	256	POD:RtObject-mirror	Object::Base / RtObject::Internal view
+runtime/src/object/internal.cpp	261	CONST:SerializeUInt-ref	const uint32_t& through SerializeUInt(uint32_t&)
+runtime/src/object/internal.cpp	266	POD:RtObject-mirror	Object::Base / RtObject::Internal view
+runtime/src/object/internal_class.cpp	140	POD:RtObject-mirror	System::Random view of the engine random
+runtime/src/object/internal_class.cpp	167	POD:RtIo-views	IO::MemoryStream dtor through the POD
+runtime/src/object/internal_class.cpp	204	OTHER:alloc-result	InternalMemAlloc result (Array growth allocator) cast to element pointer
+runtime/src/object/internal_class.cpp	230	OTHER:alloc-result	InternalMemAlloc result (Array growth allocator) cast to element pointer
+runtime/src/object/internal_class.cpp	258	OTHER:alloc-result	InternalMemAlloc result (Array growth allocator) cast to element pointer
+runtime/src/object/internal_class.cpp	286	OTHER:alloc-result	InternalMemAlloc result (Array growth allocator) cast to element pointer
+runtime/src/object/internal_class.cpp	487	POD:RtIo-views	RtIo stream POD viewed as IO::Stream
+runtime/src/object/internal_class.cpp	507	POD:RtIo-views	RtIo stream POD viewed as IO::Stream
+runtime/src/object/internal_ptr_array_serialize.cpp	68	POD:ExternalPtr-thunk	ExternalPtr / InternalPtr serialize body over the POD
+runtime/src/object/type_reflection.cpp	209	FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn	void* function slots
+runtime/src/object/type_reflection.cpp	213	FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn	void* function slots
+runtime/src/object/type_reflection.cpp	336	POD:RtObject-mirror	TypeRecord::info is RtObject::BaseTypeInfo*
+runtime/src/object/type_reflection.cpp	409	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	TypeChildAlloc result
+runtime/src/object/type_system.cpp	97	POD:RtObject-mirror	Object::Base view
+runtime/src/object/type_system.cpp	206	SIG:RtObject_Type_Serialize(void*, void*)	Type.h (void*, void*) caller code/Game/Action/sendcomponentmessage.cpp [2 casts on the line]
+runtime/src/picking/pickingmesh.cpp	171	H5:PickingMesh (SubMesh::_name, _string20, _string28)	String held as raw char*
+runtime/src/picking/pickingmesh.cpp	259	H5:PickingMesh (SubMesh::_name, _string20, _string28)	String held as raw char*
+runtime/src/picking/pickingmesh.cpp	260	H5:PickingMesh (SubMesh::_name, _string20, _string28)	String held as raw char*
+runtime/src/picking/scene.cpp	587	SIG:RtPicking_Scene_Ctor(void* self)	void* door; code/Game gameupdateloop_load.cpp passes raw MemAlloc storage
+runtime/src/save/closure_batch2b.cpp	113	ERASED:ArraySpec element ops (copy/init/destroy callbacks taking void* dst/src/base)	RtSave_MetaData_CopyCtor element op (SaveInfo)
+runtime/src/save/saveload_draw.cpp	618	FIELD:Video::Context::_contextData/_renderBuffer	void* platform data / render buffer
+runtime/src/save/saveload_draw.cpp	680	OTHER:memset-of-raw-stack-SpriteContext	sc + 0x58 memset
+runtime/src/save/saveload_draw.cpp	689	FIELD:Video::Context::_contextData/_renderBuffer	void* platform data / render buffer
+runtime/src/system/closure_batch2b.cpp	146	FLOOR:alloc_header	MemoryAllocator::LinkPrevBlock block-header byte distance (uint64_t* self)
+runtime/src/system/closure_batch2b.cpp	152	FLOOR:alloc_header	MemoryAllocator::LinkPrevBlock block-header byte distance (uint64_t* self)
+runtime/src/system/compression.cpp	469	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/configuration.cpp	304	SIG:rtavl::StringMapInsert	map erased to rtsetavl::Set*
+runtime/src/system/configuration.cpp	571	SIG:rtsetclear::Clear	erased rtsetavl::Set*
+runtime/src/system/filename.cpp	45	POD:pod_bridge-Sys/SysFile	file-local AsSys bridge
+runtime/src/system/filename.cpp	48	POD:pod_bridge-Sys/SysFile	file-local AsSys bridge
+runtime/src/system/filename.cpp	459	POD:RtSystem::Filename	this viewed as the POD
+runtime/src/system/pod_bridge.h	44	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	45	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	46	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	47	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	54	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	55	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	56	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	57	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	60	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	61	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	62	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	63	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	71	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/pod_bridge.h	72	POD:pod_bridge-Sys/SysFile	Sys()/SysFile() reinterpret bridges
+runtime/src/system/string.cpp	54	POD:pod_bridge-Sys/SysFile	file-local AsSys bridge
+runtime/src/system/string.cpp	57	POD:pod_bridge-Sys/SysFile	file-local AsSys bridge
+runtime/src/system/string.cpp	127	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	660	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	905	SIG:Serialize(void*) family	String::Serialize helper Rw: void* enc -> IO::ReaderWriter*
+runtime/src/system/string.cpp	962	SIG:System::String::Serialize(void*)	void* serializerRaw -> RtSerializer*
+runtime/src/system/string.cpp	988	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/string.cpp	990	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/thread_win.cpp	285	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/thread_win.cpp	287	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/thread_win.cpp	289	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/thread_win.cpp	290	FLOOR:vslot	Thread slot calls stay raw (B34_RULES 3.1; slot 1 would recurse)
+runtime/src/system/value_types.cpp	227	H8:uint-overload	int32 _index through the uint overload
+runtime/src/system/value_types.cpp	432	POD:RtSystem::String	WideString AsUTF8 into String POD
+runtime/src/system/widestring.cpp	197	POD:RtSystem::String	RtString_ReleaseInline of WideString
+runtime/src/system/widestring.cpp	291	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/system/widestring.cpp	370	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	RtMemAlloc result
+runtime/src/ui/borderdescription.cpp	87	H5:BorderDescription::_spriteName	a System::String / Array held as raw char* storage
+runtime/src/ui/characterset.cpp	107	H5:CharacterSet::_string20	a System::String / Array held as raw char* storage
+runtime/src/ui/characterset.cpp	121	H5:CharacterSet::_string20	a System::String / Array held as raw char* storage
+runtime/src/ui/combodialog_ctor.cpp	406	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	InternalMemAlloc result cast to ChildNode*
+runtime/src/ui/comboelement.cpp	141	H5:ComboElement::_params	a System::String / Array held as raw char* storage
+runtime/src/ui/comboelement.cpp	142	H5:ComboElement::_strings	a System::String / Array held as raw char* storage
+runtime/src/ui/cursor.cpp	120	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (cursor.cpp) [2 casts on the line]
+runtime/src/ui/description_common.h	85	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (description_common.h)
+runtime/src/ui/description_common.h	88	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (description_common.h)
+runtime/src/ui/description_common.h	91	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (description_common.h)
+runtime/src/ui/description_common.h	96	H5:description_common::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/description_common.h	136	H5:description_common::GetSpriteIndexFromName	System::String held as char* storage
+runtime/src/ui/dialog.cpp	1172	SIG:DialogInstance::Update(time, ui, uint8_t* updateState)	updateState bytes viewed as Element::UpdateState
+runtime/src/ui/dialog.cpp	1450	H5:ElementDescription::_textName	a System::String / Array held as raw char* storage
+runtime/src/ui/dialog_create.cpp	198	POD:RtObject-mirror	Factory singleton as RtObject::Factory
+runtime/src/ui/dialog_create.cpp	319	FIELD:UI::DialogInstance::_root	InternalPtr<Element> held as Element*
+runtime/src/ui/dialog_create.cpp	328	H5:DialogInstance::_spriteName / entry name	String held as raw char*
+runtime/src/ui/dialog_create.cpp	390	H5:DialogInstance::_spriteName / entry name	String held as raw char*
+runtime/src/ui/dialog_create.cpp	452	FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn	void* factoryFn called
+runtime/src/ui/dialog_ctor_dtor.cpp	205	H5:DialogInstance::_references	Array<void*> triple viewed as Array
+runtime/src/ui/dialog_ctor_dtor.cpp	220	H5:Dialog::_spriteName	a System::String / Array held as raw char* storage
+runtime/src/ui/dialog_vtable.cpp	334	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (dialog_vtable.cpp)
+runtime/src/ui/dialog_vtable.cpp	337	H5:dialog::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/dialog_vtable.cpp	398	POD:ExternalPtr-thunk	Serializer view for the ExternalPtr thunks
+runtime/src/ui/documenttext.cpp	155	H5:documenttext::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttext.cpp	157	H5:documenttext::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttext.cpp	159	H5:documenttext::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttextdescription.cpp	218	H5:DocumentTextDescription::_documentTextName	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttextelement.cpp	245	H5:DocumentTextElement::_sourceText	a System::String / Array held as raw char* storage
+runtime/src/ui/documenttextelement.cpp	249	H5:DocumentTextElement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/editelement.cpp	87	H5:editelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/editelement.cpp	110	H5:editelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/element.cpp	671	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array ClearCallback core on _children
+runtime/src/ui/element_bodies_b5.cpp	635	H5:TextDescription::_name	a System::String / Array held as raw char* storage
+runtime/src/ui/element_sprite_debug.cpp	43	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/element_sprite_debug.cpp	44	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/element_sprite_debug.cpp	76	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/element_sprite_debug.cpp	77	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/elementdescription_serialize.cpp	136	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (elementdescription_serialize.cpp)
+runtime/src/ui/elementdescription_serialize.cpp	154	POD:ExternalPtr-thunk	Serializer view for the ExternalPtr thunks
+runtime/src/ui/elementdescription_serialize.cpp	165	H8:uint-overload	int32 _id through SerializeUInt
+runtime/src/ui/elementdescription_serialize.cpp	172	H5:ElementDescription::_textName	a System::String / Array held as raw char* storage
+runtime/src/ui/font.cpp	93	H5:font::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/font.cpp	228	H5:Font::_string88	a System::String / Array held as raw char* storage
+runtime/src/ui/font.cpp	229	H5:Font::_string80	a System::String / Array held as raw char* storage
+runtime/src/ui/font.cpp	230	H5:Font::_string78	a System::String / Array held as raw char* storage
+runtime/src/ui/font.cpp	231	H5:Font::_string20	a System::String / Array held as raw char* storage
+runtime/src/ui/font.cpp	284	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (font.cpp) [2 casts on the line]
+runtime/src/ui/font.cpp	285	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (font.cpp) [2 casts on the line]
+runtime/src/ui/font.cpp	286	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (font.cpp) [2 casts on the line]
+runtime/src/ui/labeldescription.cpp	124	H5:LabelDescription::_spriteName	a System::String / Array held as raw char* storage
+runtime/src/ui/labelelement.cpp	64	H5:labelelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/layoutdescription.cpp	151	H8:uint-overload	int32 enum through SerializeUInt
+runtime/src/ui/layoutdescription.cpp	152	H8:uint-overload	int32 enum through SerializeUInt
+runtime/src/ui/numberdescription.cpp	108	H8:bool-byte	uint8_t flag through SerializeBool
+runtime/src/ui/numbereditdescription.cpp	209	H5:NumberEditDescription::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/numberelement.cpp	187	H5:NumberElement::_cachedText	a System::String / Array held as raw char* storage
+runtime/src/ui/progressdescription.cpp	91	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (progressdescription.cpp) [2 casts on the line]
+runtime/src/ui/progressdescription.cpp	98	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (progressdescription.cpp) [2 casts on the line]
+runtime/src/ui/ribbondescription.cpp	129	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (ribbondescription.cpp) [2 casts on the line]
+runtime/src/ui/scrolldescription.cpp	103	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (scrolldescription.cpp) [2 casts on the line]
+runtime/src/ui/scrolldescription.cpp	105	H5:ScrollDescription::_spriteNames	a System::String / Array held as raw char* storage
+runtime/src/ui/scrolldescription.cpp	153	H5:ScrollDescription::_spriteNames	a System::String / Array held as raw char* storage
+runtime/src/ui/sliderdescription.cpp	114	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (sliderdescription.cpp) [2 casts on the line]
+runtime/src/ui/sliderdescription.cpp	115	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (sliderdescription.cpp) [2 casts on the line]
+runtime/src/ui/spinnerdescription.cpp	115	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (spinnerdescription.cpp) [2 casts on the line]
+runtime/src/ui/spinnerdescription.cpp	116	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (spinnerdescription.cpp) [2 casts on the line]
+runtime/src/ui/spinnerdescription.cpp	117	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (spinnerdescription.cpp) [2 casts on the line]
+runtime/src/ui/sprite_debug.cpp	28	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/sprite_debug.cpp	29	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/sprite_debug.cpp	77	SIG:Debug_{ImageElement,LabelElement}_SetSprite / Debug_Sprite_{Ctor,IsValid} (void* self, void* sprite)	debug harness externs pass void*
+runtime/src/ui/spritecapture.cpp	167	H5:SpriteCapture::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/spritecapture.cpp	185	H5:SpriteCapture::_sprites	raw Array storage
+runtime/src/ui/spritecapture.cpp	320	H5:SpriteCapture::_sprites	raw Array storage
+runtime/src/ui/spritecapture_class.cpp	162	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (spritecapture_class.cpp) [2 casts on the line]
+runtime/src/ui/spritecapture_class.cpp	198	H5:SpriteCapture::name	a System::String / Array held as raw char* storage
+runtime/src/ui/spritecapture_class.cpp	382	H5:spritecapture::name	a System::String / Array held as raw char* storage
+runtime/src/ui/spritecontext.cpp	177	FIELD:Video::Context::_renderBuffer	void* _renderBuffer read as RenderBufferPrefix*
+runtime/src/ui/spritecontext.cpp	372	FIELD:Video::Context::_renderBuffer	void* _renderBuffer read as RenderBufferPrefix*
+runtime/src/ui/spritecontext_flush.cpp	305	FIELD:Video::Device::deviceData / Context platform data	void* deviceData / contextData
+runtime/src/ui/spritecontext_flush.cpp	382	FIELD:Video::Device::deviceData / Context platform data	void* deviceData / contextData
+runtime/src/ui/spritecontext_flush.cpp	505	FIELD:Video::Device::deviceData / Context platform data	void* deviceData / contextData
+runtime/src/ui/spritesheet_vtable.cpp	281	H5:spritesheet::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/spritesheet_vtable.cpp	289	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (spritesheet_vtable.cpp)
+runtime/src/ui/spritesheet_vtable.cpp	290	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (spritesheet_vtable.cpp)
+runtime/src/ui/stringtable_factory.cpp	177	H5:StringTable::name	a System::String / Array held as raw char* storage
+runtime/src/ui/stringtable_factory.cpp	178	H5:StringTable::text	a System::String / Array held as raw char* storage
+runtime/src/ui/tabdescription.cpp	138	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabdescription.cpp) [2 casts on the line]
+runtime/src/ui/tabdescription.cpp	139	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabdescription.cpp) [2 casts on the line]
+runtime/src/ui/tabdescription.cpp	140	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabdescription.cpp) [2 casts on the line]
+runtime/src/ui/tabdescription.cpp	141	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabdescription.cpp) [2 casts on the line]
+runtime/src/ui/tabdescription.cpp	160	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabdescription.cpp) [2 casts on the line]
+runtime/src/ui/tabdescription.cpp	161	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabdescription.cpp) [2 casts on the line]
+runtime/src/ui/tabledescription.cpp	137	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabledescription.cpp)
+runtime/src/ui/tabledescription.cpp	138	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (tabledescription.cpp)
+runtime/src/ui/textdescription.cpp	95	H5:TextDescription::_name	a System::String / Array held as raw char* storage
+runtime/src/ui/textdescription.cpp	133	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (textdescription.cpp) [2 casts on the line]
+runtime/src/ui/textdescription.cpp	134	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (textdescription.cpp) [2 casts on the line]
+runtime/src/ui/textdescription.cpp	135	H5:TextDescription::_name	a System::String / Array held as raw char* storage
+runtime/src/ui/textelement.cpp	56	H5:textelement::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/textelement.cpp	72	H5:TextElement::_cachedText	a System::String / Array held as raw char* storage
+runtime/src/ui/textelement_cachetext.cpp	163	FIELD:TextElement::ParamArray::_data	char** data viewed as const Str*
+runtime/src/ui/userinterface.cpp	636	SIG:RtUi_UserInterface_AddDialog(void** dlgPtr)	extern "C" door takes void** (ui_userinterface_abi_test pins it)
+runtime/src/ui/userinterface.cpp	690	FIELD:Video::Device::deviceData	void* deviceData
+runtime/src/ui/userinterface.cpp	1230	OTHER:IO::Serializer-null-encoding-guard	tree guards a null Encoding before CreateWriter
+runtime/src/ui/userinterface.cpp	1255	OTHER:IO::Serializer-null-encoding-guard	tree guards a null Encoding before CreateWriter
+runtime/src/ui/userinterface_draw.cpp	287	H5:UserInterface::SpriteContext-stack-storage	raw stack storage
+runtime/src/ui/userinterface_draw.cpp	317	FIELD:UserInterface::_captureViewport	raw bytes (Video::Viewport)
+runtime/src/ui/userinterface_frame.cpp	400	SIG:DialogInstance::Update(time, ui, uint8_t* updateState)	frame record passed as uint8_t*
+runtime/src/ui/userinterface_showdialog.cpp	347	FLOOR:ptr_int	retail defect-2 repro: low dword of _parent read through uintptr
+runtime/src/ui/userinterface_showdialog.cpp	348	FLOOR:ptr_int	retail defect-2 repro: low dword of _parent read through uintptr
+runtime/src/ui/userinterface_standalone.cpp	125	SIG:UI::UserInterface::{UpdateStandAloneUI,DrawStandAloneUI}(void* ui)	callback user data is void* (retail PEAX)
+runtime/src/ui/userinterface_standalone.cpp	174	SIG:UI::UserInterface::{UpdateStandAloneUI,DrawStandAloneUI}(void* ui)	callback user data is void* (retail PEAX)
+runtime/src/ui/widgets_input.cpp	291	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_input.cpp	292	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_input.cpp	697	H5:EditElement::_text	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	92	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	93	H5:widgets::<raw String slot passed in>	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	337	H5:DocumentTextElement::text	a System::String / Array held as raw char* storage
+runtime/src/ui/widgets_layout.cpp	489	H5:GraphSeries-stack-fill	raw stack bytes of a GraphSeries local
+runtime/src/ui/widgets_layout.cpp	490	H5:GraphSeries-stack-fill	raw stack bytes of a GraphSeries local
+runtime/src/ui/widgets_layout.cpp	500	H5:GraphSeries-stack-fill	raw stack bytes of a GraphSeries local
+runtime/src/video/batchc_context_setlight.cpp	144	SIG:Video::Context::SetLight(void* direction, void* attenuation, void* colour, void* position)	raw pointers (callers pass float arrays and fields)
+runtime/src/video/batchc_context_setlight.cpp	145	SIG:Video::Context::SetLight(void* direction, void* attenuation, void* colour, void* position)	raw pointers (callers pass float arrays and fields)
+runtime/src/video/batchc_context_setlight.cpp	146	SIG:Video::Context::SetLight(void* direction, void* attenuation, void* colour, void* position)	raw pointers (callers pass float arrays and fields)
+runtime/src/video/batchc_context_setlight.cpp	147	SIG:Video::Context::SetLight(void* direction, void* attenuation, void* colour, void* position)	raw pointers (callers pass float arrays and fields)
+runtime/src/video/context.cpp	335	FLOOR:dx11_seam	dx11/src/contextdata.cpp hands the setters void*
+runtime/src/video/context.cpp	348	FLOOR:dx11_seam	dx11/src/contextdata.cpp hands the setters void*
+runtime/src/video/context_bind.cpp	255	FIELD:Video::Context::_imageBuffers	void* array read as ImageBuffer*
+runtime/src/video/context_bind.cpp	319	FIELD:Video::Context::_pixelConstantStaging	staging bytes hold a VideoProgram*
+runtime/src/video/context_bind.cpp	420	SIG:Video::Context::SetVertexBuffer(const void* vb, int slot, ...)	void* vb stored as VertexBuffer*
+runtime/src/video/context_ctor.cpp	396	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/video/context_ctor.cpp	408	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/video/context_ctor.cpp	413	OTHER:alloc-result (RtMemAlloc / class operator new / InternalMemAlloc void* result cast; tier-I shape miss)	class operator new returns void*
+runtime/src/video/context_ctor.cpp	474	SIG:Video::Context::SetDefaultRenderBuffer(void* rb)	minimap_paint.cpp hands void*
+runtime/src/video/device_startup.cpp	676	ERASED:rtsetavl::Node-element-read	node cast to its (callback/key) element
+runtime/src/video/imagebuffer_platform_serialize.cpp	332	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array core takes ArrayHdr*/bytes
+runtime/src/video/imagebuffer_platform_serialize.cpp	337	H5:ImageBuffer::levels	raw header of Array<Level>
+runtime/src/video/imagebuffer_platform_serialize.cpp	345	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array core takes ArrayHdr*/bytes
+runtime/src/video/imagebuffer_vtable.cpp	393	H5:ImageBuffer::_sourceName	String held as raw char*
+runtime/src/video/pixelprogram.cpp	113	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (pixelprogram.cpp)
+runtime/src/video/save_image_to_file.cpp	291	SIG:FileSystem::CreatePath/ExistsInPackfile (RtSystem::Filename POD parameter)	CreatePath(Filename POD)
+runtime/src/video/shaderprogram.cpp	176	H5:ShaderProgram entry::name	String held as raw char*
+runtime/src/video/vertexlayout.cpp	135	H5:VertexLayout::Element::name	String held as raw char*
+runtime/src/video/vertexprogram.cpp	200	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (vertexprogram.cpp)
+runtime/src/video/video_program.cpp	183	FIELD:Video::Context::_pixelConstantStaging	Context +0x200 videoProgram lives in _pixelConstantStaging
+runtime/src/video/video_program.cpp	187	FIELD:Video::Context::_pixelConstantStaging	Context +0x200 videoProgram lives in _pixelConstantStaging
+runtime/src/video/videoprogram.cpp	176	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (videoprogram.cpp)
+runtime/src/video/videoprogram.cpp	178	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (videoprogram.cpp)
+runtime/src/video/videoprogram.cpp	180	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (videoprogram.cpp)
+runtime/src/video/videoprogram.cpp	182	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (videoprogram.cpp)
+runtime/src/video/videoprogram.cpp	184	POD:ExternalPtr-thunk	ExternalPtr<T>::Serialize thunk argument (videoprogram.cpp)
+runtime/types/collection/Collection.h	450	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	459	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	460	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	467	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	473	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	474	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	479	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	480	ERASED:rtcoll::ArrayHdr-core (ArrayDtorImpl/ArrayAssignCore/SetSizeCore/ClearCallback)	Array<T> member cast this to rtcoll::ArrayHdr*
+runtime/types/collection/Collection.h	1225	ERASED:PortedRetrace8(void*,void**)	Set8::Retrace passes its slot as void**
+runtime/types/collection/Collection.h	1576	FLOOR:elem_stride	node element bytes as Key
+runtime/types/graphics/AnimationGroup.h	159	H5:AnimationGroup::_clips	Animation has no C++ dtor body; array typed Array<Animation> raw
+runtime/types/graphics/GraphicsMesh.h	439	H5:GraphicsMesh::_nodes	raw header viewed as Array<Node>
+runtime/types/graphics/Mesh.h	572	FIELD:ExternalPtrHandle::p	_mesh.p void* read as GraphicsMesh*
+runtime/types/object/External.h	459	POD:ExternalPtr-thunk	ExternalPtr / InternalPtr serialize body over the POD
+runtime/types/object/External.h	466	POD:ExternalPtr-thunk	ExternalPtr / InternalPtr serialize body over the POD
+runtime/types/object/Internal.h	362	POD:RtObject-mirror	InternalPtr<T> holds RtObject::Internal* POD; T not an Object::Internal yet
+runtime/types/object/Internal.h	371	POD:RtObject-mirror	InternalPtr<T> holds RtObject::Internal* POD; T not an Object::Internal yet
+runtime/types/object/Internal.h	566	POD:RtObject-mirror	InternalPtr<T> holds RtObject::Internal* POD; T not an Object::Internal yet
+runtime/types/object/TypeInfo.h	405	SIG:RtObject IsDerivedFrom(const void* p, typeId)	callers tree-wide hand in untyped refs
+runtime/types/system/Filename.h	103	POD:pod_bridge-Sys/SysFile	Filename::AsString: retail Filename is one String field (layout alias)
+runtime/types/system/Filename.h	104	POD:pod_bridge-Sys/SysFile	Filename::AsString: retail Filename is one String field (layout alias)
+runtime/types/ui/EditElement.h	159	H5:EditElement::_text	a System::String / Array held as raw char* storage
+runtime/types/ui/UserInterface.h	361	OTHER:forward-declared InternalPtr	header only forward-declares InternalPtr (unit test links this inline body alone)

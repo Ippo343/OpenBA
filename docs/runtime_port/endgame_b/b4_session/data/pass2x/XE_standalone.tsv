@@ -1,0 +1,93 @@
+file	line	family	note
+standalone/autostart.cpp	125	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	OnElementEvent on a void* dialog (g_StandaloneNewGameDialog void* + the two LastOpened returns)
+standalone/autostart.cpp	275	FIELD:g_StandaloneNewGameDialog	NewGameDialog held as void* (NewGameDialog.h:92, mainmenudialog.cpp:137); button read by offset kNewGame_ButtonOk
+standalone/autostart.cpp	276	FIELD:g_StandaloneNewGameDialog	NewGameDialog held as void* (NewGameDialog.h:92, mainmenudialog.cpp:137); button read by offset kNewGame_ButtonOk
+standalone/autostart.cpp	356	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	ModDialog_LastOpened returns void*
+standalone/boot_window.cpp	49	FLOOR:dx11_seam	dx11/src/devicedata.cpp hands the configuration as void*
+standalone/builder_seat_harness.cpp	99	SIG:CitizenList_AddWorker_91130(int64_t town, uint64_t builder)	builder pointer passed as uint64 key
+standalone/builder_seat_harness.cpp	103	SIG:CitizenList_AddWorker_91130(int64_t town, uint64_t builder)	town manager passed as int64
+standalone/cropfield_force_start.cpp	91	FLOOR:vslot	harness reads/calls the node vtable slot 2 directly
+standalone/cropfield_force_start.cpp	94	FLOOR:vslot	harness reads/calls the node vtable slot 2 directly
+standalone/food_panel_harness.cpp	507	SIG:EntityUI_SetEditMode_Impl(uint64_t mode)	template pointer passed as uint64_t mode
+standalone/food_panel_harness.cpp	538	SIG:EditTool_CloseInfoDialog(tool, uintptr_t dialog)	dialog pointer passed as uintptr_t
+standalone/food_workers_harness.cpp	222	SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int count)	town passed as int64
+standalone/food_workers_harness.cpp	232	SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int count)	town passed as int64
+standalone/main.cpp	663	FIELD:RtObject::BaseTypeInfo::factoryFn	void* factoryFn called as Factory_t (TypeInfo.h)
+standalone/main.cpp	880	FLOOR:dx11_seam	swap chain read from the DX11 DeviceData subclass at +0x18 [2 casts on the line]
+standalone/main.cpp	952	FLOOR:dx11_seam	swap chain read from the DX11 DeviceData subclass at +0x18 [2 casts on the line]
+standalone/modal_driver.cpp	222	FIELD:MainLoopCallback::_func/_context	void* _func / _context (engine/MainLoop.h)
+standalone/modal_driver.cpp	229	FIELD:MainLoopCallback::_func/_context	void* _func / _context (engine/MainLoop.h)
+standalone/modal_driver.cpp	285	FIELD:MainLoopCallback::_func/_context	void* _func / _context (engine/MainLoop.h)
+standalone/modal_driver.cpp	290	FIELD:MainLoopCallback::_func/_context	void* _func / _context (engine/MainLoop.h)
+standalone/mouse_inject.cpp	433	H5:UI::Element::_name/_toolTipString	String held as char* storage read as const char*
+standalone/mouse_inject.cpp	451	H5:UI::Element::_name/_toolTipString	String held as char* storage read as const char*
+standalone/mouse_inject.cpp	458	H5:UI::Element::_name/_toolTipString	String held as char* storage read as const char*
+standalone/mouse_inject.cpp	609	H5:UI::Element::_name/_toolTipString	String held as char* storage read as const char*
+standalone/mouse_inject.cpp	611	H5:UI::Element::_name/_toolTipString	String held as char* storage read as const char*
+standalone/mouse_inject.cpp	650	OTHER:InternalPtr-raw-local	raw locals handed where BeginDragDrop takes InternalPtr<>* (an InternalPtr local would run its dtor)
+standalone/mouse_inject.cpp	651	OTHER:InternalPtr-raw-local	raw locals handed where BeginDragDrop takes InternalPtr<>* (an InternalPtr local would run its dtor)
+standalone/orchard_force_start.cpp	139	OTHER:InternalPtr-raw-local	element handed where the slot takes InternalPtr<Element>* (known_port_issues)
+standalone/orchard_workers_harness.cpp	159	SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int count)	town passed as int64
+standalone/orchard_workers_harness.cpp	168	SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int count)	town passed as int64
+standalone/panel_staffing_driver.cpp	196	SIG:EditTool_CloseInfoDialog(tool, uintptr_t dialog)	dialog pointer passed as uintptr_t
+standalone/pausemenu_harness.cpp	149	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	LastOpened returns void*
+standalone/pausemenu_harness.cpp	161	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	LastOpened returns void*
+standalone/pausemenu_harness.cpp	162	OTHER:InternalPtr-raw-local	nullElem passed as InternalPtr<Element>*
+standalone/pausemenu_harness.cpp	265	SIG:EntityUI_OpenPauseMenu (void* return)	EntityUI_OpenPauseMenu returns void*
+standalone/perf_experimental.cpp	112	OTHER:bool-flag-as-byte-pointer	MeshInstance::_rootOnlyUpdates (bool) as uint8_t* flag
+standalone/perf_experimental.cpp	142	LOCAL:perf_experimental Frustum view	worldFrustum void* param cast to Frustum*
+standalone/perf_experimental.cpp	206	SIG:PerfX::PickCullSkip / PerfX::ModelCulled (void* model)	model void* offset reads (+0x148 / +0x158) [2 casts on the line]
+standalone/perf_experimental.cpp	258	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	259	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	260	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	264	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	278	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	279	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	281	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	287	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	290	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	291	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	293	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	403	SIG:PerfX::PickCullSkip / PerfX::ModelCulled (void* model)	model void* offset reads (+0x148 / +0x158) [2 casts on the line]
+standalone/perf_experimental.cpp	417	SLOT:Component::Update(void* time)	ModelComponent time param is void*
+standalone/perf_experimental.cpp	445	SIG:PerfX::PickCullSkip / PerfX::ModelCulled (void* model)	model void* offset reads (+0x148 / +0x158) [2 casts on the line]
+standalone/redzone_alloc.cpp	405	FIELD:MemoryAllocator::freeLists	freeLists is uint64_t (FreeTag*) in MemoryAllocator.h
+standalone/redzone_alloc.cpp	1004	FIELD:MemoryAllocator::freeLists	freeLists is uint64_t (FreeTag*) in MemoryAllocator.h
+standalone/scene_watch.cpp	449	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	450	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	451	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	452	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	561	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	568	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	569	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	570	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	571	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	584	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	585	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	586	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	608	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	614	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	615	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	616	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/scene_watch.cpp	690	LOCAL:scene_watch raw camera/mesh/object offset reads	Graphics::Camera / MeshInstance / GraphicsMesh::DetailLevel types exist; harness reads by offset
+standalone/stress_harness.cpp	233	H5:CitizenComponent::name	CitizenComponent::name (+0x28) is a String held as raw storage
+standalone/stress_harness.cpp	343	SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int count)	profession pointer / town as integers
+standalone/stress_harness.cpp	377	SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int count)	profession pointer / town as integers
+standalone/stress_harness.cpp	563	SIG:CompProf_BeginKind(void* comp)	comp void* cast to CitizenComponent / CitizenAIComponent / Object::Base
+standalone/stress_harness.cpp	564	SIG:CompProf_BeginKind(void* comp)	comp void* cast to CitizenComponent / CitizenAIComponent / Object::Base
+standalone/stress_harness.cpp	572	FLOOR:vslot	profiler keys its table on the vtable word
+standalone/stress_harness.cpp	580	SIG:CompProf_BeginKind(void* comp)	comp void* cast to CitizenComponent / CitizenAIComponent / Object::Base
+standalone/tool_harness.cpp	178	SIG:RemovalTool_Factory_SA / PlacementTool_Factory_SA (void* return)	factory returns void*
+standalone/tool_harness.cpp	266	SIG:RemovalTool_Factory_SA / PlacementTool_Factory_SA (void* return)	factory returns void*
+standalone/tool_harness.cpp	358	SIG:EntityUI_SetEditMode_Impl(uint64_t mode)	template pointer passed as uint64_t mode
+standalone/tool_harness.cpp	412	SIG:EntityUI_SetEditMode_Impl(uint64_t mode)	template pointer passed as uint64_t mode
+standalone/tool_harness.cpp	546	OTHER:CalcCost int* out-param	8-byte local behind CalcCost(int*) (resizing not B.4)
+standalone/tool_harness.cpp	596	SIG:EntityUI_SetEditMode_Impl(uint64_t mode)	template pointer passed as uint64_t mode
+standalone/tool_harness.cpp	878	SIG:ToolbarUtility_HarnessOpen(gameSys, uint64_t desc)	desc pointer passed as uint64_t
+standalone/tool_harness.cpp	1688	OTHER:InternalPtr-raw-local	element handed where the slot takes InternalPtr<Element>*
+standalone/tool_harness.cpp	1825	OTHER:InternalPtr-raw-local	element handed where the slot takes InternalPtr<Element>*
+standalone/tool_harness.cpp	2114	SIG:RemovalTool_Factory_SA / PlacementTool_Factory_SA (void* return)	factory returns void*
+standalone/tool_harness.cpp	2529	FIELD:g_BridgeLastMaster/g_BridgeLastSegments	void* globals (bridgetool_calcpath.cpp:217-218)
+standalone/tool_harness.cpp	2558	SIG:EntityUI_SetEditMode_Impl(uint64_t mode)	template pointer passed as uint64_t mode
+standalone/tool_harness.cpp	2725	OTHER:CalcCost int* out-param	8-byte local behind CalcCost(int*) (resizing not B.4)
+standalone/tool_harness.cpp	2827	FIELD:g_BridgeLastMaster/g_BridgeLastSegments	void* globals (bridgetool_calcpath.cpp:217-218)
