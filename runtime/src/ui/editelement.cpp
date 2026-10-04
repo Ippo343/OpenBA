@@ -84,7 +84,7 @@ void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // A System::String held in a raw char* slot, as the member calls below need
 // it. LEFT (H5): the Strings of this class are raw char* storage.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
 struct Event {
     void*    dialog;
@@ -107,7 +107,7 @@ int StrLen(const char* s) {
 }
 
 const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);
+    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 void ReleaseString(char** slot) {
@@ -226,7 +226,7 @@ void EditElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // `top - font.baseline + font.lineHeight`, and the caret — a literal "|" —
 // one pixel LEFT of the character position the caret index resolves to.
 void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))   // LEFT: _border is void*
+    if (Element* border = _border)
         border->Draw(ctx, alpha);                            // virtual, slot 6
 
     const uint32_t flags = _flags;

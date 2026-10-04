@@ -92,7 +92,7 @@ void TextDescription::Destruct() { this->~TextDescription(); }
 // retail's, the same asymmetry ~ImageDescription has.
 TextDescription::~TextDescription() {
     System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_name));           // 18011eb04..18011eb22
+        *reinterpret_cast<System::String*>(&_name));           // 18011eb04..18011eb22  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ============================================================================
@@ -130,9 +130,9 @@ bool TextDescription::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 1);                      // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 18011ee8b ExternalPtr<Font>
-    RtObject_ExternalPtrSerialize_StringTable(reinterpret_cast<RtObject::External**>(&_stringTable2), reinterpret_cast<rt::io::Serializer*>(&ser));  // 18011ee99 ExternalPtr<StringTable>
-    reinterpret_cast<System::String*>(&_name)->Serialize(&ser);   // 18011eea7 String 0x1800c9930
+    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 18011ee8b ExternalPtr<Font>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    RtObject_ExternalPtrSerialize_StringTable(reinterpret_cast<RtObject::External**>(&_stringTable2), reinterpret_cast<rt::io::Serializer*>(&ser));  // 18011ee99 ExternalPtr<StringTable>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    reinterpret_cast<System::String*>(&_name)->Serialize(&ser);   // 18011eea7 String 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     rw->SerializeBool(_b84, nullptr);
     rw->SerializeBool(_b85, nullptr);

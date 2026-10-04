@@ -184,7 +184,7 @@ public:
     // +0xf0 Collection::Array<GraphSeries> (GraphElementOffsets above), kept
     // as its raw 16-byte header: the array's destroy and grow are addressed
     // helpers (0x1800416d0 / kSpec_GraphSeries), not a C++ ~Array.
-    void*    _seriesData;     // +0xf0
+    GraphSeries* _seriesData; // +0xf0  (B4 P2 H4: typed, stride 0x18)
     int32_t  _seriesCount;    // +0xf8
     int32_t  _seriesCapacity; // +0xfc
 };

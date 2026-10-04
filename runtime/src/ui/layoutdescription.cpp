@@ -148,8 +148,8 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int
         rtdesc::StringSerialize(&e->relativeToX, ser);         // 180043f8e
         rtdesc::StringSerialize(&e->relativeToY, ser);         // 180043f9a
 
-        rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->horizontal), nullptr);          // +0x98
-        rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98
+        rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->horizontal), nullptr);          // +0x98  // LEFT: H8 the int32 enum through retail's uint overload (vt+0x98)
+        rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98  // LEFT: H8 the int32 enum through retail's uint overload (vt+0x98)
         rw()->SerializeInt(e->offsetX, nullptr);              // +0xa0
         rw()->SerializeInt(e->offsetY, nullptr);              // +0xa0
         rw()->SerializeBool(e->force, nullptr);               // +0x78

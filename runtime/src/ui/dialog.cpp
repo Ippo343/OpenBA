@@ -1169,7 +1169,7 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
 // block R-UI-b) still hand the UpdateState as its address.
 void DialogInstance::Update(const System::Time& time, UserInterface* ui,
                             uint8_t* updateState) {
-    Update(time, ui, *reinterpret_cast<Element::UpdateState*>(updateState));
+    Update(time, ui, *reinterpret_cast<Element::UpdateState*>(updateState));   // LEFT: B4 FORWARD for userinterface_frame.cpp, whose 0x30-byte frame record is value-initialised where Element::UpdateState's ctor (0x180115600) writes less (NOCLASS frame state)
 }
 
 void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180114a60
@@ -1235,10 +1235,8 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
             Element* child = r->_children._data[i];
             if (child) child->AdjustUpperLeft(dx, dy);          // 0x180115840
         }
-        // LEFT: Element::_border stays void* (tests/unit/ui_element_abi_test.cpp:394
-        // assigns a void* to it).
-        if (void* border = r->_border)
-            static_cast<Element*>(border)->AdjustUpperLeft(dx, dy);
+        if (Element* border = r->_border)
+            border->AdjustUpperLeft(dx, dy);
 
         _upperLeftX = x;
         _upperLeftY = y;
@@ -1449,7 +1447,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     if (table) {
         // LEFT (H5): _textName is a System::String held as raw char* storage.
         index = table->GetIndexFromName(                               // 0x180002470
-            *reinterpret_cast<const System::String*>(&_textName));
+            *reinterpret_cast<const System::String*>(&_textName));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
     }
     elem = ED_ELEM;
     elem->_toolTip.table = table;                                      // +0x48

@@ -82,7 +82,7 @@ void SpinnerElement::ComputeSize() {
 // [5] 0x1800d80c0
 void SpinnerElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
     if (_border != nullptr)
-        reinterpret_cast<Element*>(_border)->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
+        _border->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
 
     ComputeSize();   // slot 4, VIRTUAL — `CALL [RAX+0x20]` in retail
 
@@ -136,7 +136,7 @@ void SpinnerElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t 
 // [6] 0x1800d8030
 void SpinnerElement::Draw(SpriteContext& context, uint8_t alpha) const {
     if (_border != nullptr)
-        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+        _border->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
     const int32_t n = _children.GetSize();
     for (int32_t i = 0; i < n; ++i)

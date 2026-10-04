@@ -344,7 +344,7 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     // B.4 LEFT: the defect-2 control reads the low dword of `_parent` (+0x28),
     // which is no field.
     if (g_RtShowDialogDefect == 2)                                       // control
-        return *reinterpret_cast<int*>(
-            reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);
+        return *reinterpret_cast<int*>(   // LEFT: the defect-2 control reads the low dword of _parent (+0x28), which is no field
+            reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);   // LEFT: as above
     return dialogArg->Get()->_result;
 }

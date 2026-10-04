@@ -121,7 +121,7 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
         int32_t idx;
         if (sheet != nullptr) {                              // 1800d2749
             idx = sheet->GetSpriteIndexFromName(               // 1800d2755
-                *reinterpret_cast<const System::String*>(&_spriteName));
+                *reinterpret_cast<const System::String*>(&_spriteName));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
         } else {
             idx = -1;                                        // 1800d275c OR EAX,-1
         }

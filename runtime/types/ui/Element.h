@@ -71,6 +71,7 @@
 #include "ElementDescription.h"        // UI::ElementDescription::Alignment, ExternalPtr
 
 namespace System { class String; class Time; }
+namespace Input  { class KeyMap; }
 
 namespace UI {
 class Element;
@@ -350,7 +351,7 @@ public:
         int32_t  mouseY;          // +0x1c
         uint8_t  mouseCaptured;   // +0x20  ctor 0
         uint8_t  pad21[7];        // +0x21  written by nothing
-        void*    config;          // +0x28  NOT written by the ctor
+        ::Input::KeyMap* config;  // +0x28  NOT written by the ctor; = Input::Configuration::_singleton->_keyMap (B4 P2 H4)
 
         // 0x180115600, transcribed store for store; the bytes it does not
         // write stay unwritten (no member initialisers).
@@ -530,7 +531,7 @@ public:
     DialogInstance* _dialogParent; // +0x90  InternalPtr<UI::DialogInstance> (B4 H4: typed)
     Element* _parent;            // +0x98
     Collection::Array<Element*> _children;   // +0xa0
-    void*    _border;            // +0xb0  InternalPtr<UI::Element>
+    Element* _border;            // +0xb0  InternalPtr<UI::Element> (B4 P2 H4: typed)
     const ElementDescription* _description; // +0xb8  ExternalPtr<UI::ElementDescription>; CreateInstance 0x180115ad0 stores its const `this` (B4 H4)
 };
 

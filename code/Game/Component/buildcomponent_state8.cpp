@@ -64,6 +64,7 @@
 #include "Component/StorageComponent.h"
 #include "Component/WorkComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
 
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
 extern "C" void* g_pBuildStructureWork = nullptr;                    // 2c-B probe: last spawned build work
@@ -125,24 +126,22 @@ static ModelDescription* BC8_MeshModelDesc(ModelComponent* meshElem) {
 }
 // Frame count for a model's current mesh group (modelDesc+0x20 group array, stride
 // 0x18, frameCount @ +0x10).
-// LEFT: ModelDescription::_meshGroups is void* (no MeshGroup type yet, COMP-d): the
-// group reads stay by offset.
 static int BC8_MeshFrameCount(ModelComponent* meshElem, ModelDescription* modelDesc) {
     if (!modelDesc) return 0;
     int16_t variant = meshElem->meshGroup;
-    uintptr_t groupBase = reinterpret_cast<uintptr_t>(modelDesc->_meshGroups);
+    ModelMeshGroup* groupBase = modelDesc->_meshGroups;
     if (!groupBase || variant < 0) return 0;
-    return *reinterpret_cast<int32_t*>(groupBase + (int64_t)variant * 0x18 + 0x10);
+    return groupBase[variant].meshCount;
 }
 // Frame mesh pointer: modelDesc+0x20 group[variant].framePtrs(+8)[frame].
 static void* BC8_MeshFramePtr(ModelComponent* meshElem, ModelDescription* modelDesc, int frame) {
     if (!modelDesc || frame < 0) return nullptr;
     int16_t variant = meshElem->meshGroup;
-    uintptr_t groupBase = reinterpret_cast<uintptr_t>(modelDesc->_meshGroups);
+    ModelMeshGroup* groupBase = modelDesc->_meshGroups;
     if (!groupBase || variant < 0) return nullptr;
-    uintptr_t framePtrArr = *reinterpret_cast<uintptr_t*>(groupBase + (int64_t)variant * 0x18 + 8);
+    Graphics::GraphicsMesh** framePtrArr = groupBase[variant].meshes;
     if (!framePtrArr) return nullptr;
-    return *reinterpret_cast<void**>(framePtrArr + (int64_t)frame * 8);
+    return framePtrArr[frame];
 }
 // Re-add a model's draw children (its entity's components, each one's slot 12).
 static void BC8_ReaddDrawChildren(ModelComponent* meshElem) {
@@ -292,12 +291,11 @@ char BuildComponent::State8Enter(void* sm) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
                 uintptr_t bsIBP = 0;
                 new (&bsIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge
+                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge  LEFT: SIG BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
                 // find the site WorkComponent (c8070) the work posts under
                 WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
                 if (workComp != nullptr) {
-                    // LEFT: CitizenAI_WorkScheduler_Post takes the component as uintptr_t (COMP-b's declaration)
-                    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x2001, 1, &bsIBP);
+                    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x2001, 1, &bsIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post (the component as uintptr_t)
 
                     // Builders are seated by the tick-driven Builder pool
                     // (BuilderPool_Tick) through the townMgr+0x100 registration made at
@@ -446,28 +444,24 @@ char BuildComponent::State8OneShot(void* /*sm*/) {
 
     ModelComponentNotify_Reimpl(_entity, 4);
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the CitizenBehavior
-    // reads below stay by offset.
-    uintptr_t townMgr = 0;
+    CitizenBehavior* townMgr = nullptr;
     if (GameUpdateLoop::_singleton != nullptr)
-        townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+        townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> selfIBP(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &selfIBP);
+        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &selfIBP);
         if (idx >= 0) {
-            int count = *reinterpret_cast<int32_t*>(townMgr + 0xd8);
-            uintptr_t base = *reinterpret_cast<uintptr_t*>(townMgr + 0xd0);
+            int count = townMgr->buildComponentCount;
+            BuildComponent** base = townMgr->buildComponents;
             for (int j = idx; j + 1 < count; ++j)
-                *reinterpret_cast<uint64_t*>(base + (int64_t)j * 8) =
-                    *reinterpret_cast<uint64_t*>(base + (int64_t)(j + 1) * 8);
-            *reinterpret_cast<int32_t*>(townMgr + 0xd8) = count - 1;
+                base[j] = base[j + 1];
+            townMgr->buildComponentCount = count - 1;
         }
     }
     {
         StatusIconComponent* statusIcon = _entity->FindComponent<StatusIconComponent>();
         if (statusIcon) {
-            // LEFT: CitizenComp_FUN_14012c3f0 takes int64_t* (Component/exe_bodies.h, statusiconcomponent.cpp's section)
-            CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 0, 0);
+            statusIcon->SetFlag(0, 0);   // 0x14012c3f0 (CitizenComp_FUN_14012c3f0's member)
         }
     }
     return 1;
@@ -502,25 +496,23 @@ void BuildComponent::State8Finalize() {
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     if (storage == nullptr) return;
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-    uintptr_t townMgr = 0;
+    CitizenBehavior* townMgr = nullptr;
     if (GameUpdateLoop::_singleton != nullptr)
-        townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+        townMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // (a) refund leftover storage slots to town stock (townMgr+0x170; entry idx*0x20+0xc).
-    // LEFT: StorageComponent::storageSlots is void* (no slot type yet, COMP-e).
     int slotCount = storage->slotCount;
     for (int k = 0; k < slotCount; ++k) {
-        uintptr_t slotArr = reinterpret_cast<uintptr_t>(storage->storageSlots);
-        uintptr_t slot = slotArr + (int64_t)k * 0x10;
-        int count = *reinterpret_cast<int32_t*>(slot + 8);
-        void* matType = *reinterpret_cast<void**>(slot);
-        int resIdx = ActRm_GetResourceCategory_88f90(storage->storageSlots,
-                                                     reinterpret_cast<uintptr_t>(matType));
+        StorageComponent::Item* slotArr = storage->storageSlots;
+        StorageComponent::Item* slot = slotArr + k;
+        int count = slot->_count;
+        ComponentDescription* matType = slot->_resource;
+        // ActRm_GetResourceCategory_88f90 is a forwarder that never reads its first argument.
+        int resIdx = ResourceCategory(matType);   // 0x140088f90
         if (resIdx >= 0 && townMgr) {
-            uintptr_t stockBase = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
+            ProfessionResourceEntry* stockBase = townMgr->professionResources;
             if (stockBase) {
-                int* pStock = reinterpret_cast<int*>((int64_t)resIdx * 0x20 + 0xc + stockBase);
+                int* pStock = &stockBase[resIdx].field_0x0C;
                 *pStock += count;
             }
         }

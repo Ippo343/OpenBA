@@ -25,8 +25,8 @@
 void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName) {
     // The code/Game callers pass the ExternalPtr<SpriteSheet> as the raw word
     // and the System::String const& untyped (their local extern declarations).
-    UI::SpriteSheet* const sheet = reinterpret_cast<UI::SpriteSheet*>(spriteSheet);  // B.3.6 bridge
-    const System::String* const name = static_cast<const System::String*>(spriteName);
+    UI::SpriteSheet* const sheet = reinterpret_cast<UI::SpriteSheet*>(spriteSheet);  // B.3.6 bridge  // LEFT: SIG the code/Game extern passes void* (debug harness; wave X)
+    const System::String* const name = static_cast<const System::String*>(spriteName);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 #ifdef _DEBUG
     const char* nameStr = "(null)";
     if (name) {
@@ -74,7 +74,7 @@ void* Debug_Sprite_DefaultCtor(void* retval) {
 // Returns true if index >= 0 AND sheet != null
 // ============================================================
 bool Debug_Sprite_IsValid(void* sprite) {
-    const UI::Sprite* const s = reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge
+    const UI::Sprite* const s = reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge  // LEFT: SIG the code/Game extern passes void* (debug harness; wave X)
 #ifdef _DEBUG
     bool result = s->IsValid();
     printf("[Sprite::IsValid] sprite=%p sheet=%p index=%d -> %s\n",

@@ -46,31 +46,13 @@
 
 #include "../../types/io/Stream.h"
 
-namespace {
-
-
-void ReleaseStringField(char** field) {
-    char* s = *field;
-    if (s == nullptr) return;
-    if (--RtSystem::StringRefCount(s) == 0) {
-        *field = s - 8;
-        System::MemoryAllocator::MemFree(*field);
-    } else {
-        *field = nullptr;
-    }
-}
-
-}  // namespace
-
 // ============================================================================
 // The MEMBERS
 // ============================================================================
 namespace {
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
-// B.4 LEFT: the names are `System::String` fields spelt `char*` (their dtors
-// would start to run as the real type, B4_RULES H5).
-int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const void* nameStr) {
-    return sheet->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
+int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const System::String* name) {
+    return sheet->GetSpriteIndexFromName(*name);
 }
 }  // namespace
 
@@ -106,14 +88,14 @@ bool ProgressDescription::Serialize(IO::Stream& streamArg) {
     // kScalarUInt, NOT kScalarInt — vt+0x98 at 0x180119fbe.
     rw->SerializeUInt(_unknown68, nullptr);
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 180119fcd ExternalPtr<SpriteSheet>
-    reinterpret_cast<System::String*>(&_fillLeftName)->Serialize(&ser);           // 180119fdb
-    reinterpret_cast<System::String*>(&_fillMiddleName)->Serialize(&ser);         // 180119fec
-    reinterpret_cast<System::String*>(&_fillRightName)->Serialize(&ser);          // 180119ffd
-    reinterpret_cast<System::String*>(&_trackLeftName)->Serialize(&ser);          // 18011a00e
-    reinterpret_cast<System::String*>(&_trackMiddleName)->Serialize(&ser);        // 18011a01f
-    reinterpret_cast<System::String*>(&_trackRightName)->Serialize(&ser);         // 18011a030
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 18011a041 ExternalPtr<ElementDescription>
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 180119fcd ExternalPtr<SpriteSheet>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    _fillLeftName.Serialize(&ser);           // 180119fdb
+    _fillMiddleName.Serialize(&ser);         // 180119fec
+    _fillRightName.Serialize(&ser);          // 180119ffd
+    _trackLeftName.Serialize(&ser);          // 18011a00e
+    _trackMiddleName.Serialize(&ser);        // 18011a01f
+    _trackRightName.Serialize(&ser);         // 18011a030
+    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 18011a041 ExternalPtr<ElementDescription>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     // The inlined ~Serializer deletes the ReaderWriter (18011a04f).
     return true;
@@ -149,7 +131,7 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
         &slot);
 
     uint64_t idxSlot;                                                   // [RBP-0x10]
-    char* const* const names[6] = { &_fillLeftName,  &_fillMiddleName,  &_fillRightName,
+    const System::String* const names[6] = { &_fillLeftName,  &_fillMiddleName,  &_fillRightName,
                                     &_trackLeftName, &_trackMiddleName, &_trackRightName };
     ::Sprite* const sprites[6] = { &elem->_fillLeft,  &elem->_fillMiddle,  &elem->_fillRight,
                                    &elem->_trackLeft, &elem->_trackMiddle, &elem->_trackRight };
@@ -196,14 +178,10 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
 // the retired door (ENDGAME B.3.9 UI-B): the six Strings in REVERSE order. The
 // restamps, the base's _textName (+0x60) and the tail JMP into ~External are
 // the compiler's chain. Neither ExternalPtr is released.
-ProgressDescription::~ProgressDescription() {
-    ReleaseStringField(&_trackRightName);    // +0xa0// 18011a0a5
-    ReleaseStringField(&_trackMiddleName);    // +0x98// 18011a0d8
-    ReleaseStringField(&_trackLeftName);    // +0x90// 18011a10a
-    ReleaseStringField(&_fillRightName);    // +0x88// 18011a13c
-    ReleaseStringField(&_fillMiddleName);    // +0x80// 18011a16e
-    ReleaseStringField(&_fillLeftName);    // +0x78// 18011a1a0
-}
+// 0x18011a080: the six releases +0xa0 .. +0x78 (0x18011a0a5 .. 0x18011a1c2), then
+// ~ElementDescription (0x18011a1c6 .. 0x18011a203): the members ~String
+// (0x180006c80) in reverse declaration order, then the base (B4 P2 H5).
+ProgressDescription::~ProgressDescription() {}
 
 // ?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ 0x180077860 --
 // `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xb0, align 8; retail's null

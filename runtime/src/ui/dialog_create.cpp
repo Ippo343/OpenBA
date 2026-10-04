@@ -195,7 +195,7 @@ void* MemAlloc(uint64_t bytes, int align) {
 // ?_singleton@Factory@Object@@0PEAV12@EA — the class static now (ENDGAME
 // B.3.9 SS1, B39_RULES D7): read fresh, no lazy cache (B9-10).
 RtObject::Factory* FactorySingleton() {
-    return reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
+    return reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);   // LEFT: H10 the RtObject::Factory POD mirror (TypeInfo.h / Factory, R-OBJ)
 }
 
 // ============================================================================
@@ -316,7 +316,7 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // the second argument — the same slot the 6-arg AddController calls.
     // LEFT: `_root` is an InternalPtr<Element> in retail, held as Element*.
     dlg->_rootDescription->CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&_root),   // B.3.x bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&_root),   // B.3.x bridge  // LEFT: DialogInstance::_root is Element* where retail holds InternalPtr<Element> (DialogInstance.h field spelling; the slot is passed by address)
         dialogArg);
 
     _spriteSheet = dlg->_spriteSheet;             // +0x58
@@ -325,7 +325,7 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // LEFT (H5): _spriteName is a System::String held as raw char* storage.
     _spriteIndex = _spriteSheet
         ? _spriteSheet->GetSpriteIndexFromName(
-              *reinterpret_cast<const System::String*>(&dlg->_spriteName))
+              *reinterpret_cast<const System::String*>(&dlg->_spriteName))   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
         : -1;                                     // +0x60   (+0x64 left alone)
 
     _timers._data      = nullptr;                 // +0x68
@@ -387,7 +387,7 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
             Object::ExternalPtr<UI::DialogControllerConfig>(e._config),       // entry+0x10 -> R9
             Object::ExternalPtr<UI::ElementDescription>(e._elementDesc),      // entry+0x08 -> a5
             // LEFT (H5): the entry's +0x18 is a System::String held as char*.
-            *reinterpret_cast<const System::String*>(&e._name));  // B.3.6 bridge  entry+0x18 -> a6
+            *reinterpret_cast<const System::String*>(&e._name));  // B.3.6 bridge  entry+0x18 -> a6  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
     }
 }
 
@@ -449,7 +449,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
     // LEFT: RtObject::BaseTypeInfo::factoryFn is an untyped void* (TypeInfo.h,
     // block R-IO).
     Object::Base* const created =
-        reinterpret_cast<Object::Base* (*)(void*)>(info->factoryFn)(info);
+        reinterpret_cast<Object::Base* (*)(void*)>(info->factoryFn)(info);   // LEFT: FIELD RtObject::BaseTypeInfo::factoryFn is void* (TypeInfo.h, R-OBJ)
 
     const bool isController = created->IsDerivedFrom(UI::DialogController::TypeId());
 

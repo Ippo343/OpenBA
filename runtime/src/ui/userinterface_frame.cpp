@@ -335,7 +335,7 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // `DialogInstance::ComputeLayout` (0x180113d90) — non-virtual member of the
     // real class (block B).
     for (Node* n = _dialogs._head; n; n = n->next) {
-        reinterpret_cast<DialogInstance*>(n->element)->ComputeLayout(0, 0, w, h);
+        n->element->ComputeLayout(0, 0, w, h);
     }
 
     // 0x18012161e — a fade in progress swallows the whole input half AND the
@@ -390,14 +390,14 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     Node* n = _dialogs._tail;
     if (n) {
         for (;;) {
-            DialogInstance* const dlg = static_cast<DialogInstance*>(n->element);
+            DialogInstance* const dlg = n->element;
             if (dlg->_parent.Get() == nullptr) {                    // +0x28
                 // `DialogInstance::Update(const Time&, UserInterface*,
                 // Element::UpdateState&)` (0x180113980) — non-virtual member of
                 // the real class (block B), which spells the state as its
                 // address; it WRITES BACK into `st`.
                 // B.4 LEFT: the `uint8_t*` parameter is R-UI-a's signature.
-                dlg->Update(timeRef, this, reinterpret_cast<uint8_t*>(&st));
+                dlg->Update(timeRef, this, reinterpret_cast<uint8_t*>(&st));   // LEFT: NOCLASS the frame's value-initialised 0x30-byte record (see dialog.cpp:1172)
             }
             if ((dlg->_flags >> 1) & 1u) break;
             n = n->prev;

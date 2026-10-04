@@ -44,6 +44,7 @@
 #include <cstdint>
 
 #include "ElementDescription.h"
+#include "../system/String.h"       // System::String members (B4 P2 H5)
 
 namespace UI {
 
@@ -58,11 +59,8 @@ public:
     SliderDescription() : ElementDescription() {
         _childDescription = nullptr;
         _spriteSheet      = nullptr;
-        _trackStartName   = nullptr;
-        _trackMiddleName  = nullptr;
-        _trackEndName     = nullptr;
-        _thumbName        = nullptr;
-        _thumbHotName     = nullptr;
+        // +0x78 .. +0x98: the five System::String members, zeroed by their own
+        // ctor (0x180006760) as 0x1800d7be5 .. 0x1800d7bfe store (B4 P2 H5).
         _trackOffsetY     = 0;
         _thumbMargin      = 0;
         _minimum          = 0.0f;
@@ -98,11 +96,11 @@ private:
 public:
     ElementDescription*    _childDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]
     SpriteSheet*    _spriteSheet;        // +0x70  ExternalPtr<UI::SpriteSheet>
-    char*    _trackStartName;     // +0x78  System::String -> SliderElement::_trackStart
-    char*    _trackMiddleName;    // +0x80  -> _trackMiddle
-    char*    _trackEndName;       // +0x88  -> _trackEnd
-    char*    _thumbName;          // +0x90  -> _thumb
-    char*    _thumbHotName;       // +0x98  -> _thumbHot
+    System::String _trackStartName;     // +0x78  System::String -> SliderElement::_trackStart
+    System::String _trackMiddleName;    // +0x80  -> _trackMiddle
+    System::String _trackEndName;       // +0x88  -> _trackEnd
+    System::String _thumbName;          // +0x90  -> _thumb
+    System::String _thumbHotName;       // +0x98  -> _thumbHot
     int32_t  _trackOffsetY;       // +0xa0  ctor 0  -> SliderElement +0x110
     int32_t  _thumbMargin;        // +0xa4  ctor 0  -> +0x114
     float    _minimum;            // +0xa8  ctor 0.0f -> +0x118

@@ -117,7 +117,7 @@ bool Cursor::Serialize(IO::Stream& streamv) {
 
     // LEFT: the ExternalPtr<T>::Serialize thunk takes RtObject::External** and
     // the rt::io::Serializer POD (External.h, block R-IO).
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800cd15b
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800cd15b  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
 
     rw->SerializeInt(_hotSpotX, nullptr);
     rw->SerializeInt(_hotSpotY, nullptr);

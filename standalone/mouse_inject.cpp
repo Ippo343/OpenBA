@@ -504,7 +504,7 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
     }
 
     for (ListNode* n = head; n; n = n->next) {
-        RtUI::DialogInstance* dlg = static_cast<RtUI::DialogInstance*>(n->element);
+        RtUI::DialogInstance* dlg = reinterpret_cast<RtUI::DialogInstance*>(n->element);   // LEFT: H10 the RtUI::DialogInstance mirror (the list element is typed UI::DialogInstance* since B4 P2 R-UI)
         if (!dlg) continue;
         UI::Element* root = static_cast<UI::Element*>(dlg->_root);
         if (!root) continue;
@@ -680,7 +680,7 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
         (void)fId; (void)fDat; (void)fGx; (void)fGy;
         printf("[MouseInject/DRAGFIELDS] dlgMatchesArg=%d id=0x%08X dataIsNull=%d "
                "grabX=%d grabY=%d  (argX=%d argY=%d layoutLeft=%d layoutTop=%d)\n",
-               (int)(ui->_dragDropDialog == t.dlg), (unsigned)fId, (int)(fDat == nullptr),
+               (int)(static_cast<const void*>(ui->_dragDropDialog) == t.dlg), (unsigned)fId, (int)(fDat == nullptr),
                (int)fGx, (int)fGy, (int)dragX, (int)dragY,
                (int)(dragX - fGx), (int)(dragY - fGy));
     }

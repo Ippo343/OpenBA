@@ -122,7 +122,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     // 0x180120329 -- note the argument SWAP: retail is a static taking
     // (time, ui) and Update is a member taking (this=ui, time). `ui` is the
     // callback's `void*` user data (retail's `PEAX`).
-    UserInterface* const self = static_cast<UserInterface*>(ui);
+    UserInterface* const self = static_cast<UserInterface*>(ui);   // LEFT: SIG retail's callback user data is void* (PEAX, 0x180120310)
     self->Update(timeRef);
 
     // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
@@ -131,7 +131,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     System::Random rng;
     RtSystem_Random_Ctor(&rng);                                        // 0x1800c7f20
 
-    void* const scene = self->_audioScene;                             // 0x180120388, +0x90
+    Audio::Scene* const scene = self->_audioScene;                             // 0x180120388, +0x90
     if (scene) {                                                       // 0x18012038f
         ++g_updWithScene;
         const Vector3 listener(0.0f, 0.0f, 0.0f);                      // 0x1801203a7
@@ -139,8 +139,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
         const int64_t elapsed = static_cast<int64_t>(0.0 / ::System::Timer::_secondsPerTick);      // 0x1801203b0
         System::Time now;     now._ticks     = timeRef._ticks;
         System::Time elapsedT; elapsedT._ticks = elapsed;
-        // B.4 LEFT: `_audioScene` stays `void*` (code/Game assigns it a `void*`).
-        reinterpret_cast<Audio::Scene*>(scene)->Update(
+        scene->Update(
             now, elapsedT, rng, listener, 0.0f);                       // 0x1801203d0
     }
 }
@@ -172,7 +171,7 @@ extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, 
 // ============================================================================
 void UI::UserInterface::DrawStandAloneUI(Video::Context& context, void* ui) {
     ++g_drawEntries;
-    static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP
+    static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP  // LEFT: SIG retail's callback user data is void* (PEAX, 0x1801203f0)
 }
 
 extern "C" void RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui) {

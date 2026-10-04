@@ -309,7 +309,7 @@ Object::Base* ToolTipDialog::CreateInPlaceObject(void* place) {
 // releases; the result starts null (0x1800356b7).
 System::String Element::GetToolTipString() const {
     System::String out;                                        // 0x1800356b7
-    char* const s = static_cast<char*>(_toolTipString);        // 0x1800356ba, +0x58
+    char* const s = _toolTipString;        // 0x1800356ba, +0x58
     if (s != nullptr) {                                        // 0x1800356be
         ++g_getTipNonNull;
         out._data = s;                                         // 0x1800356c3
@@ -347,7 +347,7 @@ void ToolTipDialog::SetText(const System::String& text) {
     if (name._data != nullptr &&                                // 0x1800dab46
         RtSystem::StringLength(name._data) != 0) {              // 0x1800dab4e
         const int32_t want = RtSystem::StringLength(name._data);
-        char* const mine = static_cast<char*>(root->_name);    // 0x1800dab52, +0x10
+        char* const mine = root->_name;    // 0x1800dab52, +0x10
         const int32_t lm = mine ? RtSystem::StringLength(mine) : 0;  // 0x1800dab5b
         if (lm == want) {                                      // 0x1800dab64
             if (mine == nullptr ||                             // 0x1800dab6c

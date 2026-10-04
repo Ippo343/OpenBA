@@ -131,7 +131,7 @@ void CheckElement::Update(const System::Time& time, UserInterface* ui,
         } else {
             const int32_t key = _keyIndex;
             if (key >= 0 &&
-                reinterpret_cast<const ::Input::KeyMap*>(state.config)->Pressed(0, key)) {  // B.3.7 bridge
+                state.config->Pressed(0, key)) {  // B.3.7 bridge
                 toggle = true;
             }
         }

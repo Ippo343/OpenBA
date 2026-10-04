@@ -55,6 +55,7 @@
 #include "../../types/ui/StringTable.h"   // B4: StringTable::_size
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/ComboDialog.h"     // ComboElement::_openDialog
 
 namespace {
 
@@ -183,8 +184,7 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
         }
 
         // 180112c18: close any dialog the element is still showing.
-        // LEFT: ComboElement::_openDialog stays void* (widgets_input.cpp, R-UI-b).
-        DialogInstance* const open = static_cast<DialogInstance*>(elem->_openDialog);
+        DialogInstance* const open = elem->_openDialog;
         if (open != nullptr) {                              // 180112c1f
             Object::InternalPtr<DialogInstance> dlgSlot(open);   // 180112c24
             open->_ui->CloseDialog(&dlgSlot);               // 180112c38

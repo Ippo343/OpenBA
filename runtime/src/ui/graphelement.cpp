@@ -105,7 +105,7 @@ void GraphElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // before the loop, and each point is `bottom - (int)(value * scale)`.
 void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
     if (_border != nullptr)
-        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6 (LEFT: _border void*, unit test)
+        _border->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
     const uint32_t base = _color;
     alpha = DimAlpha(this, alpha);

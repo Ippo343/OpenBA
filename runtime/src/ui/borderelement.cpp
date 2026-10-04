@@ -83,7 +83,7 @@ void BorderElement::ComputeSize() {
 // NOT the standard aligned body: a border always fills the box it is given,
 // inset by its own padding. No ComputeSize call, no alignment, no clamping.
 void BorderElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
-    Element* border = static_cast<Element*>(_border);
+    Element* border = _border;
     if (border != nullptr) border->ComputeLayout(x, y, w, h);
 
     _layoutRight  = w - _rightPad;
@@ -106,7 +106,7 @@ void BorderElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // caching it, and the reads are interleaved with the calls. The calls can
 // change a sprite sheet (they do not today), so the re-reads are kept.
 void BorderElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    const Element* border = static_cast<const Element*>(_border);
+    const Element* border = _border;
     if (border != nullptr) border->Draw(context, alpha);
 
     const uint32_t base = _color;

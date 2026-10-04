@@ -129,7 +129,7 @@ void SliderElement::ComputeSize() {
 // [5] 0x1800d6fc0
 void SliderElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
     if (_border != nullptr)
-        reinterpret_cast<Element*>(_border)->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
+        _border->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
 
     ComputeSize();   // slot 4, VIRTUAL — `CALL [RAX+0x20]` in retail
 
@@ -180,7 +180,7 @@ void SliderElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
 // [6] 0x1800d6d40
 void SliderElement::Draw(SpriteContext& context, uint8_t alpha) const {
     if (_border != nullptr)
-        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+        _border->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
     const uint32_t raw = _color;
     if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
