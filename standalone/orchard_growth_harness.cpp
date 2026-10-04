@@ -125,8 +125,8 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
             if (slot.state != 1) continue;  // only planted+bound   (+0x04)
             ++slotsSeen;
 
-            NaturalResourceComponent* natRes = slot.resource;   // +0x10
-            FruitComponent* fruit  = slot.fruit;                 // +0x18
+            NaturalResourceComponent* natRes = slot.resource.Get();   // +0x10
+            FruitComponent* fruit  = slot.fruit.Get();                 // +0x18
             if (!natRes) continue;
 
             float* pMat = &natRes->resourceScale;                // +0x28

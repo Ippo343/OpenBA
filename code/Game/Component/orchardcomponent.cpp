@@ -111,21 +111,21 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
         ser.Serialize(slot->state, nullptr);
 
         // LEFT: InternalBasePtr has no typed view of a bare pointer member.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->tree)->Serialize(ser);   // LEFT: OrchardComponent.h declares the slot's InternalPtr<ComponentEntity> as a bare ComponentEntity*; InternalBasePtr::Serialize needs the slot
+        slot->tree.InternalBasePtr::Serialize(ser);
         if (slot->tree != nullptr &&
-            !(::Object::IsDerivedFromNullSafe(slot->tree, ComponentEntity::TypeId())))
+            !(::Object::IsDerivedFromNullSafe(slot->tree.Get(), ComponentEntity::TypeId())))
             slot->tree = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);   // LEFT: POD the orchard slot holds its InternalPtr<ComponentEntity> as a bare pointer (OrchardComponent.h); InternalBasePtr has no typed view of it
+        slot->resource.InternalBasePtr::Serialize(ser);
         if (slot->resource != nullptr &&
-            !(::Object::IsDerivedFromNullSafe(slot->resource, NaturalResourceComponent::TypeId())))
+            !(::Object::IsDerivedFromNullSafe(slot->resource.Get(), NaturalResourceComponent::TypeId())))
             slot->resource = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);   // LEFT: POD the orchard slot holds its InternalPtr<ComponentEntity> as a bare pointer (OrchardComponent.h); InternalBasePtr has no typed view of it
+        slot->fruit.InternalBasePtr::Serialize(ser);
         if (slot->fruit != nullptr &&
-            !(::Object::IsDerivedFromNullSafe(slot->fruit, FruitComponent::TypeId())))
+            !(::Object::IsDerivedFromNullSafe(slot->fruit.Get(), FruitComponent::TypeId())))
             slot->fruit = nullptr;
 
         ser.Serialize(slot->picked, nullptr);
@@ -148,7 +148,7 @@ void OrchardComponent::ValidateRefs() {
         if (live) {
             if (live->IsA(ComponentEntity::TypeId())) {   // slot 0x140151410
                 if (live->FindComponent<NaturalResourceComponent>() != nullptr) {   // 0x1400052c0
-                    if (live == slot.tree) ok = true;
+                    if (live == slot.tree.Get()) ok = true;
                 }
             }
         }
@@ -159,7 +159,7 @@ void OrchardComponent::ValidateRefs() {
             // one said no.
             static int s_n = 0;
             if (s_n++ < 8) {
-                ComponentEntity* bound = slot.tree;
+                ComponentEntity* bound = slot.tree.Get();
                 std::fprintf(stderr, "[OrchardValidate] slot=%d tile=%d DEMOTING 1->2: live=%p "
                              "bound=%p typeIdCompEntity=%u isA=%d liveEqBound=%d\n",
                              i, tile, static_cast<void*>(live), static_cast<void*>(bound),
@@ -220,7 +220,7 @@ float OrchardComponent::GetGrowth() const {
 
         if (entity->FindComponent<NaturalResourceComponent>() == nullptr) continue;   // 0x1400052c0
 
-        if (entity != slot.tree) continue;
+        if (entity != slot.tree.Get()) continue;
         if (slot.state != 1) continue;
 
         if (!slot.fruit) continue;   // SA: retail derefs unguarded; state 1 implies it
