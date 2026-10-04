@@ -55,7 +55,7 @@ void ResetReadableCache() {
 
 bool Readable(const void* p, size_t n) {
     if (!p) return false;
-    const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+    const uintptr_t a = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
     for (int i = 0; i < kReadCacheSize; i++) {
         const ReadRegion& r = g_readCache[i];
         if (r.end && a >= r.base && a + n <= r.end) return true;
@@ -69,11 +69,11 @@ bool Readable(const void* p, size_t n) {
     const DWORD rd = PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ |
                      PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY;
     if (!(prot & rd)) return false;
-    uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+    uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;   // CAST-OK: ptr_int
 
     // Remember the readable region (round-robin) — the next probe into the same
     // arena skips the syscall.
-    g_readCache[g_readCacheNext].base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+    g_readCache[g_readCacheNext].base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);   // CAST-OK: ptr_int
     g_readCache[g_readCacheNext].end  = end;
     g_readCacheNext = (g_readCacheNext + 1) % kReadCacheSize;
 
@@ -96,36 +96,35 @@ uint32_t SafeGetTypeId(void* obj) {
     if (!Readable(obj, 8)) return 0;
     // Probe the vptr's table entry for Type() -- the slot is taken from the
     // member, never a literal (B3X_RULES X3) -- then call it by name.
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);
+    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);   // CAST-OK: vslot
     const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
     if (typeSlot < 0) return 0;
-    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;
+    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: vslot
     if (!Executable(::Object::SlotAddressOf(obj, &::Object::Base::Type))) return 0;
-    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
+    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)   // CAST-OK: vslot
 }
 
-void* FindComp(void* entity, uint32_t tid) {
+Component* FindComp(ComponentEntity* entity, uint32_t tid) {
     if (!entity || !tid || !Readable(entity, 0x40)) return nullptr;
-    // LEFT: the harnesses hand the entity as void* (it is probed before it is read).
-    const ComponentEntity* e = reinterpret_cast<const ComponentEntity*>(entity);
+    const ComponentEntity* e = entity;   // probed before it is read
     int count = e->_componentCount;                              // +0x38
     const Object::InternalPtr<Component>* arr = e->_components;  // +0x30
     if (count <= 0 || count > 512 || !Readable(arr, (size_t)count * 8))
         return nullptr;
     for (int i = 0; i < count; ++i) {
-        void* comp = arr[i].Get();
+        Component* comp = arr[i].Get();
         if (SafeGetTypeId(comp) == tid) return comp;
     }
     return nullptr;
 }
 
-int WorkAreaCenterCell(void* area) {
+int WorkAreaCenterCell(ComponentEntity* area) {
     if (GameUpdateLoop::_singleton == nullptr) return -1;
     const uint32_t tidMap = MapComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
-    void* found = FindComp(area, tidMap);
+    Component* found = FindComp(area, tidMap);
     if (!found || !Readable(found, 0x30)) return -1;
-    // LEFT: FindComp returns the matched component as void*.
-    const MapComponent* mc = reinterpret_cast<const MapComponent*>(found);
+    const MapComponent* mc = static_cast<const MapComponent*>(found);   // matched by type id
+
     const Map* game = GameUpdateLoop::_singleton->m_game;
     if (!game) return -1;
     int dim = game->size;
@@ -143,7 +142,7 @@ int WorkAreaCenterCell(void* area) {
 bool CitizenStackIdle(void* citizen) {
     if (!citizen || !Readable(citizen, kCharCompOff + 8)) return false;
     // LEFT: the harnesses hand the citizen component as void* (probed first).
-    const CitizenComponent* c = reinterpret_cast<const CitizenComponent*>(citizen);
+    const CitizenComponent* c = reinterpret_cast<const CitizenComponent*>(citizen);   // LEFT: SIG the harness entries (StartTown_ForcePush*Work, outside callers) hand the citizen as void*
     const CharacterComponent* charComp = c->character;   // +0x278
     if (!charComp || !Readable(charComp, kActionTopOff + 8)) return false;
     return charComp->currentAction < 0;                 // +0x60
@@ -155,7 +154,7 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
     if (!CitizenStackIdle(citizen)) return INT_MIN;
 
     // CitizenStackIdle proved it readable as a CitizenComponent.
-    CitizenComponent* c = reinterpret_cast<CitizenComponent*>(citizen);
+    CitizenComponent* c = reinterpret_cast<CitizenComponent*>(citizen);   // LEFT: SIG the harness entries (StartTown_ForcePush*Work, outside callers) hand the citizen as void*
     ::Object::InternalPtr<CitizenComponent> citizenIBP(c);
     int rc = driveFn(work, &citizenIBP);
 

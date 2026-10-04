@@ -47,7 +47,9 @@
 #include "perf_terrain.h"
 #include "Object/factory_registration.h"
 #include "picking/PickingMesh.h"   // ENDGAME B.3.7 callers (K2)
-#include "Action/exe_bodies.h"      // Pf_FineCellDirty_a8c90, Pf_EnqueueCmd2_a6fe0, Pf_CellQuadRay_aa20
+#include "Action/exe_bodies.h"      // Pf_CellQuadRay_aa20
+#include "Action/PathSearch.h"       // RegionGraph::MarkCellDirty
+#include "Game/PathfinderThread.h"   // PathfinderThread::SetCellTerrain
 #include "Component/ModelComponent.h"
 #include "Component/MapComponent.h"
 #include "Component/DecalComponent.h"
@@ -162,8 +164,7 @@ void QuarryComponent::ApplyDepth(float depth) {
     const Picking::PickingMesh* mesh = desc->_floorMesh;
     if (!mesh) { QuarryBail("ApplyDepth", "desc+0x20 _floorMesh is null"); return; }
 
-    // LEFT: WorldGeometry's +0xD8 height array is void* (its header).
-    int16_t* heightArray = reinterpret_cast<int16_t*>(terrain->_arrayD8);
+    int16_t* heightArray = terrain->_arrayD8;   // +0xD8 the height array
     const int       stride      = terrain->_fieldD0;
     const float     half        = static_cast<float>(terrain->_gridSize >> 1);
     if (!heightArray) { QuarryBail("ApplyDepth", "terrainGrid+0xD8 heightmap null"); return; }
@@ -179,7 +180,7 @@ void QuarryComponent::ApplyDepth(float depth) {
         // Transform::operator*(const Vector3&) — slot 0x140151470. LEFT: the picking
         // mesh's element is the global engine Vector3, Math::Vector3's layout twin.
         const Math::Vector3 world =
-            xform * *reinterpret_cast<const Math::Vector3*>(&data[i]);
+            xform * *reinterpret_cast<const Math::Vector3*>(&data[i]);   // LEFT: POD ::Vector3 (PickingMesh.h) vs Math::Vector3 (wave X)
 
         float z = world.z;
         if (z < depth) z = depth;          // floor clamp — this IS the progressive dig
@@ -308,9 +309,9 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 // "improve" this into a hit check.
                 float probe[3]  = { 0.0f, 0.0f, 0.0f };
 
-                Pf_CellQuadRay_aa20(reinterpret_cast<int64_t>(terrainGrid), cellX, cellY,
+                Pf_CellQuadRay_aa20(reinterpret_cast<int64_t>(terrainGrid), cellX, cellY,   // LEFT: SIG Pf_CellQuadRay_aa20
                                     dir, origin, &maxT, outHit, &outT,
-                                    reinterpret_cast<uint32_t*>(probe));
+                                    reinterpret_cast<uint32_t*>(probe));   // LEFT: SIG Pf_CellQuadRay_aa20 (its body RayTestCell is file-static in action_pf_road.cpp)
 
                 if (!(probe[2] < s_slopeCut)) continue;
 
@@ -322,15 +323,15 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 const uint8_t dirty = ((oldMask & 0xe1f) != 0) ? 1u : 0u;
                 tileGrid->field_0xA2 |= dirty;
                 cell->terrainType = 5;
-                PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (takes the cell's bytes)
+                PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (takes the cell's bytes)  LEFT: SIG PerfX::TerrainNoteWrite (SA)
 
                 if (dirty) {
-                    const int64_t regionObj = reinterpret_cast<int64_t>(tileGrid->regionGraph);
-                    if (regionObj) Pf_FineCellDirty_a8c90(regionObj, cellIdx % gw, cellIdx / gw);
+                    RegionGraph* regionObj = tileGrid->regionGraph;
+                    if (regionObj) regionObj->MarkCellDirty(cellIdx % gw, cellIdx / gw);   // 0x1400a8c90 (Pf_FineCellDirty_a8c90's body)
                 }
-                const int64_t pfThread = reinterpret_cast<int64_t>(tileGrid->pathfinder);
+                PathfinderThread* pfThread = tileGrid->pathfinder;
                 if (pfThread)
-                    Pf_EnqueueCmd2_a6fe0(pfThread, static_cast<int>(cellIdx), 5);
+                    pfThread->SetCellTerrain(static_cast<int>(cellIdx), 5);   // 0x1400a6fe0 (Pf_EnqueueCmd2_a6fe0's body)
 
                 // MapCell::occupant (+0x08) is the ENTITY raster — the quarry claims the dug cell.
                 cell->occupant = entity;

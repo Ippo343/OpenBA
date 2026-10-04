@@ -22,7 +22,10 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/External.h"
+#include "system/String.h"   // System::String (_name)
 #include "Object/exe_type.h"
+
+namespace UI { class StringTable; }
 
 class Disease final : public Object::External {
     DECLARE_EXE_TYPE(Disease)
@@ -39,8 +42,9 @@ public:
     virtual Object::External* Construct();                        // [8] 0x140019040
 
 public:
-    void*   _stringTable;   // +0x20  ExternalPtr<StringTable> (weak)
-    void*   _name;          // +0x28  System::String (COW pointer)
+    UI::StringTable* _stringTable;   // +0x20  ExternalPtr<StringTable> (weak)
+    System::String   _name;          // +0x28  (Construct 0x140019040 stores qword 0; dtor 0x140018f60 runs ~String first)
+
     float   _field30;       // +0x30  1.0f
     float   _field34;       // +0x34  0.0f
     float   _field38;       // +0x38  1.0f

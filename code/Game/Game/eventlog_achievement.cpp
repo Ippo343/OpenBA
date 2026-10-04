@@ -86,12 +86,13 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     // UI::String(ExternalPtr<StringTable> = *(achievement+0x20), key), then
     // operator System::String() — the LOOKED-UP display text. This is the
     // NAME-LOOKUP UI::String ctor (0x140151300), not the index one.
-    uint8_t uiName[24] = {0};
+    uint8_t uiNameBuf[24] = {0};
     System::String titleText;
-    ::new (uiName) UI::String(achievement->_stringTable, titleKey);   // Achievement+0x20
+    const UI::String* uiName =
+        ::new (uiNameBuf) UI::String(achievement->_stringTable, titleKey);   // Achievement+0x20
     titleKey = System::String();   // retail releases the key here
-    ::new (&titleText) System::String(
-        reinterpret_cast<const UI::String*>(uiName)->operator System::String());  // B.3.6 bridge
+    ::new (&titleText) System::String(uiName->operator System::String());
+
 
     ::Object::InternalBasePtr nullEntity(nullptr);
 

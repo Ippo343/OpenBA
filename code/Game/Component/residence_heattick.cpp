@@ -78,12 +78,11 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
     //    (no-food); while it HAS firewood, clear bit 7 (no-firewood / cold).
     //    Faithful to the decompile: FUN_14012c3f0(*finder2f90(owner), bit, 0).
     {
-        // LEFT: the two count bodies take the residence as int64_t (COMP-b's declarations).
-        if (CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(this)) > 0) {
+        if (CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(this)) > 0) {   // LEFT: SIG CitizenComp_Storage_GetResourceCount (int64_t self)
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
             if (icon) icon->SetFlag(6, 0);   // 0x14012c3f0
         }
-        if (Storage_GetResourceCount2(reinterpret_cast<int64_t>(this)) > 0) {
+        if (Storage_GetResourceCount2(reinterpret_cast<int64_t>(this)) > 0) {   // LEFT: SIG Storage_GetResourceCount2 (int64_t self)
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
             if (icon) icon->SetFlag(7, 0);   // 0x14012c3f0
         }
@@ -143,12 +142,11 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
             RtSystem_Time_Ctor(&t, desc->_heatInterval);
             heatRemaining = t;
 
-            // LEFT: ActRm_StorageSubtract_d150 takes the storage and the item as integers (ACT-b's declaration).
-            ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(store), reinterpret_cast<int64_t>(stack), 1);
+            StorageSubtract(store, stack, 1);   // 0x14012d150 (ActRm_StorageSubtract_d150's body)
 
             CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
             if (townMgr) {
-                int cat = ActRm_GetResourceCategory_88f90(store, reinterpret_cast<uintptr_t>(stack));   // LEFT: ACT-b's declaration takes the item as uintptr_t
+                int cat = ResourceCategory(stack);   // 0x140088f90 (ActRm_GetResourceCategory_88f90's body; its first argument is unused)
                 if (cat >= 0) {
                     // The counter rows (consumed count at +0xC) — same deref as the eat loop.
                     ProfessionResourceEntry* rows = townMgr->professionResources;

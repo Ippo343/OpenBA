@@ -45,6 +45,9 @@
 #include "force_work.h"                     // generic ForceWork core (probes + drive)
 #include "Component/ForesterComponent.h"     // caller batch CB6: TypeId()
 #include "Component/ForesterDescription.h"
+#include "Entity/ComponentEntity.h"    // the lodge, read by name (B4 P2 GAME-1)
+#include "Component/Component.h"
+#include "Work/Work.h"                // the ForesterWork's Work fields (+0x10, +0x28)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -87,22 +90,21 @@ using ForceWork::FindComp;
 
 // Dump the lodge component set + locate a usable ForesterComponent (once). Returns the
 // ForesterComponent whose description derives from ForesterDescription, or null.
-static void* VerifyLodgeForester(void* lodge, bool dump) {
+static ForesterComponent* VerifyLodgeForester(ComponentEntity* lodge, bool dump) {
     // Caller batch CB6: the classes' TypeId() (was a lazy by-name cache).
     const uint32_t tidForesterComp = ForesterComponent::TypeId();
     const uint32_t tidForesterDesc = ForesterDescription::TypeId();
 
     if (dump) {
-        int count = Readable(lodge, 0x40) ? *reinterpret_cast<int*>((uintptr_t)lodge + ForceWork::kEntCompCnt) : 0;
-        uintptr_t arr = Readable(lodge, 0x40) ? *reinterpret_cast<uintptr_t*>((uintptr_t)lodge + ForceWork::kEntCompArr) : 0;
+        int count = Readable(lodge, 0x40) ? lodge->_componentCount : 0;                        // +0x38
+        const Object::InternalPtr<Component>* arr = Readable(lodge, 0x40) ? lodge->_components : nullptr;   // +0x30
         fprintf(stderr, "[ForceForester] lodge=%p compCount=%d tid(ForesterComponent)=%u tid(ForesterDescription)=%u\n",
                 lodge, count, tidForesterComp, tidForesterDesc);
-        if (count > 0 && count <= 512 && Readable(reinterpret_cast<void*>(arr), (size_t)count * 8)) {
+        if (count > 0 && count <= 512 && Readable(arr, (size_t)count * 8)) {
             for (int i = 0; i < count; ++i) {
-                void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-                void* comp = *slot;
+                Component* comp = arr[i].Get();   // the slot's raw pointer
                 uint32_t ct = SafeGetTypeId(comp);
-                void* desc = (comp && Readable(comp, 0x20)) ? *reinterpret_cast<void**>((uintptr_t)comp + 0x18) : nullptr;
+                Description* desc = (comp && Readable(comp, 0x20)) ? comp->_description : nullptr;   // +0x18
                 uint32_t dt = SafeGetTypeId(desc);
                 const char* mark = (ct == tidForesterComp) ? "  <== ForesterComponent" : "";
                 fprintf(stderr, "[ForceForester]   comp[%d] tid=%u desc=%p descTid=%u%s\n",
@@ -112,23 +114,24 @@ static void* VerifyLodgeForester(void* lodge, bool dump) {
         fflush(stderr);
     }
 
-    void* fc = FindComp(lodge, tidForesterComp);
+    Component* fc = FindComp(lodge, tidForesterComp);
     if (!fc) return nullptr;
     // ForesterWork::Execute reads fc+0x18 (the description) and treats it as a
     // ForesterDescription via IsDerivedFrom; verify that holds before we let it run.
-    void* desc = Readable(fc, 0x20) ? *reinterpret_cast<void**>((uintptr_t)fc + 0x18) : nullptr;
+    Description* desc = Readable(fc, 0x20) ? fc->_description : nullptr;   // +0x18
     if (!desc) return nullptr;
     if (tidForesterDesc && !::Object::IsDerivedFromNullSafe(desc, tidForesterDesc))
         return nullptr;
-    return fc;
+    return static_cast<ForesterComponent*>(fc);   // FindComp matched ForesterComponent's type id
 }
+
 
 // Driver. Called from the CitizenAI UpdateAdapter for ONE force-worked citizen. Returns true
 // if it "owns" the citizen this tick (caller should skip the competing AI state machine), so
 // ForesterWork — not Leisure/Wander — keeps driving the stack.
 extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     if (!ForceForesterEnvOn()) return false;
-    void* lodge = g_pForceWorkBuilding;
+    ComponentEntity* lodge = reinterpret_cast<ComponentEntity*>(g_pForceWorkBuilding);   // LEFT: g_pForceWorkBuilding is void* (GAME-4)
     if (!lodge || !citizen) return false;
     if (GameUpdateLoop::_singleton == nullptr) return false;
 
@@ -141,7 +144,7 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     // never push (report-only; keeps a mis-templated lodge crash-free).
     static int s_verified = -1;   // -1 unchecked, 0 unusable, 1 usable
     if (s_verified < 0) {
-        void* fc = VerifyLodgeForester(lodge, /*dump*/true);
+        ForesterComponent* fc = VerifyLodgeForester(lodge, /*dump*/true);
         // Refuse to push unless EVERY ForesterWork dependency (sub-fns, type-id globals,
         // .rdata floats) resolved — else Execute would null-deref. ResolveFuncs prints the
         // missing sub-fns in _DEBUG, so a FAIL here pinpoints the next domino.
@@ -154,8 +157,8 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
         // configuration): +0x51 = 1 (cut trees), +0x50 = 0 (no planting). This drives the
         // CUT path -> PerformWork -> CreateRawMaterial -> RegisterRawMaterial production chain.
         if (s_verified == 1 && fc && Readable(fc, 0x52)) {
-            *reinterpret_cast<uint8_t*>((uintptr_t)fc + 0x51) = 1;   // cut-trees enabled
-            *reinterpret_cast<uint8_t*>((uintptr_t)fc + 0x50) = 0;   // plant-trees disabled
+            fc->cutTrees = true;     // +0x51 cut-trees enabled
+            fc->plantTrees = false;  // +0x50 plant-trees disabled
             fprintf(stderr, "[ForceForester] set ForesterComponent cut-flag (+0x51)=1, plant(+0x50)=0\n");
             fflush(stderr);
         }
@@ -178,14 +181,14 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     // fail counter @+0x58 that must survive across drives). Faithful to ForesterWork_CopyCtor:
     // ForesterWork_Factory does the object build (vtable + Object::Internal + +0x20/+0x28 = -1),
     // then we set the Work_Ctor25 work-area-dependent fields (+0x10 work-area IBP, +0x28 cell).
-    static void* s_fw = nullptr;
+    static Work* s_fw = nullptr;
     if (!s_fw) {
-        s_fw = ForesterWork_Factory();
+        s_fw = reinterpret_cast<Work*>(ForesterWork_Factory());   // LEFT: SIG ForesterWork_Factory returns void* (Work/exe_bodies.h)
         if (!s_fw) return true;
-        new (reinterpret_cast<uint8_t*>(s_fw) + 0x10) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(lodge));   // B.3.3 bridge  // +0x10 work-area IBP
+        new (&s_fw->field_10) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(lodge));   // B.3.3 bridge  // +0x10 work-area IBP  // LEFT: POD:RtObject::Internal (Internal.h)
         int cell = ForceWork::WorkAreaCenterCell(lodge);
-        if (cell >= 0) *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(s_fw) + 0x28) = cell;
+        if (cell >= 0) s_fw->field_28 = cell;   // +0x28 target cell
         fprintf(stderr, "[ForceForester] constructed ForesterWork=%p work+0x10=lodge "
                 "work+0x28(cell)=%d\n", s_fw, cell);
         fflush(stderr);

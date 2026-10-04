@@ -274,3 +274,10 @@ Metric at `33d41e34`: **5,291** to remove.
 | 73 | P2-COMP-4+5 | `360a066f` | growth, herd, floor, immigration, map, nomad components by name; five dead forwarders deleted (row 400): 135 -> 47 in 49 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
 
 Metric at `360a066f`: **4,584** to remove.
+
+| 74 | P2-COMP-2+3 | `c40923a2` | disease, destroy, cemetery, crop field, clear area, char manager, state table by name; `StateMachine` fully asserted (retail ctor 0x14012ba30); `CemeteryDescription::_ref20` typed (rows 390-392): 295 -> 89 in 50 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 75 | P2-DLG-3 | `616fdf55` | tradeui, townhallui, the trade leaves / sort / checkout by name; `TradeStockEntry` (retail 0x14000e1c0), `UpgradeUIConfig::_target` typed (row 420): 267 -> 37 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 76 | P2-GAME-1 | `c079adec` | game_leaf_helpers, gamegrid / citizenlist serialize, citizen names, event log by name; element operations through `AssignAs` / `InitAs` / `DestroyAs`; `behaviour:` `Disease::_name`, `ClimateGenerator::_field28` are `System::String` members (retail 0x140019040 / 0x1400930c0, dtor 0x140018f60) (row 410): 256 -> 109 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 77 | P2-COMP-6+7 | `c8ad99b8` | residence, storage, orchard, pasture, terraform, tornado, state machine components by name; nine dead forwarders and doors deleted (row 430): 239 -> 114 in 48 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+
+Metric at `c8ad99b8`: **3,876** to remove.

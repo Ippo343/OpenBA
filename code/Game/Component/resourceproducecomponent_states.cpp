@@ -114,14 +114,14 @@ static char RP_State13Enter(ResourceProduceComponent* self, void* sm) {
     // Post it to the reservation ledger so an idle citizen claims it.
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
     if (workComp != nullptr && workIbp != 0) {
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, 0, &workIbp);
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, 0, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
     }
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers
     // assigned but every gather bails "no target": the same trap the pasture wave hit.
     WorkPlaceComponent* wpc = owner->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     if (wpc != nullptr) {
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
+        wpc->SetAccepting(true);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
     }
 
 
@@ -159,7 +159,7 @@ static char RP_State14Enter(ResourceProduceComponent* self, void* /*sm*/) {
         // Latent, not new: nothing reached state 14 until ConsumeProduce/Market were
         // promoted to live controllers, because no ResourceProduce subclass had its
         // state machine running in a default build.
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), false);
+        wpc->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
     }
 
 

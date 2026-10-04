@@ -37,6 +37,7 @@
 #include <initializer_list>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Game/MapGenerator.h"        // ExternalRef / InitialStructure, the element rows (B4 P2 GAME-1)
 #include "Game/Minimap.h"             // Game_ImageCaptureDtor's class (B.4 GAME-a)
 #include "Game/WeatherSimulation.h"   // Game_WeatherDtor's class (B.4 GAME-a)
 #include "Work/exe_bodies.h"   // WorkBase_TreeNodeFree_e320
@@ -72,22 +73,35 @@
 // ------------------------------------------------------------------
 namespace {
 
-void AssignRefTriple18(uint8_t* d, const uint8_t* s) {
-    // B.3.2 bridge: the entry is still untyped bytes in MapGenerator/BuildingGoal.
-    new (d) System::String(*reinterpret_cast<const System::String*>(s));       // +0x00
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+// The element is MapGenerator::ExternalRef (Game/MapGenerator.h), reached
+// through Collection.h's element adapters (B4 P2 GAME-1).
+using ExternalRef = MapGenerator::ExternalRef;
+using InitialStructure = MapGenerator::InitialStructure;
+
+void CopyExternalRef(ExternalRef* d, const ExternalRef* s) {
+    new (&d->strPtr) System::String(*reinterpret_cast<const System::String*>(&s->strPtr));   // +0x00  // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+    d->factoryGen = s->factoryGen;   // +0x08
+    d->resolved = s->resolved;       // +0x10
 }
 // Generation seed is -1, not 0: 0 is a live ExternalFactory generation and
 // would make the lazy resolver take its "cache valid" early-out on a null.
-void InitRefTriple18(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xFFFFFFFFu;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+void ZeroExternalRef(ExternalRef* d) {
+    d->strPtr = nullptr;             // +0x00 qword 0
+    d->factoryGen = -1;              // +0x08
+    d->resolved = nullptr;           // +0x10 qword 0
 }
-void DestroyRefTriple18(void* /*ignoredThis*/, uint8_t* base, int count) {
+void DestroyExternalRefs(ExternalRef* elems, int count) {
     for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
+        reinterpret_cast<System::String*>(&elems[i].strPtr)->~String();   // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+}
+void AssignRefTriple18(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<ExternalRef, &CopyExternalRef>(d, s);
+}
+void InitRefTriple18(uint8_t* d) {
+    rtcoll::InitAs<ExternalRef, &ZeroExternalRef>(d);
+}
+void DestroyRefTriple18(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<ExternalRef, &DestroyExternalRefs>(ignoredThis, base, count);
 }
 // stays explicit: a String copy-ctor `assign` (byteCopy=false) with a real
 // `destroy`, a -1 generation seed in `init`, and an unwritten extent at
@@ -101,28 +115,38 @@ const rtcoll::ArraySpec kSpec_RefTriple18 = {           // exe 0x14001b340 / 0x1
 using RefTriple18Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
                                            Collection::ExplicitSpec<&kSpec_RefTriple18>>;
 
+void CopyInitialStructure(InitialStructure* d, const InitialStructure* s) {
+    new (&d->structure.strPtr) System::String(*reinterpret_cast<const System::String*>(&s->structure.strPtr));   // +0x00  // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+    d->structure.factoryGen = s->structure.factoryGen;   // +0x08
+    d->structure.resolved = s->structure.resolved;       // +0x10
+    d->offsetX  = s->offsetX;    // +0x18
+    d->offsetY  = s->offsetY;    // +0x1c
+    d->width    = s->width;      // +0x20
+    d->height   = s->height;     // +0x24
+    d->rotation = s->rotation;   // +0x28
+}
+void ZeroInitialStructure(InitialStructure* d) {
+    d->structure.strPtr = nullptr;      // +0x00 qword 0
+    d->structure.factoryGen = -1;       // +0x08 generation -1
+    d->structure.resolved = nullptr;    // +0x10 qword 0
+    d->offsetX = 0;                     // _offsetX/_offsetY (one qword 0 before; H7)
+    d->offsetY = 0;
+    d->width = -1;                      // _width/_height -1 (one qword before; H7)
+    d->height = -1;
+    d->rotation = 0;                    // _rotation
+}
+void DestroyInitialStructures(InitialStructure* elems, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<System::String*>(&elems[i].structure.strPtr)->~String();   // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+}
 void AssignInitialStructure30(uint8_t* d, const uint8_t* s) {
-    // B.3.2 bridge: MapGenerator's InitialStructure is still untyped bytes.
-    new (d) System::String(*reinterpret_cast<const System::String*>(s));       // +0x00
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
-    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
-    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
-    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
-    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
-    *reinterpret_cast<uint32_t*>(d + 0x28) = *reinterpret_cast<const uint32_t*>(s + 0x28);
+    rtcoll::AssignAs<InitialStructure, &CopyInitialStructure>(d, s);
 }
 void InitInitialStructure30(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xFFFFFFFFu;               // generation -1
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;                         // _offsetX/_offsetY
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0xFFFFFFFFFFFFFFFFull;     // _width/_height -1
-    *reinterpret_cast<uint32_t*>(d + 0x28) = 0;                         // _rotation
+    rtcoll::InitAs<InitialStructure, &ZeroInitialStructure>(d);
 }
-void DestroyInitialStructure30(void* /*ignoredThis*/, uint8_t* base, int count) {
-    for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x30)->~String();
+void DestroyInitialStructure30(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<InitialStructure, &DestroyInitialStructures>(ignoredThis, base, count);
 }
 // stays explicit: same three reasons as the 0x18 row above, plus a -1 seed for
 // _width/_height at +0x20 and a second unwritten extent at [0x2c,0x30).
@@ -141,12 +165,12 @@ extern "C" void EventLog_EventArray_Destroy(void* arrBase);   // eventlog.cpp
 
 // FUN_14001b030 (mapgenerator.cpp) — String at element+0, stride 0x18.
 void Game_DestroyStringArray18(void* arrayHeader) {
-    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();          // B.3.2 bridge
+    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();          // LEFT: SIG Game_DestroyStringArray18 (callers mapgenerator.cpp, buildinggoal.cpp hold DynArrayHeader<ExternalRef>, not a Collection::Array)
 }
 
 // FUN_14001b0a0 (mapgenerator.cpp) — String at element+0, stride 0x30.
 void Game_DestroyStringArray30(void* arrayHeader) {
-    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();   // B.3.2 bridge
+    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();   // LEFT: SIG Game_DestroyStringArray30 (caller mapgenerator.cpp declares it locally)
 }
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,
@@ -166,10 +190,10 @@ void Game_EventNotifierCleanup(void* arrayHeader) { EventLog_EventArray_Destroy(
 // ArrayDtorSited uses) is the honest spelling until MusicPlayer is a class.
 // ------------------------------------------------------------------
 void Game_MusicPlayerDtor(void* self) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(self);
+    uint8_t* b = reinterpret_cast<uint8_t*>(self);   // LEFT: SIG Game_MusicPlayerDtor (caller gameupdateloop.cpp passes m_characterGrid; the record is CharacterGrid, whose five arrays Component/CharacterGrid.h declares as raw triples, H5)
     static const uint64_t kOffsets[5] = { 0x50, 0x40, 0x30, 0x20, 0x10 };
     for (uint64_t off : kOffsets)
-        reinterpret_cast<rtcoll::ArrayHdr*>(b + off)->~Array();   // B.3.2 bridge
+        reinterpret_cast<rtcoll::ArrayHdr*>(b + off)->~Array();   // LEFT: Component/CharacterGrid.h: the arrays are raw triples (H5)
 }
 
 // ------------------------------------------------------------------
@@ -190,8 +214,8 @@ void Game_ImageCaptureDtor(Minimap* self) {
     // +0x18, in that order — re-decompiled 2026-09-13: MemFree, data = 0, one
     // qword over size+capacity).
     // LEFT: the pixel arrays are declared as the Array's three fields (H5).
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->overlayPixels)->~Array();   // B.3.2 bridge
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->terrainPixels)->~Array();   // B.3.2 bridge
+    reinterpret_cast<rtcoll::ArrayHdr*>(&self->overlayPixels)->~Array();   // LEFT: Minimap.h H5 (gameupdateloop_load.cpp asserts Minimap trivially constructible)
+    reinterpret_cast<rtcoll::ArrayHdr*>(&self->terrainPixels)->~Array();   // LEFT: Minimap.h H5 (gameupdateloop_load.cpp asserts Minimap trivially constructible)
 }
 
 // ------------------------------------------------------------------
@@ -200,20 +224,45 @@ void Game_ImageCaptureDtor(Minimap* self) {
 // the backing array at +0. Mirrors FUN_14000a8a0's sibling layout but with a
 // tree node rather than a String element.
 // ------------------------------------------------------------------
+//
+// B4 P2 GAME-1: the record is {Array @+0, tree root @+0x10, int32 count @+0x18}
+// (retail 0x14001b860: MemFree(*p), p[0] = p[1] = 0; root at p[2], a dword 0 at
+// p[3]); MenuScene holds two of them (+0x1C8, +0x1E8). The node's only fields
+// this body reads are its two children at +0x18 / +0x20 (the shared tree free
+// 0x14000e320 walks the same two); its key and size are not read here.
+namespace {
+struct MenuSceneTreeNode {
+    uint8_t            _key[0x18];   // +0x00 not read by 0x14001b860
+    MenuSceneTreeNode* left;         // +0x18
+    MenuSceneTreeNode* right;        // +0x20
+};
+static_assert(offsetof(MenuSceneTreeNode, left)  == 0x18, "MenuSceneTreeNode::left @ +0x18 (0x14001b860)");
+static_assert(offsetof(MenuSceneTreeNode, right) == 0x20, "MenuSceneTreeNode::right @ +0x20 (0x14001b860)");
+struct MenuSceneTreeMap {
+    rtcoll::ArrayHdr   array;        // +0x00 trivial-element Array
+    MenuSceneTreeNode* root;         // +0x10
+    int32_t            count;        // +0x18
+    uint8_t            _pad1C[4];    // +0x1C
+};
+static_assert(sizeof(MenuSceneTreeMap) == 0x20, "MenuScene +0x1C8 / +0x1E8 records are 0x20 apart");
+static_assert(offsetof(MenuSceneTreeMap, root)  == 0x10, "MenuSceneTreeMap::root @ +0x10 (0x14001b860)");
+static_assert(offsetof(MenuSceneTreeMap, count) == 0x18, "MenuSceneTreeMap::count @ +0x18 (0x14001b860)");
+}  // namespace
+
 void Game_MenuSceneArrayDtor(void* self) {
-    uint64_t* p = reinterpret_cast<uint64_t*>(self);
-    void* node = reinterpret_cast<void*>(p[2]);  // *(self + 0x10)
+    MenuSceneTreeMap* map = reinterpret_cast<MenuSceneTreeMap*>(self);   // LEFT: SIG Game_MenuSceneArrayDtor (caller menuscene.cpp declares it locally with void*)
+    MenuSceneTreeNode* node = map->root;  // *(self + 0x10)
     if (node) {
-        WorkBase_TreeNodeFree_e320(&p[2], *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18));   // 0x14000e320
-        WorkBase_TreeNodeFree_e320(&p[2], *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x20));
+        WorkBase_TreeNodeFree_e320(&map->root, node->left);   // 0x14000e320
+        WorkBase_TreeNodeFree_e320(&map->root, node->right);
         System::MemoryAllocator::MemFree(node);
     }
-    p[2] = 0;
-    *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(p) + 0x18) = 0;
+    map->root = nullptr;
+    map->count = 0;
     // ENDGAME B.3.2 step 2: the backing array at +0 is a trivial-element
     // `~Array` (re-decompiled 2026-09-13: MemFree(*p); p[0] = 0; p[1] = 0).
     // The tree at +0x10 above is a {root, count} pair, not an Array; untouched.
-    reinterpret_cast<rtcoll::ArrayHdr*>(p)->~Array();   // B.3.2 bridge
+    map->array.~Array();
 }
 
 // ------------------------------------------------------------------
@@ -245,8 +294,8 @@ void Game_WeatherDtor(WeatherSimulation* self) {
     // size+capacity). +0x50 holds Geometry* — `Array<void*>`, trait-derived:
     // byteCopy, no init, no destroy, align 8. +0x60's element is not pinned.
     // LEFT: both arrays are declared as the Array's three fields (H5).
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->emitters)->~Array();          // B.3.2 bridge
-    reinterpret_cast<Collection::Array<void*>*>(&self->effects)->~Array();  // B.3.2 bridge
+    reinterpret_cast<rtcoll::ArrayHdr*>(&self->emitters)->~Array();          // LEFT: WeatherSimulation.h (GAME-2): raw Array triple (H5)
+    reinterpret_cast<Collection::Array<void*>*>(&self->effects)->~Array();  // LEFT: WeatherSimulation.h (GAME-2): raw Array triple (H5)
 }
 
 // ------------------------------------------------------------------
@@ -266,17 +315,14 @@ void Game_WeatherDtor(WeatherSimulation* self) {
 void Game_TerrainResolveMaterial(void* refTriple) {
     if (!refTriple) return;
     if (!::Object::ExternalFactory::_singleton) return;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    // The singleton is still read through the EXISTING door, so the guard
-    // above still gates the same cell and the same registered body still runs.
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-    uint8_t* b = reinterpret_cast<uint8_t*>(refTriple);
-    int factoryGen = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(factory) + 8);
-    if (*reinterpret_cast<int*>(b + 8) == factoryGen) return;
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    // The triple is the {String, generation, External*} record MapGenerator.h
+    // names ExternalRef (TerrainGenerator's material ref has the same layout).
+    MapGenerator::ExternalRef* ref = reinterpret_cast<MapGenerator::ExternalRef*>(refTriple);   // LEFT: SIG Game_TerrainResolveMaterial (caller terraingenerator.cpp declares it locally with void*)
+    int factoryGen = efactory->_generation;   // factory+8
+    if (ref->factoryGen == factoryGen) return;
 
-    System::Filename fnameBuf(*reinterpret_cast<const System::String*>(b));  // String @ b+0
+    System::Filename fnameBuf(*reinterpret_cast<const System::String*>(&ref->strPtr));  // String @ +0  // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
     void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge
 
     void* result = nullptr;
@@ -287,6 +333,6 @@ void Game_TerrainResolveMaterial(void* refTriple) {
         if (::Object::IsDerivedFromNullSafe(obj, tid))
             result = obj;
     }
-    *reinterpret_cast<void**>(b + 0x10) = result;
-    *reinterpret_cast<int*>(b + 8) = factoryGen;
+    ref->resolved = result;
+    ref->factoryGen = factoryGen;
 }

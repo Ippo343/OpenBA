@@ -34,7 +34,7 @@
 
 namespace {
 
-void* PersistenceSingleton() {
+::IO::Persistence* PersistenceSingleton() {
     return ::IO::Persistence::_singleton;
 }
 
@@ -79,7 +79,7 @@ const BoolKey kBoolKeys[] = {
 // GameSettings_Load — faithful port of 0x140098b60.
 extern "C" void GameSettings_Load(GameSettings* settings) {
     if (!settings) return;
-    void* p = PersistenceSingleton();
+    ::IO::Persistence* p = PersistenceSingleton();
     if (!p) {
         fprintf(stderr, "[GameSettings] Load SKIPPED — persistence=%p\n", p);
         return;
@@ -88,10 +88,10 @@ extern "C" void GameSettings_Load(GameSettings* settings) {
     // overload (int& / bool&), as §7.3 requires — the bool keys are one byte at
     // settings+0xC/+0x14/+0x18 and must not pick the int& overload.
     for (const auto& k : kIntKeys)
-        reinterpret_cast<const IO::Persistence*>(p)->Get("Game", k.key, settings->*k.field);   // B.3.4 bridge
+        p->Get("Game", k.key, settings->*k.field);
     for (const auto& k : kBoolKeys)
-        reinterpret_cast<const IO::Persistence*>(p)->Get(
-            "Game", k.key, *reinterpret_cast<bool*>(&(settings->*k.field)));   // B.3.4 bridge
+        p->Get(
+            "Game", k.key, *reinterpret_cast<bool*>(&(settings->*k.field)));   // LEFT: H8: the settings flags are uint8_t (retail hands the raw byte to Get(bool&), 0x140098b60)
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
@@ -109,16 +109,16 @@ extern "C" void GameSettings_Load(GameSettings* settings) {
 // GameSettings_Save — faithful port of 0x140098970.
 extern "C" void GameSettings_Save(GameSettings* settings) {
     if (!settings) return;
-    void* p = PersistenceSingleton();
+    ::IO::Persistence* p = PersistenceSingleton();
     if (!p) {
         fprintf(stderr, "[GameSettings] Save SKIPPED — persistence=%p\n", p);
         return;
     }
     // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.
     for (const auto& k : kIntKeys)
-        reinterpret_cast<IO::Persistence*>(p)->Set("Game", k.key, settings->*k.field);   // B.3.4 bridge
+        p->Set("Game", k.key, settings->*k.field);
     for (const auto& k : kBoolKeys)
-        reinterpret_cast<IO::Persistence*>(p)->Set(
+        p->Set(
             "Game", k.key, (settings->*k.field) != 0);   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "

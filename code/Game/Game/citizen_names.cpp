@@ -38,30 +38,31 @@
 #include <cstdio>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "Game/exe_bodies.h"
+#include "Game/NameDatabase.h"   // the .ndb record the generator walks (B4 P2 GAME-1)
 
 // System::Random::Rand(int min, int max)  (Runtime 0x1800c7d70) returns
 //   min + Rand() % ((max - min) + 1)   -- inclusive [min, max].
 // Built from the (self, N) overload, which is Rand() % N.
-static inline int RandRange(void* rng, int lo, int hi) {
+static inline int RandRange(System::Random* rng, int lo, int hi) {
     if (hi < lo) return lo;
-    return lo + (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(hi - lo + 1));   // B.3.4b bridge
+    return lo + (int)rng->Rand((uint32_t)(hi - lo + 1));
 }
 
 // Faithful port of FUN_1400a4880: one 4-gram Markov walk. Writes a C-string into
 // `out` (caller supplies a >=0x100 byte buffer, memset to 0). No allocation.
-static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char* out) {
-    uintptr_t table    = *(uintptr_t*)(db + 0x20);
-    int       recCount = *(int*)(db + 0x28);
-    uintptr_t startArr = *(uintptr_t*)(db + 0x30);
-    uint32_t  startCnt = *(uint32_t*)(db + 0x38);
+static void MarkovGenerate(const NameDatabase* db, System::Random* rng, int minLen, int maxLen, char* out) {
+    const NameDatabaseEntry* table = db->_array1._data;   // +0x20
+    int       recCount = db->_array1._size;              // +0x28
+    const uint16_t* startArr = db->_array2._data;        // +0x30
+    uint32_t  startCnt = db->_array2._size;              // +0x38 (read as uint)
     if (!table || recCount <= 0 || !startArr || startCnt == 0) { out[0] = 0; return; }
 
     // --- Seed: pick a random starting 4-gram and copy it into out[0..3] ---
-    uint32_t s = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(startCnt));   // B.3.4b bridge
-    uint16_t startIdx = *(uint16_t*)(startArr + (uintptr_t)(int)s * 2);
+    uint32_t s = rng->Rand(static_cast<uint32_t>(startCnt));
+    uint16_t startIdx = startArr[(int)s];
     if ((int)startIdx >= recCount) { out[0] = 0; return; }
-    uint32_t seedKey = *(uint32_t*)(table + (uintptr_t)startIdx * 0xc);
-    *(uint32_t*)out = seedKey;
+    uint32_t seedKey = *(const uint32_t*)table[startIdx].field_0x00;   // LEFT: NameDatabase.h: the 4-gram is declared uint8_t[4]; retail reads it as one dword
+    *(uint32_t*)out = seedKey;   // LEFT: the 4-gram stored into the caller's char buffer as one dword (retail)
     out[0] = (char)(out[0] - 0x20);   // uppercase the first letter ('a'-0x20 = 'A')
 
     // Context window = the 4 seed bytes, in memory (little-endian) order.
@@ -88,7 +89,7 @@ static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char
         for (;;) {
             int mid = (hi + lo) >> 1;
             if (mid < 0 || mid >= recCount) return;   // context not found -> stop
-            const unsigned char* rp = (const unsigned char*)(table + (uintptr_t)mid * 0xc);
+            const unsigned char* rp = table[mid].field_0x00;
             uint32_t rkey = ((uint32_t)rp[0] << 24) | ((uint32_t)rp[1] << 16)
                           | ((uint32_t)rp[2] << 8) | (uint32_t)rp[3];
             if (rkey == ctxKey) { foundIdx = mid; break; }
@@ -96,15 +97,15 @@ static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char
             if (hi < lo) return;                       // not found -> stop
         }
 
-        uintptr_t rec = table + (uintptr_t)foundIdx * 0xc;
-        uint32_t recKey  = *(uint32_t*)rec;
-        uint32_t mask    = *(uint32_t*)(rec + 8);
+        const NameDatabaseEntry* rec = &table[foundIdx];
+        uint32_t recKey  = *(const uint32_t*)rec->field_0x00;   // LEFT: NameDatabase.h: the 4-gram is declared uint8_t[4]; retail reads it as one dword
+        uint32_t mask    = rec->field_0x08;
         // Slide the context window: drop the oldest byte (recKey byte0), keep 1..3.
         c0 = (unsigned char)(recKey >> 8);
         c1 = (unsigned char)(recKey >> 16);
         c2 = (unsigned char)(recKey >> 24);
         if (mask == 0) return;                         // no continuations
-        unsigned char flag = (unsigned char)*(uint32_t*)(rec + 4);
+        unsigned char flag = rec->field_0x04;   // the low byte of the old dword read at +4
         if (maxLen <= charCount && flag != 0) return;  // too long, at a word boundary
         if (flag != 0) lastBoundary = outIdx + 4;
 
@@ -113,7 +114,7 @@ static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char
         // of the low 27 bits, so a single popcount + one Rand call is faithful.
         int total = __builtin_popcount(mask & 0x07FFFFFFu);
         if (total <= 0) return;
-        uint32_t pick = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)total);   // B.3.4b bridge
+        uint32_t pick = rng->Rand((uint32_t)total);
         int chosenBit = 0;
         uint32_t seen = 0;
         for (int bit = 0; bit < 0x1b; ++bit) {
@@ -145,10 +146,10 @@ static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char
 // yields a name of at least `minLen`, rejecting any candidate that appears in the
 // db's reject list (a sorted C-string table at +0x40 / +0x50 / +0x58). Writes the
 // accepted C-string into `out` (>=0x100 bytes).
-static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* out) {
-    uintptr_t pool  = *(uintptr_t*)(db + 0x40);
-    uintptr_t offs  = *(uintptr_t*)(db + 0x50);
-    int       rejN  = *(int*)(db + 0x58);
+static void GenerateName(const NameDatabase* db, System::Random* rng, int minLen, int maxLen, char* out) {
+    const uint8_t* pool = db->_array3._data;   // +0x40
+    const int32_t* offs = db->_array4._data;   // +0x50
+    int       rejN  = db->_array4._size;      // +0x58
 
     for (int attempt = 0; attempt < 0x32; ++attempt) {
         std::memset(out, 0, 0x100);
@@ -164,7 +165,7 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
             while (true) {
                 int mid = (lo + hi) >> 1;
                 if (mid < 0 || mid >= rejN) break;     // not found -> accept
-                const char* cand = (const char*)(pool + (uintptr_t)*(int*)(offs + (uintptr_t)mid * 4));
+                const char* cand = (const char*)(pool + offs[mid]);   // LEFT: NameDatabase.h: the reject pool is a byte Array (_array3 is Array<uint8_t>)
                 int cmp = std::strcmp(out, cand);
                 if (cmp == 0) { rejected = true; break; }
                 if (cmp < 1) hi = mid - 1; else lo = mid + 1;
@@ -191,18 +192,18 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
 // The IsDerivedFrom check retail does on the result is still skipped: its type-id
 // .rdata (DWORD_1401c5a60) is NULL in standalone, and FindOrLoad by exact
 // filename is authoritative.
-static uintptr_t LoadNameDb(const char* path) {
+static NameDatabase* LoadNameDb(const char* path) {
     if (!path || !::Object::ExternalFactory::_singleton)
-        return 0;
+        return nullptr;
 
     System::Filename fname(path);
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.
-    void* obj = const_cast<::Object::External*>(
+    // (retail's IsDerivedFrom on the result is skipped, as before: see above)
+    return static_cast<NameDatabase*>(const_cast<::Object::External*>(
         ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
-    return (uintptr_t)obj;
+            ->FindOrLoad(fname)));                                         // B.3.3 bridge
 }
 
 // Public entry: generate a citizen name for `female` into `out` (>=0x100 bytes,
@@ -210,9 +211,9 @@ static uintptr_t LoadNameDb(const char* path) {
 // minLen=3 / maxLen=10 (retail FUN_1400a4c60 passes 3, 10).
 extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap) {
     if (!out || cap < 0x100 || !rng) return false;
-    uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
+    NameDatabase* db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (!db) { out[0] = 0; return false; }
-    GenerateName(db, rng, 3, 10, out);
+    GenerateName(db, reinterpret_cast<System::Random*>(rng), 3, 10, out);   // LEFT: SIG GenerateCitizenName(void* rng) (outside callers)
     return std::strlen(out) >= 3;
 }
 
@@ -234,7 +235,7 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
     char buf[0x100];
     buf[0] = 0;
     if (db && rng)
-        GenerateName((uintptr_t)db, rng, minLen, maxLen, buf);
+        GenerateName((const NameDatabase*)db, reinterpret_cast<System::Random*>(rng), minLen, maxLen, buf);   // LEFT: SIG NameDB_GenerateName(void*, void*, void*) (outside callers)
     // Retail constructs the result String in the caller's return slot.
     new (retStr) System::String(buf);
     return retStr;
@@ -256,9 +257,10 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng,
 extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female) {
     char buf[0x100];
     buf[0] = 0;
-    uintptr_t db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
+    NameDatabase* db = LoadNameDb(female ? "Game/Names/Female.ndb" : "Game/Names/Male.ndb");
     if (db && rng)
-        GenerateName(db, rng, 3, 10, buf);
+        GenerateName(db, reinterpret_cast<System::Random*>(rng), 3, 10, buf);   // LEFT: SIG NameDB_PickAndGenerate(void* rng) (outside callers)
+
     new (retStr) System::String(buf);
     return retStr;
 }

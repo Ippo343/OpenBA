@@ -30,7 +30,7 @@
 #include <cstdlib>
 #include <new>
 #include "Component/exe_bodies.h"
-#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000
+#include "Action/exe_bodies.h"   // StorageAdd
 
 // Exe helpers, by retail address:
 //   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable (item type External ref)
@@ -87,13 +87,17 @@ int StorageComponent::QueryAvailable(const ComponentDescription* material) const
 int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
     if (!storageComp) return 0;
     return reinterpret_cast<StorageComponent*>(storageComp)->QueryAvailable(
-        reinterpret_cast<const ComponentDescription*>(materialEntity));
+        reinterpret_cast<const ComponentDescription*>(materialEntity));   // LEFT: B4 FORWARD (wave X: Work/buildroad.cpp passes void* / int64_t)
 }
 
 // ============================================================
 // Reimpl of FUN_14000f090 (StorageComponent dynamic-array resize:
 //   grow/shrink an array of 0x10-byte slot entries, plain memcpy of survivors)
 // ============================================================
+// LEFT (every cast in this body): ERASED hand-expanded Array<T>::SetSize over 0x10-byte
+// elements, shared by four element types (storage items, the trade manifest, the notify
+// entries); its callers hand the array in as void* (wave X; policy: typed wrappers over
+// the one core, never a container swap).
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
     int64_t* field = (int64_t*)arrayBase;     // [0]=ptr, [1] low=count, high=capacity
     int oldCount = (int)field[1];
@@ -304,8 +308,7 @@ void StorageComponent::OnAdded() {
     if (templateCount > 0) {
         for (int i = 0; i < templateCount; i++) {
             const StorageDescription::Volume& entry = templateArray[i];
-            // LEFT: ActRm_StorageAdd_d000 takes the storage and the item as integers (ACT-b's declaration).
-            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(this), reinterpret_cast<int64_t>(entry._resource), entry._count);   // 0x14012d000
+            StorageAdd(this, entry._resource, entry._count);   // 0x14012d000 (ActRm_StorageAdd_d000 is its forwarder)
         }
     }
 }
@@ -357,5 +360,5 @@ int StorageComponent::QueryCount() const {
 
 // B4 FORWARD: outside callers in ~25 files (Action, Component, Dialog, Entity, Game, Work).
 int fn_StorageComponent_QueryCount(void* storageComp) {
-    return reinterpret_cast<StorageComponent*>(storageComp)->QueryCount();
+    return reinterpret_cast<StorageComponent*>(storageComp)->QueryCount();   // LEFT: B4 FORWARD (wave X: its callers hold void*)
 }

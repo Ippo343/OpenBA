@@ -60,7 +60,7 @@
 // LEFT: the test reads the billboard's vptr (a guard the real ctor makes always-true;
 // removing it is NEXT_SESSION �0.2's).
 static inline bool SI_Initialised(const StatusIconComponent* c) {
-    return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;
+    return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;   // LEFT: the vptr test (above)
 }
 
 // The graphics scene the icons register with: GameUpdateLoop +0x60.
@@ -298,7 +298,7 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
 // workplacecomponent; Work: consumeproduce, fishingwork, foresterwork, harvestarea,
 // harvestorchard, herbalistwork, huntwork, pasturework)
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
-    reinterpret_cast<StatusIconComponent*>(param_1)->SetFlag(flagIndex, value);
+    reinterpret_cast<StatusIconComponent*>(param_1)->SetFlag(flagIndex, value);   // LEFT: B4 FORWARD (wave X: destroycomponent_states.cpp)
 }
 
 // ============================================================
@@ -707,7 +707,7 @@ void StatusIconComponent::Tick(void* /*time*/) {
     if (model && PerfX::IconCull() && PerfX::ModelCulled(model)) {
         PerfX::Count(PerfX::kCntIconCulled);
         PerfX::NoteDeferred(this, [](void* o) {
-            reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge
+            reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge  LEFT: SIG PerfX::NoteDeferred (SA: the callback takes void*)
         });
         return;
     }
