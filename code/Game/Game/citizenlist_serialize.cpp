@@ -207,7 +207,7 @@ void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serialize
     for (int32_t i = 0; i < count; ++i) {
         T** elem = &arr[i];
         // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)
         T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
@@ -269,24 +269,38 @@ namespace {
 // very next line, so the two extra stores are unobservable. (The second port
 // of the same address, gameupdateloop_load.cpp, zeroes on both arms — this
 // row reproduces that one exactly.)
+// B4 P2 GAME-1: each element is one inner Collection::Array<int32_t>, reached
+// through Collection.h's element adapters (the gameupdateloop_load.cpp form of
+// the same row). Retail's qword zero over +0x08..+0x0F is the two named
+// int32 stores (H7).
+void CopyIntAssocOuter(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
+    d->_data = nullptr;       // +0x00
+    d->_size = 0;             // +0x08 / +0x0C (H7: two stores)
+    d->_capacity = 0;
+    DeepCopyInner04Array(d, s);
+}
+void ZeroIntAssocOuter(Collection::Array<int32_t>* d) {
+    d->_data = nullptr;
+    d->_size = 0;             // (H7)
+    d->_capacity = 0;
+}
+void DestroyIntAssocOuters(Collection::Array<int32_t>* elems, int count) {
+    for (int i = 0; i < count; ++i) {
+        Collection::Array<int32_t>* e = &elems[i];
+        System::MemoryAllocator::MemFree(e->_data);
+        e->_data = nullptr;
+        e->_size = 0;         // (H7)
+        e->_capacity = 0;
+    }
+}
 void AssignIntAssocOuter(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0) = 0;
-    *reinterpret_cast<uint64_t*>(d + 8) = 0;
-    // The spec row's element is raw bytes; each element is one inner Array<int32>.
-    DeepCopyInner04Array(reinterpret_cast<Collection::Array<int32_t>*>(d),
-                         reinterpret_cast<const Collection::Array<int32_t>*>(s));
+    rtcoll::AssignAs<Collection::Array<int32_t>, &CopyIntAssocOuter>(d, s);
 }
 void InitIntAssocOuter(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0) = 0;
-    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+    rtcoll::InitAs<Collection::Array<int32_t>, &ZeroIntAssocOuter>(d);
 }
-void DestroyIntAssocOuter(void* /*ignoredThis*/, uint8_t* base, int count) {
-    for (int i = 0; i < count; ++i) {
-        uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(e + 0));
-        *reinterpret_cast<uint64_t*>(e + 0) = 0;
-        *reinterpret_cast<uint64_t*>(e + 8) = 0;
-    }
+void DestroyIntAssocOuter(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuters>(ignoredThis, base, count);
 }
 const rtcoll::ArraySpec kSpec_IntAssocOuter = {          // exe 0x140017640
     "Array<Array<int32>>", 0x10, 8,
@@ -302,11 +316,17 @@ using IntAssocOuterArray = Collection::Array<uint8_t, Collection::DefaultAllocat
 // u64@0, u64@8, u32@0x10, u64@0x18, so +0x14..+0x17 is left untouched;
 // trivially destructible.
 void AssignProfResEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x20); }
+// The element is ProfessionResourceEntry (Entity/CitizenBehavior.h).
+void ZeroProfResEntry(ProfessionResourceEntry* e) {
+    e->currentCount  = 0;       // +0x00 / +0x04: retail's u64 0 (H7: two stores)
+    e->previousCount = 0;
+    e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
+    e->field_0x0C    = 0;
+    e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
+    e->timer         = 0;       // +0x18 u64
+}
 void InitProfResEntry(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 100;
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    rtcoll::InitAs<ProfessionResourceEntry, &ZeroProfResEntry>(d);
 }
 const rtcoll::ArraySpec kSpec_ProfResEntry = {           // exe 0x1400177c0
     "Array<ProfessionResourceEntry>", 0x20, 8,
@@ -319,10 +339,13 @@ using ProfResEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocato
 
 // FUN_140017f60 element: two int32, stride 8, align 4. Copy = 8-byte copy,
 // init = zero, trivially destructible.
+// Retail moves the pair as one qword: the word-wise adapter at retail's width.
+void ZeroWord8(uint64_t* w) { *w = 0; }
 void AssignIntPair(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 1>>(d, s);
 }
-void InitIntPair(uint8_t* d) { *reinterpret_cast<uint64_t*>(d) = 0; }
+void InitIntPair(uint8_t* d) { rtcoll::InitAs<uint64_t, &ZeroWord8>(d); }
+
 const rtcoll::ArraySpec kSpec_IntPair = {                // exe 0x140017f60
     "Array<{int32,int32}>", 8, 4,
     &AssignIntPair, &InitIntPair, nullptr, true,
@@ -348,7 +371,7 @@ using IntPairArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 void ResizeStride0x10(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x140/+0x150 are still raw 0x10-byte
     // headers in an unconverted exe struct.
-    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);
+    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);   // LEFT: SIG ResizeStride0x10 (caller Entity/citizenbehavior.cpp); CitizenBehavior.h (ENT) +0x140/+0x150 are raw headers (H5)
 }
 
 // ------------------------------------------------------------
@@ -358,7 +381,7 @@ void ResizeStride0x10(void* hdr, int n) {
 // ------------------------------------------------------------
 void ResizeStride0x20(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
-    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);
+    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);   // LEFT: SIG ResizeStride0x20 (caller Entity/citizenbehavior.cpp); CitizenBehavior.h (ENT) +0x170 is a raw header (H5)
 }
 
 namespace {
@@ -369,7 +392,7 @@ namespace {
 // ------------------------------------------------------------
 void ResizeStride08Pair(void* hdr, int newCount) {
     // B.3.2 bridge: CitizenBehavior+0x130 is still a raw header.
-    reinterpret_cast<IntPairArray*>(hdr)->SetSize(newCount);
+    reinterpret_cast<IntPairArray*>(hdr)->SetSize(newCount);   // LEFT: CitizenBehavior.h (ENT): +0x130 is a raw header (H5)
 }
 
 // ------------------------------------------------------------
@@ -474,7 +497,7 @@ CompRefNode* CompRefTreeSucc(CompRefNode* n) {
 void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* serializer,
                           fn_KeyResolve_t keyFn) {
     // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
-    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);
+    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);   // LEFT: CitizenBehavior.h (ENT): field_0x100 / field_0x160 are void* tree roots
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -519,8 +542,8 @@ void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* 
             if (!dup) {
                 *countField = *countField + 1;
                 // LEFT: the shared AVL retrace takes int64_t* (Player/exe_bodies.h).
-                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(rootPtr),
-                                     reinterpret_cast<int64_t*>(&insertedNode));
+                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(rootPtr),   // LEFT: SIG TradeWork_impl_4b40(int64_t*) (wave X)
+                                     reinterpret_cast<int64_t*>(&insertedNode));   // LEFT: SIG TradeWork_impl_4b40(int64_t*) (wave X)
             }
         }
     } else {
@@ -586,7 +609,7 @@ LegacyNode* LegacyTreeSucc(LegacyNode* n) {
 }
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
     // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
-    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);
+    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);   // LEFT: CitizenBehavior.h (ENT): field_0x160 is a void* tree root
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -621,7 +644,7 @@ void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Seriali
             if (!dup) {
                 *countField = *countField + 1;
                 // LEFT: the shared AVL retrace takes int64_t* (Component/exe_bodies.h).
-                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360
+                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360   // LEFT: SIG CitizenAI_Reg_helper_e360(int64_t*) (wave X)
             }
         }
     } else {
@@ -682,7 +705,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
             GameColl::AsArray<GameColl::Ptr8>(&field_0x110).SetSize(count);
         // LEFT: the array body takes the element base as long long (Game/exe_bodies.h,
         // serialize_externals_array.cpp).
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x110), nullptr);   // 0x1400049c0
+        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x110), nullptr);   // 0x1400049c0   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize(long long) (wave X)
     }
     {
         int32_t count = field_0x128;
@@ -691,12 +714,12 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
             GameColl::AsArray<GameColl::Ptr8>(&field_0x120).SetSize(count);
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x120), nullptr);   // 0x1400049c0
+        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x120), nullptr);   // 0x1400049c0   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize(long long) (wave X)
     }
 
     // LEFT: the three clocks are declared int64_t (CitizenBehavior.h, block WORK-a).
-    reinterpret_cast<System::Time*>(&field_0x190)->Serialize(*ser);   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&field_0x198)->Serialize(*ser);   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&field_0x190)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): the clocks are int64_t, retail System::Time
+    reinterpret_cast<System::Time*>(&field_0x198)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): the clocks are int64_t, retail System::Time
 
     // "Stats" int-assoc array at +0x150.
     SerializeIntAssocArray(&field_0x150, &field_0x158, ser);
@@ -760,7 +783,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
                 // LEFT (a defect, kept: the stream must stay byte-identical): retail
                 // serializes the entry's Time at +0x18 (0x14008ff9d, Time::Serialize(
                 // piVar7 + 4) with piVar7 = entry + 8); the tree has always used +0x14.
-                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // B.3.4b bridge
+                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time
                 ++entry;
             }
         }
@@ -778,14 +801,14 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
             for (int32_t i = 0; i < sumCount; ++i) {
                 ser->Serialize(entry->current, nullptr);
                 ser->Serialize(entry->maxCapacity, nullptr);
-                reinterpret_cast<System::Time*>(&entry->timer)->Serialize(*ser);   // B.3.4b bridge
+                reinterpret_cast<System::Time*>(&entry->timer)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): ProfessionResourceEntry::timer is int64_t, retail System::Time
                 ++entry;
             }
         }
     }
 
     ser->Serialize(field_0x1A8, nullptr);
-    reinterpret_cast<System::Time*>(&field_0x1A0)->Serialize(*ser);   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&field_0x1A0)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): the clock is int64_t, retail System::Time
 
     if (ser->GetVersion() > 1) {
         ser->Serialize(field_0x1AC, nullptr);
@@ -852,7 +875,7 @@ void CitizenBehavior::PostLoad() {
             }
             // LEFT: the cell-map insert takes the town manager as int64_t
             // (Component/wellcomponent_funcs.h).
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80
+            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80   // LEFT: SIG WellComp_AddCellEntry_88a80(int64_t) (wave X)
         }
     }
 
@@ -887,7 +910,7 @@ void CitizenBehavior::PostLoad() {
             MapComponent* chosenVal = chosenRef.Get();
             int16_t cx = chosenVal ? static_cast<int16_t>(chosenVal->tileX0) : 0;
             int16_t cy = chosenVal ? static_cast<int16_t>(chosenVal->tileY0) : 0;
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cx, cy, slot);   // 0x140088a80
+            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cx, cy, slot);   // 0x140088a80   // LEFT: SIG WellComp_AddCellEntry_88a80(int64_t) (wave X)
         }
     }
 }
