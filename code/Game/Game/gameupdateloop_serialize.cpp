@@ -575,9 +575,9 @@ void Minimap::Serialize(IO::Stream& stream) {
 static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
     if (stream->GetDirection() != IO::kReading) return;   // save direction: no-op
 
-    int count = el->masterArray.count;
+    int count = el->masterArray._size;
     for (int i = 0; i < count; i++) {
-        ComponentEntity** entSlot = &el->masterArray.data[i];
+        ComponentEntity** entSlot = &el->masterArray._data[i];
         ComponentEntity* ent = *entSlot;
 
         int compCount = ent->_componentCount;
@@ -600,14 +600,14 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
                 new (&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
                 ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
-                                              owner->stagingUpdate.count + 1, &ibp);   // 0x140003110
+                                              owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
                 ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
-                                              owner->stagingPostUpdate.count + 1, &ibp);   // 0x140003110
+                                              owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
             }
         }
     }
@@ -627,14 +627,14 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
 
     UpdateBucket* hdr = buckets;
     for (int b = 0; b < 5; b++, hdr++) {
-        int count = hdr->count;
+        int count = hdr->_size;
         serializer->Serialize(count, nullptr);
         if (serializer->_stream->GetDirection() == IO::kReading) {   // the stream's +0x08, read inline
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
             // align 8, new tail zeroed. Element is the 8-byte InternalBasePtr slot.
-            GameColl::AsArray<GameColl::Ptr8>(hdr).SetSize(count);
+            hdr->SetSize(count);
         }
-        ComponentEntity** slot = hdr->data;
+        ComponentEntity** slot = hdr->_data;
         for (int i = 0; i < count; i++, slot++) {
             // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
             reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: an InternalBasePtr slot (the IBP's raw pointer).

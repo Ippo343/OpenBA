@@ -713,7 +713,7 @@ char CitizenComponent::RecoverOrDie() {
                     treated ? "LINKED" : "NOT-LINKED");
             fflush(stderr);
         }
-        AttendanceComponent_ReleaseLink59b0(self);   // 0x1401159b0
+        AttendanceComponent_ReleaseLink59b0(this);   // 0x1401159b0
         return 0;                               // dead
     }
     field_0x78._ticks = 0;
@@ -727,7 +727,7 @@ char CitizenComponent::RecoverOrDie() {
                 treated ? "LINKED" : "NOT-LINKED", (long long)field_0x70._ticks);
         fflush(stderr);
     }
-    AttendanceComponent_ReleaseLink59b0(self);   // 0x1401159b0
+    AttendanceComponent_ReleaseLink59b0(this);   // 0x1401159b0
     return 1;                                   // recovered
 }
 

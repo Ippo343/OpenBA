@@ -146,9 +146,9 @@ void TombstoneComponent::Update(const System::Time* timeV) {
                 // Add to removal queue
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 if (entityList) {
-                    int count = entityList->removalList.count;
-                    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
-                        .SetSizeFill(count + 1, &_entity);
+                    int count = entityList->removalList._size;
+                    entityList->removalList
+                        .SetSize(count + 1, _entity);
                 }
             }
         }

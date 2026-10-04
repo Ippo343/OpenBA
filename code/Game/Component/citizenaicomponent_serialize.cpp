@@ -64,7 +64,7 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(stream, 5);
 
     // citizen is an InternalPtr<CitizenComponent> (eight bytes): its serializer.
-    reinterpret_cast<Object::InternalBasePtr*>(&citizen)->Serialize(*s);   // B.3.4 bridge; LEFT: citizen is a CitizenComponent* over an InternalPtr (readers tree-wide; wave X)
+    reinterpret_cast<Object::InternalBasePtr*>(&citizen)->Serialize(*s);   // B.3.4 bridge   // LEFT: citizen is a CitizenComponent* local standing for the InternalPtr<CitizenComponent> retail serializes; InternalBasePtr::Serialize needs the slot
     if (citizen) {
         uint32_t tid = CitizenAISer_TidCitizenComponent();
         if (tid && !citizen->IsDerivedFrom(tid))

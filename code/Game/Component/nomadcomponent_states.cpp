@@ -99,7 +99,7 @@ void EntityList::QueueDestroy(ComponentEntity* const* entity) {
     if (((*entity)->_entityFlags >> 10) & 1) return;
     ActHunt_MarkEntityRemoval_c2ea0(*entity);   // 0x1400c2ea0
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSizeFill(removalList.count + 1, entity);
+    removalList.SetSize(removalList._size + 1, *entity);
 }
 
 // ============================================================
@@ -118,7 +118,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
         act = ::new (mem) ::MoveTo(&ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);   // 0x1400c9170
     }
     void* actIBP = act;
-    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0   // LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent +0x48 is no ActionStack yet, wave X)
+    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0   // LEFT: SIG Pf_ActStackPush_54e0 (Action/exe_bodies.h, WORK's) takes the stack as int64_t*; CharacterComponent +0x48 is not an embedded ActionStack (ActionStack::actions is InternalPtr<Action>*, the readers use Action**)
 }
 
 // ============================================================

@@ -506,10 +506,10 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
         if (GameUpdateLoop::_singleton != nullptr) {
             GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
             EntityList* entityList = gameWorld->m_entityList;
-            int32_t entityCount = entityList->masterArray.count;
+            int32_t entityCount = entityList->masterArray._size;
 
             for (int32_t i = 0; i < entityCount; ++i) {
-                ComponentEntity* entity = entityList->masterArray.data[i];
+                ComponentEntity* entity = entityList->masterArray._data[i];
                 WorkComponent* workComponent = entity->FindComponent<WorkComponent>();
                 if (workComponent != nullptr) {
                     int32_t workId = workComponent->workId;

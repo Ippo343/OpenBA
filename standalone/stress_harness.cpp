@@ -160,7 +160,7 @@ Census TakeCensus(GameUpdateLoop* gw) {
     if (!Readable(gw)) return c;
     EntityList* el = gw->m_entityList;                 // +0xE8
     if (Readable(el)) {
-        int n = el->masterArray.count;                 // +0x10
+        int n = el->masterArray._size;                 // +0x10
         if (n >= 0 && n < 10000000) c.entities = n;
     }
     CitizenBehavior* town = gw->m_citizenList;         // +0xF0
@@ -319,8 +319,8 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
     CitizenBehavior* townMgr = gw->m_citizenList;     // +0xF0
     EntityList* entityList   = gw->m_entityList;      // +0xE8
     if (!townMgr || !entityList) return;
-    ComponentEntity** arr = entityList->masterArray.data;   // +0x08
-    const int n = entityList->masterArray.count;            // +0x10
+    ComponentEntity** arr = entityList->masterArray._data;   // +0x08
+    const int n = entityList->masterArray._size;            // +0x10
     if (!arr || n <= 0) return;
 
     // 0x140002e10 = FindComponent_WorkPlace, 0x140003050 = FindComponent_Work (both

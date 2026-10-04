@@ -412,9 +412,11 @@ void ForceTornado(int frameNum, int want) {
     // Preconditions, named individually — "nothing appeared" has three distinct causes
     // and they must not look alike in the log.
     EntityList* entityList = gw->m_entityList;                  // +0xe8
+    ComponentEntity* (*createEntity)(ComponentEntity*, ComponentDescription*) =
+        &ComponentEntity_CtorFromDescription;                   // the typed overload
     DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
          "RegisterEntity=%p entityList=%p\n", frameNum,
-         reinterpret_cast<void*>(&ComponentEntity_CtorFromDescription),
+         reinterpret_cast<void*>(createEntity),
          reinterpret_cast<void*>(&EntityList_RegisterEntity_Impl), static_cast<void*>(entityList));
     if (!entityList) {
         DLOG("Tornado", "entityList null. Nothing spawned.\n");
@@ -424,14 +426,14 @@ void ForceTornado(int frameNum, int want) {
     // Approximate entity count (the same field gameupdateloop.cpp:886 reads for its
     // FPS line). Approximate is enough: we only need a before/after delta.
     // +0x30 is buckets[1].count in EntityList's header (row 124).
-    const int before = entityList->buckets[1].count;
+    const int before = entityList->buckets[1]._size;
 
     for (int i = 0; i < want; ++i) {
         DLOG("Tornado", "spawning %d/%d via DebugUI_Slot9(id=329)\n", i + 1, want);
         DebugUI_Slot9(nullptr, 0, /*msg=buttonClick*/0x12, /*id=spawnTornado*/329);
     }
 
-    const int after = entityList->buckets[1].count;             // +0x30
+    const int after = entityList->buckets[1]._size;             // +0x30
     DLOG("Tornado", "done — entityList count %d -> %d (+%d expected if "
          "Template/Tornado.rsc resolved and RegisterEntity is live; +0 means the "
          "template did not resolve). A funnel that spawns but never MOVES means "

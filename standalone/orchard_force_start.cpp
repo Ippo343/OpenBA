@@ -157,8 +157,8 @@ void FireForceStart(PlayerToolManager* entityUI, int frameNum) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: EntityList (gw+0xe8) null — cannot run\n", frameNum);
         return;
     }
-    ComponentEntity** arr = entityList->masterArray.data;        // +0x08
-    int       n   = entityList->masterArray.count;               // +0x10
+    ComponentEntity** arr = entityList->masterArray._data;        // +0x08
+    int       n   = entityList->masterArray._size;               // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: cannot scan (arr=%p n=%d "

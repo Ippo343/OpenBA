@@ -88,7 +88,7 @@ int StorageComponent::QueryAvailable(const ComponentDescription* material) const
 int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity) {
     if (!storageComp) return 0;
     return reinterpret_cast<StorageComponent*>(storageComp)->QueryAvailable(   // LEFT: B4 FORWARD StorageComponent_QueryAvailable: its one caller (Work/buildroad.cpp, not this agent's) holds the storage as void*
-        reinterpret_cast<const ComponentDescription*>(materialEntity));   // LEFT: B4 FORWARD (wave X: Work/buildroad.cpp passes void* / int64_t)
+        reinterpret_cast<const ComponentDescription*>(materialEntity));   // LEFT: B4 FORWARD StorageComponent_QueryAvailable: Work/buildroad.cpp (WORK's) passes the material as void*
 }
 
 // ============================================================

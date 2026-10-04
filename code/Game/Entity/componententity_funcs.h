@@ -10,6 +10,8 @@
 // Ctor from a description (0x1400c3720, the retail "CopyCtor"): registered at
 // that address (fn_EntityFactory_CreateEntity), so the door stays. It
 // placement-constructs the class on caller-allocated memory.
+ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, ComponentDescription* description);
+// B4 FORWARD: Game/founding_spawn.cpp:262 and Player/bridgetool_calcpath.cpp:207 still call this (they hold the template as void*).
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 
 // EntityList::RegisterEntity (0x1400c48a0): adds a freshly-instantiated entity

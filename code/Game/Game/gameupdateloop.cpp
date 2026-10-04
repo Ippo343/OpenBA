@@ -1266,7 +1266,7 @@ post_simulation:
         g_phCalls[kPhWholeUpdate]++;
         long entCount = -1;
         if (m_entityList)
-            entCount = m_entityList->buckets[1].count;   // +0x30
+            entCount = m_entityList->buckets[1]._size;   // +0x30
         int spd = 0;
         if (m_toolManager && !m_toolManager->paused)
             spd = m_toolManager->field_0x34;
@@ -1962,11 +1962,10 @@ void GameUpdateLoop::Shutdown() {
                 Profession* citProfession = citizen->profession;
                 ComponentEntity* citWorkplace = citizen->workplace;
 
-                int64_t nullRef[1] = {0};
-                new (nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                ComponentEntity* nullRef = nullptr;   // the null InternalPtr<ComponentEntity> retail passes
 
                 if (citProfession != defaultProfession || citWorkplace != nullptr) {
-                    CitizenComp_AssignHousing(citizen, nullRef);   // 0x140111ee0
+                    citizen->SetWorkplace(nullRef);   // 0x140111ee0
                     citizen->profession = defaultProfession;
                 }
             }
@@ -2030,7 +2029,7 @@ void GameUpdateLoop::Shutdown() {
     // EntityList
     if (m_entityList != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityList...\n");
-        EntityList_Dtor_c3e60(m_entityList);   // 0x1400c3e60
+        m_entityList->~EntityList();   // 0x1400c3e60
         System::MemoryAllocator::MemFree(m_entityList);
     }
 

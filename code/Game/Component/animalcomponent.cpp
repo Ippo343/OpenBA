@@ -477,9 +477,9 @@ void AnimalComponent::Update(const System::Time* time) {
         if (corpseOwner) {
             // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
             // Collection::Array<void*>::SetSize(n, fill).
-            const int newCount = corpseOwner->removalList.count + 1;
-            GameColl::AsArray<GameColl::Ptr8>(&corpseOwner->removalList)
-                .SetSizeFill(newCount, &entity);
+            const int newCount = corpseOwner->removalList._size + 1;
+            corpseOwner->removalList
+                .SetSize(newCount, entity);
         }
         // Running total, not a capped sample: at kTraceCap=24 this read as
         // "24 deaths" against a 47-animal drain and hid the fact that old age

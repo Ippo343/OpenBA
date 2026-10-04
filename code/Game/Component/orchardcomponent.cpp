@@ -111,7 +111,7 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
         ser.Serialize(slot->state, nullptr);
 
         // LEFT: InternalBasePtr has no typed view of a bare pointer member.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->tree)->Serialize(ser);   // LEFT: InternalPtr member held as T* (wave X)
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->tree)->Serialize(ser);   // LEFT: OrchardComponent.h declares the slot's InternalPtr<ComponentEntity> as a bare ComponentEntity*; InternalBasePtr::Serialize needs the slot
         if (slot->tree != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->tree, ComponentEntity::TypeId())))
             slot->tree = nullptr;

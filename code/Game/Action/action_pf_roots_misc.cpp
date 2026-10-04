@@ -401,7 +401,7 @@ void HerdStartMigration(HerdComponent* herd) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
                         MarkEntityForRemoval(local_res8);   // 0x1400c2ea0
                         ActHunt_DynArraySetCount_3110(&list->removalList,   // 0x140003110
-                                 list->removalList.count + 1, &local_res8);
+                                 list->removalList._size + 1, &local_res8);
                     }
                 }
             } while (0 < herd->memberCount);

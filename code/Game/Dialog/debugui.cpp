@@ -488,7 +488,7 @@ static void Game_SpawnCitizens_Impl() {
                             ComponentEntity* newEntity = nullptr;
                             if (memBlock != nullptr) {
                                 newEntity = ComponentEntity_CtorFromDescription(
-                                    memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: SIG ComponentEntity_CtorFromDescription (void*)
+                                    memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: the factory walk hands out const ComponentDescription* and the ctor takes it mutable (ComponentEntity.h)
                             }
 
                             // Find the CitizenComponent (DAT_1401c7158) on the new entity:
@@ -627,7 +627,7 @@ static void Game_SpawnTornado_Impl() {
     ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (memBlock) {
         newEntity = ComponentEntity_CtorFromDescription(
-            memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: SIG ComponentEntity_CtorFromDescription (void*)
+            memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: the factory walk hands out const ComponentDescription* and the ctor takes it mutable (ComponentEntity.h)
     }
 
     // Register entity with entity manager

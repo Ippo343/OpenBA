@@ -259,7 +259,7 @@ static bool StagingNodeRemovable(EntityTreeNode* node) {
     if (PtrCorrupt(node->parent)) return false;
     if (PtrCorrupt(node->left))   return false;
     if (PtrCorrupt(node->right))  return false;
-    if (PtrCorrupt(node->entityIBP)) return false;
+    if (PtrCorrupt(node->element)) return false;
     return true;
 }
 
@@ -273,13 +273,13 @@ static void ReportStagingCorrupt(const char* which, EntityList* self, EntityTree
     printf("[TreeGuard] CORRUPT node refused during %s staging REMOVE: node=%p\n", which, (void*)node);
     if (node && !NodeCorrupt(node)) {
         printf("[TreeGuard]   node entityIBP=%p parent=%p left=%p right=%p bal=%d ht=%d\n",
-               static_cast<void*>(node->entityIBP), static_cast<void*>(node->parent),
+               static_cast<void*>(node->element), static_cast<void*>(node->parent),
                static_cast<void*>(node->left), static_cast<void*>(node->right),
                (int)node->balance, (int)node->height);
     }
     printf("[TreeGuard]   postUpdateRoot=%p (cnt=%lld)  updateRoot=%p (cnt=%lld)\n",
-           (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
-           (void*)self->updateTreeRoot, (long long)self->updateTreeCount);
+           (void*)self->postUpdateTree._root, (long long)self->postUpdateTree._count,
+           (void*)self->updateTree._root, (long long)self->updateTree._count);
     fflush(stdout);
 }
 
@@ -300,19 +300,19 @@ static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode
     EntityTreeNode* f = g_treeCorruptFrom;
     if (f && !NodeCorrupt(f)) {
         printf("[TreeGuard]   from-node=%p  entityIBP=%p parent=%p left=%p right=%p bal=%d ht=%d\n",
-               static_cast<void*>(f), static_cast<void*>(f->entityIBP),
+               static_cast<void*>(f), static_cast<void*>(f->element),
                static_cast<void*>(f->parent), static_cast<void*>(f->left),
                static_cast<void*>(f->right), (int)f->balance, (int)f->height);
     }
     if (prev && !NodeCorrupt(prev) && prev != f) {
         printf("[TreeGuard]   prev-node=%p  entityIBP=%p parent=%p left=%p right=%p\n",
-               static_cast<void*>(prev), static_cast<void*>(prev->entityIBP),
+               static_cast<void*>(prev), static_cast<void*>(prev->element),
                static_cast<void*>(prev->parent), static_cast<void*>(prev->left),
                static_cast<void*>(prev->right));
     }
     printf("[TreeGuard]   postUpdateRoot=%p (cnt=%lld)  updateRoot=%p (cnt=%lld)\n",
-           (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
-           (void*)self->updateTreeRoot, (long long)self->updateTreeCount);
+           (void*)self->postUpdateTree._root, (long long)self->postUpdateTree._count,
+           (void*)self->updateTree._root, (long long)self->updateTree._count);
     fflush(stdout);
 
     // BANISHED_TREE_CATCH=1 — name the WRITER with a hardware write watchpoint.
@@ -401,15 +401,15 @@ extern "C" void EntityList_MarkUpdateTreeDirty() { s_walkDirty = true; }
 static bool RebuildWalkSnapshot(EntityList* self) {
     s_walkSnap.clear();
     s_walkOwner = self;
-    s_walkCountAtBuild = self->updateTreeCount;
-    EntityTreeNode* treeRoot = self->updateTreeRoot;
+    s_walkCountAtBuild = self->updateTree._count;
+    EntityTreeNode* treeRoot = self->updateTree._root;
     if (!treeRoot) { s_walkDirty = false; return true; }
     g_treeCorrupt = false;
     EntityTreeNode* node = TreeMinimum(treeRoot);
     EntityTreeNode* prev = nullptr;
-    s_walkSnap.reserve((size_t)(self->updateTreeCount > 0 ? self->updateTreeCount : 16));
+    s_walkSnap.reserve((size_t)(self->updateTree._count > 0 ? self->updateTree._count : 16));
     while (node && !g_treeCorrupt) {
-        ComponentEntity* entity = node->entityIBP;
+        ComponentEntity* entity = node->element;
         if (PtrCorrupt(entity)) { FlagTreeCorrupt("snap.entityIBP", node, entity); break; }
         s_walkSnap.push_back(entity);
         prev = node;
@@ -423,7 +423,7 @@ static bool RebuildWalkSnapshot(EntityList* self) {
 // Returns true when the snapshot walk ran (so the tree walk is skipped).
 static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, bool prof) {
     if (!PerfX::TreeSnapshot()) return false;
-    if (s_walkDirty || s_walkOwner != self || s_walkCountAtBuild != self->updateTreeCount) {
+    if (s_walkDirty || s_walkOwner != self || s_walkCountAtBuild != self->updateTree._count) {
         if (!RebuildWalkSnapshot(self)) return false;   // corrupt: fall back to the tree walk
     }
     const size_t n = s_walkSnap.size();
@@ -457,6 +457,42 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
         if (prof) ++g_elProfTreeNodes;
     }
     return true;
+}
+
+// ============================================================
+// 0x1400c3f90 — EntityList::EntityList
+// ============================================================
+// The member initialisers are retail's stores in its order: +0x00 = 0; the
+// master Array's two zero qwords (+0x08 / +0x10); the five bucket Arrays
+// (0x14003accc over 0x140008080, the same two qwords each); the two Sets'
+// root qword and count dword (+0x68 / +0x70, +0x78 / +0x80); the staging and
+// removal Arrays; then the body: the +0xE0 byte, the five process counts (the
+// +0xB8 store is retail's qword of 2, H7: two stores) and the cursors.
+EntityList::EntityList() {
+    accumulatedTime._ticks = 0;            // +0x00 (retail: before the Arrays)
+    shuttingDown = false;                  // +0xE0
+    processCount[0] = 0x32;                // +0xA8 50
+    processCount[1] = 0xf;                 // +0xAC 15
+    processCount[2] = 8;                   // +0xB0
+    processCount[3] = 5;                   // +0xB4
+    processCount[4] = 2;                   // +0xB8 (retail's qword store of 2: with +0xBC)
+    cursor[0] = 0;                         // +0xBC
+    cursor[1] = 0;                         // +0xC0 (retail: two qword stores of 0)
+    cursor[2] = 0;                         // +0xC4
+    cursor[3] = 0;                         // +0xC8
+    cursor[4] = 0;                         // +0xCC
+}
+
+// ============================================================
+// 0x1400c3e60 — EntityList::~EntityList
+// ============================================================
+// The body is the Shutdown call (0x1400c3e7d); the members are destroyed after
+// it in reverse declaration order: removalList, stagingPostUpdate,
+// stagingUpdate (~Array: MemFree, two zero qwords), postUpdateTree,
+// updateTree (Set Clear: both subtrees, the root, root = 0, count = 0), the
+// buckets 4..0 (0x14003ad30 with 0x140001740), masterArray.
+EntityList::~EntityList() {
+    EntityList_Shutdown_c3d30(this);   // 0x1400c3d30
 }
 
 void EntityList::Update(const System::Time* time) {
@@ -496,7 +532,7 @@ void EntityList::Update(const System::Time* time) {
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfPreTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 3: In-order traversal of update tree (+0x68)
-    EntityTreeNode* treeRoot = updateTreeRoot;
+    EntityTreeNode* treeRoot = updateTree._root;
     if (treeRoot && WalkUpdateTreeSnapshot(this, time, prof)) {
         treeRoot = nullptr;   // [PerfX] flat snapshot walk ran -- identical order, no tree chase
     }
@@ -511,7 +547,7 @@ void EntityList::Update(const System::Time* time) {
             // CheckPtr on the node (it's an IBP)
 
             // Guard the node's entity-IBP key against a freelist link (UAF node).
-            ComponentEntity* entity = node->entityIBP;
+            ComponentEntity* entity = node->element;
             if (PtrCorrupt(entity)) {
                 FlagTreeCorrupt("entityIBP", node, entity);
                 break;
@@ -525,8 +561,8 @@ void EntityList::Update(const System::Time* time) {
             // inserts as our successor is not skipped; this is a hint only.
             if (g_treePrefetch) {
                 EntityTreeNode* pf = TreeSuccessor(node);
-                if (pf && !PtrCorrupt(pf->entityIBP)) {
-                    const ComponentEntity* pe = pf->entityIBP;
+                if (pf && !PtrCorrupt(pf->element)) {
+                    const ComponentEntity* pe = pf->element;
                     __builtin_prefetch(&pe->_components);
                     const Object::InternalPtr<Component>* comps = pe->_components;
                     if (comps) __builtin_prefetch(comps);
@@ -556,7 +592,7 @@ void EntityList::Update(const System::Time* time) {
 
     for (int bucket = 0; bucket < 5; bucket++) {
         UpdateBucket* bkt = &buckets[bucket];
-        int32_t count = bkt->count;
+        int32_t count = bkt->_size;
         if (count == 0) continue;
 
         uint32_t toProcess = processCount[bucket];
@@ -570,7 +606,7 @@ void EntityList::Update(const System::Time* time) {
         if ((int32_t)toProcess > 0) {
             do {
                 // Re-read bucket data pointer each iteration (may be reallocated)
-                ComponentEntity** arrBase = bkt->data;
+                ComponentEntity** arrBase = bkt->_data;
 
                 // Read entity IBP and CheckPtr
                 ComponentEntity* entIBP = arrBase[idx];
@@ -636,7 +672,7 @@ void EntityList::Update(const System::Time* time) {
                 processed++;
                 cursorVal++;
                 // Re-read count (array may have changed size)
-                count = bkt->count;
+                count = bkt->_size;
                 if ((int64_t)idx >= count) {
                     idx = 0;
                     cursorVal = 0;
@@ -823,7 +859,7 @@ static void AuditDyingEntity(ComponentEntity* entity) {
 }
 
 void EntityList::DrainRemovals() {
-    int32_t removalCount = removalList.count;
+    int32_t removalCount = removalList._size;
     if (removalCount <= 0) return;
 
     // Close dialogs + clear tool selection bound to the entities we're about to free
@@ -835,14 +871,14 @@ void EntityList::DrainRemovals() {
     PostUpdateStaging();
 
     for (int64_t i = 0; i < removalCount; i++) {
-        ComponentEntity* entityIBP = removalList.data[i];
+        ComponentEntity* entityIBP = removalList._data[i];
         AuditDyingEntity(entityIBP);
         RemoveEntity(&entityIBP);
     }
 
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSize(0);
+    removalList.SetSize(0);
 
 }
 
@@ -857,16 +893,16 @@ void EntityList::DrainRemovals() {
 //
 // Decompiled from 0x1400c3bd0.
 void EntityList::PreUpdate() {
-    int32_t stagingCount = stagingUpdate.count;
+    int32_t stagingCount = stagingUpdate._size;
     if (stagingCount <= 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&stagingUpdate).SetSize(0);
+        stagingUpdate.SetSize(0);
         return;
     }
 
     for (int i = 0; i < stagingCount; i++) {
-        ComponentEntity** ibpPtr = &stagingUpdate.data[i];
+        ComponentEntity** ibpPtr = &stagingUpdate._data[i];
 
         uint32_t entityFlags = (*ibpPtr)->_entityFlags;
         bool hasUpdateFlag = (entityFlags & 0x4) != 0;
@@ -875,19 +911,19 @@ void EntityList::PreUpdate() {
         if (hasUpdateFlag && !isDeleted) {
             // Insert into update tree
             uint64_t outBuf = 0;
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&updateTreeRoot), &outBuf, ibpPtr);   // LEFT: H5 EntityList holds the update tree as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+            WorkBST_RegisterWork_1a30(&updateTree, &outBuf, ibpPtr);
             EntityList_MarkUpdateTreeDirty();
         } else {
             // Search for entity in update tree, remove if found
-            EntityTreeNode* node = updateTreeRoot;
+            EntityTreeNode* node = updateTree._root;
 
             while (node != nullptr) {
                 ComponentEntity* ibpVal = *ibpPtr;
 
-                if (ibpVal < node->entityIBP) {
+                if (ibpVal < node->element) {
                     node = node->left;
                 } else {
-                    if (ibpVal <= node->entityIBP) {
+                    if (ibpVal <= node->element) {
                         // Found — remove from tree
                         // Validate first: the AVL delete derefs node->parent
                         // unguarded (faithful to retail 0x14001a6e0).
@@ -895,7 +931,7 @@ void EntityList::PreUpdate() {
                             ReportStagingCorrupt("PreUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), node);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&updateTree, node);
                         EntityList_MarkUpdateTreeDirty();
                         break;
                     }
@@ -907,7 +943,7 @@ void EntityList::PreUpdate() {
 
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&stagingUpdate).SetSize(0);
+    stagingUpdate.SetSize(0);
 }
 
 // ============================================================
@@ -918,16 +954,16 @@ void EntityList::PreUpdate() {
 //
 // Decompiled from 0x1400c3ab0.
 void EntityList::PostUpdateStaging() {
-    int32_t stagingCount = stagingPostUpdate.count;
+    int32_t stagingCount = stagingPostUpdate._size;
     if (stagingCount <= 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&stagingPostUpdate).SetSize(0);
+        stagingPostUpdate.SetSize(0);
         return;
     }
 
     for (int i = 0; i < stagingCount; i++) {
-        ComponentEntity** ibpPtr = &stagingPostUpdate.data[i];
+        ComponentEntity** ibpPtr = &stagingPostUpdate._data[i];
 
         uint32_t entityFlags = (*ibpPtr)->_entityFlags;
         bool hasPostUpdateFlag = (entityFlags & 0x10) != 0;
@@ -936,18 +972,18 @@ void EntityList::PostUpdateStaging() {
         if (hasPostUpdateFlag && !isDeleted) {
             // Insert into post-update tree
             uint64_t outBuf = 0;
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), &outBuf, ibpPtr);   // LEFT: H5 EntityList holds the update tree as a raw root + count (Collection::Set has a dtor); the shared WorkBST core views it as Set<uint64_t>
+            WorkBST_RegisterWork_1a30(&postUpdateTree, &outBuf, ibpPtr);
         } else {
             // Search for entity in post-update tree, remove if found
-            EntityTreeNode* node = postUpdateTreeRoot;
+            EntityTreeNode* node = postUpdateTree._root;
 
             while (node != nullptr) {
                 ComponentEntity* ibpVal = *ibpPtr;
 
-                if (ibpVal < node->entityIBP) {
+                if (ibpVal < node->element) {
                     node = node->left;
                 } else {
-                    if (ibpVal <= node->entityIBP) {
+                    if (ibpVal <= node->element) {
                         // Found — remove from tree
                         // Same guard as PreUpdate. This is the path that actually
                         // crashed on the 2026-09-04 tutorial run.
@@ -955,7 +991,7 @@ void EntityList::PostUpdateStaging() {
                             ReportStagingCorrupt("PostUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), node);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                        WorkBST_BSTRemove_a6e0(&postUpdateTree, node);
                         break;
                     }
                     node = node->right;
@@ -966,7 +1002,7 @@ void EntityList::PostUpdateStaging() {
 
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&stagingPostUpdate).SetSize(0);
+    stagingPostUpdate.SetSize(0);
 }
 
 // ============================================================
@@ -981,7 +1017,7 @@ void EntityList::PostUpdate() {
     PostUpdateStaging();
 
     // Step 2: In-order traversal of post-update tree (+0x78)
-    EntityTreeNode* treeRoot = postUpdateTreeRoot;
+    EntityTreeNode* treeRoot = postUpdateTree._root;
     if (!treeRoot) return;
 
     g_treeCorrupt = false;
@@ -995,7 +1031,7 @@ void EntityList::PostUpdate() {
 
         // Guard the node's entity-IBP key: a freed-but-still-linked node has a
         // freelist link written over +0x00, so dereferencing it faults.
-        ComponentEntity* entity = node->entityIBP;
+        ComponentEntity* entity = node->element;
         if (PtrCorrupt(entity)) {
             FlagTreeCorrupt("entityIBP", node, entity);
             break;
@@ -1039,7 +1075,7 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
         UpdateBucket* bucket = &buckets[bucketIdx];
 
         // Last element index in bucket
-        uint32_t lastIdx = bucket->count - 1;
+        uint32_t lastIdx = bucket->_size - 1;
 
         entity = *entityIBP;
 
@@ -1048,11 +1084,11 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
         if (lastIdx != entityBucketIdx) {
             // Swap last element into removed element's slot
-            ComponentEntity** bucketData = bucket->data;
+            ComponentEntity** bucketData = bucket->_data;
             bucketData[entityBucketIdx] = bucketData[lastIdx];
 
             // Update swapped entity's bucket index field
-            ComponentEntity* swappedEntity = bucket->data[entityBucketIdx];
+            ComponentEntity* swappedEntity = bucket->_data[entityBucketIdx];
 
             // Update low 24 bits of +0x1C with new index
             swappedEntity->_handle = swappedEntity->_handle ^ ((swappedEntity->_handle ^ entityBucketIdx) & 0xFFFFFF);
@@ -1061,18 +1097,18 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
         // Shrink bucket array.
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(bucket).SetSize((int)lastIdx);
+        bucket->SetSize((int)lastIdx);
     }
 
     // Step 2: Remove from master array (+0x08)
-    int32_t lastMasterIdx = masterArray.count - 1;
+    int32_t lastMasterIdx = masterArray._size - 1;
 
     entity = *entityIBP;
     int32_t entityMasterIdx = entity->_entityId;
 
     if (lastMasterIdx != entityMasterIdx) {
         // Swap last element into removed element's slot
-        ComponentEntity** masterData = masterArray.data;
+        ComponentEntity** masterData = masterArray._data;
         masterData[entityMasterIdx] = masterData[lastMasterIdx];
 
         // Update swapped entity's master array index
@@ -1082,15 +1118,15 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
     // Shrink master array.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&masterArray).SetSize(lastMasterIdx);
+    masterArray.SetSize(lastMasterIdx);
 
     // Step 3: Search and remove from update tree (+0x68)
-    EntityTreeNode* updateNode = updateTreeRoot;
+    EntityTreeNode* updateNode = updateTree._root;
     while (updateNode != nullptr) {
-        if (*entityIBP < updateNode->entityIBP) {
+        if (*entityIBP < updateNode->element) {
             updateNode = updateNode->left;
         } else {
-            if (*entityIBP <= updateNode->entityIBP) {
+            if (*entityIBP <= updateNode->element) {
                 break;  // Found
             }
             updateNode = updateNode->right;
@@ -1098,12 +1134,12 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
     }
 
     // Step 4: Search and remove from post-update tree (+0x78)
-    EntityTreeNode* postUpdateNode = postUpdateTreeRoot;
+    EntityTreeNode* postUpdateNode = postUpdateTree._root;
     while (postUpdateNode != nullptr) {
-        if (*entityIBP < postUpdateNode->entityIBP) {
+        if (*entityIBP < postUpdateNode->element) {
             postUpdateNode = postUpdateNode->left;
         } else {
-            if (*entityIBP <= postUpdateNode->entityIBP) {
+            if (*entityIBP <= postUpdateNode->element) {
                 break;  // Found
             }
             postUpdateNode = postUpdateNode->right;
@@ -1112,11 +1148,11 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
     // Remove found nodes from trees
     if (updateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), updateNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+        WorkBST_BSTRemove_a6e0(&updateTree, updateNode);
         EntityList_MarkUpdateTreeDirty();
     }
     if (postUpdateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), postUpdateNode);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+        WorkBST_BSTRemove_a6e0(&postUpdateTree, postUpdateNode);
     }
 
     // Step 5: Delete the entity IBP reference. Object::InternalBasePtr::DeletePtr
@@ -1154,22 +1190,22 @@ void EntityList::Serialize(IO::Stream& stream) {
 
     // Step 3: On save (stream+0x08 == 1), process removal list
     if (static_cast<int>(stream.GetDirection()) == 1) {   // IO::Stream::GetDirection, retail 0x180006200
-        int32_t removalCount = removalList.count;
+        int32_t removalCount = removalList._size;
         if (removalCount > 0) {
             for (int64_t i = 0; i < removalCount; i++) {
-                ComponentEntity* localIBP = removalList.data[i];
+                ComponentEntity* localIBP = removalList._data[i];
                 RemoveEntity(&localIBP);
             }
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
             // align 8, new tail zeroed. Element is the entity InternalBasePtr.
-            GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSize(0);
+            removalList.SetSize(0);
         }
     }
 
     accumulatedTime.Serialize(serializer);
 
     // Step 5: Serialize master array count
-    int32_t masterCount = masterArray.count;
+    int32_t masterCount = masterArray._size;
     int32_t serializedCount = masterCount;
     serializer.Serialize(serializedCount, nullptr);
 
@@ -1177,16 +1213,16 @@ void EntityList::Serialize(IO::Stream& stream) {
     if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&masterArray).SetSize(serializedCount);
+        masterArray.SetSize(serializedCount);
     }
 
     // Serialize each entity IBP in master array
-    ComponentEntity** ibpIter = masterArray.data;
+    ComponentEntity** ibpIter = masterArray._data;
     int64_t ibpCount = (int64_t)serializedCount;
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
             ComponentEntity** currentIBP = &ibpIter[j];
-            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: IBPArray holds bare ComponentEntity* (H5 raw triple)
+            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: the IBPArray element is the InternalPtr<ComponentEntity> slot held as ComponentEntity* (EntityList.h): InternalBasePtr::Serialize reads the slot
 
             // After loading, verify it's a ComponentEntity
             if (*currentIBP != nullptr) {
@@ -1214,16 +1250,16 @@ void EntityList::Serialize(IO::Stream& stream) {
 
     // Step 8: Per-entity metadata serialization
     int32_t entityIdx = 0;
-    if (masterArray.count > 0) {
+    if (masterArray._size > 0) {
         do {
             // Read master array index from entity+0x18
-            int32_t masterIdxField = masterArray.data[entityIdx]->_entityId;
+            int32_t masterIdxField = masterArray._data[entityIdx]->_entityId;
 
             // Read bucket index (low 24 bits of entity+0x1C)
-            int32_t bucketIdxField = static_cast<int32_t>((masterArray.data[entityIdx]->_handle << 8) >> 8);
+            int32_t bucketIdxField = static_cast<int32_t>((masterArray._data[entityIdx]->_handle << 8) >> 8);
 
             // Read bucket ID from entity+0x1F (the category byte of _handle)
-            int32_t bucketId = (int32_t)static_cast<int8_t>(masterArray.data[entityIdx]->_handle >> 24);
+            int32_t bucketId = (int32_t)static_cast<int8_t>(masterArray._data[entityIdx]->_handle >> 24);
 
             // Serialize the three metadata fields
             serializer.Serialize(masterIdxField, nullptr);
@@ -1231,20 +1267,20 @@ void EntityList::Serialize(IO::Stream& stream) {
             serializer.Serialize(bucketId, nullptr);
 
             // Serialize entity's timestamp at +0x20 (System::Time)
-            masterArray.data[entityIdx]->_lastUpdateTime.Serialize(serializer);
+            masterArray._data[entityIdx]->_lastUpdateTime.Serialize(serializer);
 
             // Write back deserialized metadata to entity
-            masterArray.data[entityIdx]->_entityId = masterIdxField;
+            masterArray._data[entityIdx]->_entityId = masterIdxField;
 
-            ComponentEntity* ent = masterArray.data[entityIdx];
+            ComponentEntity* ent = masterArray._data[entityIdx];
             ent->_handle = ent->_handle ^ ((static_cast<uint32_t>(bucketIdxField) ^ ent->_handle) & 0xFFFFFF);
 
             // The category byte +0x1F: retail stores the BYTE. ComponentEntity.h declares
             // +0x1C..+0x1F as one uint32 `_handle`: LEFT for the header's owner.
-            reinterpret_cast<int8_t*>(&masterArray.data[entityIdx]->_handle)[3] = (int8_t)bucketId;   // LEFT: _handle's byte store vs its 32-bit sites
+            reinterpret_cast<int8_t*>(&masterArray._data[entityIdx]->_handle)[3] = (int8_t)bucketId;   // LEFT: _handle's byte store vs its 32-bit sites
 
             entityIdx++;
-        } while (entityIdx < masterArray.count);
+        } while (entityIdx < masterArray._size);
     }
 
     // Step 9: the Serializer's destructor runs here

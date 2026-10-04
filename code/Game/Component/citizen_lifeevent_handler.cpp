@@ -382,8 +382,8 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
         if ((entIBP->_entityFlags >> 10 & 1) == 0) {
             MarkEntityForRemoval(entIBP);   // 0x1400c2ea0
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&loop->removalList)
-                .SetSizeFill(loop->removalList.count + 1, &entIBP);   // +0xd0 / +0xd8
+            loop->removalList
+                .SetSize(loop->removalList._size + 1, entIBP);   // +0xd0 / +0xd8
         }
     }
     return 1;

@@ -331,24 +331,22 @@ void ComponentEntity::RefreshEntityFlags() {
         // If update bit (bit 2) changed, register in update bucket
         if (((oldFlags ^ _entityFlags) & 4) != 0) {
             // EntityList +0x88 = update entity array, +0x90 = update count
-            int updateCount = entityList->stagingUpdate.count + 1;
-            GameColl::Ptr8 ibp;
-            ibp.v = this;   // the InternalBasePtr onto this entity
+            int updateCount = entityList->stagingUpdate._size + 1;
+            ComponentEntity* ibp = this;   // the InternalBasePtr onto this entity
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
             // stride 8 align 8. Element is the 8-byte entity InternalBasePtr
-            // (IBPArray is the raw triple, H5: the AsArray bridge as RegisterEntity's).
-            GameColl::AsArray<GameColl::Ptr8>(&entityList->stagingUpdate).SetSize(updateCount, ibp);
+            // (IBPArray is Collection::Array over that row).
+            entityList->stagingUpdate.SetSize(updateCount, ibp);
         }
 
         // If draw bit (bit 4) changed, register in draw bucket
         if (((oldFlags ^ _entityFlags) & 0x10) != 0) {
             // EntityList +0x98 = draw entity array, +0xa0 = draw count
-            int drawCount = entityList->stagingPostUpdate.count + 1;
-            GameColl::Ptr8 ibp;
-            ibp.v = this;   // the InternalBasePtr onto this entity
+            int drawCount = entityList->stagingPostUpdate._size + 1;
+            ComponentEntity* ibp = this;   // the InternalBasePtr onto this entity
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
             // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-            GameColl::AsArray<GameColl::Ptr8>(&entityList->stagingPostUpdate).SetSize(drawCount, ibp);
+            entityList->stagingPostUpdate.SetSize(drawCount, ibp);
         }
     }
 }
@@ -619,9 +617,13 @@ void ComponentEntity::Persist(IO::Stream& stream) {
 
 // The 0x1400c3720 door: fn_EntityFactory_CreateEntity resolves here by address
 // (standalone/address_registry.cpp). Placement-constructs on the caller's block.
+ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, ComponentDescription* description) {
+    return new (static_cast<void*>(self)) ComponentEntity(description);
+}
+// B4 FORWARD: Game/founding_spawn.cpp:262 and Player/bridgetool_calcpath.cpp:207 still call this (they hold the template as void*).
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
-    return new (static_cast<void*>(self))
-        ComponentEntity(static_cast<ComponentDescription*>(descriptionPtr));   // B.3.8 bridge   // LEFT: SIG ComponentEntity_CtorFromDescription: founding_spawn.cpp:262 / bridgetool_calcpath.cpp:207 pass the template as void* and disaster_harness.cpp:417 prints the function's address (a typed overload makes that ambiguous); X3-GAME's files
+    return ComponentEntity_CtorFromDescription(self,
+        static_cast<ComponentDescription*>(descriptionPtr));   // LEFT: SIG ComponentEntity_CtorFromDescription(void*): the forwarder for founding_spawn.cpp:262 / bridgetool_calcpath.cpp:207, which hold the template as void* (GAME files)
 }
 
 // ============================================================
@@ -641,20 +643,18 @@ void ComponentEntity::RegisterUpdateDraw(uint32_t oldFlags) {
     EntityList* el = _entityList;
     uint32_t changed = oldFlags ^ _entityFlags;
     if ((changed & 4) != 0) {
-        int updateCount = el->stagingUpdate.count + 1;
-        GameColl::Ptr8 ibp;
-        ibp.v = this;   // the InternalBasePtr onto this entity
+        int updateCount = el->stagingUpdate._size + 1;
+        ComponentEntity* ibp = this;   // the InternalBasePtr onto this entity
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::AsArray<GameColl::Ptr8>(&el->stagingUpdate).SetSize(updateCount, ibp);
+        el->stagingUpdate.SetSize(updateCount, ibp);
     }
     if ((changed & 0x10) != 0) {
-        int drawCount = el->stagingPostUpdate.count + 1;
-        GameColl::Ptr8 ibp;
-        ibp.v = this;   // the InternalBasePtr onto this entity
+        int drawCount = el->stagingPostUpdate._size + 1;
+        ComponentEntity* ibp = this;   // the InternalBasePtr onto this entity
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::AsArray<GameColl::Ptr8>(&el->stagingPostUpdate).SetSize(drawCount, ibp);
+        el->stagingPostUpdate.SetSize(drawCount, ibp);
     }
 }
 
@@ -700,7 +700,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 
     // Every step re-reads the slot (CheckPtr each time, matching the original).
     (*entityIBP)->_entityList = this;                   // owner = entityList
-    int32_t id = masterArray.count;                     // id = current main-array count
+    int32_t id = masterArray._size;                     // id = current main-array count
     (*entityIBP)->_entityId = id;
     // entity+0x20 = entityList+0x00: the last-update System::Time takes the list's
     // accumulated time.
@@ -710,9 +710,8 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
     // Append to the main entity array (count -> id+1).
     // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
     // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-    GameColl::Ptr8 fill;
-    fill.v = *entityIBP;
-    GameColl::AsArray<GameColl::Ptr8>(&masterArray).SetSize(id + 1, fill);
+    ComponentEntity* fill = *entityIBP;
+    masterArray.SetSize(id + 1, fill);
 
     // The category byte +0x1F (the handle's high byte): retail stores the BYTE.
     // ComponentEntity.h declares +0x1C..+0x1F as one uint32 `_handle`: LEFT.
@@ -721,16 +720,15 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
         (*entityIBP)->_handle |= 0xFFFFFF;               // no category bucket
     } else {
         // bucket index = the category bucket's current count
-        uint32_t bucketIdx = static_cast<uint32_t>(buckets[category].count);
+        uint32_t bucketIdx = static_cast<uint32_t>(buckets[category]._size);
         uint32_t& handle = (*entityIBP)->_handle;
         handle ^= (handle ^ bucketIdx) & 0xFFFFFF;       // low-24 = bucket index
         UpdateBucket* bucket = &buckets[category];
-        int bcount = bucket->count;
+        int bcount = bucket->_size;
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::Ptr8 bfill;
-        bfill.v = *entityIBP;
-        GameColl::AsArray<GameColl::Ptr8>(bucket).SetSize(bcount + 1, bfill);
+        ComponentEntity* bfill = *entityIBP;
+        bucket->SetSize(bcount + 1, bfill);
     }
 
     (*entityIBP)->OnAddedPass();
@@ -741,7 +739,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 // 0x1400c48a0 has none); kept here, not extended into the member.
 void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
     if (!entityListV || !entityIBP) return;
-    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: SIG EntityList_RegisterEntity_Impl (38 outside callers, wave X)
+    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: SIG EntityList_RegisterEntity_Impl (B4 FORWARD): its callers in 24 files across Action, Component, Game, Work, Player and standalone pass the list and the IBP slot as void*
 }
 
 // ============================================================

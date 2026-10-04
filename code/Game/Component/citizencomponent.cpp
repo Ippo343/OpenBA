@@ -2462,14 +2462,6 @@ DEFINE_EXE_TYPE(CitizenComponent, "Component")
 // their one caller calls FindWorkplace / FindRankedWorkplace; deleted.
 
 
-// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp:1969, whose null InternalBasePtr is
-// an int64_t local of X3-GAME's file).
-void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
-    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));   // LEFT: SIG CitizenComp_AssignHousing: gameupdateloop.cpp:1964 holds the InternalBasePtr as int64_t[1]
-}
-
-// B4 FORWARD: 1 outside caller (standalone/food_panel_harness.cpp:740, whose InternalBasePtr
-// is an int64_t local of X3-GAME's file).
-char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
-    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));   // LEFT: SIG CitizenComp_TryEnrolInSchool: food_panel_harness.cpp:740 holds the InternalBasePtr as int64_t
-}
+// (B4 X4-COMP: CitizenComp_AssignHousing 0x140111ee0 and CitizenComp_TryEnrolInSchool
+// 0x140111840, the forwarders onto SetWorkplace / TryEnrolInSchool: their callers call the
+// members; deleted.)
