@@ -86,9 +86,7 @@ int WorkLeaf_FreeStorageCapacity_116540(const Component* owner) {
 //   DAT_1401c77e8 type-ID global                        [runtime-filled by RegisterType]
 // ============================================================
 // RCX is a ComponentDescription (the list is its sub-descriptions).
-// LEFT: the caller (ForesterWork, WORK-b) hands it as an integer and the out slot as void*.
-void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
-    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(entity);
+GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut) {
     const uint32_t typeId = GrowthDescription::TypeId();  // 0x1401c77e8
     GrowthDescription* found = nullptr;
     int n = desc->_subDescCount;
@@ -103,7 +101,7 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
             break;
         }
     }
-    *reinterpret_cast<GrowthDescription**>(retOut) = found;
+    *retOut = found;
     return retOut;
 }
 
@@ -129,9 +127,7 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 // ============================================================
 // RCX is the GrowthDescription whose planting is tested (its +0x58 / +0x5c limits
 // are read, and a neighbour's growth counts as "owned" when its description is it).
-// LEFT: the three outside callers hand it as an integer.
-long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
-    GrowthDescription* growth = reinterpret_cast<GrowthDescription*>(self);
+long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, int col, int row) {
     // The singleton / map null arms are the tree's guards (retail reads them unguarded).
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 

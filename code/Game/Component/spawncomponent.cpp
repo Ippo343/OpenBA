@@ -262,7 +262,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
         PlayerPath_CharComp_f5d0(map, x, y, 4, ca, cb, 0.0f, '\0', '\0', nullptr);   // 0x14009f5d0 (the Map* overload the int* one forwards to)
     if (!canPlace) { ++g_doSpawn.cannotPlace; return; }
     if (!(static_cast<char>(WorkLeaf_FootprintOwnerCheck_120c30(
-              reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }   // LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30 (intptr_t self)
+              templ, x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
     int placeMapSize = map->size;
     ComponentEntity* mem = static_cast<ComponentEntity*>(

@@ -211,7 +211,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         if (local_a8->capacity < pastureCount) {
             // Find an animal to remove via helper (0x140128350 takes the component as an
             // integer: LEFT)
-            int slotIdx = WorkLeaf_Pasture_8350(reinterpret_cast<uintptr_t>(local_a8));   // LEFT: SIG WorkLeaf_Pasture_8350
+            int slotIdx = WorkLeaf_Pasture_8350(local_a8);
             if (slotIdx >= 0) {
                 // The livestock at that slot, its entity's AnimalComponent (0x140005500)
                 LivestockComponent* livestock = local_a8->animals[slotIdx];

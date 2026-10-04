@@ -135,14 +135,17 @@ void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h, void* 
 // ---- work_leaf_gather.cpp
 class Component;
 int WorkLeaf_FreeStorageCapacity_116540(const Component* owner);  // 0x140116540
-void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut);  // 0x14000c3c0
-long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row);  // 0x140120c30
+class GrowthDescription;
+GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut);  // 0x14000c3c0
+long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, int col, int row);  // 0x140120c30
 
 // ---- work_leaf_hunt.cpp
-void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval);  // 0x1400063d0
-bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self);  // 0x1401193a0
-int WorkLeaf_Pasture_8350(uintptr_t self);  // 0x140128350
-void WorkLeaf_ConsumeProduce_b310(uintptr_t self);  // 0x14012b310
+class ConsumeProduceComponent;
+class PastureComponent;
+class ResourceProduceComponent;
+bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp);  // 0x1401193a0
+int WorkLeaf_Pasture_8350(const PastureComponent* pasture);  // 0x140128350
+void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer);  // 0x14012b310
 
 // ---- work_leaf_market.cpp
 void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node);  // 0x14002af40

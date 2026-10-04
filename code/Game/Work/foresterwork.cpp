@@ -284,9 +284,8 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     int cellCol = workplaceCell % mapSize;
 
     // Get the GrowthDescription from the forester description's material ref
-    // (0x14000c3c0 takes the description as an integer: LEFT)
-    void* natResDesc = nullptr;
-    WorkLeaf_FindGrowthDescription_c3c0(reinterpret_cast<intptr_t>(radiusComp->_ref20), &natResDesc);   // LEFT: SIG WorkLeaf_FindGrowthDescription_c3c0
+    GrowthDescription* natResDesc = nullptr;
+    WorkLeaf_FindGrowthDescription_c3c0(radiusComp->_ref20, &natResDesc);
 
     // Get citizen's current position: CharacterComponent (+0x278) -> ModelComponent
     // (+0x68) -> the transform's translation (+0x158)
@@ -409,10 +408,9 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                             mapGrid, testCellX, testCellY, 4,
                             fMinGrowthVal, fMaxHeight, 0.0f, 0, 0, 0);
                         if (terrainOk) {
-                            // Check natural resource density limits (0x140120c30 takes
-                            // the description as an integer: LEFT)
+                            // Check natural resource density limits (0x140120c30)
                             bool densityOk = static_cast<uint8_t>(WorkLeaf_FootprintOwnerCheck_120c30(
-                                reinterpret_cast<intptr_t>(natResDesc), testCellX, testCellY));   // the door read AL   // LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30
+                                natResDesc, testCellX, testCellY));   // the door read AL
                             if (densityOk) {
                                 // Reset fail counter
                                 _field58 = 0;

@@ -327,7 +327,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     ConsumeProduceComponent* smComp2 = field_10->FindComponent<ConsumeProduceComponent>();
 
     // Check produce threshold
-    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(reinterpret_cast<uintptr_t>(smComp2));   // LEFT: SIG WorkLeaf_ConsumeProduce_93a0
+    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(smComp2);
     // [CPWork] the gate that decides whether the tavern is allowed to make more at
     // all (retail 0x1401193a0 -- a stock-vs-limit test against the "Alcohol Limit 500"
     // the panel shows). Printed on CHANGE only; a permanent 0 here means the work runs
@@ -857,7 +857,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // The !depleted && !canProduce path (the goto above) still reaches b310, since
     // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
     if ((char)canProduce == '\0') {
-        WorkLeaf_ConsumeProduce_b310(reinterpret_cast<uintptr_t>(smComp));   // LEFT: SIG WorkLeaf_ConsumeProduce_b310
+        WorkLeaf_ConsumeProduce_b310(smComp);
     }
 
     // Set active state = 3, disabled

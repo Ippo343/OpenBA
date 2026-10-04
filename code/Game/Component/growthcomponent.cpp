@@ -237,7 +237,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     if (!placed) return;
 
     int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
-        reinterpret_cast<intptr_t>(cfg), x, y);   // 0x140120c30  LEFT: SIG WorkLeaf_FootprintOwnerCheck_120c30
+        cfg, x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = map->size;
