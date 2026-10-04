@@ -10,6 +10,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/EventLog.h"         // GameUpdateLoop::m_eventNotifier, EventLogEntry
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -35,14 +36,14 @@ void EventPopupDialog::OnOpened() {
       buttonOk = FindElement(nameStr).Get(); }
 
     // The event log entry (0x28 bytes) at eventIndex.
-    // LEFT: the event log has no class (m_eventNotifier is void*, block GAME):
-    // its +0x18 entry array, the entry's +0x08 text and +0x20 icon stay offset reads.
-    uint8_t* eventMgr = (uint8_t*)GameUpdateLoop::_singleton->m_eventNotifier;
-    uint8_t* eventArray = *(uint8_t**)(eventMgr + 0x18);
-    uint8_t* eventEntry = eventArray + (int64_t)eventIndex * 0x28;
+    // (Game/EventLog.h: +0x18 the entry array; the entry's +0x08 text and +0x20,
+    // EventLogEntry::popup, the pop-up's icon.)
+    EventLog* eventMgr = GameUpdateLoop::_singleton->m_eventNotifier;
+    EventLogEntry* eventArray = eventMgr->entries;
+    const EventLogEntry* eventEntry = eventArray + eventIndex;
 
     // Format sprite name "EventIcon<iconIdx>"
-    uint32_t iconIdx = *(uint32_t*)(eventEntry + 0x20);
+    uint32_t iconIdx = static_cast<uint32_t>(eventEntry->popup);
     System::String fmtStr = System::String::Format("EventIcon%i", iconIdx);
 
     // The same sheet, the index named fmtStr (-1 without a sheet)
@@ -52,7 +53,7 @@ void EventPopupDialog::OnOpened() {
     imageIcon->SetSprite(&newSprite);
 
     // Set text parameter 0 on textEvent to the event's text
-    textEvent->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));
+    textEvent->SetParameter(0, eventEntry->text);
 
     // Set button ID 200 on buttonOk
     buttonOk->SetElementId(200);
