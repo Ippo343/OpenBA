@@ -140,7 +140,7 @@ constexpr float kCenterBias = 0.5f;      // DAT_140172114 = 0x3f000000
 // is); copy the prefix only when the block moved; the new tail memcpy'd from the
 // fill; free the old block only when it moved. Every caller appends exactly one
 // element with a fill, so each local is now a real Collection::Array:
-//   * the two index lists are the trait-derived Array<int16_t> (stride 2, align 2,
+//   * the two index lists are the trait-derived Array<uint16_t> (stride 2, align 2,
 //     byteCopy, init == nullptr, destroy == nullptr) — the same row GrowTo used;
 //   * the two vertex lists are trait-derived over blobs at ALIGN 2, because this
 //     site allocates BOTH strides with ALIGN 2 (`fn_MemAllocStatic(cap * stride,
@@ -164,7 +164,7 @@ static_assert(alignof(TriVertex8)  == 2,    "TriVertex8 align");
 static_assert(sizeof(EdgeVertex16)  == 0x10, "EdgeVertex16 stride");
 static_assert(alignof(EdgeVertex16) == 2,    "EdgeVertex16 align");
 
-using IdxArray     = Collection::Array<int16_t>;
+using IdxArray     = Collection::Array<uint16_t>;   // EdgeMesh::Set's short indices
 using TriVtxArray  = Collection::Array<TriVertex8>;
 using EdgeVtxArray = Collection::Array<EdgeVertex16>;
 
@@ -257,7 +257,7 @@ void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* 
 
     static const int16_t offs[6] = {0, 1, 2, 0, 2, 3};
     for (int k = 0; k < 6; k++) {
-        int16_t v = (int16_t)(baseIdx + offs[k]);
+        uint16_t v = (uint16_t)(int16_t)(baseIdx + offs[k]);
         idx->SetSize(idx->_size + 1, v);
     }
 }
@@ -359,7 +359,7 @@ void Impl_b930(HighlightComponent* hc) {
             const float* pf = &scratch[1];      // pfVar23 = local_c4
             for (int corner = 0; corner < 6; corner++) {
                 // 1. append index = current vertex count (before this vertex)
-                int16_t idxVal = (int16_t)fillVtx._size;
+                uint16_t idxVal = (uint16_t)(int16_t)fillVtx._size;
                 fillIdx.SetSize(fillIdx._size + 1, idxVal);
                 // 2. build corner Vector3 + TriangleVertex (8 bytes)
                 Math::Vector3 cv(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
@@ -413,11 +413,11 @@ void Impl_b930(HighlightComponent* hc) {
             1, triList0,
             1, triList1,
             // fill stream: short indices + 8-byte TriangleVertex, stride 8
-            fillIdx._size, reinterpret_cast<uint16_t*>(fillIdx._data),
+            fillIdx._size, fillIdx._data,
             fillVtx._size, fillVtx._data, 8,
             0, nullptr, 0, nullptr, 0,
             // edge stream: short indices + 16-byte EdgeVertex, stride 0x10
-            edgeIdx._size, reinterpret_cast<uint16_t*>(edgeIdx._data),
+            edgeIdx._size, edgeIdx._data,
             edgeVtx._size, edgeVtx._data, 0x10,
             0, nullptr, 0, nullptr, 0,
             box);
@@ -436,8 +436,8 @@ void Impl_b930(HighlightComponent* hc) {
     // so this reproduces it exactly. Argument order is (mask, edge, skinMask,
     // skinEdge) — see Mesh.h's note; the fields are grouped differently.
     if (mesh && desc) {
-        auto* m0 = reinterpret_cast<Graphics::MaterialInstance*>(desc->_ref0);   // LEFT: HighlightDescription::_ref0 is void* (not PLAYER's header)
-        auto* m1 = reinterpret_cast<Graphics::MaterialInstance*>(desc->_ref1);   // LEFT: as above
+        Graphics::MaterialInstance* m0 = desc->_ref0;
+        Graphics::MaterialInstance* m1 = desc->_ref1;
         hc->fieldF8
             ->SetMaterials(Object::ExternalPtr<Graphics::MaterialInstance>(m0),
                            Object::ExternalPtr<Graphics::MaterialInstance>(m1),

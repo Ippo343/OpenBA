@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Graphics { class MaterialInstance; }
+
 // One element of HighlightDescription's group array (stride 0x10, Serialize 0x14004c9d0):
 // an Array of External refs (serialized by 0x14001bcc0).
 struct HighlightGroup {
@@ -48,8 +50,8 @@ public:
     HighlightGroup* _groups;                    // +0x20 group array data (0x10 stride)
     int32_t _groupCount;                        // +0x28
     int32_t _groupCap;                          // +0x2c
-    void* _ref0;                                // +0x30 ExternalPtr
-    void* _ref1;                                // +0x38 ExternalPtr
+    Graphics::MaterialInstance* _ref0;          // +0x30 ExternalPtr<Graphics::MaterialInstance> (0x140007140, as Radius / Picking)
+    Graphics::MaterialInstance* _ref1;          // +0x38 ExternalPtr<Graphics::MaterialInstance> (0x140007140)
 };
 
 static_assert(sizeof(HighlightDescription) == 0x40, "HighlightDescription is 0x40 (create 0x140006ea0 MemAlloc(0x40))");
