@@ -361,7 +361,7 @@ Entry* EntryAssign(Entry* d, const Entry* s) {
 // `Math::Transform::AsTransform3`, the member, called by name (B3R).
 // `?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ` (0x18001fcd0).
 
-::Box* BoxTransform(::Box* out, const Math::Transform* transform, const ::Box* b) {
+float* BoxTransform(float* out, const Math::Transform* transform, const float* b) {
     // Math::Transform3 AsTransform3(const Math::Transform&) — hidden return
     // slot in RDX, `this` in RCX. m[0..11] are the three basis vectors and the
     // translation, in that order.
@@ -371,12 +371,12 @@ Entry* EntryAssign(Entry* d, const Entry* s) {
                           t3.axisZ.x, t3.axisZ.y, t3.axisZ.z,
                           t3.translation.x, t3.translation.y, t3.translation.z };
 
-    const float ez = (b->max.z - b->min.z) * kHalf;
-    const float ey = (b->max.y - b->min.y) * kHalf;
-    const float ex = (b->max.x - b->min.x) * kHalf;
-    const float cy = (b->max.y + b->min.y) * kHalf;
-    const float cx = (b->max.x + b->min.x) * kHalf;
-    const float cz = (b->max.z + b->min.z) * kHalf;
+    const float ez = (b[5] - b[2]) * kHalf;
+    const float ey = (b[4] - b[1]) * kHalf;
+    const float ex = (b[3] - b[0]) * kHalf;
+    const float cy = (b[4] + b[1]) * kHalf;
+    const float cx = (b[3] + b[0]) * kHalf;
+    const float cz = (b[5] + b[2]) * kHalf;
 
     // Centre, transformed. Retail's association, left to right as written.
     const float tcx = ((m[3] * cy + m[0] * cx) + m[6] * cz) + m[9];
@@ -388,12 +388,12 @@ Entry* EntryAssign(Entry* d, const Entry* s) {
     const float ay = (RtFAbs(m[1]) * ex + RtFAbs(m[4]) * ey) + RtFAbs(m[7]) * ez;
     const float az = (RtFAbs(m[2]) * ex + RtFAbs(m[5]) * ey) + RtFAbs(m[8]) * ez;
 
-    out->min.x = tcx - ax;
-    out->min.y = tcy - ay;
-    out->min.z = tcz - az;
-    out->max.x = ax + tcx;
-    out->max.y = ay + tcy;
-    out->max.z = az + tcz;
+    out[0] = tcx - ax;
+    out[1] = tcy - ay;
+    out[2] = tcz - az;
+    out[3] = ax + tcx;
+    out[4] = ay + tcy;
+    out[5] = az + tcz;
     return out;
 }
 
@@ -435,18 +435,18 @@ float* MeshBoundsXY(const Desc* desc, float* outRect) {
         const Math::Transform* xforms = desc->_transforms._data;
 
         const ::Box& aabb = nodes[i]._aabb;
-        const ::Box box = { { aabb.min.x, aabb.min.y, aabb.min.z },
-                            { aabb.max.x, aabb.max.y, aabb.max.z } };
+        const float box[6] = { aabb.min.x, aabb.min.y, aabb.min.z,
+                               aabb.max.x, aabb.max.y, aabb.max.z };
 
-        ::Box t;
-        BoxTransform(&t, xforms + i, &box);
+        float t[6];
+        BoxTransform(t, xforms + i, box);
 
-        if (!(maxZ > t.max.z)) maxZ = t.max.z;
-        if (!(maxY > t.max.y)) maxY = t.max.y;
-        if (!(maxX > t.max.x)) maxX = t.max.x;
-        if (!(t.min.z > minZ)) minZ = t.min.z;
-        if (!(t.min.y > minY)) minY = t.min.y;
-        if (!(t.min.x > minX)) minX = t.min.x;
+        if (!(maxZ > t[5])) maxZ = t[5];
+        if (!(maxY > t[4])) maxY = t[4];
+        if (!(maxX > t[3])) maxX = t[3];
+        if (!(t[2] > minZ)) minZ = t[2];
+        if (!(t[1] > minY)) minY = t[1];
+        if (!(t[0] > minX)) minX = t[0];
 
         // re-read the loop bound exactly as retail does (`CMP EDI,[RSI+0x10]`)
         count = desc->_transforms._size;
