@@ -296,11 +296,8 @@ const float kBigNeg       = -1.0e8f;
 // rotations and boxes whose extent terms nearly cancel, plus a moved-term
 // negative control (scene_grid_probe.cpp, SweepFloatBodies). Tolerance zero.
 // ONE registration, in that file: do not add a second here.
-//   out: 6 floats {minX,minY,minZ,maxX,maxY,maxZ}; localBox: the same 6 floats.
-// B3R: rtpickgrid::BoxTransform, by name.
-float* RtBoxTransform(float* out, const Transform* xf, const float* localBox) {
-    return static_cast<float*>(rtpickgrid::BoxTransform(out, xf, localBox));  // LEFT: SIG rtpickgrid::BoxTransform returns void* (picking/, wave X)
-}
+//   out, localBox: Volume::Box {min.xyz, max.xyz}.
+// B3R: rtpickgrid::BoxTransform, by name (the forwarder RtBoxTransform is gone).
 
 // Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191,
 // ?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z. HIDDEN RETURN SLOT:
@@ -1186,16 +1183,15 @@ bool Geometry::Clean() {
         // Retail copies the transform to a local before handing its address to
         // the box helper; kept so the helper never sees the live object.
         const Math::Transform xf = _transform;
-        float box[6];
-        const float* world = RtBoxTransform(box, &xf,
-                                            reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform takes float[6] (picking/, wave X)
+        ::Box box;
+        const ::Box* world = rtpickgrid::BoxTransform(&box, &xf, &_localBounds);
         _prevWorldBounds = _worldBounds;
-        _worldBounds.min.x = world[0];
-        _worldBounds.min.y = world[1];
-        _worldBounds.min.z = world[2];
-        _worldBounds.max.x = world[3];
-        _worldBounds.max.y = world[4];
-        _worldBounds.max.z = world[5];
+        _worldBounds.min.x = world->min.x;
+        _worldBounds.min.y = world->min.y;
+        _worldBounds.min.z = world->min.z;
+        _worldBounds.max.x = world->max.x;
+        _worldBounds.max.y = world->max.y;
+        _worldBounds.max.z = world->max.z;
         changed = true;
     }
 
