@@ -82,6 +82,7 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Action/exe_bodies.h"   // B3R: Pf_AvlRebalanceB_13480
 #include "Work/exe_bodies.h"   // B3R: WorkBase_TreeNodeFree_14c30
+#include "Game/Calendar.h"     // GameUpdateLoop::m_dayCounter (year, yearTime)
 
 // ============================================================
 // Helpers
@@ -171,13 +172,13 @@ void TownHallUI::InitGraph() {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
         const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
         graphYearsTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;
+            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
     }
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
         const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
         graphTypesTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;
+            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
     }
 
     // Populate time combo
@@ -231,7 +232,7 @@ void TownHallUI::InitProfessions() {
     // field +0xB8 of the template element — NOT vtable+0xB8)
     UI::Element* templateChild = table->Child(0).Get();
     const UI::ElementDescription* cloneObj =
-        reinterpret_cast<const UI::ElementDescription*>(templateChild->_description);   // LEFT: Element::_description is void* (R-UI-a)
+        templateChild->_description;
 
     // Set table size to profession count x 1
     int profCount = profList->professions.GetSize();
@@ -275,7 +276,7 @@ void TownHallUI::InitProfessions() {
         profEntry.button = button;
 
         // Get profession type entry: profList->types[i]
-        uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->professions.GetData())[i];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+        Profession* profTypeId = profList->professions.GetData()[i];
         profEntry.workers = i;  // profession index
 
         // Insert into profession BST at +0x50
@@ -313,7 +314,7 @@ void TownHallUI::InitProfessions() {
                         }
                         parent->left = newNode;
                         // Rebalance
-                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&professionTree), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480; LEFT: its int64_t* signature (ACT)
+                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&professionTree), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480; LEFT: SIG Pf_AvlRebalanceB_13480 (int64_t*, Action/exe_bodies.h)
                         inserted = true;
                     } else {
                         curNode = curNode->left;
@@ -331,7 +332,7 @@ void TownHallUI::InitProfessions() {
                             newNode->balance = 0;
                         }
                         parent->right = newNode;
-                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&professionTree), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480; LEFT: its int64_t* signature (ACT)
+                        Pf_AvlRebalanceB_13480(reinterpret_cast<int64_t*>(&professionTree), reinterpret_cast<int64_t*>(&curNode));   // 0x140013480; LEFT: SIG Pf_AvlRebalanceB_13480 (int64_t*, Action/exe_bodies.h)
                         inserted = true;
                     } else {
                         curNode = curNode->right;
@@ -347,21 +348,21 @@ void TownHallUI::InitProfessions() {
         // Set label text from the profession:
         //   +0x20 = StringTable pointer, +0x28 = SpriteSheet pointer,
         //   +0x30 = name key, +0x38 = tooltip key (System::Strings)
-        Profession* prof = reinterpret_cast<Profession*>(profTypeId);
+        Profession* prof = profTypeId;
         UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(prof->stringTable),
-                         *reinterpret_cast<const System::String*>(&prof->stringName));   // LEFT: Profession::stringName is H5 raw (GAME-b)
+                         prof->stringName);
         UI::String uiStrCopy = uiStr;
         label->SetText(&uiStrCopy);
 
         // Set sprite on label
         UI::Sprite sprBuf(::Object::ExternalPtr<UI::SpriteSheet>(prof->spriteSheet),
-                          *reinterpret_cast<const System::String*>(&prof->stringName));   // LEFT: H5 raw (GAME-b)
+                          prof->stringName);
         UI::Sprite sprCopy = sprBuf;
         label->SetSprite(&sprCopy);
 
         // Set tooltip
         UI::String ttStr(::Object::ExternalPtr<UI::StringTable>(prof->stringTable),
-                         *reinterpret_cast<const System::String*>(&prof->stringDesc));   // LEFT: H5 raw (GAME-b)
+                         prof->stringDesc);
         UI::String ttCopy = ttStr;
         label->SetToolTip(ttCopy);
 
@@ -444,7 +445,7 @@ void TownHallUI::InitProduction() {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
         const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
         yearsTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;
+            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
     }
 
     // Add 7 combo items from graphYears string table
@@ -485,7 +486,7 @@ void TownHallUI::InitInventory() {
 
     UI::Element* templateChild = table->Child(0).Get();
     const UI::ElementDescription* cloneObj =
-        reinterpret_cast<const UI::ElementDescription*>(templateChild->_description);   // LEFT: R-UI-a
+        templateChild->_description;
 
     // Size table: ceil(resourceCount / colCount) rows
     int rowCount = ((colCount - 1 + resourceCount) / colCount * colCount) / colCount;
@@ -527,7 +528,7 @@ void TownHallUI::InitInventory() {
         System::Filename filenameBuf("Dialog/StringTable.rsc:inventoryType");
         const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
         invTypeTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;
+            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
     }
 
     // Find "inventoryCombo" ComboElement
@@ -578,7 +579,7 @@ void TownHallUI::InitAgriculture() {
             int subCount = buildComp->_subDescCount;
 
             for (int j = 0; j < subCount; j++) {
-                ::Object::Base* subComp = reinterpret_cast<::Object::Base*>(buildComp->_subDescs[j]);   // LEFT: _subDescs is void** (COMP-c)
+                ::Object::Base* subComp = buildComp->_subDescs[j];
                 // Check if sub-component's type matches SelectDescription
                 // Virtual call at vtable+0x10 returns type ID
                 int subTypeId = subComp->Type();
@@ -588,7 +589,7 @@ void TownHallUI::InitAgriculture() {
                     void* subObj = buildComp->_subDescs[j];
                     if (::Object::IsDerivedFromNullSafe(subObj, selectDescId) && subObj) {
                         // Insert buildComp into agriculture BST at +0x1D8
-                        uint64_t key = reinterpret_cast<uint64_t>(buildComp);
+                        const ComponentDescription* key = buildComp;
                         AgricultureNode* curNode = agriBST;
 
                         if (curNode == nullptr) {
@@ -663,7 +664,7 @@ void TownHallUI::InitAgriculture() {
 
     UI::Element* templateChild = table->Child(0).Get();
     const UI::ElementDescription* cloneObj =
-        reinterpret_cast<const UI::ElementDescription*>(templateChild->_description);   // LEFT: R-UI-a
+        templateChild->_description;
 
     // Size table: ceil(agriCount / colCount) rows
     int rowCount = ((colCount - 1 + agriCount) / colCount * colCount) / colCount;
@@ -704,9 +705,8 @@ void TownHallUI::UpdateGraph() {
     // The town manager and its stat-history series (+0x150: an Array of int
     // Arrays, one per series; series 0's count is the current tick).
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
-    const Collection::Array<int>* history =
-        reinterpret_cast<const Collection::Array<int>*>(town->field_0x150);   // LEFT: CitizenBehavior::field_0x150 is void* (WORK-a)
+        GameUpdateLoop::_singleton->m_citizenList;
+    const Collection::Array<int>* history = town->field_0x150;
 
     // Cache game tick
     cachedGameTick = history[0]._size;
@@ -842,7 +842,7 @@ void TownHallUI::UpdateGraph() {
 // ============================================================
 void TownHallUI::UpdateGeneral() {
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
 
     int totalCitizens = town->citizenCount;
     int adults = 0, students = 0, children = 0, familyCount = 0;
@@ -888,11 +888,11 @@ void TownHallUI::UpdateGeneral() {
     float clothedPct = (adults > 0) ? ((clothedSum / (float)adults) * 100.0f) : 0.0f;
 
     // Year
-    int year = *(int*)GameUpdateLoop::_singleton->m_dayCounter;   // LEFT: DayCounter (W0 void*)
+    int year = GameUpdateLoop::_singleton->m_dayCounter->year;
     numberYear->SetValue(static_cast<int32_t>(year));
 
     // Month
-    float seconds = ((const System::Time*)((uintptr_t)GameUpdateLoop::_singleton->m_dayCounter + 8))->AsSeconds();   // LEFT: W0 void*
+    float seconds = GameUpdateLoop::_singleton->m_dayCounter->yearTime.AsSeconds();
     int monthIdx = (int)((seconds / 3600.0f) * 12.0f);
     if (monthIdx > 11) monthIdx = 0;
 
@@ -976,17 +976,17 @@ void TownHallUI::UpdateProfessions() {
         limitPrevProdHdr->SetParameter(0, fmtBuf);
     }
 
-    int* timePtr = (int*)GameUpdateLoop::_singleton->m_dayCounter;   // LEFT: DayCounter (W0 void*)
-    int currentYearTick = timePtr[0] * 0x30 - 0x30;
-    float secs = ((const System::Time*)(timePtr + 2))->AsSeconds();   // LEFT: W0 void*
+    Calendar* timePtr = GameUpdateLoop::_singleton->m_dayCounter;
+    int currentYearTick = timePtr->year * 0x30 - 0x30;
+    float secs = timePtr->yearTime.AsSeconds();
     uint32_t monthTick = (uint32_t)((secs / 3600.0f) * 48.0f);
     if ((int)monthTick > 0x2f) monthTick = 0;
     int endTick = monthTick + currentYearTick;
-    int prevEnd = timePtr[0] * 0x30 - 0x31;
-    int prevStart = (timePtr[0] - (int)yearSpan - 1) * 0x30;
+    int prevEnd = timePtr->year * 0x30 - 0x31;
+    int prevStart = (timePtr->year - (int)yearSpan - 1) * 0x30;
 
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
     uint32_t resIdx = 10;
     int prodCount = prodLimitsCount;
 
@@ -1066,11 +1066,11 @@ static TownHallUI::AgricultureNode* AgriBST_Next(TownHallUI::AgricultureNode* no
 // Find a description's sub-description by type ID (the description's +0x28/+0x30
 // array). The count and pointer-range guards are the tree's (STANDALONE; retail
 // has none).
-static ::Object::Base* TownHall_FindComponentByTypeId(uint64_t entity, uint32_t typeId) {
+static ::Object::Base* TownHall_FindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId) {
     if (!entity) {
         return nullptr;
     }
-    const ComponentDescription* desc = reinterpret_cast<const ComponentDescription*>(entity);   // LEFT: the key is the pointer's bits
+    const ComponentDescription* desc = entity;
     Description** compArray = desc->_subDescs;   // COMP-c typed _subDescs (merge fix)
     int compCount = desc->_subDescCount;
 
@@ -1082,7 +1082,7 @@ static ::Object::Base* TownHall_FindComponentByTypeId(uint64_t entity, uint32_t 
     }
 
     for (int i = 0; i < compCount; i++) {
-        void* comp = compArray[i];
+        Description* comp = compArray[i];
         if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {   // LEFT: STANDALONE pointer-range guard
             continue;
         }
@@ -1091,7 +1091,7 @@ static ::Object::Base* TownHall_FindComponentByTypeId(uint64_t entity, uint32_t 
         if (!vtable) {
             continue;
         }
-        ::Object::Base* base = reinterpret_cast<::Object::Base*>(comp);   // LEFT: _subDescs is void** (COMP-c)
+        ::Object::Base* base = comp;
         int id = base->Type();
         if ((uint32_t)id == typeId) {
             bool derived = ::Object::IsDerivedFromNullSafe(comp, typeId);
@@ -1104,10 +1104,10 @@ static ::Object::Base* TownHall_FindComponentByTypeId(uint64_t entity, uint32_t 
 }
 
 // Look up a key in the inventory tree (+0x138). Returns node or nullptr.
-static TownHallUI::InventoryNode* InvBST_Find(TownHallUI::InventoryNode* root, uint64_t key) {
+static TownHallUI::InventoryNode* InvBST_Find(TownHallUI::InventoryNode* root, const ComponentDescription* key) {
     TownHallUI::InventoryNode* node = root;
     while (node) {
-        uint64_t nodeKey = node->key;
+        const ComponentDescription* nodeKey = node->key;
         if (key < nodeKey)
             node = node->left;
         else if (key > nodeKey)
@@ -1131,7 +1131,7 @@ void TownHallUI::UpdateProduction() {
 
     // Collect entries from invBST in-order traversal
     struct ProdEntry {
-        uint64_t entityPtr;
+        const ComponentDescription* entityPtr;
         void*    resourceTypeComp;
         int      value;
         int      _pad;
@@ -1151,7 +1151,7 @@ void TownHallUI::UpdateProduction() {
         InventoryNode* node = bstRoot;
         while (node->left) node = node->left;
         while (node) {
-            uint64_t entityPtr = node->key;
+            const ComponentDescription* entityPtr = node->key;
 
             // Find ResourceType component on entity
             ::Object::Base* resourceComp = TownHall_FindComponentByTypeId(entityPtr, RawMaterialDescription::TypeId());
@@ -1184,7 +1184,7 @@ void TownHallUI::UpdateProduction() {
     int displayIdx = 0;
     if (entryCount > 0) {
         for (int i = 0; i < entryCount; i++) {
-            uint64_t entityPtr = entries[i].entityPtr;
+            const ComponentDescription* entityPtr = entries[i].entityPtr;
 
             // Find ValueDescription component on entity
             ValueDescription* valDesc = static_cast<ValueDescription*>(
@@ -1246,7 +1246,7 @@ void TownHallUI::UpdateProduction() {
 // and text from SelectDescription components.
 void TownHallUI::UpdateAgriculture() {
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
 
     // Build temporary BST from the town's description list (+0x120/+0x128)
     AgricultureNode* tempBSTRoot = nullptr;
@@ -1254,7 +1254,7 @@ void TownHallUI::UpdateAgriculture() {
     int entityCount = town->field_0x128;
 
     for (int i = 0; i < entityCount; i++) {
-        uint64_t entityPtr = reinterpret_cast<uint64_t>(town->field_0x120[i]);   // LEFT: the tree key is the pointer's bits
+        const ComponentDescription* entityPtr = town->field_0x120[i];
 
         if (!tempBSTRoot) {
             // First node — allocate root
@@ -1272,7 +1272,7 @@ void TownHallUI::UpdateAgriculture() {
             AgricultureNode* current = tempBSTRoot;
             AgricultureNode* parent = nullptr;
             while (current) {
-                uint64_t curKey = current->key;
+                const ComponentDescription* curKey = current->key;
                 if (entityPtr == curKey) goto next_entity; // already exists
                 parent = current;
                 if (entityPtr < curKey)
@@ -1311,13 +1311,13 @@ next_entity: ;
         while (node->left) node = node->left;
 
         while (node) {
-            uint64_t entityPtr = node->key;
+            const ComponentDescription* entityPtr = node->key;
 
             // Look up entity in temp BST
             AgricultureNode* found = nullptr;
             AgricultureNode* searchNode = tempBSTRoot;
             while (searchNode) {
-                uint64_t sk = searchNode->key;
+                const ComponentDescription* sk = searchNode->key;
                 if (entityPtr < sk)
                     searchNode = searchNode->left;
                 else if (entityPtr > sk)
@@ -1383,7 +1383,7 @@ next_entity: ;
 // max worker slots, updates NumberEditElement values.
 void TownHallUI::UpdateInventory() {
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
     ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
     int profCount = profList->professions.GetSize();
 
@@ -1399,28 +1399,28 @@ void TownHallUI::UpdateInventory() {
     // Phase 2: For each profession, look up the town's profession tree
     // (+0x100) to find the buildings of that profession, count worker slots
     for (int p = 0; p < profCount; p++) {
-        uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->professions.GetData())[p];   // LEFT: GAME-b void*
+        Profession* profTypeId = profList->professions.GetData()[p];
 
         // Look up profession type in the town's profession tree (+0x100)
-        void* bstNode = town->field_0x100;   // the node walk below stays raw: CitizenBehavior types no node (WORK-a)
+        ProfessionBucket* bstNode = town->field_0x100;
         while (bstNode) {
-            uint64_t nodeKey = *(uint64_t*)bstNode;
+            Profession* nodeKey = bstNode->key;
             if (profTypeId < nodeKey)
-                bstNode = *(void**)((uintptr_t)bstNode + 0x20);
+                bstNode = bstNode->left;
             else if (profTypeId > nodeKey)
-                bstNode = *(void**)((uintptr_t)bstNode + 0x28);
+                bstNode = bstNode->right;
             else
                 break;
         }
 
         int slotCount = 0;
         if (bstNode) {
-            slotCount = (int)*(uint64_t*)((uintptr_t)bstNode + 0x10);
+            slotCount = bstNode->count;
         }
 
         // For each slot in the profession BST node
         for (int slot = 0; slot < slotCount; slot++) {
-            ComponentEntity* entity = (*(ComponentEntity***)((uintptr_t)bstNode + 0x08))[slot];   // LEFT: WORK-a
+            ComponentEntity* entity = bstNode->entities[slot];
 
             // Push the entity into this profession row's entity array at +0x30.
             // B.3.2 bridge: ProfessionRow::entities is Collection::Array<ComponentEntity*>
@@ -1475,10 +1475,10 @@ void TownHallUI::UpdateInventory() {
 
         if (age >= adultAge && school == nullptr) {
             // Adult citizen — look up profession in profBST (+0x50)
-            uint64_t profId = reinterpret_cast<uint64_t>(citizen->profession);
+            Profession* profId = citizen->profession;
             ProfessionNode* profNode = professionTree;
             while (profNode) {
-                uint64_t nodeKey = profNode->key;
+                Profession* nodeKey = profNode->key;
                 if (profId < nodeKey)
                     profNode = profNode->left;
                 else if (profId > nodeKey)
@@ -1516,13 +1516,13 @@ void TownHallUI::UpdateInventory() {
 // agriculture table UI based on component types.
 void TownHallUI::UpdateAll() {
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        GameUpdateLoop::_singleton->m_citizenList;
 
     // Phase 1: For each tracked description (+0x110/+0x118),
     // zero or insert entry in invBST
     int trackedCount = town->field_0x118;
     for (int i = 0; i < trackedCount; i++) {
-        uint64_t entityPtr = reinterpret_cast<uint64_t>(town->field_0x110[i]);   // LEFT: the tree key is the pointer's bits
+        ComponentDescription* entityPtr = town->field_0x110[i];
 
         // Look up in invBST
         InventoryNode* bstNode = InvBST_Find(invBST, entityPtr);
@@ -1533,13 +1533,13 @@ void TownHallUI::UpdateAll() {
             bstNode->counts[2] = 0;
         } else {
             // Insert new node with zeroed counters
-            struct { uint64_t key; uint64_t val1; uint32_t val2; } entry;
+            struct { ComponentDescription* key; uint64_t val1; uint32_t val2; } entry;
             entry.key = entityPtr;
             entry.val1 = 0;
             entry.val2 = 0;
             void* retNode = nullptr;
             ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&invBST), &retNode,
-                                          reinterpret_cast<uint64_t*>(&entry));   // 0x140014890; LEFT: its untyped signature (DLG-a)
+                                          reinterpret_cast<uint64_t*>(&entry));   // 0x140014890; LEFT: SIG ToolbarUtility_BstInsert_4890 (untyped)
         }
     }
 
@@ -1589,9 +1589,9 @@ void TownHallUI::UpdateAll() {
         int resourceCount = storage->slotCount;
 
         for (int r = 0; r < resourceCount; r++) {
-            uintptr_t items = (uintptr_t)storage->storageSlots;   // LEFT: W0 raw storage
-            uint64_t resourceEntity = *(uint64_t*)(items + (uintptr_t)r * 0x10);
-            int resourceQty = *(int*)(items + (uintptr_t)r * 0x10 + 8);
+            StorageComponent::Item* items = storage->storageSlots;
+            ComponentDescription* resourceEntity = items[r]._resource;
+            int resourceQty = items[r]._count;
 
             // Look up resource entity in invBST
             InventoryNode* bstNode = InvBST_Find(invBST, resourceEntity);
@@ -1648,7 +1648,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         for (int i = 0; i < toAdd; i++) {
             // The seat functions take the town manager and the profession as integers.
             const int64_t townKey = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (Component/Game exe_bodies.h)
-            const int64_t profKey = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_professionList->professions.GetData())[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+            const int64_t profKey = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index]);   // LEFT: SIG CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (wave X)
 
             int64_t retBuf[2] = {0, 0};
             FindAvailableBuilding(townKey, retBuf, static_cast<uint64_t>(profKey));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
@@ -1682,7 +1682,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         int toRemove = current - desired;
         for (int i = 0; i < toRemove; i++) {
             void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t*>(GameUpdateLoop::_singleton->m_professionList->professions.GetData())[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index]);   // LEFT: SIG TownHall_RemoveWorker takes uint64_t (Dialog/exe_bodies.h, DLG-2)
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
         }
     }
@@ -1718,7 +1718,7 @@ bool TownReady() {
     if (!(GameUpdateLoop::_singleton != nullptr)) return false;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     CitizenBehavior* townMgr =
-        reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+        gw->m_citizenList;
     ProfessionList* profList = gw->m_professionList;
     if (!townMgr || !profList) return false;
     if (profList->professions.GetSize() <= 0 || profList->professions.GetData() == nullptr) return false;
@@ -1761,7 +1761,7 @@ void DiagPrint(const char* where, const TownHallUI* self) {
     if (GameUpdateLoop::_singleton != nullptr) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         CitizenBehavior* townMgr =
-            reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+            gw->m_citizenList;
         ProfessionList* profList = gw->m_professionList;
         fprintf(stderr, "[TownHallSA]   gw=%p townMgr=%p profList=%p profCnt=%d clock=%p hist(+150)=%p prod(+170)=%p\n",
                 static_cast<void*>(gw), gw->m_citizenList, static_cast<void*>(profList),
@@ -1889,8 +1889,8 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
         return;
     }
     CitizenBehavior* town =
-        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
-    int currentTick = reinterpret_cast<const Collection::Array<int>*>(town->field_0x150)[0]._size;   // LEFT: CitizenBehavior::field_0x150 is void* (WORK-a)
+        GameUpdateLoop::_singleton->m_citizenList;
+    int currentTick = town->field_0x150[0]._size;
 
     if (this->cachedGameTick != currentTick) {
         this->cachedGameTick = currentTick;
