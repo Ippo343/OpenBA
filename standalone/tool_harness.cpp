@@ -255,7 +255,7 @@ void FirePlacementTool() {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
-    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
     if (!tmpl) {
         fprintf(stderr, "[ToolHarness] ERROR: template resolve returned null\n");
@@ -270,7 +270,7 @@ void FirePlacementTool() {
     }
 
     // descriptionPtr (+0x20) = the building description entity Startup searches.
-    tool->descriptionPtr = static_cast<ComponentDescription*>(tmpl);   // LEFT: starttown.cpp's void* return (owner: Game)
+    tool->descriptionPtr = tmpl;
     fprintf(stderr, "[ToolHarness] PlacementTool=%p descriptionPtr(+0x20)=%p — running Startup probe...\n",
            tool, tmpl);
 
@@ -348,7 +348,7 @@ void FireActivatePlacement(PlayerToolManager* entityUI) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
-    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness] ERROR: template resolve returned null\n"); return; }
 
@@ -473,7 +473,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+            ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
             const int cc = e->_componentCount;
             Object::InternalPtr<Component>* ca = e->_components;
@@ -588,7 +588,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness][pasture] resolving template \"%s\"...\n", kTemplate);
-    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
     fprintf(stderr, "[ToolHarness][pasture]   -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness][pasture] ERROR: template resolve failed\n"); return; }
 
@@ -663,7 +663,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
         long sumCol = 0, sumRow = 0; int nh = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+            ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
             const int cc = e->_componentCount;
             Object::InternalPtr<Component>* ca = e->_components;
@@ -942,7 +942,7 @@ void FireSelectEntity(PlayerToolManager* entityUI) {
     fprintf(stderr, "[ToolHarness] founding houses captured: %d\n", houses);
     int opened = 0;
     for (int i = 0; i < houses && !opened; i++) {
-        ComponentEntity* house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        ComponentEntity* house = StartTown_GetFoundingHouseEntity(i);
         if (!house) continue;
         fprintf(stderr, "[ToolHarness] selecting founding house[%d] entity=%p...\n", i, house);
         opened = EditTool_HarnessSelectEntity(tool, house);
@@ -1133,7 +1133,7 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     int houses = StartTown_GetFoundingHouseCount();
     ComponentEntity* house = nullptr; int opened = 0;
     for (int i = 0; i < houses && !opened; ++i) {
-        house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        house = StartTown_GetFoundingHouseEntity(i);
         if (house) opened = EditTool_HarnessSelectEntity(tool, house);
     }
     if (!opened || !house) { fprintf(stderr, "[PinPanel] no house info dialog opened (houses=%d)\n", houses); return; }
@@ -1319,7 +1319,7 @@ void FireHousePanel(PlayerToolManager* entityUI) {
     ComponentEntity* house = nullptr; int opened = 0; int pickedIdx = -1;
     for (int i = 0; i < houses && !opened; ++i) {
         if (want >= 0 && i != want) continue;
-        house = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        house = StartTown_GetFoundingHouseEntity(i);
         if (house) {
             DlgSettings_InstallBuffer(house, i);   // no-op unless the route is armed
             opened = EditTool_HarnessSelectEntity(tool, house);
@@ -1343,7 +1343,7 @@ void FireHousePanel(PlayerToolManager* entityUI) {
             ComponentEntity* other = nullptr;
             for (int i = 0; i < houses; ++i) {
                 if (i == pickedIdx) continue;
-                other = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+                other = StartTown_GetFoundingHouseEntity(i);
                 if (other) { DlgSettings_InstallBuffer(other, i); break; }
             }
             if (!other) {
@@ -1545,7 +1545,7 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
     ComponentEntity* B = nullptr;
     const int houses = StartTown_GetFoundingHouseCount();
     for (int i = 0; i < houses && !B; ++i) {
-        ComponentEntity* h = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+        ComponentEntity* h = StartTown_GetFoundingHouseEntity(i);
         if (h && h != A) B = h;
     }
     if (!B) {
@@ -2109,11 +2109,11 @@ void FireClearPlaceOver() {
         }
     if (rcRow < 0) { fprintf(stderr, "[ClearPlaceOver] no resource cell found near centre\n"); return; }
 
-    void* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
     if (!tmpl) { fprintf(stderr, "[ClearPlaceOver] ERROR: WoodHouse template null\n"); return; }
     PlacementTool* tool = static_cast<PlacementTool*>(PlacementTool_Factory_SA());   // LEFT: placementtool.cpp's void* return (owner: Player)
     if (!tool) { fprintf(stderr, "[ClearPlaceOver] ERROR: tool factory null\n"); return; }
-    tool->descriptionPtr = static_cast<ComponentDescription*>(tmpl);   // LEFT: starttown.cpp's void* return (owner: Game)
+    tool->descriptionPtr = tmpl;
     if (!PlacementTool_HarnessStartupProbe(tool)) {
         fprintf(stderr, "[ClearPlaceOver] Startup probe failed\n"); return;
     }
@@ -2271,7 +2271,7 @@ int UpgradeRequired(BuildComponent* bc) {
 // Pick the upgrade subject: the construction-demo house if one was seeded (the only
 // building that ever reaches delivered != 0), else founding house 0 so the run still
 // exercises the click + REMOVE branch instead of doing nothing.
-void* UpgradePickSubject(bool* outIsDemo) {
+ComponentEntity* UpgradePickSubject(bool* outIsDemo) {
     if (g_pConstructionDemoEntity) { *outIsDemo = true;  return g_pConstructionDemoEntity; }
     *outIsDemo = false;
     return StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0)
@@ -2280,8 +2280,8 @@ void* UpgradePickSubject(bool* outIsDemo) {
 
 void FireUpgradeArm(PlayerToolManager* entityUI, int frameNum) {
     bool isDemo = false;
-    // LEFT: g_pConstructionDemoEntity / StartTown_GetFoundingHouseEntity are void* (starttown.cpp, owner: Game).
-    ComponentEntity* subject = static_cast<ComponentEntity*>(UpgradePickSubject(&isDemo));
+    ComponentEntity* subject = UpgradePickSubject(&isDemo);
+
     s_up_entityUI = entityUI;
     s_up_entity   = subject;
     s_up_armFrame = frameNum;
@@ -2607,7 +2607,7 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
-            ComponentEntity* e = static_cast<ComponentEntity*>(StartTown_GetFoundingHouseEntity(i));   // LEFT: starttown.cpp's void* return (owner: Game)
+            ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
             const int cc = e->_componentCount;
             Object::InternalPtr<Component>* ca = e->_components;
