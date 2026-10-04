@@ -340,7 +340,7 @@ void CitizenComponent::LongTermPlan() {
 
         // not satisfied by current set: ask d590 for a new storage candidate.
         float    outVec[3] = {0, 0, 0};      // local_80
-        ComponentEntity* matchIBP = nullptr;   // local_a8
+        Object::InternalPtr<ComponentEntity> matchIBP = nullptr;   // local_a8
         ComponentEntity* outBest  = nullptr;   // local_98
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
         PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(listPair), &outBest, homeCell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)

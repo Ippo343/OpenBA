@@ -175,7 +175,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
 
             // Valid spot found -- create orchard planting action
             uint32_t typeConstVal = OrchardComponent::TypeId();  // DAT_1401c46b0
-            ComponentEntity* entityRef = field_10;
+            ComponentEntity* entityRef = field_10.Get();
 
             float halfOffset = (float)(map->size >> 1) - kRdata_140172114;
             Math::Vector3 targetPos(

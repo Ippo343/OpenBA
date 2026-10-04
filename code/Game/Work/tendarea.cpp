@@ -179,7 +179,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     Reimpl_MapGetTerrainPos(map, citizenTerrain, &citizenPos.x, '\0', nullptr);
 
     // Step 7: Create PerformWork action
-    ComponentEntity* workEntityRef = field_10;
+    ComponentEntity* workEntityRef = field_10.Get();
     CitizenComponent* entityBuf[2] = { *citizenRef, nullptr };
 
     WorkAct_GrazingWorkCtor_bb0a0(

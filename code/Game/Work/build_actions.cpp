@@ -90,7 +90,7 @@ inline void* Alloc(uint64_t sz)          { return System::MemoryAllocator::MemAl
 } // namespace
 
 extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority,
-                    ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim) {
+                    const Object::InternalPtr<ComponentEntity>* building, float* position, uint32_t taskParam, uint32_t altAnim) {
     EnsureInit();
     if (!citizenRef) return;
 
@@ -102,7 +102,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: CharacterComponent::actions is raw fields (CharacterComponent.h, WORK-3); SIG Pf_ActStackPush_54e0
 
     // heading = Entity_impl_29a0(position, &buildingEntityValue) — used as PerformWork anim.
-    ComponentEntity* buildingEntity = building ? *building : nullptr;
+    ComponentEntity* buildingEntity = building ? building->Get() : nullptr;
     float heading = 0.0f;
     heading = ActChild_Entity29a0_c29a0(position, &buildingEntity);
 
@@ -152,7 +152,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         if (mem) {
             ComponentEntity* outIBP = nullptr;
             uint32_t msgId = (altAnim & 0xff) ? s_msg75f0 : s_msg7008;
-            ComponentEntity* bldg = building ? *building : nullptr;   // building entity
+            ComponentEntity* bldg = building ? building->Get() : nullptr;   // building entity
             act = ::new (mem) SendComponentMessage(&bldg, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         void* ibp = act;

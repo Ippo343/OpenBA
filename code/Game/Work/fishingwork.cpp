@@ -300,7 +300,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 // Valid spot found — create fishing action
 
                 // Build action parameters
-                ComponentEntity* entityRef = field_10;
+                ComponentEntity* entityRef = field_10.Get();
                 CitizenComponent* citizenRef = *citizenIBP;
                 float uvScale = (kRdata_14017214c / (float)terrainType) * fishing->fishingRate;
                 uint32_t spotInfo = ((freeSpot | 0x800) << 4) | emptySlot;
@@ -415,7 +415,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // leaves those cells unowned, so this branch should now be unreachable. It
             // stays as a tripwire: if it ever fires again the claim is back, and the
             // dock's 4-catch cap is back with it.
-            if (cellEntity == field_10) {
+            if (cellEntity == field_10.Get()) {
                 static bool s_warned = false;
                 if (!s_warned) {
                     s_warned = true;
@@ -477,7 +477,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                         "[FishWork] +0x28 NULL: spot[%d] cell=%d tile=(%d,%d) "
                         "cellEntity=%p dock=%p wanted tid=0x%x (%s) — entity carries "
                         "%d component(s):\n", i, cellIdx, cx, cy, static_cast<void*>(cellEnt),
-                        static_cast<void*>(field_10), want,
+                        static_cast<void*>(field_10.Get()), want,
                         wantName ? wantName : "UNREGISTERED", compCount);
                     for (int k = 0; k < compCount; ++k) {
                         Component* c2 = cellEnt->_components[k].Get();
@@ -718,7 +718,7 @@ int FishingWork::OnComplete(CitizenComponent** param2, ComponentEntity** param3,
             std::fprintf(stderr,
                 "[WILDWRITE] FishingWork::Slot6 OUT OF RANGE: work=%p entity=%p workId=%d "
                 "param4=0x%x -> spotIdx=%u (count %d, cap %d, array %p) citizenSlot=%u (count %d)\n",
-                (void*)this, static_cast<void*>(field_10), field_20, param4,
+                (void*)this, static_cast<void*>(field_10.Get()), field_20, param4,
                 spotIdx, spotCount, spotCapacity, static_cast<void*>(spotStates),
                 citizenSlot, citizenCount);
             RedzoneAlloc_PrintBacktrace("FishingWork::Slot6");

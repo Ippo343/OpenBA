@@ -191,7 +191,7 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             }
 
             uint32_t typeConstVal = CropFieldComponent::TypeId();  // DAT_1401c7510
-            ComponentEntity* entityRef = field_10;
+            ComponentEntity* entityRef = field_10.Get();
 
             // The slot indices the per-slot messages carry: primary, then paired
             uint32_t packedCells[2];

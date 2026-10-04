@@ -181,7 +181,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         Map* map = world->m_game;
         float dropPos[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};   // local_50
         Action* ptr = nullptr;
-        ComponentEntity* exclude = nullptr;   // local_res8
+        Object::InternalPtr<ComponentEntity> exclude = nullptr;   // local_res8
         ComponentEntity* found = nullptr;     // local_70
 
         const Math::Vector3& position = citizen->character->modelComponent->transform.translation;

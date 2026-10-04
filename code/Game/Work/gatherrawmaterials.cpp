@@ -247,7 +247,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
             // --- Search for a storage entity with this resource ---
             ComponentEntity* foundEntity = nullptr;
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-            ComponentEntity* excludeIBP = nullptr;  // Original: local null-initialized IBP (NOT &self->field_10)
+            Object::InternalPtr<ComponentEntity> excludeIBP = nullptr;  // Original: local null-initialized IBP (NOT &self->field_10)
 
             PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
                 &foundEntity, citizenCell,
@@ -370,7 +370,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 // before the call; that value and the slot's two other qwords are never read).
                 ::Object::InternalPtr<Action> pathBuf;
                 ComponentEntity* destEntity = foundEntity;
-                ComponentEntity* srcEntity = field_10;  // Reread from self
+                ComponentEntity* srcEntity = field_10.Get();  // Reread from self
                 CitizenComponent* citizenPtr = *entityIBP;
 
                 WorkAct_GatherRawMatCtor_bf790(

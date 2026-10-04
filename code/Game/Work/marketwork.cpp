@@ -573,7 +573,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // (0x14012e5c0). Full -> 1 = examined but declined. (The tree has two ports of 0x14012e5c0 that differ; the one
     // called here takes the component as an integer: LEFT.)
     const int claimed = _field50;
-    WorkComponent* workComp = field_18;
+    WorkComponent* workComp = field_18.Get();
     if (workComp->workState == 0) {
         workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
     }
@@ -935,7 +935,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             // descriptor's capacity field. (0x14008d590 takes the town, the resource
             // and the position by name.)
             float destPos[3] = {0.0f, 0.0f, 0.0f};
-            ComponentEntity* exclude = field_10;  // this market
+            Object::InternalPtr<ComponentEntity> exclude = field_10;  // this market
             ComponentEntity* found = nullptr;
             PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(town),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
                                &found,
@@ -963,7 +963,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             // Arg 8 is the resource TYPE ENTITY POINTER, full 64 bits -- see the
             // engine_funcs.h note; it was truncated to 32 once before and crashed.
             ComponentEntity* pathDest = found;                    // where to deliver
-            ComponentEntity* pathSrc = field_10;                  // this market
+            ComponentEntity* pathSrc = field_10.Get();                  // this market
             CitizenComponent* pathWalker = *citizenSlot;
             ::Object::InternalPtr<Action> pathOut;   // retail discards this handle on this arm
             const int pathType = field_20;
@@ -1267,7 +1267,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             // Retail builds each FindPath argument as InternalBasePtr() + Copy
             // (0x140152ac0 / 0x140152ab8: an 8-byte copy, not refcounted).
             ComponentEntity* pathWinner = winner;
-            ComponentEntity* pathMarket = field_10;
+            ComponentEntity* pathMarket = field_10.Get();
             CitizenComponent* pathCitizen = *citizenSlot;
 
             // Note the direction: SRC is the winner (pick up there), DEST is the

@@ -201,17 +201,17 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 void Work::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 3);
 
-    // LEFT: +0x10 / +0x18 are InternalPtrs retail serializes through
-    // InternalBasePtr::Serialize; the members are declared T* (their readers in
-    // other blocks spell them so), so the Serialize view is a cast.
-    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);   // LEFT: H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBasePtr::Serialize
+    // +0x10 / +0x18 are InternalPtrs retail serializes through
+    // InternalBasePtr::Serialize (the typed wrapper's Serialize(ser, typeId) hides
+    // it; the tree validates with IsDerivedFromNullSafe below).
+    field_10.Object::InternalBasePtr::Serialize(ser);
     if (field_10) {
-        if (!Object::IsDerivedFromNullSafe(field_10, ComponentEntity::TypeId()))
+        if (!Object::IsDerivedFromNullSafe(field_10.Get(), ComponentEntity::TypeId()))
             field_10 = nullptr;
     }
-    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);   // LEFT: H5 Work::field_10 / field_18 are retail's InternalPtr<ComponentEntity> / InternalPtr<WorkComponent> declared as T* (read as pointers in about 60 files); the InternalPtr serializes through InternalBasePtr::Serialize
+    field_18.Object::InternalBasePtr::Serialize(ser);
     if (field_18) {
-        if (!Object::IsDerivedFromNullSafe(field_18, WorkComponent::TypeId()))
+        if (!Object::IsDerivedFromNullSafe(field_18.Get(), WorkComponent::TypeId()))
             field_18 = nullptr;
     }
     ser.Serialize(field_20, nullptr);

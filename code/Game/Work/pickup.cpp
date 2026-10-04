@@ -313,7 +313,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
         return 0;
 
     // --- is there anywhere to drop it off? --------------------------------------
-    ComponentEntity* dropIBP = nullptr;
+    Object::InternalPtr<ComponentEntity> dropIBP = nullptr;
     ComponentEntity* storeOut = nullptr;
     amount = rawMatIBP->quantity;
     PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(townMgr),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
@@ -332,7 +332,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     cand.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
                                    static_cast<uint32_t>(selfCell));
     cand.typeId     = field_20;
-    cand.entity     = field_10;
+    cand.entity     = field_10.Get();
     cand.rawMat     = rawMatIBP;
 
     int count = 1;

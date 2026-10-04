@@ -209,7 +209,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // Set up fire suppression action queue
     // Original: local_res8 = param_1[2]; local_88 = *(int**)param_2;
     // local_88 is REASSIGNED from mapGrid to citizen entity ptr here.
-    ComponentEntity* workEntityIBP = field_10;
+    ComponentEntity* workEntityIBP = field_10.Get();
     int priority = field_20;
     CitizenComponent* citizenPtr = *citizenIBP;
     WorkAct_PerformWorkCopyCtor_ba9f0(

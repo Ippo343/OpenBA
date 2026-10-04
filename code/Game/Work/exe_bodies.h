@@ -19,7 +19,8 @@
 // ---- build_actions.cpp
 class CitizenComponent;
 class ComponentEntity;
-extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
+namespace Object { template <class T> class InternalPtr; }
+extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, const Object::InternalPtr<ComponentEntity>* building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
 
 // ---- buildstructure.cpp
 class BuildStructure;
