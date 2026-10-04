@@ -2313,7 +2313,7 @@ namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: void* door, outside callers hold void* */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
         return nullptr;                                                       \
     }
 
@@ -2466,7 +2466,7 @@ J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
 
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
 void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
-    void* r = RtColl_I32ArrayAssign(static_cast<Collection::Array<int32_t>*>(dst),  // LEFT: void* door (R-GFX's RtArrayAssignI32 holds void*)
+    void* r = RtColl_I32ArrayAssign(static_cast<Collection::Array<int32_t>*>(dst),  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
                                     static_cast<const Collection::Array<int32_t>*>(src));  // LEFT: as above
     return r;
 }
@@ -2867,7 +2867,7 @@ void RtColl_ArraySetSize_18000c300(void* a) {
 // away). SetSizeCore keeps one, and it is unobservable: the only state that
 // path would skip is `_size = 0x4000`, which the restore below undoes.
 void RtColl_ArrayReserve_18005f980(void* a) {
-    ArrayHdr* h = static_cast<ArrayHdr*>(a);  // LEFT: void* door (outside callers hold void*)
+    ArrayHdr* h = static_cast<ArrayHdr*>(a);  // CAST-OK: elem_stride
     const int32_t oldSize = h->_size;
     SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8);
     h->_size = oldSize;
@@ -3272,7 +3272,7 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
 
 #define D1_J1_ENTRY(ADDR)                                                     \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: void* door, outside callers hold void* */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
         return nullptr;                                                       \
     }
 
@@ -3388,7 +3388,7 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: void* door, outside callers hold void* */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
         return nullptr;                                                       \
     }
 

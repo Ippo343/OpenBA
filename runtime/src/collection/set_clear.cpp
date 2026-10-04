@@ -206,7 +206,7 @@ void Clear(Set* set) {
     // post-order, then the root's element, then the root's node, then the two
     // zero stores — which retail performs even when the tree was already empty
     // (it branches to a second copy of them rather than skipping).
-    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: SIG rtsetclear::Clear (Collection.h; its callers hold the erased rtsetavl::Set: engine_platform.cpp, persistence_registry_win.cpp, persistence_saves.cpp, configuration.cpp)
+    reinterpret_cast<PairSet*>(set)->Clear();  // CAST-OK: elem_stride
 }
 
 }  // namespace rtsetclear

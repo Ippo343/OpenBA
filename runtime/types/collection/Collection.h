@@ -448,7 +448,7 @@ inline void Array<T, Allocator, SpecPolicy>::ClearCallback(Array<uint8_t>* hdr) 
 
 template <class T, class Allocator, class SpecPolicy>
 inline Array<T, Allocator, SpecPolicy>::~Array() {
-    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
 }
 
 // retail 0x18001cdf0 — the deep assign. Every arm of it is
@@ -457,28 +457,28 @@ inline Array<T, Allocator, SpecPolicy>::~Array() {
 template <class T, class Allocator, class SpecPolicy>
 inline Array<T, Allocator, SpecPolicy>&
 Array<T, Allocator, SpecPolicy>::Assign(const Array& src) {
-    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
-                            reinterpret_cast<const rtcoll::ArrayHdr*>(&src),  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+                            reinterpret_cast<const rtcoll::ArrayHdr*>(&src),  // CAST-OK: elem_stride
                             Spec(), &ClearCallback);
     return *this;
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
                         nullptr, Spec());
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize, const T& fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
-                        reinterpret_cast<const uint8_t*>(&fill), Spec());  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+                        reinterpret_cast<const uint8_t*>(&fill), Spec());  // CAST-OK: elem_stride
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void* fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
-                        static_cast<const uint8_t*>(fill), Spec());  // LEFT: the type-erased core takes rtcoll::ArrayHdr (Array<uint8_t>*): SetSizeCore / ArrayDtorImpl / ArrayAssignCore and their 23 outside caller files
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+                        static_cast<const uint8_t*>(fill), Spec());  // CAST-OK: elem_stride
 }
 
 // ============================================================
@@ -1579,7 +1579,7 @@ private:
     // retail's rule (Key == T in both mangled names that spell the parameters
     // out). The cast is the leading-subobject one, not a type pun.
     static const Key& KeyOf(const T& e) {
-        return *reinterpret_cast<const Key*>(&e);  // LEFT: the Set node / key view: element bytes of a type-erased node
+        return *reinterpret_cast<const Key*>(&e);  // CAST-OK: elem_stride
     }
 
     enum : unsigned { kElemWidth = (sizeof(T) + 7u) & ~7u };

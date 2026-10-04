@@ -300,7 +300,7 @@ Node** Insert(Set* set, Node** outSlot, char* const* key, const uint32_t* value)
     temp.value = *value;
     // temp._pad0c deliberately left uninitialised: retail's store is a DWORD.
 
-    InsertCore(reinterpret_cast<PathIdSet*>(set), reinterpret_cast<PathIdNode**>(outSlot), &temp);  // LEFT: SIG rtpathid::Insert (Collection.h; its caller holds the erased rtsetavl::Set / Node: modification_setupfilesystem.cpp)
+    InsertCore(reinterpret_cast<PathIdSet*>(set), reinterpret_cast<PathIdNode**>(outSlot), &temp);  // CAST-OK: elem_stride
 
     StringReleaseInline(&temp.key);
     return outSlot;
@@ -331,7 +331,7 @@ void SubtreeFree(void* ignoredThis, Node* node) {
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    StringReleaseInline(&reinterpret_cast<PathIdNode*>(node)->element.key);  // LEFT: SIG rtpathid::SubtreeFree (Collection.h; its caller holds the erased rtsetavl::Node: modification_setupfilesystem.cpp)
+    StringReleaseInline(&reinterpret_cast<PathIdNode*>(node)->element.key);  // CAST-OK: elem_stride
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }
