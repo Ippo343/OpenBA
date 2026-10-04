@@ -677,7 +677,8 @@ void NewGameDialog::StartGame() {
 void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, uint32_t terrainSize,
                                    bool disastersOff, MapGenerator* mapGen, TerrainGenerator* terrainGen,
                                    ClimateGenerator* climateGen,
-                                   uint32_t scenarioResIdx, const void* savedStateIBP) {
+                                   uint32_t scenarioResIdx,
+                                   const Object::InternalPtr<Achievement::AchievementInstance>* savedStateIBP) {
     {
         fprintf(stderr, "[StartNewGame] ENTER worldSetup=%p seed=%u size=%u disastersOff=%d "
                 "scenarioIdx=%d saved=%p GameUpdateLoop_Vtable=%p\n",
@@ -695,7 +696,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
         void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
-            const Object::InternalPtr<Achievement::AchievementInstance> ibp = savedStateIBP ? *(const Object::InternalPtr<Achievement::AchievementInstance>*)savedStateIBP : Object::InternalPtr<Achievement::AchievementInstance>();  // LEFT: SIG this function's `const void* savedStateIBP` parameter (Dialog/newgamedialog.cpp, X6-GAME-B's partition)
+            const Object::InternalPtr<Achievement::AchievementInstance> ibp = savedStateIBP ? *savedStateIBP : Object::InternalPtr<Achievement::AchievementInstance>();
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 nullptr, ibp, (int32_t)scenarioResIdx,
                 name,

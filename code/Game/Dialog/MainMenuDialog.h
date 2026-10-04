@@ -29,6 +29,7 @@
 class GameUpdateLoop;    // Game/GameUpdateLoop.h
 class MenuDialogLoopT;   // Game/MenuDialogLoopT.h
 class MapGenerator; class TerrainGenerator; class ClimateGenerator;   // the three generator resources (StartNewGame)
+namespace Achievement { class AchievementInstance; }   // StartNewGame's saved-state pointer
 
 class MainMenuDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(MainMenuDialog)
@@ -70,7 +71,8 @@ public:
     void* StartNewGame(const System::String& name, uint32_t seed, uint32_t terrainSize,
                        bool disastersOff, MapGenerator* mapGen, TerrainGenerator* terrainGen,
                        ClimateGenerator* climateGen,
-                       uint32_t scenarioResIdx, const void* savedStateIBP);  // 0x1400b4540
+                       uint32_t scenarioResIdx,
+                       const Object::InternalPtr<Achievement::AchievementInstance>* savedStateIBP);  // 0x1400b4540
 
 public:
     GameUpdateLoop*  game;       // +0xB8: the running game (0 at the front end; the pause menu's)

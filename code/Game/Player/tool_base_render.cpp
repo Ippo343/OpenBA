@@ -564,7 +564,7 @@ add_prebuilt:
         // Retail guarantees the table is populated + consistent with the model's
         // variant range; a fresh/inert description in SA may leave it empty.
         Object::External** row = table ? table[iVar10].refs : nullptr;
-        void* cellMesh = row ? row[iVar11] : nullptr;
+        Object::External* cellMesh = row ? row[iVar11] : nullptr;
         if (cellMesh == nullptr) return;   // nothing loaded to draw
 
         // The third SetMesh argument is a SOURCE MeshInstance (mangled name:
@@ -604,7 +604,7 @@ add_prebuilt:
             srcInst = nullptr;
         }
         reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
-            ->SetMesh(Graphics::ExternalPtrHandle{cellMesh}, srcInst);   // B.3.5 bridge
+            ->SetMesh(Object::ExternalPtr<Graphics::EdgeMesh>(static_cast<Graphics::EdgeMesh*>(cellMesh)), srcInst);   // the table holds the EdgeMesh resources
 
         // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
         // it: retail's PREBUILT branch sets no transform of its own because
