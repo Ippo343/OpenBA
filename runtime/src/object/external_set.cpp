@@ -793,11 +793,11 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             Node* hit = rtresset::Find(set, k);
             // UNGUARDED, and retail's: 0x1800be454 reads [hit+8] on the
             // not-found path with hit == 0. See the banner.
-            External* ext = Elem(hit)->external;
+            ::Object::External* ext = Elem(hit)->external;
             if (ext) {
                 // vtable slot 0, scalar deleting destructor, flag 1.
                 // B3X W0: by name on the object's own hierarchy root.
-                delete reinterpret_cast<::Object::External*>(ext);   // 0x1800be465 (B.3.x bridge)  // LEFT: H10 ResourceEntry::external is the RtObject::External POD
+                delete ext;   // 0x1800be465
             }
             rtresset::Erase(set, hit);   // 0x1800be46e
         }

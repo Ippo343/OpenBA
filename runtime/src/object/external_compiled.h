@@ -19,7 +19,7 @@ System::Filename* RtObject_ExternalFactory_GetCompiledPath(System::Filename* ret
 
 // ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z
 //                                                          retail 0x1800bf320
-const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
+const ::Object::External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
                                                     const System::Filename* path);
 
 // Effectiveness control: every counter is a branch taken INSIDE a ported body.

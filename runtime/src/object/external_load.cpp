@@ -223,10 +223,10 @@ LoadCounters g_lc{};
 // ============================================================================
 // Object::External::Load — the body.                     retail 0x1800bc620
 // ============================================================================
-extern "C" External* RtObject_External_Load(const System::Filename* path, External* existing) {
+extern "C" ::Object::External* RtObject_External_Load(const System::Filename* path, ::Object::External* existing) {
     ++g_lc.calls;
 
-    External* obj = existing;      // RDI, and it is REASSIGNED at 1800bc745
+    ::Object::External* obj = existing;      // RDI, and it is REASSIGNED at 1800bc745
 
     // `keep` IS THE CHOICE BETWEEN RETAIL'S TWO JOIN POINTS, and it is the only
     // thing that decides what this function returns.
@@ -323,7 +323,7 @@ extern "C" External* RtObject_External_Load(const System::Filename* path, Extern
                 const BaseTypeInfo* info = *infoSlot;
 
                 ::Object::Base* const created = info->factoryFn();   // 1800bc742
-                obj = reinterpret_cast<External*>(created);   // LEFT: H10 `obj` is the RtObject::External POD (the body's parameter and return, declared extern "C" for outside callers)
+                obj = reinterpret_cast<::Object::External*>(created);   // LEFT: ERASED the factory slot returns Object::Base*; retail uses the result as the External with no type check, so there is no checked downcast to spell
                 ++g_lc.created;
 
                 // `External::TypeId()` (0x180029350): the record's +0x00,
@@ -343,7 +343,7 @@ extern "C" External* RtObject_External_Load(const System::Filename* path, Extern
                 uint32_t version;
                 SerU32(ser.impl, &version);
                 const int32_t objVersion =          // slot 3 +0x18 (B.3.x bridge)
-                    reinterpret_cast<::Object::External*>(obj)->GetFileVersion();  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+                    obj->GetFileVersion();
                 if (static_cast<int32_t>(version) != objVersion) {
                     ++g_lc.badVersion;
                     bad = true;
@@ -379,7 +379,7 @@ extern "C" External* RtObject_External_Load(const System::Filename* path, Extern
                 // The object reads (or writes) ITSELF, through the same slot
                 // ExternalFactory::Add and External::SaveText drive.
                 ++g_lc.serialized;
-                reinterpret_cast<::Object::External*>(obj)->Serialize(*reinterpret_cast<IO::Stream*>(&cfs));   // slot 5 +0x28 (B.3.x bridge)   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
+                obj->Serialize(*reinterpret_cast<IO::Stream*>(&cfs));   // slot 5 +0x28 (B.3.x bridge)   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
             }
         }
 
@@ -408,7 +408,7 @@ extern "C" External* RtObject_External_Load(const System::Filename* path, Extern
         }
         CloseIfOpen(&cfs.file.base.file);                                // 1800bc872
     }
-    External* result = keep ? obj : nullptr;                             // 1800bc888
+    ::Object::External* result = keep ? obj : nullptr;                             // 1800bc888
     if (result == nullptr) ++g_lc.returnedNull;
 
     // ---- 1800bc88b..1800bc921 -------------------------------------------

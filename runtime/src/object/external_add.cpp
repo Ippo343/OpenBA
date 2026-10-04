@@ -106,8 +106,8 @@ namespace {
 // External vtable slot +0x28 — `Serialize(IO::Stream&)`. The same slot
 // `External::Load` drives and the one External.h names. B3X W0: called by
 // name; the bool result is discarded, as retail does here.
-void ExternalSerialize(External* self, IO::Stream& stream) {
-    reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+void ExternalSerialize(::Object::External* self, IO::Stream& stream) {
+    self->Serialize(stream);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ AddCounters g_ac{};
 // ============================================================================
 // Object::ExternalFactory::Add — the body.               retail 0x1800be570
 // ============================================================================
-extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external) {
+extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, ::Object::External* external) {
     ++g_ac.calls;
 
     // ---- 1800be589..1800be5d9 -------------------------------------------

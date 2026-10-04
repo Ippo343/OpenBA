@@ -193,7 +193,7 @@ System::Filename* RtObject_ExternalFactory_GetCompiledPath(System::Filename* ret
 // B3R RT-Core: `Find`(private, 0x1800be0e0), `Add` (0x1800be570) and
 // `External::Load` (0x1800bc620) are ported and called by name.
 
-const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
+const ::Object::External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
                                                     const System::Filename* path) {
     ++g_cc.findOrLoadCalls;
 
@@ -217,9 +217,9 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     System::Filename expanded;                                   // [RBP+0x38]
     RtObject_ExternalFactory_ExpandRelativePath(self, &expanded, path, true);
 
-    External* found = RtObject_ExternalFactory_Find(self, &expanded);    // private Find
+    ::Object::External* found = RtObject_ExternalFactory_Find(self, &expanded);    // private Find
 
-    const External* result = nullptr;
+    const ::Object::External* result = nullptr;
 
     if (found != nullptr) {
         // ---- 0x1800bf376: the CACHE HIT -----------------------------------
@@ -245,7 +245,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         // against it is not a self-check. It is the reason the two functions
         // share a file.
 
-        External* loaded = RtObject_External_Load(&compiled, nullptr);
+        ::Object::External* loaded = RtObject_External_Load(&compiled, nullptr);
 
         if (loaded != nullptr) {
             ++g_cc.loaded;
@@ -254,7 +254,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
             // `Filename::operator=(const Filename&)` (0x180006770) instruction
             // for instruction. `_path` is a POD member of the not-yet-converted
             // `Object::External`, so the left-hand side comes through the bridge.
-            Sys(loaded->_path) = expanded;
+            loaded->_path = expanded;
             RtObject_ExternalFactory_Add(self, loaded);           // 0x1800bf5b1
             result = loaded;
         } else {

@@ -42,6 +42,8 @@
 // `#pragma once` no-op and is left in place with its explanatory banner.
 #include "TypeInfo.h"
 
+namespace Object { class External; }   // ResourceEntry::external
+
 namespace RtObject {
 
 using RtSystem::Filename;
@@ -178,7 +180,7 @@ static_assert(offsetof(External, _refs)    == 0x10, "External::_refs @ +0x10 (~E
 // (0x1800bcb60) all walk.
 struct ResourceEntry {
     Filename  path;         // +0x00 — the Set key; compared with _stricmp
-    External* external;     // +0x08 — Find/FindNext return this
+    ::Object::External* external;   // +0x08 — Find/FindNext return this
     uint32_t  usageMask;    // +0x10 — Add ORs in 1 << factory->_cleanBitIndex
     uint32_t  referenceId;  // +0x14 — GetReferenceId returns this; Add seeds -1
 };
@@ -955,14 +957,14 @@ static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simple
 
 namespace RtObject {
 // ---- object/external_load.cpp
-extern "C" External* RtObject_External_Load(const System::Filename* path, External* existing);  // 0x1800bc620
+extern "C" ::Object::External* RtObject_External_Load(const System::Filename* path, ::Object::External* existing);  // 0x1800bc620
 // ---- B3R RT-Core: object/external.cpp, external_find.cpp, external_add.cpp
-System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret);  // 0x180006250
-uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const External* external);  // 0x1800bf100
+System::Filename* RtObject_External_GetPath(const ::Object::External* self, System::Filename* ret);  // 0x180006250
+uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const ::Object::External* external);  // 0x1800bf100
 System::Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
                                                                  System::Filename* ret, uint32_t id);  // 0x1800bf1d0
-External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path);  // 0x1800be0e0 (private Find)
-extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);  // 0x1800be570
+::Object::External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path);  // 0x1800be0e0 (private Find)
+extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, ::Object::External* external);  // 0x1800be570
 }  // namespace RtObject
 
 // ==== end B3R W0-P0c ====

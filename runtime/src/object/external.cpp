@@ -158,14 +158,14 @@ static ResourceSet::Node* ResourceSetSuccessor(ResourceSet::Node* n) {
 // Diffable because ours and theirs both copy from the same `_path`, so the two
 // results are the SAME char* and an 8-byte compare is exact. The oracle call
 // takes one extra reference, which the scratch release below gives back.
-System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret) {
+System::Filename* RtObject_External_GetPath(const ::Object::External* self, System::Filename* ret) {
 
     // ENDGAME B.3.1 step 2: retail's copy ctor (0x1800067d0), spelled as itself.
     // `ret` is the hidden return slot — raw, uninitialised bytes — so the object
     // is placement-constructed into it, which is what retail's CALL does.
     // `_path` is a `RtSystem::Filename` member of the not-yet-converted
     // `Object::External`, so it comes through the one transitional bridge.
-    new (ret) System::Filename(Sys(self->_path));
+    new (ret) System::Filename(self->_path);
 
     return ret;
 }
@@ -196,10 +196,10 @@ System::Filename* RtObject_External_GetPath(const External* self, System::Filena
 //  3. **The tree is case-INSENSITIVE.** ExternalList::Find, three functions
 //     below, is case-SENSITIVE over the same kind of path. That asymmetry is
 //     real, not a transcription slip.
-const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
+const ::Object::External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
                                               const System::Filename* path) {
 
-    const External* ours = nullptr;
+    const ::Object::External* ours = nullptr;
 
     // ENDGAME B.3.1 step 2. Adopt-then-adjust-twice IS the Filename copy ctor
     // (0x1800067d0), whose ported body normalises twice for exactly this reason,
@@ -254,7 +254,7 @@ const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
 // Note the double copy: retail takes GetPath's Filename and then copy-constructs
 // a SECOND Filename from it before searching, releasing both. Transcribed.
 uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
-                                                 const External* external) {
+                                                 const ::Object::External* external) {
 
     ResourceSet::Node* node;
     {
@@ -352,9 +352,9 @@ static ::Object::Factory* const* FactorySingletonSlot() {
     return &::Object::Factory::_singleton;
 }
 
-const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
+const ::Object::External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
                                                   uint32_t typeId,
-                                                  const External* prev) {
+                                                  const ::Object::External* prev) {
 
     ResourceSet::Node* cursor = nullptr;
 
@@ -377,7 +377,7 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
             cursor = ResourceSetSuccessor(found);
     }
 
-    const External* ours = nullptr;
+    const ::Object::External* ours = nullptr;
     using TypeNode = ::Object::Factory::TypeSet::Node;
     ::Object::Factory* const* pFactorySingleton = FactorySingletonSlot();
     const TypeNode* factoryRoot =
@@ -385,10 +385,10 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
                           : nullptr;
 
     while (cursor != nullptr) {
-        External* candidate = cursor->element.external;
+        ::Object::External* candidate = cursor->element.external;
         // Object::Base::Type() (retail slot 2, +0x10), by name on the real class.
         uint32_t actual =
-            reinterpret_cast<const ::Object::Base*>(candidate)->Type();   // B.3.x bridge  // LEFT: H10 ResourceEntry::external is the RtObject::External POD (External.h)
+            candidate->Type();
 
         if (actual == typeId) { ours = candidate; break; }
 
