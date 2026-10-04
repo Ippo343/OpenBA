@@ -47,15 +47,15 @@ void TitleDescToolTipUI::OnCreated() {
     Object::Base* userData = static_cast<UI::Element*>(dataSource)->GetUserData();
 
     if (userData) {
-        // LEFT: the user data is two consecutive System::Strings (title at +0,
-        // description at +8) that the tooltip's owner hands over as an
-        // Object::Base*; retail reads them the same way.
-        const System::String* strings = reinterpret_cast<const System::String*>(userData);
+        // The user data is a TitleDescToolTipData (TitleDescToolTipUI.h) that the
+        // tooltip's owner hands over through the Object::Base* slot; retail reads
+        // it the same way.
+        const TitleDescToolTipData* strings = reinterpret_cast<const TitleDescToolTipData*>(userData);   // LEFT: UI::Element's user data is Object::Base* (R-UI); the producer is not ported
         if (titleElement) {
-            titleElement->SetParameter(0, strings[0]);
+            titleElement->SetParameter(0, strings->title);
         }
         if (descElement) {
-            descElement->SetParameter(0, strings[1]);
+            descElement->SetParameter(0, strings->desc);
         }
     }
 }
