@@ -138,8 +138,7 @@ void ModDialog::RefreshDisplay() {
                 int depCount = mod.files.size;
                 if (depCount <= 0) continue;
 
-                // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
-                const RtSystem::Filename* depArray = static_cast<const RtSystem::Filename*>(mod.files.data);   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
+                const RtSystem::Filename* depArray = mod.files.data;   // Mod +0x70 Array<Filename>
                 for (int k = 0; k < depCount; k++) {
                     // Compare other mod's filename with this mod's dependency[k]
                     if (Filename_Equals(otherMod.file, depArray[k])) {
@@ -152,12 +151,11 @@ void ModDialog::RefreshDisplay() {
 conflict_done:
 
         // Set text parameters: name, author, description.
-        // LEFT: RtIO::Mod holds the three Strings as char* (R-IO's POD).
-        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
+        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
 
-        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
+        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
 
-        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
+        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
 
         // Format version string: "versionMinor (versionString)"
         {

@@ -38,6 +38,7 @@
 #include "Dialog/ModDialog.h"          // ModDialog_LastOpened's result (an upcast to DialogInstance)
 #include "Dialog/ModDetailsDialog.h"   // ModDetailsDialog_LastOpened's result
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h" // B4: PlayerToolManager::OpenPauseMenu (0x140101ce0)
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -49,7 +50,6 @@
 extern "C" ModDialog*        ModDialog_LastOpened();
 extern "C" ModDetailsDialog* ModDetailsDialog_LastOpened();
 
-extern "C" void* EntityUI_OpenPauseMenu(void* entityUI);  // code/Game/Dialog/toolbardialog.cpp
 
 namespace {
 
@@ -62,7 +62,7 @@ int   s_openedAt   = 0;
 int   s_clickedAt  = 0;
 void* s_forWorld   = nullptr;  // the GameUpdateLoop this arming belongs to
 int   s_worldSeenAt = 0;       // frame we first saw that GameUpdateLoop
-void* s_dialog     = nullptr;  // the pause menu the opener handed back
+UI::DialogInstance* s_dialog = nullptr;  // the pause menu the opener handed back
 void* s_vtable     = nullptr;  // its vtable at open time (liveness check before we click)
 char  s_clicks[256] = {0};     // BANISHED_PAUSEMENU_CLICKS, consumed in place
 char* s_clickCursor = nullptr;
@@ -145,8 +145,6 @@ extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum)
                     // 4-argument call; the by-name call passes 0 / nullptr. The
                     // four trailing arguments are the harness's choice: retail
                     // has no such caller.
-                    // LEFT (the pause-menu call below): EntityUI_OpenPauseMenu returns
-                    // the dialog as void* (DLG's file).
                     static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // through the base slot (an upcast)
                         nullptr, 0x12, id, 0, 0, 0, nullptr);
                 }
@@ -160,7 +158,7 @@ extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum)
                     // retail has no such caller.
                     void* nullElem = nullptr;
                     static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // through the base slot (an upcast)
-                        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),   // LEFT: a raw null local handed as InternalPtr<Element>* (an InternalPtr local would construct / destroy)
+                        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),   // LEFT: OTHER a raw null Element* local handed where OnElementEvent takes InternalPtr<Element>* (an InternalPtr local would construct / destroy a handle)
                         0x12, id, 0, 0, 0, nullptr);
                 }
             }
@@ -210,7 +208,7 @@ extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum)
                                           : gameWorld->m_toolManager;   // +0x120
         std::fprintf(stderr, "[PauseMenu] frame %d - opening (entityUI=%p ui=%p pausesGame=%d)\n",
                      frameNum, eui, static_cast<void*>(ui), Paused(ui));
-        s_dialog   = EntityUI_OpenPauseMenu(eui);
+        s_dialog   = eui->OpenPauseMenu();
         s_opened   = true;
         s_openedAt = frameNum;
         if (!s_dialog) {
@@ -263,7 +261,7 @@ extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum)
     // by the old raw 4-argument call; the by-name call passes 0 / nullptr. The
     // four trailing arguments are the harness's choice: retail has no such caller.
     std::fprintf(stderr, "[PauseMenu] dispatching OnCommand(msg=0x12, id=%d)\n", s_buttonId);
-    static_cast<UI::DialogInstance*>(s_dialog)->OnElementEvent(   // B.3.x bridge  // LEFT: EntityUI_OpenPauseMenu returns void* (toolbardialog.cpp, DLG)
+    s_dialog->OnElementEvent(
         nullptr, 0x12, s_buttonId, 0, 0, 0, nullptr);
 
     s_clickedAt = frameNum;

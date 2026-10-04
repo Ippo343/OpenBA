@@ -164,12 +164,12 @@ using InitialStructure30Array = Collection::Array<uint8_t, Collection::DefaultAl
 
 // FUN_14001b030 (mapgenerator.cpp) — String at element+0, stride 0x18.
 void Game_DestroyStringArray18(void* arrayHeader) {
-    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray18 (wave X family across two agents: callers hold DynArrayHeader<ExternalRef>)
+    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray18: its callers hold MapGenerator's DynArrayHeader<ExternalRef> raw triples (MapGenerator.h, H5)
 }
 
 // FUN_14001b0a0 (mapgenerator.cpp) — String at element+0, stride 0x30.
 void Game_DestroyStringArray30(void* arrayHeader) {
-    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray30 (wave X family across two agents)
+    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray30: its callers hold MapGenerator's DynArrayHeader raw triples (MapGenerator.h, H5)
 }
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,

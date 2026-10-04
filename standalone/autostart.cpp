@@ -12,9 +12,10 @@
 #include <cstring>
 #include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 
-// Captured by NewGameDialog_Ctor_Standalone (code/Game/Dialog/newgamedialog.cpp).
+// Captured by MainMenuDialog::OpenNewGame (code/Game/Dialog/mainmenudialog.cpp).
+class NewGameDialog;    // Dialog/NewGameDialog.h
 extern "C" {
-    void* g_StandaloneNewGameDialog = nullptr;
+    NewGameDialog* g_StandaloneNewGameDialog = nullptr;
 }
 // Captured by MainMenuDialog_OpenLoad (code/Game/Dialog/mainmenudialog.cpp; its local
 // declaration still spells the pointer void*: the same symbol, the stored value is the
@@ -34,6 +35,8 @@ ScenarioDialog* g_StandaloneScenarioDialog = nullptr;
 #include "Dialog/ModDialog.h"         // B4: ModDialog::entries
 #include "Dialog/SaveLoadDialog.h"    // B4: SaveLoadDialog list fields
 #include "Dialog/ScenarioDialog.h"    // B4: ScenarioDialog's entries / selectedIndex
+#include "Dialog/NewGameDialog.h"     // B4: NewGameDialog::buttonOk
+#include "Dialog/ModDetailsDialog.h"  // B4: ModDetailsDialog is-a UI::DialogInstance (InjectClick)
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
 class ModDetailsDialog;
@@ -43,9 +46,6 @@ extern "C" ModDetailsDialog* ModDetailsDialog_LastOpened();
 namespace AutoStart {
 
 namespace {
-
-// --- Layout constants (verified elsewhere in the standalone code) ---
-constexpr uintptr_t kNewGame_ButtonOk       = 0xF0;   // NewGameDialog::buttonOk
 
 // Dialog command/event protocol (matches the UI dispatcher).
 constexpr int kMsg_ButtonClick = 0x12;
@@ -122,8 +122,8 @@ constexpr int kNewGameTimeoutFrames = 600;   // ~10s at 60fps
 // UI::DialogInstance. The three trailing ints and userData were never set by
 // the old raw 4-argument call; the by-name call passes 0 / nullptr. The four
 // trailing arguments are the harness's choice: retail has no such caller.
-void InjectClick(void* dialog, int msg, int id) {
-    static_cast<UI::DialogInstance*>(dialog)->OnElementEvent(   // B.3.x bridge  // LEFT: three callers hold their dialog as void* (g_StandaloneNewGameDialog: NewGameDialog.h; ModDialog_LastOpened / ModDetailsDialog_LastOpened: mod_dialog_vtables.cpp, DLG)
+void InjectClick(UI::DialogInstance* dialog, int msg, int id) {
+    dialog->OnElementEvent(
         nullptr, msg, id, 0, 0, 0, nullptr);
 }
 
@@ -266,15 +266,11 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
 
     case Phase::WaitNewGame: {
         ++s_newGameFrame;
-        void* newGame = g_StandaloneNewGameDialog;
+        NewGameDialog* newGame = g_StandaloneNewGameDialog;
         // NewGameDialog::Slot4 (Startup) finds buttonOk and populates the
         // combos. buttonOk != null is our proxy that setup finished, so
         // StartGame can safely read the combo selections.
-        // LEFT: g_StandaloneNewGameDialog is void* (NewGameDialog.h / mainmenudialog.cpp,
-        // DLG); a typed read here would raise this file's static_void column.
-        bool setupDone = newGame &&
-            *reinterpret_cast<void**>(   // LEFT: SIG g_StandaloneNewGameDialog is void* (NewGameDialog.h / mainmenudialog.cpp, not this set's)
-                reinterpret_cast<uintptr_t>(newGame) + kNewGame_ButtonOk) != nullptr;   // LEFT: SIG g_StandaloneNewGameDialog is void* (NewGameDialog.h / mainmenudialog.cpp, not this set's)
+        bool setupDone = newGame && newGame->buttonOk != nullptr;   // +0xF0
 
         if (setupDone) {
             fprintf(stderr, "[AutoStart] NewGameDialog ready (self=%p) — injecting "
@@ -339,7 +335,7 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
             fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=%p id=%d\n", (void*)mainMenu, id);
             if (mainMenu) InjectClick(mainMenu, kMsg_ButtonClick, id);
         } else if (tok[0] == 'd') {
-            void* dlg = ModDetailsDialog_LastOpened();   // InjectClick takes void* (its other callers)
+            ModDetailsDialog* dlg = ModDetailsDialog_LastOpened();
             int id = std::atoi(tok + 1);
             fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
             if (dlg) InjectClick(dlg, kMsg_ButtonClick, id);
