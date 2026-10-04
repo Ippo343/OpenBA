@@ -65,7 +65,7 @@ namespace RtObject {
 // one-body-one-file rule runtime/src/object/rt_object_port.cpp states).
 Filename* RtObject_External_GetPath(const External* self, Filename* ret);
 // external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
-extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
+extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filename* path,
                                            const Filename* name);
 const External* RtObject_ExternalFactory_Find(const ExternalFactory* self, const Filename* path);
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
@@ -141,7 +141,7 @@ inline System::Filename ByHiddenSlot(Fn call) {
 // and keeps its effectiveness counters. Declared on the class by B.3.3 step 6A
 // because a caller batch needed it; nothing about the body moved.
 bool External::SaveText(const System::Filename& path, const System::Filename& name) {
-    return RtObject::RtObject_External_SaveText(Pod(this), PodF(path), PodF(name));
+    return RtObject::RtObject_External_SaveText(this, PodF(path), PodF(name));
 }
 
 // ============================================================================
