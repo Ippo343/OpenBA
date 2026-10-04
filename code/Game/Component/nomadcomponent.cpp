@@ -142,7 +142,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
             // NOT a substitute for this filter -- without it the call returns nothing
             // and the narrow never gets anything to reject.
             Object::InternalPtr<UI::DialogController> ctrl(
-                reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetController(  // B.3.6 bridge  LEFT: UI::DialogInstancePtr is void* (runtime/types/ui/UserInterface.h, R-UI)
+                it.node->element->GetController(
                     EntityUI::TypeId()));   // DAT_1401c4f00
             EntityUI* found = nullptr;
             if (ctrl.Get() != nullptr) {
@@ -152,12 +152,12 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
             if (found != nullptr) {
                 ComponentEntity* bound = found->entity;
                 if (bound == *entity) {
-                    void* dlgPtr = it.node->element;
-                    ui->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgPtr));  // B.3.6 bridge  LEFT: UI::DialogInstancePtr is void* (UserInterface.h, R-UI)
+                    Object::InternalPtr<UI::DialogInstance> dlgPtr(it.node->element);
+                    ui->CloseDialog(&dlgPtr);
                     closed = 1;
                     if (traceWalk) {
                         fprintf(stderr, "[NomadDlgWalk] #%d visited=%d CLOSED the removed "
-                                        "entity's panel (dlg=%p)\n", s_walks, visited, dlgPtr);
+                                        "entity's panel (dlg=%p)\n", s_walks, visited, static_cast<void*>(dlgPtr.Get()));
                         fflush(stderr);
                     }
                     return;
