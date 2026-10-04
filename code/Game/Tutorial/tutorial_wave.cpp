@@ -417,10 +417,10 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
 void TutorialSetupDialog::ShowListedElements() {
     SetAllDialogFlags('\0');
 
-    int count = static_cast<int32_t>(shownPathCount);
+    int count = shownPaths.GetSize();
     if (count <= 0) return;
 
-    System::String* arr = shownPaths;
+    System::String* arr = shownPaths.GetData();
     if (!arr) return;
     for (int i = 0; i < count; ++i) {
         Object::InternalPtr<UI::Element> elem;
