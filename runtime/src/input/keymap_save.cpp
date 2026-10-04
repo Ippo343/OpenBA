@@ -306,7 +306,7 @@ Input::KeyMap* RtInput_KeyMap_DeletingDtor(Input::KeyMap* self) {
     // KeyMap's +0x08 {_root, _count, _pad14} seen as the rtsetavl24 core's Set,
     // whose nodes are untyped (set_avl_e24.h); LEFT until the core takes a
     // BindingNode.
-    auto* set = reinterpret_cast<rtsetavl24::Set*>(&self->_root);
+    auto* set = reinterpret_cast<rtsetavl24::Set*>(&self->_root);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     auto* root = set->root;
     const int countBefore = set->count;
     const unsigned visitsBefore = rtsetavl24::g_destroyVisits;

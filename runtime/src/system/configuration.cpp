@@ -301,7 +301,7 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     // body, called by name (B3R), not a member.
                     rtsetavl::Node* node = nullptr;
                     rtavl::StringMapInsert(
-                        static_cast<rtsetavl::Set*>(map), &node,  // LEFT: SIG rtavl::StringMapInsert takes the erased rtsetavl::Set (R-COLL, wave X)
+                        static_cast<rtsetavl::Set*>(map), &node,  // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
                         &key._data, &val._data);
                 }
 

@@ -34,7 +34,7 @@ public:
     ~ConsumeProduceComponent() override;                                // [0]  0x140032460
     void        Persist(IO::Stream& stream) override;                         // [3]  0x140118e00
     void        Startup() override;                                     // [4]  0x140118ef0
-    uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x140118d00
+    ::Object::InternalPtr<Work>* CreateWork(::Object::InternalPtr<Work>* out) override;                    // [18] 0x140118d00
 
     int32_t  consumeResourceId; // +0x50: the selected recipe (-1 from the ctor)
     uint8_t  _pad54[4];         // +0x54

@@ -132,7 +132,7 @@ TutorialGoalCount::TutorialGoalCount()
 
 // LEFT H5: the +0x48 String is raw storage (see the header).
 System::String& TutorialGoalCount::ElementName() {
-    return *reinterpret_cast<System::String*>(&elementName);
+    return *reinterpret_cast<System::String*>(&elementName);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 // The dtor inside [0] 0x140027820: ~String +0x48, ~String +0x30; the

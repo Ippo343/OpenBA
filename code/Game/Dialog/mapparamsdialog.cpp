@@ -189,7 +189,7 @@ void MapParamsDialog::ApplyName() {
 
     if (editName) {
         // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-        const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);
+        const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);   // LEFT: H5 EditElement::_text is char* String storage (runtime/types/ui/EditElement.h)
         gameWorld->m_saveName = nameStr;
     }
 
@@ -270,7 +270,7 @@ void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
 void MapParamsDialog::OnUpdateLayout() {
     // The name edit box's text length (0 when empty).
     // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    int textLen = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();
+    int textLen = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();   // LEFT: H5 EditElement::_text is char* String storage (runtime/types/ui/EditElement.h)
 
     // Enable/disable OK button based on text length (Element slot 8)
     buttonOk->Enable(textLen > 0);

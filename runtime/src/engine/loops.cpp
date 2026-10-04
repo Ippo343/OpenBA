@@ -908,7 +908,7 @@ void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
     ctx->_unknown03b8.z = 0.0f;  ctx->_unknown03b8.w = 0.0f;
 
     // LEFT: `_pixelConstantStaging` is raw bytes (Context.h, R-VIDEO).
-    float* staging = reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);
+    float* staging = reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     staging[0] = secs; staging[1] = 0.0f; staging[2] = 0.0f; staging[3] = 0.0f;
     ctx->_dirty |= 0x10800u;
 
@@ -1102,7 +1102,7 @@ void Engine::MainLoop::Draw(float dt) {
         RtEngine::MainLoopCallback e = _postDraw._data[i];
         // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
         // userinterface_showdialog.cpp appends through one element type).
-        reinterpret_cast<PostDrawFunc>(e._func)(*_context, e._context);
+        reinterpret_cast<PostDrawFunc>(e._func)(*_context, e._context);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     }
 
     {

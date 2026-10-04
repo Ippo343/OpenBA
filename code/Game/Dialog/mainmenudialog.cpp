@@ -88,7 +88,7 @@ enum MainMenuButtonId {
 static UI::Dialog* LoadDialogResource(const char* rscPath) {
     System::Filename filenameBuf(rscPath);
     // The dialog doors of the other blocks take the resource as a non-const void*.
-    ::Object::External* resource = const_cast<::Object::External*>(
+    ::Object::External* resource = const_cast<::Object::External*>(   // LEFT: ExternalFactory::FindOrLoad returns const External*; the dialog doors take it non-const
         ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf));
     printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, (const void*)resource);
     UI::Dialog* extRes = nullptr;
@@ -857,7 +857,7 @@ extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr
         return retInternalBasePtr;
     }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(MainMenuDialog), 8);
-    MenuDialogLoopT* menuLoop = static_cast<MenuDialogLoopT*>(loop);
+    MenuDialogLoopT* menuLoop = static_cast<MenuDialogLoopT*>(loop);   // LEFT: SIG MainMenuDialog_FromMenuDLT (void* loop: standalone/menudialogloopt_stubs.cpp)
     const UI::Dialog* rsc = menuLoop ? menuLoop->_dialogExternal : nullptr;
     MainMenuDialog* dlg;
     if (rsc) {

@@ -32,6 +32,7 @@
 #include "Action/PathSearch.h"   // RegionGraph
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
+#include "Action/PathAvl.h"           // AvlInsert28 (0x14001a4f0), AvlTreeHead, AvlNode28
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
 #include "Component/exe_bodies.h"     // FloorComponent_FindResData
@@ -127,7 +128,7 @@ static_assert(offsetof(RoadBatch, maxY) == 0x38, "RoadBatch::maxY @ +0x38");
 // ------------------------------------------------------------
 //   ae270 Reimpl_TradeWork_helper_e270 (road normal)    ae180 Pf_TileShapeLut_ae180
 //   fa80  Pf_VectorResize60_fa80 (grow + dup element)   f250  Reimpl_Struct60B_Resize
-//   aa810 Pf_RayTriIntersect_aa810                       1a4f0 Pf_AvlInsertA_a4f0
+//   aa810 Pf_RayTriIntersect_aa810                       1a4f0 AvlInsert28
 //   a8420 Pf_DirtyCoarseCellB_8420                       123070 Pf_RecursiveChildSum_123070
 //   002ed0 WorkBase_FindComponent_2ed0                   003f60 ActCNR_FindComponent_3f60
 //   004680 FloorComponent_FindResData                    122e20 Pf_EntityResolvePos_2e20 (self-rec)
@@ -417,26 +418,26 @@ void WorldGeometry::MarkChunksDirty(int x, int y) {
     int qy = y / cs;
     int cw = _gridSize / cs;            // chunks per row
 
-    // LEFT: the dirty-chunk tree is two raw members (_dirtyTreeRoot / _dirtyTreeCount) of
-    // WorldGeometry (block GAME-c); 0x14001a4f0 takes it as one Set header.
-    int64_t* tree = reinterpret_cast<int64_t*>(&_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h _dirtyTreeRoot raw (GAME-2); SIG Pf_AvlInsertA_a4f0
-    uint64_t outNode = 0;     // local_res8
-    uint32_t key[2] = {0, 0}; // local_res10
+    // The dirty-chunk tree is two members (_dirtyTreeRoot / _dirtyTreeCount) of WorldGeometry;
+    // 0x14001a4f0 takes it as one Set header.
+    AvlTreeHead<AvlNode28>* tree = reinterpret_cast<AvlTreeHead<AvlNode28>*>(&_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h +0xE8 / +0xF0 are two members, not one AvlTreeHead<AvlNode28>
+    AvlNode28* outNode = nullptr;   // local_res8
+    int32_t key[2] = {0, 0};        // local_res10
 
     if ((x % cs == 0) && (-1 < qx - 1)) {
-        key[0] = static_cast<uint32_t>(cw * qy - 1 + qx);
-        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+        key[0] = static_cast<int32_t>(cw * qy - 1 + qx);
+        AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
     }
     if ((y % cs == 0) && (-1 < qy - 1)) {
-        key[0] = static_cast<uint32_t>((qy - 1) * cw + qx);
-        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+        key[0] = static_cast<int32_t>((qy - 1) * cw + qx);
+        AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
     }
     if ((x % cs == 0) && (y % cs == 0) && (-1 < qx - 1) && (-1 < qy - 1)) {
-        key[0] = static_cast<uint32_t>((qy - 1) * cw - 1 + qx);
-        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+        key[0] = static_cast<int32_t>((qy - 1) * cw - 1 + qx);
+        AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
     }
-    key[0] = static_cast<uint32_t>(cw * qy + qx);
-    Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+    key[0] = static_cast<int32_t>(cw * qy + qx);
+    AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
 }
 
 
@@ -963,11 +964,11 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                     for (int b = 0; b < batchCount; b++) {
                         RoadBatch& rec = batches.data[b];
                         if (0 < rec.vertices.size) {
-                            // LEFT: 0x14001fa80's C declaration (action_pf_pools.cpp; its other
-                            // caller is Player/tool_base_highlight.cpp) takes the array and
-                            // the element as integers.
-                            Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(meshBatches), meshBatches->size + 1,   // LEFT: SIG Pf_VectorResize60_fa80
-                                                   reinterpret_cast<uint64_t*>(&rec));   // 0x14001fa80   // LEFT: SIG Pf_VectorResize60_fa80
+                            // 0x14001fa80 resizes a GeometryBatch array; this file's RoadBatch is
+                            // its own copy of that record (+0x00 a source word, not the material;
+                            // RoadVertex, int16 indices), so the two arguments stay cast.
+                            Pf_VectorResize60_fa80(reinterpret_cast<RawArray<GeometryBatch>*>(meshBatches), meshBatches->size + 1,   // LEFT: RoadBatch (this file) is a copy of GeometryBatch: unify the record
+                                                   reinterpret_cast<const GeometryBatch*>(&rec));   // 0x14001fa80   // LEFT: RoadBatch (this file) is a copy of GeometryBatch: unify the record
                         }
                     }
                 }
@@ -1002,7 +1003,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
 // B4 FORWARD: 1 outside caller (Player/tool_base_highlight_tess.cpp)
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend) {
-    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10
+    BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10 — its one caller (tool_base_highlight_tess.cpp) holds the geometry as TradeWork_impl_ace40's int64_t and the quad as a byte buffer; RoadVertex (this file) is a copy of GeometryBatchVertex
 }
 
 // The exported names of the two file-static bodies (callers: Component/quarrycomponent_deform.cpp,

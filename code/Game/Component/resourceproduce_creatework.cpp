@@ -72,16 +72,14 @@ W* AllocWork(int size) {
 }
 
 // The tail shared by all of them: hand the object back as an InternalBasePtr.
-uintptr_t* WrapIBP(uintptr_t* out, Work* obj) {
+::Object::InternalPtr<Work>* WrapIBP(::Object::InternalPtr<Work>* out, Work* obj) {
     ::new (out) ::Object::InternalPtr<Work>(obj);
     return out;
 }
 
 }  // namespace
 
-// The bodies below are the classes' slot-18 members' bodies; each class's
-// CreateWork (in its own file, another block's) calls its C name here. The receiver
-// casts are B4 FORWARD receivers: the C names take void*.
+// The bodies below are the classes' slot-18 members.
 
 // ── FishingComponent::CreateWork — retail 0x14011efe0 ─────────────────────────────
 // The work is 0x70 bytes and its ctor (0x1400eaac0) sizes TWO arrays off the dock's
@@ -91,7 +89,7 @@ uintptr_t* WrapIBP(uintptr_t* out, Work* obj) {
 // nowhere to stand.
 // (The member slot [18] itself: was the C body FishingComponent_CreateWork its one-line
 // member in fishingcomponent.cpp forwarded to.)
-uintptr_t* FishingComponent::CreateWork(uintptr_t* out) {
+::Object::InternalPtr<Work>* FishingComponent::CreateWork(::Object::InternalPtr<Work>* out) {
     FishingComponent* self = this;
     FishingWork* work = AllocWork<FishingWork>(0x70);
     if (!work) return WrapIBP(out, nullptr);
@@ -127,7 +125,7 @@ uintptr_t* FishingComponent::CreateWork(uintptr_t* out) {
 // compiler artefact of the two-level ctor); only the final store is observable.
 // (The member slot [18] itself: was the C body HuntComponent_CreateWork its one-line
 // member in huntcomponent.cpp forwarded to.)
-uintptr_t* HuntComponent::CreateWork(uintptr_t* out) {
+::Object::InternalPtr<Work>* HuntComponent::CreateWork(::Object::InternalPtr<Work>* out) {
     HuntComponent* self = this;
     HuntWork* work = AllocWork<HuntWork>(0x58);
     if (!work) return WrapIBP(out, nullptr);
@@ -143,8 +141,8 @@ uintptr_t* HuntComponent::CreateWork(uintptr_t* out) {
 
 // ── HerbalistComponent::CreateWork — retail 0x14004b160 ───────────────────────────
 // This is the Gatherer's Hut work (GathererShelter.rsc carries HerbalistDescription).
-extern "C" uintptr_t* HerbalistComponent_CreateWork(void* selfV, uintptr_t* out) {
-    HerbalistComponent* self = reinterpret_cast<HerbalistComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
+::Object::InternalPtr<Work>* HerbalistComponent::CreateWork(::Object::InternalPtr<Work>* out) {
+    HerbalistComponent* const self = this;
     HerbalistWork* work = AllocWork<HerbalistWork>(0x60);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -178,8 +176,8 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* selfV, uintptr_t* out)
 // this is the repair that keeps such a lodge from minting a work that can never run.
 // sm+0x52 is the pending state id and sm+0x50 the current one; the sign test is
 // retail's "no pending transition" check.
-extern "C" uintptr_t* ForesterComponent_CreateWork(void* selfV, uintptr_t* out) {
-    ForesterComponent* self = reinterpret_cast<ForesterComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
+::Object::InternalPtr<Work>* ForesterComponent::CreateWork(::Object::InternalPtr<Work>* out) {
+    ForesterComponent* const self = this;
     ComponentEntity* entity = self->_entity;
 
     {
@@ -218,7 +216,7 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* selfV, uintptr_t* out) 
 // ever minted: state 13's enter (0x14012ae60) calls slot 18 to create the work and post
 // it to the citizen reservation ledger, so a stubbed slot silently means "market never
 // offers a job".
-uintptr_t* MarketComponent::CreateWork(uintptr_t* out) {
+::Object::InternalPtr<Work>* MarketComponent::CreateWork(::Object::InternalPtr<Work>* out) {
     MarketWork* work = AllocWork<MarketWork>(0x58);
     if (!work) return WrapIBP(out, nullptr);
 
@@ -309,8 +307,8 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
 // Declared nowhere else (consumeproduce_recipe_dump.cpp).
 extern "C" void ConsumeProduce_DumpRecipes(const ConsumeProduceDescription* cpDesc, int selected);
 
-extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* selfV, uintptr_t* out) {
-    ConsumeProduceComponent* self = reinterpret_cast<ConsumeProduceComponent*>(selfV);   // LEFT: B4 FORWARD receiver (wave X: the member in the class file declares it locally with void*)
+::Object::InternalPtr<Work>* ConsumeProduceComponent::CreateWork(::Object::InternalPtr<Work>* out) {
+    ConsumeProduceComponent* const self = this;
 
     ComponentEntity* entity = self->_entity;
     if (!entity) return WrapIBP(out, nullptr);
@@ -354,7 +352,7 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* selfV, uintptr_t*
     static int n = 0;
     if (n < 4) { ++n;
         fprintf(stderr, "[ConsumeProduce] CreateWork self=%p entity=%p cpDesc=%p "
-                        "work=%p\n", selfV, static_cast<void*>(entity),
+                        "work=%p\n", static_cast<void*>(self), static_cast<void*>(entity),
                         static_cast<void*>(cpDesc), static_cast<void*>(obj));
         fflush(stderr);
     }

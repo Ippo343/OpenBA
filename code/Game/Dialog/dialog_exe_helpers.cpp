@@ -43,7 +43,7 @@
 // Caller signature (workplaceui.cpp): void* fn(void* entity, void* retIBP).
 void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<BuildComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: SIG Dialog_FindComponent_d6c0 (void* entity: callers in Work/, Component/tornadocomponent.cpp, workplaceui.cpp, tool_harness.cpp)
 }
 
 // ============================================================
@@ -51,7 +51,7 @@ void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
 // ============================================================
 // The body is AutoSaveDialog::Autosave (autosavedialog.cpp).
 // B4 FORWARD: 1 outside caller (standalone/saveload_harness.cpp)
-void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) { reinterpret_cast<AutoSaveDialog*>(self)->Autosave(); }
+void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) { reinterpret_cast<AutoSaveDialog*>(self)->Autosave(); }   // LEFT: SIG Dialog_AutoSaveHandler (standalone/saveload_harness.cpp declares it locally with void*)
 
 // ============================================================
 // GameContainer_EnsureLists — standalone stand-in for GameContainer_Init (0x140099db0)
@@ -100,7 +100,7 @@ void GameContainer_EnsureLists() {
         if (slot) continue;                       // already loaded
         System::Filename fnameObj(e.path);   // ctor already normalises delimiters
         // Trusted, not IsDerivedFrom-checked (see above).
-        Object::ExternalList* ext = static_cast<Object::ExternalList*>(const_cast<::Object::External*>(
+        Object::ExternalList* ext = static_cast<Object::ExternalList*>(const_cast<::Object::External*>(   // LEFT: ExternalFactory::FindOrLoad returns const External*; the GameContainer slot holds ExternalPtr<ExternalList> (non-const)
             ::Object::ExternalFactory::_singleton->FindOrLoad(fnameObj)));
         slot = ext;
         fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, (void*)ext);

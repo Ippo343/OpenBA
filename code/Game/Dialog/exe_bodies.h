@@ -45,9 +45,7 @@ extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserIn
 // (callers use EditTool::SelectEntity, Player/EditTool.h).
 
 // ---- entityui.cpp
-// fn_EntityUI_SetEditMode — reimplemented in entityui.cpp as EntityUI_SetEditMode_Impl
-// FUN_140102b60: sets player controller edit state (BST lookup + Factory::CreateObject)
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+// fn_EntityUI_SetEditMode (FUN_140102b60) is PlayerToolManager::SelectTool (Game/PlayerToolManager.h).
 
 // fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
 // FUN_140102e30: BST insert/update for entity tracking
@@ -166,8 +164,8 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (dstArray == srcArray) return;
     // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp, DLG-2, hands the
     // addresses of TrackerComponent's +0x38 / +0x28 field triples as void*).
-    TrackerComponent::EntryArray* dst = reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);
-    TrackerComponent::EntryArray* src = reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);
+    TrackerComponent::EntryArray* dst = reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);   // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp passes TrackerComponent's field triples)
+    TrackerComponent::EntryArray* src = reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);   // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp passes TrackerComponent's field triples)
     System::MemoryAllocator::MemFree(dst->data);
     dst->count = 0;          // the old qword store over count | capacity
     dst->capacity = 0;

@@ -91,7 +91,6 @@ void ForesterComponent::Command(int cmd) {
 // ============================================================================
 #include "Object/factory_registration.h"
 
-extern "C" uintptr_t* ForesterComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
 
 // 0x14011fa40: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
 // `MOV word [RBX+0x50],0x101` — a freshly built lodge plants AND cuts.
@@ -120,6 +119,6 @@ void       ForesterComponent::Persist(IO::Stream& stream) {
     ser.Serialize(plantTrees, nullptr);
     ser.Serialize(cutTrees, nullptr);
 }
-uintptr_t* ForesterComponent::CreateWork(uintptr_t* out) { return ForesterComponent_CreateWork(this, out); } // [18] 0x14011f780
+// [18] ForesterComponent::CreateWork is defined in resourceproduce_creatework.cpp.
 
 DEFINE_EXE_TYPE(ForesterComponent, "ResourceProduceComponent")

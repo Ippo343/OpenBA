@@ -250,11 +250,7 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
         GeometryBatch tmpl;
         std::memset(&tmpl, 0, sizeof(tmpl));
         tmpl.slot = -1;
-        // LEFT: 0x14001fa80 is a C door in block ACT-b's Action/exe_bodies.h taking
-        // the array header and the element as integers.
-        Pf_VectorResize60_fa80(reinterpret_cast<int64_t*>(&decals),
-                               decals.size + 1,
-                               reinterpret_cast<uint64_t*>(&tmpl));
+        Pf_VectorResize60_fa80(&decals, decals.size + 1, &tmpl);   // 0x14001fa80
         System::MemoryAllocator::MemFree(tmpl.indices.data);
         System::MemoryAllocator::MemFree(tmpl.vertices.data);
         iVar3 = iVar2;
@@ -274,7 +270,7 @@ haveSlot:
     entry->field_0x40 = static_cast<int32_t>(param_7);
     // LEFT: +0x44 / +0x5D are `bool` fields (GAME-b's WorldGeometryElements.h);
     // retail stores the caller's raw byte, which a bool store would normalise (H8).
-    *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;
+    *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
     // (the callers pass the bits in integer registers / stack slots).
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // CAST-OK: float_bits
@@ -285,7 +281,7 @@ haveSlot:
     entry->field_0x5C = true;
     *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: as +0x44
     // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
-    TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);
+    TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     return iVar3;
 }
 
@@ -318,9 +314,4 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
                     0xff, 0, target, 0,
                     uv, 0, 0, uv, uv,
                     1, r - 2, r + 2, 1);
-}
-
-// B4 FORWARD: 1 outside caller (Dialog/radiusui.cpp) passes the description as an integer.
-int Player_HighlightAdd_55430(int64_t param_1, int param_2) {
-    return Player_HighlightAdd_55430(reinterpret_cast<const RadiusDescription*>(param_1), param_2);   // B4 FORWARD
 }

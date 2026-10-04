@@ -78,13 +78,12 @@ void NoiseUI::SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
     }
     // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
     (*materialOut)->SetMaterial(
-        Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));
+        Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));   // LEFT: ExternalFactory::FindOrLoad returns const; ExternalPtr<Material> holds non-const
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");
-    // LEFT: AddTexture takes the RtSystem::String POD (R-GFX's header).
     (*materialOut)->AddTexture(
-        *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+        diffuseStr,
         Object::ExternalPtr<Video::ImageBuffer>(image));
 
     (*materialOut)->BuildParameters();
@@ -109,8 +108,8 @@ void NoiseUI::SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
     System::String emptyStr1;
     System::String emptyStr2;
     // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).
-    *reinterpret_cast<System::String*>(&ss->m_groupName) = emptyStr1;
-    *reinterpret_cast<System::String*>(&ss->m_textureName) = emptyStr2;
+    *reinterpret_cast<System::String*>(&ss->m_groupName) = emptyStr1;   // LEFT: H5 SpriteSheet::m_groupName is char* String storage (runtime/types/ui/SpriteSheet.h)
+    *reinterpret_cast<System::String*>(&ss->m_textureName) = emptyStr2;   // LEFT: H5 SpriteSheet::m_textureName is char* String storage (runtime/types/ui/SpriteSheet.h)
     ss->m_field48 = imgW;
     ss->m_field4C = imgH;
     ss->m_field50 = false;

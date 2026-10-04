@@ -396,8 +396,8 @@ void Renderer::AddDrawItem(const Geometry* geometry, const MaterialInstance* mat
     // check — spelling it as an array index would let the compiler assume
     // pass < 3 and is undefined behaviour on the path retail simply takes. LEFT.
     Collection::Array<RendererDrawItem>* list =
-        reinterpret_cast<Collection::Array<RendererDrawItem>*>(
-            reinterpret_cast<uint8_t*>(group) + 0x1c0 + pass * 0x10);
+        reinterpret_cast<Collection::Array<RendererDrawItem>*>(   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+            reinterpret_cast<uint8_t*>(group) + 0x1c0 + pass * 0x10);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     const int32_t oldSize = list->_size;
     DrawItemArrayResize(list, oldSize + 1, &rec);
 

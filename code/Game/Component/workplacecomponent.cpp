@@ -478,9 +478,8 @@ void WorkPlaceComponent::ReleaseWorkers() {
     }
 }
 
-// town_workplace_registry.cpp — 0x1400895a0, add the owner entity to the profession
-// bucket for `key` in the town BST (townMgr+0x100), creating the bucket if absent.
-extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* ownerRefLocal, uint64_t key);
+// town_workplace_registry.cpp — 0x1400895a0 (Game/exe_bodies.h), add the owner entity to
+// the profession bucket for `key` in the town BST (townMgr+0x100), creating it if absent.
 
 // 0x14012f670 — leave the Builder profession: drop the owner from the Builder bucket of
 // the town's profession tree, refresh the WorkComponent's capacity, hand the posted work
@@ -592,11 +591,10 @@ char WorkPlaceComponent::EnterBuilt() {
     Profession* key = profession;
     if (key == nullptr) return 0;   // no profession (house / storage) -> nothing to register
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    // 0x1400895a0 takes the town manager and the key as integers (Game/exe_bodies.h, wave X).
-    uintptr_t townMgr = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: SIG ResidenceComponent_impl_95a0
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     ComponentEntity* ownerRef = _entity;
-    ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, (uint64_t)key);   // LEFT: SIG ResidenceComponent_impl_95a0
+    ResidenceComponent_impl_95a0(townMgr, &ownerRef, key);   // 0x1400895a0
     return 0;
 }
 
@@ -624,17 +622,17 @@ char WorkPlaceComponent::EnterDemolish() {
 // LeaveBuilderProfession: destroycomponent_states (the null test is the tree's).
 // ApplyOccupiedVisual: Game/starttown.cpp.
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
-    ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD
+    ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 void WorkPlaceComponent_OnCreateInit(void* selfP) {
-    ((WorkPlaceComponent*)selfP)->ReleaseWorkers();   // B4 FORWARD
+    ((WorkPlaceComponent*)selfP)->ReleaseWorkers();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     if (!selfP) return;
-    ((WorkPlaceComponent*)selfP)->LeaveBuilderProfession();   // B4 FORWARD
+    ((WorkPlaceComponent*)selfP)->LeaveBuilderProfession();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
-    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD
+    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====

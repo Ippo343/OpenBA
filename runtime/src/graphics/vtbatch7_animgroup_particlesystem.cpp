@@ -179,7 +179,7 @@ namespace {
 // raw); the member is ?Serialize@String@System@@ 0x1800c9930. LEFT: the one
 // view of the raw field as the real `System::String`.
 inline void StrSer(void* str, IO::Serializer& ser) {
-    static_cast<System::String*>(str)->Serialize(&ser);
+    static_cast<System::String*>(str)->Serialize(&ser);   // LEFT: SIG the Serialize(void*) helper family (String / Vector / Transform: ledger, Serializer-typed family)
 }
 
 // B.4: the local `{ stream, rw }` pair every External::Serialize in this file
@@ -231,7 +231,7 @@ using AnimationGroup = ::Graphics::AnimationGroup;
 // (AnimationGroup.h keeps `_clips` raw, H5), viewed once as its element type.
 void RtGraphics_AnimationGroup_SerializeClips(IO::Serializer& ser, int count, void* datav) {
     if (count <= 0) return;
-    AnimationClip* c = static_cast<AnimationClip*>(datav);
+    AnimationClip* c = static_cast<AnimationClip*>(datav);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
     for (int i = 0; i < count; ++i, ++c) {
         StrSer(&c->_name, ser);
         StrSer(&c->_meshName, ser);

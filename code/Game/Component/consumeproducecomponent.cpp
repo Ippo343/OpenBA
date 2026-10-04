@@ -83,9 +83,8 @@
 // ============================================================================
 #include "Object/factory_registration.h"
 
-// Slot 18 (+0x90) CreateWork -- retail 0x140118d00, ported in
+// Slot 18 (+0x90) CreateWork -- retail 0x140118d00, defined in
 // resourceproduce_creatework.cpp alongside its five siblings.
-extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void*, uintptr_t*);
 
 // 0x140119050: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
 // +0x50 = -1, +0x58 = +0x60 = 0 (qwords), +0x68 = 0, `_flags |= 0x80` (already
@@ -211,6 +210,5 @@ void       ConsumeProduceComponent::Startup() {
         }
     }
 }
-uintptr_t* ConsumeProduceComponent::CreateWork(uintptr_t* out) { return ConsumeProduceComponent_CreateWork(this, out); }  // [18] 0x140118d00
 
 DEFINE_EXE_TYPE(ConsumeProduceComponent, "ResourceProduceComponent")

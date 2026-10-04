@@ -316,7 +316,7 @@ void ResidenceUI::OnUpdateLayout() {
                     // would fault on garbage. 0 (empty String) is fine.
                     uintptr_t nameBuf = citizen->name;
                     if (textName && (nameBuf == 0 || RUI_OkPtr(reinterpret_cast<const void*>(nameBuf))))  // CAST-OK: ptr_int
-                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&citizen->name));   // LEFT: H5 CitizenComponent::name (CIT-4)
+                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&citizen->name));   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (Component/CitizenComponent.h)
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     int ageYears = (int)(citizen->age * ageMul);
@@ -471,8 +471,8 @@ void ResidenceUI::GoToCitizen(int citizenIndex) {
         for (int r = 0; r < residentCount; r++) {
             if (flatIdx == citizenIndex) {
                 // Found the target citizen — re-read storageComp after CheckPtr
-                uintptr_t citizenPtr = *(uintptr_t*)(
-                    *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
+                uintptr_t citizenPtr = *(uintptr_t*)(   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
+                    *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
                     + (uintptr_t)r * 8);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
 
                 // Get citizen's InternalBasePtr self-reference at +0x10

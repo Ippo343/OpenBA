@@ -698,7 +698,7 @@ Node** StringMapInsert(Set* map, Node** outSlot,
     StringAddRefInto(&temp.key,   *key);
     StringAddRefInto(&temp.value, *value);
 
-    StringInsertCore(reinterpret_cast<KeyedSet<StringPairNode>*>(map), reinterpret_cast<StringPairNode**>(outSlot), &temp);  // LEFT: SIG StringMapInsert (outside callers hold the erased rtsetavl::Set / Node: configuration.cpp, persistence.cpp, persistence_registry_win.cpp)
+    StringInsertCore(reinterpret_cast<KeyedSet<StringPairNode>*>(map), reinterpret_cast<StringPairNode**>(outSlot), &temp);  // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
 
     StringReleaseInline(&temp.value);
     StringReleaseInline(&temp.key);
@@ -827,11 +827,11 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
 
     RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
         &temp.key,
-        static_cast<const RtSystem::Filename*>(key));  // LEFT: SIG FilenameSetInsert (the key arrives as const void*: filesystem_packages.cpp)
+        static_cast<const RtSystem::Filename*>(key));  // LEFT: POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename
 
     temp.value = *value;
 
-    FilenameInsertCore(reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(outSlot), &temp);  // LEFT: SIG FilenameSetInsert (outside callers hold the erased rtsetavl::Set / Node: filesystem_packages.cpp)
+    FilenameInsertCore(reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(outSlot), &temp);  // LEFT: SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
 
     StringReleaseInline(&temp.key.data);
     return outSlot;

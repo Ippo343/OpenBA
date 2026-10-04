@@ -108,13 +108,13 @@ static char RP_State13Enter(ResourceProduceComponent* self, StateMachine* sm) {
     // CreateWork (slot 18) — allocates the class's Work object and hands back an
     // InternalBasePtr. Abstract in the base, so a null here means the subclass did
     // not override it: report rather than crash on a _purecall.
-    uintptr_t workIbp = 0;
+    ::Object::InternalPtr<Work> workIbp;
     rp->CreateWork(&workIbp);
 
     // Post it to the reservation ledger so an idle citizen claims it.
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
-    if (workComp != nullptr && workIbp != 0) {
-        CitizenAI_WorkScheduler_Post(workComp, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIbp));   // LEFT: SIG ResourceProduceComponent::CreateWork (slot 18) hands the work back as uintptr_t
+    if (workComp != nullptr && workIbp) {
+        CitizenAI_WorkScheduler_Post(workComp, 1, 0, &workIbp);
     }
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers

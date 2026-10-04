@@ -195,7 +195,7 @@ Video::RenderBuffer* NewRenderBuffer() {
     void* p = OperatorNew(0x30);
     if (p == nullptr)
         return nullptr;
-    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(p);
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(p);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
     rb->colorBuffer = nullptr;   // +0x00
     rb->depthBuffer = nullptr;   // +0x08
     rb->width  = 0;              // +0x10 \ one qword store in retail

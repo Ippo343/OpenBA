@@ -118,8 +118,8 @@ ToolModeNode* TreeNode_Alloc(uint32_t key, uint32_t toolTypeId, ToolModeNode* pa
 // LEFT: the shared AVL retrace 0x140014b40 (tool_base_highlight.cpp) still takes
 // the root and node as integers (seven outside callers bind that C signature).
 void Retrace(ToolModeTree* tree, ToolModeNode* node) {
-    int64_t nn = reinterpret_cast<int64_t>(node);
-    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(&tree->root), &nn);
+    int64_t nn = reinterpret_cast<int64_t>(node);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(&tree->root), &nn);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 // helper_ddb0 (0x14002ddb0) find-or-create insert.
@@ -166,7 +166,7 @@ void Tree_Insert(ToolModeTree* tree, uint32_t key, uint32_t toolTypeId) {
 // GAME-b) binds them through local `extern "C"` declarations taking `void*`, so
 // the signature stays (B4 FORWARD) and the manager is recovered here once.
 PlayerToolManager* Manager(void* entityUI) {
-    return reinterpret_cast<PlayerToolManager*>(entityUI);   // B4 FORWARD: the callers' C signature
+    return reinterpret_cast<PlayerToolManager*>(entityUI);   // B4 FORWARD: the callers' C signature   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 }  // namespace
@@ -234,7 +234,7 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     PlayerToolManager* mgr = Manager(entityUI);
     // LEFT: +0x10 / +0x18 are declared `ToolRegistryNode*` / int32 in GAME-b's header,
     // the node type file-local to Dialog/toolbardialog.cpp; the pair is this tree.
-    ToolModeTree* tree = reinterpret_cast<ToolModeTree*>(&mgr->field_0x10);
+    ToolModeTree* tree = reinterpret_cast<ToolModeTree*>(&mgr->field_0x10);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     if (tree->root != nullptr) return;  // already built
 
     // The "Tool" / "ToolSetting" base type ids the SetEditMode reimpls IsDerivedFrom

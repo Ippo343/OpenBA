@@ -110,7 +110,6 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 
 // ---- action_pf_avl.cpp
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
-extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x14001a4f0
 struct PathGraph;
 extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
@@ -140,7 +139,8 @@ int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCe
 struct GeometryBatchVertex;   // Game/WorldGeometryElements.h
 void Pf_VectorResize14_ee40(RawArray<GeometryBatchVertex>* arr, int newCount);  // 0x14001ee40
 void Pf_VectorResize14Fill_f8d0(RawArray<GeometryBatchVertex>* arr, int newCount, const GeometryBatchVertex* fill);  // 0x14001f8d0
-void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001fa80
+struct GeometryBatch;   // Game/WorldGeometryElements.h
+void Pf_VectorResize60_fa80(RawArray<GeometryBatch>* arr, int newSize, const GeometryBatch* fill);  // 0x14001fa80
 
 // ---- action_pf_region.cpp
 

@@ -139,7 +139,7 @@ void ModDialog::RefreshDisplay() {
                 if (depCount <= 0) continue;
 
                 // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
-                const RtSystem::Filename* depArray = static_cast<const RtSystem::Filename*>(mod.files.data);
+                const RtSystem::Filename* depArray = static_cast<const RtSystem::Filename*>(mod.files.data);   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
                 for (int k = 0; k < depCount; k++) {
                     // Compare other mod's filename with this mod's dependency[k]
                     if (Filename_Equals(otherMod.file, depArray[k])) {
@@ -153,11 +153,11 @@ conflict_done:
 
         // Set text parameters: name, author, description.
         // LEFT: RtIO::Mod holds the three Strings as char* (R-IO's POD).
-        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));
+        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
-        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));
+        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
-        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));
+        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));   // LEFT: H5 RtIO::Mod's Strings / file array are POD (runtime/types/io/Modification.h; the Mod element was examined and LEFT, see the ledger)
 
         // Format version string: "versionMinor (versionString)"
         {
@@ -350,15 +350,14 @@ void ModDialog::OnOpened() {
             }
             // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
             matInst->SetMaterial(
-                Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));
+                Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));   // LEFT: ExternalFactory::FindOrLoad returns const; ExternalPtr<Material> holds non-const
         }
 
         // AddTexture("diffuse", imageBuffer)
         {
             System::String strBuf("diffuse");
-            // LEFT: AddTexture takes the RtSystem::String POD (R-GFX's header).
-            matInst->AddTexture(
-                *reinterpret_cast<const RtSystem::String*>(&strBuf),
+                    matInst->AddTexture(
+                strBuf,
                 Object::ExternalPtr<Video::ImageBuffer>(imgBuf));
         }
 
@@ -378,8 +377,8 @@ void ModDialog::OnOpened() {
             // operator= empty strings at +0x40 and +0x38 (the two String fields).
             // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).
             System::String emptyStr1, emptyStr2;
-            *reinterpret_cast<System::String*>(&sprSheet->m_groupName) = emptyStr1;
-            *reinterpret_cast<System::String*>(&sprSheet->m_textureName) = emptyStr2;
+            *reinterpret_cast<System::String*>(&sprSheet->m_groupName) = emptyStr1;   // LEFT: H5 SpriteSheet::m_groupName is char* String storage (runtime/types/ui/SpriteSheet.h)
+            *reinterpret_cast<System::String*>(&sprSheet->m_textureName) = emptyStr2;   // LEFT: H5 SpriteSheet::m_textureName is char* String storage (runtime/types/ui/SpriteSheet.h)
 
             // w/h at +0x48/+0x4c = 48 (0x30)
             sprSheet->m_field48 = 0x30;
@@ -422,7 +421,7 @@ void ModDialog::OnOpened() {
         // controller IS the right type — passing null would silently break the UI.
         // LEFT: ExternalPtr<T> wraps a non-const T (FindOrLoad returns const).
         UI::ElementDescription* browserExt =
-            const_cast<UI::ElementDescription*>(static_cast<const UI::ElementDescription*>(ext));
+            const_cast<UI::ElementDescription*>(static_cast<const UI::ElementDescription*>(ext));   // LEFT: ExternalFactory::FindOrLoad returns const; AddController takes the description non-const
 
         // AddController(this, typeId, 0, 0, browserExt, "groupBrowse")
         System::String groupStr("groupBrowse");
@@ -613,7 +612,7 @@ void ModDialog::Apply() {
                 Object::InternalPtr<UI::DialogInstance> nullRef2;
 
                 // Trigger game reload with saved state
-                WorldSetup_LoadFromSave(parentMenu.Get(), statePtr, (void*)(uintptr_t)-1, &nullRef2);   // 0x1400b49f0
+                WorldSetup_LoadFromSave(parentMenu.Get(), statePtr, (void*)(uintptr_t)-1, &nullRef2);   // 0x1400b49f0   // LEFT: SIG WorldSetup_LoadFromSave (void* scenarioIdx: -1 = none; Game/exe_bodies.h, worldsetup_reload.cpp)
             }
         } else {
             // User cancelled: refresh list to undo changes

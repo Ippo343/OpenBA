@@ -115,7 +115,7 @@ void FollowDialog::OnOpened() {
         // LEFT: CitizenComponent::name is the String's raw storage (H5, block COMP).
         CitizenComponent* entity = citizen;
         if (entity && elem) {
-            elem->SetParameter(0, *reinterpret_cast<const System::String*>(&entity->name));
+            elem->SetParameter(0, *reinterpret_cast<const System::String*>(&entity->name));   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (Component/CitizenComponent.h)
         }
     }
 
@@ -177,9 +177,8 @@ void FollowDialog::OnUpdateLayout() {
         // Guard: the profession (and its string table) can be garbage in standalone
         // where the profession data is not live — deref would hardfault.
         if (FD_OkPtr(profEntry) && FD_OkPtr(profEntry->stringTable) && textFollow) {
-            // LEFT: Profession::stringName is the String's raw storage (H5, W0-H1's header).
             UI::String uiStr(Object::ExternalPtr<UI::StringTable>(profEntry->stringTable),
-                             *reinterpret_cast<const System::String*>(&profEntry->stringName));
+                             profEntry->stringName);
             System::String sysStr(uiStr.operator System::String());
 
             textFollow->SetParameter(1, sysStr);

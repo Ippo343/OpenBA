@@ -198,7 +198,7 @@ void EventLogUI::ToggleNotification(int32_t btnIdx) {
     EventLog* eventLog = EventLogAddress();
     // LEFT: EventLog::field_0x10 is bool[6] (Game/EventLog.h, GAME-a's): a bool
     // store would normalise the check box's raw byte, the byte store does not.
-    *reinterpret_cast<uint8_t*>(&eventLog->field_0x10[btnIdx]) = btnElem->_checked;
+    *reinterpret_cast<uint8_t*>(&eventLog->field_0x10[btnIdx]) = btnElem->_checked;   // LEFT: H8 EventLog::field_0x10 is bool[6] (Game/EventLog.h); retail stores the raw check byte
 }
 
 // ============================================================

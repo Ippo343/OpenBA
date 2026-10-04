@@ -37,7 +37,7 @@
 #include "Entity/ComponentEntity.h"   // B4: the component array by name
 #include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "ui/DialogInstance.h"        // B4: the open dialog's controller array
-#include "Dialog/exe_bodies.h"   // EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp): EntityUI_SetEditMode_Impl
+#include "Dialog/exe_bodies.h"
 
 // EditTool select-by-entity harness hook (Player/edittool_funcs.h) — opens the
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.

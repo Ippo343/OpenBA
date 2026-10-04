@@ -231,16 +231,16 @@ static_assert(std::is_same<HKEY, HKEY__*>::value, "Registry.h's HKEY__* is <wind
 // (it has no constructor -- engine/singleton_ctors.cpp builds it), so the
 // collection bodies are handed `this` as the untyped Set they are.
 void MapClear(void* self) {
-    rtsetclear::Clear(static_cast<rtsetavl::Set*>(self));            // 0x18000f7d0  LEFT: see above
+    rtsetclear::Clear(static_cast<rtsetavl::Set*>(self));            // 0x18000f7d0  LEFT: see above   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 // Map_Insert hands back the collection's opaque-element node; the settings
 // map's node IS `RtIo::SettingsMapNode` (Persistence.h).
 SettingsMapNode* MapInsert(void* map, const System::String& key, const System::String& value) {
     rtsetavl::Node* node = nullptr;
-    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  LEFT: see above
+    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
                            &node, &key._data, &value._data);
-    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: set_avl.h's node keeps its element opaque
+    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
 }
 
 // Convert one NUL-terminated UTF-16 buffer to a System::String, exactly the

@@ -462,9 +462,7 @@ void PathResultsResize(RawArray<PathResult>* results, int newSize, const PathRes
 // copy-construct from the old buffer (or the template *param_3 for appended slots). On
 // shrink-in-place, destruct the tail; on realloc, destruct the whole old buffer then
 // MemFree it.
-void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
-    RawArray<GeometryBatch>* arr = reinterpret_cast<RawArray<GeometryBatch>*>(param_1);   // LEFT: SIG Pf_VectorResize60_fa80
-    const GeometryBatch* fill = reinterpret_cast<const GeometryBatch*>(param_3);          // LEFT: SIG Pf_VectorResize60_fa80
+void Pf_VectorResize60_fa80(RawArray<GeometryBatch>* arr, int param_2, const GeometryBatch* fill) {
     int iVar1 = arr->size;
     if (param_2 != iVar1) {
         GeometryBatch* old = arr->data;

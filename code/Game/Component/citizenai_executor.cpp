@@ -452,7 +452,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         if (dim <= iy) iy = dim - 1;
         MapCell* cellBase = gameWorld->cells;   // +0x80
         // [PerfX] TERRAIN_SIDECAR: cells[dim*iy+ix].type via the mirror (perf_terrain.h).
-        if (PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(cellBase), gameWorld->cellCount,   // LEFT: SIG PerfX::TerrainGet (standalone/perf_terrain.h, SA)
+        if (PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(cellBase), gameWorld->cellCount,   // LEFT: SIG PerfX::TerrainGet — its slow path TerrainGetSlow and g_terrainSCBase (standalone/perf_terrain.cpp) hold the cell array as bytes
                               static_cast<int>(static_cast<int64_t>(dim) * iy + ix)) == 0x0b) {
             pos[2] = 0.0f; pos[0] = fx; pos[1] = fy;
             blockedHandled = true;     // goto LAB_14010981e

@@ -436,7 +436,7 @@ public:
     // B.4: PORTED, inline. LEFT: `_nodes` stays the raw header (see `Node`),
     // so this is the one view of it as its element type.
     const Collection::Array<Node>& GetNodes() const {
-        return *reinterpret_cast<const Collection::Array<Node>*>(&_nodes);
+        return *reinterpret_cast<const Collection::Array<Node>*>(&_nodes);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     }
     float   GetMaxDepthDistance() const;                   // 0x180012680
     int32_t GetSkinCount() const;                          // 0x1800126a0

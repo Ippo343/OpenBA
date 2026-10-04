@@ -57,7 +57,7 @@ namespace {
 template <class T>
 void* ForwardFindComponent(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<T>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 }  // namespace
 
@@ -82,7 +82,7 @@ void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
 void Work::InitFromEntity(void* pEntityIBP) {
     // LEFT: Work(void*) and InitFromEntity(void*) keep their callers' untyped
     // entity reference (the leaves' ctors in other blocks).
-    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(pEntityIBP);
+    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(pEntityIBP);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     field_10 = nullptr;
     field_10 = entityRef ? *entityRef : nullptr;   // the tree's guard (retail reads *param_2)
     field_18 = nullptr;
@@ -175,7 +175,7 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
 // hand the stack as void*.
 void WorkBase_TaskListCleanup_c5400(void* self) {
     // LEFT: SIG WorkBase_TaskListCleanup_c5400 (the callers hand the stack as void*).
-    ActionStack* stack = reinterpret_cast<ActionStack*>(self);
+    ActionStack* stack = reinterpret_cast<ActionStack*>(self);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     // ⚠ Retail re-reads BOTH the array pointer (*param_1) and the capacity
     // ((int)param_1[1]) on EVERY iteration — the +0x40 Cancel vcalls below can
     // push onto this same list (FUN_1400c54e0) and grow/realloc it mid-loop.
@@ -222,12 +222,12 @@ void Work::Persist(IO::Stream& stream) {
     // LEFT: +0x10 / +0x18 are InternalPtrs retail serializes through
     // InternalBasePtr::Serialize; the members are declared T* (their readers in
     // other blocks spell them so), so the Serialize view is a cast.
-    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);
+    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     if (field_10) {
         if (!Object::IsDerivedFromNullSafe(field_10, ComponentEntity::TypeId()))
             field_10 = nullptr;
     }
-    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);
+    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     if (field_18) {
         if (!Object::IsDerivedFromNullSafe(field_18, WorkComponent::TypeId()))
             field_18 = nullptr;

@@ -314,8 +314,8 @@ extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(TradeResourceNode
     // Helper_e360 walks it up via +0x10 to the root, rotating as it goes. That helper
     // is 0x14000e360, CitizenAI_Reg_helper_e360, called by name (B3R).
     {
-        int64_t walk = reinterpret_cast<int64_t>(node);   // LEFT: SIG CitizenAI_Reg_helper_e360 (retail 0x14000e360 serves several node types)
-        CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(tree), &walk);   // 0x14000e360  LEFT: SIG CitizenAI_Reg_helper_e360
+        TradeResourceNode* walk = node;
+        CitizenAI_Reg_helper_e360(tree, &walk);   // 0x14000e360
     }
     *out = inserted;
     ++*count;

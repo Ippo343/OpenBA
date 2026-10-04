@@ -128,6 +128,7 @@
 #include "Game/exe_bodies.h"
 #include "Player/exe_bodies.h"              // Avl38Retrace (0x140014b40)
 #include "Component/exe_bodies.h"           // CitizenAI_Reg_helper_e360, StorageComponent_DynArrayResize
+#include "Game/LegacyKeyIntNode.h"         // the version < 2 key -> int tree node
 #include "Component/wellcomponent_funcs.h"  // WellComp_AddCellEntry_88a80
 
 // Already-ported sibling functions, called by name through their declaring headers:
@@ -566,44 +567,30 @@ void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* 
 // left@0x18,right@0x20,balance@0x28}. Rebalance via TradeDescription_impl_e360.
 // Never reached at our fixed save version (6); ported for completeness only.
 // ------------------------------------------------------------
-struct LegacyNode {
-    uint64_t    key;         // +0x00
-    int32_t     value;       // +0x08 (the high dword is zeroed with it: one qword store)
-    uint32_t    valueHigh;   // +0x0C
-    LegacyNode* parent;      // +0x10
-    LegacyNode* left;        // +0x18
-    LegacyNode* right;       // +0x20
-    int32_t     balance;     // +0x28
-    uint8_t     _pad2C[4];   // +0x2C
-};
-static_assert(sizeof(LegacyNode) == 0x30, "LegacyNode is MemAlloc(0x30)");
-static_assert(offsetof(LegacyNode, value) == 0x08, "LegacyNode::value @ +0x08");
-static_assert(offsetof(LegacyNode, parent) == 0x10, "LegacyNode::parent @ +0x10");
-static_assert(offsetof(LegacyNode, left) == 0x18, "LegacyNode::left @ +0x18");
-static_assert(offsetof(LegacyNode, right) == 0x20, "LegacyNode::right @ +0x20");
-static_assert(offsetof(LegacyNode, balance) == 0x28, "LegacyNode::balance @ +0x28");
+// The node: Game/LegacyKeyIntNode.h (rebalanced by the shared 0x30 walk 0x14000e360).
 
-LegacyNode* AllocLegacyTreeNode(uint64_t key, LegacyNode* parent, int32_t value) {
+LegacyKeyIntNode* AllocLegacyTreeNode(uint64_t key, LegacyKeyIntNode* parent, int32_t value) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
-    LegacyNode* n = static_cast<LegacyNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    LegacyKeyIntNode* n = static_cast<LegacyKeyIntNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;
     n->key = key;
     n->value = value;          // +0x08 / +0x0C: the value zero-extended (H7: two stores)
     n->valueHigh = 0;
     n->parent = parent;
     n->left = nullptr; n->right = nullptr;
-    n->balance = 0;
+    n->balance = 0;            // +0x28 / +0x2A: one dword store (H7: two stores)
+    n->height = 0;
     return n;
 }
-LegacyNode* LegacyTreeMin(LegacyNode* n) {
+LegacyKeyIntNode* LegacyTreeMin(LegacyKeyIntNode* n) {
     if (!n) return nullptr;
     while (n->left) n = n->left;
     return n;
 }
-LegacyNode* LegacyTreeSucc(LegacyNode* n) {
+LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
     if (!n) return nullptr;
     if (n->right) return LegacyTreeMin(n->right);
-    LegacyNode* parent = n->parent;
+    LegacyKeyIntNode* parent = n->parent;
     while (parent && parent->right == n) {
         n = parent;
         parent = parent->parent;
@@ -613,7 +600,7 @@ LegacyNode* LegacyTreeSucc(LegacyNode* n) {
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
     // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
     // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
-    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);   // LEFT: +0x160 read as a second node type (legacy path)
+    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: +0x160 read as a second node type (legacy path)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -629,31 +616,29 @@ void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Seriali
                 *countField = *countField + 1;
                 continue;
             }
-            LegacyNode* cur = *rootPtr;
-            LegacyNode* insertedNode = nullptr;
+            LegacyKeyIntNode* cur = *rootPtr;
+            LegacyKeyIntNode* insertedNode = nullptr;
             bool dup = false;
             for (;;) {
                 if (key < cur->key) {
-                    LegacyNode* left = cur->left;
+                    LegacyKeyIntNode* left = cur->left;
                     if (!left) { insertedNode = AllocLegacyTreeNode(key, cur, value); cur->left = insertedNode; break; }
                     cur = left;
                 } else if (key <= cur->key) {
                     dup = true; break;
                 } else {
-                    LegacyNode* right = cur->right;
+                    LegacyKeyIntNode* right = cur->right;
                     if (!right) { insertedNode = AllocLegacyTreeNode(key, cur, value); cur->right = insertedNode; break; }
                     cur = right;
                 }
             }
             if (!dup) {
                 *countField = *countField + 1;
-                // LEFT: 0x14000e360's typed body is citizenai_housing_idle.cpp's Helper_e360
-                // (WorkCandidateNode, not a template; X-G1-2's file): the C entry takes int64_t*.
-                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360   // LEFT: SIG CitizenAI_Reg_helper_e360(int64_t*)
+                CitizenAI_Reg_helper_e360(rootPtr, &insertedNode);   // 0x14000e360
             }
         }
     } else {
-        LegacyNode* node = LegacyTreeMin(*rootPtr);
+        LegacyKeyIntNode* node = LegacyTreeMin(*rootPtr);
         while (node) {
             Reimpl_ExternalPtr_Serialize_StringTable(&node->key, serializer);
             serializer->Serialize(node->value, nullptr);

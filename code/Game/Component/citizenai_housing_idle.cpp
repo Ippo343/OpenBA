@@ -95,6 +95,8 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/WorkScheduler.h"        // WorkScheduler (GameUpdateLoop +0x118)
 #include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode / BucketNode, WorkCandidateNode / Tree
+#include "Game/LegacyKeyIntNode.h"     // LegacyKeyIntNode (a tree of the e360 walk)
+#include "Component/TradeComponent.h"  // TradeResourceNode (a tree of the e360 walk)
 #include "Game/Map.h"                  // Map::size
 #include "Game/ProfessionList.h"
 #include "Game/Profession.h"
@@ -116,7 +118,7 @@ namespace {
 
 
 // A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
-// user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (Helper_e360) against a
+// user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (CitizenAI_Reg_helper_e360) against a
 // corrupt/invalid child or parent link — observed in standalone when an idle citizen's work-
 // candidate tree picks up a tool-placed building whose inert-factory component yields a -1
 // field, which fed 0xffffffffffffffff into the tree and faulted on deref (READ of -1). When
@@ -124,7 +126,7 @@ namespace {
 // rather than dereferencing it. The transient tree is freed immediately after, so a slightly
 // less-balanced tree in that rare corrupt case only means a marginally different candidate pick.
 // NOT RETAIL: 0x14000e360 tests each link for null only (known_port_issues 14d row 210).
-static inline bool ValidNode(const WorkCandidateNode* p) {
+static inline bool ValidNode(const void* p) {
     uint64_t u = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
     return u >= 0x10000ULL && u < 0x0000800000000000ULL;
 }
@@ -144,7 +146,6 @@ long long g_idleBuilderTookWork = 0;
 }
 
 // Forward decls for the helper subtree.
-void          Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** walk);                // 0x14000e360
 void          Helper_sub_8000(void* p1, ComponentEntity* const* keyHolder,
                               WorkSchedulerIdNode* const* srcRootSlot, WorkCandidateTree* dst);       // 0x1400f8000
 void          Helper_sub_7c90(void* p1, CitizenComponent* const* citizenHolder, ComponentEntity* const* keyHolder,
@@ -166,55 +167,6 @@ void* Helper_3f010(unsigned char* dst, uint64_t byteVal, uint64_t count) {
     unsigned char b = static_cast<unsigned char>(byteVal);
     for (uint64_t i = 0; i < count; ++i) p[i] = b;
     return dst;
-}
-
-// ============================================================
-// 0x14000e360 — AVL rebalance walk up the right-spine of an insertion path.
-//   param_2 = &(node ptr); walks node = node->parent (+0x10) updating height/balance and
-//   rotating via e450/e580 until null. param_1 is the tree-root slot passed to the rotations.
-//   Retail's body serves every 0x30 node with links at +0x10/+0x18/+0x20 (B13); this file's
-//   callers pass the candidate tree (Game/WorkSchedulerNodes.h WorkCandidateNode).
-// ============================================================
-void Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** param_2) {
-    WorkCandidateNode* node = *param_2;
-    while (ValidNode(node)) {
-        WorkCandidateNode* n = *param_2;
-        if (!ValidNode(n)) break;                                // corrupt slot -> stop the walk
-        WorkCandidateNode* parent = n->parent;  // next up
-        WorkCandidateNode* left  = n->left;
-        WorkCandidateNode* right = n->right;
-        short hL = ValidNode(left)  ? static_cast<short>(left->height + 1) : 0;
-        short hR = ValidNode(right) ? static_cast<short>(right->height + 1) : 0;
-        short h = (hR < hL) ? hL : hR;
-        n->height = h;
-        n->balance = static_cast<short>(hR - hL);
-
-        if (static_cast<short>(hR - hL) > 1) {
-            WorkCandidateNode* rc = n->right;
-            if (ValidNode(rc)) {
-                // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
-                if (rc->balance < 1 && rc->balance < 0) {
-                    AvlRotateRight(rootSlot, rc);   // 0x14000e580
-                    n = *param_2;
-                }
-                if (ValidNode(n)) AvlRotateLeft(rootSlot, n);   // 0x14000e450
-            }
-        }
-        n = *param_2;
-        if (ValidNode(n) && n->balance < -1) {
-            WorkCandidateNode* lc = n->left;
-            if (ValidNode(lc)) {
-                // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
-                if (lc->balance > -1 && lc->balance > 0) {
-                    AvlRotateLeft(rootSlot, lc);   // 0x14000e450
-                    n = *param_2;
-                }
-                if (ValidNode(n)) AvlRotateRight(rootSlot, n);   // 0x14000e580
-            }
-        }
-        *param_2 = parent;
-        node = parent;
-    }
 }
 
 // ============================================================
@@ -261,7 +213,7 @@ void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* co
                     WorkCandidateNode* self = existing;
                     // Track the descent node for the post-insert rebalance. The originals
                     // (0x1400f8000 / 0x1400f7c90) do `local_res8 = pIVar3` at the top of this
-                    // loop, so Helper_e360 walks UP from the insertion node. The port left
+                    // loop, so CitizenAI_Reg_helper_e360 walks UP from the insertion node. The port left
                     // local_res8 pinned at param_1 (the citizen), so e360 read citizen fields
                     // as AVL links and faulted on the -1 they held (READ of -1 crash once an
                     // idle citizen's candidate tree grew past its root). Restore the update.
@@ -293,7 +245,7 @@ void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* co
                                     nn->balance = 0; nn->height = 0;   // retail: one dword store (0x1400f81a0)
                                     self->right = nn;
                                 }
-                                Helper_e360(&param_4->root, &local_res8);
+                                CitizenAI_Reg_helper_e360(&param_4->root, &local_res8);
                                 break;
                             }
                             existing = rc;
@@ -312,7 +264,7 @@ void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* co
                                 nn->balance = 0; nn->height = 0;   // retail: one dword store (0x1400f81e3)
                             }
                             self->left = nn;
-                            Helper_e360(&param_4->root, &local_res8);
+                            CitizenAI_Reg_helper_e360(&param_4->root, &local_res8);
                             break;
                         }
                         existing = lc;
@@ -413,7 +365,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
                     WorkCandidateNode* self = existing;
                     // Track the descent node for the post-insert rebalance. The originals
                     // (0x1400f8000 / 0x1400f7c90) do `local_res8 = pIVar3` at the top of this
-                    // loop, so Helper_e360 walks UP from the insertion node. The port left
+                    // loop, so CitizenAI_Reg_helper_e360 walks UP from the insertion node. The port left
                     // local_res8 pinned at param_1 (the citizen), so e360 read citizen fields
                     // as AVL links and faulted on the -1 they held (READ of -1 crash once an
                     // idle citizen's candidate tree grew past its root). Restore the update.
@@ -441,7 +393,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
                                     nn->balance = 0; nn->height = 0;   // retail: one dword store
                                     self->right = nn;
                                 }
-                                Helper_e360(&param_5->root, &local_res8);
+                                CitizenAI_Reg_helper_e360(&param_5->root, &local_res8);
                                 break;
                             }
                             existing = rc;
@@ -459,7 +411,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
                                 nn->balance = 0; nn->height = 0;   // retail: one dword store
                             }
                             self2->left = nn;
-                            Helper_e360(&param_5->root, &local_res8);
+                            CitizenAI_Reg_helper_e360(&param_5->root, &local_res8);
                             break;
                         }
                         existing = lc;
@@ -815,10 +767,57 @@ uint64_t CitizenAIComponent::State_Idle() {
 }
 
 // ============================================================
-// 0x14000e360 by name for the other files' trees (Component/exe_bodies.h). Retail's rebalance
-// serves every 0x30 node with links at +0x10 / +0x18 / +0x20 and int16 balance / height at
-// +0x28 / +0x2A (ICF, B13); its callers hold the root slot and the walk slot as int64_t*.
+// 0x14000e360 — AVL rebalance walk up the right-spine of an insertion path.
+//   param_2 = &(node ptr); walks node = node->parent (+0x10) updating height/balance and
+//   rotating via e450/e580 until null. param_1 is the tree-root slot passed to the rotations.
+//   Retail's body serves every 0x30 node with links at +0x10/+0x18/+0x20 and int16 balance /
+//   height at +0x28 / +0x2A (ICF, B13): one template, instantiated below for each tree.
 // ============================================================
-extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b) {
-    Helper_e360(reinterpret_cast<WorkCandidateNode**>(a), reinterpret_cast<WorkCandidateNode**>(b));   // LEFT: SIG CitizenAI_Reg_helper_e360 (wave X: callers in citizenlist_serialize / action_pf_avl / tradeui_leaves pass their own node types)
+template <class Node>
+void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** param_2) {
+    Node* node = *param_2;
+    while (ValidNode(node)) {
+        Node* n = *param_2;
+        if (!ValidNode(n)) break;                                // corrupt slot -> stop the walk
+        Node* parent = n->parent;  // next up
+        Node* left  = n->left;
+        Node* right = n->right;
+        short hL = ValidNode(left)  ? static_cast<short>(left->height + 1) : 0;
+        short hR = ValidNode(right) ? static_cast<short>(right->height + 1) : 0;
+        short h = (hR < hL) ? hL : hR;
+        n->height = h;
+        n->balance = static_cast<short>(hR - hL);
+
+        if (static_cast<short>(hR - hL) > 1) {
+            Node* rc = n->right;
+            if (ValidNode(rc)) {
+                // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
+                if (rc->balance < 1 && rc->balance < 0) {
+                    AvlRotateRight(rootSlot, rc);   // 0x14000e580
+                    n = *param_2;
+                }
+                if (ValidNode(n)) AvlRotateLeft(rootSlot, n);   // 0x14000e450
+            }
+        }
+        n = *param_2;
+        if (ValidNode(n) && n->balance < -1) {
+            Node* lc = n->left;
+            if (ValidNode(lc)) {
+                // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
+                if (lc->balance > -1 && lc->balance > 0) {
+                    AvlRotateLeft(rootSlot, lc);   // 0x14000e450
+                    n = *param_2;
+                }
+                if (ValidNode(n)) AvlRotateRight(rootSlot, n);   // 0x14000e580
+            }
+        }
+        *param_2 = parent;
+        node = parent;
+    }
 }
+
+// The trees that rebalance through 0x14000e360.
+template void CitizenAI_Reg_helper_e360<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode**);
+template void CitizenAI_Reg_helper_e360<AvlNode30>(AvlNode30**, AvlNode30**);                          // PathCostTreeInsert
+template void CitizenAI_Reg_helper_e360<TradeResourceNode>(TradeResourceNode**, TradeResourceNode**);  // the trade stock tree
+template void CitizenAI_Reg_helper_e360<LegacyKeyIntNode>(LegacyKeyIntNode**, LegacyKeyIntNode**);     // citizenlist_serialize.cpp

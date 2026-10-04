@@ -535,15 +535,15 @@ void CitizenComponent::Infect(Disease* disease) {
 
 // B4 FORWARD: 2 outside caller(s) (Dialog/debugui.cpp, standalone/disaster_harness.cpp).
 // The null-citizen arm stays here: a member has no null `this`.
-extern "C" void CitizenComp_Infect(void* self, void* disease) {
+extern "C" void CitizenComp_Infect(CitizenComponent* self, Disease* disease) {
     if (!self) {
         EnsureInit();
         if (PlagueTraceOn())
             fprintf(stderr, "[Plague] INFECT skip=nullarg citizen=%p disease=%p gw=%p\n",
-                    self, disease, (void*)GameUpdateLoop::_singleton), fflush(stderr);
+                    static_cast<void*>(self), static_cast<void*>(disease), (void*)GameUpdateLoop::_singleton), fflush(stderr);
         return;
     }
-    ((CitizenComponent*)self)->Infect((Disease*)disease);   // LEFT: SIG CitizenComp_Infect (void* self / disease: 2 outside callers)
+    self->Infect(disease);
 }
 
 // ============================================================

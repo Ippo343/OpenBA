@@ -62,7 +62,7 @@ static void EntityTrackingSet_Remove_Impl(TrackedEntityNode** root, ComponentEnt
         } else if (*key <= node->key) {
             // Found the node — delete it
             // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
-            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740
+            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740   // LEFT: SIG PlayerTrade_BSTRemove_25740 (B4 FORWARD; Work/tradework.cpp still calls it)
             return;
         } else {
             node = node->right;
@@ -166,15 +166,7 @@ bool BuildComponent::IsBuildComplete() const
 //   +0x10: settingPtr (void*) - cached ToolSetting object
 //   +0x18: parent (node*), +0x20: left (node*), +0x28: right (node*)
 
-// The surviving port of 0x140102b60 (code/Game/Dialog/toolbardialog.cpp).
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);
-
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
-{
-    // Forward to the single implementation. int64_t vs uint64_t is a spelling
-    // difference only - the field at +0x20 is one 8-byte slot either way.
-    Toolbar_ShowGroup_Impl(playerController, (int64_t)mode);
-}
+// SetEditMode is PlayerToolManager::SelectTool (0x140102b60, code/Game/Dialog/toolbardialog.cpp).
 
 // ============================================================
 // EntityUI_SelectEntity (0x140102e30)
@@ -520,7 +512,7 @@ void EntityUI::UpdateInput() {
 
     if (editTool == nullptr) {
         // No EditTool active — deselect first, then get new EditTool
-        EntityUI_SetEditMode_Impl(playerController, 0);
+        playerController->SelectTool(nullptr);
 
         // Re-read current tool after deselect (with CheckPtr)
         currentTool = playerController->currentTool;
@@ -569,7 +561,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
 
     if (id == 1) {
         // Close entity panel — set edit mode to 0
-        EntityUI_SetEditMode_Impl(playerController, 0);
+        playerController->SelectTool(nullptr);
         return;
     }
 

@@ -322,7 +322,7 @@ float Scene::GetAttenuatedVolume(const AttenutedEffect& effect, const Vector3& l
 // ---------------------------------------------------------------------------
 void Scene::OnSoundEnded(Device::AudioChannel* audioChannel, void* userData, uint32_t tag) {
     ++g_endedCalls;
-    Scene* const scene = static_cast<Scene*>(userData);
+    Scene* const scene = static_cast<Scene*>(userData);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
 
     // CMP dword [RDX+0x18],0 / JZ -- Scene::channels._size
     if (scene->channels._size == 0) { ++g_endedRejected; return; }
