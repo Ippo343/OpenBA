@@ -504,7 +504,7 @@ static void MW_ReportTreeMiss(const char* site, int entityIdx, const void* entit
             path[i] = '\0';
         }
     }
-    const int regCount = town->field_0x118;
+    const int regCount = town->field_0x110._size;
     fprintf(stderr, "[MarketWork::Execute] TREE MISS at %s: storage entity[%d]=%p holds resType=%p "
             "(%s) rawMatDesc=%p flags=0x%x -- not among the %d types in townMgr+0x110; "
             "about to fault faithfully\n",
@@ -668,9 +668,9 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
     MW_SupplyTree tree = {nullptr, 0, 0};
     {
-        const int typeCount = town->field_0x118;
+        const int typeCount = town->field_0x110._size;
         for (int i = 0; i < typeCount; ++i) {
-            ComponentDescription* key = town->field_0x110[i];
+            ComponentDescription* key = town->field_0x110._data[i];
 
             MW_SupplyNode* root = tree.root;
             if (root == nullptr) {
@@ -830,12 +830,12 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // available stock. Tree and records both take the plain unitSize*available
     // here (0x1400f0907 / 0x1400f0928).
     {
-        const int entityCount = town->field_0x08;
+        const int entityCount = town->field_0x00._size;
         for (int e = 0; e < entityCount; ++e) {
-            ComponentEntity* entity = town->field_0x00[e];
+            ComponentEntity* entity = town->field_0x00._data[e];
             StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
-            entity = town->field_0x00[e];
+            entity = town->field_0x00._data[e];
             ConsumeProduceComponent* consumeProduce = entity->FindComponent<ConsumeProduceComponent>();
 
             if (consumeProduce != nullptr) continue;   // 0x1400f0812: has a consumer -> skip
@@ -937,7 +937,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             float destPos[3] = {0.0f, 0.0f, 0.0f};
             ComponentEntity* exclude = field_10;  // this market
             ComponentEntity* found = nullptr;
-            PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(town),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+            PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(town),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                                &found,
                                static_cast<uint32_t>(cellIdx), resType, take, '\x01',
                                destPos, &exclude);   // 0x14008d590
@@ -1019,10 +1019,10 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     int  result     = 1;      // uVar29 / R10D
     int  bestIndex  = -1;     // local_160, 0x1400f0e87 MOV dword [RBP-0x68],0xffffffff
     float bestScore = 0.0f;   // 0x1400f0e8e XORPS XMM6,XMM6
-    const int townEntityCount = town->field_0x08;
+    const int townEntityCount = town->field_0x00._size;
 
     for (int e = 0; e < townEntityCount; ++e) {
-        ComponentEntity** const townEntities = town->field_0x00;
+        ComponentEntity** const townEntities = town->field_0x00._data;
 
         StorageComponent* candStorage = townEntities[e]->FindComponent<StorageComponent>();
         MapComponent* candMap = townEntities[e]->FindComponent<MapComponent>();
@@ -1124,7 +1124,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // STAGE 5 -- take list, path, transfer, claim.  retail 0x1400f13a3..0x1400f1c15
     // ======================================================================
     if (bestIndex >= 0) {   // 0x1400f0e8a-era check: local_160 < 0 -> straight to epilogue
-        ComponentEntity* const winner = town->field_0x00[bestIndex];
+        ComponentEntity* const winner = town->field_0x00._data[bestIndex];
         StorageComponent* winStorage = winner->FindComponent<StorageComponent>();
 
         // --- 0x1400f1425..0x1400f16a0: build the take list ------------------

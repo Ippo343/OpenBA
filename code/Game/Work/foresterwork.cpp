@@ -240,7 +240,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     int materialIdx = (int)radiusComp->_type;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     CitizenBehavior* resourceTracker = gameWorld->m_citizenList;
-    ProfessionResourceEntry* resourceTable = resourceTracker->professionResources;
+    ProfessionResourceEntry* resourceTable = resourceTracker->professionResources._data;
     const ProfessionResourceEntry& resEntry = resourceTable[materialIdx];
     bool atCapacity = resEntry.maxCount <= resEntry.currentCount;
 

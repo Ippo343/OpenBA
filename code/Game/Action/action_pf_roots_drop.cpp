@@ -192,9 +192,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         if (size <= iVar8) iVar8 = size - 1;
         if (iVar5 < 0) iVar5 = 0;
         if (size <= iVar5) iVar5 = size - 1;
-        // LEFT: CitizenBehavior (block WORK-a's header) keeps its two entity lists as raw
-        // {data, count, capacity} triples at +0x00 / +0x10.
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(&world->m_citizenList->field_0x00),   // LEFT: Entity/CitizenBehavior.h field_0x00 raw (ENT)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(&world->m_citizenList->field_0x00._data),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                            &found, static_cast<uint32_t>(size * iVar5 + iVar8), material, iVar9, '\x01',
                            dropPos, &exclude);   // 0x14008d590
         if (found == nullptr) {

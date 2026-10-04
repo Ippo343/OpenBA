@@ -197,9 +197,9 @@ extern "C" void ActionStack_AbortForEntity_c52c0(ActionStack* stack, ComponentEn
 extern "C" void TownMgr_AbortCitizenActionsFor_89e30(CitizenBehavior* townMgr, ComponentEntity** pEntityIbp) {
     if (!townMgr || !pEntityIbp) return;
     CitizenBehavior* tm = townMgr;
-    int n = tm->citizenCount;
+    int n = tm->citizens._size;
     if (n <= 0) return;
-    CitizenComponent** base = tm->citizens;
+    CitizenComponent** base = tm->citizens._data;
     if (!base) return;
     for (int i = 0; i < n; ++i) {
         ComponentEntity* entityCopy = *pEntityIbp;

@@ -77,16 +77,16 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
     // depends on the ordering of heap description pointers — which differs run to
     // run. Reached step 18 by a jump and the tree was small enough to work; reached
     // it organically, with WoodHouse and Clear already registered, and it did not.
-    TemplateBucket* node = field_0x160;
+    TemplateBucket* node = field_0x160._root;
     TemplateBucket* found = nullptr;
     for (;;) {
         found = nullptr;
         if (node == nullptr) break;
-        if (key < node->key) {
+        if (key < node->element.key) {
             node = node->left;    // +0x20
         } else {
             found = node;
-            if (key <= node->key) break;   // equal key => exact match, stop
+            if (key <= node->element.key) break;   // equal key => exact match, stop
             node = node->right;   // +0x28
         }
     }
@@ -94,17 +94,17 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
     if (found == nullptr) {
         void* outNode[2] = {nullptr, nullptr};
         int64_t scratch[3] = {0, 0, 0};
-        void** ret = static_cast<void**>(ResidenceComponent_impl_7230(   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
-            reinterpret_cast<int64_t*>(&field_0x160),   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
-            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
-        if (ret) found = reinterpret_cast<TemplateBucket*>(*ret);   // LEFT: SIG ResidenceComponent_impl_7230: its tree argument is CitizenBehavior's root + count pair (+0x100/+0x108, +0x160/+0x168: two fields, no tree type) and its record is the node's raw entity triple (H5)
+        void** ret = static_cast<void**>(ResidenceComponent_impl_7230(   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+            reinterpret_cast<int64_t*>(&field_0x160._root),   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+        if (ret) found = reinterpret_cast<TemplateBucket*>(*ret);   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
         System::MemoryAllocator::MemFree(nullptr);
     }
 
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     if (found)
-        GameColl::AsArray<GameColl::Ptr8>(&found->entities)   // the bucket's Array (+0x08)
-            .SetSizeFill(found->count + 1, entityPtr);
+        GameColl::AsArray<GameColl::Ptr8>(&found->element.entities._data)   // the bucket's Array (+0x08)
+            .SetSizeFill(found->element.entities._size + 1, entityPtr);
 }
 
 // ============================================================================
@@ -251,18 +251,18 @@ void ZoneComponent::OnRemove() {
     CitizenBehavior* zoneMap = world->m_citizenList;
     ComponentDescription* key = _entity->_description;
 
-    TemplateBucket* node = zoneMap->field_0x160;
+    TemplateBucket* node = zoneMap->field_0x160._root;
     TemplateBucket* found = nullptr;
     while (node != nullptr) {
-        if (key < node->key) {
+        if (key < node->element.key) {
             node = node->left;    // +0x20
         } else {
-            if (key <= node->key) { found = node; break; }
+            if (key <= node->element.key) { found = node; break; }
             node = node->right;   // +0x28
         }
     }
     if (found)
-        CemeteryListErase_Reimpl(&found->entities, &ownerRef);   // 0x140002cc0 (the bucket's Array, +0x08)
+        CemeteryListErase_Reimpl(&found->element.entities._data, &ownerRef);   // 0x140002cc0 (the bucket's Array, +0x08)
 }
 
 // create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.

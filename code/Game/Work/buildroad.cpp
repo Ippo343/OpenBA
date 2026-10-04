@@ -431,7 +431,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
             ComponentEntity* foundEntity = nullptr;
             PickBestDropTarget(
-                reinterpret_cast<const RawArray<ComponentEntity*>*>(citizenList), &foundEntity,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                reinterpret_cast<const RawArray<ComponentEntity*>*>(citizenList), &foundEntity,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
                 field_50, 1, '\0', velocity, reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));   // 0x14008d590  // LEFT: the scratch slot is reused for three types
 

@@ -153,7 +153,7 @@ int TradeComponent::PickMerchantTier() {
     int idx = 0;
     for (int i = 0; i < count; ++i) {
         const CitizenBehavior* townState = GameUpdateLoop::_singleton->m_citizenList;
-        const int pop = townState->citizenCount;   // +0xa8
+        const int pop = townState->citizens._size;   // +0xa8
         if (pop >= 0 && pop < tiers[i].populationLimit)
             return idx;
         ++idx;
@@ -433,7 +433,7 @@ char TradeComponent::Teardown() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
         // The town manager's trading-post list at +0x30.
-        CemeteryListErase_Reimpl(&gw->m_citizenList->field_0x30,
+        CemeteryListErase_Reimpl(&gw->m_citizenList->field_0x30._data,
                     &entityIBP);
     }
 

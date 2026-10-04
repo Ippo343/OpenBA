@@ -837,9 +837,9 @@ void DiseaseComponent::OnAdded() {
     if (!town) return;
 
     ::Object::InternalPtr<DiseaseComponent> ibp(this);
-    int count = town->diseaseCount;
+    int count = town->diseases._size;
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&town->diseases).SetSizeFill(count + 1, &ibp);
+    town->diseases.SetSizeFill(count + 1, &ibp);
 
     if (CDTrace()) {
         printf("[CropDisease] REGISTER this=%p registry-count=%d\n",
@@ -853,7 +853,7 @@ void DiseaseComponent::OnRemove() {
         CitizenBehavior* town = TownManager(gw);
         if (town) {
             ::Object::InternalPtr<DiseaseComponent> ibp(this);
-            CemeteryListErase_Reimpl(&town->diseases, &ibp);   // 0x140002cc0
+            CemeteryListErase_Reimpl(&town->diseases._data, &ibp);   // 0x140002cc0
         }
     }
     Cure();

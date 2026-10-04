@@ -95,7 +95,7 @@ bool TownReady() {
     if (game == nullptr) return false;
     const CitizenBehavior* town = game->m_citizenList;
     if (!town) return false;
-    if (town->professionResources == nullptr) return false;  // resource stock
+    if (town->professionResources._data == nullptr) return false;  // resource stock
     if (game->m_dayCounter == nullptr) return false;          // game clock
     if (game->m_weather == nullptr) return false;             // weather
     return true;
@@ -126,8 +126,8 @@ static void DiagOnce(const StatusBarUI* self) {
             static_cast<const void*>(self), self ? (Bound(self) ? 1 : 0) : -1,
             self ? (Built(self) ? 1 : 0) : -1,
             Ready() ? 1 : 0, TownReady() ? 1 : 0,
-            town ? town->citizenCount : -1,
-            town ? static_cast<const void*>(town->professionResources) : nullptr);
+            town ? town->citizens._size : -1,
+            town ? static_cast<const void*>(town->professionResources._data) : nullptr);
     fflush(stderr);
 }
 
@@ -140,7 +140,7 @@ static void DiagStockOnce(void) {
     s_calls = -1;
     const GameUpdateLoop* game = GameUpdateLoop::_singleton;
     const CitizenBehavior* town = game ? game->m_citizenList : nullptr;
-    const ProfessionResourceEntry* stock = town ? town->professionResources : nullptr;
+    const ProfessionResourceEntry* stock = town ? town->professionResources._data : nullptr;
     if (!stock) return;
     fprintf(stderr, "[StatusBarUI] SA stock slots (cur@+0):");
     for (int i = 0; i < 0x15; i++)
@@ -263,7 +263,7 @@ void StatusBarUI::OnUpdateLayout() {
 
     // The town (+0xF0)
     const CitizenBehavior* town = game->m_citizenList;
-    int citizenCount = town->citizenCount;
+    int citizenCount = town->citizens._size;
 
     // Accumulators matching decompilation locals
     uint32_t statusBitfield = 0;     // local_res10[0]
@@ -276,7 +276,7 @@ void StatusBarUI::OnUpdateLayout() {
 
     // Iterate all citizens
     for (int i = 0; i < citizenCount; i++) {
-        const CitizenComponent* citizen = town->citizens[i];
+        const CitizenComponent* citizen = town->citizens._data[i];
 
         if (citizen->age < citizen->description->adultAge || citizen->school != nullptr) {
             if (citizen->school == nullptr) {
@@ -313,7 +313,7 @@ void StatusBarUI::OnUpdateLayout() {
         happySum = 0.0f;
     } else {
         // The first citizen's description (Component::_description, checked)
-        const Description* desc = town->citizens[0]->_description;
+        const Description* desc = town->citizens._data[0]->_description;
         const CitizenDescription* citizenDesc =
             ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
                 ? static_cast<const CitizenDescription*>(desc) : nullptr;
@@ -322,7 +322,7 @@ void StatusBarUI::OnUpdateLayout() {
                                         citizenDesc->maxHealth);
 
         // Retail reads the first citizen's description a second time
-        desc = town->citizens[0]->_description;
+        desc = town->citizens._data[0]->_description;
         citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
                           ? static_cast<const CitizenDescription*>(desc) : nullptr;
         happySum = happySum / (float)citizenCount;
@@ -417,7 +417,7 @@ void StatusBarUI::OnUpdateLayout() {
     }
 
     // --- Update resource counts: the town's stock, one entry per resource ---
-    const ProfessionResourceEntry* stock = town->professionResources;
+    const ProfessionResourceEntry* stock = town->professionResources._data;
 
     // Match exact decompilation order: pre-read into locals
     int valFood     = stock[5].currentCount;
@@ -452,7 +452,7 @@ void StatusBarUI::OnUpdateLayout() {
     // (retail: lVar25 from 0x160 to <0x2A0 step 0x20, re-reading the stock each time)
     for (int k = 0; k < 10; k++) {
         if (numberCustom[k] != nullptr) {
-            int value = town->professionResources[11 + k].currentCount;
+            int value = town->professionResources._data[11 + k].currentCount;
             numberCustom[k]->SetValue(static_cast<int32_t>(value));
         }
     }
@@ -484,10 +484,10 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
     const CitizenBehavior* town = game->m_citizenList;
     if (!town) return;
 
-    int citizenCount = town->citizenCount;
+    int citizenCount = town->citizens._size;
     if (citizenCount <= 0) return;
 
-    CitizenComponent* const* citizens = town->citizens;
+    CitizenComponent* const* citizens = town->citizens._data;
     uint32_t bitMask = 1u << (iconIndex & 0x1F);
 
     // Increment cycling index

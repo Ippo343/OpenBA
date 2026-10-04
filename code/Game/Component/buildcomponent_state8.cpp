@@ -443,13 +443,13 @@ char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> selfIBP(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &selfIBP);
+        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents._data, &selfIBP);
         if (idx >= 0) {
-            int count = townMgr->buildComponentCount;
-            BuildComponent** base = townMgr->buildComponents;
+            int count = townMgr->buildComponents._size;
+            BuildComponent** base = townMgr->buildComponents._data;
             for (int j = idx; j + 1 < count; ++j)
                 base[j] = base[j + 1];
-            townMgr->buildComponentCount = count - 1;
+            townMgr->buildComponents._size = count - 1;
         }
     }
     {
@@ -504,7 +504,7 @@ void BuildComponent::State8Finalize() {
         // ActRm_GetResourceCategory_88f90 is a forwarder that never reads its first argument.
         int resIdx = ResourceCategory(matType);   // 0x140088f90
         if (resIdx >= 0 && townMgr) {
-            ProfessionResourceEntry* stockBase = townMgr->professionResources;
+            ProfessionResourceEntry* stockBase = townMgr->professionResources._data;
             if (stockBase) {
                 int* pStock = &stockBase[resIdx].field_0x0C;
                 *pStock += count;

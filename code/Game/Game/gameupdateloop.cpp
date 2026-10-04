@@ -1941,8 +1941,8 @@ void GameUpdateLoop::Shutdown() {
     TRACE("[GameUpdateLoop::Shutdown] reassigning citizen housing...\n");
     {
         CitizenBehavior* citizenList = m_citizenList;
-        int32_t citizenCount = citizenList->citizenCount;       // +0xa8
-        CitizenComponent** citizenArray = citizenList->citizens;   // +0xa0
+        int32_t citizenCount = citizenList->citizens._size;       // +0xa8
+        CitizenComponent** citizenArray = citizenList->citizens._data;   // +0xa0
 
         for (int i = 0; i < citizenCount; i++) {
             CitizenComponent* citizen = citizenArray[i];
@@ -2044,7 +2044,7 @@ void GameUpdateLoop::Shutdown() {
     // CitizenBehavior
     if (m_citizenList != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CitizenBehavior...\n");
-        CitizenList_Dtor_907b0(m_citizenList);   // 0x1400907b0
+        m_citizenList->~CitizenBehavior();   // 0x1400907b0
         System::MemoryAllocator::MemFree(m_citizenList);
     }
 

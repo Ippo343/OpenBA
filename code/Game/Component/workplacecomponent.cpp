@@ -500,14 +500,14 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // address).
     ComponentEntity* ownerRef = _entity;
     CitizenBehavior* townMgr = gw->m_citizenList;
-    ProfessionBucket* node = townMgr ? townMgr->field_0x100 : nullptr;
+    ProfessionBucket* node = townMgr ? townMgr->field_0x100._root : nullptr;
     while (node) {
-        if (key < node->key) {
+        if (key < node->element.key) {
             node = node->left;          // +0x20
         } else {
-            if (key <= node->key) {
+            if (key <= node->element.key) {
                 ComponentEntity* localRef[4] = { ownerRef, nullptr, nullptr, nullptr };
-                CemeteryListErase_Reimpl(&node->entities, localRef);   // 0x140002cc0 (the bucket's Array, +0x08)
+                CemeteryListErase_Reimpl(&node->element.entities._data, localRef);   // 0x140002cc0 (the bucket's Array, +0x08)
                 break;
             }
             node = node->right;         // +0x28
@@ -845,20 +845,20 @@ void WorkPlaceComponent::OnRemove() {
 
         // The town's profession tree: CitizenBehavior +0x100 (ProfessionBucket nodes).
         CitizenBehavior* gameState = GameUpdateLoop::_singleton->m_citizenList;
-        ProfessionBucket* node = gameState->field_0x100;
+        ProfessionBucket* node = gameState->field_0x100._root;
         Profession* const key = professionId;
 
         bool found = false;
         while (node != nullptr) {
-            if (key < node->key) {
+            if (key < node->element.key) {
                 node = node->left;   // +0x20
-            } else if (key > node->key) {
+            } else if (key > node->element.key) {
                 node = node->right;  // +0x28
             } else {
                 // Found: UNregister the owner entity from this bucket's entity array.
                 ComponentEntity* localRef[4];
                 localRef[0] = ownerRef;
-                CemeteryListErase_Reimpl(&node->entities, localRef);   // 0x140002cc0 (+0x08)
+                CemeteryListErase_Reimpl(&node->element.entities._data, localRef);   // 0x140002cc0 (+0x08)
                 found = true;
                 break;
             }

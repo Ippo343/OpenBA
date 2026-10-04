@@ -300,7 +300,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 int materialType = productPtr->materialType;   // +0x18
                 productPtr++;  // stride = 0x28 bytes
                 // Check world material supply vs demand (the town's material table, +0x170)
-                ProfessionResourceEntry* matArray = worldEntityList->professionResources;
+                ProfessionResourceEntry* matArray = worldEntityList->professionResources._data;
                 int supply = matArray[materialType].currentCount;   // +0x00
                 int demand = matArray[materialType].maxCount;       // +0x08
                 if (demand <= supply) {
@@ -311,7 +311,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     } else {
         // Single product mode: check specific active product
         int materialType = recipes[activeProductIdx].materialType;   // +0x18
-        ProfessionResourceEntry* matArray = worldEntityList->professionResources;
+        ProfessionResourceEntry* matArray = worldEntityList->professionResources._data;
         int supply = matArray[materialType].currentCount;   // +0x00
         int demand = matArray[materialType].maxCount;       // +0x08
         resourcesDepleted = (demand <= supply);
@@ -489,7 +489,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 uintptr_t foundEntity = 0;
                 PickBestDropTarget(
-                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                     reinterpret_cast<ComponentEntity**>(&foundEntity),   // LEFT: the slot doubles as the position out below (8 bytes, 12 written: known_port_issues row 260)
                     (uint32_t)field_28, matEntity,
                     available, '\x01', searchPos, &field_10);   // 0x14008d590
@@ -588,7 +588,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 ComponentEntity* foundStorage = nullptr;
                 PickBestDropTarget(
-                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList), &foundStorage,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+                    reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList), &foundStorage,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                     mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
                     &field_10);   // 0x14008d590
 

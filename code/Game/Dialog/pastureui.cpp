@@ -260,7 +260,7 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 
         // The town's template list (CitizenBehavior +0x120)
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
-        ComponentDescription* resourceType = world->m_citizenList->field_0x120[resourceIndex];
+        ComponentDescription* resourceType = world->m_citizenList->field_0x120._data[resourceIndex];
 
         SetResource(resourceType);   // slot 11, virtual (as retail)
     }

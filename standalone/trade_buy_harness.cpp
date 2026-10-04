@@ -218,8 +218,8 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
             // fault walking a field that was never a tree.
             // Found by exact type id.
             TradeComponent* tradeComp = static_cast<TradeComponent*>(FindCompOnEntity(postEnt, tidTrade));
-            ComponentDescription** tmpls = townMgr->field_0x110;   // +0x110
-            const int tmplN = townMgr->field_0x118;                 // +0x118
+            ComponentDescription** tmpls = townMgr->field_0x110._data;   // +0x110
+            const int tmplN = townMgr->field_0x110._size;                 // +0x118
             if (tradeComp && tmpls && tmplN > 0) {
                 for (int i = 0; i < tmplN; ++i) {
                     if (!tmpls[i]) continue;

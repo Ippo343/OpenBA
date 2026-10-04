@@ -82,7 +82,7 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
     int count = (int)arr[1];
     for (int i = 0; i < count; i++) {
         int64_t base = arr[0];
-        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {   // LEFT: SIG BuildComponent_FindInQueue (0x140017550) takes retail's Array<InternalPtr<BuildComponent>>*; its callers pass CitizenBehavior +0xD0, three raw fields (H5, CitizenBehavior.h), so the header and the slot are void*
+        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {   // LEFT: SIG BuildComponent_FindInQueue (0x140017550) takes retail's Array<InternalPtr<BuildComponent>>*; its callers pass &CitizenBehavior::buildComponents._data (a Collection::Array member since X5-COMP) and an InternalPtr's address, so the header and the slot are void*
             return i;
         }
     }
@@ -456,10 +456,10 @@ void BuildComponent::OnRemove() {
     CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
 
     // Find in removal queue (CitizenBehavior::buildComponents, +0xD0 / +0xD8)
-    int idx = BuildComponent_FindInQueue(&worldData->buildComponents, &ptrBuf);
+    int idx = BuildComponent_FindInQueue(&worldData->buildComponents._data, &ptrBuf);
 
     if (idx >= 0) {
-        int count = worldData->buildComponentCount;
+        int count = worldData->buildComponents._size;
 
         // Shift remaining elements down (each is 8 bytes / InternalBasePtr)
         if (idx < count) {
@@ -467,7 +467,7 @@ void BuildComponent::OnRemove() {
             do {
                 int nextIdx = idx + 1;
                 if (nextIdx < count) {
-                    BuildComponent** pSlot = worldData->buildComponents + offset;
+                    BuildComponent** pSlot = worldData->buildComponents._data + offset;
                     if (pSlot != nullptr) {
                         *pSlot = nullptr;
                         *pSlot = pSlot[1];
@@ -479,7 +479,7 @@ void BuildComponent::OnRemove() {
         }
 
         // Decrement count
-        worldData->buildComponentCount = count - 1;
+        worldData->buildComponents._size = count - 1;
     }
 }
 

@@ -126,7 +126,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     // Check if fishing season is valid
     // The town's resource entry for fishingDesc+0x28 (CitizenBehavior +0x170, 0x20 stride)
     int spotMapIdx = (int)fishingDesc->_u28;
-    ProfessionResourceEntry* mapEntries = gameWorld->m_citizenList->professionResources;
+    ProfessionResourceEntry* mapEntries = gameWorld->m_citizenList->professionResources._data;
     ProfessionResourceEntry& entry = mapEntries[spotMapIdx];
     // atCapacity = (limit <= current) — true when resource count is at/above limit
     bool atCapacity = entry.maxCount <= entry.currentCount;   // +0x08 / +0x00

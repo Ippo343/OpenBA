@@ -239,6 +239,6 @@ void CitizenComponent::OnRemove() {
         CitizenComponent* selfIBP = this;
         CitizenBehavior* townMgr = gw->m_citizenList;
         if (townMgr)
-            CemeteryListErase_Reimpl(&townMgr->citizens, &selfIBP);   // 0x140002cc0, +0xA0
+            CemeteryListErase_Reimpl(&townMgr->citizens._data, &selfIBP);   // 0x140002cc0, +0xA0
     }
 }

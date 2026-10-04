@@ -186,8 +186,8 @@ void MusicPlayer::Update() {
     CitizenBehavior* citizens = gw->m_citizenList;
     float    moodA = 0.0f, moodB = 0.0f;
     if (citizens) {
-        int                count = citizens->citizenCount;
-        CitizenComponent** arr   = citizens->citizens;
+        int                count = citizens->citizens._size;
+        CitizenComponent** arr   = citizens->citizens._data;
         if (count > 0 && arr) {
             for (int i = 0; i < count; ++i) {
                 CitizenComponent* c = arr[i];

@@ -64,9 +64,9 @@
 template <class Node, class Key>
 static Node* BSTFind(Node* node, const Key* key) {
     while (node != nullptr) {
-        if (key < node->key) {
+        if (key < node->element.key) {
             node = node->left;
-        } else if (key > node->key) {
+        } else if (key > node->element.key) {
             node = node->right;
         } else {
             return node;  // found
@@ -256,10 +256,10 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 1: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
-        int citizenCount = worldData->citizenCount;
+        int citizenCount = worldData->citizens._size;
         int matched = 0;
         for (int i = 0; i < citizenCount; i++) {
-            const CitizenComponent* citizen = worldData->citizens[i];
+            const CitizenComponent* citizen = worldData->citizens._data[i];
             if (!citizen) continue;
 
             float age = citizen->age;
@@ -285,7 +285,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 2: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (worldData) {
-            count = worldData->field_0x28;
+            count = worldData->field_0x20._size;
         }
         break;
     }
@@ -320,7 +320,7 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 4: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (worldData) {
-            count = worldData->field_0x08;
+            count = worldData->field_0x00._size;
         }
         break;
     }
@@ -357,10 +357,10 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
 
             // Re-read worldData each iteration (matches original)
             worldData = GameUpdateLoop::_singleton->m_citizenList;
-            ProfessionBucket* node = BSTFind(worldData->field_0x100, curProfType);
+            ProfessionBucket* node = BSTFind(worldData->field_0x100._root, curProfType);
             if (!node) continue;
 
-            ComponentEntity* entity = node->entities[i];
+            ComponentEntity* entity = node->element.entities._data[i];
 
             // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
             WorkPlaceComponent* workplace = FindOnEntity<WorkPlaceComponent>(entity);
@@ -383,8 +383,8 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 7: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
-        int entityCount = worldData->field_0x38;
-        ComponentEntity** entityArray = worldData->field_0x30;
+        int entityCount = worldData->field_0x30._size;
+        ComponentEntity** entityArray = worldData->field_0x30._data;
         int total = 0;
 
         for (int i = 0; i < entityCount; i++) {
@@ -422,8 +422,8 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     case 8: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
-        int entityCount = worldData->field_0x38;
-        ComponentEntity** entityArray = worldData->field_0x30;
+        int entityCount = worldData->field_0x30._size;
+        ComponentEntity** entityArray = worldData->field_0x30._data;
         int total = 0;
 
         for (int i = 0; i < entityCount; i++) {
@@ -489,11 +489,11 @@ bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
             // Re-resolve the type each iteration (original code does this)
             const ComponentDescription* curTypePtr = ResolveTypePtr<ComponentDescription>(typeRef);
             worldData = GameUpdateLoop::_singleton->m_citizenList;
-            TemplateBucket* node = BSTFind(worldData->field_0x160, curTypePtr);
+            TemplateBucket* node = BSTFind(worldData->field_0x160._root, curTypePtr);
 
             ComponentEntity* entity = nullptr;
             if (node) {
-                entity = node->entities[i];
+                entity = node->element.entities._data[i];
             }
 
             StateMachineComponent* buildState = FindOnEntity<StateMachineComponent>(entity);

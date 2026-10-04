@@ -143,7 +143,7 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     CitizenBehavior* town = Town();
     LivestockComponent* selfRef = this;
     if (cur == nullptr) {
-        if (town) CemeteryListErase_Reimpl(&town->livestock, &selfRef);
+        if (town) CemeteryListErase_Reimpl(&town->livestock._data, &selfRef);
     } else {
         CemeteryListErase_Reimpl(&cur->animals, &selfRef);
         AnimalComponent* animal = _entity->FindComponent<AnimalComponent>();   // 0x140005500
@@ -156,7 +156,7 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
         ActHunt_DynArraySetCount_3110(&target->animals, target->animalCount + 1, &againRef);
         PenInPasture();   // 0x1401240a0
     } else if (town) {
-        ActHunt_DynArraySetCount_3110(&town->livestock, town->livestockCount + 1, &againRef);
+        ActHunt_DynArraySetCount_3110(&town->livestock._data, town->livestock._size + 1, &againRef);
     }
 }
 
@@ -179,14 +179,14 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
 void PastureComponent::AdoptWanderers() {
     CitizenBehavior* town = Town();
     if (!town) return;
-    int freeCount = town->livestockCount;
+    int freeCount = town->livestock._size;
     if (freeCount == 0) return;
 
     const int cap = ComputeCapacity();   // 0x140128570
     if (animalCount >= cap) return;
 
     ComponentDescription* wanted = livestockType;
-    LivestockComponent** freeList = town->livestock;
+    LivestockComponent** freeList = town->livestock._data;
     if (!freeList) return;
 
     static const int kMaxCandidates = 64;
@@ -332,11 +332,11 @@ void PastureComponent::ReleaseAllAnimals() {
         animal->pasture = nullptr;
         LivestockComponent* backRef = animal;
         if (town)
-            ActHunt_DynArraySetCount_3110(&town->livestock, town->livestockCount + 1, &backRef);
+            ActHunt_DynArraySetCount_3110(&town->livestock._data, town->livestock._size + 1, &backRef);
     }
 
     PastureComponent* selfRef = this;
-    if (town) CemeteryListErase_Reimpl(&town->pastures, &selfRef);
+    if (town) CemeteryListErase_Reimpl(&town->pastures._data, &selfRef);
 }
 
 // ============================================================
@@ -356,7 +356,7 @@ char PastureComponent::EnterOperational() {
     CitizenBehavior* town = Town();
     PastureComponent* selfRef = this;
     if (town)
-        ActHunt_DynArraySetCount_3110(&town->pastures, town->pastureCount + 1, &selfRef);
+        ActHunt_DynArraySetCount_3110(&town->pastures._data, town->pastures._size + 1, &selfRef);
 
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     if (wpc) wpc->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
@@ -434,7 +434,7 @@ void PastureProduce(PastureComponent* self) {
 
     InteractComponent* pos = self->_entity->FindComponent<InteractComponent>();   // 0x140002ed0
 
-    ProfessionResourceEntry* stockTable = town->professionResources;
+    ProfessionResourceEntry* stockTable = town->professionResources._data;
     const int resIdx = static_cast<int>(lsDesc->_type);
 
     // ACCUMULATOR METER. The production loop below is a pure function of `production`
@@ -626,8 +626,8 @@ extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);
 uint32_t PastureComponent::CommandMask(int cmd) {
     int freeElsewhere = 0;
     CitizenBehavior* town = Town();
-    const int n = town ? town->pastureCount : 0;
-    PastureComponent** list = town ? town->pastures : nullptr;
+    const int n = town ? town->pastures._size : 0;
+    PastureComponent** list = town ? town->pastures._data : nullptr;
     for (int i = 0; i < n && list; ++i) {
         PastureComponent* p = list[i];
         if (!p || p == this) continue;
@@ -708,8 +708,8 @@ void PastureComponent::Command(int cmd) {
 
     // cmd 0 / cmd 1 — transfer animals out.
     CitizenBehavior* town = Town();
-    const int n = town ? town->pastureCount : 0;
-    PastureComponent** list = town ? town->pastures : nullptr;
+    const int n = town ? town->pastures._size : 0;
+    PastureComponent** list = town ? town->pastures._data : nullptr;
     const int keep = (cmd != 0) ? animalCount - (animalCount >> 1) : 0;
 
     PastureComponent* best = nullptr;

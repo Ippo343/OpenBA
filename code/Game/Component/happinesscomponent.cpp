@@ -281,16 +281,16 @@ void HappinessComponent::Register() {
     if (GameUpdateLoop::_singleton != nullptr) {
         CitizenBehavior* town = TownManager();
         if (town) {
-            const int count = town->happinessComponentCount;
+            const int count = town->happinessComponents._size;
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&town->happinessComponents)
+            town->happinessComponents
                 .SetSizeFill(count + 1, &self);
 
             static int n = 0;
             if (n < 8) { ++n;
                 fprintf(stderr, "[Happiness] source REGISTERED: comp=%p townMgr=%p "
                                 "happinessCount=%d\n", static_cast<void*>(this),
-                        static_cast<void*>(town), town->happinessComponentCount);
+                        static_cast<void*>(town), town->happinessComponents._size);
                 fflush(stderr);
             }
         }
@@ -309,7 +309,7 @@ void HappinessComponent::Unregister() {
     if (GameUpdateLoop::_singleton != nullptr) {
         CitizenBehavior* town = TownManager();
         if (town)
-            CemeteryListErase_Reimpl(&town->happinessComponents, &self);   // 0x140002cc0
+            CemeteryListErase_Reimpl(&town->happinessComponents._data, &self);   // 0x140002cc0
     }
     UpdateInfluence(-1);   // 0x14004a300
     registered = false;
@@ -443,7 +443,7 @@ void HappinessComponent::OnRemove() {
     if (!registered) return;
     ::Object::InternalPtr<HappinessComponent> self(this);
     if (GameUpdateLoop::_singleton != nullptr)
-        CemeteryListErase_Reimpl(&TownManager()->happinessComponents, &self);   // 0x140002cc0
+        CemeteryListErase_Reimpl(&TownManager()->happinessComponents._data, &self);   // 0x140002cc0
     UpdateInfluence(-1);                                      // 0x14004a300
     registered = false;
 }

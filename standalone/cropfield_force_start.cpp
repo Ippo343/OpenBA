@@ -135,8 +135,8 @@ void Fire(int frame) {
             const uint32_t tidNatRes = NaturalResourceDescription::TypeId();
             GameUpdateLoop* gw2 = GameUpdateLoop::_singleton;
             CitizenBehavior* town = gw2 ? gw2->m_citizenList : nullptr;    // +0xf0
-            ComponentDescription** types = town ? town->field_0x120 : nullptr;   // +0x120
-            const int typeN = town ? town->field_0x128 : 0;                // +0x128
+            ComponentDescription** types = town ? town->field_0x120._data : nullptr;   // +0x120
+            const int typeN = town ? town->field_0x120._size : 0;                // +0x128
             // VARIETY, not just "a crop": collect every planable type and hand each
             // field the NEXT one, rather than the first match for all of them.
             //

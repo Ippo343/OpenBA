@@ -169,10 +169,10 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
     int local_a8_best = 0x7fffffff;   // best cost so far
 
     // -------- Phase 1: scan the PRIMARY list (param_1[2], count param_1[3]) --------
-    if (0 < list->field_0x18) {
+    if (0 < list->field_0x10._size) {
         int iVar20 = 0;
         do {
-            ComponentEntity* local_a0 = list->field_0x10[iVar20];                // candidate entity
+            ComponentEntity* local_a0 = list->field_0x10._data[iVar20];                // candidate entity
             ComponentEntity* local_90 = local_a0;                                // IBP scratch
             uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_90, nullptr);        // entity -> cell idx
 
@@ -245,7 +245,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                 }
             }
             iVar20 = iVar20 + 1;
-        } while (iVar20 < list->field_0x18);
+        } while (iVar20 < list->field_0x10._size);
 
         // If a "B"-qualified primary hit was found, return immediately (skip fallback).
         if ((static_cast<char>(local_98_flag) != '\0') && (*found != nullptr)) {
@@ -254,11 +254,11 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
     }
 
     // -------- Phase 2: scan the FALLBACK list (param_1[0], count param_1[1]) --------
-    if (0 < list->field_0x08) {
+    if (0 < list->field_0x00._size) {
         int iVar20 = 0;
         int iVar15loop = local_a8_best;
         do {
-            ComponentEntity* local_a0 = list->field_0x00[iVar20];               // candidate entity
+            ComponentEntity* local_a0 = list->field_0x00._data[iVar20];               // candidate entity
             ComponentEntity* local_58 = local_a0;                               // IBP scratch
             uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
 
@@ -384,7 +384,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                 }
             }
             iVar20 = iVar20 + 1;
-        } while (iVar20 < list->field_0x08);
+        } while (iVar20 < list->field_0x00._size);
     }
 
     return list;

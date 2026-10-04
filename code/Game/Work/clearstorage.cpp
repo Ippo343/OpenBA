@@ -174,7 +174,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         uint32_t resourceTypeId = (uint32_t)field_28;
         ComponentEntity* destEntity = nullptr;
 
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(worldArray),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(worldArray),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                            &destEntity, resourceTypeId, itemEntity, availCount, 1,
                            searchPos, &entityIBP);   // 0x14008d590
 

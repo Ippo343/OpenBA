@@ -210,8 +210,8 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
     // LEFT: the void* parameter of the outside callers (storagelocationcomponent.cpp,
     // starttown.cpp); the object is a Component (its +0x10 entity).
     ComponentEntity* entityRef = reinterpret_cast<const Component*>(storageLocationComp)->_entity;   // LEFT: void* parameter of outside callers
-    int newCount = townMgr->field_0x08 + 1;
-    ActHunt_DynArraySetCount_3110(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
+    int newCount = townMgr->field_0x00._size + 1;
+    ActHunt_DynArraySetCount_3110(&townMgr->field_0x00._data, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
@@ -238,14 +238,14 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
     // table at townMgr+0x170 (the currentCount... +0xc field per 0x20-stride row,
     // index FUN_140088f90). No-op for a freshly spawned building (0 slots).
     int slots = sc->slotCount;
-    if (slots > 0 && townMgr && townMgr->professionResources) {
+    if (slots > 0 && townMgr && townMgr->professionResources._data) {
         StorageComponent::Item* arr = sc->storageSlots;
         for (int i = 0; i < slots; i++) {
             StorageComponent::Item* slot = &arr[i];
             int cnt = slot->_count;
             int idx = ResourceCategory(slot->_resource);   // 0x140088f90
             if (idx >= 0) {
-                int* cell = &townMgr->professionResources[idx].field_0x0C;
+                int* cell = &townMgr->professionResources._data[idx].field_0x0C;
                 *cell += cnt;
             }
         }
@@ -312,8 +312,8 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
     // `if (!matched) break` out-of-memory bail is gone.
     Collection::Array<ComponentDescription*> matched;
 
-    int tmplCount = townMgr->field_0x118;
-    ComponentDescription** tmplArr = townMgr->field_0x110;
+    int tmplCount = townMgr->field_0x110._size;
+    ComponentDescription** tmplArr = townMgr->field_0x110._data;
     for (int t = 0; t < tmplCount; t++) {
         ComponentDescription* tmpl = tmplArr[t];
         RawMaterialDescription* desc = FindRawMatDescOnTemplate(tmpl);
@@ -332,10 +332,10 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
     if (matchedCount > 0 && count > 0) {
         for (;;) {
             bool progress = false;
-            int locCount = townMgr->field_0x08;   // +0x08 (retail: the low dword of the qword)
+            int locCount = townMgr->field_0x00._size;   // +0x08 (retail: the low dword of the qword)
             if (locCount < 1) break;
             for (int i = 0; i < locCount; i++) {
-                ComponentEntity* entityRef = townMgr->field_0x00[i];
+                ComponentEntity* entityRef = townMgr->field_0x00._data[i];
                 StorageComponent* storage = FindStorageOnEntity(entityRef);
                 // Original wraps the found component in an IBP before use.
                 ::Object::InternalPtr<StorageComponent> compIBP(storage);

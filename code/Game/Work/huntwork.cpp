@@ -178,7 +178,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     // -------------------------------------------------------
     int materialIdx = (int)huntDesc->_type;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources[materialIdx];
+    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources._data[materialIdx];
     bool atCapacity = resEntry.maxCount <= resEntry.currentCount;
 
     // -------------------------------------------------------

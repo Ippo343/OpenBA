@@ -345,7 +345,7 @@ void AttendanceComponent::OnRemove() {
     CitizenBehavior* const town = GameUpdateLoop::_singleton->m_citizenList;
     if (!town) return;
     Object::InternalPtr<AttendanceComponent> selfIbp(this);
-    CemeteryListErase_Reimpl(&town->attendanceComponents, &selfIbp);   // 0x140002cc0 (CitizenBehavior +0x60)
+    CemeteryListErase_Reimpl(&town->attendanceComponents._data, &selfIbp);   // 0x140002cc0 (CitizenBehavior +0x60)
 }
 
 // [9] 0x140044370 — the elapsed-time argument is not read by retail's body.

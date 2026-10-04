@@ -79,7 +79,7 @@ void ResidenceComponent::EvictAndUnregister() {
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the town's residence entity list (+0x20)
-    CemeteryListErase_Reimpl(&worldMgr->field_0x20, &entityPtr);   // 0x140002cc0
+    CemeteryListErase_Reimpl(&worldMgr->field_0x20._data, &entityPtr);   // 0x140002cc0
 }
 
 // Resident per-family member-array copy on grow.

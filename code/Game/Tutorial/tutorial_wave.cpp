@@ -94,7 +94,7 @@ uint32_t TutorialUITypeId() { return TutorialUI::TypeId(); }
 // +0x00, entities +0x08, count +0x10, left +0x20, right +0x28.
 TemplateBucket* BstFind(TemplateBucket* node, const Object::External* key) {
     while (node) {
-        const Object::External* nodeKey = node->key;
+        const Object::External* nodeKey = node->element.key;
         if (key < nodeKey)      node = node->left;
         else if (nodeKey < key) node = node->right;
         else                    return node;
@@ -354,14 +354,14 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
     if (toolbarRef.resolved != nullptr) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
-        TemplateBucket* root = mgr ? mgr->field_0x160 : nullptr;
+        TemplateBucket* root = mgr ? mgr->field_0x160._root : nullptr;
 
         NamedExternalRef refCopy{};
         TutWave_ExternalRefCopy(&refCopy, &toolbarRef);
         const Object::External* key = TutWave_ExternalRefResolve(&refCopy);
 
         TemplateBucket* found = BstFind(root, key);
-        int count = found ? found->count : 0;
+        int count = found ? found->element.entities._size : 0;
         int index = toolbarIndex;
 
         if (count > index) {
@@ -369,8 +369,8 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
             TutWave_ExternalRefCopy(&refCopy2, &toolbarRef);
             const Object::External* key2 = TutWave_ExternalRefResolve(&refCopy2);
             TemplateBucket* found2 = BstFind(root, key2);
-            if (found2 && found2->entities) {
-                targetElem = found2->entities[index];
+            if (found2 && found2->element.entities._data) {
+                targetElem = found2->element.entities._data[index];
             }
             branchA = true;
         }

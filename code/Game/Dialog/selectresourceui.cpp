@@ -59,8 +59,8 @@ static int SelectResourceUI_IterateResources(SelectResourceUI* ui, UI::ComboElem
 
     // The town's template list
     const CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
-    int numTypes = town->field_0x128;
-    ComponentDescription** typeArray = town->field_0x120;
+    int numTypes = town->field_0x120._size;
+    ComponentDescription** typeArray = town->field_0x120._data;
 
     // The current resource type (slot 12, the ExternalPtr retslot)
     ComponentDescription* currentResource = nullptr;
@@ -224,7 +224,7 @@ void SelectResourceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
     int resourceIndex = (int)reinterpret_cast<intptr_t>(itemData);  // CAST-OK: ptr_int
 
     // The template
-    ComponentDescription* resourceType = GameUpdateLoop::_singleton->m_citizenList->field_0x120[resourceIndex];
+    ComponentDescription* resourceType = GameUpdateLoop::_singleton->m_citizenList->field_0x120._data[resourceIndex];
 
     // Slot 11 (polymorphic -- sets resource type on component)
     SetResource(resourceType);   // slot 11, virtual (as retail)

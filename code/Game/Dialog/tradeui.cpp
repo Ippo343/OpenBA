@@ -298,7 +298,7 @@ void TradeUI::RefreshSellTable()
 
     // Get resource table from game world singleton (+0xf0 = resource manager)
     CitizenBehavior* resourceMgr = GameUpdateLoop::_singleton->m_citizenList;
-    int resourceCount = resourceMgr->field_0x118;
+    int resourceCount = resourceMgr->field_0x110._size;
 
     // Clear sell data array at +0x30 (stride 0x20)
     _sellItems.Clear();   // 0x140016050
@@ -310,7 +310,7 @@ void TradeUI::RefreshSellTable()
             RawMaterialDescription* resTypeComp = nullptr;
 
             // Get resource entity from resource table
-            ComponentDescription* resEntity = resourceMgr->field_0x110[ri];
+            ComponentDescription* resEntity = resourceMgr->field_0x110._data[ri];
             const ComponentDescription* resKey = resEntity;
 
             // Search the post's storage BST for this resource
@@ -1939,14 +1939,14 @@ void TradeUI::RefreshOrderDisplay() {
 void TradeUI::RefreshDisplay() {
     // Get the raw-material list from game world singleton (+0xF0)
     CitizenBehavior* tradeList = GameUpdateLoop::_singleton->m_citizenList;
-    int entityCount = tradeList->field_0x118;
+    int entityCount = tradeList->field_0x110._size;
 
     // Clear display entries array at self+0x50
     _storageItems.Clear();   // 0x140016200
 
     // Build display entries: for each entity, find ResourceType + ValueDescription
     for (int i = 0; i < entityCount; i++) {
-        ComponentDescription* entity = tradeList->field_0x110[i];
+        ComponentDescription* entity = tradeList->field_0x110._data[i];
 
         RawMaterialDescription* resourceComp = nullptr;
         {

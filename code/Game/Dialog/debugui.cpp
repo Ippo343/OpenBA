@@ -360,11 +360,11 @@ static CitizenBehavior* DebugUI_Town() {
 static void Game_SpawnItemsInStorage_Impl() {
     CitizenBehavior* town = DebugUI_Town();
 
-    int storageCount = town->pastureCount;
+    int storageCount = town->pastures._size;
     if (storageCount <= 0) return;
 
     for (int i = 0; i < storageCount; i++) {
-        PastureComponent* storage = town->pastures[i];
+        PastureComponent* storage = town->pastures._data[i];
 
         // Check if storage has items to spawn (component+0x28 != 0)
         if (storage->livestockType == nullptr) continue;
@@ -394,7 +394,7 @@ static void Game_SpawnCitizens_Impl() {
     System::Random* random = game->m_random;
     // The building list: CitizenBehavior +0x00 / +0x08.
     CitizenBehavior* town = DebugUI_Town();
-    int buildingCount = town->field_0x08;
+    int buildingCount = town->field_0x00._size;
 
     if (buildingCount == 0) return;
 
@@ -405,7 +405,7 @@ static void Game_SpawnCitizens_Impl() {
         if (buildingCount > 0) {
             do {
                 // The building (the array is re-read per pass)
-                ComponentEntity* building = town->field_0x00[buildIdx];
+                ComponentEntity* building = town->field_0x00._data[buildIdx];
 
                 if (building != nullptr) {
 
@@ -535,7 +535,7 @@ static void Game_SpawnCitizens_Impl() {
                 // Advance to next building
                 buildIdx++;
                 // Re-read building count (may change if entities are added)
-                buildingCount = town->field_0x08;
+                buildingCount = town->field_0x00._size;
             } while (buildIdx < buildingCount);
         }
     } while (spawnedTotal < 4);
@@ -552,7 +552,7 @@ void DebugUI::TriggerDisasterOnBuilding() {
 
     // Pick a random citizen (CitizenBehavior +0xA0 / +0xA8; the tree called it the
     // building list)
-    uint32_t buildingCount = (uint32_t)town->citizenCount;
+    uint32_t buildingCount = (uint32_t)town->citizens._size;
     if (buildingCount == 0) return;
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
@@ -568,7 +568,7 @@ void DebugUI::TriggerDisasterOnBuilding() {
     if (!diseaseDesc) return;
 
     // Get building entity from building array
-    CitizenComponent* building = town->citizens[(int)randIdx];
+    CitizenComponent* building = town->citizens._data[(int)randIdx];
     if (!building) return;
 
     // Apply disease to building
@@ -583,14 +583,14 @@ static void Game_StartRandomFire_Impl() {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
     // The building list: CitizenBehavior +0x20 / +0x28.
     CitizenBehavior* town = DebugUI_Town();
-    uint32_t buildingCount = (uint32_t)town->field_0x28;
+    uint32_t buildingCount = (uint32_t)town->field_0x20._size;
 
     if (buildingCount == 0) return;
 
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
     // Get random building entity
-    ComponentEntity* building = town->field_0x20[randIdx];
+    ComponentEntity* building = town->field_0x20._data[randIdx];
 
     // Find FireComponent on the building (FindComponent<FireComponent>, cell 0x1401c41e0)
     FireComponent* fireComp = building->FindComponent<FireComponent>();
@@ -645,13 +645,13 @@ static void Game_InfectRandomCitizen_Impl() {
     // The disease components: CitizenBehavior +0xF0 / +0xF8.
     CitizenBehavior* town = DebugUI_Town();
 
-    uint32_t citizenCount = (uint32_t)town->diseaseCount;
+    uint32_t citizenCount = (uint32_t)town->diseases._size;
     if (citizenCount == 0) return;
 
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(citizenCount));
 
     // Get random citizen
-    DiseaseComponent** citizenArray = town->diseases;
+    DiseaseComponent** citizenArray = town->diseases._data;
     if (!citizenArray) return;
     DiseaseComponent* citizen = citizenArray[randIdx];
     if (!citizen) return;
@@ -1080,10 +1080,10 @@ void DebugUI::OnCreated() {
             // Populate from the population list at gameWorld+0xF0 (+0xC0/+0xC8).
             // STANDALONE: guard a null list (empty combo instead of a fault).
             CitizenBehavior* town = DebugUI_Town();
-            int drawCount = town ? town->populationCount : 0; // +0xC8
+            int drawCount = town ? town->populations._size : 0; // +0xC8
             int selectedIndex = 0;
             for (int i = 0; i < drawCount; i++) {
-                Component* entry = town->populations[i];   // +0xC0
+                Component* entry = town->populations._data[i];   // +0xC0
                 Description* inner = entry->_description;
                 bool isDrawable = ::Object::IsDerivedFromNullSafe(inner, PopulationDescription::TypeId());
                 PopulationDescription* drawableDesc = isDrawable ? static_cast<PopulationDescription*>(inner) : nullptr;

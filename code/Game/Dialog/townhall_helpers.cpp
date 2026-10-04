@@ -225,7 +225,7 @@ extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, const Prod
 // [startTick, endTick] (clamped to [0, count-1]).
 // ===========================================================================
 extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick) {
-    const Collection::Array<int32_t>* seriesBase = town->field_0x150;
+    const Collection::Array<int32_t>* seriesBase = town->field_0x150._data;
     if (!seriesBase) return 0;
     const Collection::Array<int32_t>& series = seriesBase[seriesIdx];
     const int32_t* data = series.GetData();
@@ -352,9 +352,9 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
     // `profession` is the ExternalPtr<Profession> the callers hold (compared as an unsigned qword).
 
     // Pass 1: idle (no-workplace) adult worker of this profession.
-    int cnt = town->citizenCount;
+    int cnt = town->citizens._size;
     for (int i = 0; i < cnt; i++) {
-        CitizenComponent* cz = town->citizens[i];
+        CitizenComponent* cz = town->citizens._data[i];
         if (IsWorkingAge(cz) && cz->profession == profession && cz->workplace == nullptr) {
             DemoteToLaborer(cz, laborer);
             return;
@@ -363,20 +363,20 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 
     // Pass 2: the profession's tree node — the workplace with the most
     // rostered workers.
-    ProfessionBucket* node = town->field_0x100;
+    ProfessionBucket* node = town->field_0x100._root;
     ProfessionBucket* found = nullptr;
     while (node) {
-        const Profession* k = node->key;
+        const Profession* k = node->element.key;
         if (profession < k)      node = node->left;
         else if (profession > k) node = node->right;
         else { found = node; break; }
     }
-    if (found && found->count > 0) {
-        int wpCount = found->count;
+    if (found && found->element.entities._size > 0) {
+        int wpCount = found->element.entities._size;
         ComponentEntity* bestEntity = nullptr;
         int bestWorkers = 0;
         for (int i = 0; i < wpCount; i++) {
-            ComponentEntity* ent = found->entities[i];
+            ComponentEntity* ent = found->element.entities._data[i];
             WorkPlaceComponent* comp = FindWorkPlaceComp(ent);
             if (!comp) continue;
             int workers = comp->workerCount;
@@ -392,9 +392,9 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
     }
 
     // Pass 3: any adult, non-student citizen of the profession.
-    cnt = town->citizenCount;
+    cnt = town->citizens._size;
     for (int i = 0; i < cnt; i++) {
-        CitizenComponent* cz = town->citizens[i];
+        CitizenComponent* cz = town->citizens._data[i];
         if (IsWorkingAge(cz) && cz->profession == profession) {
             DemoteToLaborer(cz, laborer);
             return;

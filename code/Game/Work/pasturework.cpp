@@ -172,7 +172,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     {
         int descIndex = (int)pvVar19->_type;
         const ProfessionResourceEntry& entry =
-            GameUpdateLoop::_singleton->m_citizenList->professionResources[descIndex];
+            GameUpdateLoop::_singleton->m_citizenList->professionResources._data[descIndex];
         int currentCount = entry.currentCount;
         int maxCount = entry.maxCount;
         bVar8 = (maxCount <= currentCount);  // at capacity?

@@ -613,7 +613,7 @@ uint64_t Helper_7550(WorkScheduler* param_1, CitizenComponent* const* param_2) {
                          == GameUpdateLoop::_singleton->m_professionList->field_0x38);
         if (homeless) buf[0] = 0x0d;
         uint32_t idx = homeless ? 1u : 0u;
-        ProfessionResourceEntry* p = listEnt->professionResources;
+        ProfessionResourceEntry* p = listEnt->professionResources._data;
 
         // Each resource category below threshold -> emit a gather/work state code into the next
         // slot. The packed multi-byte writes mirror the exe (slot low byte = primary state id).

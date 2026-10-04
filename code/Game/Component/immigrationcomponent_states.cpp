@@ -172,21 +172,21 @@ bool ImmigrationComponent::CanAccept() {
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return false;
     CitizenBehavior* tm = TownMgr(gw);
-    if (tm->citizenCount < desc->_minPopulation) return false;
+    if (tm->citizens._size < desc->_minPopulation) return false;
     int req = desc->_requiredBuildingCount;
     if (req < 1) return true;
     // The +0x160 template bucket tree (key compared as an unsigned qword, 0x1400172f0).
-    TemplateBucket* root = tm->field_0x160;
+    TemplateBucket* root = tm->field_0x160._root;
     ComponentDescription** keys = desc->_requiredBuildings;
     for (int i = 0; i < req; ++i) {
         ComponentDescription* key = keys[i];
         TemplateBucket* n = root;
         while (n) {
-            if (key < n->key)       n = n->left;    // +0x20
-            else if (key <= n->key) break;
+            if (key < n->element.key)       n = n->left;    // +0x20
+            else if (key <= n->element.key) break;
             else                    n = n->right;   // +0x28
         }
-        if (!n || n->count == 0) return false;   // +0x10
+        if (!n || n->element.entities._size == 0) return false;   // +0x10
     }
     return true;
 }
@@ -309,7 +309,7 @@ void ImmigrationComponent::Spawn() {
     }
 
     CitizenBehavior* tm = TownMgr(gw);
-    const int pop = tm->citizenCount;
+    const int pop = tm->citizens._size;
     const float fLo = desc->_groupFractionMin;
     const float fRand = rng->RandFloat();
     const float fHi = desc->_groupFractionMax;
@@ -317,8 +317,8 @@ void ImmigrationComponent::Spawn() {
     // Empty household slots across every registered house (townMgr+0x20/+0x28).
     int emptySlots = 0;
     {
-        int nh = tm->field_0x28;
-        ComponentEntity** houses = tm->field_0x20;
+        int nh = tm->field_0x20._size;
+        ComponentEntity** houses = tm->field_0x20._data;
         for (int i = 0; i < nh; ++i) {
             ComponentEntity* h = houses[i];
             ResidenceComponent* rc = (h && TidResidence())

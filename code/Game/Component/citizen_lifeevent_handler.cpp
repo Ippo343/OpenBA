@@ -144,10 +144,10 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
     Map* map = world->m_game;                                    // +0xf8
     Map* mapGrid = map;
     int best = 0x7fffffff;
-    int count = listMgr->cemeteryCount;                          // +0x48
+    int count = listMgr->cemeteries._size;                          // +0x48
     uint32_t tidInteract = InteractComponent::TypeId();
     for (int i = 0; i < count; i++) {
-        CemeteryComponent** slot = &listMgr->cemeteries[i];      // +0x40
+        CemeteryComponent** slot = &listMgr->cemeteries._data[i];      // +0x40
         CemeteryComponent* comp = *slot;
         if (!comp) continue;   // [STANDALONE GUARD]
         ComponentEntity* entity = comp->_entity;                 // +0x10
@@ -320,7 +320,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     // plot count, and which branch was taken, so a regression names itself.
     CitizenBehavior* const townMgrForTrace = world->m_citizenList;
     const int cemCountForTrace =
-        townMgrForTrace ? townMgrForTrace->cemeteryCount : -1;   // +0x48
+        townMgrForTrace ? townMgrForTrace->cemeteries._size : -1;   // +0x48
 
     CemeteryComponent* cem = nullptr;
     Cemetery_FindNearestWithSlot_9740(world->m_citizenList, &cem, cell);

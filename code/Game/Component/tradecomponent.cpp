@@ -360,8 +360,8 @@ void TradeComponent::OnAdded() {
 
     // Add to the trading-post list at +0x30
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    int currentCount = worldMgr->field_0x38;
-    GameColl::AsArray<GameColl::Ptr8>(&worldMgr->field_0x30)
+    int currentCount = worldMgr->field_0x30._size;
+    worldMgr->field_0x30
         .SetSizeFill(currentCount + 1, &entityPtr);
 
     Setup();   // 0x14005c220
@@ -390,7 +390,7 @@ void TradeComponent::OnRemove() {
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the trading-post list at +0x30
-    CemeteryListErase_Reimpl(&worldMgr->field_0x30, &entityPtr);   // 0x140002cc0
+    CemeteryListErase_Reimpl(&worldMgr->field_0x30._data, &entityPtr);   // 0x140002cc0
 }
 // [13] 0x14005c140 / [14] 0x14005c000 — the work-enable pair; they go together (a
 // live query over a stub toggle reports a state nothing can change). Neither

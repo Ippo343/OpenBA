@@ -73,10 +73,10 @@ void LivestockComponent::OnAdded() {
     if (!town) return;
     LivestockComponent* ibp = this;
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(&town->livestock)
-        .SetSizeFill(town->livestockCount + 1, &ibp);
+    town->livestock
+        .SetSizeFill(town->livestock._size + 1, &ibp);
     std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",
-                 (void*)this, town->livestockCount);
+                 (void*)this, town->livestock._size);
     std::fflush(stderr);
 }
 
@@ -88,7 +88,7 @@ void LivestockComponent::OnRemove() {
     if (pasture == nullptr) {
         if (GameUpdateLoop::_singleton == nullptr) return;
         CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;   // +0xF0
-        if (town) s_erase(&town->livestock, &ibp);
+        if (town) s_erase(&town->livestock._data, &ibp);
         return;
     }
     s_erase(&pasture->animals, &ibp);

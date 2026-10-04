@@ -63,7 +63,7 @@ void CitizenBehavior::RemoveCellEntry(int x, int y, int value) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
     int width = world->m_game->size >> 3;   // Map +0x00
-    Collection::Array<int32_t>& cell = field_0x140[(width * (y >> 3)) + (x >> 3)];
+    Collection::Array<int32_t>& cell = field_0x140._data[(width * (y >> 3)) + (x >> 3)];
     int count = cell._size;
     if (count <= 0) return;
 
@@ -102,21 +102,21 @@ void CitizenBehavior::RemoveCellEntry(int x, int y, int value) {
 // 1:1 port.
 // ============================================================
 void CitizenBehavior::UnregisterWell(Object::InternalPtr<WellComponent>* well) {
-    if (wellCount <= 0) return;
+    if (wells._size <= 0) return;
     int idx = 0;
     do {
-        if (wells[idx] == well->Get()) {
+        if (wells._data[idx] == well->Get()) {
             if (idx < 0) return;
-            ComponentEntity* entry = wells[idx]->_entity;
+            ComponentEntity* entry = wells._data[idx]->_entity;
             MapComponent* resData = entry->FindComponent<MapComponent>();   // 0x140004680
             int rx = (int)static_cast<int16_t>(resData->tileX0);
             int ry = (int)static_cast<int16_t>(resData->tileY0);
             RemoveCellEntry(rx, ry, -1 - idx);
-            wells[idx] = nullptr;   // a fresh InternalBasePtr(nullptr)
+            wells._data[idx] = nullptr;   // a fresh InternalBasePtr(nullptr)
             return;
         }
         idx++;
-    } while (idx < wellCount);
+    } while (idx < wells._size);
 }
 
 // ============================================================
@@ -159,7 +159,7 @@ void CitizenBehavior::AddCellEntry(int x, int y, int value) {
     if (!world) return;
     const int mapW = world->m_game->size;   // Map +0x00
     const int64_t cellIdx = static_cast<int64_t>((mapW >> 3) * (y >> 3) + (x >> 3));
-    Collection::Array<int32_t>& rec = field_0x140[cellIdx];
+    Collection::Array<int32_t>& rec = field_0x140._data[cellIdx];
 
     int* oldData = rec._data;
     const int count = rec._size;
@@ -197,9 +197,9 @@ void CitizenBehavior::AddCellEntry(int x, int y, int value) {
 // ============================================================
 void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
     int index = -1;
-    const int count = wellCount;
+    const int count = wells._size;
     if (count > 0) {
-        WellComponent** arr = wells;
+        WellComponent** arr = wells._data;
         for (int i = 0; i < count; ++i) {
             if (arr[i] != nullptr) continue;
             arr[i] = well->Get();
@@ -208,9 +208,9 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
         }
     }
     if (index < 0) {
-        index = wellCount;      // append at the current end
+        index = wells._size;      // append at the current end
         // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-        GameColl::AsArray<GameColl::Ptr8>(&wells).SetSizeFill(index + 1, well);
+        wells.SetSizeFill(index + 1, well);
     }
 
     ComponentEntity* entity = well->Get()->_entity;
@@ -252,7 +252,7 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
         if (n < 8) { ++n;
             fprintf(stderr, "[Well] water source REGISTERED: slot=%d tile=(%d,%d) "
                             "cellValue=%d townMgr=%p arrayCount=%d\n",
-                    index, tx, ty, -1 - index, static_cast<void*>(this), wellCount);
+                    index, tx, ty, -1 - index, static_cast<void*>(this), wells._size);
             fflush(stderr);
         }
     }

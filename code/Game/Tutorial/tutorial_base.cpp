@@ -172,24 +172,24 @@ static inline uint32_t BstCountByKey(const Node* node, const Key* key) {
     while (true) {
         while (true) {
             if (node == nullptr) return 0;
-            if (node->key <= key) break;     // not greater → leave inner loop
+            if (node->element.key <= key) break;     // not greater → leave inner loop
             node = node->left;               // go left
         }
-        if (key <= node->key) break;         // equal → found
+        if (key <= node->element.key) break;         // equal → found
         node = node->right;                  // go right
     }
     if (node == nullptr) return 0;
-    return static_cast<uint32_t>(node->count);
+    return static_cast<uint32_t>(node->element.entities._size);
 }
 
 // 0x140092010 — the entities of one template (the +0x160 tree).
 uint32_t CitizenBehavior::CountByTemplate(const ComponentDescription* key) const {
-    return BstCountByKey(field_0x160, key);
+    return BstCountByKey(field_0x160._root, key);
 }
 
 // 0x1400910a0 — the entities of one profession (the +0x100 tree).
 uint32_t CitizenBehavior::CountByProfession(const Profession* key) const {
-    return BstCountByKey(field_0x100, key);
+    return BstCountByKey(field_0x100._root, key);
 }
 
 // The tree's guards around 0x14012e5c0 that retail lacks (known_port_issues

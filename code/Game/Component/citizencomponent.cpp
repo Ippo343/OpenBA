@@ -871,16 +871,16 @@ LAB_140113873:
 // Returns count of jobs, or 0 if not found.
 // ============================================================
 static int LookupProfessionJobCount(const CitizenBehavior* registry, const Profession* key) {
-    const ProfessionBucket* node = registry->field_0x100;
+    const ProfessionBucket* node = registry->field_0x100._root;
     while (node) {
-        const Profession* nodeKey = node->key;
+        const Profession* nodeKey = node->element.key;
         if (key < nodeKey) {
             node = node->left;    // +0x20
         } else if (key > nodeKey) {
             node = node->right;   // +0x28
         } else {
             // Found
-            return node->count;
+            return node->element.entities._size;
         }
     }
     return 0; // not found
@@ -888,16 +888,16 @@ static int LookupProfessionJobCount(const CitizenBehavior* registry, const Profe
 
 // Get job array entry from profession registry
 static ComponentEntity* GetJobEntity(const CitizenBehavior* registry, const Profession* key, int64_t index) {
-    const ProfessionBucket* node = registry->field_0x100;
+    const ProfessionBucket* node = registry->field_0x100._root;
     while (node) {
-        const Profession* nodeKey = node->key;
+        const Profession* nodeKey = node->element.key;
         if (key < nodeKey) {
             node = node->left;
         } else if (key > nodeKey) {
             node = node->right;
         } else {
             // Found — read array[index]
-            ComponentEntity** arr = node->entities;
+            ComponentEntity** arr = node->element.entities._data;
             return arr[index];
         }
     }
@@ -1136,9 +1136,9 @@ CitizenComponent* CitizenComponent::FindSpouse() {
     // dword (little-endian) of 0x7fffffffffffffff.
     uint32_t mask = static_cast<uint32_t>(kRdata_1401722b0);
     CitizenBehavior* list = gw->m_citizenList;
-    int64_t n = list->citizenCount;
+    int64_t n = list->citizens._size;
     for (int64_t i = 0; i < n; i++) {
-        CitizenComponent* cand = list->citizens[i];
+        CitizenComponent* cand = list->citizens._data[i];
         if (cand->gender != gender) {
             if (cand->spouse == nullptr) {
                 float* minAge = &description->marriageAge;
@@ -1187,22 +1187,22 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
     // tree lookup helper (ordered by the Profession's address; CitizenBehavior.h's
     // ProfessionBucket: key, entities, count, left +0x20, right +0x28)
     auto findNode = [&](const Profession* k) -> ProfessionBucket* {
-        ProfessionBucket* p = tree->field_0x100;
+        ProfessionBucket* p = tree->field_0x100._root;
         while (p != nullptr) {
-            if (k < p->key) p = p->left;
-            else if (k <= p->key) return p;
+            if (k < p->element.key) p = p->left;
+            else if (k <= p->element.key) return p;
             else p = p->right;
         }
         return nullptr;
     };
 
     ProfessionBucket* keyNode = findNode(key);
-    int outerCount = keyNode ? keyNode->count : 0;
+    int outerCount = keyNode ? keyNode->element.entities._size : 0;
     int bestSlots = 0;
     for (int64_t i = 0; i < outerCount; i++) {
         ProfessionBucket* node = findNode(key);
         if (!node) break;
-        ComponentEntity* entry = node->entities[i];
+        ComponentEntity* entry = node->element.entities._data[i];
 
         // the entry's WorkPlaceComponent (DAT_1401c80e0)
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
@@ -1249,17 +1249,17 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
     Profession* key = profession;
 
     auto findNode = [&](const Profession* k) -> ProfessionBucket* {
-        ProfessionBucket* p = tree->field_0x100;
+        ProfessionBucket* p = tree->field_0x100._root;
         while (p != nullptr) {
-            if (k < p->key) p = p->left;
-            else if (k <= p->key) return p;
+            if (k < p->element.key) p = p->left;
+            else if (k <= p->element.key) return p;
             else p = p->right;
         }
         return nullptr;
     };
 
     ProfessionBucket* keyNode = findNode(key);
-    int outerCount = keyNode ? keyNode->count : 0;
+    int outerCount = keyNode ? keyNode->element.entities._size : 0;
 
     // dynamic candidate array
     ComponentEntity** cand = nullptr;
@@ -1269,7 +1269,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
     for (int64_t i = 0; i < outerCount; i++) {
         ProfessionBucket* node = findNode(key);
         if (!node) break;
-        ComponentEntity* entry = node->entities[i];
+        ComponentEntity* entry = node->element.entities._data[i];
 
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
         int curWorkers = wp->workerCount;
@@ -1397,9 +1397,9 @@ void CitizenComponent::GiveBirth() {
     CitizenBehavior* list = gw->m_citizenList;
 
     int eligible = 0, mature = 0;
-    int total = list->citizenCount;
+    int total = list->citizens._size;
     for (int i = 0; i < total; i++) {
-        CitizenComponent* cand = list->citizens[i];
+        CitizenComponent* cand = list->citizens._data[i];
         if (cand->spouse == nullptr) {
             float maxAge = description->_f4c;
             float candAge = cand->age;
@@ -1573,7 +1573,7 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         {
             uint32_t idx = ResourceCategory(work);   // 0x140088f90 (its first argument, the storage, is never read)
             if (-1 < (int)idx) {
-                int* p = &worldGrid->professionResources[(int64_t)(int)idx].field_0x0C;
+                int* p = &worldGrid->professionResources._data[(int64_t)(int)idx].field_0x0C;
                 *p = *p + 1;
             }
         }
@@ -1671,9 +1671,9 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     // or if our workplace is nearly full while a coworker's still has room.
     if (home != nullptr) {
         ResidenceComponent* ownStore = home->FindComponent<ResidenceComponent>();
-        int citCount = townMgr->citizenCount;
+        int citCount = townMgr->citizens._size;
         for (int64_t i = 0; i < citCount; i++) {
-            CitizenComponent* other = townMgr->citizens[i];
+            CitizenComponent* other = townMgr->citizens._data[i];
             if (other == this) continue;
             if (other->description->adultAge <= other->age
                 && other->school == nullptr) {
@@ -1691,7 +1691,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
         }
     }
 
-    int count = townMgr->field_0x28;
+    int count = townMgr->field_0x20._size;
     Map* mapInfo = GameUpdateLoop::_singleton->m_game;
 
     // The original computes the home cell then loops the registry; when the registry
@@ -1712,7 +1712,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
         int64_t homeCellIdx = static_cast<int64_t>(homeY * mapW + homeX);
 
         for (int64_t entryIdx = 0; entryIdx < count; entryIdx++) {
-            ComponentEntity* entry = townMgr->field_0x20[entryIdx];  // local_98
+            ComponentEntity* entry = townMgr->field_0x20._data[entryIdx];  // local_98
 
             Component* resComp = FindEntityComp(entry, ResidenceComponent::TypeId());   // 0x1401c7cf0
             if (!resComp) continue;   // registered entries always carry one; guard.
@@ -2115,7 +2115,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     CitizenBehavior* list = GameUpdateLoop::_singleton->m_citizenList;
     ComponentEntity* srcWp = home;
     int bestCost = -1;
-    int count = list->attendanceComponentCount;
+    int count = list->attendanceComponents._size;
     AttendanceComponent* best = nullptr;
     uint32_t srcRegion = 0xffffffff;
     if (srcWp != nullptr) {
@@ -2124,7 +2124,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     }
 
     for (int i = 0; i < count; i++) {
-        AttendanceComponent* cand = list->attendanceComponents[i];
+        AttendanceComponent* cand = list->attendanceComponents._data[i];
         if (cand == exclude) continue;
 
         // the WorkplaceComponent (DAT_1401c80e0) on the candidate's entity

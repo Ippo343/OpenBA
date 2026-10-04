@@ -1609,8 +1609,8 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;
     if (!gs) { fprintf(stderr, "[PasturePanel] no entity-list singleton\n"); return; }
-    int n = gs->pastureCount;
-    PastureComponent** list = gs->pastures;
+    int n = gs->pastures._size;
+    PastureComponent** list = gs->pastures._data;
     PastureComponent* pastureComp = (n > 0 && list) ? *list : nullptr;
 
     // The gs+0x90 registry holds only pastures that have REGISTERED — i.e. finished
