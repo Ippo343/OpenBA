@@ -201,7 +201,7 @@ public:
     // slot the 2026-09-13 perf-only crash came through.
     Math::Matrix* GetInstanceTransform(Math::Matrix* ret, int node,
                                        float t) const override;            // [6] 0x1801047f0 RETSLOT
-    virtual void SetParticle(ExternalPtrHandle particle);                  // [9] 0x180104a00
+    virtual void SetParticle(Object::ExternalPtr<Particle> particle);      // [9] 0x180104a00
     // slots 4, 5, 7, 8 are Geometry's own bodies, inherited unchanged.
 
     // `?Update@ParticleInstance@Graphics@@QEAA_NXZ` @ 0x180104180 — NON-VIRTUAL,
@@ -216,7 +216,7 @@ public:
     void RemoveState();
 
     // Exported, NOT PORTED, no caller: declared, deliberately undefined.
-    ExternalPtrHandle GetParticle() const;                                 // 0x1800201e0
+    Object::ExternalPtr<Particle> GetParticle() const;                     // 0x1800201e0
 
     // `?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ` @ 0x1800201f0.
     // A CLASS STATIC over `_frameIndex` below. PORTED in `animation.cpp`.
@@ -304,7 +304,7 @@ public:
     // restamps, ~ParticleInstance (RemoveState) and ~Geometry are the chain.
     ~ParticleSystemInstance() override;
     void Update(const System::Time& time) override;                        // [1] 0x1800a5600
-    void SetParticle(ExternalPtrHandle particle) override;                  // [9] 0x1800a6a80
+    void SetParticle(Object::ExternalPtr<Particle> particle) override;      // [9] 0x1800a6a80
     // slots 2..8 are ParticleInstance's / Geometry's bodies, inherited unchanged.
 
     // ??0ParticleSystemInstance@Graphics@@QEAA@XZ 0x1800a55a0 -- the REAL

@@ -401,7 +401,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menu
         Graphics::Particle* particleResource = resArr[elem.particleIndex];
 
         // `?SetParticle@ParticleInstance@Graphics@@` @0x180104a00 (slot 9).
-        inst->SetParticle(Graphics::ExternalPtrHandle{particleResource});
+        inst->SetParticle(Object::ExternalPtr<Graphics::Particle>(particleResource));
 
         // SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem.position)).
         Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
