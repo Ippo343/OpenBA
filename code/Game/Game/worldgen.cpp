@@ -758,16 +758,15 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
     fflush(stderr);
 }
 
-// B4 FORWARD: 1 outside caller (gameupdateloop_load.cpp, GAME-a: it holds the two
-// objects as void* locals copied from GameUpdateLoop's typed members). The null
-// test is the old body's; retail's caller tests both before the call.
-extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed) {
+// The one caller is gameupdateloop_load.cpp (GameUpdateLoop's m_worldGeometry /
+// m_terrainConfig). The null test is the old body's; retail's caller tests both
+// before the call.
+extern "C" void WorldGen_BuildTerrain(WorldGeometry* wg, TerrainGenerator* gen, int sizeIdx, uint32_t seed) {
     if (!wg || !gen) {
-        fprintf(stderr, "[worldgen] BuildTerrain: null wg=%p gen=%p — skipping\n", wg, gen);
+        fprintf(stderr, "[worldgen] BuildTerrain: null wg=%p gen=%p — skipping\n",
+                static_cast<void*>(wg), static_cast<void*>(gen));
         fflush(stderr);
         return;
     }
-    // LEFT: the two untyped parameters (the old body's C-style casts) until the
-    // closing wave rewires the caller to `m_worldGeometry->BuildTerrain(m_terrainConfig, ...)`.
-    ((WorldGeometry*)wg)->BuildTerrain((TerrainGenerator*)gen, sizeIdx, seed);   // LEFT: SIG WorldGen_BuildTerrain (B4 FORWARD, void* caller)
+    wg->BuildTerrain(gen, sizeIdx, seed);
 }

@@ -41,11 +41,9 @@
 // Pf_RegionGraphCtor_8670 (0x1400a8670), Pf_RegionPairCache_Build (the e8c0 pair-cache
 // tail), Pf_FlushDirtyChunks_8a90 (0x1400a8a90).
 
-extern "C" void Region_Seed(void* gameObjV, int dim) {
-    if (!gameObjV || dim <= 0) return;
+extern "C" void Region_Seed(Map* map, int dim) {   // map: GameUpdateLoop::m_game
+    if (!map || dim <= 0) return;
 
-    // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
-    Map* map = reinterpret_cast<Map*>(gameObjV);   // the Map (GameUpdateLoop::m_game)
     if (map->regionGraph != nullptr) return;       // already built
 
     // coarse-grid dims = ceil(dim/8) via the exe's signed-rounding idiom (e8c0):
@@ -66,11 +64,11 @@ extern "C" void Region_Seed(void* gameObjV, int dim) {
     graph->Flush();   // 0x1400a8a90
 
     // 4) region-pair length cache (Map::regionPairCache) — needed by f810's cross-region path (a8ba0).
-    void* pcV = Pf_RegionPairCache_Build();
-    map->regionPairCache = reinterpret_cast<RegionPairCache*>(pcV);   // LEFT: SIG Pf_RegionPairCache_Build (Action/exe_bodies.h returns void*)
+    RegionPairCache* pcV = Pf_RegionPairCache_Build();
+    map->regionPairCache = pcV;
 
     int regionCount = graph->regions.size;
     fprintf(stderr, "[RegionSeed] region map built: graph@%p coarseDim=%d regionNodes=%d pairCache=%p\n",
-            (void*)graph, coarseDim, regionCount, pcV);
+            (void*)graph, coarseDim, regionCount, static_cast<void*>(pcV));
     fflush(stderr);
 }

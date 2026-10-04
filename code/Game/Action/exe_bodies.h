@@ -218,5 +218,6 @@ int RoadTool_sub_ce00(int64_t param_1, unsigned int param_2, unsigned int param_
 // ---- region_graph_build.cpp
 
 // ---- region_paircache.cpp
-extern "C" void* Pf_RegionPairCache_Build();  // no retail address (local extern in code/Game/Game/region_seed.cpp)
+struct RegionPairCache;   // Action/PathSearch.h
+extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)
 void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2);  // 0x1400a5d10

@@ -70,7 +70,7 @@ static void RegionPairRingResize(RawArray<RegionPairEntry>* ring) {
 // ---- Builder: allocate + init the whole 0x38-byte pair cache.
 // Replicates the snippet in CreateNaturalResource_impl_sub_e8c0 (0x14009e8c0).
 // Returns null on allocation failure (caller then zeroes Map+0x78 fields).
-extern "C" void* Pf_RegionPairCache_Build() {
+extern "C" RegionPairCache* Pf_RegionPairCache_Build() {
     RegionPairCache* pc = static_cast<RegionPairCache*>(System::MemoryAllocator::MemAlloc(0x38, 4));
     if (pc == nullptr) {
         return nullptr;
