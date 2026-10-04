@@ -137,8 +137,6 @@ extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEnt
 // ---- tradeui_sort.cpp
 // B4 P2 DLG-3: the two introsort drivers are declared typed in Dialog/TradeUI.h.
 
-// ---- unreg_lane2_mapparamsdialog_ctor.cpp
-extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006bd80
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 
