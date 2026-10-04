@@ -221,17 +221,17 @@ void EnableCursorBody(App* self, bool enabled, RtSink& out) {
     Node* n = self->_messageCallbacks.root;
     const Node* found = nullptr;
     while (n != nullptr) {
-        const unsigned key = reinterpret_cast<const CursorCallbackElement*>(n)->message;
+        const unsigned key = reinterpret_cast<const CursorCallbackElement*>(n)->message;  // LEFT: rtsetavl::Node keeps its element opaque (erased AVL core, R-COLL / wave X)
         if (kWmSetCursor < key)      n = n->left;                // 0x18009f820
         else if (key < kWmSetCursor) n = n->right;                // 0x18009f81a
         else { found = n; break; }                                // 0x18009f826
     }
     if (found != nullptr) {
         CursorCallbackFn cb =
-            reinterpret_cast<const CursorCallbackElement*>(found)->callback;
+            reinterpret_cast<const CursorCallbackElement*>(found)->callback;  // LEFT: as above
         if (out.Call("Application message callback @ WM_SETCURSOR",
-                     reinterpret_cast<const void*>(cb),
-                     reinterpret_cast<int64_t>(self->_windowHandle),
+                     reinterpret_cast<const void*>(cb),  // CAST-OK: ptr_int
+                     reinterpret_cast<int64_t>(self->_windowHandle),  // CAST-OK: win32
                      static_cast<int64_t>(kWmSetCursor), 0, 0)) {
             cb(self->_windowHandle, kWmSetCursor, 0, 0);          // 0x18009f838
         }
