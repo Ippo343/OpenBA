@@ -125,10 +125,7 @@
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
 
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
 using rt::io::Serializer;
-using rt::io::Stream;
 
 namespace {
 
@@ -137,35 +134,6 @@ namespace {
 // runtime/types/object/External.h) and System::String::Serialize, called by name.
 RtObject::External** ExtField(void* field) {
     return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
-}
-
-// The prologue and epilogue, transcribed from 0x180116b20 and 0x180116c4d.
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    Encoding* enc = stream->encoding;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw =
-        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-void RecInt(ReaderWriter* rw, int32_t* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(*v, nullptr);   // B.3.x bridge
-}
-
-void RecUInt(ReaderWriter* rw, void* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(v), nullptr);   // B.3.x bridge
 }
 
 }  // namespace
@@ -179,31 +147,31 @@ void RecUInt(ReaderWriter* rw, void* v) {
 namespace UI {
 
 bool ElementDescription::Serialize(IO::Stream& streamArg) {
-    void* const streamArgRaw = &streamArg;
-    Stream* const stream = static_cast<Stream*>(streamArgRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
+    // The prologue and epilogue, 0x180116b20 and 0x180116c4d: the inlined
+    // ??0Serializer@IO@@ 0x1800b9960 (version 0) / ??1Serializer@IO@@ 0x1800b99b0.
+    IO::Serializer serializer(streamArg, 0);
+    IO::ReaderWriter* const rw = serializer._readerWriter;
+    Serializer& ser = *reinterpret_cast<Serializer*>(&serializer);   // LEFT: SIG the ExternalPtr<T>::Serialize thunks take rt::io::Serializer* (External.h, R-OBJ; wave X)
 
-    RecInt(rw, &_x);            // +0x20
-    RecInt(rw, &_y);            // +0x24
-    RecInt(rw, &_width);        // +0x28
-    RecInt(rw, &_height);       // +0x2c
-    RecInt(rw, &_minWidth);     // +0x30
-    RecInt(rw, &_minHeight);    // +0x34
+    rw->SerializeInt(_x, nullptr); // +0x20
+    rw->SerializeInt(_y, nullptr); // +0x24
+    rw->SerializeInt(_width, nullptr); // +0x28
+    rw->SerializeInt(_height, nullptr); // +0x2c
+    rw->SerializeInt(_minWidth, nullptr); // +0x30
+    rw->SerializeInt(_minHeight, nullptr); // +0x34
 
-    RecUInt(rw, &_elementType); // +0x40
-    RecUInt(rw, &_flags);       // +0x44
-    RecUInt(rw, &_id);          // +0x3c — unsigned slot, see the banner
+    rw->SerializeUInt(_elementType, nullptr); // +0x40
+    rw->SerializeUInt(_flags, nullptr); // +0x44
+    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_id), nullptr); // +0x3c — unsigned slot, see the banner  // LEFT: the int32 _id through retail's uint overload (H8)
 
-    RecInt(rw, &_tabOrder);     // +0x38
+    rw->SerializeInt(_tabOrder, nullptr); // +0x38
 
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), &ser);   // +0x48 0x180038f90
     RtObject_ExternalPtrSerialize_Dialog(ExtField(&_toolTipDialog), &ser);           // +0x50 0x180076610
     RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), &ser);        // +0x58 0x1800042a0
     reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930
 
-    DestroyCodec(rw);
-    return true;
+    return true;                    // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 // (`~ElementDescription` is inline in ElementDescription.h; its body,

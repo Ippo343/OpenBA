@@ -1042,7 +1042,7 @@ void UI::UserInterface::UpdateEvents() {
         Object::InternalPtr<UI::Element> elem(ev.element);
         // DialogInstance vtable slot 8 (+0x40) `OnElementEvent` — VIRTUAL, so
         // an exe dialog's hand-built slot 8 is what runs.
-        reinterpret_cast<UI::DialogInstance*>(ev.dialog)->OnElementEvent(&elem,
+        ev.dialog->OnElementEvent(&elem,
             ev.eventId, ev.arg14, ev.arg18, ev.arg1C, ev.arg20, ev.userData);
     }
 

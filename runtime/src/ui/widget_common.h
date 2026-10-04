@@ -110,13 +110,11 @@ inline int32_t ScreenWidth()  { return ::Video::Device::_singleton->backBufferWi
 inline int32_t ScreenHeight() { return ::Video::Device::_singleton->backBufferHeight; }  // +8
 
 // The UI scale of the element's ROOT dialog: walk _parent to the top, then
-// root->_dialogParent->_ui->_uiScale (+0x90, +0x10, +0xdc). B.4 LEFT:
-// Element::_dialogParent and DialogInstance::_ui are `void*` in block R-UI-a's
-// headers.
+// root->_dialogParent->_ui->_uiScale (+0x90, +0x10, +0xdc).
 inline float RootUiScale(const ::UI::Element* e) {
     const ::UI::Element* n = e;
     while (n->_parent != nullptr) n = n->_parent;
-    const auto* dialog = static_cast<const ::UI::DialogInstance*>(n->_dialogParent);
+    const ::UI::DialogInstance* dialog = n->_dialogParent;
     return dialog->_ui->_uiScale;
 }
 

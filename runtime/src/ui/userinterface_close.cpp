@@ -392,11 +392,11 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
     int32_t k = i;                                                     // RBX, MOVSXD
 
     // DialogInstance vtable slot 5 (+0x28) `OnClosed` — VIRTUAL.
-    reinterpret_cast<DialogInstance*>(base[k])->OnClosed();
+    base[k]->OnClosed();
 
     // The array base is RE-LOADED after the virtual (0x180121246): OnClosed can
     // reallocate the queue. Reproduced.
-    UnlinkFromParent(reinterpret_cast<DialogInstance*>(_addDialogs._data[k]));
+    UnlinkFromParent(_addDialogs._data[k]);
 
     UpdateEvents();                                                    // 0x180121314
 

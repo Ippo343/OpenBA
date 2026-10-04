@@ -47,6 +47,7 @@
 #include "description_common.h"
 #include "../../types/ui/RadioDescription.h"
 #include "../../types/ui/RadioElement.h"
+#include "../../types/ui/CheckElement.h"     // CheckElement::_checked
 
 namespace {
 
@@ -88,18 +89,13 @@ void RadioDescription::Destruct() { this->~RadioDescription(); }         // 0x18
 // ReaderWriter over the same stream, after GroupDescription::Serialize has
 // already opened and closed its own. That is retail.
 bool RadioDescription::Serialize(IO::Stream& streamv) {
-    void* const streamvRaw = &streamv;
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-
     GroupDescription::Serialize(streamv);                       // 1800d5a9a
 
-    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800d5aca
+    IO::Serializer ser(streamv, 0);                // [RSP+0x28], [RSP+0x30]; 1800d5aca (inlined ctor)
 
-    rw->SerializeInt(_activeRadio, nullptr);
+    ser._readerWriter->SerializeInt(_activeRadio, nullptr);
 
-    if (rw != nullptr) delete rw;                    // 1800d5aed
-    return true;
+    return true;                                    // ~Serializer 1800d5aed (inlined)
 }
 
 // ============================================================================
@@ -130,23 +126,23 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
     if (raw != nullptr)                                        // 1800d5941
         elem = ::new (raw) RadioElement();                     // 1800d5946..1800d5970 inlined ctor
 
-    void* slot = elem;                                         // 1800d5980
-    UI::ElementDescription::CreateInstance(                   // 1800d598d
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+    Object::InternalPtr<Element> slot(elem);                   // 1800d5980
+    UI::ElementDescription::CreateInstance(&slot);             // 1800d598d
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 1800d5994 / 1800d59f9
-        void* desc = _children._data[i];                       // 1800d59a7
+        ElementDescription* desc = _children._data[i];         // 1800d59a7
 
-        void** made = rtdesc::DialogCreateElement(dialog, &slot, desc);
+        // ?CreateElement@Dialog@UI@@ 0x180112ed0, its result into the same slot.
+        slot = dialog->UI::Dialog::CreateElement(Object::ExternalPtr<ElementDescription>(desc));
 
-        Element* child = *reinterpret_cast<Element**>(made);   // 1800d59b8
+        Element* child = slot.Get();                           // 1800d59b8
         if (child != nullptr)
             child->_parent = elem;                             // 1800d59c0
 
         rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
-                                               made);          // 1800d59d9
+                                               &slot);         // 1800d59d9
 
         for (Element* n = elem; n != nullptr; n = n->_parent)  // 1800d59e1..1800d59f5
             n->_flags |= kElementFlagNeedsSizeCalc;
@@ -155,9 +151,8 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
     // The PRIVATE `FindCheckBoxes(InternalPtr<Element>)` (0x1800d5750);
     // retail passes the address of a SECOND stack slot holding the element
     // (RULE B6-11).
-    void* self2 = elem;                                        // 1800d59fe
-    elem->FindCheckBoxes(                                      // 1800d5a0b
-        reinterpret_cast<Object::InternalPtr<Element>*>(&self2));   // B.3.x bridge
+    Object::InternalPtr<Element> self2(elem);                  // 1800d59fe
+    elem->FindCheckBoxes(&self2);                              // 1800d5a0b
 
     const int32_t want = _activeRadio;
     if (want != elem->_activeIndex) {                          // 1800d5a13
@@ -165,8 +160,8 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
         const int32_t boxes = elem->_checkBoxes._size;
         for (int32_t i = 0; i < boxes; ++i) {                  // 1800d5a21 / 1800d5a50
             if (i == elem->_activeIndex) continue;             // 1800d5a30 RE-READ
-            uint8_t* box = reinterpret_cast<uint8_t*>(elem->_checkBoxes._data[i]);
-            box[0xd8] = 0;                                     // 1800d5a43  the CHECKBOX's byte
+            // FindCheckBoxes collected CheckElements only (its type test).
+            static_cast<CheckElement*>(elem->_checkBoxes._data[i])->_checked = 0;   // 1800d5a43  +0xd8
         }
     }
 

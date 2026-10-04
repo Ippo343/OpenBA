@@ -59,36 +59,9 @@ namespace rtdesc {
 // Every Serialize in this family inlines `??0Serializer@IO@@` (0x1800b9960,
 // version 0) and `??1Serializer@IO@@` (0x1800b99b0): B4 bodies build a real
 // `IO::Serializer ser(stream, 0)` for exactly those stores and that teardown.
-//
-// B4 FORWARD: `Stream`, `Serializer`, `VTableOf`, `MakeReaderWriter` and
-// `DialogCreateElement` below are the pre-B4 shapes; their remaining callers
-// are block R-UI-b's (pagedescription.cpp, radiodescription.cpp).
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-// RETAIL IO::Encoding factory offsets (Encoding has no destructor slot, so
-// these stay byte offsets; B3X_RULES X1). The ReaderWriter the factory returns
-// is dispatched BY NAME (IO::ReaderWriter, runtime/types/io/Serializer.h).
-constexpr int kEncCreateReader = 0x18;
-constexpr int kEncCreateWriter = 0x20;
 
 // UI::Element::_flags bit 27 (Element.h kElementFlagNeedsSizeCalc).
 constexpr uint32_t kElementFlagNeedsSizeCalc = 0x08000000u;
-
-inline void** VTableOf(const void* o) {
-    return *const_cast<void***>(reinterpret_cast<void** const*>(o));
-}
 
 // B3R RT-UI: `?MemFree@MemoryAllocator@System@@` (0x1800c7ad0), called
 // directly (B3R_RULES R9, correction 1).
@@ -123,17 +96,6 @@ inline void StringSerialize(char** field, IO::Serializer* ser) {
     reinterpret_cast<System::String*>(field)->Serialize(ser);             // B.3.x bridge (H5)
 }
 
-// ---- fragment 1/2 (pre-B4 shape; B4 FORWARD, see the banner above) ----------
-inline IO::ReaderWriter* MakeReaderWriter(Stream* stream, Serializer* ser) {
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? kEncCreateReader : kEncCreateWriter;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, ser, 0);
-    ser->readerWriter = rw;
-    return reinterpret_cast<IO::ReaderWriter*>(rw);                        // B.3.x bridge
-}
-
 // ---- fragment 3: the refcounted System::String release ---------------------
 // See the banner: the asymmetry is retail's and is kept.
 inline void ReleaseStringField(char*& s) {
@@ -166,16 +128,6 @@ inline void AttachAndPushChild(UI::Element* parent, Object::InternalPtr<UI::Elem
     MarkNeedsSizeCalc(parent);
 }
 
-// ---- the base-class entry point every CreateInstance goes through ---------
-// ?CreateElement@Dialog@UI@@ (0x180112ed0). B4 FORWARD for R-UI-b's callers;
-// this block's callers call `dialog->CreateElement(...)` by name.
-inline void** DialogCreateElement(const void* dialog, void** retSlot, void* desc) {
-    new (retSlot) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<const UI::Dialog*>(dialog)                         // B.3.6 bridge
-            ->UI::Dialog::CreateElement(Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(desc))));
-    return retSlot;
-}
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z, reached
 // by rel32 from every one of these appliers. Fragment pass F2: block D's
 // member (sprite.cpp), called directly instead of by address.

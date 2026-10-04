@@ -619,9 +619,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
 
                     int32_t w = 0, h = 0;
                     if (sprite >= 0) {                         // 1800cec9a / 1800cecba
-                        // LEFT: UI::Sprite::spriteSheet is void* (Sprite.h, R-UI-b).
-                        const SpriteInfo& s = static_cast<const SpriteSheet*>(
-                            entry.spriteSheet)->m_sprites[sprite];
+                        const SpriteInfo& s = entry.spriteSheet->m_sprites[sprite];
                         w = s.width;                           // 1800cecb1
                         h = s.height;                          // 1800cecd0
                     }

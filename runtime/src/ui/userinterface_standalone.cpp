@@ -131,7 +131,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     System::Random rng;
     RtSystem_Random_Ctor(&rng);                                        // 0x1800c7f20
 
-    void* const scene = self->_audioScene;                             // 0x180120388, +0x90
+    Audio::Scene* const scene = self->_audioScene;                             // 0x180120388, +0x90
     if (scene) {                                                       // 0x18012038f
         ++g_updWithScene;
         const Vector3 listener(0.0f, 0.0f, 0.0f);                      // 0x1801203a7
@@ -139,8 +139,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
         const int64_t elapsed = static_cast<int64_t>(0.0 / ::System::Timer::_secondsPerTick);      // 0x1801203b0
         System::Time now;     now._ticks     = timeRef._ticks;
         System::Time elapsedT; elapsedT._ticks = elapsed;
-        // B.4 LEFT: `_audioScene` stays `void*` (code/Game assigns it a `void*`).
-        reinterpret_cast<Audio::Scene*>(scene)->Update(
+        scene->Update(
             now, elapsedT, rng, listener, 0.0f);                       // 0x1801203d0
     }
 }
