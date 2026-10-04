@@ -72,3 +72,38 @@ declaration defined in another partition is not its own: the cast stays, tagged 
 Every cast left at hand-in carries a self-contained `// LEFT:` reason ("as above" and "not examined" are not
 reasons) or a `// CAST-OK:` marker. Vtable-word probes, callback contexts and the erased core's views of
 its own receiver are tagged `// LEFT: FLOOR? <what the cast does>` for the audit's ruling.
+
+## The line procedure (rounds 6 onward: completeness)
+The job is to read EVERY remaining cast line of your partition, file by file, and leave none unread. Your
+lines are in `data/pass2x/assign/X3-<P>.lines.tsv` (regenerated before each round by `round3.py`; the reason
+tagged on each line is often STALE: the tree has moved). For each line decide and act:
+1. **The type exists now** -> convert by name; delete the stale tag.
+2. **It waits on a declaration defined in your partition** -> the five steps above (typed declaration and
+   every caller in one commit; a pure forwarder is replaced by the member and deleted; a function with no
+   caller is deleted).
+3. **A hand-written array resize** -> read retail (the address is in the function's name or comment). If
+   it is step-for-step the engine's `SetSize`, the body becomes the ONE erased core through an element-spec
+   row (as `StorageComponent_DynArrayResize` and the CitizenBehavior rows are); otherwise the body stays,
+   typed by element. Typed WRAPPERS over the one core only: never a per-type copy, never a container swap.
+4. **Raw storage of a non-trivial object (H5)** -> per CLASS, one `behaviour:` commit quoting retail's
+   constructor AND destructor (read the DISASSEMBLY), only where the typed member reproduces retail's
+   construction / destruction order exactly (members are destroyed in reverse declaration order after the
+   dtor body), the hand-written ctor stops zeroing it, the dtor stops releasing it, nothing constructs it
+   twice, and nothing memsets / memcpys the class or asserts it trivial. Where neighbours block the order,
+   type the neighbours in the same commit (CitizenBehavior, EntityList, the Work leaves and Persistence-like
+   classes were done that way). A class local with a constexpr / zeroing constructor ADDS stores: use a
+   constructor-less POD struct, or leave. A finding recorded in the ledger is not retried without its
+   named prerequisite.
+5. **A POD mirror of a real class** -> the real class where the mirror is field-identical and the lifetime
+   is the same; delete a mirror / bridge overload when nothing names it.
+6. **A genuine reinterpretation FLOOR.md defines** -> `// CAST-OK: <category>` (M2: never on a `+ 0x…`
+   field offset or a `self` / `this` operand). Vtable-word probes, callback `void*` contexts, the erased
+   core's views of its own receiver and casts inside macros stay `LEFT: FLOOR? <what the cast does>` for
+   the audit. `FindOrLoad` / `FindNext` const results stay tagged CONST. Allocation results the metric's
+   tier-I shape does not recognise stay, each naming its allocator.
+7. **Only a behaviour change would remove it** -> it stays, with a precise self-contained reason; a retail
+   difference found on the way goes to `docs/known_port_issues.md` entry 14, never fixed.
+Always: no null guard added or dropped; no log text changed; H7 split stores write every byte; H8 bytes stay
+bytes; no door; no getenv. B11 at -O2 and -O0 with every DIFF read (a store whose width changes writes the
+same bytes with the same values; a store or call that APPEARS is reverted or explained from retail).
+At hand-in say exactly which files you finished (every line read) and which you did not reach.

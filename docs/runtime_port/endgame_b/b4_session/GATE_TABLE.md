@@ -363,3 +363,5 @@ Metric at `a424a694`: **1,341** to remove (of which `dx11/` 240). Wave X round 5
 | 116 | X6-CW | `07d3aa4a` | `PickBestDropTarget` takes `CitizenBehavior*`; the `InternalPtr` members of Pickup, BuildRoad, LocationWork, the set records, OrchardSlot, Nomad / Picking / Character components typed (30 serialize bridges gone); seven forwarders deleted: 290 -> 220 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `07d3aa4a`: **1,142** to remove (of which `dx11/` 240). Wave X round 6 done.
+
+`sa-stress` at `07d3aa4a`, QUIET machine: exit 0, update 1.70 ms/frame, p95 2.13 (base 1.92 / 2.40). Recorded, not chased.
