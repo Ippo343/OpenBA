@@ -618,9 +618,9 @@ void AmbientEmitterComponent::MoveTo(const Math::Vector3& newPos) {
         return;
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    const int count = slotCount;
+    const int count = slots._size;
     for (int i = 0; i < count; i++) {
-        const uint32_t id = slots[i].handle;
+        const uint32_t id = slots._data[i].handle;
         if (id != 0 && gw)
             gw->m_audioScene->MoveEmitter(id, position, newPos);
     }
@@ -916,7 +916,7 @@ void TornadoComponent::Tick(const System::Time* time) {
 
         AmbientEmitterComponent* audio2 = nullptr;   // PORT GAP 0x140002280 (see above)
         if (audio2) {
-            AmbientEmitterSlot* emitter = audio2->slots;
+            AmbientEmitterSlot* emitter = audio2->slots._data;
             if (emitter) {
                 if (emitter->handle == 0) {
                     emitter->volume = volume;

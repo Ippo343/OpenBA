@@ -26,7 +26,8 @@ namespace IO { class Serializer; }
 extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
 
 // ---- ambientemittercomponent.cpp
-extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount);  // 0x140001770
+struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)
+extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
 
 // ---- ambientenvironmentdescription.cpp
 extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount);  // 0x140002540
