@@ -154,8 +154,11 @@ extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax);  // 0
 extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc);  // 0x14012f520
 
 // ---- entity_finders_disaster.cpp
-extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP);  // 0x140005840
-extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP);  // 0x140009790
+// B4 X-G1-2b: deleted with its file. Entity_FindComponent_Fire_5840 (0x140005840),
+// _Citizen_9790 (0x140009790) and _AmbientEmitter_2280 (0x140002280) had no caller
+// left (the tornado reads ComponentEntity::FindComponent<T>()); the AmbientEmitter
+// finder's warning (its OnAdded 0x140042e10 is not ported, so +0x38 stays null and
+// 0x14012a710's unguarded read faults) is in git history at that file.
 
 // ---- floorcomponent.cpp
 void* FloorComponent_FindResData(void* owner, void* outIBP);  // 0x140004680
