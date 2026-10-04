@@ -2,31 +2,31 @@
 #include "perf_terrain.h"
 #include "perf_experimental.h"
 #include "options.h"
+#include "Game/Map.h"   // MapCell
 #include <cstdio>
 #include <cstdlib>
 
 namespace PerfX {
 
 uint8_t*       g_terrainSC      = nullptr;
-const uint8_t* g_terrainSCBase  = nullptr;
+const MapCell* g_terrainSCBase  = nullptr;
 int            g_terrainSCCount = 0;
 int            g_terrainVerify  = 0;
 
 namespace {
-enum { kStride = 0x30, kTypeOff = 0x29 };
 uint8_t* s_buf        = nullptr;   // owned allocation, reused across rebuilds
 int      s_bufCap     = 0;
 int      s_verifyInit = 0;
 long     s_rebuilds = 0, s_writes = 0, s_verified = 0, s_mismatch = 0;
 
-void Rebuild(const uint8_t* cells, int count) {
+void Rebuild(const MapCell* cells, int count) {
     if (count > s_bufCap) {
         std::free(s_buf);
         s_buf = static_cast<uint8_t*>(std::malloc((size_t)count));  // CAST-OK: win32
         s_bufCap = s_buf ? count : 0;
     }
     if (!s_buf) { g_terrainSC = nullptr; g_terrainSCBase = nullptr; g_terrainSCCount = 0; return; }
-    for (int i = 0; i < count; ++i) s_buf[i] = cells[(size_t)i * kStride + kTypeOff];
+    for (int i = 0; i < count; ++i) s_buf[i] = cells[(size_t)i].terrainType;
     g_terrainSC = s_buf; g_terrainSCBase = cells; g_terrainSCCount = count;
     ++s_rebuilds;
     if (g_terrainVerify)
@@ -35,8 +35,8 @@ void Rebuild(const uint8_t* cells, int count) {
 }
 }  // namespace
 
-uint8_t TerrainGetSlow(const uint8_t* cells, int count, int idx) {
-    const uint8_t raw = cells[(size_t)idx * kStride + kTypeOff];
+uint8_t TerrainGetSlow(const MapCell* cells, int count, int idx) {
+    const uint8_t raw = cells[(size_t)idx].terrainType;
     if (!s_verifyInit) {
         s_verifyInit = 1;
         g_terrainVerify = Opt().perfTerrainVerify ? 1 : 0;
@@ -58,13 +58,13 @@ uint8_t TerrainGetSlow(const uint8_t* cells, int count, int idx) {
     return g_terrainSC[idx];
 }
 
-void TerrainNoteWrite(const uint8_t* cellPtr) {
+void TerrainNoteWrite(const MapCell* cellPtr) {
     if (!g_terrainSC || !cellPtr) return;
-    const uint8_t* base = g_terrainSCBase;
+    const MapCell* base = g_terrainSCBase;
     if (cellPtr < base) return;
-    const size_t idx = static_cast<size_t>(cellPtr - base) / kStride;
+    const size_t idx = static_cast<size_t>(cellPtr - base);
     if (idx >= (size_t)g_terrainSCCount) return;
-    g_terrainSC[idx] = cellPtr[kTypeOff];
+    g_terrainSC[idx] = cellPtr->terrainType;
     ++s_writes;
 }
 

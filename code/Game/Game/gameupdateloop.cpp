@@ -1917,7 +1917,7 @@ void GameUpdateLoop::Shutdown() {
 
     // EntityUI::SetTool(nullptr)
     TRACE("[GameUpdateLoop::Shutdown] calling EntityUI::SetTool(0)...\n");
-    Toolbar_ShowGroup_Impl(m_toolManager, 0);   // 0x140102b60
+    m_toolManager->SelectTool(nullptr);   // 0x140102b60
 
     // Disable cursor
     TRACE("[GameUpdateLoop::Shutdown] disabling cursor...\n");

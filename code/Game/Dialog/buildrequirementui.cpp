@@ -17,7 +17,6 @@
 // Decompiled from Application-x64.exe at 0x14005E7C0.
 
 #include "Dialog/ui_panels.h"
-#include "Component/coll_bridge.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
@@ -263,12 +262,12 @@ void BuildRequirementUI::OnCreated() {
     // current count and appends, because the controller is constructed fresh per
     // dialog and this runs exactly once on it. In standalone the controller is reused
     // across opens, so without a reset the arrays grow every time.
-    labelCount = 0;
-    countCount = 0;
+    labels._size = 0;
+    counts._size = 0;
 
     // Find first label element using format "labelBuild%i"
     {
-        System::String fmtBuf = System::String::Format("labelBuild%i", (uint64_t)(uint32_t)labelCount);
+        System::String fmtBuf = System::String::Format("labelBuild%i", (uint64_t)(uint32_t)labels._size);
         UI::Element* labelElem = _dialog->FindElement(fmtBuf).Get();
 
         while (labelElem) {
@@ -284,9 +283,9 @@ void BuildRequirementUI::OnCreated() {
             // Push into the label array at +0x40.
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8;
             // the new slot is written right after.
-            uint32_t newCount = (uint32_t)labelCount + 1;
-            GameColl::ArrayAt<UI::Element*>(&labelData, 0).SetSize((int)newCount);   // LEFT: H5 BuildRequirementUI's +0x40 label Array is raw members (Dialog/BuildRequirementUI.h, row 441)
-            labelData[newCount - 1] = wrappedElem;
+            uint32_t newCount = (uint32_t)labels._size + 1;
+            labels.SetSize((int)newCount);
+            labels._data[newCount - 1] = wrappedElem;
 
             // Find next label
             fmtBuf = System::String::Format("labelBuild%i", (uint64_t)newCount);
@@ -303,9 +302,9 @@ void BuildRequirementUI::OnCreated() {
     if (!resourceComp) return;
 
     // Determine item count: min of label count and cost entry count
-    int labels = labelCount;
+    int labelTotal = labels._size;
     int entryCount = resourceComp->_costCount;
-    int itemCount = (entryCount < labels) ? entryCount : labels;
+    int itemCount = (entryCount < labelTotal) ? entryCount : labelTotal;
 
     if (itemCount <= 0) goto check_multi;
 
@@ -320,7 +319,7 @@ void BuildRequirementUI::OnCreated() {
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003600,
             // stride 4 align 4, no init arm (every new slot takes the fill). SetSize
             // writes the new count itself (the tree once double-counted here).
-            GameColl::ArrayAt<int32_t>(&countData, 0).SetSize(countCount + 1, entry.quantity);   // LEFT: H5 BuildRequirementUI's count Array is raw members (Dialog/BuildRequirementUI.h, row 441)
+            counts.SetSize(counts._size + 1, entry.quantity);
 
             // The sub-entity of this entry (its raw material's description)
             ComponentDescription* subEntity = entry.material;
@@ -330,7 +329,7 @@ void BuildRequirementUI::OnCreated() {
                 FindCompInDesc(subEntity, RawMaterialDescription::TypeId()));
 
             // Set sprite on label element — but only if the resource type resolved.
-            UI::LabelElement* label = static_cast<UI::LabelElement*>(labelData[i]);
+            UI::LabelElement* label = static_cast<UI::LabelElement*>(labels._data[i]);
             if (SaneHeapPtr(resType)) {
                 // The small sprite: sheet (+0x20) and _nameSmall (+0x38)
                 #ifdef _DEBUG

@@ -84,7 +84,6 @@ extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNod
 // B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are
 // PlayerToolManager members (SelectTool, ToggleUtilityDialog, OpenPauseMenu,
 // CenterOnEntity; Game/PlayerToolManager.h). These are their forwarders.
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60 B4 FORWARD: 6 outside caller files -> PlayerToolManager::SelectTool
 // toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
 // (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity
@@ -112,7 +111,7 @@ class TradeComponent;
 extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list)
 
 // ---- tradeui_checkout.cpp
-extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp);  // 0x14005a490
+extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490
 // B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 

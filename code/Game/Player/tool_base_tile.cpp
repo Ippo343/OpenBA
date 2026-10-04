@@ -272,11 +272,10 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
                                                descComponent->_created);
 
     // Allocate + copy-construct the placed ComponentEntity.
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* entity = nullptr;
     if (mem != nullptr) {
-        entity = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),   // LEFT: the block is MemAlloc's void* (the 0x48-byte ComponentEntity allocation the ctor runs on)
-                                                     descriptionPtr);
+        entity = ComponentEntity_CtorFromDescription(mem, descriptionPtr);
     }
 
     // Resolve the placed entity's MapComponent (0x140004680) and write the footprint rect.

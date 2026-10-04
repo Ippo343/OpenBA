@@ -643,12 +643,12 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     // null -- because the deref is unguarded, which is retail's contract and
     // not a bug for the harness to paper over (CLAUDE.md). The crash is what
     // established the read-only reading above.
-    void* dlgLocal  = t.dlg;
-    void* elemLocal = t.elem;
+    Object::InternalPtr<UI::DialogInstance> dlgLocal(t.dlg);   // a bare pointer copy: InternalPtr's ctor / dtor are trivial
+    Object::InternalPtr<UI::Element>        elemLocal(t.elem);
 
     int32_t dragX = t.cx, dragY = t.cy;
-    ui->BeginDragDrop(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgLocal),  // B.3.6 bridge  // LEFT: two raw locals handed where BeginDragDrop takes InternalPtr<>* (an InternalPtr would construct / release)
-                      reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemLocal),   // LEFT: OTHER a raw Element* local handed where BeginDragDrop takes InternalPtr<Element>* (an InternalPtr local would construct / release a handle)
+    ui->BeginDragDrop(&dlgLocal,
+                      &elemLocal,
                       dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
     ++g_s.dragStarted;
     printf("[MouseInject] BeginDragDrop(dlg=%p, x=%d, y=%d) -> _dragDropDialog=%p\n",

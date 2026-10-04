@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "runtime/types/ui/DialogInstance.h"
+#include "collection/Collection.h"   // Collection::Array<Entry> (+0xC0)
 #include "Object/exe_type.h"
 
 namespace UI { class Element; class ImageElement; class TextElement; }
@@ -55,11 +56,11 @@ public:
 
 public:
     UI::TextElement* textComplete;   // +0xB8: "textComplete" element
-    // +0xC0 Collection::Array<Entry>, as its three raw members (the tree's dtor
-    // frees it by hand, as retail's does).
-    Entry*  entryData;               // +0xC0: entry array data (stride 0x20)
-    int32_t entryCount;              // +0xC8: entry array count
-    int32_t entryCapacity;           // +0xCC: entry array capacity
+    // +0xC0: create 0x140010320 zeroes its data qword and its count | capacity
+    // qword (0x140010369 / 0x140010370); the dtor 0x1400103f0 MemFrees the data
+    // unguarded and zeroes both qwords (0x14001041e .. 0x14001042d) before
+    // ~DialogInstance: the trivially destructible element's Array dtor.
+    Collection::Array<Entry> entries;   // +0xC0 (stride 0x20)
 };
 
 static_assert(sizeof(AchievementDialog::Entry) == 0x20, "AchievementDialog::Entry stride 0x20");
@@ -67,8 +68,6 @@ static_assert(offsetof(AchievementDialog::Entry, star) == 0x08, "Entry::star @ +
 static_assert(offsetof(AchievementDialog::Entry, title) == 0x10, "Entry::title @ +0x10");
 static_assert(offsetof(AchievementDialog::Entry, description) == 0x18, "Entry::description @ +0x18");
 static_assert(offsetof(AchievementDialog, textComplete) == 0xB8, "AchievementDialog +0xb8");
-static_assert(offsetof(AchievementDialog, entryData) == 0xC0, "AchievementDialog +0xc0");
-static_assert(offsetof(AchievementDialog, entryCount) == 0xC8, "AchievementDialog +0xc8");
-static_assert(offsetof(AchievementDialog, entryCapacity) == 0xCC, "AchievementDialog +0xcc");
+static_assert(offsetof(AchievementDialog, entries) == 0xC0, "AchievementDialog +0xc0");
 static_assert(sizeof(AchievementDialog) == 0xD0, "AchievementDialog is 0xd0 (create 0x140010320)");
 static_assert(alignof(AchievementDialog) == 8, "AchievementDialog is qword-aligned");

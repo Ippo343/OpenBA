@@ -28,6 +28,7 @@
 
 class GameUpdateLoop;    // Game/GameUpdateLoop.h
 class MenuDialogLoopT;   // Game/MenuDialogLoopT.h
+class MapGenerator; class TerrainGenerator; class ClimateGenerator;   // the three generator resources (StartNewGame)
 
 class MainMenuDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(MainMenuDialog)
@@ -67,7 +68,8 @@ public:
     // hand it to the menu loop (front end) or the running game as the next loop.
     // NewGameDialog's OK and ScenarioDialog's Load call it (newgamedialog.cpp).
     void* StartNewGame(const System::String& name, uint32_t seed, uint32_t terrainSize,
-                       bool disastersOff, void* mapGen, void* terrainGen, void* climateGen,
+                       bool disastersOff, MapGenerator* mapGen, TerrainGenerator* terrainGen,
+                       ClimateGenerator* climateGen,
                        uint32_t scenarioResIdx, const void* savedStateIBP);  // 0x1400b4540
 
 public:

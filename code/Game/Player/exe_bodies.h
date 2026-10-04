@@ -14,6 +14,7 @@
 #include "Player/Tool.h"             // ToolTileRecord / ToolSegmentRecord
 #include "Action/PathAvl.h"           // AvlTreeHead (the AVL sets below)
 #include "system/MemoryAllocator.h"   // Avl38FreeSubtree's MemFree
+#include "Game/WorldGeometryElements.h"   // GeometryBatchVertex (DecalVertexKey's record)
 #include <cstddef>
 namespace Video { class Context; }
 
@@ -67,13 +68,11 @@ uint64_t PlayerEdit_FencedAnchorCalc_dbf90(const FencedTool* self, uint32_t* par
 // set orders on the record's first 0x14 bytes, compared per column i (0..3) as
 // the short at +2i, the short at +8+2i, then the byte at +0x10+i.
 struct DecalVertexKey {
-    int16_t  column0[4];   // +0x00 compared as signed shorts
-    int16_t  column8[4];   // +0x08 compared as signed shorts
-    uint8_t  column10[4];  // +0x10 compared as unsigned bytes
-    int32_t  index;        // +0x14 the vertex's index in the slot's vertex list (not compared)
+    GeometryBatchVertex vertex;   // +0x00 compared per column: position (signed shorts), uv (signed shorts), normal (bytes)
+    int32_t             index;    // +0x14 the vertex's index in the slot's vertex list (not compared)
 };
 static_assert(sizeof(DecalVertexKey) == 0x18, "DecalVertexKey is the 0x18-byte element (0x14001f850 copies six dwords)");
-static_assert(offsetof(DecalVertexKey, column8) == 0x08 && offsetof(DecalVertexKey, column10) == 0x10, "DecalVertexKey columns");
+static_assert(offsetof(DecalVertexKey, vertex) == 0x00, "DecalVertexKey::vertex @ +0x00");
 static_assert(offsetof(DecalVertexKey, index) == 0x14, "DecalVertexKey::index @ +0x14 (0x1400ace40 reads node+0x14)");
 struct DecalVertexNode {
     DecalVertexKey   key;       // +0x00
@@ -89,7 +88,7 @@ static_assert(offsetof(DecalVertexNode, parent) == 0x18 && offsetof(DecalVertexN
 static_assert(offsetof(DecalVertexNode, right) == 0x28 && offsetof(DecalVertexNode, balance) == 0x30, "DecalVertexNode links");
 static_assert(offsetof(DecalVertexNode, height) == 0x32, "DecalVertexNode::height @ +0x32");
 DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out, const DecalVertexKey* key);  // 0x14001f6b0
-DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key);  // 0x14001fc00
+DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const GeometryBatchVertex* key);  // 0x14001fc00 (0x1400ace40 passes the corner record itself)
 
 namespace Graphics { class MaterialInstance; }
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
@@ -118,7 +117,7 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 // ---- tool_base_render.cpp
 class EditTool;
 extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
-extern "C" void HighlightClear_Impl(void* self);  // 0x1400fcb40
+extern "C" void HighlightClear_Impl(EditTool* self);  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
 // ---- tool_base_screenrect.cpp

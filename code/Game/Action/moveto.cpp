@@ -426,9 +426,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     // destCell here samples the wrong tile's movement cost.
     // [PerfX] TERRAIN_SIDECAR: same byte, read through the 1-byte-per-cell mirror
     // (perf_terrain.h) instead of the 0x30-stride cell record -- raw read when off.
-    // LEFT: PerfX::TerrainGet (standalone/perf_terrain.h, STANDALONE) takes the cell array
-    // as bytes.
-    uint8_t terrainType = PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(map->cells),   // LEFT: SIG PerfX::TerrainGet — its slow path TerrainGetSlow and g_terrainSCBase (standalone/perf_terrain.cpp) hold the cell array as bytes
+    uint8_t terrainType = PerfX::TerrainGet(map->cells,
                                             map->cellCount, curCell);
 
     float speed;

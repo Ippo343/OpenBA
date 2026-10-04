@@ -438,14 +438,8 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
     currentTool->Startup();
 }
 
-// B4 FORWARD: 6 outside caller(s) (Component/nomadcomponent.cpp,
-// Dialog/entityui.cpp, Game/gameupdateloop.cpp, Tutorial/tutorialsetupdialog.cpp,
-// Tutorial/tutorialsetuprestrictplayer.cpp, via EntityUI_SetEditMode_Impl the
-// Player tools and standalone harnesses).
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
-    reinterpret_cast<PlayerToolManager*>(gameSubsys)->SelectTool(   // LEFT: SIG Toolbar_ShowGroup_Impl (B4 FORWARD: nomadcomponent.cpp, gameupdateloop.cpp, tutorialsetup*.cpp pass void* / int64_t)
-        reinterpret_cast<ComponentDescription*>(groupId));   // LEFT: SIG Toolbar_ShowGroup_Impl (B4 FORWARD: nomadcomponent.cpp, gameupdateloop.cpp, tutorialsetup*.cpp pass void* / int64_t)
-}
+// B4 X6: the forwarder Toolbar_ShowGroup_Impl(void*, int64_t) is deleted; its two
+// callers (PlayerToolManager::OnEntityRemoved, GameUpdateLoop) call SelectTool(nullptr).
 
 // ============================================================
 // PlayerToolManager::ToggleUtilityDialog (FUN_140101a80; the tree's
@@ -1677,7 +1671,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
 // B4 FORWARD: outside callers in Dialog/citizenui.cpp, entityui.cpp, townhallui.cpp,
 // workplaceui.cpp and residenceui.cpp's GoToCitizen (its entity is still raw).
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
-    reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(   // LEFT: SIG Toolbar_CenterOnEntity_Impl (B4 FORWARD: townhallui.cpp, workplaceui.cpp and others pass void*)
-        reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),   // LEFT: SIG Toolbar_CenterOnEntity_Impl (B4 FORWARD: townhallui.cpp, workplaceui.cpp and others pass void*)
-        reinterpret_cast<ComponentEntity* const*>(entityPtr));   // LEFT: SIG Toolbar_CenterOnEntity_Impl (B4 FORWARD: townhallui.cpp, workplaceui.cpp and others pass void*)
+    reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(   // LEFT: SIG Toolbar_CenterOnEntity_Impl: citizenui.cpp hands a ComponentEntity as the dialog and a component as the entity (known_port_issues row 690), residenceui.cpp the entity word of a raw StorageComponent read (row 452)
+        reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),   // LEFT: SIG Toolbar_CenterOnEntity_Impl: citizenui.cpp hands a ComponentEntity as the dialog and a component as the entity (known_port_issues row 690), residenceui.cpp the entity word of a raw StorageComponent read (row 452)
+        reinterpret_cast<ComponentEntity* const*>(entityPtr));   // LEFT: SIG Toolbar_CenterOnEntity_Impl: citizenui.cpp hands a ComponentEntity as the dialog and a component as the entity (known_port_issues row 690), residenceui.cpp the entity word of a raw StorageComponent read (row 452)
 }
