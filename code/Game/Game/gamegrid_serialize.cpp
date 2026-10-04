@@ -105,22 +105,16 @@ namespace {
 //
 // B4 P2 GAME-1: the element is MapCell (Game/Map.h), reached through
 // Collection.h's element adapters; every field by name. The tree's merged
-// stores (one qword over +0x1C..+0x23, one dword over +0x26..+0x29, one dword
-// over +0x2A..+0x2D) are the named fields' stores, in address order (H7): the
+// stores (one dword over +0x26..+0x29, one dword over +0x2A..+0x2D; the qword
+// over +0x1C..+0x23 stays one qword) are the named fields' stores, in address order (H7): the
 // same bytes, +0x25 and +0x2E..+0x2F still unwritten.
 void CopyMapCell(MapCell* d, const MapCell* s) {
     d->blocker = s->blocker;            // +0x00
     d->occupant = s->occupant;          // +0x08
     d->field_0x10 = s->field_0x10;      // +0x10
     d->regionId = s->regionId;          // +0x18
-    d->field_0x1C[0] = s->field_0x1C[0];   // +0x1C..+0x24, the 9-byte block
-    d->field_0x1C[1] = s->field_0x1C[1];
-    d->field_0x1C[2] = s->field_0x1C[2];
-    d->field_0x1C[3] = s->field_0x1C[3];
-    d->field_0x1C[4] = s->field_0x1C[4];
-    d->field_0x1C[5] = s->field_0x1C[5];
-    d->field_0x1C[6] = s->field_0x1C[6];
-    d->field_0x1C[7] = s->field_0x1C[7];
+    // +0x1C..+0x24, the 9-byte block: one qword and one byte, as retail moves it
+    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = *reinterpret_cast<const uint64_t*>(&s->field_0x1C[0]);   // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]; the copy is a qword + a byte
     d->field_0x1C[8] = s->field_0x1C[8];
 
     d->zone = s->zone;                  // +0x26
@@ -138,8 +132,8 @@ void ZeroMapCell(MapCell* d) {
     d->occupant = nullptr;              // +0x08
     d->field_0x10 = nullptr;            // +0x10
     d->regionId = -1;                   // +0x18 0xffffffff
-    for (int k = 0; k < 9; ++k)         // +0x1C..+0x24
-        d->field_0x1C[k] = 0;
+    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = 0;   // +0x1C..+0x23 one qword 0  // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]
+    d->field_0x1C[8] = 0;               // +0x24
     d->zone = 0;                        // +0x26..+0x29 zero
     d->footprintCount = 0;
     d->terrainType = 0;
