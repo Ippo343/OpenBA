@@ -29,6 +29,7 @@
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "Action/PathAvl.h"   // AvlRebalance (0x140013480)
+#include "Work/GridTile.h"      // GridTile (0x14009fc00 / 0x14009d7c0)
 #include "Player/exe_bodies.h"   // B3R: PlayerPath_FindComponent_3ea0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
@@ -300,20 +301,10 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* serializer) {
     }
 }
 
-// ============================================================
-// The 16-byte tile record WorldGrid::GetTilesInArea (0x14009fc00) pushes and
-// SortTilesByDistance (0x14009d7c0) sorts: a Collection::Array element.
-// LEFT: its callers (ClearArea, WORK-a) hand the array header as void*.
-// ============================================================
-namespace {
-struct GridTile {
-    int32_t          cell;       // +0x00 the map cell index
-    int32_t          distance;   // +0x04 squared grid distance (SortTilesByDistance)
-    ComponentEntity* entity;     // +0x08 the cell's occupant (InternalPtr), or null
-};
-static_assert(sizeof(GridTile) == 0x10, "tile stride 0x10");
-using GridTileArray = Collection::Array<GridTile>;
-}  // namespace
+// The 16-byte tile record GetTilesInArea (0x14009fc00) pushes and
+// SortTilesByDistance (0x14009d7c0) sorts is GridTile (Work/GridTile.h); the
+// callers' arrays are RawArray<GridTile>.
+using GridTileArray = RawArray<GridTile>;
 
 // ============================================================
 // 0x14009d7c0 — WorldGrid::SortTilesByDistance (FUN_14009d7c0)
@@ -330,11 +321,10 @@ int WorkLeaf_TileDistCompare(const void* a, const void* b) {
     return da - db;   // MOV EAX,[RCX+4]; SUB EAX,[RDX+4]; RET
 }
 }
-void WorkLeaf_SortTilesByDistance_9d7c0(int* mapGrid, void* tileArray, int refCell) {
-    GridTileArray* arr = reinterpret_cast<GridTileArray*>(tileArray);
-    int gridW = *mapGrid;
-    int count = arr->_size;
-    GridTile* base = arr->_data;
+void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, GridTileArray* arr, int refCell) {
+    int gridW = map->size;
+    int count = arr->size;
+    GridTile* base = arr->data;
     if (count > 0) {
         for (int i = 0; i < count; i++) {
             GridTile& e = base[i];
@@ -362,24 +352,24 @@ void WorkLeaf_SortTilesByDistance_9d7c0(int* mapGrid, void* tileArray, int refCe
 namespace {
 // push one tile `rec` into array `arr`. Faithful to the exe inline.
 void WorkLeaf_TileArrPush(GridTileArray* arr, const GridTile* rec) {
-    int oldCount = arr->_size;
+    int oldCount = arr->size;
     int newCount = oldCount + 1;
     if (newCount == oldCount) return;            // overflow guard (exe: iVar10!=iVar11)
-    GridTile* oldPtr = arr->_data;
-    arr->_size = newCount;
-    if (arr->_capacity < newCount) {
-        arr->_capacity = newCount;
+    GridTile* oldPtr = arr->data;
+    arr->size = newCount;
+    if (arr->capacity < newCount) {
+        arr->capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            arr->_capacity = newCount * 3;
+            arr->capacity = newCount * 3;
         }
-        arr->_data = static_cast<GridTile*>(
-            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->_capacity) << 4, 8));
+        arr->data = static_cast<GridTile*>(
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) << 4, 8));
     }
-    int copyStart = (oldPtr == arr->_data) ? oldCount : 0;
+    int copyStart = (oldPtr == arr->data) ? oldCount : 0;
     if (copyStart < newCount) {
         const GridTile* srcOld = oldPtr + copyStart;
         for (int idx = copyStart; idx < newCount; idx++) {
-            GridTile* dst = arr->_data + idx;
+            GridTile* dst = arr->data + idx;
             if (dst != nullptr) {
                 const GridTile* s = (idx < oldCount) ? srcOld : rec;
                 dst->cell = s->cell;
@@ -390,17 +380,14 @@ void WorkLeaf_TileArrPush(GridTileArray* arr, const GridTile* rec) {
             srcOld += 1;
         }
     }
-    if (oldPtr != arr->_data) {
+    if (oldPtr != arr->data) {
         System::MemoryAllocator::MemFree(oldPtr);
     }
 }
 }
 
-void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h,
-                                   void* outArr, char collectEmpty) {
-    // LEFT: the callers hand the Map as its leading int and the array as void*.
-    Map* map = reinterpret_cast<Map*>(grid);
-    GridTileArray* arr = reinterpret_cast<GridTileArray*>(outArr);
+void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h,
+                                   GridTileArray* arr, char collectEmpty) {
     int gridW = map->size;
     MapCell* cells = map->cells;
     int rowEnd = h + y;
@@ -428,14 +415,12 @@ void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h,
                     cell.field_0x2A == 0xFF) {
                     // Pass/flag condition HOLDS: walk the Map's +0xE8 set (int keys).
                     // Exe: found (cellIdx <= *node) -> EMIT; exhausted -> SKIP.
-                    // LEFT: Map::field_0xE8 is untyped (GAME-a's header).
-                    Collection::Set<int32_t>::Node* bnode =
-                        reinterpret_cast<Collection::Set<int32_t>::Node*>(map->field_0xE8);
+                    const AvlNode28* bnode = map->field_0xE8;   // key +0x00, left +0x10, right +0x18
                     emit = false;
                     while (bnode != nullptr) {
-                        if (cellIdx < bnode->element) {
+                        if (cellIdx < bnode->key) {
                             bnode = bnode->left;                          // left  +0x10
-                        } else if (cellIdx <= bnode->element) {
+                        } else if (cellIdx <= bnode->key) {
                             emit = true;                                  // found -> emit
                             break;
                         } else {

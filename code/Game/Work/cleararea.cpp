@@ -26,6 +26,7 @@
 #include "system/MemoryAllocator.h"
 #include "math/Math.h"
 #include "Work/exe_bodies.h"
+#include "Work/GridTile.h"         // GridTile (0x14009fc00)
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_bodies.h"        // B3R: 0x14009f3e0
@@ -303,15 +304,7 @@ int ClearArea::GetPriority() {
 // RawMaterialComponent (DAT_1401c7c80) and WorkComponent (DAT_1401c8070) are read
 // through their classes' TypeId().
 
-// ============================================================
-// Tile info entry — 16 bytes per tile returned by GetTilesInArea
-// ============================================================
-struct TileInfo {
-    uint32_t tileIndex;          // +0x00
-    uint32_t pad04;              // +0x04
-    ComponentEntity* entityPtr;  // +0x08: InternalBasePtr to entity on this tile (null if empty)
-};
-static_assert(sizeof(TileInfo) == 0x10, "TileInfo size mismatch");
+// The 16-byte tile GetTilesInArea returns is GridTile (Work/GridTile.h).
 
 // ============================================================
 // ClearArea::Execute implementation
@@ -356,20 +349,14 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // --- Get tile list for the clear area ---
     int result = 0;
 
-    // Tile array (dynamic): ptr + count
-    struct TileArray {
-        TileInfo* ptr;
-        int count;
-        int _pad;
-    };
-    TileArray tileArray;
-    tileArray.ptr = nullptr;
-    tileArray.count = 0;
-    tileArray._pad = 0;
+    // Tile array (dynamic): data, size, capacity (freed by hand below)
+    RawArray<GridTile> tileArray;
+    tileArray.data = nullptr;
+    tileArray.size = 0;
+    tileArray.capacity = 0;
 
     // The world map; the grid callees take it as a leading int*
     Map* map = GameUpdateLoop::_singleton->m_game;
-    int* worldGrid = (int*)map;   // LEFT: SIG WorkLeaf_* (Map passed as int*)
 
     // Read the tile-query filter flag.
     //
@@ -394,10 +381,10 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     int16_t y2 = area->tileY1;
 
     // Get tiles in the area
-    WorkLeaf_GetTilesInArea_9fc00(worldGrid, (int)x1, (int)y1, (int)x2, (int)y2,
+    WorkLeaf_GetTilesInArea_9fc00(map, (int)x1, (int)y1, (int)x2, (int)y2,
                                  &tileArray, includeEmptyTiles);
 
-    int tileCount = tileArray.count;
+    int tileCount = tileArray.size;
     if (tileCount == 0) {
         goto done_nothing;
     }
@@ -430,16 +417,16 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         uint32_t refTileIdx = (uint32_t)(gridSize * tileY + tileX);
 
         // Sort tiles by distance from citizen
-        WorkLeaf_SortTilesByDistance_9d7c0(worldGrid, &tileArray, refTileIdx);
+        WorkLeaf_SortTilesByDistance_9d7c0(map, &tileArray, refTileIdx);
 
         // ============================================================
         // Phase 1: Clear trees (field_70)
         // ============================================================
         if (field_70 != 0 && tileCount > 0) {
-            TileInfo* tiles = tileArray.ptr;
+            GridTile* tiles = tileArray.data;
             for (int i = 0; i < tileCount; i++) {
-                TileInfo* tile = &tiles[i];
-                ComponentEntity* treeEntity = tile->entityPtr;
+                GridTile* tile = &tiles[i];
+                ComponentEntity* treeEntity = tile->entity;
 
                 if (treeEntity == nullptr) {
                     continue;  // no entity on this tile
@@ -480,7 +467,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Find valid cell near this tile
-                int cellIdx = WorkGrid_FindCell_9ccf0(map, tile->tileIndex, refTileIdx, 0xe07);
+                int cellIdx = WorkGrid_FindCell_9ccf0(map, tile->cell, refTileIdx, 0xe07);
                 if (cellIdx < 0) {
                     continue;
                 }
@@ -556,20 +543,20 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 goto cleanup;
             }
             // Exhausted all tiles in phase 1, reload tileCount
-            tileCount = tileArray.count;
+            tileCount = tileArray.size;
         }
 
         // ============================================================
         // Phase 2: Clear ground tiles (field_71)
         // ============================================================
         if (field_71 != 0 && tileCount > 0) {
-            TileInfo* tiles = tileArray.ptr;
+            GridTile* tiles = tileArray.data;
             for (int i = 0; i < tileCount; i++) {
-                TileInfo* tile = &tiles[i];
-                uint32_t tileIdx = tile->tileIndex;
+                GridTile* tile = &tiles[i];
+                uint32_t tileIdx = tile->cell;
 
                 // Only process tiles with no entity
-                if (tile->entityPtr != nullptr) continue;
+                if (tile->entity != nullptr) continue;
 
                 // Check if tile is already in ground tracking BST at +0x58
                 WorkCellSetNode* bstNode = field_58;
@@ -586,14 +573,14 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                     }
                 }
                 if (alreadyTracked) {
-                    tileCount = tileArray.count;
+                    tileCount = tileArray.size;
                     continue;
                 }
 
                 // Validate cell passability
                 int passable = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
                 if (!(passable & 0xFF)) {
-                    tileCount = tileArray.count;
+                    tileCount = tileArray.size;
                     continue;
                 }
 
@@ -657,18 +644,18 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         // Phase 3: Clear natural resources (field_72)
         // ============================================================
         if (field_72 != 0 && tileCount > 0) {
-            TileInfo* tiles = tileArray.ptr;
+            GridTile* tiles = tileArray.data;
             for (int i = 0; i < tileCount; i++) {
-                TileInfo* tile = &tiles[i];
+                GridTile* tile = &tiles[i];
 
                 // CheckPtr on entity for this tile; its RawMaterialComponent
                 // (DAT_1401c7c80) -- the FindComponent walk, inlined by retail
-                RawMaterialComponent* natResComp = tile->entityPtr->FindComponent<RawMaterialComponent>();
+                RawMaterialComponent* natResComp = tile->entity->FindComponent<RawMaterialComponent>();
 
                 if (natResComp == nullptr) continue;
 
                 // Now find the WorkComponent on the same entity
-                WorkComponent* storageLocComp = tile->entityPtr->FindComponent<WorkComponent>();
+                WorkComponent* storageLocComp = tile->entity->FindComponent<WorkComponent>();
 
                 // Get the posted work id from the WorkComponent
                 int resourceTypeId = storageLocComp->workId;
@@ -694,11 +681,11 @@ done_nothing:
 
 cleanup:
     // Free the tile array
-    if (tileArray.ptr) {
-        System::MemoryAllocator::MemFree(tileArray.ptr);
+    if (tileArray.data) {
+        System::MemoryAllocator::MemFree(tileArray.data);
     }
-    tileArray.ptr = nullptr;
-    tileArray.count = 0;
+    tileArray.data = nullptr;
+    tileArray.size = 0;
     return result;
 }
 

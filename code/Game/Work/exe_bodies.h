@@ -127,8 +127,10 @@ void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropF
 void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP);  // 0x1400298a0
 void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* insIBP);  // 0x140029920
 void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser);  // 0x140029c10
-void WorkLeaf_SortTilesByDistance_9d7c0(int* mapGrid, void* tileArray, int refCell);  // 0x14009d7c0
-void WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h, void* outArr, char collectEmpty);  // 0x14009fc00
+struct GridTile;   // Work/GridTile.h
+template <class T> struct RawArray;   // Action/PathSearch.h
+void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0
+void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp
 int WorkLeaf_FreeStorageCapacity_116540(intptr_t self);  // 0x140116540
