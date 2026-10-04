@@ -149,10 +149,6 @@ namespace {
 // ============================================================
 
 // Event-log leaves exported from code/Game/Game/eventlog.cpp.
-extern "C" void EventLog_ArrayGrow_Reg(void* arrBase, int newCount, const void* newEntry);
-extern "C" void EventLog_YearString_Reg(void* gameWorld, void* retStr);
-extern "C" void EventLog_SeasonString_Reg(void* gameWorld, void* eventLog, void* retStr);
-extern "C" int  EventLog_TileIndex_Reg(void* unused, void* entityIBP);
 
 // Particle VFX (code/Game/Component/particlecomponent.cpp, 0x140053660):
 // ParticleComponent_StartEmitterFade, declared in particlecomponent_funcs.h.
@@ -468,8 +464,8 @@ void DiseaseComponent::Infect() {
                                     seasonStr._data, yearStr._data,
                                     haveName ? cropName._data : "");
 
-        void* entityIBP = &_entity;
-        int tileIdx = EventLog_TileIndex_Reg(nullptr, entityIBP);
+        const Object::InternalPtr<ComponentEntity> entityIBP(_entity);
+        int tileIdx = EventLog_TileIndex_Reg(nullptr, &entityIBP);
 
         // Every byte zeroed, the text copy-constructed, destroyed after the grow.
         EventLogEntry entry = {
@@ -514,11 +510,12 @@ void DiseaseComponent::Infect() {
     spreadAccum._ticks = 0;
 
     if (CDTrace()) {
+        [[maybe_unused]] const Object::InternalPtr<ComponentEntity> traceIBP(_entity);
         printf("[CropDisease] INFECT self=%p pasture=%d stage=%d durationMonths=%.2f "
                "emitters=%d tile=%d\n",
                (void*)this, (int)isPasture, (int)stage,
                (double)desc->durationMonths, emitters,
-               EventLog_TileIndex_Reg(nullptr, &_entity));
+               EventLog_TileIndex_Reg(nullptr, &traceIBP));
         fflush(stdout);
     }
 }

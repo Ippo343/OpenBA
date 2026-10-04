@@ -349,8 +349,8 @@ void FireComponent::Ignite() {
     // The Map's active-fire count is Map::field_0x90[6] (+0x9c).
     const Map* grid = gw->m_game;
     if (grid && grid->field_0x90[6] < 1) {
-        void* eventLog = gw->m_eventNotifier;   // +0x138
-        ComponentEntity* entityIbp = _entity;
+        EventLog* eventLog = gw->m_eventNotifier;   // +0x138
+        Object::InternalPtr<ComponentEntity> entityIbp(_entity);
         if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
         // The settings' auto-slow byte (+0x17). Retail 0x1400498e6:
         // MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of the settings

@@ -293,7 +293,7 @@ char TradeComponent::OnMerchantDocked(StateMachine* sm) {
     if (gw) {
         // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
         // helper takes an InternalBasePtr*, not the entity).
-        ComponentEntity* entityIBP = _entity;
+        Object::InternalPtr<ComponentEntity> entityIBP(_entity);
         EventLog_AddEvent(gw->m_eventNotifier, 0xd, 2, &entityIBP);
     }
 

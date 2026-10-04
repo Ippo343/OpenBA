@@ -864,7 +864,7 @@ void CitizenBehavior::CountResources() {
 void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
     float notifyInterval = 120.0f; // DAT_140172210 = 120.0f seconds
     // GameUpdateLoop +0x138 is the event notifier (still void* in GameUpdateLoop.h)
-    void* notifMgr = GameUpdateLoop::_singleton->m_eventNotifier;
+    EventLog* notifMgr = GameUpdateLoop::_singleton->m_eventNotifier;
 
     // Part 1: Check profession resource thresholds (21 entries)
     for (int i = 0; i < 21; i++) {
@@ -892,7 +892,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
             if (currentCount < threshold && threshold <= previousCount) {
                 // Fire shortage notification (with a null entity InternalBasePtr)
                 {
-                    void* nullIBP = nullptr;
+                    Object::InternalBasePtr nullIBP(nullptr);
                     EventLog_AddEvent(notifMgr, i + 0x11, 3, &nullIBP);   // 0x140095580
                 }
                 // Reset timer to notification cooldown (120 seconds)
@@ -932,7 +932,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
                 // Notification type: 0x17 for food (entry 0), 0x18 for firewood (entry 1)
                 int notifType = 0x17 + (i != 0 ? 1 : 0);
                 {
-                    void* nullIBP = nullptr;
+                    Object::InternalBasePtr nullIBP(nullptr);
                     EventLog_AddEvent(notifMgr, notifType, 3, &nullIBP);   // 0x140095580
                 }
                 {

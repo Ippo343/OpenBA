@@ -763,7 +763,7 @@ void TornadoComponent::Startup() {
     }
 
     // --- post the warning to the event log, and pause if the setting says so ---
-    void* eventLog = gw->m_eventNotifier;
+    EventLog* eventLog = gw->m_eventNotifier;
     Object::InternalBasePtr nullIbp(nullptr);
     EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
 

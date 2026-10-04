@@ -585,7 +585,7 @@ void ImmigrationComponent::OnLeaveGroup() {
 char ImmigrationComponent::EnterAnswer() {
     GameUpdateLoop* gw = GW();
     if (gw) {
-        ComponentEntity* ownerIBP = _entity;
+        Object::InternalPtr<ComponentEntity> ownerIBP(_entity);
         EventLog_AddEvent(gw->m_eventNotifier, 0xe, 2, &ownerIBP);
     }
     return 1;
