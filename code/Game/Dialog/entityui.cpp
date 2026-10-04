@@ -216,13 +216,11 @@ static TrackedEntityNode* NewTrackedEntityNode(ComponentEntity* key, uint32_t x,
     return node;
 }
 
-void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
+void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEntity* const* entityPtr,
                                  uint32_t x, uint32_t y)
 {
-    // LEFT: SIG EntityUI_SelectEntity_Impl (the receiver and key arrive as void*:
-    // toolui.cpp declares it locally).
-    PlayerToolManager* manager = reinterpret_cast<PlayerToolManager*>(playerController);
-    ComponentEntity* entityKey = *reinterpret_cast<ComponentEntity* const*>(entityPtr);
+    PlayerToolManager* manager = playerController;
+    ComponentEntity* entityKey = *entityPtr;
     TrackedEntityNode** rootPtr = &manager->field_0x60;
 
     // Search the tree for an existing node with this key
@@ -681,7 +679,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         // If pinned, select entity in edit tool at the dialog's upper-left corner
         uint32_t dialogX = _dialog->_upperLeftX;
         uint32_t dialogY = _dialog->_upperLeftY;
-        void* entityKey = entity;
+        ComponentEntity* entityKey = entity;
         EntityUI_SelectEntity_Impl(playerController, &entityKey, dialogX, dialogY);
         return;
     }

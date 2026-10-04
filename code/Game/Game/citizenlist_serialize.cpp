@@ -67,8 +67,7 @@
 //                                     Serialize_StringTable); resolved locally here.
 //   fn_Serializer_SerializeBulk     — engine_funcs.h, used for the int-assoc arrays'
 //                                     inner int[] bulk serialize.
-//   TradeWork_impl_4b40 (0x140014b40) — shared AVL retrace, already ported+registered
-//                                     in code/Game/Player/tool_base_highlight.cpp.
+//   Avl38Retrace (0x140014b40) — the shared AVL retrace template (Player/exe_bodies.h).
 //   Reimpl_ExternalPtrArray_Serialize (0x1400049c0) — already ported+registered in
 //                                     code/Game/Game/serialize_externals_array.cpp.
 //   TradeDescription_impl_e360 (0x14000e360) — DEAD-PATH ONLY (version<2 legacy tree,
@@ -127,12 +126,12 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "Game/exe_bodies.h"
-#include "Player/exe_bodies.h"              // TradeWork_impl_4b40
+#include "Player/exe_bodies.h"              // Avl38Retrace (0x140014b40)
 #include "Component/exe_bodies.h"           // CitizenAI_Reg_helper_e360, StorageComponent_DynArrayResize
 #include "Component/wellcomponent_funcs.h"  // WellComp_AddCellEntry_88a80
 
 // Already-ported sibling functions, called by name through their declaring headers:
-//   0x140014b40 TradeWork_impl_4b40 (Player/exe_bodies.h), 0x14000e360
+//   0x140014b40 Avl38Retrace (Player/exe_bodies.h), 0x14000e360
 //   CitizenAI_Reg_helper_e360 (Component/exe_bodies.h), 0x140018020 / 0x140002340
 //   Reimpl_ExternalPtr_Serialize_StringTable and 0x1400049c0
 //   Reimpl_ExternalPtrArray_Serialize (Game/exe_bodies.h), 0x14000f090
@@ -371,7 +370,7 @@ using IntPairArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 void ResizeStride0x10(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x140/+0x150 are still raw 0x10-byte
     // headers in an unconverted exe struct.
-    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);   // LEFT: SIG ResizeStride0x10 (caller Entity/citizenbehavior.cpp); CitizenBehavior.h (ENT) +0x140/+0x150 are raw headers (H5)
+    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);   // LEFT: CitizenBehavior.h +0x140 / +0x150 (and the v5 clamp's +0x160) are raw {data, count, cap} triples (H5): the one erased core through the header view
 }
 
 // ------------------------------------------------------------
@@ -381,7 +380,7 @@ void ResizeStride0x10(void* hdr, int n) {
 // ------------------------------------------------------------
 void ResizeStride0x20(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
-    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);   // LEFT: SIG ResizeStride0x20 (caller Entity/citizenbehavior.cpp); CitizenBehavior.h (ENT) +0x170 is a raw header (H5)
+    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);   // LEFT: CitizenBehavior.h +0x170 is a raw {data, count, cap} triple (H5): the one erased core through the header view
 }
 
 namespace {
@@ -440,7 +439,7 @@ void SerializeIntAssocArray(Collection::Array<int32_t>** outer, int32_t* countFi
 // ------------------------------------------------------------
 // TREE #1 / TREE #2 — component-ref-keyed BST mapping key -> IBP[] array.
 // Node (0x38 bytes): {uint64 key@0, valHdr[16]@8 (ptr,count,cap), parent@0x18,
-// left@0x20, right@0x28, int32 balance@0x30}. Rebalance via TradeWork_impl_4b40.
+// left@0x20, right@0x28, int16 balance@0x30, int16 height@0x32}. Rebalance via Avl38Retrace (0x140014b40).
 // ------------------------------------------------------------
 struct IbpArrayHeader {             // a Collection::Array<InternalPtr<ComponentEntity>>
     ComponentEntity** data;         // +0x00
@@ -453,7 +452,8 @@ struct CompRefNode {
     CompRefNode*   parent;          // +0x18
     CompRefNode*   left;            // +0x20
     CompRefNode*   right;           // +0x28
-    int32_t        balance;         // +0x30
+    int16_t        balance;         // +0x30 right height - left height (0x140014b40)
+    int16_t        height;          // +0x32
     uint8_t        _pad34[4];       // +0x34
 };
 static_assert(sizeof(CompRefNode) == 0x38, "CompRefNode is MemAlloc(0x38)");
@@ -462,6 +462,7 @@ static_assert(offsetof(CompRefNode, parent) == 0x18, "CompRefNode::parent @ +0x1
 static_assert(offsetof(CompRefNode, left) == 0x20, "CompRefNode::left @ +0x20");
 static_assert(offsetof(CompRefNode, right) == 0x28, "CompRefNode::right @ +0x28");
 static_assert(offsetof(CompRefNode, balance) == 0x30, "CompRefNode::balance @ +0x30");
+static_assert(offsetof(CompRefNode, height) == 0x32, "CompRefNode::height @ +0x32");
 
 CompRefNode* AllocCompRefTreeNode(uint64_t key, CompRefNode* parent, const IbpArrayHeader& val) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
@@ -472,7 +473,8 @@ CompRefNode* AllocCompRefTreeNode(uint64_t key, CompRefNode* parent, const IbpAr
     n->parent = parent;              // +0x18
     n->left = nullptr;               // +0x20
     n->right = nullptr;              // +0x28
-    n->balance = 0;                  // +0x30
+    n->balance = 0;                  // +0x30 / +0x32: retail's dword zero (H7: two stores)
+    n->height = 0;
     return n;
 }
 
@@ -496,8 +498,11 @@ CompRefNode* CompRefTreeSucc(CompRefNode* n) {
 // declared void*), `countField` its count.
 void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* serializer,
                           fn_KeyResolve_t keyFn) {
-    // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
-    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);   // LEFT: CitizenBehavior.h (ENT): field_0x100 / field_0x160 are void* tree roots
+    // LEFT: the roots are CitizenBehavior.h's ProfessionBucket* / TemplateBucket*
+    // (CitizenBucketNode<Key>), whose +0x30 is one int32 where 0x140014b40 reads an
+    // int16 balance + int16 height: this body walks its own CompRefNode until that
+    // header's node carries the pair (not this block's header).
+    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);   // LEFT: CitizenBehavior.h CitizenBucketNode::balance (int32, retail int16 + int16)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -541,9 +546,7 @@ void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* 
             }
             if (!dup) {
                 *countField = *countField + 1;
-                // LEFT: the shared AVL retrace takes int64_t* (Player/exe_bodies.h).
-                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(rootPtr),   // LEFT: SIG TradeWork_impl_4b40(int64_t*) (wave X)
-                                     reinterpret_cast<int64_t*>(&insertedNode));   // LEFT: SIG TradeWork_impl_4b40(int64_t*) (wave X)
+                Avl38Retrace(rootPtr, &insertedNode);   // 0x140014b40 (the shared AVL retrace)
             }
         }
     } else {
@@ -608,8 +611,9 @@ LegacyNode* LegacyTreeSucc(LegacyNode* n) {
     return parent;
 }
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
-    // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
-    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);   // LEFT: CitizenBehavior.h (ENT): field_0x160 is a void* tree root
+    // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
+    // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
+    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);   // LEFT: +0x160 read as a second node type (legacy path)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -643,8 +647,9 @@ void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Seriali
             }
             if (!dup) {
                 *countField = *countField + 1;
-                // LEFT: the shared AVL retrace takes int64_t* (Component/exe_bodies.h).
-                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360   // LEFT: SIG CitizenAI_Reg_helper_e360(int64_t*) (wave X)
+                // LEFT: 0x14000e360's typed body is citizenai_housing_idle.cpp's Helper_e360
+                // (WorkCandidateNode, not a template; X-G1-2's file): the C entry takes int64_t*.
+                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360   // LEFT: SIG CitizenAI_Reg_helper_e360(int64_t*)
             }
         }
     } else {

@@ -42,11 +42,9 @@ static T* FindElementAs(MapParamsDialog* dialog, const char* name) {
 }
 
 // The UI::String of a generator's name: its StringTable (+0x20) and name key (+0x28).
-// LEFT: the generator headers declare both as void* (block GAME).
 template <class Generator>
 static UI::String GeneratorNameString(const Generator* desc) {
-    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(desc->_field20)),
-                     *reinterpret_cast<const System::String*>(&desc->_field28));
+    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(desc->_field20), desc->_field28);
     uiStr.pad0C = 0;   // built in a zeroed 16-byte slot before
     return uiStr;
 }

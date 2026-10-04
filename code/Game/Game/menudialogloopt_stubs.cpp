@@ -374,7 +374,7 @@ void MenuDialogLoopT::Startup() {
     // the UserInterface's sound table.
     EnsureUISoundsLoaded();
 
-    void* ui = &_ui;
+    UI::UserInterface* ui = &_ui;
     GameContainer* keyMap = (g_gameContainer);
     UI::Cursor* arrowCursor = keyMap
         ? keyMap->cursorArrow.Get()
@@ -688,7 +688,7 @@ void MenuDialogLoopT::Draw(float alpha) {
     Video::Context* context = mainLoop
         ? mainLoop->_context
         : nullptr;
-    void* ui = &_ui;
+    UI::UserInterface* ui = &_ui;
 
     if (trace) {
         void* menuScene = _menuScene;

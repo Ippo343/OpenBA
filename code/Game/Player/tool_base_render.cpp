@@ -140,7 +140,7 @@ constexpr float kCenterBias = 0.5f;      // DAT_140172114 = 0x3f000000
 // is); copy the prefix only when the block moved; the new tail memcpy'd from the
 // fill; free the old block only when it moved. Every caller appends exactly one
 // element with a fill, so each local is now a real Collection::Array:
-//   * the two index lists are the trait-derived Array<int16_t> (stride 2, align 2,
+//   * the two index lists are the trait-derived Array<uint16_t> (stride 2, align 2,
 //     byteCopy, init == nullptr, destroy == nullptr) — the same row GrowTo used;
 //   * the two vertex lists are trait-derived over blobs at ALIGN 2, because this
 //     site allocates BOTH strides with ALIGN 2 (`fn_MemAllocStatic(cap * stride,
@@ -164,7 +164,7 @@ static_assert(alignof(TriVertex8)  == 2,    "TriVertex8 align");
 static_assert(sizeof(EdgeVertex16)  == 0x10, "EdgeVertex16 stride");
 static_assert(alignof(EdgeVertex16) == 2,    "EdgeVertex16 align");
 
-using IdxArray     = Collection::Array<int16_t>;
+using IdxArray     = Collection::Array<uint16_t>;   // EdgeMesh::Set's short indices
 using TriVtxArray  = Collection::Array<TriVertex8>;
 using EdgeVtxArray = Collection::Array<EdgeVertex16>;
 
@@ -257,7 +257,7 @@ void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* 
 
     static const int16_t offs[6] = {0, 1, 2, 0, 2, 3};
     for (int k = 0; k < 6; k++) {
-        int16_t v = (int16_t)(baseIdx + offs[k]);
+        uint16_t v = (uint16_t)(int16_t)(baseIdx + offs[k]);
         idx->SetSize(idx->_size + 1, v);
     }
 }
@@ -277,9 +277,6 @@ inline void RelVec(float* dst, const float* p, float ox, float oy) {
 //   self = HighlightComponent*.
 // ===========================================================================
 void Impl_b930(HighlightComponent* hc) {
-    // LEFT: transform (+0x100) is raw storage (HighlightComponent H5); it is reached
-    // from this integer.
-    const int64_t self = reinterpret_cast<int64_t>(hc);
     Map* mapGrid = GameUpdateLoop::_singleton->m_game;
 
     // Entity footprint rect (MapComponent tileX0 / tileY0 / tileX1 / tileY1).
@@ -305,13 +302,13 @@ void Impl_b930(HighlightComponent* hc) {
     float ox = centerWorld[0];
     float oy = centerWorld[1];
 
-    // Quaternion(0,0,0,uv) rotation + centre position -> Transform at self+0x100.
+    // Quaternion(0,0,0,uv) rotation + centre position -> the Transform at +0x100.
     float uv = kRdata_14017214c;
     Math::Quaternion quat(0.0f, 0.0f, 0.0f, uv);
-    std::memcpy(reinterpret_cast<void*>(self + 0x100), &quat, 16);
-    *reinterpret_cast<float*>(self + 0x110) = ox;
-    *reinterpret_cast<float*>(self + 0x114) = oy;
-    *reinterpret_cast<uint32_t*>(self + 0x118) = 0;
+    hc->transform.rotation = quat;            // +0x100 (16 bytes)
+    hc->transform.translation.x = ox;         // +0x110
+    hc->transform.translation.y = oy;         // +0x114
+    hc->transform.translation.z = 0.0f;       // +0x118 (retail's dword 0)
 
     IdxArray     edgeIdx;   // local_208 / local_200  (short indices)
     EdgeVtxArray edgeVtx;   // local_218 / local_210  (16-byte EdgeVertex)
@@ -362,7 +359,7 @@ void Impl_b930(HighlightComponent* hc) {
             const float* pf = &scratch[1];      // pfVar23 = local_c4
             for (int corner = 0; corner < 6; corner++) {
                 // 1. append index = current vertex count (before this vertex)
-                int16_t idxVal = (int16_t)fillVtx._size;
+                uint16_t idxVal = (uint16_t)(int16_t)fillVtx._size;
                 fillIdx.SetSize(fillIdx._size + 1, idxVal);
                 // 2. build corner Vector3 + TriangleVertex (8 bytes)
                 Math::Vector3 cv(pf[-1] - ox, pf[0] - oy, pf[1] - 0.0f);
@@ -416,11 +413,11 @@ void Impl_b930(HighlightComponent* hc) {
             1, triList0,
             1, triList1,
             // fill stream: short indices + 8-byte TriangleVertex, stride 8
-            fillIdx._size, reinterpret_cast<uint16_t*>(fillIdx._data),
+            fillIdx._size, fillIdx._data,
             fillVtx._size, fillVtx._data, 8,
             0, nullptr, 0, nullptr, 0,
             // edge stream: short indices + 16-byte EdgeVertex, stride 0x10
-            edgeIdx._size, reinterpret_cast<uint16_t*>(edgeIdx._data),
+            edgeIdx._size, edgeIdx._data,
             edgeVtx._size, edgeVtx._data, 0x10,
             0, nullptr, 0, nullptr, 0,
             box);
@@ -439,8 +436,8 @@ void Impl_b930(HighlightComponent* hc) {
     // so this reproduces it exactly. Argument order is (mask, edge, skinMask,
     // skinEdge) — see Mesh.h's note; the fields are grouped differently.
     if (mesh && desc) {
-        auto* m0 = reinterpret_cast<Graphics::MaterialInstance*>(desc->_ref0);   // LEFT: HighlightDescription::_ref0 is void* (not PLAYER's header)
-        auto* m1 = reinterpret_cast<Graphics::MaterialInstance*>(desc->_ref1);   // LEFT: as above
+        Graphics::MaterialInstance* m0 = desc->_ref0;
+        Graphics::MaterialInstance* m1 = desc->_ref1;
         hc->fieldF8
             ->SetMaterials(Object::ExternalPtr<Graphics::MaterialInstance>(m0),
                            Object::ExternalPtr<Graphics::MaterialInstance>(m1),
@@ -544,7 +541,7 @@ void Impl_c4a0(HighlightComponent* hc) {
                 ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
                           nullptr);   // B.3.5 bridge
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
-                ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x100));   // B.3.5 bridge
+                ->SetTransform(hc->transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
             void* inst = reinterpret_cast<void*>(self + 0x28);
@@ -680,6 +677,9 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
     // Only now the virtual probe (a live EditTool answers; a recycled block may not).
     // (Tripwire probe of possibly-recycled memory: a null vptr, or a null Type()
     // entry in the table it names, skips the call; the slot comes from the member.)
+    // LEFT: `self` stays an integer: as an EditTool* (a final class) GCC devirtualises
+    // Type() to EditTool's own id, and this tripwire exists to ask a possibly-recycled
+    // block's REAL table (B11, X-G1-3b).
     if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {
         uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)
         const char* n = ::Object::GetTypeNameById(tid);
@@ -691,15 +691,15 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
 // [diag] companion of ReportBadSelectionRef for the other failure shape: the stored
 // entity pointer is canonical but the object behind it is gone (freed and recycled),
 // so the component array/count the finder reads are nonsense.
-void ReportDeadSelectedEntity(int64_t self, uint64_t ent, uint64_t arr, int32_t cnt) {
+void ReportDeadSelectedEntity(EditTool* self, const ComponentEntity* ent, uint64_t arr, int32_t cnt) {
     static int budget = 8;
     if (budget <= 0) return;
     --budget;
     std::fprintf(stderr, "[HighlightClear] DEAD selected entity: tool=%p entity=%p "
                  "entity+0x30(compArray)=0x%llx entity+0x38(count)=%d entity+0x40(flags)=0x%x\n",
-                 reinterpret_cast<void*>(self), reinterpret_cast<void*>(ent),
+                 static_cast<void*>(self), static_cast<const void*>(ent),
                  static_cast<unsigned long long>(arr), cnt,
-                 *reinterpret_cast<uint32_t*>(ent + 0x40));
+                 ent->_entityFlags);
     std::fprintf(stderr, "[HighlightClear]   last 4 entities stored into EditTool+0x30: "
                  "%p %p %p %p (newest first)\n",
                  g_LastSelectStore[(g_LastSelectStoreIdx + 3) & 3],
@@ -752,7 +752,7 @@ void Impl_cb40(EditTool* self) {
             const uint64_t arr = reinterpret_cast<uint64_t>(e->_components);   // CAST-OK: ptr_int
             const int32_t  cnt = e->_componentCount;
             const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
-            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(reinterpret_cast<int64_t>(self), ref, arr, cnt);
+            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(self, e, arr, cnt);
         }
     }
     SetSelectionHighlight(self->lastEntityRef, 0);
