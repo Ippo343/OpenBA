@@ -88,7 +88,7 @@ UNIT_TEST(b39_obj_externallist_ctor_makes_retails_stores) {
     std::memset(buf, 0xCD, sizeof buf);
     Object::ExternalList* l = ::new (buf) Object::ExternalList();
     CHECK(static_cast<void*>(l) == static_cast<void*>(buf));
-    CHECK(l->_path.data == nullptr);
+    CHECK(l->_path._data == nullptr);
     CHECK(l->_refs._data == nullptr);
     CHECK_EQ(l->_refs._size, 0);
     CHECK_EQ(l->_refs._capacity, 0);

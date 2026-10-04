@@ -599,12 +599,15 @@ public:
     // ---- the 0x18 bytes External adds, spelled as RtObject::External spells
     // them, and the two spellings are NOT interchangeable taste:
     //
-    //  * `_path` keeps the POD `RtSystem::Filename`, which is trivially
-    //    destructible. `System::Filename` is not, and a member of that type
-    //    would make the compiler release the path a SECOND time after
-    //    ~External's transcribed release — the `RtSystem::String` double-free
-    //    lesson (B31_RULES), one level in. ~External releases it by hand
-    //    through the one `Sys(...)` bridge, exactly as the C body does.
+    //  * `_path` is a `System::Filename` member (B4 X-R3, H5). Retail's ctor
+    //    0x1800bc9c0 stores +0x08 = 0 (0x1800bc9f0, under its own unwind
+    //    state) and then +0x10 / +0x18; retail's dtor 0x1800bc950 releases the
+    //    `_refs` elements and frees the array (CALL 0x180006b80 at
+    //    0x1800bc974), THEN releases +0x08 (0x1800bc97a..0x1800bc9a2, the
+    //    inlined ~Filename), then stamps Base's table. Declared in this order,
+    //    the compiler constructs `_path` before `_refs` and destroys `_refs`
+    //    before `_path`, after ~External's element loop: exactly that order,
+    //    with one release (the compiler's; the body no longer releases it).
     //
     //  * `_refs` keeps `Collection::Array<ExternalArrayElement>`, which DOES
     //    have a real `~Array`, and that is deliberate: retail's ~External is a
@@ -615,7 +618,7 @@ public:
     //    else). So ~External's body does the FIRST half only and the
     //    compiler-emitted member destructor does the second — retail's own
     //    decomposition, with each half run exactly once.
-    RtSystem::Filename                              _path;   // +0x08
+    System::Filename                                _path;   // +0x08  ctor 0x1800bc9f0, dtor 0x1800bc97a
     Collection::Array<RtObject::ExternalArrayElement> _refs;  // +0x10
 };
 static_assert(sizeof(External) == 0x20, "Object::External is 0x20 bytes");

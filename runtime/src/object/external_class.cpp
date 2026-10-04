@@ -35,7 +35,6 @@
 
 #include "../../types/object/External.h"
 #include "../system/string.h"       // RtSystem::StringRefCount / RtMemFree
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace Object {
 
@@ -52,13 +51,11 @@ namespace Object {
 // carries GCC's table rather than the minted one; the two are slot-compatible
 // (see the file banner).
 //
-// The four zero stores retail makes at +0x08, +0x10, +0x18 are the member
-// initialisers below: `_path.data` and the Array's three fields.
+// The zero stores retail makes at +0x08, +0x10, +0x18 are the members' own
+// constructors, run in declaration order before this body: `_path`'s
+// (Filename(), 0x1800bc9f0) and the Array's three fields. Restating them would
+// be a second write of the same zeros.
 External::External() {
-    _path.data = nullptr;
-    // `Collection::Array`'s own constructor is the three zero stores retail
-    // makes here; it has already run as a member initialiser. Restating them
-    // would be a second write of the same zeros.
 }
 
 // ??1External@Object@@UEAA@XZ   retail 0x1800bc950
@@ -76,11 +73,8 @@ External::External() {
 //      zero `_data`/`_size`/`_capacity`) and nothing else. Each half runs once.
 //      See External.h's member banner.
 //   3. release `_path` — retail's inlined release IS `~Filename` (0x180006980).
-//      `_path` keeps the POD type so it is trivially destructible, so it is
-//      released BY HAND here, through the one `Sys(...)` bridge, exactly as
-//      runtime/src/object/external.cpp's `RtObject_External_Dtor` does. Giving
-//      the member the class type instead would make the compiler release it a
-//      second time.
+//      `_path` is a `System::Filename` member (B4 X-R3): the compiler destroys
+//      it after `~_refs`, i.e. after this body, which is retail's 0x1800bc97a.
 //   4. stamp Base's vtable — `~Base()` running after this body emits it.
 //
 // The element release is retail's String idiom verbatim, including the
@@ -100,7 +94,6 @@ External::~External() {
             }
         }
     }
-    RtSystem::Sys(_path).~Filename();
 }
 
 // ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A — 0x1801f9b38. ENDGAME
@@ -140,7 +133,7 @@ External::CompileResult External::Compile(const System::Filename& /*path*/) {
 // The hidden return slot the C entry point carries is the ABI's, not the
 // language's: a real member returning by value has it emitted for it.
 System::Filename External::GetPath() const {
-    return System::Filename(RtSystem::Sys(_path));
+    return System::Filename(_path);
 }
 
 // ============================================================================
