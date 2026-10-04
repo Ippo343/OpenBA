@@ -204,7 +204,8 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  /
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 
 // ---- pasturecomponent_states.cpp
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770
+class Map;   // Game/Map.h
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)
 
 // ---- rawmaterialcomponent.cpp
 void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial

@@ -657,14 +657,14 @@ char OrchardComponent::EnterHarvesting() {
     // Footprint stamp. Retail passes the Map (GameUpdateLoop::m_game) and the rect as
     // four int16s off the MapComponent.
     MapComponent* pos = _entity->FindComponent<MapComponent>();   // 0x140004680
-    void* grid = nullptr;
+    Map* grid = nullptr;
     if (GameUpdateLoop::_singleton != nullptr)
         grid = GameUpdateLoop::_singleton->m_game;
     {   // The single line that says "the harvest actually started".
         static int s_n = 0;
         if (s_n++ < 4) {
             std::fprintf(stderr, "[Orchard11] enter: work=%p slots=%d grid=%p treeType=%p\n",
-                         work, slotCount, grid, static_cast<void*>(treeType));
+                         work, slotCount, static_cast<void*>(grid), static_cast<void*>(treeType));
             std::fflush(stderr);
         }
     }

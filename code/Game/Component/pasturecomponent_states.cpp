@@ -98,10 +98,9 @@ namespace {
 
 // The town manager at GameUpdateLoop+0xf0: the free-livestock list (+0x80), the pasture
 // registry (+0x90) and the town stock rows (+0x170).
-// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
 inline CitizenBehavior* Town() {
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    return w ? reinterpret_cast<CitizenBehavior*>(w->m_citizenList) : nullptr;
+    return w ? w->m_citizenList : nullptr;
 }
 
 // The LivestockDescription among a template's sub-descriptions (retail inlines the loop).
@@ -291,11 +290,6 @@ void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uin
     }
 }
 
-// 0x140127720 door: called by name from standalone/pasture_harness.cpp.
-extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
-    if (!pasture) return;
-    reinterpret_cast<PastureComponent*>(pasture)->PastureComponent::OnMessage(msg, nullptr, 0, 0);   // B.3.8 bridge
-}
 
 // ============================================================
 // Shared release body — PastureDescription_helper_6e40 (0x140126e40), byte-identical
@@ -365,8 +359,7 @@ char PastureComponent::EnterOperational() {
         ActHunt_DynArraySetCount_3110(&town->pastures, town->pastureCount + 1, &selfRef);
 
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-    // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's body).
-    if (wpc) WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), false);
+    if (wpc) wpc->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
 
     return 0;
 }
@@ -418,8 +411,7 @@ void PastureProduce(PastureComponent* self) {
     CitizenBehavior* town = Town();
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
     if (!town || !w) return;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    const Map* grid = reinterpret_cast<const Map*>(w->m_game);
+    const Map* grid = w->m_game;
     if (!grid) return;
 
     MapComponent* mc = self->_entity->FindComponent<MapComponent>();   // 0x140004680
@@ -435,8 +427,7 @@ void PastureProduce(PastureComponent* self) {
     if (produced == nullptr) return;
 
     RawMaterialDescription* rawDesc = nullptr;
-    // LEFT: WorkAcc_FindComponent_6330 takes the template as uintptr_t (WORK's body).
-    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(produced), &rawDesc);
+    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(produced), &rawDesc);   // LEFT: SIG WorkAcc_FindComponent_6330
     if (!rawDesc) return;
     const int perUnit = rawDesc->_lowCreateCount;
     if (perUnit <= 0) return;
@@ -464,8 +455,7 @@ void PastureProduce(PastureComponent* self) {
         }
 
         // Find a footprint cell with no occupant and drop the produce pile there.
-        // LEFT: the Pf_* helper takes the component as int64_t (Action's body).
-        const int nCells = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 2);
+        const int nCells = InteractNodeCount(pos, 2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             float xy[3] = {0, 0, 0};
@@ -478,11 +468,9 @@ void PastureProduce(PastureComponent* self) {
             if (gy < 0) gy = 0;
             if (gy >= dim) gy = dim - 1;
             const int cell = dim * gy + gx;
-            // LEFT: Map::cells is untyped (GAME-b); the cell's +0x08 is the entity on it.
-            const uint8_t* tiles = reinterpret_cast<const uint8_t*>(grid->cells);
+            const MapCell* tiles = grid->cells;
             if (!tiles) break;
-            ComponentEntity* occ = *reinterpret_cast<ComponentEntity* const*>(
-                tiles + (uintptr_t)cell * 0x30 + 8);
+            ComponentEntity* occ = tiles[cell].occupant;   // the entity on the cell
             if (occ == nullptr) { placedCell = cell; break; }
         }
         if (placedCell < 0) {
@@ -503,9 +491,8 @@ void PastureProduce(PastureComponent* self) {
             // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
             const float quarter = kRdata_140172204;
             int roll = w->m_random->RandTol(2);
-            // LEFT: ActRm_PositionEntity_9760 takes the component as int64_t (Action's body).
-            ActRm_PositionEntity_9760(reinterpret_cast<int64_t>(rawComp), placedCell,
-                                      static_cast<float>(roll) * quarter);
+            PositionRawMaterial(rawComp, placedCell,
+                                static_cast<float>(roll) * quarter);   // 0x140129760 (ActRm_PositionEntity_9760's body)
         }
         // Retail writes the pile's quantity onto the RawMaterialComponent right here
         // (0x1401267e0: `*(local_c8+0x28) = *(rawDesc+0x40); *(local_c8+0x30) = 0;`).
@@ -530,9 +517,7 @@ void PastureProduce(PastureComponent* self) {
         if (pastureEntity) {
             TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();   // 0x140013320
             if (tracker) {
-                // LEFT: ActRm_ArrayUpsert_58fd0 takes the tracker and the template as integers.
-                ActRm_ArrayUpsert_58fd0(reinterpret_cast<uintptr_t>(tracker),
-                                        reinterpret_cast<int64_t>(produced), perUnit);
+                TrackerUpsert(tracker, produced, perUnit);   // 0x140058fd0 (ActRm_ArrayUpsert_58fd0's body)
             }
         }
 
@@ -546,9 +531,7 @@ void PastureProduce(PastureComponent* self) {
         // depending on which branch ran — is observationally irrelevant; passing the
         // world here is equivalent.
         {
-            // LEFT: ActRm_GetResourceCategory_88f90 takes the template as uintptr_t.
-            uint32_t idx = static_cast<uint32_t>(ActRm_GetResourceCategory_88f90(
-                w, reinterpret_cast<uintptr_t>(produced)));
+            uint32_t idx = static_cast<uint32_t>(ResourceCategory(produced));   // 0x140088f90 (ActRm_GetResourceCategory_88f90's body)
             if (static_cast<int>(idx) >= 0 && stockTable) {
                 stockTable[(int)idx]._field10 += perUnit;
             }
@@ -563,8 +546,7 @@ void PastureProduce(PastureComponent* self) {
         if (autoPickup) {
             WorkComponent* pileWork = entRef->FindComponent<WorkComponent>();   // 0x140003050
             const uint32_t v = static_cast<uint32_t>(pileWork->workId);
-            // LEFT: ActRm_DynArrayPush4_44810 takes the component as uintptr_t (Action's body).
-            ActRm_DynArrayPush4_44810(reinterpret_cast<uintptr_t>(autoPickup), v);
+            AutoPickupAppend(autoPickup, v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
         }
 
         std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "
@@ -672,11 +654,6 @@ uint32_t PastureComponent::CommandMask(int cmd) {
     return 0;
 }
 
-// 0x140127dd0 door: called by name from Dialog/controlui.cpp.
-extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
-    if (!pasture) return 0;
-    return reinterpret_cast<PastureComponent*>(pasture)->PastureComponent::CommandMask(cmd);   // B.3.8 bridge
-}
 
 // ============================================================
 // PastureComponent slot 14 (0x140127a60) — execute a pasture command.
@@ -714,20 +691,17 @@ void PastureComponent::Command(int cmd) {
             return;
         }
 
-        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's body).
-        const int64_t wpcArg = reinterpret_cast<int64_t>(wpc);
         const bool cur = wpc->isAccepting;
-        WorkPlaceComponent_SetAccepting(wpcArg, !cur);
+        wpc->SetAccepting(!cur);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
         if (!wpc->isAccepting) {
             WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
-            WorkPlaceComponent_SetAccepting(wpcArg, false);
+            wpc->SetAccepting(false);
         } else {
             ComponentEntity* entRef = _entity;
             void* work = PastureWork_CreateForEntity(&entRef);
             void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
-            // LEFT: CitizenAI_WorkScheduler_Post takes the work component as uintptr_t.
-            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(wc), 1, 1, &workIBP);
-            WorkPlaceComponent_SetAccepting(wpcArg, true);
+            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(wc), 1, 1, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+            wpc->SetAccepting(true);
         }
         return;
     }
@@ -769,11 +743,6 @@ void PastureComponent::Command(int cmd) {
     }
 }
 
-// 0x140127a60 door: called by name from Dialog/controlui.cpp.
-extern "C" void Pasture_Command(void* pasture, int cmd) {
-    if (!pasture) return;
-    reinterpret_cast<PastureComponent*>(pasture)->PastureComponent::Command(cmd);   // B.3.8 bridge
-}
 
 // ============================================================
 // 0x14009f770 — map-grid cell owner-ref stamp (shared leaf).
@@ -786,19 +755,18 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
 // registered — the null guard made footprint stamping a silent no-op until
 // 2026-07-30 (deferred item from the animal wave's Update 2).
 // ============================================================
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h,
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h,
                                                 void* ref) {
     if (!grid || w <= 0) return 0;
-    // LEFT: the callers hand the Map as void* (GameUpdateLoop::m_game, W0 header).
-    const Map* map = reinterpret_cast<const Map*>(grid);
+    const Map* map = grid;
     const int dim = map->size;
-    // LEFT: Map::cells is untyped (GAME-b); +0x10 of a cell is its owner ref.
-    uint8_t* cells = reinterpret_cast<uint8_t*>(map->cells);
+    // +0x10 of a cell is its owner ref.
+    MapCell* cells = map->cells;
     if (!cells) return 0;
     for (int64_t dx = 0; dx < w; ++dx) {
         for (int64_t dy = 0; dy < h; ++dy) {
             const int64_t cell = (dy + y) * dim + x + dx;
-            *reinterpret_cast<void**>(cells + 0x10 + cell * 0x30) = ref;
+            cells[cell].field_0x10 = ref;
         }
     }
     return 0;
