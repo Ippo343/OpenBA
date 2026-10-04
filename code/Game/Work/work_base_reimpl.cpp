@@ -66,11 +66,6 @@ void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
     return ForwardFindComponent<InteractComponent>(entity, retIBP);
 }
 
-// Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78 = StorageComponent)
-void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<StorageComponent>(entity, retIBP);
-}
-
 // ============================================================
 // Work_Ctor25 (0x1400f72e0) — the shared Work base constructor.
 // ============================================================
@@ -204,8 +199,7 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
     }
     stack->current = -1;
     if (stack->field_0x10 != nullptr) {
-        // LEFT: Action.h (ACT) declares ActionStack +0x10 as Action*, not InternalPtr<Action>.
-        reinterpret_cast< ::Object::InternalBasePtr*>(&stack->field_0x10)->DeletePtr();   // B.3.3 bridge
+        stack->field_0x10.DeletePtr();
         Action* nul = nullptr;
         new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         stack->field_0x10 = nul;

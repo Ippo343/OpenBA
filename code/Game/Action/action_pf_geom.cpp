@@ -519,18 +519,5 @@ int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int param_
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: 1 outside caller (Component/citizen_updatehealth.cpp)
-void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
-    reinterpret_cast<CharacterGridWalker*>(param_1)->Subdivide();   // LEFT: SIG Pf_QuadtreeSubdivide_18880
-}
-
-// B4 FORWARD: 1 outside caller (Component/citizen_updatehealth.cpp); the two floats
-// arrive as their bits.
-uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4) {
-    float lo;
-    float hi;
-    __builtin_memcpy(&lo, &param_3, 4);
-    __builtin_memcpy(&hi, &param_4, 4);
-    reinterpret_cast<CharacterGridWalker*>(param_1)->Init(reinterpret_cast<const CharacterGrid*>(param_2), lo, hi);   // LEFT: SIG Pf_QuadtreeInit_18dd0
-    return param_1;
-}
+// (Pf_QuadtreeSubdivide_18880 / Pf_QuadtreeInit_18dd0, the forwarders to
+// CharacterGridWalker::Subdivide / Init, had no caller left: deleted, B4 wave X.)

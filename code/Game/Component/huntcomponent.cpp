@@ -101,7 +101,6 @@ void HuntComponent::Update(const System::Time* time) {
 // ============================================================================
 #include "Object/factory_registration.h"
 
-extern "C" uintptr_t* HuntComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
 
 // 0x1401228e0: the RP ctor (CALL 0x14012b3d0), the compiler's stamp,
 // `MOV qword [RBX+0x50],0`, then `_flags |= 8` (0x80 | 8 = 0x88).
@@ -122,6 +121,5 @@ void* HuntComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HuntComponent());
 }
 
-uintptr_t* HuntComponent::CreateWork(uintptr_t* out) { return HuntComponent_CreateWork(this, out); }  // [18] 0x1401226a0
 
 DEFINE_EXE_TYPE(HuntComponent, "ResourceProduceComponent")

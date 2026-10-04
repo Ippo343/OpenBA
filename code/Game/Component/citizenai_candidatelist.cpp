@@ -54,34 +54,7 @@
 // Signature matches the original (base, count); the original's 3rd scratch arg
 // (R8) is unused by the callee.
 // ============================================================
-namespace {
-
-// B4 P2 CAI-1: the candidate list TransitionState (0x14010db90) hands
-// BuildCandidateStateList: a {data, count, capacity} array of 12-byte {state id,
-// priority, unused} records. Layout from the tree's port of 0x14010dca0 (the append
-// allocates capacity * 0xc with alignment 4 and copies three dwords per record; the
-// shuffle swaps the three dwords; TransitionState reads id at +0 with stride 3 ints).
-struct StateCandidate {
-    int32_t id;         // +0x00 CitizenAI state id
-    int32_t priority;   // +0x04 sort key (descending)
-    int32_t unused;     // +0x08 always 0
-};
-static_assert(sizeof(StateCandidate) == 0xc, "StateCandidate is 12 bytes");
-static_assert(offsetof(StateCandidate, id) == 0x0, "");
-static_assert(offsetof(StateCandidate, priority) == 0x4, "");
-static_assert(offsetof(StateCandidate, unused) == 0x8, "");
-
-struct StateCandidateList {
-    StateCandidate* data;   // +0x00
-    int32_t count;          // +0x08
-    int32_t capacity;       // +0x0C
-};
-static_assert(sizeof(StateCandidateList) == 0x10, "StateCandidateList is {ptr, int, int}");
-static_assert(offsetof(StateCandidateList, data) == 0x0, "");
-static_assert(offsetof(StateCandidateList, count) == 0x8, "");
-static_assert(offsetof(StateCandidateList, capacity) == 0xc, "");
-
-} // namespace
+// (StateCandidate / StateCandidateList: Component/CitizenAIComponent.h.)
 
 static void CitizenAI_SortByPriority(StateCandidate* a, int count) {
     if (!a || count < 2) return;
@@ -193,7 +166,7 @@ int CitizenComponent::HasSufficientResources() {
         } while (lVar6 != 0);
     }
 
-    int iVar4 = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(local_res8));   // LEFT: SIG CitizenComp_Storage_GetResourceCount
+    int iVar4 = CitizenComp_Storage_GetResourceCount(local_res8);
     return (iVar7 * iVar2 * factor <= iVar4) ? 1 : 0;
 }
 
@@ -225,7 +198,7 @@ int CitizenComponent::HasSufficientResources2() {
         } while (lVar5 != 0);
     }
 
-    int iVar3 = Storage_GetResourceCount2(reinterpret_cast<int64_t>(local_res8));   // LEFT: SIG Storage_GetResourceCount2
+    int iVar3 = Storage_GetResourceCount2(local_res8);
     float threshold = lVar1desc->_fd4;
     // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
     // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
@@ -285,7 +258,7 @@ int CitizenComponent::CarryCount() {
         }
         return 0;
     }
-    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carry));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    return CitizenComp_StorageComponent_QueryCount(carry);
 }
 
 // ============================================================
@@ -365,8 +338,7 @@ static void AppendCandidate(StateCandidateList* L, int id, int prio) {
     }
 }
 
-void CitizenAIComponent::BuildCandidateStateList(int64_t* outListRaw, char param3) {
-    StateCandidateList* outList = reinterpret_cast<StateCandidateList*>(outListRaw);   // LEFT: SIG CitizenAIComponent::BuildCandidateStateList (CitizenAIComponent.h, CIT-3 / CAI-3)
+void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, char param3) {
     CitizenComponent* cz = citizen;
 
     // --- Special early branch: SICK (disease) with a care building ---

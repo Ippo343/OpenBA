@@ -2450,7 +2450,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                                 const Pathfinding::PointList::Point& e = tbl->_points[i];
                                 System::String nameBuf("boat");
                                 const bool hit =
-                                    *reinterpret_cast<const System::String*>(&e.name) == nameBuf;   // LEFT: PointList::Point::name is the String's raw char* (runtime/types/pathfinding/PointList.h, R-owned)
+                                    e.name == nameBuf;
                                 if (!hit) continue;
                                 pierX = e.pos.x;
                                 pierY = e.pos.y;
@@ -3795,8 +3795,7 @@ static void CitizenCarryStorageInit(ComponentEntity* ent) {
     // `ent` IS the citizen entity; find its StorageComponent directly. (GRM Execute's
     // `citizenEnt` is instead a component whose +0x10 dereferences to this same entity,
     // hence GRM's extra +0x10 hop — which does NOT apply here.)
-    StorageComponent* stComp = nullptr;   // the InternalPtr FindComponent writes
-    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(ent), &stComp);   // 0x140006270  // LEFT: SIG WorkBase_FindComponent_6270
+    StorageComponent* stComp = ent->FindComponent<StorageComponent>();   // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
     if (!stComp) { if (logThis) { ++s_log; fprintf(stderr, "[CarryInit] BAIL no storage (ent=%p)\n", ent); fflush(stderr); } return; }
 
     int before = stComp->capacity;
@@ -3955,7 +3954,7 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
             // = 0, so the citizen is the retail founding default (unemployed laborer) and the
             // citizen-panel Profession button (id 0x227, reads +0x248) correctly greys out.
             ComponentEntity* houseIBPLocal = houseIBP;
-            CitizenComponent_AssignWorkplace(citComp, &houseIBPLocal, 0);
+            citComp->SetHome(houseIBPLocal, 0);   // (0x1401163d0; was its CitizenComponent_AssignWorkplace forwarder)
             const ComponentEntity* home = citComp->home;
             const ComponentEntity* work = citComp->workplace;
             if (home != nullptr) ++housed;
@@ -4214,7 +4213,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         }
         // Verify through the exe-faithful read path: GetResourceCount(rescomp) walks
         // owner→StorageComponent and sums the edible units we just added.
-        int have = rescomp ? CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(rescomp)) : -1;   // LEFT: SIG CitizenComp_Storage_GetResourceCount (int64_t receiver, wave X)
+        int have = rescomp ? CitizenComp_Storage_GetResourceCount(rescomp) : -1;
         fprintf(stderr, "[startTown::housing] house food(c7e78): storage=%p residents=%d "
                 "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount(res)=%d %s\n",
                 sc, residents, reqInt, threshold, seedN, have,

@@ -50,7 +50,7 @@
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
-extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+#include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void* Debug_Sprite_DefaultCtor(void* retval);
 extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
 extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
@@ -273,10 +273,9 @@ void BuildUI::OnCreated() {
 
             if (resType) {
                 // Set sprite from resource type
-                // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
-#ifdef _DEBUG
+                #ifdef _DEBUG
                 uint8_t spriteBuf[16];
-                Debug_Sprite_Ctor(spriteBuf, (uint64_t)resType->_spriteSheet, &resType->_name);
+                Debug_Sprite_Ctor(spriteBuf, resType->_spriteSheet, &resType->_name);
                 Debug_LabelElement_SetSprite(labelStorage, spriteBuf);
 #else
                 UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resType->_spriteSheet),

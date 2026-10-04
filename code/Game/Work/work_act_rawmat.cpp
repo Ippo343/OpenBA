@@ -213,14 +213,11 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
 //   param_7 = float (raw-material p3)    -> CreateRawMaterial XMM2 ([RBP+0x70])
 //   param_8 = u32                        -> SendComponentMessage #2 p6 / CreateRawMaterial p8 ([RBP+0x78])
 //   param_9 = u32                        -> CompleteTask p5 ([RBP+0x80])
-void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* workEntity,
-                                float* position, float param5_heading, uint64_t rawMatP2,
+void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef,
+                                float* position, float param5_heading, ComponentDescription* rawMatDesc,
                                 float rawMatP3, uint32_t param8, uint32_t param9) {
 
     // the action stack = character + 0x48 (disasm 0x1400beb18..0x1400beb2f)
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_FishWorkCtor_beae0
-    ComponentEntity* const* workRef = reinterpret_cast<ComponentEntity* const*>(workEntity);   // LEFT: SIG WorkAct_FishWorkCtor_beae0 (param_3 is an entity reference)
-    ComponentDescription* rawMatDesc = reinterpret_cast<ComponentDescription*>(rawMatP2);   // LEFT: SIG WorkAct_FishWorkCtor_beae0 (param_6 is the material)
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);

@@ -7,5 +7,5 @@
 #include "EntityList.h"
 #include <cstdint>
 
-// B4 FORWARD: 2 outside caller(s) (code/Game/Game/gameupdateloop_teardown.cpp)
-void EntityList_RemoveEntity(EntityList* self, void* entityIBP);  // EntityList::RemoveEntity 0x1400c38e0
+// (EntityList_RemoveEntity, the last forwarder here, had no caller left: deleted, B4
+// wave X. The header stays for its includers' EntityList.h.)

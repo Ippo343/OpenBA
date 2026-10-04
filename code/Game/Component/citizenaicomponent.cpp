@@ -63,7 +63,7 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen);
 // Organic-construction test driver (construction_force_harness.cpp, env
 // BANISHED_FORCE_CONSTRUCT). Same contract: drives ONE citizen's construction Work
 // (gather -> build) at the demo foundation; owns the citizen when active; no-op when unset.
-extern "C" bool StartTown_ForcePushConstructionWork(void* citizen);
+extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen);
 
 // ============================================================
 // Exe helpers, called by name (Component/Work exe_bodies.h):
@@ -144,7 +144,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         // Hungry: eat at home first when the home has food
         if (citizen->home != nullptr) {
             ResidenceComponent* homeStorage = citizen->home->FindComponent<ResidenceComponent>();
-            int resourceCount = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(homeStorage));   // LEFT: SIG CitizenComp_Storage_GetResourceCount (wave X)
+            int resourceCount = CitizenComp_Storage_GetResourceCount(homeStorage);
 
             if (resourceCount > 0) {
                 citizen->EatFrom(citizen->home);
@@ -307,21 +307,13 @@ void CitizenComponent::SetupElder() {
     CitizenComp_SetupAgeMesh(this, kScaleElder);
 }
 
-// Reimpl of Entity_FindComponent_Storage (0x140008090):
-// scan an entity's component list for the ResidenceComponent type (DAT_1401c7cf0)
-// and construct an InternalBasePtr (param_2) to it (or null).
-void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
-    return new (outIBP) ::Object::InternalPtr<ResidenceComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ResidenceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
 
 // Reimpl of StorageComponent_QueryCount (0x14012cf10):
 // O(n*m) inventory scan — sums (RawMaterialDescription.unitVolume * slotCount)
 // across all inventory rows. Reads type via vtable+0x10, filters by DAT_1401c7cb8.
-int CitizenComp_StorageComponent_QueryCount(int64_t selfArg) {
+int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
     EnsureCallees();
-    if (!selfArg) return 0;   // defensive: callers may pass a null/unfound storage
-    const StorageComponent* self = reinterpret_cast<const StorageComponent*>(selfArg);   // LEFT: SIG CitizenComp_StorageComponent_QueryCount (wave X)
+    if (!self) return 0;   // defensive: callers may pass a null/unfound storage
     int total = 0;
     int rowCount = self->slotCount;
     if (0 < rowCount) {
@@ -359,11 +351,10 @@ int CitizenComp_StorageComponent_QueryCount(int64_t selfArg) {
 // start-town food seed hacked rows into it. With the real residence state node
 // wired (heat tick bring-up), +0x28 is the node vtable; the exe-faithful path
 // reads the sibling StorageComponent.
-int CitizenComp_Storage_GetResourceCount(int64_t selfArg) {
+int CitizenComp_Storage_GetResourceCount(const Component* self) {
     EnsureCallees();
-    const Component* self = reinterpret_cast<const Component*>(selfArg);   // LEFT: SIG CitizenComp_Storage_GetResourceCount (wave X)
-    StorageComponent* storage = nullptr;   // the InternalPtr the finder writes
-    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(self->_entity), &storage);   // LEFT: SIG WorkBase_FindComponent_6270 (Work/exe_bodies.h)
+    // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
+    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();
     int total = 0;
     if (storage == nullptr) return 0;   // guard: entity without a StorageComponent
     int rowCount = storage->slotCount;
@@ -404,20 +395,20 @@ void CitizenAIComponent::TransitionState(char param) {
     }
     if (queued < 0 || ok == '\0') {
         int idx = 0;
-        int64_t list[2] = {0, 0};  // {ptr, count(low32)}
-        BuildCandidateStateList(list, param);
-        int* arr = reinterpret_cast<int*>(list[0]);   // LEFT: SIG CitizenAIComponent::BuildCandidateStateList (int64_t* list; citizenai_candidatelist.cpp, CAI-1)
-        int n = static_cast<int>(list[1]);
-        int* p = arr;
+        StateCandidateList list = {nullptr, 0, 0};  // {ptr, count, capacity}
+        BuildCandidateStateList(&list, param);
+        StateCandidate* arr = list.data;
+        int n = list.count;
+        StateCandidate* p = arr;
         if (0 < n) {
             do {
-                ValidateAndEnterState(*p);
+                ValidateAndEnterState(p->id);
                 if (0 < citizen->character->currentAction + 1) {
-                    state = arr[(int64_t)idx * 3];
+                    state = arr[idx].id;
                     break;
                 }
                 idx++;
-                p += 3;
+                p += 1;
             } while (idx < n);
         }
         System::MemoryAllocator::MemFree(arr);
@@ -445,7 +436,7 @@ void CitizenAIComponent::CheckEducation() {
     int* res8Cap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res8) + 0x38);   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent, +0x38 capacity)
     if (*res8Cap != cap) {
         ResidenceComponent* res10b = citizen->_entity->FindComponent<ResidenceComponent>();
-        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(res10b));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount (wave X)
+        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<const StorageComponent*>(res10b));   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent)
         if (cnt < cap) {
             *res8Cap = cap;
         }

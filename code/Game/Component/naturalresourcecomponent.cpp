@@ -64,9 +64,8 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 
     // If bit 21 of flags is set, reassign resource
     if ((self->_flags >> 0x15) & 1) {
-        void* nullRef = nullptr;   // InternalPtr (the ctor is a plain store)
-        // LEFT: ActCNR_RemoveNatRes_1260f0 takes the component as int64_t (Action's body).
-        ActCNR_RemoveNatRes_1260f0(reinterpret_cast<int64_t>(self), &nullRef, 0);   // 0x1401260f0
+        ComponentEntity* nullRef = nullptr;   // InternalPtr (the ctor is a plain store)
+        RemoveNaturalResourceCore(self, &nullRef, 0);   // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
     }
 }
 

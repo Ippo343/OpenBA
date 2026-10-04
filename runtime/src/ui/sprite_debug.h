@@ -4,8 +4,12 @@
 
 #include <cstdint>
 
-// Wraps UI::Sprite(sheet, name) — logs sheet, name, resolved index
-void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+namespace UI { class SpriteSheet; }
+namespace System { class String; }
+
+// Wraps UI::Sprite(sheet, name) — logs sheet, name, resolved index. `retval` is the
+// raw storage the UI::Sprite is constructed into.
+void* Debug_Sprite_Ctor(void* retval, UI::SpriteSheet* sheet, const System::String* name);
 
 // Wraps UI::Sprite() — logs creation of invalid sprite
 void* Debug_Sprite_DefaultCtor(void* retval);

@@ -254,13 +254,14 @@ DEFINE_EXE_TYPE(AutoSaveDialog, "UI::DialogInstance")
 
 // The ctor DOOR, reached by address: reg_code_lane2.cpp registers it at
 // 0x14005e230 and GameUpdateLoop::Startup calls it.
-extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP) {
+extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes,
+                                                const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
     if (!self) return nullptr;
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) AutoSaveDialog(static_cast<UI::UserInterface*>(ui),
-                                       static_cast<const UI::Dialog*>(extRes), parent);
+        parent = *parentIBP;
+    return ::new (self) AutoSaveDialog(ui,
+                                       static_cast<const UI::Dialog*>(extRes), parent);   // LEFT: the caller holds the found resource as void* (ExternalList::Find's _ptr, GameUpdateLoop::Startup)
 }
 
 // The slot-4 DOOR, reached by address: reg_autosave.cpp registers it at

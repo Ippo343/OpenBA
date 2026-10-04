@@ -230,10 +230,8 @@ static RawMaterialDescription* FindLimitComponent(ComponentDescription* material
 // (`MOV R8D,0xfffffffe` before both CALL 0x140042890). The decompile rendered it as "~Axe".
 namespace { static const int kShowToolAxeArg = static_cast<int>(0xfffffffe); }
 
-void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* param_3,
-                                      int param_4, uint8_t param_5, uint32_t param_6) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PerformWorkCtor4_c1070
-    ComponentEntity* const* targetRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_PerformWorkCtor4_c1070
+void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef,
+                                      float* param_3, int param_4, uint8_t param_5, uint32_t param_6) {
     CharacterComponent* ch = nullptr;
     // Ctor4 gates BOTH the stack cleanup and the lead block behind param_6 (disasm:
     // `CMP byte[RBP+0x68],DIL; JZ` skips cleanup + lead to the cell-flags math).
@@ -332,10 +330,8 @@ void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* pa
 //   param_1 = CitizenComponent IBP ; param_2 = &srcEntityIBP ; param_3 = float* dest ;
 //   param_4 = the material ComponentDescription (for the limit scan + ConsumeRaw).
 // ============================================================
-void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* param_3, int64_t param_4) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PerformWorkCtor5_bd070
-    ComponentEntity* const* srcRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_PerformWorkCtor5_bd070
-    ComponentDescription* material = reinterpret_cast<ComponentDescription*>(param_4);   // LEFT: SIG CitizenAI_PerformWorkCtor5_bd070
+void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef,
+                                      float* param_3, ComponentDescription* material) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -394,9 +390,8 @@ void CitizenAI_PerformWorkCtor5_bd070(void* param_1, uint64_t* param_2, float* p
 //   param_1 = CitizenComponent IBP ; param_2 = &targetEntityIBP ; param_3 = float* dest ;
 //   param_4 = "first message" flag byte.
 // ============================================================
-void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* param_3, char param_4) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PerformWorkCtor6_bd420
-    ComponentEntity* const* targetRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_PerformWorkCtor6_bd420
+void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef,
+                                      float* param_3, char param_4) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -443,9 +438,8 @@ void CitizenAI_PerformWorkCtor6_bd420(void* param_1, int64_t* param_2, float* pa
 // ; PerformWork(type 8, animIdx literal -1000.0f, time 4.0) ; MoveTo(Slow).
 //   param_1 = CitizenComponent IBP ; param_2 = &targetEntityIBP ; param_3 = float* dest.
 // ============================================================
-void CitizenAI_PerformWorkCtor8_bd790(void* param_1, uint64_t* param_2, float* param_3) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PerformWorkCtor8_bd790
-    ComponentEntity* const* targetRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_PerformWorkCtor8_bd790
+void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef,
+                                      float* param_3) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -485,10 +479,8 @@ void CitizenAI_PerformWorkCtor8_bd790(void* param_1, uint64_t* param_2, float* p
 //   param_1 = CitizenComponent IBP ; param_2 = &srcEntityIBP ; param_3 = float* dest ;
 //   param_4 = the material ComponentDescription.
 // ============================================================
-void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* param_3, uint64_t param_4) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PerformWorkCtor10_bccb0
-    ComponentEntity* const* srcRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_PerformWorkCtor10_bccb0
-    ComponentDescription* material = reinterpret_cast<ComponentDescription*>(param_4);   // LEFT: SIG CitizenAI_PerformWorkCtor10_bccb0
+void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef,
+                                       float* param_3, ComponentDescription* material) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -551,12 +543,9 @@ void CitizenAI_PerformWorkCtor10_bccb0(void* param_1, uint64_t* param_2, float* 
 //   param_3 = &srcEntityIBP ; param_4 = float* destA ; param_5 = &dstEntityIBP ;
 //   param_6 = float* destB.
 // ============================================================
-void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* param_3,
-                                       float* param_4, int64_t* param_5, float* param_6) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PerformWorkCtor11_bc790
-    ComponentDescription* material = reinterpret_cast<ComponentDescription*>(param_2);   // LEFT: SIG CitizenAI_PerformWorkCtor11_bc790
-    ComponentEntity* const* srcRef = reinterpret_cast<ComponentEntity* const*>(param_3);   // LEFT: SIG CitizenAI_PerformWorkCtor11_bc790
-    ComponentEntity* const* dstRef = reinterpret_cast<ComponentEntity* const*>(param_5);   // LEFT: SIG CitizenAI_PerformWorkCtor11_bc790
+void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, ComponentDescription* material,
+                                       ComponentEntity* const* srcRef, float* param_4,
+                                       ComponentEntity* const* dstRef, float* param_6) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -639,10 +628,8 @@ void CitizenAI_PerformWorkCtor11_bc790(void* param_1, int64_t param_2, int64_t* 
 //   param_1 = CitizenComponent IBP ; param_2 = &targetEntityIBP ; param_3 = u32* dest(=float*) ;
 //   param_4 = byte (unused after the local_res20 store).
 // ============================================================
-void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
-                                            uint32_t* param_3, uint8_t /*param_4*/) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50
-    ComponentEntity* const* targetRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50
+void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef,
+                                            float* param_3, uint8_t /*param_4*/) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -670,7 +657,7 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
         }
         Push(stack, act);
     }
-    PushMoveTo(citizenRef, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);   // LEFT: SIG CitizenAI_Pathfinding_NavigateTo_bda50
+    PushMoveTo(citizenRef, stack, 1 /*Slow*/, param_3, 0xe1f);
 }
 
 // ============================================================
@@ -681,9 +668,8 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2,
 //   param_1 = CitizenComponent IBP ; param_2 = u32 (CompleteTask first arg) ; param_3 = float* dest ;
 //   param_4 = u32 (msg a4) ; param_5 = float (PerformWork time) ; param_6 = byte flag.
 // ============================================================
-void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, uint32_t* param_3,
+void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef, uint32_t param_2, float* param_3,
                                              uint32_t param_4, float param_5, uint32_t param_6) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -719,7 +705,7 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, ui
         }
         Push(stack, act);
     }
-    PushMoveTo(citizenRef, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);   // LEFT: SIG CitizenAI_Pathfinding_WalkTowards_bb490
+    PushMoveTo(citizenRef, stack, 1 /*Slow*/, param_3, 0xe1f);
 }
 
 // ============================================================
@@ -731,10 +717,8 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, ui
 //   param_1 = CitizenComponent IBP ; param_2 = &optionalTargetIBP ; param_3 = u32* dest(=float*) ;
 //   param_4 = float anim time ; param_5 = byte flag.
 // ============================================================
-void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_t* param_3,
-                                        float param_4, uint32_t param_5) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(param_1);   // LEFT: SIG CitizenAI_PlayAnimationCtor4_ba6b0
-    ComponentEntity* const* targetRef = reinterpret_cast<ComponentEntity* const*>(param_2);   // LEFT: SIG CitizenAI_PlayAnimationCtor4_ba6b0
+void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef,
+                                        float* param_3, float param_4, uint32_t param_5) {
     CharacterComponent* ch = nullptr;
     ActionStack* stack = PrologueResolveStack(citizenRef, &ch);
     InstallLeadMessage(citizenRef, ch);
@@ -781,5 +765,5 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
         }
         Push(stack, act);
     }
-    PushMoveTo(citizenRef, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);   // LEFT: SIG CitizenAI_PlayAnimationCtor4_ba6b0
+    PushMoveTo(citizenRef, stack, 1 /*Slow*/, param_3, 0xe1f);
 }
