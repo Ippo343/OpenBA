@@ -57,6 +57,7 @@
 namespace rtsetavl   { struct Set; struct Node; }   // runtime/src/collection/set_avl.h
 namespace rtsetavl24 { struct Set; struct Node; }   // runtime/src/collection/set_avl_e24.h
 namespace RtObject   { struct Factory; struct TypeNode; }   // runtime/types/object/TypeInfo.h
+namespace RtIO       { struct ModSetNode; }                 // runtime/types/io/Modification.h
 
 namespace Collection {
 
@@ -1191,10 +1192,17 @@ struct AvlGeneric {
 // pointer and the two spellings agree byte for byte. The retrace never touches
 // `_count`, exactly like the other three widths.
 //
-// The retrace keeps its `void*` signature: it is defined in R-IO's
-// modification_refresh.cpp. (Its two rotations, 0x180027e20 / 0x180027f50, had
+// The retrace is R-IO's port in modification_refresh.cpp, typed on its node
+// (`RtIO::ModSetNode`), called by name; the one-line forwarder `PortedRetrace8`
+// was deleted in B.4 wave X. (Its two rotations, 0x180027e20 / 0x180027f50, had
 // no body and no caller left; their declarations were deleted in B.4 wave X.)
-void  PortedRetrace8(void* set, void** slot);         // 0x1800274c0
+}  // namespace detail
+}  // namespace Collection
+namespace RtIO {
+extern "C" void RtColl_SetInsertFixup_1800274c0(ModSetNode** root, ModSetNode** cursor);   // 0x1800274c0
+}  // namespace RtIO
+namespace Collection {
+namespace detail {
 
 // The other three widths take the erased node and container types of their
 // ported core (B.4 R-COLL: typed at the core, set_core.cpp forwards with no
@@ -1220,7 +1228,7 @@ template <class NodeT>
 struct AvlOps<NodeT, 0x8> : AvlGeneric<NodeT> {
     template <class SetT>
     static void Retrace(SetT* set, NodeT** slot) {
-        PortedRetrace8(set, reinterpret_cast<void**>(slot));  // LEFT: SIG PortedRetrace8 (void* signature, defined in modification_refresh.cpp: R-IO)
+        RtIO::RtColl_SetInsertFixup_1800274c0(reinterpret_cast<RtIO::ModSetNode**>(set), reinterpret_cast<RtIO::ModSetNode**>(slot));  // CAST-OK: elem_stride
     }
     // No erase was ever emitted at this width either: `Mod::~Mod` tears the
     // whole tree down post-order (0x180010470) and nothing ever removes one
