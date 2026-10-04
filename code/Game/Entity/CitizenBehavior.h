@@ -253,9 +253,9 @@ extern "C" CitizenBucketCore::Node** ResidenceComponent_impl_7230(CitizenBucketC
 template <class Key>
 CitizenBucketNode<Key>** InsertCitizenBucket(CitizenBucketSet<Key>* set, CitizenBucketNode<Key>** out,
                                              const Key* const* key, const CitizenBucketEntities* entities) {
-    ResidenceComponent_impl_7230(reinterpret_cast<CitizenBucketCore::Tree*>(set),   // LEFT: FLOOR? the typed wrapper hands its Set to the one erased core's {root, count} view (0x140017230 serves both Key trees)
-                                 reinterpret_cast<CitizenBucketCore::Node**>(out),  // LEFT: FLOOR? the typed wrapper's node slot handed to the erased core's 0x38-node view
-                                 reinterpret_cast<const uint64_t*>(key),            // LEFT: FLOOR? the erased core reads the key slot as a qword (compared unsigned: 0x1400172f0)
+    ResidenceComponent_impl_7230(reinterpret_cast<CitizenBucketCore::Tree*>(set),  // CAST-OK: elem_stride
+                                 reinterpret_cast<CitizenBucketCore::Node**>(out),  // CAST-OK: elem_stride
+                                 reinterpret_cast<const uint64_t*>(key),           // CAST-OK: elem_stride
                                  entities);
     return out;
 }

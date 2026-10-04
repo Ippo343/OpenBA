@@ -140,6 +140,13 @@ inline void WorkCellBST_Remove_ca60(Collection::Set<T>* set, typename Collection
     static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
     WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(set), node);  // CAST-OK: elem_stride
 }
+// The pathfinder's region-pair index (RegionPairCache +0x28) is the same {root, count}
+// header over the 0x30-byte AvlNode30 (Action/PathAvl.h): the same core removes from it.
+template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
+template <class Node>
+inline void WorkCellBST_Remove_ca60(AvlTreeHead<Node>* head, Node* node) {
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
+}
 template <class T>
 inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* ser) {
     static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");

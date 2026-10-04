@@ -174,9 +174,7 @@ void RegionPairCache::Expire(const int64_t* dt) {
                             continue;
                         }
                         if (keyB <= node->key1) {
-                            // LEFT: 0x14001ca60 is declared in Work/exe_bodies.h (WORK) taking the
-                            // tree head as uintptr_t*.
-                            WorkCellBST_Remove_ca60((uintptr_t*)&index, node);   // 0x14001ca60  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF); the region index is an AvlTreeHead<AvlNode30>
+                            WorkCellBST_Remove_ca60(&index, node);   // 0x14001ca60
                             break;
                         }
                     }
