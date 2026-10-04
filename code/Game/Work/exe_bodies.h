@@ -86,7 +86,8 @@ class RawMaterialDescription;
 RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut);  // 0x140006330
 
 // ---- work_base_actionctor.cpp
-void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targetIBP, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
+class NaturalResourceComponent;
+void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t workId, NaturalResourceComponent* const* targetRef, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
 class PickupRawMaterial;
 PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenComponent* const* p2, ComponentEntity* const* p3);  // 0x1400c9b70
 void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP, float* worldPos, int cellIdx, uint8_t cancelFirst);  // 0x1400c0ad0
@@ -195,5 +196,4 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp);  // 0x14
 int WorkLeaf_Pasture_8350(const PastureComponent* pasture);  // 0x140128350
 void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer);  // 0x14012b310
 
-// ---- work_leaf_market.cpp
-void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node);  // 0x14002af40
+// ---- work_leaf_market.cpp (WorkLeaf_MarketTreeCleanup_2af40: Work/MarketWork.h)

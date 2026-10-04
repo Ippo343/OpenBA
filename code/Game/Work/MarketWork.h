@@ -138,6 +138,10 @@ static_assert(offsetof(MarketWork::ClaimNode, left) == 0x20, "claim node left @ 
 static_assert(offsetof(MarketWork::ClaimNode, right) == 0x28, "claim node right @ +0x28 (0x14002aebd)");
 static_assert(offsetof(MarketWork::ClaimNode, balance) == 0x30, "claim node balance @ +0x30 (0x14002aec1)");
 
+// 0x14002af40 (work_leaf_market.cpp): post-order free of a claim subtree (each node's carry
+// list, then the node). `ctx` is the tree root slot retail threads through RCX, unread.
+void WorkLeaf_MarketTreeCleanup_2af40(MarketWork::ClaimNode* const* ctx, MarketWork::ClaimNode* node);
+
 static_assert(sizeof(MarketWork) == 0x58, "MarketWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(MarketWork) == 8, "MarketWork is 8-aligned");
 static_assert(offsetof(MarketWork, _field48) == 0x48, "MarketWork +0x48");

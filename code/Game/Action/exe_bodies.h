@@ -97,7 +97,6 @@ void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
 // ---- action_child_ctors.cpp
 class ComponentEntity;        // Entity/ComponentEntity.h
 float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0
-float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h

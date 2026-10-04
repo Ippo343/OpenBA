@@ -145,7 +145,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     // --- heading via Entity_impl_29a0(pos5, &{*param_6}) (0x1400baae9..0x1400bab02; XMM6) ---
     ComponentEntity* srcInner6 = srcRef6 ? *srcRef6 : nullptr; // 0x1400baaed: MOV RAX,[R13]; [RBP+0x7f]=RAX
     float headingA = 0.0f; // XMM6
-    headingA = ActChild_Entity29a0_c29a0(pos5, &srcInner6);
+    headingA = HeadingToward(pos5, &srcInner6);
 
     // --- headingB via Vector3(pos4-pos3) → Normalize → Heading (0x1400bab05..0x1400bab46; XMM8) ---
     float headingB = 0.0f; // XMM8
@@ -428,7 +428,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
         // heading via Entity_impl_29a0(param_10, &{*param_11}) (0x1400c03a2..0x1400c03be; XMM6)
         ComponentEntity* srcInner11 = srcRef11 ? *srcRef11 : nullptr; // 0x1400c03a9: MOV RAX,[R12]
         float headingP = 0.0f;
-        headingP = ActChild_Entity29a0_c29a0(pos10, &srcInner11);
+        headingP = HeadingToward(pos10, &srcInner11);
 
         float timeC = kRdata_140172124; // 0x1400c03e2: XMM1=DAT_140172124=0.75f
 

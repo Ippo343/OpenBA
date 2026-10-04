@@ -46,6 +46,7 @@
 #include <cstring>
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include "Component/CitizenComponent.h"
+#include "Component/NaturalResourceComponent.h"   // WorkAct_PerformWorkCtor_c1eb0 target (0x1400c1eb0)
 #include "Component/CharacterComponent.h"
 #include "Component/StorageComponent.h"
 #include "Entity/ComponentEntity.h"
@@ -124,10 +125,9 @@ static int WA_CitizenCarryCount(CitizenComponent* const* citizenRef) {
 //   param_4 = float* worldPos
 //   param_5 = int (consumed/recomputed internally)
 //   param_6 = byte (RemoveNaturalResource flag)
-void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targetIBP,
+void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t workId,
+                                   NaturalResourceComponent* const* targetRef,
                                    float* worldPos, int /*zero*/, uint8_t zeroByte) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_c1eb0
-    Component* const* targetRef = reinterpret_cast<Component* const*>(targetIBP);   // LEFT: SIG WorkAct_PerformWorkCtor_c1eb0
 
     // --- derive the NaturalResourceDescription off the target (param_3) ---
     Description* targetComp = (*targetRef)->_description;
@@ -140,7 +140,7 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     // heading = Entity_impl_29a0(worldPos, &{target inner}) (XMM0 float)
     ComponentEntity* headingArg = targetInner;
     float heading = 0.0f;
-    heading = ActChild_Entity29a0_c29a0(worldPos, &headingArg);
+    heading = HeadingToward(worldPos, &headingArg);
 
     // the action stack = character + 0x48
     CharacterComponent* character = (*citizenRef)->character;
@@ -365,7 +365,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     float heading = 0.0f;
     {
         ComponentEntity* headingArg = targetInner;
-        heading = ActChild_Entity29a0_c29a0(worldPos, &headingArg);
+        heading = HeadingToward(worldPos, &headingArg);
     }
 
     void* obj;

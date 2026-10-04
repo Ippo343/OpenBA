@@ -106,7 +106,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     // heading = Entity_impl_29a0(position, &buildingEntityValue) — used as PerformWork anim.
     ComponentEntity* buildingEntity = building ? building->Get() : nullptr;
     float heading = 0.0f;
-    heading = ActChild_Entity29a0_c29a0(position, &buildingEntity);
+    heading = HeadingToward(position, &buildingEntity);
 
     // WIPE the action stack (start the new chain fresh).
     WorkBase_TaskListCleanup_c5400(stack);

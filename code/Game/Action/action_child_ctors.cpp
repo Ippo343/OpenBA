@@ -89,8 +89,3 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP) {
     Math::Vector3 n = v.Normalize();
     return n.Heading();
 }
-
-// B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp; Work files)
-float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
-    return HeadingToward(worldPos, reinterpret_cast<ComponentEntity* const*>(param_2));  // LEFT: SIG ActChild_Entity29a0_c29a0: 9 call sites in 6 files (B4 FORWARD) still hand the entity reference as void*
-}
