@@ -480,7 +480,7 @@ void WorkPlaceUI::OnUpdateLayout() {
                 return b ? Object::SlotAddressOf(b, &UI::Element::Enable) : nullptr;
             };
             auto vptrOf = [](UI::Element* b) -> void* {
-                return b ? *reinterpret_cast<void**>(b) : nullptr;   // LEFT: diagnostic prints the vptr
+                return b ? *reinterpret_cast<void**>(b) : nullptr;   // LEFT: diagnostic prints the vptr  // CAST-OK: crash_walk
             };
             std::fprintf(stderr, "[JobArrow] jobType=%p wpMaxCount=%d min(+0x28)=%d "
                          "max(+0x2c)=%d -> upEnabled=%d downEnabled=%d | "

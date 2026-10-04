@@ -60,7 +60,7 @@
 // LEFT: the test reads the billboard's vptr (a guard the real ctor makes always-true;
 // removing it is NEXT_SESSION �0.2's).
 static inline bool SI_Initialised(const StatusIconComponent* c) {
-    return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;   // LEFT: the vptr test (above)
+    return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;   // LEFT: the vptr test (above)  // CAST-OK: crash_walk
 }
 
 // The graphics scene the icons register with: GameUpdateLoop +0x60.

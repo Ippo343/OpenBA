@@ -196,14 +196,14 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     float local_29c = (float)batch->field_0x40;
     int   local_2b0_0 = 0;
 
-    uint64_t local_208 = (uint64_t)(uint32_t&)fVar35;
-    uint64_t local_200 = (uint64_t)(uint32_t&)fVar35 << 0x20;
+    uint64_t local_208 = (uint64_t)(uint32_t&)fVar35;  // CAST-OK: float_bits
+    uint64_t local_200 = (uint64_t)(uint32_t&)fVar35 << 0x20;  // CAST-OK: float_bits
     uint64_t local_1f8 = 0;
 
-    uint64_t local_280 = (uint64_t)(uint32_t&)fVar31;
+    uint64_t local_280 = (uint64_t)(uint32_t&)fVar31;  // CAST-OK: float_bits
     uint64_t local_220 = local_280;
-    uint64_t local_218 = (uint64_t)(uint32_t&)fVar32 << 0x20;
-    uint64_t local_210 = ((uint64_t)(uint32_t&)fVar34 << 32) | (uint32_t&)fVar33;
+    uint64_t local_218 = (uint64_t)(uint32_t&)fVar32 << 0x20;  // CAST-OK: float_bits
+    uint64_t local_210 = ((uint64_t)(uint32_t&)fVar34 << 32) | (uint32_t&)fVar33;  // CAST-OK: float_bits
     uint64_t local_228 = ((uint64_t)uVar8 << 32) | uVar8;
 
     float local_298[2] = {0.0f, 0.0f};
@@ -212,10 +212,10 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     uint64_t local_2a8 = ((uint64_t)negSeed << 32) | negSeed;
 
     uint32_t local_290_lo = 0;
-    local_280 = (uint64_t)(uint32_t&)fVar36;
+    local_280 = (uint64_t)(uint32_t&)fVar36;  // CAST-OK: float_bits
     uint64_t local_2e8 = local_280;
-    uint64_t uStack_2e0 = (uint64_t)(uint32_t&)local_290_hi << 0x20;
-    uint64_t local_2d8 = ((uint64_t)(uint32_t&)fStack_284 << 32) | (uint32_t&)local_288;
+    uint64_t uStack_2e0 = (uint64_t)(uint32_t&)local_290_hi << 0x20;  // CAST-OK: float_bits
+    uint64_t local_2d8 = ((uint64_t)(uint32_t&)fStack_284 << 32) | (uint32_t&)local_288;  // CAST-OK: float_bits
 
     // Transform2 chain (orig slots 0x140152648/650/640). Each Transform2 is 0x18 bytes
     // (6 floats: [m00, m01, m10, m11, tx, ty]).
@@ -330,7 +330,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                             cVar12 = ((iVar11   < iVar14 ) && (iVar18 - 1 < batch->minY)) ? '\0' : '\x01';
                             bool bVar2 = iVar18 + 1 <= batch->maxY;
                             iVar13 = Pf_TileShapeLut_ae180(
-                                reinterpret_cast<void*>((uint64_t)((uintptr_t)ppvVar9 & ~0xffULL) | (uint8_t)bVar2),
+                                reinterpret_cast<void*>((uint64_t)((uintptr_t)ppvVar9 & ~0xffULL) | (uint8_t)bVar2),  // CAST-OK: ptr_int
                                 (char)(iVar25b <= iVar13b), (char)(iVar14 <= iVar11),
                                 (char)(batch->minY <= iVar18 - 1),
                                 (char)bVar2, cVar12, cVar17, cVar23, cVar26);

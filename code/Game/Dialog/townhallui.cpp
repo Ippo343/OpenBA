@@ -1089,11 +1089,11 @@ static ::Object::Base* TownHall_FindComponentByTypeId(const ComponentDescription
 
     for (int i = 0; i < compCount; i++) {
         Description* comp = compArray[i];
-        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {   // LEFT: STANDALONE pointer-range guard
+        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {   // LEFT: STANDALONE pointer-range guard  // CAST-OK: ptr_int
             continue;
         }
         // vtable slot 2 (+0x10) = GetTypeId()
-        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard
+        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard  // CAST-OK: crash_walk
         if (!vtable) {
             continue;
         }
