@@ -26,7 +26,6 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/AchievementDialog.h"
 #include "Object/factory_registration.h"
-#include "Component/coll_bridge.h"
 #include "system/Value.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
@@ -135,11 +134,9 @@ void AchievementDialog::OnOpened() {
         textDesc->SetText(&descStr);
 
         // Push the 4-pointer entry (stride 0x20) to the entry array at +0xC0.
-        // B.3.2 bridge: the Array is its three raw members in the class, reached
-        // as one. The old hand-rolled copy guarded with `if (newCount != count)` —
-        // that is retail's `if (newSize == oldSize) return;` early return, which
-        // rtcoll::SetSizeCore already performs, so it is not carried forward.
-        auto& entries = GameColl::ArrayAt<Entry>(&entryData, 0);   // LEFT: H5 AchievementDialog's entry Array is three raw members (Dialog/AchievementDialog.h)
+        // (The old hand-rolled copy guarded with `if (newCount != count)` — that is
+        // retail's `if (newSize == oldSize) return;` early return, which
+        // rtcoll::SetSizeCore already performs, so it is not carried forward.)
         entries.SetSize(entries.GetSize() + 1, Entry{imageIcon, imageStar, textTitle, textDesc});
     }
 
@@ -170,8 +167,8 @@ void AchievementDialog::OnUpdateLayout() {
     // Get AchievementManager singleton
     Achievement::AchievementManager* manager = ::Achievement::AchievementManager::_singleton;
 
-    int count = entryCount;
-    Entry* entryArray = entryData;
+    int count = entries._size;
+    Entry* entryArray = entries._data;
 
     int awardedCount = 0;
 
@@ -224,23 +221,19 @@ void AchievementDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*eleme
 // ============================================================
 
 AchievementDialog::AchievementDialog()
-    : textComplete(nullptr), entryData(nullptr), entryCount(0), entryCapacity(0) {}
+    : textComplete(nullptr) {}
 
 // MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,
 // nullParent, 0, 0, 0), then the fields zeroed.
 AchievementDialog::AchievementDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
              Object::InternalPtr<UI::DialogInstance> parent)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
-      textComplete(nullptr), entryData(nullptr), entryCount(0), entryCapacity(0) {}
+      textComplete(nullptr) {}
 
 // Retail's dtor (inside [0] 0x1400103f0): MemFree the entry array at +0xc0 and
-// zero its header (+0xc0 data, +0xc8 count/capacity), then ~DialogInstance.
-AchievementDialog::~AchievementDialog() {
-    System::MemoryAllocator::MemFree(entryData);
-    entryData = nullptr;
-    entryCount = 0;
-    entryCapacity = 0;
-}
+// zero its header (+0xc0 data, +0xc8 count/capacity), then ~DialogInstance: the
+// `entries` member's own dtor (AchievementDialog.h).
+AchievementDialog::~AchievementDialog() {}
 
 // create 0x140010320: MemAlloc(0xd0, 8), then the ctor.
 void* AchievementDialog::CreateNewObject() {
