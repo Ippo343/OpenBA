@@ -831,8 +831,8 @@ void FileSystem::LoadPackages() {
                                         static_cast<uint32_t>(pi);
                 RtIO::PackfileIndexNode* out = nullptr;
                 rtavl::FilenameSetInsert(                                   // B.3.x bridge
-                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
-                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),  // LEFT: SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
+                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);  // LEFT: SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
                 ++inserted;
             }
 

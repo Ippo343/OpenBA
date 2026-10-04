@@ -57,9 +57,9 @@ SettingsMapNode* CallMapInsert(void* map, const System::String& key,
                                const System::String& value) {
     rtsetavl::Node* node = nullptr;
     rtavl::StringMapInsert(                                           // Map_Insert, retail 0x18002a090
-        static_cast<rtsetavl::Set*>(map),                             // LEFT: see above
+        static_cast<rtsetavl::Set*>(map),                             // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
         &node, &key._data, &value._data);
-    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: set_avl.h's node keeps its element opaque
+    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
 }
 
 // Retail's key encoding: bare concatenation, no separator. "Game" + "StatusIconEnable"

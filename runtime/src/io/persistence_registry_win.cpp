@@ -238,9 +238,9 @@ void MapClear(void* self) {
 // map's node IS `RtIo::SettingsMapNode` (Persistence.h).
 SettingsMapNode* MapInsert(void* map, const System::String& key, const System::String& value) {
     rtsetavl::Node* node = nullptr;
-    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  LEFT: see above
+    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
                            &node, &key._data, &value._data);
-    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: set_avl.h's node keeps its element opaque
+    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
 }
 
 // Convert one NUL-terminated UTF-16 buffer to a System::String, exactly the
