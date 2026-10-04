@@ -31,12 +31,6 @@
 #include <cstdlib>
 #include <new>
 
-// FUN_14001b030 / FUN_14001b0a0 — destroy the 0x18-byte ExternalRef and the
-// 0x30-byte InitialStructure pools (game_leaf_helpers.cpp; registered at those
-// addresses in reg_game_leaf.cpp). Called directly by ~MapGenerator.
-void Game_DestroyStringArray18(void* arrayHeader);
-void Game_DestroyStringArray30(void* arrayHeader);
-
 // ============================================================
 // MapGenerator::MapGenerator (0x1400a3030)
 // ============================================================
@@ -108,17 +102,9 @@ MapGenerator::MapGenerator() {
 // templateRef, _field30, _field28, then ~External.
 MapGenerator::~MapGenerator() {}
 
-// The pool destructors 0x14001b030 / 0x14001b0a0 (game_leaf_helpers.cpp), and
-// the InitialFamily pool's, which retail inlines at 0x14001af47: MemFree the
-// data, then zero both qwords of the header.
-template <>
-MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>::~DynArrayHeader() {
-    Game_DestroyStringArray18(this);
-}
-template <>
-MapGenerator::DynArrayHeader<MapGenerator::InitialStructure>::~DynArrayHeader() {
-    Game_DestroyStringArray30(this);   // 0x30-byte elements
-}
+// The pool destructors 0x14001b030 / 0x14001b0a0 are the String pools' own
+// `~Array` (MapGenerator.h, the rows below); the InitialFamily pool's, which
+// retail inlines at 0x14001af47: MemFree the data, then zero both qwords.
 template <>
 MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>::~DynArrayHeader() {
     // retail calls MemFree unconditionally (0x14001af4b); the tree's null test
@@ -284,14 +270,14 @@ void DestroyMGRef(void* ignoredThis, uint8_t* base, int count) {
 }
 // stays explicit: String copy-ctor `assign` (byteCopy=false) plus a real
 // `destroy`, a -1 generation seed, and an unwritten extent at [0x0c,0x10).
-const rtcoll::ArraySpec kSpec_MGRef = {              // exe 0x14001b340
+}  // namespace
+const rtcoll::ArraySpec MapGeneratorRows::kSpec_ExternalRef = {   // exe 0x14001b340 / 0x14001b030
     "Array<ExternalRef>", 0x18, 8,
     &AssignMGRef, &MG_InitRef, &DestroyMGRef, /*byteCopy*/false,
     /*assign unwritten*/ 0x0c, 0x10,
     /*init   unwritten*/ 0x0c, 0x10,
     /*seed zero       */ 0, 0 };
-using MGRefArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                     Collection::ExplicitSpec<&kSpec_MGRef>>;
+namespace {
 
 // stride 0x30 — InitialStructure {ExternalRef@0, int _offsetX@0x18, _offsetY@0x1c,
 // _width@0x20, _height@0x24, _rotation@0x28}, exe 0x14001b4e0. Retail's assign
@@ -328,39 +314,37 @@ void DestroyMGStructure(void* ignoredThis, uint8_t* base, int count) {
 }
 // stays explicit: same as kSpec_MGRef, plus a -1 seed for _width/_height at
 // +0x20 and a second unwritten extent at [0x2c,0x30).
-const rtcoll::ArraySpec kSpec_MGStructure = {        // exe 0x14001b4e0
+}  // namespace
+const rtcoll::ArraySpec MapGeneratorRows::kSpec_InitialStructure = {   // exe 0x14001b4e0 / 0x14001b0a0
     "Array<InitialStructure>", 0x30, 8,
     &AssignMGStructure, &MG_InitStructure, &DestroyMGStructure, /*byteCopy*/false,
     /*assign unwritten*/ 0x0c, 0x10,      // (and [0x2c,0x30); one range per row)
     /*init   unwritten*/ 0x0c, 0x10,
     /*seed zero       */ 0, 0 };
-using MGStructureArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                           Collection::ExplicitSpec<&kSpec_MGStructure>>;
+namespace {
 
-// Dispatch on the stride the caller names; the three are the three retail bodies.
-void MG_Resize(void* header, int newCount, int stride) {
-    // B.3.2 bridge: the MapGenerator pools are still raw DynArrayHeader fields.
-    switch (stride) {
-    case 8:    reinterpret_cast<MGFamilyArray*>(header)->SetSize(newCount);    break;   // LEFT: POD MapGenerator::DynArrayHeader<T>: the pool is a raw triple with its own dtor, not the Array the core resizes (H5)
-    case 0x18: reinterpret_cast<MGRefArray*>(header)->SetSize(newCount);       break;   // LEFT: POD MapGenerator::DynArrayHeader<T>: the pool is a raw triple with its own dtor, not the Array the core resizes (H5)
-    case 0x30: reinterpret_cast<MGStructureArray*>(header)->SetSize(newCount); break;   // LEFT: POD MapGenerator::DynArrayHeader<T>: the pool is a raw triple with its own dtor, not the Array the core resizes (H5)
-    default:   break;   // no such pool exists; the three callers below are the only ones
-    }
+// The resize of each pool: 0x14001b270 (stride 8), 0x14001b340 (0x18) and
+// 0x14001b4e0 (0x30), the three retail bodies, each the core through its row.
+void MG_Resize(MapGenerator::DynArrayHeader<InitialFamily>& pool, int newCount) {
+    reinterpret_cast<MGFamilyArray*>(&pool)->SetSize(newCount);   // LEFT: MapGenerator::families stays a DynArrayHeader: its dtor keeps the tree's `if (data)` before MemFree (retail 0x14001af4b has none; known_port_issues 14d), which ~Array would drop
 }
+void MG_Resize(MapGenerator::ExternalRefArray& pool, int newCount) { pool.SetSize(newCount); }
+void MG_Resize(MapGenerator::InitialStructureArray& pool, int newCount) { pool.SetSize(newCount); }
 
 // Serialize a count the way retail does: through a LOCAL seeded from the struct,
 // resizing only on the load leg. Returns the count to iterate.
-int MG_SerializeCount(IO::Serializer& serializer, void* header, int32_t count, int stride) {
+template <class Pool>
+int MG_SerializeCount(IO::Serializer& serializer, Pool& pool, int32_t count) {
     int n = count;
     serializer.Serialize(n, nullptr);
-    if (MG_IsLoading(serializer)) MG_Resize(header, n, stride);
+    if (MG_IsLoading(serializer)) MG_Resize(pool, n);
     return n;
 }
 
 // A pool of ExternalRef entries (stride 0x18).
-void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>& pool) {
-    const int n = MG_SerializeCount(serializer, &pool, pool.count, 0x18);
-    MapGenerator::ExternalRef* e = pool.data;
+void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::ExternalRefArray& pool) {
+    const int n = MG_SerializeCount(serializer, pool, pool._size);
+    MapGenerator::ExternalRef* e = pool._data;
     if (!e) return;
     for (int i = 0; i < n; ++i) {
         e[i].strPtr.Serialize(serializer);  // in place
@@ -383,7 +367,7 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        const int n = MG_SerializeCount(serializer, &families, families.count, 8);
+        const int n = MG_SerializeCount(serializer, families, families.count);
         InitialFamily* e = families.data;
         for (int i = 0; e && i < n; ++i) {
             serializer.Serialize(e[i].educated, nullptr);        // _educated
@@ -397,8 +381,8 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     // --- _structures: InitialStructure[] (stride 0x30: ExternalRef@0,
     //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
     {
-        const int n = MG_SerializeCount(serializer, &refArray2, refArray2.count, 0x30);
-        InitialStructure* e = refArray2.data;
+        const int n = MG_SerializeCount(serializer, refArray2, refArray2._size);
+        InitialStructure* e = refArray2._data;
         for (int i = 0; e && i < n; ++i) {   // FUN_14001b6c0, in place
             e[i].structure.strPtr.Serialize(serializer);   // _structure ref name
             serializer.Serialize(e[i].offsetX, nullptr);    // _offsetX

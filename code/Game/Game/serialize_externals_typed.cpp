@@ -28,30 +28,21 @@
 #include "Game/exe_bodies.h"
 #include "Game/serialize_externals.h"
 
-namespace {
-// B.4 GAME-b: the body is the shared typed SerializeExternalRef (serialize_externals.cpp);
-// this copy differed only in its log tag. The C entry points' two LEFT casts:
-// the slot and the serializer arrive as void* from callers holding their own types.
-void ForwardRef7140(void* refField, void* serializer, uint32_t typeId, const char* typeName) {
-    if (!refField || !serializer) return;
-    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),   // LEFT: SIG ForwardRef7140 serves the void* C entry points Reimpl_ExternalPtr_Serialize_Typed_7140 / _MapGenerator, whose callers (X6-CW's and this partition's description serializers) hand the slot and the serializer untyped
-                                *reinterpret_cast<IO::Serializer*>(serializer),   // LEFT: SIG ForwardRef7140 serves the void* C entry points Reimpl_ExternalPtr_Serialize_Typed_7140 / _MapGenerator, whose callers (X6-CW's and this partition's description serializers) hand the slot and the serializer untyped
-                                typeId, typeName, "ExternalPtr::Serialize_7140");
-}
-} // namespace
-
-extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
-    void* refField, void* serializer) {
-    ForwardRef7140(refField, serializer, Graphics::MaterialInstance::GetTypeInfo().typeId,
-                   "Graphics::MaterialInstance");
+// B.4 GAME-b: the body is the shared typed SerializeExternalRefChecked
+// (serialize_externals.cpp); this copy differed only in its log tag. B4 X7-GAME-A:
+// the cores take the slot as the External* it holds (the typed wrappers in
+// Game/exe_bodies.h reach them).
+void ExternalPtrSerialize_Typed_7140(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Graphics::MaterialInstance::GetTypeInfo().typeId,
+                                "Graphics::MaterialInstance", "ExternalPtr::Serialize_7140");
 }
 
-extern "C" void Reimpl_ExternalPtr_Serialize_MapGenerator(void* refField, void* serializer) {
-    ForwardRef7140(refField, serializer, 0u, "MapGenerator");
+void ExternalPtrSerialize_MapGenerator(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, 0u, "MapGenerator", "ExternalPtr::Serialize_7140");
 }
-extern "C" void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, void* serializer) {
-    ForwardRef7140(refField, serializer, 0u, "TerrainGenerator");
+void ExternalPtrSerialize_TerrainGenerator(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, 0u, "TerrainGenerator", "ExternalPtr::Serialize_7140");
 }
-extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer) {
-    ForwardRef7140(refField, serializer, 0u, "ClimateGenerator");
+void ExternalPtrSerialize_ClimateGenerator(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, 0u, "ClimateGenerator", "ExternalPtr::Serialize_7140");
 }

@@ -34,7 +34,6 @@
 // serialize. The address is registered to this body (address_registry.cpp); it
 // is called directly (the old lazily-resolved pointer, a non-atomic first-call
 // cache on the loader thread, B6-5, resolved to it).
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
 // ============================================================
 // ProfessionList::ProfessionList

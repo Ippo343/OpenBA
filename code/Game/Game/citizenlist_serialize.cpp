@@ -150,7 +150,7 @@ inline bool SerializerLoading(IO::Serializer* serializer) {
 
 // The tree serializer's key resolver (TREE #1: 0x140018020, TREE #2: 0x140002340 --
 // one body, Reimpl_ExternalPtr_Serialize_StringTable).
-typedef void (*fn_KeyResolve_t)(void* field, void* serializer);
+// B4 X7-GAME-A: the key resolver is typed on the bucket key (a Profession* / ComponentDescription* slot).
 
 // ------------------------------------------------------------
 // Registry census — the TownManager's 16 IBP registries in one line.
@@ -331,7 +331,7 @@ Node* CompRefTreeSucc(Node* n) {
 // `tree` is CitizenBehavior +0x100 / +0x160 (a Collection::Set of buckets).
 template <class Key>
 void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serializer,
-                          fn_KeyResolve_t keyFn) {
+                          void (*keyFn)(Key**, IO::Serializer*)) {
     using Node = CitizenBucketNode<Key>;
     Node** rootPtr = &tree._root;
     int32_t* countField = &tree._count;

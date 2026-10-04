@@ -1156,7 +1156,7 @@ void GameUpdateLoop::Load() {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
             // Map dimension from the terrain size-table row (sizeRow[0]).
-            const TerrainSizeRow* sizeTable = terrainGen->_field80;   // +0x80, 0x44-byte rows
+            const TerrainSizeRow* sizeTable = terrainGen->sizeRows._data;   // +0x80, 0x44-byte rows
             uint32_t dim = sizeTable ? sizeTable[sizeIdx].mapSize : 0;
 
             // Retail call site 0x1400975c7, immediately after the map dimension is
@@ -1272,10 +1272,10 @@ void GameUpdateLoop::Load() {
                             mapGen->subdivisions);
                     fprintf(stderr, "[startTown::DIAG]   pools: a0=%p a8(cnt)=%d | b0=%p b8(cnt)=%d | "
                             "c0=%p c8(cnt)=%d | d0=%p d8(cnt)=%d | e0=%d e4=%d e8=%d\n",
-                            mapGen->refArray4.data, mapGen->refArray4.count,
-                            mapGen->refArray5.data, mapGen->refArray5.count,
-                            mapGen->refArray6.data, mapGen->refArray6.count,
-                            mapGen->refArray7.data, mapGen->refArray7.count,
+                            mapGen->refArray4._data, mapGen->refArray4._size,
+                            mapGen->refArray5._data, mapGen->refArray5._size,
+                            mapGen->refArray6._data, mapGen->refArray6._size,
+                            mapGen->refArray7._data, mapGen->refArray7._size,
                             mapGen->paramE0, mapGen->paramE4,
                             mapGen->paramE8);
                 }

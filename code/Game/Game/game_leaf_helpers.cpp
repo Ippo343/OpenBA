@@ -43,133 +43,18 @@
 #include "Work/exe_bodies.h"   // WorkBase_TreeNodeFree_e320
 
 // ------------------------------------------------------------------
-// String-array destructors. Each is `{ void* data; int count; int cap; }`
-// header (data @+0, count @+8) holding `count` elements at the given stride,
-// with a System::String embedded at `strOffset` within each element. The
-// original frees the data block unconditionally even when count<=0.
-//
-// ENDGAME B.3.2 step 2: these three WERE one hand-written copy of
-// `Collection::Array<T>::~Array` (destroy each element, then
-// `rtcoll::ArrayDtorImpl`). Re-decompiled 0x14001b030 / 0x14001b0a0 /
-// 0x14000a8a0 on 2026-09-13 and compared with `~Array` + ArrayDtorImpl:
-//   * `if (0 < count) { ~String(elem + strOffset) for each }` — retail tests
-//     ONLY the count, exactly `if (destroy && _size > 0)`. The previous port's
-//     extra `&& base` was a guard retail does not have; it is gone.
-//   * `MemFree(data)` unconditionally (null test inside 0x1800c7ad0), then
-//     `data = 0` and ONE qword store over size+capacity — ArrayDtorImpl's
-//     three stores, byte for byte.
-// The element rows are the ones the matching grow bodies use:
-//   0x18: FUN_14001b340, {String @0, int32 generation @8, External* @0x10},
-//         assign = String copy-ctor + dword + qword (+0x0c..+0x10 unwritten),
-//         init = {0, -1, 0}. The SAME row exists as kSpec_GoalRefEntry in
-//         code/Game/Goal/goal_exe_helpers.cpp (file-local there); the two
-//         collapse into one when ExternalPtr becomes a real class.
-//   0x30: FUN_14001b4e0, the 0x18 triple followed by int32 _offsetX @0x18,
-//         _offsetY @0x1c, _width @0x20, _height @0x24, _rotation @0x28;
-//         assign copies each field (+0x0c..+0x10 and +0x2c..+0x30 unwritten),
-//         init = {0, -1, 0, 0, 0, -1, -1, 0} (mapgenerator.cpp MG_InitStructure).
-//   0x28: the event-log entry; its row lives in eventlog.cpp next to the grow
-//         (0x140019b70) and is reached through EventLog_EventArray_Destroy.
+// String-array destructors 0x14001b030 (0x18 ExternalRef) / 0x14001b0a0 (0x30
+// InitialStructure): B4 X7-GAME-A made MapGenerator's two String pools typed
+// `Collection::Array`s over the rows in mapgenerator.cpp (MapGeneratorRows), so
+// those bodies are the pools' own `~Array`; Game_DestroyStringArray30 and the
+// duplicate rows here had no caller left and are deleted. (0x14000a8a0, the
+// 0x28 event-log entry, is EventLog_EventArray_Destroy in eventlog.cpp.)
 // ------------------------------------------------------------------
-namespace {
 
-// The element is MapGenerator::ExternalRef (Game/MapGenerator.h), reached
-// through Collection.h's element adapters (B4 P2 GAME-1).
-using ExternalRef = MapGenerator::ExternalRef;
-using InitialStructure = MapGenerator::InitialStructure;
-
-void CopyExternalRef(ExternalRef* d, const ExternalRef* s) {
-    new (&d->strPtr) System::String(s->strPtr);   // +0x00
-    d->factoryGen = s->factoryGen;   // +0x08
-    d->resolved = s->resolved;       // +0x10
-}
-// Generation seed is -1, not 0: 0 is a live ExternalFactory generation and
-// would make the lazy resolver take its "cache valid" early-out on a null.
-void ZeroExternalRef(ExternalRef* d) {
-    d->strPtr._data = nullptr;       // +0x00 qword 0 (raw element memory)
-    d->factoryGen = -1;              // +0x08
-    d->resolved = nullptr;           // +0x10 qword 0
-}
-void DestroyExternalRefs(ExternalRef* elems, int count) {
-    for (int i = 0; i < count; ++i)
-        elems[i].strPtr.~String();
-}
-void AssignRefTriple18(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<ExternalRef, &CopyExternalRef>(d, s);
-}
-void InitRefTriple18(uint8_t* d) {
-    rtcoll::InitAs<ExternalRef, &ZeroExternalRef>(d);
-}
-void DestroyRefTriple18(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<ExternalRef, &DestroyExternalRefs>(ignoredThis, base, count);
-}
-// stays explicit: a String copy-ctor `assign` (byteCopy=false) with a real
-// `destroy`, a -1 generation seed in `init`, and an unwritten extent at
-// [0x0c,0x10) — none of which a C++ element type's traits can state.
-const rtcoll::ArraySpec kSpec_RefTriple18 = {           // exe 0x14001b340 / 0x14001b030
-    "Array<{String,int32,External*}>", 0x18, 8,
-    &AssignRefTriple18, &InitRefTriple18, &DestroyRefTriple18, false,
-    /*assign unwritten*/ 0x0c, 0x10,
-    /*init   unwritten*/ 0x0c, 0x10,
-    /*seed zero       */ 0,    0 };
-using RefTriple18Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                           Collection::ExplicitSpec<&kSpec_RefTriple18>>;
-
-void CopyInitialStructure(InitialStructure* d, const InitialStructure* s) {
-    new (&d->structure.strPtr) System::String(s->structure.strPtr);   // +0x00
-    d->structure.factoryGen = s->structure.factoryGen;   // +0x08
-    d->structure.resolved = s->structure.resolved;       // +0x10
-    d->offsetX  = s->offsetX;    // +0x18
-    d->offsetY  = s->offsetY;    // +0x1c
-    d->width    = s->width;      // +0x20
-    d->height   = s->height;     // +0x24
-    d->rotation = s->rotation;   // +0x28
-}
-void ZeroInitialStructure(InitialStructure* d) {
-    d->structure.strPtr._data = nullptr;   // +0x00 qword 0 (raw element memory)
-    d->structure.factoryGen = -1;       // +0x08 generation -1
-    d->structure.resolved = nullptr;    // +0x10 qword 0
-    d->offsetX = 0;                     // _offsetX/_offsetY (one qword 0 before; H7)
-    d->offsetY = 0;
-    d->width = -1;                      // _width/_height -1 (one qword before; H7)
-    d->height = -1;
-    d->rotation = 0;                    // _rotation
-}
-void DestroyInitialStructures(InitialStructure* elems, int count) {
-    for (int i = 0; i < count; ++i)
-        elems[i].structure.strPtr.~String();
-}
-void AssignInitialStructure30(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<InitialStructure, &CopyInitialStructure>(d, s);
-}
-void InitInitialStructure30(uint8_t* d) {
-    rtcoll::InitAs<InitialStructure, &ZeroInitialStructure>(d);
-}
-void DestroyInitialStructure30(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<InitialStructure, &DestroyInitialStructures>(ignoredThis, base, count);
-}
-// stays explicit: same three reasons as the 0x18 row above, plus a -1 seed for
-// _width/_height at +0x20 and a second unwritten extent at [0x2c,0x30).
-const rtcoll::ArraySpec kSpec_InitialStructure30 = {    // exe 0x14001b4e0 / 0x14001b0a0
-    "Array<MapGenerator::InitialStructure>", 0x30, 8,
-    &AssignInitialStructure30, &InitInitialStructure30, &DestroyInitialStructure30, false,
-    /*assign unwritten*/ 0x0c, 0x10,   // and +0x2c..+0x30 (one range field only)
-    /*init   unwritten*/ 0x0c, 0x10,   // same
-    /*seed zero       */ 0,    0 };
-using InitialStructure30Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                                  Collection::ExplicitSpec<&kSpec_InitialStructure30>>;
-
-}  // namespace
-
-
-// FUN_14001b030 (mapgenerator.cpp) — String at element+0, stride 0x18.
-void Game_DestroyStringArray18(void* arrayHeader) {
-    reinterpret_cast<RefTriple18Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray18: its callers hold MapGenerator's DynArrayHeader<ExternalRef> raw triples (MapGenerator.h, H5)
-}
-
-// FUN_14001b0a0 (mapgenerator.cpp) — String at element+0, stride 0x30.
-void Game_DestroyStringArray30(void* arrayHeader) {
-    reinterpret_cast<InitialStructure30Array*>(arrayHeader)->~Array();  // LEFT: SIG Game_DestroyStringArray30: its callers hold MapGenerator's DynArrayHeader raw triples (MapGenerator.h, H5)
+// FUN_14001b030 — the same body for BuildingGoal's entry array (~BuildingGoal,
+// 0x140025e80): `~Array` over MapGenerator's 0x18 row.
+void Game_DestroyStringArray18(NamedExternalRefArray* arrayHeader) {
+    reinterpret_cast<MapGenerator::ExternalRefArray*>(arrayHeader)->~Array();  // LEFT: BuildingGoal::_field38 is a NamedExternalRefArray (Goal/goal_exe_helpers.h): its element's name is raw storage (H5, TutorialGoalCount::elementName with NamedExternalRef::name), so it is not the typed ExternalRef pool
 }
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,
@@ -312,13 +197,12 @@ void Game_WeatherDtor(WeatherSimulation* self) {
 // fn_Filename_CtorString = ??0Filename@System@@QEAA@AEBVString@1@@Z), Find via
 // ::Object::ExternalFactory::Find. Cascade-safe: if the type slot is unresolved, load
 // without IsDerivedFrom validation rather than dereferencing a null BaseTypeInfo.
-void Game_TerrainResolveMaterial(void* refTriple) {
-    if (!refTriple) return;
+void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref) {
+    if (!ref) return;
     if (!::Object::ExternalFactory::_singleton) return;
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    // The triple is the {String, generation, External*} record MapGenerator.h
-    // names ExternalRef (TerrainGenerator's material ref has the same layout).
-    MapGenerator::ExternalRef* ref = reinterpret_cast<MapGenerator::ExternalRef*>(refTriple);   // LEFT: SIG Game_TerrainResolveMaterial (its caller terraingenerator.cpp SerializeFilenameString holds the record's leading String*, not the record)
+    // The record is TerrainGenerator's material ref (+0x38 / +0x50 / +0x68), a
+    // MapGenerator::ExternalRef {String, generation, External*}.
     int factoryGen = efactory->_generation;   // factory+8
     if (ref->factoryGen == factoryGen) return;
 

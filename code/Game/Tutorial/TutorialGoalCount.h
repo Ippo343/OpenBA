@@ -38,7 +38,7 @@ public:
     bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400df900
     Object::External* Reconstruct() override;                      // [6] 0x140027800
     void              Destruct() override;                         // [7] 0x140001640
-    bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400df290
+    bool              IsComplete(const System::Time* time, void* instance) override;  // [8] 0x1400df290
     virtual Object::External* Construct();                         // [9] 0x1400277f0
 
     // The +0x48 String (H5 raw storage: the ctor stores 0 inline, the dtor

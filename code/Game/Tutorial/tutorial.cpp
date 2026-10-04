@@ -37,16 +37,14 @@
 // ctor 0x1400deb90 (inlined in create 0x140026e50 / createInPlace 0x140026eb0):
 // External(), the stamp (the compiler's), then the fields.
 Tutorial::Tutorial()
-    : setup(nullptr), steps(nullptr), stepCount(0), stepCapacity(0), currentStep(-1), _pad3C{} {}
+    : setup(nullptr), steps(), currentStep(-1), _pad3C{} {}
 
 // The dtor inside [0] 0x140026f50: free the steps array (+0x28 data, +0x30
 // size, +0x34 capacity) — an inlined Collection::Array<T>::~Array (MemFree
 // the buffer, zero _data, zero the _size/_capacity qword); no element is
 // destroyed (8-byte ExternalPtr<TutorialStep> entries). The compiler then
 // runs ~External.
-Tutorial::~Tutorial() {
-    reinterpret_cast<Collection::Array<void*>*>(&steps)->~Array();   // B.3.2 bridge   // LEFT: H5 Tutorial::steps is the raw triple of an Array<ExternalPtr<TutorialStep>> (Tutorial.h, not this agent's)
-}
+Tutorial::~Tutorial() {}   // the steps member's ~Array, then ~External
 
 // ============================================================
 // Tutorial::Reconstruct [6] 0x140026f00 / Destruct [7] 0x140001640
@@ -79,7 +77,7 @@ bool Tutorial::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // 1. Serialize step count (+0x30)
-    int32_t localCount = stepCount;
+    int32_t localCount = steps._size;
     serializer.Serialize(localCount, nullptr);
 
     // 2. On load: resize steps array
@@ -88,7 +86,7 @@ bool Tutorial::Serialize(IO::Stream& stream) {
     }
 
     // 3. Serialize steps array (ExternalPtr<TutorialStep>[])
-    TutBase_SerializeStepArray(&serializer, localCount, steps, nullptr);   // 0x140026fb0
+    TutBase_SerializeStepArray(&serializer, localCount, steps._data, nullptr);   // 0x140026fb0
 
     // 4. Serialize the ExternalPtr at +0x20
     Reimpl_ExternalPtr_Serialize_StringTable(&setup, &serializer);   // 0x140002340

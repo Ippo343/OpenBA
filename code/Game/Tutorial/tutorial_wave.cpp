@@ -126,9 +126,8 @@ inline bool HasText(const System::String& s) {
 // ([[reference-unresolved-rdata-const-deletes-guarded-test]] family).
 // LEFT: ExternalPtrSerializeGeneric (Game/serialize_externals.h) takes void**.
 // ===========================================================================
-extern "C" void TutWave_SerializeTutorialRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeTutorialRef's callers hand the slot as void*
-                                nullptr, "Tutorial");
+void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) {
+    ExternalPtrSerializeGeneric(field, serializer, nullptr, "Tutorial");
 }
 
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
@@ -458,7 +457,7 @@ void TutorialSetupDialog::ShowListedElements() {
 void TutorialInstance::RefreshStepUI() {
     Tutorial* tutorial = tutorialDef;
     if (!tutorial) return;
-    TutorialStep** steps = tutorial->steps;
+    TutorialStep** steps = tutorial->steps._data;
     if (!steps) return;
     int idx = currentStep;
     TutorialStep* step = steps[idx];
@@ -557,7 +556,7 @@ void TutorialInstance::RefreshStepUI() {
 // ===========================================================================
 extern "C" { int g_TutUndoDepth = 0; int g_TutUndoIndex = -1; }
 
-void TutorialInstance::StepExecute(void* param2, void* param3, uint64_t param4) {
+void TutorialInstance::StepExecute(const System::Time* param2, const Achievement::GoalList* param3, uint64_t param4) {
     Tutorial* tutorial = tutorialDef;
     if (!tutorial) {
         // Both of retail's early returns are silent, which is fine in retail and
@@ -607,11 +606,11 @@ void TutorialInstance::StepExecute(void* param2, void* param3, uint64_t param4) 
     }
 
     int stepIndex = currentStep;
-    int stepCount = tutorial->stepCount;
+    int stepCount = tutorial->steps._size;
 
     if (stepIndex >= stepCount) return;
 
-    TutorialStep** steps = tutorial->steps;
+    TutorialStep** steps = tutorial->steps._data;
     if (!steps) return;
     TutorialStep* step = steps[stepIndex];
     if (!step) return;
