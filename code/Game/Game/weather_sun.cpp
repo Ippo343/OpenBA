@@ -178,8 +178,8 @@ extern "C" void Weather_SunUpdate(GameUpdateLoop* self, Video::Context* ctx) {
         uint8_t weatherSetting = (g_gameSettings != nullptr)
             ? g_gameSettings->showWeather : 0;   // +0x16
         if (weatherSetting != 0 && wsim) {
-            int cnt = wsim->effectCount;                 // +0x58
-            Graphics::Geometry** arr = wsim->effects;    // +0x50
+            int cnt = wsim->effects.GetSize();           // +0x58
+            Graphics::Geometry** arr = wsim->effects._data;   // +0x50
             if (cnt > 0 && arr) {
                 for (int i = 0; i < cnt; ++i) {
                     if (!arr[i]) continue;

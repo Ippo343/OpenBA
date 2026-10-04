@@ -1402,10 +1402,10 @@ void GameUpdateLoop::Draw(float alpha) {
             WeatherSimulation* weather = m_weather;
             if (weather && videoCtx) {
                 // The four floats +0x1c..+0x28 (copied as they are, never computed on).
-                Math::Vector4 params(weather->field_0x1C[0],   // snow coverage
-                                     weather->field_0x1C[1],
-                                     weather->field_0x1C[2],
-                                     weather->field_0x1C[3]);
+                Math::Vector4 params(weather->field_0x1C.x,   // snow coverage
+                                     weather->field_0x1C.y,
+                                     weather->field_0x1C.z,
+                                     weather->field_0x1C.w);
                 static int s_forceSnow = -1;
                 static float s_snowVal = 0.0f;
                 if (s_forceSnow < 0) {

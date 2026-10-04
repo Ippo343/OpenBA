@@ -259,16 +259,14 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
     ser.Serialize(field_0x14, nullptr);
     ser.Serialize(temperature, nullptr);
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
-    // LEFT (H5): +0x1C is a Math::Vector4, declared as float[4]: a Vector4
-    // member would give the class a constructor that runs in Load.
-    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(ser);   // LEFT: H5: +0x1C is a Math::Vector4, declared as float[4]: a Vector4 member would give the class a constructor that runs in Load.
+    field_0x1C.Serialize(ser);
     ser.Serialize(field_0x2C, nullptr);
     ser.Serialize(field_0x30, nullptr);
     ser.Serialize(field_0x44, nullptr);
     ser.Serialize(field_0x48, nullptr);
     ser.Serialize(seasonStep, nullptr);
 
-    int slotCount = effectCount;
+    int slotCount = effects.GetSize();
     for (int i = 0; i < slotCount; i++) {
         Graphics::Geometry** slot = &effects[i];
         bool active = (*slot != nullptr);

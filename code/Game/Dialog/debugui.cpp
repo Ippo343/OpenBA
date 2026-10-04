@@ -236,7 +236,7 @@ void DebugUI::OnWeatherComboChanged() {
     int drawCount = (int)env->_weatherCount;
     EnvironmentDescription::WeatherChoice* descArray = env->_weatherArray;  // {descriptor, audio descriptor} pairs
 
-    Graphics::Geometry** geometryArray = drawMgr->effects;  // R14+0x50 (WeatherParticleGeometry each)
+    Graphics::Geometry** geometryArray = drawMgr->effects._data;  // R14+0x50 (WeatherParticleGeometry each)
     // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
     // PORT GAP audio branch below reads it in retail.
 

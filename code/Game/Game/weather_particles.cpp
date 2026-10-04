@@ -343,7 +343,7 @@ void WeatherParticleGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 //   enable= build effect if 1, fade out if 0
 // ============================================================
 void WeatherSimulation::SetEffectEnabled(int slot, bool enable) {
-    Graphics::Geometry** activeArray = effects;   // +0x50 effect geometry array
+    Graphics::Geometry** activeArray = effects._data;   // +0x50 effect geometry array
     if (!activeArray) return;
 
     if (!enable) {

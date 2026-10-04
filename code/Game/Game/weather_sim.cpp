@@ -224,8 +224,8 @@ void WeatherSimulation::Update(const System::Time* time) {
     //     0) or weather is disabled, remove it from the Graphics scene and
     //     destroy it. (Per-effect audio emitter volume is out of scope.) ---
     {
-        int cnt = effectCount;
-        Graphics::Geometry** activeArray = effects;
+        int cnt = effects.GetSize();
+        Graphics::Geometry** activeArray = effects._data;
         if (cnt > 0 && activeArray) {
             for (int i = 0; i < cnt; ++i) {
                 Graphics::Geometry* geo = activeArray[i];
@@ -293,9 +293,9 @@ void WeatherSimulation::Update(const System::Time* time) {
 
         // Max intensity across the active weather effects (fade value geo+0xc0).
         float maxIntensity = 0.0f;
-        int cnt = effectCount;
+        int cnt = effects.GetSize();
         if (cnt > 0) {
-            Graphics::Geometry** arr = effects;
+            Graphics::Geometry** arr = effects._data;
             if (arr) {
                 for (int i = 0; i < cnt; ++i) {
                     if (arr[i]) {
@@ -306,10 +306,10 @@ void WeatherSimulation::Update(const System::Time* time) {
             }
         }
 
-        field_0x1C[0] = coverage;       // +0x1C
-        field_0x1C[1] = fadeA;          // +0x20
-        field_0x1C[2] = fadeB;          // +0x24
-        field_0x1C[3] = maxIntensity;   // +0x28
+        field_0x1C.x = coverage;       // +0x1C
+        field_0x1C.y = fadeA;          // +0x20
+        field_0x1C.z = fadeB;          // +0x24
+        field_0x1C.w = maxIntensity;   // +0x28
     }
 
     // --- Part 5: at each keyframe boundary, run the weather-type state machine

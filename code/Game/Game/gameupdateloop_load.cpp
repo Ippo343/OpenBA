@@ -347,14 +347,6 @@ namespace {
 void AssignPtr8(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 1>>(d, s);
 }
-const rtcoll::ArraySpec kSpec_Ptr8NoInit = {             // exe 0x1400191f0
-    "Array<void*> (no tail init)", 8, 8,
-    &AssignPtr8, nullptr, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using Ptr8NoInitArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                          Collection::ExplicitSpec<&kSpec_Ptr8NoInit>>;
 
 // 0x14002e000 element: camera view {Vector3 pos, float a, float b, float c,
 // bool used}, stride 0x1c, align 4. Copy writes +0x00..+0x18 (the 4x-unrolled
@@ -390,6 +382,14 @@ void InitCamView(uint8_t* d) {
 
 }  // namespace
 
+// WeatherSimulation::effects' row (WeatherSimulation.h).
+const rtcoll::ArraySpec WeatherSimulationRows::kSpec_Ptr8NoInit = {   // exe 0x1400191f0
+    "Array<void*> (no tail init)", 8, 8,
+    &AssignPtr8, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+
 // PlayerToolManager::cameraViews' row (PlayerToolManager.h).
 const rtcoll::ArraySpec PlayerToolManagerRows::kSpec_CamView = {   // exe 0x14002e000
     "Array<CameraView>", 0x1c, 4,
@@ -398,12 +398,6 @@ const rtcoll::ArraySpec PlayerToolManagerRows::kSpec_CamView = {   // exe 0x1400
     /*init   unwritten*/ 0x19, 0x1c,
     /*seed zero       */ 0,    0 };
 
-// FUN_1400191f0 — stride-8 pointer-array resize; copies existing, does NOT zero new slots.
-static void* Reimpl_FUN_1400191f0(void* hdr, int n) {
-    // B.3.2 bridge: the +0x50 header is still raw bytes in an unconverted struct.
-    reinterpret_cast<Ptr8NoInitArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
 
 
 
@@ -479,18 +473,15 @@ static void WorkScheduler_Construct(WorkScheduler* scheduler) {
 }
 
 // FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
-static_assert(std::is_trivially_default_constructible<WeatherSimulation>::value,
-              "placement new of WeatherSimulation runs no code");
+// Load's placement new runs the members' ctors (the Vector4 at +0x1C and the two
+// Arrays at +0x50 / +0x60 zero themselves, as retail's 0x140093fa3..0x140093fab
+// and 0x140094008..0x140094014 do); this body writes the rest.
 static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->environment = nullptr;
     w->climate = nullptr;
     w->field_0x10 = 0;
     w->field_0x14 = 4;                        // default count = 4
     w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
-    w->field_0x1C[0] = 0.0f;                  // +0x1C..+0x2B: two qword stores (H7: named stores)
-    w->field_0x1C[1] = 0.0f;
-    w->field_0x1C[2] = 0.0f;
-    w->field_0x1C[3] = 0.0f;
     w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
     w->field_0x30 = 0.0f;
     System::Random rng1;   // trivial class: no code until the ctor door below
@@ -504,12 +495,6 @@ static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
     w->field_0x48 = 0.0f;
     w->seasonStep = -1;
-    w->effects = nullptr;
-    w->effectCount = 0;                       // +0x58 / +0x5C: one qword store
-    w->effectCapacity = 0;
-    w->emitters = nullptr;
-    w->emitterCount = 0;                      // +0x68 / +0x6C: one qword store
-    w->emitterCapacity = 0;
     w->disasterTime._ticks = 0;
 }
 
@@ -520,12 +505,10 @@ void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* clim
     climate = climateGen;
     if (env) {
         int count = env->_weatherCount;          // env+0x30
-        Reimpl_FUN_1400191f0(&effects, count);
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
-        // new tail zeroed. Element is an 8-byte object handle (byte-copy, zeroing).
-        GameColl::AsArray<GameColl::Ptr8>(&emitters).SetSize(count);
-        int n0 = effectCount;
-        Graphics::Geometry** arr0 = effects;
+        effects.SetSize(count);    // 0x1400191f0
+        emitters.SetSize(count);   // 0x1400032e0
+        int n0 = effects.GetSize();
+        Graphics::Geometry** arr0 = effects._data;
         for (int i = 0; i < n0; ++i) arr0[i] = nullptr;
     }
     if (climateGen) {
