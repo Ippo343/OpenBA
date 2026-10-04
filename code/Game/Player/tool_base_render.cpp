@@ -73,6 +73,8 @@
 #include "object/External.h"
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/WorldGeometry.h"    // m_worldGeometry: the heightfield SampleTile reads
+#include "Game/Map.h"              // m_game: the tile grid
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "math/Math.h"
 #include "Object/factory_registration.h"
@@ -181,20 +183,20 @@ using EdgeVtxArray = Collection::Array<EdgeVertex16>;
 //   6 corners x {x,y,z}). Two parity branches (checkerboard tile orientation).
 //   hf fields: +0xc0 dimA, +0xc4 dimB, +0xd0 clampMax, +0xd8 height-sample table.
 // ===========================================================================
-void SampleTile(int64_t hf, int col, int row, float* out) {
+void SampleTile(const WorldGeometry* hf, int col, int row, float* out) {
     const float hscale = 0.00390625f;  // DAT_1401720bc = 1/256
-    int base = (*reinterpret_cast<int32_t*>(hf + 0xc0) - *reinterpret_cast<int32_t*>(hf + 0xc4)) >> 1;
+    int base = (hf->_gridSize - hf->_fieldC4) >> 1;
     int cx = base + col;
     int cy = base + row;
     int cx1 = cx + 1;
     int cy1 = cy + 1;
-    float half = (float)(*reinterpret_cast<int32_t*>(hf + 0xc0) >> 1);
-    int dim = *reinterpret_cast<int32_t*>(hf + 0xd0);
+    float half = (float)(hf->_gridSize >> 1);
+    int dim = hf->_fieldD0;
     float fx  = (float)cx  - half;
     float fy  = (float)cy  - half;
     float fx1 = (float)cx1 - half;
     float fy1 = (float)cy1 - half;
-    int16_t* tbl = *reinterpret_cast<int16_t**>(hf + 0xd8);
+    int16_t* tbl = hf->_arrayD8;
 
     auto sample = [&](int a, int b) -> float {
         int ca = a < 0 ? 0 : a; if (dim <= ca) ca = dim - 1;
@@ -272,22 +274,24 @@ inline void RelVec(float* dst, const float* p, float ox, float oy) {
 //   a filled top-face (per-tile 6-corner triangles), then EdgeMesh::Set + materials.
 //   self = HighlightComponent*.
 // ===========================================================================
-void Impl_b930(int64_t self) {
-    int64_t gw = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton);
-    int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
+void Impl_b930(HighlightComponent* hc) {
+    // LEFT: transform (+0x100) is raw storage (HighlightComponent H5); it is reached
+    // from this integer.
+    const int64_t self = reinterpret_cast<int64_t>(hc);
+    Map* mapGrid = GameUpdateLoop::_singleton->m_game;
 
-    // Entity footprint rect (short fields at +0x28 x, +0x2a y, +0x2c w, +0x2e h).
-    uint64_t rectIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(self + 0x10), &rectIBP);
-    int rx = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x28);
-    int ry = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2a);
-    int rw = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2c);
-    int rh = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2e);
+    // Entity footprint rect (MapComponent tileX0 / tileY0 / tileX1 / tileY1).
+    MapComponent* rect = nullptr;
+    FloorComponent_FindResData(hc->_entity, &rect);   // 0x140004680 FindComponent<MapComponent>
+    int rx = (int)rect->tileX0;
+    int ry = (int)rect->tileY0;
+    int rw = (int)rect->tileX1;
+    int rh = (int)rect->tileY1;
     // Defensive (standalone): a malformed footprint rect would make the tessellation
     // loops runaway and freeze. Real building footprints are small; bail on garbage.
     if (rw <= 0 || rh <= 0 || rw > 64 || rh > 64) return;
 
-    int g = *mapGrid;
+    int g = mapGrid->size;
     // origin = terrain-world position of the footprint centre cell
     int centerIdx = g * ((rh >> 1) + ry) + (rw >> 1) + rx;
     float bias = (float)(g >> 1) - kCenterBias;
@@ -339,7 +343,7 @@ void Impl_b930(int64_t self) {
     }
 
     // Fill section — per-tile top-face triangles from the heightfield.
-    int64_t hf = *reinterpret_cast<int64_t*>(gw + 0x110);
+    const WorldGeometry* hf = GameUpdateLoop::_singleton->m_worldGeometry;
     IdxArray    fillIdx;   // local_1f0 / local_1e8 (short indices)
     TriVtxArray fillVtx;   // local_268 / local_260 (8-byte TriangleVertex)
     uint8_t box[24];
@@ -378,18 +382,18 @@ void Impl_b930(int64_t self) {
     }
 
     // Release the previous EdgeMesh (vtable slot 0 = scalar deleting dtor, arg 1 = free).
-    void** oldMesh = *reinterpret_cast<void***>(self + 0xf8);
+    Graphics::EdgeMesh* oldMesh = hc->fieldF8;
     if (oldMesh) {
-        delete reinterpret_cast<Graphics::EdgeMesh*>(oldMesh);   // B.3.x bridge (slot 0, free)
-        *reinterpret_cast<void**>(self + 0xf8) = nullptr;
+        delete oldMesh;   // slot 0, free
+        hc->fieldF8 = nullptr;
     }
 
     // Allocate + construct a fresh EdgeMesh.
-    void* mesh = System::MemoryAllocator::MemAlloc(0x180, 8);
+    Graphics::EdgeMesh* mesh = static_cast<Graphics::EdgeMesh*>(System::MemoryAllocator::MemAlloc(0x180, 8));
     if (mesh) {
         ::new (mesh) Graphics::EdgeMesh();   // B.3.9 GFX: the real ctor (was the ??0 door)
     }
-    *reinterpret_cast<void**>(self + 0xf8) = mesh;
+    hc->fieldF8 = mesh;
 
     // Two GraphicsMesh::TriangleList descriptors { pad, vtxCount@+4, pad, idxCount@+0xc, pad, pad }.
     uint32_t triList0[6] = {0, (uint32_t)fillVtx._size, 0, (uint32_t)fillIdx._size, 0, 0};
@@ -408,7 +412,7 @@ void Impl_b930(int64_t self) {
     // `if (mesh)` is an OBJECT test and stays; only the `fn_EdgeMesh_Set` readiness
     // term came out.
     if (mesh) {
-        reinterpret_cast<Graphics::EdgeMesh*>(mesh)->Set(
+        mesh->Set(
             1, triList0,
             1, triList1,
             // fill stream: short indices + 8-byte TriangleVertex, stride 8
@@ -423,9 +427,10 @@ void Impl_b930(int64_t self) {
     }
 
     // Materials from the HighlightDescription (self+0x18): +0x30, +0x38 (yellow).
-    void* obj = *reinterpret_cast<void**>(self + 0x18);
+    Description* obj = hc->_description;
     const uint32_t tidDesc = HighlightDescription::TypeId();
-    void* desc = Object::IsDerivedFromNullSafe(obj, tidDesc) ? obj : nullptr;
+    HighlightDescription* desc = Object::IsDerivedFromNullSafe(obj, tidDesc)
+        ? static_cast<HighlightDescription*>(obj) : nullptr;
     // B.3.5 bridge — the four parameters are `Object::ExternalPtr<MaterialInstance>`
     // BY VALUE, and constructing them from the raw pointers the HighlightDescription
     // holds adds NO refcount traffic the door did not do: `ExternalPtr(T*)` is a bare
@@ -434,9 +439,9 @@ void Impl_b930(int64_t self) {
     // so this reproduces it exactly. Argument order is (mask, edge, skinMask,
     // skinEdge) — see Mesh.h's note; the fields are grouped differently.
     if (mesh && desc) {
-        auto* m0 = *reinterpret_cast<Graphics::MaterialInstance**>(reinterpret_cast<int64_t>(desc) + 0x30);
-        auto* m1 = *reinterpret_cast<Graphics::MaterialInstance**>(reinterpret_cast<int64_t>(desc) + 0x38);
-        reinterpret_cast<Graphics::EdgeMesh*>(*reinterpret_cast<void**>(self + 0xf8))
+        auto* m0 = reinterpret_cast<Graphics::MaterialInstance*>(desc->_ref0);   // LEFT: HighlightDescription::_ref0 is void* (not PLAYER's header)
+        auto* m1 = reinterpret_cast<Graphics::MaterialInstance*>(desc->_ref1);   // LEFT: as above
+        hc->fieldF8
             ->SetMaterials(Object::ExternalPtr<Graphics::MaterialInstance>(m0),
                            Object::ExternalPtr<Graphics::MaterialInstance>(m1),
                            Object::ExternalPtr<Graphics::MaterialInstance>(m0),
@@ -485,11 +490,10 @@ void Impl_c4a0(HighlightComponent* hc) {
     }
     // Release the built EdgeMesh (vtable slot 0).
     {
-        void* m = hc->fieldF8;
+        Graphics::EdgeMesh* m = hc->fieldF8;
         hc->highlightId = -1;
         if (m) {
-            // LEFT: HighlightComponent::fieldF8 is `void*` (block COMP).
-            delete reinterpret_cast<Graphics::EdgeMesh*>(m);   // B.3.x bridge (slot 0, free)
+            delete m;   // slot 0, free
             hc->fieldF8 = nullptr;
         }
     }
@@ -535,7 +539,7 @@ void Impl_c4a0(HighlightComponent* hc) {
     if (iVar10 < 0 || iVar11 < 0) {
         MapComponent* r = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
         if (r && desc && desc->_ref0 != nullptr) {
-            Impl_b930(self);
+            Impl_b930(hc);
             reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
                 ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
                           nullptr);   // B.3.5 bridge
