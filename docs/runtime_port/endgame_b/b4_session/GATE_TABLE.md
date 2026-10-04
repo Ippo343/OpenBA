@@ -315,3 +315,10 @@ Metric at `6f9dbc5d`: **2,475** to remove.
 | 92 | X-G1-1 | `1b134ba9` | the citizen find / target helpers, the nine CitizenAI action builders, the work action constructors, WorkLeaf helpers and WalkablePos, the StateCandidate list, dialog ctor entries, TradeUI price functions typed; about 25 forwarders and 7 callerless functions deleted; `FishingDescription::_fish`, `ForesterDescription::_ref20` typed (rows 550-551): 702 -> 398 in 90 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `1b134ba9`: **2,163** to remove.
+
+| 93 | X-G1-3b | `75c80222` | `TradeWork_impl_4b40`'s callers on `Avl38Retrace`, the UIFade entry points take `UI::UserInterface*`, `EntityUI_SelectEntity_Impl` typed, `TerrainGenerator::_field20`, HighlightDescription's refs typed; `behaviour:` `HighlightComponent::transform` is a `Math::Transform` member (retail ctor 0x14004c930) (rows 573-575): 324 -> 296 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 94 | X-R3 | `8229a704` | `behaviour:` `IO::FileSystem`'s directories are `System::Filename` members (0x1800ac7c0 / 0x1800ac6d0), `Object::External::_path` released after `_refs` as retail (0x1800bc950), `IO::PackageFile`'s Strings and String arrays (0x1800b4440 / 0x1800b4540), `UI::Font`'s Strings (0x180031ce0 / 0x1801175a0) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 95 | X-G1-2b | `bda542a1` | the TownHall helpers typed (`TownHall_AvlRebalance28` deleted for the template), ProfessionNode / AgricultureNode / PathCostNode balance + height two int16 (rows 560-561 confirmed), ActMv / Pf_VectorResize14 / WorldGen / Region entry points, `GridTile.h`, entity_finders_disaster.cpp deleted: 404 -> 318 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 96 | X-G1-1b | `c57419d5` | `CitizenAIComponent::leisureTimer` a `System::Time`, dialog ctor entries take `const UI::Dialog*`, the tool-registry teardown on `ToolRegistryNode` (row 550 confirmed, rows 552-553): 398 -> 366 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `c57419d5`: **2,009** to remove (of which `dx11/` 240). Wave X round 1 done: 12 gated merges (rows 85-96), 0 problems each.
