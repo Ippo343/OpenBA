@@ -288,12 +288,10 @@
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/String.h"
 #include "../../src/system/string.h"
-#include "../../src/system/pod_bridge.h"
 
 namespace RtIO {
 
 using RtSystem::String;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -484,9 +482,8 @@ Object::Base* PackageFile::CreateInPlaceObject(void* place) {
 // ---- the three String getters ----------------------------------------------
 // Retail's body is the null-then-AddRef idiom, which is `System::String`'s copy
 // constructor exactly (0x180006cb0): it nulls the return slot, loads the
-// member, and AddRefs only if it is non-null. The members keep the POD spelling
-// (PackageFile.h's banner says why), so each is reached through pod_bridge.h's
-// `Sys()`.
+// member, and AddRefs only if it is non-null. The members are System::String
+// members (B4 X-R3).
 //
 //   180025327  MOV qword ptr [RDX],RAX     ; RAX = 0, the return slot
 //   18002532a  MOV RAX,qword ptr [RCX+off]
@@ -494,15 +491,15 @@ Object::Base* PackageFile::CreateInPlaceObject(void* place) {
 //   180025333  MOV qword ptr [RDX],RAX
 //   180025336  INC dword ptr [RAX + -0x4]  ; the refcount, block+4
 System::String PackageFile::GetName() const {
-    return System::String(RtSystem::Sys(_name));               // +0x40
+    return System::String(_name);                              // +0x40
 }
 
 System::String PackageFile::GetAuthor() const {
-    return System::String(RtSystem::Sys(_author));             // +0x48
+    return System::String(_author);                            // +0x48
 }
 
 System::String PackageFile::GetDescription() const {
-    return System::String(RtSystem::Sys(_description));        // +0x50
+    return System::String(_description);        // +0x50
 }
 
 // ---- the scalar field reads ------------------------------------------------
