@@ -94,12 +94,17 @@ private:                                                                        
 // `used`: the slot has no reader but the section walk, so it must be kept.
 #define OBJECT_EXE_TYPE_ENTRY __attribute__((used, section(".data$exetype_b")))
 
+// The record's two factory entries. One line each (no `\` continuation) so the
+// reason can sit on the line of the cast.
+#define OBJECT_EXE_TYPE_FACTORY(Class) reinterpret_cast< ::Object::BaseTypeInfo::FactoryFn>(&Class::CreateNewObject)  // LEFT: SIG CreateNewObject returns void* where BaseTypeInfo::FactoryFn returns Object::Base* (DECLARE_EXE_TYPE above; about 630 definitions in every partition)
+#define OBJECT_EXE_TYPE_INPLACE(Class) reinterpret_cast< ::Object::BaseTypeInfo::InPlaceFn>(&Class::CreateInPlaceObject)  // LEFT: SIG CreateInPlaceObject returns void* where BaseTypeInfo::InPlaceFn returns Object::Base* (as the line above: the same declaration family)
+
 // The record (a CRT-init head-insert into _firstTypeInfo) and its section slot.
 #define DEFINE_EXE_TYPE_EXT(Class, ParentLiteral, FileExt)                        \
     ::Object::BaseTypeInfo Class::_typeInfo(                                      \
         #Class, (ParentLiteral), (FileExt),                                       \
-        reinterpret_cast< ::Object::BaseTypeInfo::FactoryFn>(&Class::CreateNewObject), \
-        reinterpret_cast< ::Object::BaseTypeInfo::InPlaceFn>(&Class::CreateInPlaceObject)); \
+        OBJECT_EXE_TYPE_FACTORY(Class),                                           \
+        OBJECT_EXE_TYPE_INPLACE(Class));                                          \
     OBJECT_EXE_TYPE_ENTRY ::Object::BaseTypeInfo* Class::_exeTypeInfoEntry = &Class::_typeInfo;
 
 #define DEFINE_EXE_TYPE(Class, ParentLiteral)                                     \
