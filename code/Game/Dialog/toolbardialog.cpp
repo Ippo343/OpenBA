@@ -90,7 +90,7 @@
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
-extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+#include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void* Debug_Sprite_DefaultCtor(void* retval);
 extern bool Debug_Sprite_IsValid(void* sprite);
 extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
@@ -1001,7 +1001,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                             *reinterpret_cast<const System::String*>(&item->_field30));
 #ifdef _DEBUG
         UI::Sprite uiSprite;
-        Debug_Sprite_Ctor(&uiSprite, reinterpret_cast<uint64_t>(item->_field28), &item->_field38);
+        Debug_Sprite_Ctor(&uiSprite, item->_field28, reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 the String is raw storage, as on the release arm
 #else
         UI::Sprite uiSprite(Object::ExternalPtr<UI::SpriteSheet>(item->_field28),
                             *reinterpret_cast<const System::String*>(&item->_field38));
@@ -1039,9 +1039,8 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
 
                     // Override the sprite (the description's sheet and _name)
 #ifdef _DEBUG
-                    // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
-                    UI::Sprite overrideSpr;
-                    Debug_Sprite_Ctor(&overrideSpr, reinterpret_cast<uint64_t>(buildReqComp->_spriteSheet),
+                                        UI::Sprite overrideSpr;
+                    Debug_Sprite_Ctor(&overrideSpr, buildReqComp->_spriteSheet,
                                       &buildReqComp->_name);
 #else
                     UI::Sprite overrideSpr(Object::ExternalPtr<UI::SpriteSheet>(buildReqComp->_spriteSheet),

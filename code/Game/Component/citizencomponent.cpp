@@ -926,6 +926,26 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 }
 
 // ============================================================
+// CitizenComponent_HasVacancy (0x140017050) — the WorkPlaceComponent's roster (+0x60) <
+// the seat capacity (its entity's WorkComponent +0x30, lazily CalcMaxWorkers'd).
+// Byte-faithful to 0x140017050 (FUN_140003050 = fn_FindComponent_Work, FUN_14012e5c0 =
+// fn_StorageCountQuery), plus one SA safety guard the original lacks: a null
+// WorkComponent -> "no vacancy" rather than dereferencing null+0x30. (Moved from
+// Component/exe_bodies.h, where it was an inline body: this file is its only caller.)
+// ============================================================
+static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
+    int roster = workplaceComp->workerCount;
+    WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
+    fn_FindComponent_Work(workplaceComp->_entity, &sl);
+    if (sl == nullptr) return false;
+    if (sl->workState == 0) {
+        int cap = fn_StorageCountQuery(sl);
+        sl->workState = cap;
+    }
+    return roster < sl->workState;
+}
+
+// ============================================================
 // CitizenComponent_ShouldSwitchWorkplace
 // Original: 0x1401109E0 (CitizenComponent_helper_09e0)
 // ============================================================
@@ -993,7 +1013,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
                 continue;
 
             // Check has vacancy
-            if (!fn_CitizenComponent_HasVacancy(reinterpret_cast<uintptr_t>(workplaceComp)))   // LEFT: SIG fn_CitizenComponent_HasVacancy (Component/exe_bodies.h, wave X)
+            if (!fn_CitizenComponent_HasVacancy(workplaceComp))
                 continue;
 
             // Look up this workplace's region (re-read areaMap fresh, matches original asm)
@@ -1008,7 +1028,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
             // If other region has lower priority value, switch
             if (otherRegionDesc->field_24 < currentPriority) {
                 // Double-check vacancy
-                if (fn_CitizenComponent_HasVacancy(reinterpret_cast<uintptr_t>(workplaceComp)))   // LEFT: SIG fn_CitizenComponent_HasVacancy (Component/exe_bodies.h, wave X)
+                if (fn_CitizenComponent_HasVacancy(workplaceComp))
                     return true;
             }
         }

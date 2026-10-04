@@ -22,11 +22,7 @@
 // Original: 0x18011b9c0
 // Resolves sprite name to index via SpriteSheet::GetSpriteIndexFromName
 // ============================================================
-void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName) {
-    // The code/Game callers pass the ExternalPtr<SpriteSheet> as the raw word
-    // and the System::String const& untyped (their local extern declarations).
-    UI::SpriteSheet* const sheet = reinterpret_cast<UI::SpriteSheet*>(spriteSheet);  // B.3.6 bridge  // LEFT: SIG the code/Game extern passes void* (debug harness; wave X)
-    const System::String* const name = static_cast<const System::String*>(spriteName);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+void* Debug_Sprite_Ctor(void* retval, UI::SpriteSheet* sheet, const System::String* name) {
 #ifdef _DEBUG
     const char* nameStr = "(null)";
     if (name) {
