@@ -29,6 +29,9 @@
 #include "Entity/ComponentEntity.h"          // ComponentEntity::FindComponent<T> (OnAdded)
 #include "Component/MapComponent.h"
 #include "Component/MultiObjectComponent.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
+#include "Game/PathfinderThread.h"
 
 // ============================================================
 // Resolved helpers
@@ -80,7 +83,7 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
         // `lea eax,[rbx+rbx*2]` -- the 3x over-allocate applies only once the array is
         // already non-empty; the very first push allocates exactly one element.
         self->plotCapacity = (oldCount != 0) ? newCount * 3 : newCount;
-        self->plots = reinterpret_cast<int32_t*>(
+        self->plots = static_cast<int32_t*>(
             ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->plotCapacity) * 4, 4));
     }
     if (!self->plots) { self->plotCount = oldCount; self->plots = oldPtr; return; }
@@ -139,6 +142,8 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
 // down by one slot and decrementing the count. Calls CheckPtr on the search key
 // before comparing (resolves lazy/weak pointers, mirroring the original). The exe
 // shifts via a quirky `*p=0; *p=p[1]` (effectively `p[0]=p[1]`). 1:1 port.
+// LEFT: ERASED, the one erase body every 8-byte-pointer town list shares (callers in
+// nine files hand it their Array as void*; wave X types the signature).
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
     int64_t* list = reinterpret_cast<int64_t*>(listBase);
     int i = 0;
@@ -175,29 +180,28 @@ char CemeteryComponent::EnterBuilt() {
     if (GameUpdateLoop::_singleton == nullptr)
         return 0;
 
-    // LEFT: GameUpdateLoop::m_citizenList / m_game are void* (W0 header): the town list
-    // and the map cells stay by offset.
-    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+    // The town list is CitizenBehavior::cemeteries (+0x40), the cells Map::cells.
+    CitizenBehavior* const townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
 
     Object::InternalPtr<CemeteryComponent> ibp(this);
-    const int count = *reinterpret_cast<int*>(townMgr + 0x48);
+    const int count = townMgr->cemeteryCount;
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x40))
+    GameColl::AsArray<GameColl::Ptr8>(&townMgr->cemeteries)
         .SetSizeFill(count + 1, &ibp);
 
-    const uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
+    Map* const world = GameUpdateLoop::_singleton->m_game;
     if (!world) return 0;
 
     int claimed = 0;
     for (int i = 0; i < plotCount; ++i) {
         const int cellIdx = plots[i];
-        const uintptr_t cells = *reinterpret_cast<uintptr_t*>(world + 0x80);
+        MapCell* const cells = world->cells;
         if (!cells) break;
-        const uintptr_t cell = cells + static_cast<uintptr_t>(cellIdx) * 0x30;
+        MapCell* const cell = &cells[static_cast<uintptr_t>(cellIdx)];
 
         // Already occupied by a grave? Leave the plot as it stands.
-        ComponentEntity* occupant = *reinterpret_cast<ComponentEntity**>(cell + 0x08);
+        ComponentEntity* occupant = cell->occupant;
         if (occupant) {
             ComponentEntity* probe = occupant;
             bool hasTombstone = false;
@@ -215,28 +219,28 @@ char CemeteryComponent::EnterBuilt() {
         }
 
         // Free plot: stamp the zone byte, notify, and null the entity slot.
-        const uint8_t zone = *reinterpret_cast<uint8_t*>(cell + 0x29);
+        const uint8_t zone = cell->terrainType;   // +0x29
         const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
-        *reinterpret_cast<uint8_t*>(world + 0xA2) |= walkableZone ? 1 : 0;
-        *reinterpret_cast<uint8_t*>(cell + 0x29) = 2;
-        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror
+        *reinterpret_cast<uint8_t*>(&world->field_0xA2) |= walkableZone ? 1 : 0;   // LEFT: Map.h (DLG-1) field_0xA2 is bool, retail ORs the byte (row 311)
+        cell->terrainType = 2;
+        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror  LEFT: SIG PerfX::TerrainNoteWrite (SA)
 
         if (walkableZone) {
-            const int mapWidth = *reinterpret_cast<int*>(world);
-            void* fine = *reinterpret_cast<void**>(world + 0x70);
+            const int mapWidth = world->size;
+            RegionGraph* fine = world->regionGraph;   // +0x70
             if (fine && mapWidth)
-                Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(fine), cellIdx, cellIdx / mapWidth);
+                fine->MarkCellDirty(cellIdx, cellIdx / mapWidth);   // 0x1400a8c90
         }
         {
-            void* pf = *reinterpret_cast<void**>(world + 0x68);
+            PathfinderThread* pf = world->pathfinder;   // +0x68
             // Retail 0x140047145: RCX = pf, EDX = cellIdx, R8D = 2, R9 not set. The body's
             // fourth parameter reaches only Pf_WorkerApplyCmd_a6430's cmd-5 arm; this is
             // cmd 2, so it is never read (quarrycomponent_deform.cpp / starttown.cpp pass
             // nullptr the same way).
-            if (pf) Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(pf), cellIdx, 2);
+            if (pf) pf->SetCellTerrain(cellIdx, 2);   // 0x1400a6fe0
         }
 
-        *reinterpret_cast<ComponentEntity**>(cell + 0x08) = nullptr;   // a null InternalBasePtr
+        cell->occupant = nullptr;   // a null InternalBasePtr (+0x08)
         ++claimed;
     }
 
@@ -245,8 +249,8 @@ char CemeteryComponent::EnterBuilt() {
         if (n < 8) { ++n;
             fprintf(stderr, "[Cemetery] graveyard REGISTERED: comp=%p townMgr=%p "
                             "cemeteryCount=%d plots=%d claimed=%d\n",
-                    static_cast<void*>(this), reinterpret_cast<void*>(townMgr),
-                    *reinterpret_cast<int*>(townMgr + 0x48), plotCount, claimed);
+                    static_cast<void*>(this), static_cast<void*>(townMgr),
+                    townMgr->cemeteryCount, plotCount, claimed);
             fflush(stderr);
         }
     }
@@ -369,10 +373,9 @@ void CemeteryComponent::OnAdded() {
     int h   = static_cast<int16_t>(map->tileY1);
     const int rot = map->extraField;
 
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header): the map width stays by offset.
-    const uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
+    const Map* const world = GameUpdateLoop::_singleton->m_game;
     if (!world) { CEM_TRACE("BAIL no world"); return; }
-    const int mapWidth = *reinterpret_cast<int*>(world);
+    const int mapWidth = world->size;
 
     // The gate child: multi->children[0], then that entity's MapComponent.
     MultiObjectComponent* multi = _entity->FindComponent<MultiObjectComponent>();   // 0x140004740
@@ -431,10 +434,8 @@ void CemeteryComponent::OnRemove() {
     Object::InternalPtr<CemeteryComponent> ptrBuf(this);
 
     if (GameUpdateLoop::_singleton != nullptr) {
-        // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the town list stays by offset.
-        void* subObj = GameUpdateLoop::_singleton->m_citizenList;
-        void* cemeteryListBase = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(subObj) + 0x40);
-        CemeteryListErase_Reimpl(cemeteryListBase, &ptrBuf);   // 0x140002cc0
+        CitizenBehavior* subObj = GameUpdateLoop::_singleton->m_citizenList;
+        CemeteryListErase_Reimpl(&subObj->cemeteries, &ptrBuf);   // 0x140002cc0 (+0x40)
     }
 }
 
