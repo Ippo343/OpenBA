@@ -66,13 +66,6 @@ DecalVertexNode* DecalVertexNodeAlloc(const DecalVertexKey* key, DecalVertexNode
 
 }  // namespace
 
-// B4 FORWARD: outside callers (Component/citizenai_work_scheduler.cpp,
-// Component/keystone_a_restree.cpp, Dialog/toolbar_utility_helpers.cpp,
-// Game/citizenlist_serialize.cpp, Game/goals_serialize.cpp, Work/marketwork.cpp)
-// hold their sets as integers. 0x140014b40 is 0x140025920's algorithm.
-extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2) {
-    Avl38Retrace(reinterpret_cast<Avl38Node**>(param_1), reinterpret_cast<Avl38Node**>(param_2));   // LEFT: B4 FORWARD
-}
 
 // ============================================================
 // 0x14001f6b0 — AVL insert keyed by the vertex record. Returns (in *out) the

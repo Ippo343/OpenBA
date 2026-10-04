@@ -92,7 +92,6 @@ static_assert(offsetof(DecalVertexNode, height) == 0x32, "DecalVertexNode::heigh
 DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out, const DecalVertexKey* key);  // 0x14001f6b0
 DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key);  // 0x14001fc00
 
-extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2);  // 0x140014b40 B4 FORWARD -> Avl38Retrace<Avl38Node>
 namespace Graphics { class MaterialInstance; }
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,

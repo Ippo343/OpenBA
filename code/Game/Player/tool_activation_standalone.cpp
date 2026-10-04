@@ -62,8 +62,7 @@
 #include "Game/PlayerToolManager.h"
 #include <cstddef>
 
-// Registered AVL retrace/rebalance for 0x38-byte nodes (tool_base_highlight.cpp).
-extern "C" void TradeWork_impl_4b40(int64_t* root, int64_t* newNode);
+#include "Player/exe_bodies.h"   // Avl38Retrace (0x140014b40)
 
 namespace {
 
@@ -115,11 +114,10 @@ ToolModeNode* TreeNode_Alloc(uint32_t key, uint32_t toolTypeId, ToolModeNode* pa
     return n;
 }
 
-// LEFT: the shared AVL retrace 0x140014b40 (tool_base_highlight.cpp) still takes
-// the root and node as integers (seven outside callers bind that C signature).
+// The shared AVL retrace 0x140014b40 (Avl38Retrace, Player/exe_bodies.h).
 void Retrace(ToolModeTree* tree, ToolModeNode* node) {
-    int64_t nn = reinterpret_cast<int64_t>(node);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
-    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(&tree->root), &nn);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    ToolModeNode* nn = node;
+    Avl38Retrace(&tree->root, &nn);
 }
 
 // helper_ddb0 (0x14002ddb0) find-or-create insert.

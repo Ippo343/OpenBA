@@ -17,7 +17,7 @@
 // Faithful 1:1 against the Ghidra disassembly (offsets verified). Registered via
 // standalone/reg_toolbar_utility.cpp.
 
-#include "Player/exe_bodies.h"   // B3R: TradeWork_impl_4b40
+#include "Player/exe_bodies.h"   // Avl38Retrace (0x140014b40)
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerToolManager.h"
@@ -46,7 +46,8 @@ struct SetNode {
     SetNode* parent;    // +0x18
     SetNode* left;      // +0x20
     SetNode* right;     // +0x28
-    uint32_t balance;   // +0x30
+    int16_t  balance;   // +0x30
+    int16_t  height;    // +0x32
     uint32_t _pad34;    // +0x34
 };
 static_assert(sizeof(SetNode) == 0x38, "set node 0x38");
@@ -71,7 +72,8 @@ SetNode* BstNodeAlloc(const uint64_t* insertData, SetNode* parent) {
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
-    n->balance = 0;
+    n->balance = 0;     // +0x30 / +0x32: one dword 0 in retail (H7)
+    n->height = 0;
     return n;
 }
 
@@ -136,6 +138,7 @@ void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t
             n->data[1] = insertData[2];
             n->parent = nullptr; n->left = nullptr; n->right = nullptr;
             n->balance = 0;
+            n->height = 0;
             *retNode = n;
             set->root = n;
         }
@@ -174,8 +177,7 @@ void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t
             next = node->left;
         }
 
-        // LEFT: 0x140014b40's declaration (Player/exe_bodies.h) takes int64_t*.
-        TradeWork_impl_4b40(rootHolder, reinterpret_cast<int64_t*>(&node));   // 0x140014b40   // LEFT: SIG TradeWork_impl_4b40 (X-G2-WAIT)
+        Avl38Retrace(&set->root, &node);   // 0x140014b40
         *retNode = newNode;
     }
 

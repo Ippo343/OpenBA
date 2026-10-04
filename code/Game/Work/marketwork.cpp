@@ -738,9 +738,9 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
                 // 0x1400f03ea: shared AVL retrace, cursor starts at the PARENT
                 // (retail keeps the descent cursor in a stack slot and hands its
                 // address over, so the retrace can walk and rewrite it). The retrace
-                // takes the header and the cursor slot as int64_t*: LEFT.
+                // (Avl38Retrace, Player/exe_bodies.h).
                 MW_SupplyNode* cursor = parent;
-                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(&tree), reinterpret_cast<int64_t*>(&cursor));   // LEFT: SIG TradeWork_impl_4b40
+                Avl38Retrace(&tree.root, &cursor);   // 0x140014b40
             }
             // 0x1400f03ef
             tree.count += 1;
