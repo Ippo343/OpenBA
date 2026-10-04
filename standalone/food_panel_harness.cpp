@@ -535,7 +535,7 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
     }
 
     // (b) the real close path.
-    EditTool_CloseInfoDialog(tool, reinterpret_cast<uintptr_t>(dialog));   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t dialog; Player/edittool_funcs.h, wave X)
+    EditTool_CloseInfoDialog(tool, dialog);
     UI::DialogInstance* after = tool->entityRef;                       // +0x28
     std::fprintf(stderr, "[FoodPanel]   teardown: CloseInfoDialog -> tool dialog=%p %s\n",
                  after, after ? "STILL OPEN — close path did not take" : "(closed)");

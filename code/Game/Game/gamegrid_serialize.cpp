@@ -52,6 +52,7 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
+#include "Game/WorldGeometry.h"    // WorldGeometry::RebuildRoadMesh (0x1400af370)
 #include "Action/PathAvl.h"        // AvlNode28, the +0xE8 tree's node (B4 P2 GAME-1)
 #include "perf_terrain.h"
 #include "collection/Collection.h"
@@ -257,9 +258,7 @@ void Map::Serialize(IO::Stream& stream) {
                     e->occupant == nullptr) {
                     bool occupied = ActCNR_CheckTerrain_cb00(this, i) != 0;
                     if (!occupied) {
-                        // LEFT: the classify helper takes the map as int* (Component/exe_bodies.h).
-                        int cls = CreateNaturalResource_helper_e2c0(
-                            reinterpret_cast<int*>(this), i);   // LEFT: SIG the classify helper takes the map as int* (Component/exe_bodies.h, wave X)
+                        int cls = CreateNaturalResource_helper_e2c0(this, i);   // 0x14009e2c0
                         e->terrainType = static_cast<uint8_t>(cls);
                     }
                 }
@@ -323,9 +322,7 @@ void Map::Serialize(IO::Stream& stream) {
         if (GameUpdateLoop::_singleton != nullptr) {
             GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
             WorldGeometry* worldGeometry = gameWorld->m_worldGeometry;
-            // LEFT: the road mesh rebuild takes (int64_t, uint32_t*) (Action/exe_bodies.h).
-            Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(worldGeometry),
-                                     reinterpret_cast<uint32_t*>(this));   // LEFT: SIG Pf_RoadMeshRebuild_f370 (Action/exe_bodies.h, wave X)
+            worldGeometry->RebuildRoadMesh(this);   // 0x1400af370
         }
     }
 }

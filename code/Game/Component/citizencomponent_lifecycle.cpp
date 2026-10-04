@@ -56,7 +56,7 @@
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.
-extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
+extern "C" bool GenerateCitizenName(System::Random* rng, bool female, char* out, int cap);
 
 // Exe sub-callees are called by name (Component/Work/Player/Action exe_bodies.h).
 

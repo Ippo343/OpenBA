@@ -30,6 +30,7 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/serialize_externals.h"
+#include "Component/ComponentDescription.h"   // the typed ExternalPtr slot (_target)
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -56,7 +57,7 @@ bool UpgradeUIConfig::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
     // ENDGAME B.3.9 CG2: TypeId_ComponentEntity (0x1401c5d70) -> ComponentEntity::TypeId().
     uint32_t componentEntityTypeId = ComponentEntity::TypeId();
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&_target), &serializer, &componentEntityTypeId,   // LEFT: SIG ExternalPtrSerializeGeneric (void** field, Game/serialize_externals.h)
+    ExternalPtrSerializeGeneric(&_target, &serializer, &componentEntityTypeId,
                                 "ComponentEntity");
     return true;
 }

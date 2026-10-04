@@ -99,8 +99,6 @@
 #include "Component/StatusIconComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7e08 cell class
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
-                                                  long long arrayBase, void* deadInit);
 
 namespace {
 
@@ -182,7 +180,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5948 is Disease's registered type-id cell
         // (INVENTORY_C Table 1).
         const uint32_t tid = Disease::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&disease), ser,   // LEFT: SIG ExternalPtrSerializeGeneric (Game/serialize_externals.h, wave X)
+        ExternalPtrSerializeGeneric(&disease, s,
                                     &tid, "CitizenDisease");
     }
 
@@ -196,14 +194,13 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(arrCount, nullptr);
     if (stream.GetDirection() == IO::kReading)   // Stream +0x08 == 0
         ResizeCitizenExternalArray(consumedTypes, consumedTypeCount, consumedTypeCapacity, arrCount);
-    Reimpl_ExternalPtrArray_Serialize(ser, arrCount,
-        reinterpret_cast<int64_t>(consumedTypes), nullptr);   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize (wave X)
+    Reimpl_ExternalPtrArray_Serialize(s, arrCount, consumedTypes, nullptr);   // 0x1400049c0
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5a98 is Profession's registered type-id cell
         // (INVENTORY_C Table 1).
         const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&profession), ser,   // LEFT: SIG ExternalPtrSerializeGeneric (Game/serialize_externals.h, wave X)
+        ExternalPtrSerializeGeneric(&profession, s,
                                     &tidProf, "Profession");
     }
 
@@ -242,7 +239,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
 
     {
         const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&pendingProfession), ser,   // LEFT: SIG ExternalPtrSerializeGeneric (Game/serialize_externals.h, wave X)
+        ExternalPtrSerializeGeneric(&pendingProfession, s,
                                     &tidProf, "Profession");
     }
 
@@ -262,7 +259,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
         // ENDGAME B.3.9 C1 (D5): 0x1401c7190 is CitizenDescription's registered
         // type-id cell (INVENTORY_C Table 1).
         const uint32_t tidDesc = CitizenDescription::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&description), ser,   // LEFT: SIG ExternalPtrSerializeGeneric (Game/serialize_externals.h, wave X)
+        ExternalPtrSerializeGeneric(&description, s,
                                     &tidDesc, "CitizenDescription");
     }
 

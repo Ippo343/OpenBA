@@ -80,7 +80,7 @@ bool CreateRemovalDescription::Serialize(IO::Stream& stream) {
         // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
         GameColl::AsArray<GameColl::Ptr8>(&_refs).SetSize(count);
     }
-    Reimpl_ExternalPtrArray_Serialize(&ser, count, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[count] (0x1400049c0)
+    Reimpl_ExternalPtrArray_Serialize(&ser, count, _refs, nullptr);   // ExtPtr[count] (0x1400049c0)
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref38, &ser);
     ser.Serialize(_b40, nullptr);
     ser.Serialize(_b41, nullptr);

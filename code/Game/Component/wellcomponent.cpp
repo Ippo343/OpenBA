@@ -186,11 +186,6 @@ void CitizenBehavior::AddCellEntry(int x, int y, int value) {
     if (oldData != data) System::MemoryAllocator::MemFree(oldData);
 }
 
-// B4 FORWARD: 1 outside caller (Game/citizenlist_serialize.cpp) holds the town manager
-// as an integer; the closing wave rewires it.
-void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
-    reinterpret_cast<CitizenBehavior*>(townMgr)->AddCellEntry(x, y, value);   // B4 FORWARD
-}
 
 // ============================================================
 // Reimpl of FUN_140091cb0 — TownManager::RegisterWaterSource.

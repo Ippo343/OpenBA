@@ -110,9 +110,8 @@ inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) 
 // The member PopulationComponent::Persist (populationcomponent.cpp) calls this body;
 // it reads the fields by name.
 // ============================================================
-extern "C" void PopulationComponent_Serialize_Real(void* selfP, IO::Stream& stream) {
-    if (!selfP) return;
-    PopulationComponent* self = reinterpret_cast<PopulationComponent*>(selfP);   // B4 FORWARD receiver  LEFT: FWD (populationcomponent.cpp's local extern passes void*)
+extern "C" void PopulationComponent_Serialize_Real(PopulationComponent* self, IO::Stream& stream) {
+    if (!self) return;
     self->Component::Persist(stream);   // 0x1401189b0
 
     IO::Serializer ser(stream, 0);
@@ -121,7 +120,7 @@ extern "C" void PopulationComponent_Serialize_Real(void* selfP, IO::Stream& stre
     // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
     // (code/Game/Game, out of C1's file set) still wants a pointer.
     const uint32_t tidPopDesc = PopulationDescription::TypeId();
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&self->description), &ser,   // LEFT: SIG ExternalPtrSerializeGeneric (void** field, Game/serialize_externals.h)
+    ExternalPtrSerializeGeneric(&self->description, &ser,
                                 &tidPopDesc, "PopulationDescription");
     ser.Serialize(self->habitatDim, nullptr);
     ser.Serialize(self->herdDim, nullptr);

@@ -261,11 +261,10 @@ void WeatherParticleGeometry::Configure(Weather* d) {
     }
 }
 
-// B4 FORWARD: 1 outside caller (debugui.cpp: it holds the geometry and the
-// descriptor as untyped pointers). The null test is the old body's.
-extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
+// The C entry debugui.cpp calls. The null test is the old body's.
+extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor) {
     if (!geo || !descriptor) return;
-    static_cast<WeatherParticleGeometry*>(geo)->Configure(static_cast<Weather*>(descriptor));   // LEFT: SIG WeatherParticle_Config (B4 FORWARD, debugui.cpp)
+    geo->Configure(descriptor);
 }
 
 // ============================================================
@@ -389,11 +388,10 @@ void WeatherSimulation::SetEffectEnabled(int slot, bool enable) {
     // spawned here — audio is out of scope for this task.
 }
 
-// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a: its own
-// extern declares the receiver void*). The null test is the old body's.
-extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
+// The C entry gameupdateloop_serialize.cpp calls. The null test is the old body's.
+extern "C" void WeatherEffect_SetEnabled(WeatherSimulation* sim, int slot, int enable) {
     if (!sim) return;
-    static_cast<WeatherSimulation*>(sim)->SetEffectEnabled(slot, enable != 0);   // LEFT: SIG WeatherEffect_SetEnabled (B4 FORWARD)
+    sim->SetEffectEnabled(slot, enable != 0);
 }
 
 // ============================================================

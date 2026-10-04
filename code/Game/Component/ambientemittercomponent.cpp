@@ -26,6 +26,7 @@
 #include <new>
 #include "Component/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "collection/Collection.h"   // Collection::Array (the typed view of the raw triple)
 
 #include "Component/AmbientEmitterComponent.h"
 #include "audio/SoundEffect.h"
@@ -68,47 +69,46 @@ static Audio::Scene* WorldAudioScene() {
 // non-empty array), MemAlloc(cap*0x10, 8), copy existing elements (2 qwords each),
 // zero-init the new tail with element layout [u32 0][f32 1.0][u64 0]. The exe body
 // is hand-unrolled x4; this is the equivalent scalar 1:1 port.
-// LEFT (every cast in this body): ERASED Array<AmbientEmitterSlot>::SetSize hand-expanded
-// instance, kept AS IS. Its element default is {0, 1.0f, null} and it skips MemAlloc when
-// there is no allocator, so it is not provably the core's (SetSizeCore) first allocation /
-// growth; its C signature (void* header) is in Component/exe_bodies.h (wave X).
+// Retail 0x140001770 is Array<AmbientEmitterSlot>::SetSize exactly (unconditional MemAlloc,
+// treble rule, copy-then-free, no element destroy). The tree's body keeps ONE step retail
+// lacks -- it skips MemAlloc when System::MemoryAllocator::_singleton is null (known_port_issues
+// row 570) -- so it is not replaced by the erased core; it is typed by element instead.
 extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
-    uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
-    int oldCount = *(int*)(arr + 8);
+    // LEFT: H5 AmbientEmitterComponent::slots / slotCount / slotCapacity are a raw Array triple
+    auto* arr = reinterpret_cast<Collection::Array<AmbientEmitterSlot>*>(arrayBase);
+    int oldCount = arr->_size;
     if (newCount == oldCount) return;
 
-    void* oldPtr = *(void**)(arr + 0);
-    *(int*)(arr + 8) = newCount;
-    if (*(int*)(arr + 0xc) < newCount) {
-        *(int*)(arr + 0xc) = newCount;
+    AmbientEmitterSlot* oldPtr = arr->_data;
+    arr->_size = newCount;
+    if (arr->_capacity < newCount) {
+        arr->_capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            *(int*)(arr + 0xc) = newCount * 3;
+            arr->_capacity = newCount * 3;
         }
         if (::System::MemoryAllocator::_singleton) {
-            void* newPtr = ::System::MemoryAllocator::MemAlloc((uint64_t)(*(int*)(arr + 0xc)) << 4, 8);
-            *(void**)(arr + 0) = newPtr;
+            arr->_data = static_cast<AmbientEmitterSlot*>(
+                ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity << 4, 8));
         }
     }
 
     int start = 0;
-    if (oldPtr == *(void**)(arr + 0)) start = oldCount;  // grown in place
+    if (oldPtr == arr->_data) start = oldCount;  // grown in place
 
-    uint8_t* base = *(uint8_t**)(arr + 0);
+    AmbientEmitterSlot* base = arr->_data;
     for (int i = start; i < newCount; ++i) {
-        uint8_t* dst = base + (intptr_t)i * 0x10;
+        AmbientEmitterSlot* dst = base + i;
         if (!dst) continue;
         if (i < oldCount) {
-            const uint8_t* src = reinterpret_cast<const uint8_t*>(oldPtr) + (intptr_t)i * 0x10;
-            *(uint64_t*)(dst + 0) = *(const uint64_t*)(src + 0);
-            *(uint64_t*)(dst + 8) = *(const uint64_t*)(src + 8);
+            *dst = oldPtr[i];                     // the two qwords
         } else {
-            *(uint32_t*)(dst + 0) = 0;
-            *(uint32_t*)(dst + 4) = 0x3f800000;   // 1.0f
-            *(uint64_t*)(dst + 8) = 0;
+            dst->handle = 0;
+            dst->volume = 1.0f;                   // 0x3f800000
+            dst->sound  = nullptr;
         }
     }
 
-    if (oldPtr != *(void**)(arr + 0) && oldPtr) {
+    if (oldPtr != arr->_data && oldPtr) {
         ::System::MemoryAllocator::MemFree(oldPtr);
     }
 }

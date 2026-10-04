@@ -82,7 +82,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
         // Retail's local_res8: seeded from *entity BEFORE the call, and passed by
         // address as the slot's second argument (see the typedef note above).
         ComponentEntity* entityRef = *entity;
-        char active = currentTool->IsSelected(reinterpret_cast<uint64_t*>(&entityRef));   // slot 10  LEFT: SIG Tool::IsSelected takes the entity InternalPtr as uint64_t* (Player/Tool.h, PLAYER)
+        char active = currentTool->IsSelected(&entityRef);   // slot 10
         // 0x140102b60 is EntityUI::SetEditMode / Toolbar::ShowGroup — resetting the
         // active tool to mode 0 when the entity it was bound to goes away. This call
         // was DEAD for the whole life of the project (0x140102b60 was ported but never
@@ -172,11 +172,6 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
     }
 }
 
-// B4 FORWARD: 2 outside caller files (citizen_onremove.cpp, destroycomponent_states.cpp).
-void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
-    reinterpret_cast<PlayerToolManager*>(param_1)->OnEntityRemoved(   // LEFT: SIG NomadComp_FUN_140103480 (B4 FORWARD, wave X)
-        reinterpret_cast<ComponentEntity* const*>(param_2));
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — NomadComponent as a REAL class (NomadComponent.h).

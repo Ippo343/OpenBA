@@ -11,7 +11,7 @@
 // NOT registered at the exe address (it doubles as the per-frame deactivate slot;
 // see standalone/reg_player_render.cpp). dialogPtr = resolved DialogInstance*.
 // Original: 0x1400fcc90
-void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr);
+void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog);
 
 // The harnesses' EditTool entry points (defined in edittool.cpp; no retail address:
 // standalone drivers). B4 P2 SA: declared here once, in place of each harness's local
@@ -24,5 +24,7 @@ extern "C" int       EditTool_HarnessSelectNearby(EditTool* editTool);
 
 // The harness factories of the two build tools (placementtool.cpp / removaltool.cpp,
 // `CreateNewObject` with C linkage; standalone/tool_harness.cpp is the caller).
-extern "C" void* PlacementTool_Factory_SA(void);
-extern "C" void* RemovalTool_Factory_SA(void);
+class PlacementTool;
+extern "C" PlacementTool* PlacementTool_Factory_SA(void);
+class RemovalTool;
+extern "C" RemovalTool* RemovalTool_Factory_SA(void);

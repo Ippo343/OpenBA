@@ -32,6 +32,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/NameDatabase.h"   // the Cities.ndb resource (NameDB_GenerateName)
 #include "Game/GameSettings.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -148,10 +149,10 @@ static void GenerateTownName(System::String& retStr, System::Random* random, int
     // the result is skipped: the standalone factory tree is incomplete and the
     // walk NULL-faults, while FindOrLoad by exact filename is authoritative
     // (same call shape as citizen_names.cpp's Male.ndb/Female.ndb load).
-    void* nameDB = nullptr;
+    const NameDatabase* nameDB = nullptr;
     if (::Object::ExternalFactory::_singleton) {
         System::Filename fn("Game/Names/Cities.ndb");
-        nameDB = const_cast<::Object::External*>(
+        nameDB = static_cast<const NameDatabase*>(
             ::Object::ExternalFactory::_singleton->FindOrLoad(fn));
     }
 
@@ -739,11 +740,10 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
                 (void*)pGameLoop, (void*)pDlLoop, (void*)pOuterLoop, (void*)menuLoop, (void*)game,
                 menuLoop ? "SetDialogLoaderNextLoop(loop)" : "SetEngineNextLoop(engine)");
         fflush(stderr);
-        // LEFT: the two helpers (Game/exe_bodies.h, block GAME) take the loop as uintptr_t.
         if (menuLoop == nullptr) {
-            SetEngineNextLoop((uintptr_t)game, pOuterLoop);
+            SetEngineNextLoop(game, pOuterLoop);
         } else {
-            SetDialogLoaderNextLoop((uintptr_t)menuLoop, pOuterLoop);
+            SetDialogLoaderNextLoop(menuLoop, pOuterLoop);
         }
         fprintf(stderr, "[StartNewGame] EXIT — next loop set, transition pending\n");
         fflush(stderr);
