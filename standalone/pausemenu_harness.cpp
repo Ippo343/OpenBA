@@ -35,6 +35,8 @@
 #include <windows.h>
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/Internal.h"
+#include "Dialog/ModDialog.h"          // ModDialog_LastOpened's result (an upcast to DialogInstance)
+#include "Dialog/ModDetailsDialog.h"   // ModDetailsDialog_LastOpened's result
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>
@@ -44,8 +46,8 @@
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- BANISHED_PAUSEMENU_CLICKS targets
-extern "C" void* ModDialog_LastOpened();
-extern "C" void* ModDetailsDialog_LastOpened();
+extern "C" ModDialog*        ModDialog_LastOpened();
+extern "C" ModDetailsDialog* ModDetailsDialog_LastOpened();
 
 extern "C" void* EntityUI_OpenPauseMenu(void* entityUI);  // code/Game/Dialog/toolbardialog.cpp
 
@@ -134,31 +136,30 @@ extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum)
             if (tok[0] == 'w') {
                 std::fprintf(stderr, "[PauseMenu] CLICKS: wait (frame %d)\n", frameNum);
             } else if (tok[0] == 'd') {
-                void* dlg = ModDetailsDialog_LastOpened();
+                ModDetailsDialog* dlg = ModDetailsDialog_LastOpened();
                 int id = std::atoi(tok + 1);
-                std::fprintf(stderr, "[PauseMenu] CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
+                std::fprintf(stderr, "[PauseMenu] CLICKS: ModDetailsDialog=%p id=%d\n", static_cast<void*>(dlg), id);
                 if (dlg) {
                     // UI::DialogInstance::OnElementEvent (retail slot 8, +0x40).
                     // The trailing ints / userData were never set by the old raw
                     // 4-argument call; the by-name call passes 0 / nullptr. The
                     // four trailing arguments are the harness's choice: retail
                     // has no such caller.
-                    // LEFT (this and the two calls below): the dialogs arrive as void*
-                    // from ModDialog_LastOpened / ModDetailsDialog_LastOpened /
-                    // EntityUI_OpenPauseMenu (DLG's files).
-                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge  // LEFT: ModDetailsDialog_LastOpened returns void* (mod_dialog_vtables.cpp, DLG)
+                    // LEFT (the pause-menu call below): EntityUI_OpenPauseMenu returns
+                    // the dialog as void* (DLG's file).
+                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // through the base slot (an upcast)
                         nullptr, 0x12, id, 0, 0, 0, nullptr);
                 }
             } else {
-                void* dlg = ModDialog_LastOpened();
+                ModDialog* dlg = ModDialog_LastOpened();
                 int id = std::atoi(tok);
-                std::fprintf(stderr, "[PauseMenu] CLICKS: ModDialog=%p id=%d\n", dlg, id);
+                std::fprintf(stderr, "[PauseMenu] CLICKS: ModDialog=%p id=%d\n", static_cast<void*>(dlg), id);
                 if (dlg) {
                     // The four trailing arguments (0 / 0 / 0 / nullptr, as the
                     // old raw call already passed) are the harness's choice:
                     // retail has no such caller.
                     void* nullElem = nullptr;
-                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge  // LEFT: ModDialog_LastOpened returns void* (mod_dialog_vtables.cpp, DLG)
+                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // through the base slot (an upcast)
                         reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),   // LEFT: a raw null local handed as InternalPtr<Element>* (an InternalPtr local would construct / destroy)
                         0x12, id, 0, 0, 0, nullptr);
                 }

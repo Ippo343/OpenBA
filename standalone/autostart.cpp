@@ -36,8 +36,9 @@ ScenarioDialog* g_StandaloneScenarioDialog = nullptr;
 #include "Dialog/ScenarioDialog.h"    // B4: ScenarioDialog's entries / selectedIndex
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
-extern "C" void* ModDialog_LastOpened();
-extern "C" void* ModDetailsDialog_LastOpened();
+class ModDetailsDialog;
+extern "C" ModDialog*        ModDialog_LastOpened();
+extern "C" ModDetailsDialog* ModDetailsDialog_LastOpened();
 
 namespace AutoStart {
 
@@ -338,22 +339,21 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
             fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: MainMenuDialog=%p id=%d\n", (void*)mainMenu, id);
             if (mainMenu) InjectClick(mainMenu, kMsg_ButtonClick, id);
         } else if (tok[0] == 'd') {
-            void* dlg = ModDetailsDialog_LastOpened();
+            void* dlg = ModDetailsDialog_LastOpened();   // InjectClick takes void* (its other callers)
             int id = std::atoi(tok + 1);
             fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDetailsDialog=%p id=%d\n", dlg, id);
             if (dlg) InjectClick(dlg, kMsg_ButtonClick, id);
         } else {
-            void* dlg = ModDialog_LastOpened();
+            ModDialog* dlg = ModDialog_LastOpened();
             int id = std::atoi(tok);
-            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDialog=%p id=%d\n", dlg, id);
+            fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS: ModDialog=%p id=%d\n", static_cast<void*>(dlg), id);
             // A fabricated click on a per-row id (1000..5999: row = id % 1000)
             // must name a row the dialog actually built. The real UI cannot
             // deliver such a click without the element, but this driver can,
             // and with no .pkm installed (WinData/_mods_off holds them) the
             // entry array count at +0xC0 is 0 and the row handler faults reading
             // its entry. Mirror WaitLoadDialog's saveCount gate: skip loudly.
-            // LEFT: ModDialog_LastOpened (mod_dialog_vtables.cpp, DLG) returns void*.
-            ModDialog* modDlg = static_cast<ModDialog*>(dlg);
+            ModDialog* modDlg = dlg;
             if (dlg && id >= 1000 && id < 6000) {
                 const int rows = modDlg->entries.GetSize();   // +0xC0, entries' count
                 const int row  = id % 1000;
