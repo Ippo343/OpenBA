@@ -436,7 +436,7 @@ static Profession* StartTown_ActivateWorkplace(ComponentEntity* entity, bool reg
     WorkPlaceComponent* wpc =
         FindComponentOnEntity<WorkPlaceComponent>(entity, WorkPlaceComponent::TypeId());
     if (!wpc) return nullptr;
-    int64_t townMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: TownRegistry_RegisterWorkplace takes int64_t (town_workplace_registry.cpp, GAME-c-rest)
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     const Description* linked = wpc->_description;
     const WorkPlaceDescription* wpDesc = static_cast<const WorkPlaceDescription*>(linked);
     Profession* profKey = wpDesc ? wpDesc->_profession0 : nullptr;

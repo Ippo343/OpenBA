@@ -1489,7 +1489,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 9: Quicksave screenshot
     if (m_quickSavePressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quicksave screenshot...\n");
-        GameUpdateLoop_TakeScreenshot((void*)this);   // 0x140095da0
+        TakeScreenshot();   // 0x140095da0
         TRACE("[GameUpdateLoop::Draw] quicksave screenshot done\n");
     }
 
@@ -1553,7 +1553,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 13: Quickload screenshot (after UI draw)
     if (m_quickLoadPressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quickload screenshot...\n");
-        GameUpdateLoop_TakeScreenshot((void*)this);   // 0x140095da0
+        TakeScreenshot();   // 0x140095da0
         TRACE("[GameUpdateLoop::Draw] quickload screenshot done\n");
     }
 

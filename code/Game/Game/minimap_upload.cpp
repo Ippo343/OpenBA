@@ -116,9 +116,9 @@ void Minimap::CreateAndUpload() {
     CreateAndUploadOne(&overlayImage, overlayPixels, width, "overlay", s_trace);
 }
 
-// B4 FORWARD: 1 outside caller (standalone/tool_harness.cpp, a local extern
-// holding the minimap as void*).
-extern "C" void Minimap_CreateAndUpload(void* mapObj) {
+// B4 FORWARD: 2 callers (Minimap::Serialize; standalone/tool_harness.cpp). The
+// null test is the old body's.
+extern "C" void Minimap_CreateAndUpload(Minimap* mapObj) {
     if (!mapObj) return;
-    reinterpret_cast<Minimap*>(mapObj)->CreateAndUpload();   // LEFT: tool_harness.cpp (STANDALONE) holds void*
+    mapObj->CreateAndUpload();
 }

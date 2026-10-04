@@ -416,7 +416,7 @@ extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* prof
     int seated = 0;
     for (int i = 0; i < count; ++i) {
         ComponentEntity* availOut[2] = { nullptr, nullptr };
-        FindAvailableBuilding(reinterpret_cast<int64_t>(town), availOut, reinterpret_cast<uint64_t>(profKey));   // LEFT: SIG FindAvailableBuilding (0x14008d100; Game/exe_bodies.h, defined in GAME's town_workplace_registry.cpp) takes the town as int64_t and the profession key as uint64_t
+        FindAvailableBuilding(town, availOut, profKey);   // 0x14008d100
         ComponentEntity* avail = availOut[0];
 
         CitizenComponent* result[2];
@@ -524,8 +524,7 @@ extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession
     } _rosterGuard;
 
     ComponentEntity* avail[2] = { nullptr, nullptr };
-    FindAvailableBuilding(reinterpret_cast<int64_t>(townMgr), avail,   // LEFT: SIG FindAvailableBuilding (0x14008d100; Game/exe_bodies.h, defined in GAME's town_workplace_registry.cpp) takes the town as int64_t and the profession key as uint64_t
-                          reinterpret_cast<uint64_t>(profession));     // LEFT: SIG FindAvailableBuilding (0x14008d100; Game/exe_bodies.h, defined in GAME's town_workplace_registry.cpp) takes the town as int64_t and the profession key as uint64_t
+    FindAvailableBuilding(townMgr, avail, profession);   // 0x14008d100
 
     ComponentEntity* availArg = avail[0];        // fresh copy — c3d0 anchors through it
     CitizenComponent* out[2] = { nullptr, nullptr };   // local_18[16] in the original

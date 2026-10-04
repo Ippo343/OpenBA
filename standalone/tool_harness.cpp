@@ -103,7 +103,7 @@ extern "C" void ToolbarUtility_HarnessOpen(PlayerToolManager* gameSubsys, Compon
 
 // Map-render bring-up: create + upload the minimap GPU ImageBuffers
 // (gameWorld+0x148 +0x08 terrain / +0x10 overlay) from the raw pixel arrays.
-extern "C" void Minimap_CreateAndUpload(void* mapObj);
+extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
 // Drive a named controller's Slot4 (+0x20 SetupImage) on the just-opened dialog.
 extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex);
 // Open the in-game "Map" menu dialog (buttonMap id 11 → MapParamsDialog).

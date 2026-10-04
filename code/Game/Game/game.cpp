@@ -145,9 +145,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
     }
 }
 
-void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count) {
-    // LEFT: the debug UI (Dialog/debugui.cpp) hands the citizen list as void*.
-    CitizenBehavior* citizenList = reinterpret_cast<CitizenBehavior*>(citizenListPtr);   // LEFT: SIG Game_SpawnResources_Impl (caller Dialog/debugui.cpp)
+void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count) {
 
     // Dynamic array for matching entities
     // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)

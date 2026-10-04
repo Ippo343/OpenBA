@@ -834,7 +834,7 @@ void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
         return;
 
     // Get citizen list from game world (+0xF0)
-    void* citizenList = game->m_citizenList;
+    CitizenBehavior* citizenList = game->m_citizenList;
 
     switch (b) {
     // --- Resource spawn buttons ---

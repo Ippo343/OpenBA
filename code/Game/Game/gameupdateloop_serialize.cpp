@@ -87,7 +87,7 @@
 #include "system/Filename.h"
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
-extern "C" void Minimap_CreateAndUpload(void* mapObj);
+extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
 // code/Game/Game/weather_particles.cpp — ports FUN_1400942c0 (enable half; the
 // ambient-audio entity spawn is not ported there yet — see WeatherSim_Serialize).
 extern "C" void WeatherEffect_SetEnabled(WeatherSimulation* sim, int slot, int enable);

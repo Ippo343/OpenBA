@@ -103,12 +103,8 @@ namespace {
 }  // namespace
 
 // ============================================================================
-// GameUpdateLoop::TakeScreenshot — exe 0x140095da0.
-// B4 FORWARD: 2 outside calls (gameupdateloop.cpp, GAME-a: `GameUpdateLoop_TakeScreenshot((void*)this)`).
+// GameUpdateLoop::TakeScreenshot — exe 0x140095da0 (Draw calls it by name).
 // ============================================================================
-extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
-    reinterpret_cast<GameUpdateLoop*>(self)->TakeScreenshot();   // LEFT: the void* its outside caller passes
-}
 
 void GameUpdateLoop::TakeScreenshot() {
 
