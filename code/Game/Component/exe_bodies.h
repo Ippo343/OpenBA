@@ -173,7 +173,6 @@ void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMas
 // ---- herdcomponent.cpp
 
 // ---- interactcomponent.cpp
-void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  // 0x140004740
 
 // ---- keystone_a_map.cpp
 
