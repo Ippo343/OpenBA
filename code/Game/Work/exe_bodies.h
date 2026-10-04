@@ -43,17 +43,17 @@ class Work;   // Work/Work.h
 extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
-extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- pasturework.cpp
-extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
+extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
 
 // ---- plantorchard_ctor.cpp
 class ComponentDescription;
-extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- tendarea_ctor.cpp
-extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- work_act_clear.cpp
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h

@@ -716,9 +716,9 @@ PastureWork::PastureWork(void* entityIBP) : AutoPickupWork() {
 // Convenience for PastureComponent Slot14 (pasturecomponent_states.cpp, block MI-B):
 // MemAlloc(0x58,8) + the faithful ctor. `entityRefSlot` points at an 8-byte entity ref
 // (the pasture's owner entity).
-extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot) {
+extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot) {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
-    return p ? static_cast<Object::Base*>(new (p) PastureWork(entityRefSlot)) : nullptr;
+    return p ? new (p) PastureWork(entityRefSlot) : nullptr;
 }
 
 

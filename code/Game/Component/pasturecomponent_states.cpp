@@ -608,7 +608,7 @@ static void PastureCtrl_PopulateTable() {
 
 // PastureWork factory-with-entity (code/Game/Work/pasturework.cpp): MemAlloc(0x58,8)
 // + the retail ctor 0x1400f2d80. `entityRefSlot` points at an 8-byte entity ref.
-extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);
+extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot);
 
 // ============================================================
 // PastureComponent slot 13 (0x140127dd0) — capability query for the three
@@ -698,9 +698,9 @@ void PastureComponent::Command(int cmd) {
             wpc->SetAccepting(false);
         } else {
             ComponentEntity* entRef = _entity;
-            void* work = PastureWork_CreateForEntity(&entRef);
-            void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
-            CitizenAI_WorkScheduler_Post(wc, 1, 1, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG PastureWork_CreateForEntity returns void*
+            Work* work = PastureWork_CreateForEntity(&entRef);
+            Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
+            CitizenAI_WorkScheduler_Post(wc, 1, 1, &workIBP);
             wpc->SetAccepting(true);
         }
         return;
