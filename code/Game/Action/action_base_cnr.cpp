@@ -332,10 +332,8 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     if (self->resourceScale <= uvScale) frac = self->resourceScale;
 
     int amount;
-    // LEFT: 0x140006330's C declaration (Work/exe_bodies.h, WORK-a's header) takes the
-    // template as an integer.
-    const RawMaterialDescription* raw = nullptr;
-    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(material), &raw);   // 0x140006330   // LEFT: SIG WorkAcc_FindComponent_6330
+    RawMaterialDescription* raw = nullptr;
+    WorkAcc_FindComponent_6330(material, &raw);   // 0x140006330
     if (!self->mature) {
         amount = raw->_lowCreateCount;
     } else {

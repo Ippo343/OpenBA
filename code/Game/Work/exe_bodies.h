@@ -22,8 +22,8 @@ class ComponentEntity;
 extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
 
 // ---- buildstructure.cpp
-extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim);  // 0x1400e59c0 (local extern in buildcomponent_state8.cpp, destroycomponent_states.cpp)
 class BuildStructure;
+extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, uint8_t altAnim);  // 0x1400e59c0 (buildcomponent_state8.cpp, destroycomponent_states.cpp)
 extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP);  // no retail address (standalone harness entry)
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
@@ -81,7 +81,8 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
 void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* position, float param5_heading, ComponentDescription* rawMatDesc, float rawMatP3, uint32_t param8, uint32_t param9);  // 0x1400beae0
 
 // ---- work_base_accessor.cpp
-void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut);  // 0x140006330
+class RawMaterialDescription;
+RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, RawMaterialDescription** retOut);  // 0x140006330
 
 // ---- work_base_actionctor.cpp
 void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targetIBP, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
@@ -90,7 +91,7 @@ PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenCo
 void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP, float* worldPos, int cellIdx, uint8_t cancelFirst);  // 0x1400c0ad0
 void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex);  // 0x1400c2490
 void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentEntity* const* workEntityIBP, uint32_t, float* targetPos, float* srcPos, uint32_t typeId, uint32_t flag8, uint32_t cellIdx9);  // 0x1400bb0a0
-void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* workEntityInner, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, int64_t* condPtr8, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0
+void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentDescription* plantDesc, uint32_t, float* position, uint32_t createParam6, uint32_t completeParam7, ComponentEntity* const* parentRef, uint32_t* msgIdPtr9, uint64_t, uint32_t smParam11);  // 0x1400be6e0
 
 // ---- work_base_bst.cpp
 void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP);  // 0x140021a30
@@ -146,13 +147,13 @@ inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h
 int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
-uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag);  // 0x1400f8620
+class WorkScheduler;   // Game/WorkScheduler.h
+uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* mgr, CitizenComponent** citizenRef, int cellId, char flag);  // 0x1400f8620
 
 // ---- work_base_impl2.cpp
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
 
 // ---- work_base_reimpl.cpp
-void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP);  // 0x140002ed0
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 void WorkBase_TaskListCleanup_c5400(void* self);  // 0x1400c5400

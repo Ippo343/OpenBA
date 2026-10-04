@@ -39,7 +39,7 @@ public:
     GatherRawMaterials();                                           // (Work_GenericCtor shape)
     explicit GatherRawMaterials(void* buildEntityIBP);              // 0x1400ec710 (site ctor)
 
-    // 0x1400ec650: frees the BST and both arrays
+    // 0x1400ec650: the compiler's chain over the three members (set, +0x58, +0x48)
     ~GatherRawMaterials() override;                                 // [0]  0x14002a410
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ec560
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]
@@ -51,30 +51,30 @@ public:
     int   GetPriority() override;                                   // [11] 0x14002a400
 
     // --- GatherRawMaterials fields (+0x48) ---
-    // +0x48 / +0x58: two Collection::Array<int32> {data, count, capacity}, one element per
-    // BuildDescription cost (the site ctor 0x1400ec710 sizes both through 0x1400021d0;
-    // Persist 0x1400ec560 bulk-serializes them as int). The containers stay raw (H5).
-    int32_t* field_48;           // +0x48: per material, the amount present
-    int32_t  field_50;           // +0x50: count (zeroed)
-    int32_t  field_54;           // +0x54: capacity of the +0x48 array
-    int32_t* field_58;           // +0x58: per material, the amount in flight
-    int32_t  field_60;           // +0x60: count (zeroed)
-    int32_t  field_64;           // +0x64: capacity of the +0x58 array
-    // +0x68: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
-    // Cleanup 0x1400ec480 reads the element's +0x278). The container stays raw (H5).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* field_68;    // +0x68: tree root (zeroed)
-    int32_t  field_70;           // +0x70: count (zeroed; GetPriority 0x14002a400 `> 0`)
-    uint8_t  _pad74[4];          // +0x74: padding
+    // +0x48 / +0x58: two Collection::Array<int32> {data, size, capacity}, one element per
+    // BuildDescription cost (the site ctor 0x1400ec710 sizes both through 0x1400021d0, which
+    // leaves a grown tail as found: Array<int32_t>'s trait-derived spec has no init arm;
+    // Persist 0x1400ec560 bulk-serializes them as int). +0x68: Collection::Set<InternalPtr<
+    // CitizenComponent>> (the T = 8 node; Cleanup 0x1400ec480 reads the element's +0x278):
+    // the citizens hauling. Real members: the ctors 0x1400ec8a0 / 0x1400ec710 zero +0x48..
+    // +0x60 as four qwords and the set's root (qword) and count (dword) under an EH state;
+    // the dtor 0x1400ec650 clears the set FIRST, then frees +0x58 (data = 0, +0x60 = 0 qword),
+    // then +0x48 (data = 0, +0x50 = 0 qword): the reverse of this declaration order. The
+    // Set's ctor also zeroes its +0x0c pad (+0x74), which retail's leaves (row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    Collection::Array<int32_t> _present;    // +0x48: per material, the amount present
+    Collection::Array<int32_t> _inFlight;   // +0x58: per material, the amount in flight
+    CitizenSet _citizens;                   // +0x68: count +0x70 (GetPriority 0x14002a400 `> 0`)
 };
 
 static_assert(sizeof(GatherRawMaterials) == 0x78, "GatherRawMaterials is 0x78 (retail create MemAlloc)");
 static_assert(alignof(GatherRawMaterials) == 8, "GatherRawMaterials is 8-aligned");
-static_assert(offsetof(GatherRawMaterials, field_48) == 0x48, "GatherRawMaterials +0x48");
-static_assert(offsetof(GatherRawMaterials, field_50) == 0x50, "GatherRawMaterials +0x50");
-static_assert(offsetof(GatherRawMaterials, field_54) == 0x54, "GatherRawMaterials +0x54");
-static_assert(offsetof(GatherRawMaterials, field_58) == 0x58, "GatherRawMaterials +0x58");
-static_assert(offsetof(GatherRawMaterials, field_60) == 0x60, "GatherRawMaterials +0x60");
-static_assert(offsetof(GatherRawMaterials, field_64) == 0x64, "GatherRawMaterials +0x64");
-static_assert(offsetof(GatherRawMaterials, field_68) == 0x68, "GatherRawMaterials +0x68");
-static_assert(offsetof(GatherRawMaterials, field_70) == 0x70, "GatherRawMaterials +0x70");
+static_assert(offsetof(GatherRawMaterials, _present) == 0x48, "GatherRawMaterials +0x48");
+static_assert(offsetof(GatherRawMaterials, _present) + offsetof(Collection::Array<int32_t>, _size) == 0x50, "GatherRawMaterials +0x50");
+static_assert(offsetof(GatherRawMaterials, _present) + offsetof(Collection::Array<int32_t>, _capacity) == 0x54, "GatherRawMaterials +0x54");
+static_assert(offsetof(GatherRawMaterials, _inFlight) == 0x58, "GatherRawMaterials +0x58");
+static_assert(offsetof(GatherRawMaterials, _inFlight) + offsetof(Collection::Array<int32_t>, _size) == 0x60, "GatherRawMaterials +0x60");
+static_assert(offsetof(GatherRawMaterials, _inFlight) + offsetof(Collection::Array<int32_t>, _capacity) == 0x64, "GatherRawMaterials +0x64");
+static_assert(offsetof(GatherRawMaterials, _citizens) == 0x68, "GatherRawMaterials +0x68");
+static_assert(offsetof(GatherRawMaterials, _citizens) + offsetof(GatherRawMaterials::CitizenSet, _count) == 0x70, "GatherRawMaterials +0x70");

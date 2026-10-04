@@ -425,11 +425,11 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                                 Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
 
                                 // The forester description's material ref for the plant action
-                                void* matDescRef = radiusComp->_ref20;
+                                ComponentDescription* matDescRef = radiusComp->_ref20;
 
                                 // Create plant action chain
                                 CitizenComponent* plantBuf[2] = { *citizenIBP, nullptr };
-                                int64_t resourceVal = 0;
+                                ComponentEntity* resourceVal = nullptr;   // the parent reference: none
                                 uint32_t resCountBuf[4] = { 0, 0, 0, 0 };
                                 WorkAct_PlantWorkCtor_be6e0(
                                     plantBuf,                          // entityIBP

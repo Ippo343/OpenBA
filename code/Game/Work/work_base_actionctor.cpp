@@ -685,15 +685,13 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
 //   param_9  = u32* (msg id for optional SendComponentMessage #2 = *param_9)
 //   param_10 = u64 unused (SendComponentMessage #2 param_4 = 0 in disasm)
 //   param_11 = u32 (SendComponentMessage #2 param_6)
-void WorkAct_PlantWorkCtor_be6e0(void* citizenIBP, uint32_t priority, void* workEntityInner,
+// param_3 is the description CreateNaturalResource takes (+0x20), param_8 the parent
+// entity reference (*param_8 tested, then copied).
+void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t priority,
+                                 ComponentDescription* plantDesc,
                                  uint32_t /*unused4*/, float* position, uint32_t createParam6,
-                                 uint32_t completeParam7, int64_t* condPtr8, uint32_t* msgIdPtr9,
-                                 uint64_t /*unused10*/, uint32_t smParam11) {
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_PlantWorkCtor_be6e0
-    // LEFT: SIG WorkAct_PlantWorkCtor_be6e0: param_3 is the description CreateNaturalResource
-    // takes (+0x20), param_8 the parent entity reference (*param_8 tested, then copied).
-    ComponentDescription* plantDesc = reinterpret_cast<ComponentDescription*>(workEntityInner);   // LEFT: SIG WorkAct_PlantWorkCtor_be6e0
-    ComponentEntity* const* parentRef = reinterpret_cast<ComponentEntity* const*>(condPtr8);   // LEFT: SIG WorkAct_PlantWorkCtor_be6e0
+                                 uint32_t completeParam7, ComponentEntity* const* parentRef,
+                                 uint32_t* msgIdPtr9, uint64_t /*unused10*/, uint32_t smParam11) {
 
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;

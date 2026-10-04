@@ -129,39 +129,39 @@ void GatherRawMaterials::Persist(IO::Stream& stream) {
     bool isLoading = (static_cast<int>(serializer.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
 
     // --- Serialize first int array count (+0x50) ---
-    int count50 = field_50;
+    int count50 = _present._size;
     serializer.Serialize(count50, nullptr);
 
     if (isLoading) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
-        // GatherRawMaterials_Shutdown calls it at 1400ec5be). I32NoInit — a grown tail
+        // FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+        // GatherRawMaterials_Shutdown calls it at 1400ec5be, the member's own SetSize; no init arm) — a grown tail
         // is left as the allocation found it, like retail. Safe: load-only, and the bulk
         // int read below writes all count50 elements from the stream.
-        GameColl::AsArray<GameColl::I32NoInit>(&field_48).SetSize(count50);
-        field_50 = count50;
+        _present.SetSize(count50);
+        _present._size = count50;
     }
 
     // Bulk-serialize the first int array
-    serializer.Serialize(field_50, field_48, nullptr);
+    serializer.Serialize(_present._size, _present._data, nullptr);
 
     // --- Serialize second int array count (+0x60) ---
-    int count60 = field_60;
+    int count60 = _inFlight._size;
     serializer.Serialize(count60, nullptr);
 
     if (isLoading) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
-        // GatherRawMaterials_Shutdown calls it at 1400ec606). I32NoInit — a grown tail
+        // FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
+        // GatherRawMaterials_Shutdown calls it at 1400ec606, the member's own SetSize; no init arm) — a grown tail
         // is left as the allocation found it, like retail. Safe: load-only, and the bulk
         // int read below writes all count60 elements from the stream.
-        GameColl::AsArray<GameColl::I32NoInit>(&field_58).SetSize(count60);
-        field_60 = count60;
+        _inFlight.SetSize(count60);
+        _inFlight._size = count60;
     }
 
     // Bulk-serialize the second int array
-    serializer.Serialize(field_60, field_58, nullptr);
+    serializer.Serialize(_inFlight._size, _inFlight._data, nullptr);
 
-    // --- Serialize tree at +0x68 (the helper takes the container as uintptr_t*: LEFT) ---
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_68), &serializer);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
+    // --- Serialize the citizen set at +0x68 ---
+    WorkBST_BST_Serialize_296b0(&_citizens, &serializer);
 }
 
 // ============================================================
@@ -219,7 +219,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
     uint32_t citizenCell = (uint32_t)(cellY * mapSize + cellX);
 
     // --- Iterate material slots ---
-    int numSlots = field_50;
+    int numSlots = _present._size;
     if (numSlots < 1) {
         return 1;
     }
@@ -232,9 +232,9 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
         int targetAmount = cost->quantity * descComp->costMultiplier;
 
 
-        // Check: buildCount[slotIdx] + field_48[slotIdx] < targetAmount
-        int buildCount = field_58[slotIdx];
-        int assignCount = field_48[slotIdx];
+        // Check: buildCount[slotIdx] + _present[slotIdx] < targetAmount
+        int buildCount = _inFlight[slotIdx];
+        int assignCount = _present[slotIdx];
         if (buildCount + assignCount >= targetAmount) {
             // This slot is already fulfilled
             goto next_slot;
@@ -403,10 +403,10 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 }
 
                 // (the tree helper takes the container as uintptr_t*: LEFT)
-                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
+                WorkBST_RegisterWork_1a30(&_citizens, &workEntity, entityIBP);
 
                 // Increment build count for this slot
-                field_58[slotIdx] += remaining;
+                _inFlight[slotIdx] += remaining;
 
 
                 return 2;
@@ -424,29 +424,29 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
 // OnComplete (0x1400ebdf0) -- vtable slot 6
 //
 // Completion handler. Removes citizen from tree at +0x68,
-// updates build counts (decrement field_58, increment field_48).
-// Returns: value from field_48 masking.
+// updates build counts (decrement _inFlight, increment _present).
+// Returns: value from _present masking.
 // ============================================================
 int GatherRawMaterials::OnComplete(CitizenComponent** param2, ComponentEntity** /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
 
     // Extract slot index (low byte) and amount (high 24 bits, shifted right by 8)
     uint32_t slotIdx = param4 & 0xFF;
     int amount = (int)param4 >> 8;
 
-    // Decrement field_58[slotIdx] (build counts) by amount
-    field_58[slotIdx] -= amount;
+    // Decrement _inFlight[slotIdx] (build counts) by amount
+    _inFlight[slotIdx] -= amount;
 
-    // Increment field_48[slotIdx] (assigned counts) by amount
-    field_48[slotIdx] += amount;
+    // Increment _present[slotIdx] (assigned counts) by amount
+    _present[slotIdx] += amount;
 
 
     // Original returns uVar3 & 0xffffffffffffff00: retail's bool false in AL over the
     // array pointer left in RAX.
-    return reinterpret_cast<uintptr_t>(field_48) & 0xFFFFFF00;  // CAST-OK: ptr_int
+    return reinterpret_cast<uintptr_t>(_present._data) & 0xFFFFFF00;  // CAST-OK: ptr_int
 }
 
 // ============================================================
@@ -459,14 +459,14 @@ int GatherRawMaterials::OnCancel(CitizenComponent** param2, ComponentEntity** /*
     const uint32_t param4 = static_cast<uint32_t>(arg3);
 
     // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
+    WorkBST_BSTFindRemove_25520(&_citizens, param2);
 
     // Extract slot index and amount
     uint32_t slotIdx = param4 & 0xFF;
     int amount = (int)param4 >> 8;
 
-    // Decrement field_58[slotIdx] only (cancel = don't credit the work)
-    field_58[slotIdx] -= amount;
+    // Decrement _inFlight[slotIdx] only (cancel = don't credit the work)
+    _inFlight[slotIdx] -= amount;
     return 0;
 }
 
@@ -479,7 +479,7 @@ int GatherRawMaterials::OnCancel(CitizenComponent** param2, ComponentEntity** /*
 // ============================================================
 int GatherRawMaterials::Cleanup() {
     while (true) {
-        AssignmentNode* root = field_68;
+        AssignmentNode* root = _citizens._root;
         if (root == nullptr) return 0;
 
         // Find leftmost node
@@ -515,8 +515,8 @@ int GatherRawMaterials::Cleanup() {
 // Returns: true (nonzero) if nothing was removed, false if any removed.
 // ============================================================
 int GatherRawMaterials::Validate() {
-    // Walk tree at +0x68 (field_68), collect invalid entries
-    AssignmentNode* root = field_68;
+    // Walk tree at +0x68 (_citizens._root), collect invalid entries
+    AssignmentNode* root = _citizens._root;
     uint32_t invalidCount = 0;
     CitizenComponent** invalidArray = nullptr;
     uint32_t invalidCapacity = 0;
@@ -601,7 +601,7 @@ int GatherRawMaterials::Validate() {
         for (uint32_t i = 0; i < invalidCount; i++) {
             // Find node in tree by key and remove
             CitizenComponent* searchKey = invalidArray[i];
-            AssignmentNode* treeNode = field_68;
+            AssignmentNode* treeNode = _citizens._root;
 
             while (treeNode != nullptr) {
                 CitizenComponent* nodeKey = treeNode->element;
@@ -611,7 +611,7 @@ int GatherRawMaterials::Validate() {
                     if (searchKey <= nodeKey) {
                         // Found -- remove this node (the helper takes the container as
                         // uintptr_t*: LEFT)
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_68), treeNode);   // LEFT: H5 the +0x68 set stays two raw fields: typed alone, its ~Set would run AFTER the dtor body frees the +0x58 / +0x48 arrays; retail 0x1400ec650 clears the set FIRST, then +0x58, then +0x48 (the two arrays must become members in the same commit)
+                        WorkBST_BSTRemove_a6e0(&_citizens, treeNode);
                         break;
                     }
                     treeNode = treeNode->right;
@@ -624,9 +624,9 @@ int GatherRawMaterials::Validate() {
             Cleanup();   // slot 8 (vtable +0x40), a virtual dispatch in retail
 
             // Reset all build counts to 0
-            int numSlots = field_60;
+            int numSlots = _inFlight._size;
             for (int i = 0; i < numSlots; i++) {
-                field_58[i] = 0;
+                _inFlight[i] = 0;
             }
         }
     }
@@ -654,46 +654,22 @@ Profession** GatherRawMaterials::GetTarget(Profession** retbuf) {
 // then calls Object::Internal::~Internal.
 // ============================================================
 // GatherRawMaterials dtor 0x1400ec650. The stamps and the `~Internal` call are the compiler's chain.
-GatherRawMaterials::~GatherRawMaterials() {
-    // Free BST nodes at +0x68
-    AssignmentNode* bstRoot = field_68;
-    if (bstRoot != nullptr) {
-        // Clean up left subtree
-        WorkBase_TreeNodeFree_14c30(&field_68, bstRoot->left);
-        // Clean up right subtree
-        WorkBase_TreeNodeFree_14c30(&field_68, bstRoot->right);
-        // Free root node
-        System::MemoryAllocator::MemFree(bstRoot);
-    }
-
-    // Zero out BST root and count
-    field_68 = nullptr;
-    field_70 = 0;
-
-    // Free second int array at +0x58 (count and capacity: one qword store in retail)
-    System::MemoryAllocator::MemFree(field_58);
-    field_58 = nullptr;
-    field_60 = 0;
-    field_64 = 0;
-
-    // Free first int array at +0x48 (count and capacity: one qword store in retail)
-    System::MemoryAllocator::MemFree(field_48);
-    field_48 = nullptr;
-    field_50 = 0;
-    field_54 = 0;
-
-}
+// Retail 0x1400ec650: stamp 0x140161420; the +0x68 set's inlined Clear (0x140014c30 on the
+// root's +0x10 / +0x18 children, MemFree [0x140152b68] of the root, root = 0 qword, count =
+// 0 dword); MemFree +0x58, +0x58 = 0, +0x60 = 0 (qwords); MemFree +0x48, +0x48 = 0, +0x50 = 0;
+// stamp Work 0x140161a80 and tail-jump ~Internal. That is the compiler's chain over the three
+// members in reverse declaration order: ~Set (Clear), ~Array (_inFlight), ~Array (_present).
+GatherRawMaterials::~GatherRawMaterials() = default;
 // Slot11 (+0x58) — retail 0x14002a400 is `return 0 < *(int*)(self + 0x70)` (this class
 // keeps its tree count at +0x70). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
 int GatherRawMaterials::GetPriority() {
-    return field_70 > 0 ? 1 : 0;
+    return _citizens._count > 0 ? 1 : 0;
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The stamps are the compiler's.
 GatherRawMaterials::GatherRawMaterials()
-    : Work(), field_48(nullptr), field_50(0), field_54(0), field_58(nullptr),
-      field_60(0), field_64(0), field_68(nullptr), field_70(0) {
+    : Work() {
 }
 
 // ============================================================

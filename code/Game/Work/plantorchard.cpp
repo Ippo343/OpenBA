@@ -198,7 +198,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
                 pathPos,                          // [RSP+0x20]: position
                 srcCellIdx,                       // [RSP+0x28]: srcCellIdx
                 (uint32_t)i,                      // [RSP+0x30]: cellIdx (integer, EBX)
-                reinterpret_cast<int64_t*>(&entityRef),   // [RSP+0x38]: entity ref from field_10 (LEFT: be6e0's C signature, WORK-b caller)  // LEFT: SIG WorkAct_PlantWorkCtor_be6e0 (wave X family across two agents)
+                &entityRef,                       // [RSP+0x38]: entity ref from field_10
                 &typeConstVal,                    // [RSP+0x40]: type constant
                 0,                                // [RSP+0x48]: unused
                 (uint32_t)i                       // [RSP+0x50]: cellIdx again (integer, EBX)

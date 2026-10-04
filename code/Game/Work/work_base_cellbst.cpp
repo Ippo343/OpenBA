@@ -144,7 +144,7 @@ static Node* CellBST_AllocNode(const WorkCellAssignment* rec, Node* parent) {
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
     CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_*: one body over the area works' raw field pairs (H5) and the scheduler's WorkSchedulerTree (ICF)
     const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);  // LEFT: SIG WorkCellBST_Insert_9a40: the scheduler inserts {id, pad, InternalPtr<Work>} through the same body (ICF)
-    Node** pOut = reinterpret_cast<Node**>(outResult);  // LEFT: SIG as above (the scheduler's out slot is its own node type)
+    Node** pOut = reinterpret_cast<Node**>(outResult);  // LEFT: FLOOR? the erased core's view of its out slot: one body (ICF) hands back the inserted node of the area works' cell sets and of the scheduler's WorkSchedulerTree
     int key = rec->cell;
     if (set->_root == nullptr) {
         Node* node = CellBST_AllocNode(rec, nullptr);
@@ -185,7 +185,7 @@ void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
 // Caller: void fn(void* bstRoot, void* node).
 void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
     CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF: cell, entity, scheduler id / bucket, region pair, goals)
-    Node* node = reinterpret_cast<Node*>(nodeArg);  // LEFT: SIG as above
+    Node* node = reinterpret_cast<Node*>(nodeArg);  // LEFT: FLOOR? the erased core's view of the node it unlinks: one body (ICF) over five node types (cell, entity, scheduler id / bucket, region pair, goals)
     Node* local_res8 = node->parent;
     set->_count -= 1; // count--
     Node* lVar5 = node->right;
@@ -291,7 +291,7 @@ joined:
     while ((pIVar5 = pIVar7) != nullptr) {
         ser->Serialize(pIVar5->element.cell, nullptr);   // key @+0
         // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8  // LEFT: as above
+        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8  // LEFT: WorkCellAssignment::citizen is a raw CitizenComponent* (Work.h); retail serializes the slot as an InternalBasePtr
         if (pIVar5->element.citizen != nullptr && citTid &&
             !Object::IsDerivedFromNullSafe(pIVar5->element.citizen, citTid))
             pIVar5->element.citizen = nullptr;

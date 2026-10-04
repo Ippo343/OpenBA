@@ -195,14 +195,11 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // nomadcomponent_states, build_actions, work_act_clear, work_act_consume, work_act_hunt,
 // work_act_path, work_act_perform, work_act_rawmat, work_base_actionctor
 void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
-    ActionStackPush(reinterpret_cast<ActionStack*>(param_1),   // LEFT: SIG Pf_ActStackPush_54e0
-                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0
+    ActionStackPush(reinterpret_cast<ActionStack*>(param_1),   // LEFT: SIG Pf_ActStackPush_54e0: its callers hold &CharacterComponent::actions (CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)) as int64_t*
+                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0: its 10 callers hold the action as void* / int64_t / Action* locals, not InternalPtr<Action>
 }
 
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Entity, Game, Player, Work)
-int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
-    return InteractNodeCount(reinterpret_cast<const InteractComponent*>(param_1), param_2);   // LEFT: SIG Pf_RecursiveChildSum_123070
-}
 
 // ---- action_pf_roots_route.cpp's C spellings (kept here: that file's reinterpret column
 // has no room for them).
@@ -212,7 +209,7 @@ int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
 // citizen_lifeevent_handler, citizenbehavior, buildstructure, firework_search,
 // marketwork, work_base_reimpl, work_base_walkpos)
 int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
-    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);   // LEFT: SIG Pf_IsDstReachable_f810
+    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);   // LEFT: SIG Pf_IsDstReachable_f810: citizenai_housing_idle.cpp:340 (COMP) holds the map as int* (&m_game->size)
 }
 
 

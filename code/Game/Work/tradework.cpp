@@ -312,7 +312,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // destination position from the trade post's interact component:
         float destPos[4] = {};                             // local_a0
-        uint32_t range = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(posComp), 0);   // LEFT: C signature
+        uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
         Pf_EntityResolvePos_2e20(posComp, destPos, 0, rnd, nullptr);
@@ -398,7 +398,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             InteractComponent** parts = posComp->useLocations;
             int cn = posComp->useLocationCount;
             for (int k = 0; k < cn; k++) {
-                range += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(parts[k]), 0);   // LEFT: C signature
+                range += InteractNodeCount(parts[k], 0);   // 0x140123070
             }
         }
         System::Random* rng = gw ? gw->m_random : nullptr;

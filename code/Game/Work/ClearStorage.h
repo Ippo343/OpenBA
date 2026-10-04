@@ -43,7 +43,7 @@ public:
     // four qwords. ENDGAME B.3.9 OBJ: replaces the `??0Internal` door + stamp.
     explicit ClearStorage(void* pEntityIBP);
 
-    // 0x1400e73b0: frees the tree and +0x48
+    // 0x1400e73b0: the compiler's chain over the two members (set, then +0x48)
     ~ClearStorage() override;                                       // [0]  0x14002a100
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e7350
     int   Execute(CitizenComponent** citizenAI, System::Time* time) override;  // [4]  0x1400e6c50
@@ -55,20 +55,26 @@ public:
     int   GetPriority() override;                                   // [11] 0x14002a0f0
 
     // --- ClearStorage fields (+0x48) ---
-    void*    _field48;           // +0x48: auxiliary data ptr (freed in dtor)
-    void*    _field50;           // +0x50: auxiliary data ptr (zeroed in dtor)
-    // +0x58: the root of Collection::Set<InternalPtr<CitizenComponent>> (node 0x28: element,
-    // parent +0x08, left +0x10, right +0x18; Cleanup 0x1400e72a0 reads the element's +0x278).
-    // The container stays two raw fields (H5: Set has a dtor).
-    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
-    AssignmentNode* _field58;
-    uint32_t _field60;           // +0x60: item count remaining to clear
-    uint8_t  _pad64[4];         // +0x64: padding
+    // +0x48: a Collection::Array {data, count +0x50, capacity +0x54}: the ctors 0x1400e7450 /
+    // 0x1400e74b0 zero +0x48 / +0x50 as two qwords and the dtor 0x1400e73b0 frees +0x48 and
+    // zeroes both, the inlined ~Array of the other leaves. No slot of the class reads it
+    // (Persist 0x1400e7350 streams only the set; Validate 0x1400e69f0 builds its removal list
+    // in a local), so the element type is not settled: declared as bytes.
+    // +0x58: Collection::Set<InternalPtr<CitizenComponent>> (node 0x28: element, parent +0x08,
+    // left +0x10, right +0x18; Cleanup 0x1400e72a0 reads the element's +0x278); its count
+    // +0x60 is the items-left / GetPriority count (0x14002a0f0 `> 0`). Real members: the ctors
+    // zero the set's root (qword) and count (dword) under an EH state and the dtor clears the
+    // set FIRST, then frees +0x48: the reverse of this declaration order. The Set's ctor also
+    // zeroes its +0x0c pad (+0x64), which retail's leaves (row 640).
+    using CitizenSet     = Collection::Set<CitizenComponent*>;
+    using AssignmentNode = CitizenSet::Node;
+    Collection::Array<uint8_t> _field48;   // +0x48
+    CitizenSet _citizens;                  // +0x58
 };
 
 static_assert(sizeof(ClearStorage) == 0x68, "ClearStorage is 0x68 (retail create MemAlloc)");
 static_assert(alignof(ClearStorage) == 8, "ClearStorage is 8-aligned");
 static_assert(offsetof(ClearStorage, _field48) == 0x48, "ClearStorage +0x48");
-static_assert(offsetof(ClearStorage, _field50) == 0x50, "ClearStorage +0x50");
-static_assert(offsetof(ClearStorage, _field58) == 0x58, "ClearStorage +0x58");
-static_assert(offsetof(ClearStorage, _field60) == 0x60, "ClearStorage +0x60");
+static_assert(offsetof(ClearStorage, _field48) + offsetof(Collection::Array<uint8_t>, _size) == 0x50, "ClearStorage +0x50");
+static_assert(offsetof(ClearStorage, _citizens) == 0x58, "ClearStorage +0x58");
+static_assert(offsetof(ClearStorage, _citizens) + offsetof(ClearStorage::CitizenSet, _count) == 0x60, "ClearStorage +0x60");

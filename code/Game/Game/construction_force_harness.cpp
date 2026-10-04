@@ -208,7 +208,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen) {
         s_build = BuildStructure_ConstructForSite(&siteIBP);
         if (!s_build) return true;   // own it, retry construction next tick
         fprintf(stderr, "[ForceBuild] constructed BuildStructure=%p for site=%p (buildPositions=%d)\n",
-                s_build, site, s_build->field_58);
+                s_build, site, s_build->_slots._size);
         fflush(stderr);
     }
 

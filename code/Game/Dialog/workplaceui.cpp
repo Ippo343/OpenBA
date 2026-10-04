@@ -453,10 +453,10 @@ void WorkPlaceUI::OnUpdateLayout() {
         if (entity->FindComponent<BuildComponent>() != nullptr) {   // 0x14000d6c0
             int maxCap = workDesc->_i2c;
             InteractComponent* interact = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-            int posCount = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(interact), 1);   // 0x140123070  // LEFT: SIG Pf_RecursiveChildSum_123070 takes the component as int64_t (Action/exe_bodies.h, WORK)
+            int posCount = InteractNodeCount(interact, 1);   // 0x140123070
             if (posCount < maxCap) {
                 InteractComponent* interact2 = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-                maxCap = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(interact2), 1);   // 0x140123070  // LEFT: SIG Pf_RecursiveChildSum_123070 takes the component as int64_t (Action/exe_bodies.h, WORK)
+                maxCap = InteractNodeCount(interact2, 1);   // 0x140123070
             }
             jobCountUp->Enable(wpMaxCount < maxCap);
             jobCountDown->Enable(wpMaxCount > 1);
