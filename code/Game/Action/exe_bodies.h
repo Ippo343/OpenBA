@@ -39,7 +39,6 @@ void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef
 void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
 void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
-void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx);  // 0x1400f8e30
 
 // ---- action_base_hunt.cpp
 class HuntComponent;          // Component/HuntComponent.h

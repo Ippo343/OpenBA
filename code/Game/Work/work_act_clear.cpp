@@ -193,7 +193,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             ct = new (obj) CompleteTask(param_2, &entityInner, &innerIbp, param_6);
         }
         ibpB = ct;
-        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpB);   // LEFT: CharacterComponent +0x48 is declared as fields, not an ActionStack (wave X)
+        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpB);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)
     }
 
     // --- ShowTool (~Hoe = -1; disasm OR R8D,0xffffffff) action; append via FUN_1400c54e0 (0x1400c16dc..0x1400c1729) ---
@@ -205,7 +205,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             st = new (obj) ShowTool(&entityInner, ~0); // OR R8D,0xffffffff @0x1400c16fb
         }
         ibpA = st;
-        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpA);   // LEFT: CharacterComponent +0x48 is declared as fields, not an ActionStack (wave X)
+        ActionStackPush(reinterpret_cast<ActionStack*>(plVar15), &ibpA);   // LEFT: CharacterComponent.h (COMP) declares its +0x48 ActionStack as separate fields (actions / actionCount / field_0x58 / currentAction)
     }
 
     // --- LOOP: for i in [0, param_3): inline RemoveNaturalResource action per param_4[i]

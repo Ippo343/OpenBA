@@ -54,6 +54,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "Work/BuildStructure.h"   // B4 X4-WORK: BuildStructure_CreateInPlaceFull returns the typed work
 #include "Action/exe_bodies.h"
 #include "Component/pickingcomponent_funcs.h"
 #include "system/MemoryAllocator.h"
@@ -277,20 +278,18 @@ char BuildComponent::State8Enter(StateMachine* sm) {
             // PositionComponent footprint. sub_7ae0 passes &(*(BuildComponent+0x10)) as the
             // entity IBP. Without the array, BuildStructure::Execute sees 0 unbuilt positions
             // and returns 1 (never assigns labor) — this is the 2c-B fix.
-            void* bsWork = nullptr;
+            BuildStructure* bsWork = nullptr;
             if (mem) {
                 ComponentEntity* siteEnt = _entity;   // *(BuildComponent+0x10)
                 bsWork = BuildStructure_CreateInPlaceFull(mem, &siteEnt, 0);
             }
             if (bsWork) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
-                uintptr_t bsIBP = 0;
-                new (&bsIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge   // LEFT: SIG BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
+                Object::InternalPtr<Work> bsIBP(bsWork);
                 // find the site WorkComponent (c8070) the work posts under
                 WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
                 if (workComp != nullptr) {
-                    CitizenAI_WorkScheduler_Post(workComp, 0x2001, 1, reinterpret_cast<Object::InternalPtr<Work>*>(&bsIBP));   // LEFT: SIG BuildStructure_CreateInPlaceFull builds into void* (the work held as uintptr_t)
+                    CitizenAI_WorkScheduler_Post(workComp, 0x2001, 1, &bsIBP);
 
                     // Builders are seated by the tick-driven Builder pool
                     // (BuilderPool_Tick) through the townMgr+0x100 registration made at

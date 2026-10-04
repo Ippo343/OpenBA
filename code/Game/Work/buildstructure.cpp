@@ -783,8 +783,8 @@ void* BuildStructure::CreateInPlaceObject(void* storage) {
 // The one entry point other blocks name: the full ctor on caller memory
 // (buildcomponent_state8.cpp / destroycomponent_states.cpp, BuildComponent's state-8
 // enter). B8-5: the real ctor, the same bytes.
-extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim) {
-    return static_cast<Object::Base*>(new (mem) BuildStructure(entityIBP, altAnim));
+extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, uint8_t altAnim) {
+    return new (mem) BuildStructure(entityIBP, altAnim);
 }
 
 DEFINE_EXE_TYPE(BuildStructure, "Work")

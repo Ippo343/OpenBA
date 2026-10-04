@@ -217,7 +217,7 @@ void Map::FinishRoadCell(int param_2, uint8_t param_3, uint param_4) {
             if (param_2 <= piVar1->key) {
                 // LEFT: 0x14001a6e0's C declaration (Work/exe_bodies.h, WORK-c, running)
                 // takes the root slot as uintptr_t*.
-                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0xE8), piVar1);   // 0x14001a6e0  // LEFT: SIG WorkBST_BSTRemove_a6e0 (wave X family across two agents)
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0xE8), piVar1);   // 0x14001a6e0  // LEFT: SIG WorkBST_BSTRemove_a6e0: Map +0xE8 / +0xF0 is a raw root + count pair (Game/Map.h, GAME), handed to the one erased core
                 goto LAB_14009c6d2;
             }
             piVar1 = piVar1->right;
