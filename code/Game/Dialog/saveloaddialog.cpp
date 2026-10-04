@@ -697,12 +697,10 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         }
 
         // --- Step 4: Set the outer LoaderLoop as the engine's next loop ---
-        // LEFT: SetDialogLoaderNextLoop (0x14009a8f0) and SetEngineNextLoop
-        // (0x140097fb0) take the loop as an integer (Game/exe_bodies.h, block GAME).
         if (menuLoop == nullptr) {
-            SetEngineNextLoop((uintptr_t)game, pOuterLoop);
+            SetEngineNextLoop(game, pOuterLoop);
         } else {
-            SetDialogLoaderNextLoop((uintptr_t)menuLoop, pOuterLoop);
+            SetDialogLoaderNextLoop(menuLoop, pOuterLoop);
         }
 
         loadFlag = 0;

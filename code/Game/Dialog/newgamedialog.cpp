@@ -739,11 +739,10 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
                 (void*)pGameLoop, (void*)pDlLoop, (void*)pOuterLoop, (void*)menuLoop, (void*)game,
                 menuLoop ? "SetDialogLoaderNextLoop(loop)" : "SetEngineNextLoop(engine)");
         fflush(stderr);
-        // LEFT: the two helpers (Game/exe_bodies.h, block GAME) take the loop as uintptr_t.
         if (menuLoop == nullptr) {
-            SetEngineNextLoop((uintptr_t)game, pOuterLoop);
+            SetEngineNextLoop(game, pOuterLoop);
         } else {
-            SetDialogLoaderNextLoop((uintptr_t)menuLoop, pOuterLoop);
+            SetDialogLoaderNextLoop(menuLoop, pOuterLoop);
         }
         fprintf(stderr, "[StartNewGame] EXIT — next loop set, transition pending\n");
         fflush(stderr);

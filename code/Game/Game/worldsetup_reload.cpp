@@ -51,6 +51,24 @@
 #include <cstdio>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Game/MenuDialogLoopT.h"   // SetDialogLoaderNextLoop
+#include "Game/game.h"             // g_gameContainer (the hourglass cursor)
+#include "ui/UserInterface.h"
+
+// 0x140097fb0: hourglass cursor (GameContainer +0x38, "Cursor/Hourglass.rsc:cursor"),
+// fade to opaque black (fadeIn=true, 0xFF000000, reverse=false), queue the loop.
+void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop) {
+    UI::UserInterface* ui = game->m_userInterface;   // +0x98
+    ui->SetCursor(::Object::ExternalPtr<UI::Cursor>(g_gameContainer->cursorHourglass.Get()));
+    ui->SetFullscreenFade(true, 0xFF000000, false);
+    game->m_nextLoop = loaderLoop;                    // +0xC8
+}
+
+// 0x14009a8f0: fade the menu loop's UI (+0x40) to opaque black, queue the loop.
+void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* loaderLoop) {
+    menuLoop->GetUserInterface().SetFullscreenFade(true, 0xFF000000, false);
+    menuLoop->_pendingLoop = loaderLoop;              // +0xb68
+}
 
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr) {
@@ -122,9 +140,9 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // --- Step 4: publish the next loop ---------------------------------------
     // Retail tests +0xC0 first (inverse of 0x1400b4790 - see the header comment).
-    uintptr_t dialogLoader = *reinterpret_cast<uintptr_t*>(s + 0xC0);   // LEFT: +0xC0 of the unsettled receiver
-    if (dialogLoader == 0) {
-        uintptr_t gameWorld = *reinterpret_cast<uintptr_t*>(s + 0xB8);   // LEFT: +0xB8 of the unsettled receiver
+    MenuDialogLoopT* dialogLoader = *reinterpret_cast<MenuDialogLoopT**>(s + 0xC0);   // LEFT: +0xC0 of the unsettled receiver
+    if (dialogLoader == nullptr) {
+        GameUpdateLoop* gameWorld = *reinterpret_cast<GameUpdateLoop**>(s + 0xB8);   // LEFT: +0xB8 of the unsettled receiver
         SetEngineNextLoop(gameWorld, pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
         SetDialogLoaderNextLoop(dialogLoader, pOuterLoop);
