@@ -317,18 +317,17 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
 
                 // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell -- the
                 // registered cell's own class, not the legacy healing fallback which used
-                // to read MapDescription::TypeId()). (0x140122be0 / 0x140122b00 take the
-                // component and the node array as integers: LEFT.)
+                // to read MapDescription::TypeId()).
                 bool isDerivedPos = Object::IsDerivedFromNullSafe(posDescBase, InteractDescription::TypeId());
                 InteractDescription* posDesc = isDerivedPos ? static_cast<InteractDescription*>(posDescBase) : nullptr;
-                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp),   // LEFT: SIG WorkImpl_WalkablePos_122be0
-                    reinterpret_cast<uintptr_t>(&posDesc->_buildNodes), searchPos, targetPos, &bestDist) : 0;   // LEFT: SIG WorkImpl_WalkablePos_122be0
+                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posComp,
+                    &posDesc->_buildNodes, searchPos, targetPos, &bestDist) : 0;
 
                 if (posComp->useLocationCount > 0) {
                     int childCount = 0;
                     do {
                         uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(
-                            reinterpret_cast<uintptr_t>(posComp->useLocations[childCount]), 1,   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00
+                            posComp->useLocations[childCount], 1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;
@@ -355,11 +354,12 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 if (tgtCellY >= mapSz) tgtCellY = mapSz - 1;
                 int targetCell = tgtCellY * mapSz + tgtCellX;
 
-                // --- Validate work assignment (0x1400f6ef0 takes the work as an integer; the
-                // Time slot is the reused param3 scratch that holds the WorkPlaceComponent) ---
+                // --- Validate work assignment: Work::StepProgress 0x1400f6ef0 (was its
+                // WorkImpl_BuildStructureStep_6ef0 forwarder). The Time slot is the reused
+                // param3 scratch that holds the WorkPlaceComponent ---
                 CitizenComponent* citizenRef = *entityIBP;
-                uint64_t validated = WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &citizenRef,   // LEFT: SIG WorkImpl_BuildStructureStep_6ef0 (param3 is not a System::Time)
-                    targetCell, citizenCell, param3);
+                uint64_t validated = StepProgress(&citizenRef, targetCell, citizenCell,
+                    reinterpret_cast<const System::Time*>(param3));   // LEFT: retail hands the reused param3 slot (it holds the WorkPlaceComponent) as the Time
 
                 if ((char)validated == '\0') {
                     return 0;

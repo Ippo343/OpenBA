@@ -320,16 +320,17 @@ uint64_t CitizenAIComponent::State_Work() {
 
     Description* sub = posComp ? posComp->_description : nullptr;
     int bestCost = 0x7fffffff;
-    Description* transformSub = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription)) ? sub : nullptr;
+    InteractDescription* transformSub = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
+                                            ? static_cast<InteractDescription*>(sub) : nullptr;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    uint8_t any = WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp), reinterpret_cast<int64_t>(transformSub) + 0x28, pos, walkOut, &bestCost);   // LEFT: SIG WorkImpl_WalkablePos_122be0 (uintptr_t x2; Work/exe_bodies.h)
+    uint8_t any = WorkImpl_WalkablePos_122be0(posComp, &transformSub->_useNodes, pos, walkOut, &bestCost);
     if (posComp != nullptr) {
         // the use locations: InteractComponent::useLocations, useLocationCount
         int count = posComp->useLocationCount;
         int i = 0;
         while (i < count) {
             InteractComponent* child = posComp->useLocations[i];
-            uint8_t got = WorkImpl_WalkablePosRecursive_122b00(reinterpret_cast<uintptr_t>(child), 0, pos, walkOut, &bestCost);   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00 (uintptr_t; Work/exe_bodies.h)
+            uint8_t got = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, walkOut, &bestCost);
             any = static_cast<uint8_t>(any | got);
             ++i;
         }

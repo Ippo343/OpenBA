@@ -170,7 +170,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // Check main entity path
     bool pathFound = WorkImpl_WalkablePos_122be0(
-        reinterpret_cast<uintptr_t>(posCompIBP), (uintptr_t)posCompTyped + 0x28,   // LEFT: SIG WorkImpl_WalkablePos_122be0 (the description's +0x28 node array as an integer)
+        posCompIBP, &posCompTyped->_useNodes,   // +0x28 (0x28 when the description is not one)
         srcPos, bestPos, &bestDist);
 
     // Check child entities (the InteractComponent's use locations, +0x28 / +0x30)
@@ -178,7 +178,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         for (int i = 0; i < posCompIBP->useLocationCount; i++) {
             InteractComponent** childIBP = &posCompIBP->useLocations[i];
             bool childResult = WorkImpl_WalkablePosRecursive_122b00(
-                reinterpret_cast<uintptr_t>(*childIBP), 0, srcPos, bestPos, &bestDist);   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00
+                *childIBP, 0, srcPos, bestPos, &bestDist);
             pathFound = pathFound || childResult;
         }
     }

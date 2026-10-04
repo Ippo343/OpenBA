@@ -61,11 +61,8 @@ static inline int WalkClampCell(int v, int w) {
 // param_5 = best-distance out (int). An InteractComponent member (its header is
 // COMP's, so this stays free).
 // Returns true if *param_5 < 0xffff (a reachable node was found).
-// LEFT: the outside callers hand the component and the node array as integers.
-bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
+bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDescription::NodeArray* nodes,
                                  float* param_3, float* param_4, int* param_5) {
-    InteractComponent* interact = reinterpret_cast<InteractComponent*>(param_1);
-    const InteractDescription::NodeArray* nodes = reinterpret_cast<const InteractDescription::NodeArray*>(param_2);
     ModelComponent* model = interact->_entity->FindComponent<ModelComponent>();   // 0x140003f60
 
     Map* map = GameUpdateLoop::_singleton->m_game;
@@ -113,10 +110,8 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
 // IsDerivedFrom DAT_1401c7938), runs WalkablePos_122be0 on node array `param_2`
 // (0 use, 1 build, 2 create: desc + 0x28 + param_2*0x10), then recurses into each
 // part (useLocations +0x28, count +0x30). Returns the OR of all sub-results.
-// LEFT: the outside callers hand the component as an integer.
-uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
+uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int param_2,
                                              float* param_3, float* param_4, int* param_5) {
-    InteractComponent* interact = reinterpret_cast<InteractComponent*>(param_1);
     Description* buildRaw = interact->_description;
     InteractDescription* build = nullptr;
     if (Object::IsDerivedFromNullSafe(buildRaw, InteractDescription::TypeId()))
@@ -125,14 +120,12 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
     // The three node arrays are consecutive (+0x28 / +0x38 / +0x48): retail indexes them.
     const InteractDescription::NodeArray* nodes = &build->_useNodes + param_2;
     uint8_t result = WorkImpl_WalkablePos_122be0(
-        param_1,
-        reinterpret_cast<uintptr_t>(nodes),   // LEFT: 0x140122be0's C signature
-        param_3, param_4, param_5) ? 1 : 0;
+        interact, nodes, param_3, param_4, param_5) ? 1 : 0;
 
     int childCount = interact->useLocationCount;
     InteractComponent** childArr = interact->useLocations;
     for (int i = 0; i < childCount; i++) {
-        uint8_t sub = WorkImpl_WalkablePosRecursive_122b00(reinterpret_cast<uintptr_t>(childArr[i]),
+        uint8_t sub = WorkImpl_WalkablePosRecursive_122b00(childArr[i],
                                                            param_2, param_3, param_4, param_5);
         result = static_cast<uint8_t>(result | sub);
     }
@@ -213,12 +206,3 @@ uint64_t Work::StepProgress(CitizenComponent** citizen, uint32_t cellA, uint32_t
     return static_cast<uint64_t>(1);
 }
 
-// B4 FORWARD: 5 outside callers (ClearArea, ClearStorage, FireWork, GatherRawMaterials,
-// Pickup in WORK-a / WORK-b files) hand the receiver as an integer and the citizen
-// reference and the Time as void*.
-uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
-                                          uint32_t param_3, uint32_t param_4, void* param_5Time) {
-    return reinterpret_cast<Work*>(param_1)->StepProgress(reinterpret_cast<CitizenComponent**>(param_2IBP),
-                                                          param_3, param_4,
-                                                          reinterpret_cast<const System::Time*>(param_5Time));
-}

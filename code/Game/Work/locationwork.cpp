@@ -133,10 +133,9 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     float bestPos[3] = {0.0f, 0.0f, 0.0f};
     float srcPosArr[3] = {srcX, srcY, srcZ};
 
-    // Check main position (the component and the description's use nodes, +0x28;
-    // 0x140122be0 / 0x140122b00 take them as integers: LEFT)
+    // Check main position (the component and the description's use nodes, +0x28)
     uint8_t found = WorkImpl_WalkablePos_122be0(
-        reinterpret_cast<uintptr_t>(interact), reinterpret_cast<uintptr_t>(&interactDesc->_useNodes),   // LEFT: SIG WorkImpl_WalkablePos_122be0
+        interact, &interactDesc->_useNodes,
         srcPosArr, bestPos, &bestDist);
 
     // Also check the parts' use locations
@@ -145,7 +144,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         InteractComponent** subArray = interact->useLocations;
         for (int i = 0; i < subCount; i++) {
             uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
-                reinterpret_cast<uintptr_t>(subArray[i]), 0, srcPosArr, bestPos, &bestDist);   // LEFT: SIG WorkImpl_WalkablePosRecursive_122b00
+                subArray[i], 0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
         }
     }

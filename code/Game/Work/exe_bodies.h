@@ -117,9 +117,10 @@ int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB);  // 0x
 uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
 // ---- work_base_walkpos.cpp
-bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2, float* param_3, float* param_4, int* param_5);  // 0x140122be0
-uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2, float* param_3, float* param_4, int* param_5);  // 0x140122b00
-uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP, uint32_t param_3, uint32_t param_4, void* param_5Time);  // 0x1400f6ef0 B4 FORWARD: 5 outside callers (Work::StepProgress)
+#include "Component/InteractDescription.h"   // InteractDescription::NodeArray
+class InteractComponent;
+bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDescription::NodeArray* nodes, float* param_3, float* param_4, int* param_5);  // 0x140122be0
+uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int param_2, float* param_3, float* param_4, int* param_5);  // 0x140122b00
 
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;
