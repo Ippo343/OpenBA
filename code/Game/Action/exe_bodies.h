@@ -110,11 +110,8 @@ void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count);  // 0
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
 void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value);  // 0x140044810
 int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity);  // 0x140088f90
-void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP);  // 0x1400223c0
-void* ActRm_FindComp_013320(uintptr_t self, void* retIBP);  // 0x140013320
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
 void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value);  // 0x140058fd0
-void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP, char placeNear, int64_t descEntity, int quantity);  // 0x140088ef0
 void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation);  // 0x140129760
 
 // ---- action_child_ctors.cpp
