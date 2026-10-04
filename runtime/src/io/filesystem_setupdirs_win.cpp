@@ -181,8 +181,8 @@ namespace {
 //
 // Six of the seven are immediately followed by AdjustDelimiters on the same
 // object, and that PAIR is `??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z`
-// (0x180026d40): assign, then normalise. Those sites assign through
-// `SysFile(<the FileSystem String member>)`.
+// (0x180026d40): assign, then normalise. Those sites assign to the
+// FileSystem's `System::Filename` members.
 
 bool ConfigHasKey(::System::Configuration* cfg, const char* key) {
     // ENDGAME B.3.9 SS1: the `cfg == nullptr` guard this used to carry was the
@@ -404,28 +404,27 @@ void FileSystem::SetupDirectories() {
     // qwords. A null here would mean GetRootDirectory failed, which is an
     // upstream fault to find and not a thing to guard
     // (CLAUDE.md, "Don't 'fix' a faithful crash with a null check").
-    // The three path fields are `RtSystem::String` MEMBERS of the not-yet-
-    // converted IO::FileSystem, so they are reached through the one
-    // transitional bridge; `SysFile` is the reading-a-String-field-as-a-
-    // Filename that retail performs by pointer cast (pod_bridge.h).
-    RtIO::SysFile(_sourceDirectory) =
+    // The three path fields are `System::Filename` members (B4 X-R3); the
+    // String result is assigned through Filename::operator=(const String&).
+    _sourceDirectory =
         System::String::Format("%s%s%s\\", root._data, sub._data, "..\\resource");
 
     // --- 0x1800ac119-0x1800ac186: dataDirectory ----------------------------
-    RtIO::SysFile(_dataDirectory) =
+    _dataDirectory =
         System::String::Format("%s%s%s%s\\", root._data, sub._data,
                                platform._data, build._data);
 
     // --- 0x1800ac1b0-0x1800ac1f1: packDirectory = dataDirectory ------------
-    RtIO::SysFile(_packDirectory) = RtIO::Sys(_dataDirectory);
+    // The String overload (0x180026d40), as before the members were typed.
+    _packDirectory = _dataDirectory.AsString();
 
     // --- 0x1800ac1f1-0x1800ac5f0: the three command-line overrides ---------
     // `sub._data` is captured once by retail (RBX) and reused by all three.
-    RtIO::ApplyPathOverride(cfg, "pathres", &RtIO::SysFile(_sourceDirectory),
+    RtIO::ApplyPathOverride(cfg, "pathres", &_sourceDirectory,
                             root._data, sub._data);
-    RtIO::ApplyPathOverride(cfg, "pathdat", &RtIO::SysFile(_dataDirectory),
+    RtIO::ApplyPathOverride(cfg, "pathdat", &_dataDirectory,
                             root._data, sub._data);
-    RtIO::ApplyPathOverride(cfg, "pathpkg", &RtIO::SysFile(_packDirectory),
+    RtIO::ApplyPathOverride(cfg, "pathpkg", &_packDirectory,
                             root._data, sub._data);
 
     // --- 0x1800ac5f0-0x1800ac6b4: the epilogue, in retail's order ----------

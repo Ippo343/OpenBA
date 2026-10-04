@@ -451,7 +451,7 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
     bool emitted = false;
 
     const int32_t nameLen = RtIO::StrLenOf(name._data);      // 1800ac8e2
-    const int32_t dirLen  = RtIO::StrLenOf(_dataDirectory.data); // 1800ac8f2
+    const int32_t dirLen  = RtIO::StrLenOf(_dataDirectory._data); // 1800ac8f2
     if (nameLen > dirLen) {                                  // 1800ac904  JLE skips
         // Strip the data-directory prefix; the packfile index is keyed on the
         // remainder, which is what LoadPackages inserted.

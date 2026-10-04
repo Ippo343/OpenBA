@@ -291,9 +291,9 @@ IO::Modification* Ctor_Modification(IO::Modification* self) {
 // ENABLED, and FileSystem::Exists reads it every lookup.
 // ===========================================================================
 IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
-    self->_sourceDirectory.data    = nullptr;
-    self->_dataDirectory.data      = nullptr;
-    self->_packDirectory.data      = nullptr;
+    self->_sourceDirectory._data   = nullptr;   // Filename() inlined, 0x1800ac7d8
+    self->_dataDirectory._data     = nullptr;   // 0x1800ac7e4
+    self->_packDirectory._data     = nullptr;   // 0x1800ac7f0
     self->_existsInPackfileGate    = 0;
     self->_platformExistsGate      = 1;
     self->_packfiles               = nullptr;

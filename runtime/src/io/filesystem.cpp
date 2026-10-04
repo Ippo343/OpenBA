@@ -234,9 +234,8 @@ System::Filename FileSystem::GetDataDirectory() const {
     // ENDGAME B.3.1 step 2: retail's copy ctor, spelled as itself. `ret` is the
     // hidden return slot — raw, uninitialised bytes — so the object is placement-
     // constructed into it, which is exactly what the CALL at 0x180007c06 does.
-    // `dataDirectory` is a `RtSystem::String` member of the not-yet-converted
-    // `IO::FileSystem`, so it comes through the one transitional bridge.
-    return System::Filename(RtIO::SysFile(_dataDirectory));
+    // `_dataDirectory` is a `System::Filename` member (B4 X-R3).
+    return System::Filename(_dataDirectory);
 
 }
 
@@ -244,7 +243,7 @@ System::Filename FileSystem::GetSourceDirectory() const {
 
     // ENDGAME B.3.1 step 2, as GetDataDirectory above. `sourceDirectory` is
     // FileSystem+0x00, which is why retail's `MOV RDX,RCX` passes `this` itself.
-    return System::Filename(RtIO::SysFile(_sourceDirectory));
+    return System::Filename(_sourceDirectory);
 
 }
 
@@ -253,7 +252,7 @@ uint32_t FileSystem::GetPackfileId(const System::Filename& path) const {
 
     const char* pathData = path._data;
     const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
-    const char* dataDirData = _dataDirectory.data;
+    const char* dataDirData = _dataDirectory._data;
     const int dataDirLen = dataDirData ? RtIO::StringLength(dataDirData) : 0;
 
     if (dataDirLen < pathLen) {

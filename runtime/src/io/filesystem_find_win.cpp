@@ -519,8 +519,8 @@ bool FileSystem::ExistsInPackfile(const System::Filename& pathRef) const {
     // `JLE`: proceed only when the path is STRICTLY longer.
     const char* pathData = path->_data;
     const int pathLen = pathData ? path->GetLength() : 0;
-    const int dataDirLen = _dataDirectory.data
-                         ? RtIO::Sys(_dataDirectory).GetLength() : 0;
+    const int dataDirLen = _dataDirectory._data
+                         ? _dataDirectory.GetLength() : 0;
 
     if (dataDirLen < pathLen) {
         // 0x1800ab1d9: strip BY LENGTH ALONE — retail does no prefix compare

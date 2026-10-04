@@ -431,18 +431,23 @@ static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field com
 // a third spelling of a pointer that already has two. Whoever adds it must
 // check BOTH cells, not assume one.
 //
-// *** THE THREE `RtSystem::String` MEMBERS STAY PODs. *** +0x00, +0x08 and
-// +0x10 are `sourceDirectory` / `dataDirectory` / `packDirectory`, and
-// `??1FileSystem@IO@@` — whose door is `RtIo_FileSystem_Dtor` in
-// `filesystem_createfile_win.cpp`, which registers 0x1800ac6d0 there
-// (ENDGAME B.3.4a closing: this line still said "in `iobase_vtables.cpp`,
-// outside this file set", which the banner 30 lines above already corrects in
-// terms — `iobase_vtables.cpp` contains no occurrence of the string
-// "FileSystem" at all) — releases them by hand. Retyping them to `System::String` would add
-// an implicit destructor that runs IN ADDITION to that body (the B31
-// `RtSystem::String` double-free), and the precondition "the class's own dtor
-// body is in your file set" is not met. They are reached through
-// `pod_bridge.h`'s `Sys()` / `SysFile()` at each use, exactly as before.
+// *** THE THREE DIRECTORIES ARE `System::Filename` MEMBERS (B4 X-R3, H5). ***
+// Every reader treats them as Filenames: GetSourceDirectory (0x180007b90),
+// GetDataDirectory (0x180007bd0) and GetPackDirectory (0x180007c10) pass the
+// field's address to the Filename COPY ctor (0x1800067d0), SetupDirectories
+// assigns them as Filenames and hands `&field` to the path override as a
+// `Filename*`; the length reads are String::GetLength, which Filename has. So
+// the class holds them as Filenames, and the String->Filename view cast those
+// readers needed (`SysFile`) goes.
+// Retail's ctor 0x1800ac7c0 stores +0x00, +0x08, +0x10 = 0 inline (the default
+// ctor's null store; `Ctor_FileSystem` in engine/singleton_ctors.cpp transcribes
+// those three stores); retail's dtor 0x1800ac6d0 frees the index tree, the two
+// arrays, THEN releases +0x10, +0x08, +0x00 with the inlined String release
+// (0x1800ac720..0x1800ac79c, each under its own unwind state: member
+// destructors; ~Filename 0x180006980 is that same release). Declared as
+// Filenames, the compiler destroys the three after the
+// dtor body in reverse declaration order: exactly that order, and the dtor no
+// longer releases them by hand (one release, the compiler's).
 // ============================================================================
 
 namespace IO {
@@ -606,16 +611,16 @@ public:
     // these offsets through `RtIO::FileSystem`, and `offsetof` on them has to be
     // well formed for the pins below. Field-for-field with the POD above, whose
     // per-offset evidence comments are not repeated here.
-    RtSystem::String   _sourceDirectory;       // +0x00
-    RtSystem::String   _dataDirectory;         // +0x08
-    RtSystem::String   _packDirectory;         // +0x10
+    System::Filename   _sourceDirectory;       // +0x00  ctor 0x1800ac7d8, dtor 0x1800ac775 (see the banner)
+    System::Filename   _dataDirectory;         // +0x08  ctor 0x1800ac7e4, dtor 0x1800ac74a
+    System::Filename   _packDirectory;         // +0x10  ctor 0x1800ac7f0, dtor 0x1800ac720
     uint8_t            _existsInPackfileGate;  // +0x18
     uint8_t            _platformExistsGate;    // +0x19
     uint8_t            _unknown1A[0x20 - 0x1A];
     PackageFile**      _packfiles;             // +0x20  Collection::Array<PackageFile*>
     int32_t            _packfileCount;         // +0x28
     int32_t            _packfileCapacity;      // +0x2c
-    RtSystem::String*  _userPackFilenames;     // +0x30
+    System::Filename*  _userPackFilenames;     // +0x30  Collection::Array<Filename>::_data (H4: a pointer, no ctor / dtor)
     int32_t            _userPackFilenameCount; // +0x38
     int32_t            _unknown3C;             // +0x3C
     RtIO::PackfileIndexNode* _packfileIndexRoot; // +0x40
