@@ -189,7 +189,7 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 // ---- keystone_a_map.cpp
 
 // ---- keystone_a_restree.cpp
-extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230
+// ResidenceComponent_impl_7230 (0x140017230): Entity/CitizenBehavior.h (InsertCitizenBucket<Key>)
 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h

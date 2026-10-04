@@ -92,12 +92,10 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
     }
 
     if (found == nullptr) {
-        void* outNode[2] = {nullptr, nullptr};
-        int64_t scratch[3] = {0, 0, 0};
-        void** ret = static_cast<void**>(ResidenceComponent_impl_7230(   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
-            reinterpret_cast<int64_t*>(&field_0x160._root),   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
-            outNode, reinterpret_cast<uint64_t*>(&key), scratch));   // 0x140017230   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
-        if (ret) found = reinterpret_cast<TemplateBucket*>(*ret);   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+        TemplateBucket* outNode[2] = {nullptr, nullptr};
+        CitizenBucketEntities empty = {};   // the 0x10 array record: retail zeroes two qwords (0x140088e89 / e8e)
+        TemplateBucket** ret = InsertCitizenBucket(&field_0x160, outNode, &key, &empty);   // 0x140017230
+        if (ret) found = *ret;
         System::MemoryAllocator::MemFree(nullptr);
     }
 
