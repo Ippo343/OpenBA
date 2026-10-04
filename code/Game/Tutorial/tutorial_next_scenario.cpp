@@ -195,13 +195,12 @@ void TutorialInstance::LoadNextScenario() {
             // ENDGAME B.3.9 EXA: the real class; ctor 0x140098060 copy-constructs
             // the name (retail's by-value String arrives by hidden pointer), and
             // our local releases its own reference as retail's ~String does.
-            // LEFT: Scenario's generator ExternalPtrs are `void*` (GAME-b's header).
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 nullptr, ibpCopy, scenIdx, displayNameStr,
                 static_cast<int32_t>(seedVal), static_cast<int32_t>(terrainSizeVal),
-                /*p8=*/disasterOff, reinterpret_cast<MapGenerator*>(scenario->mapGenerator),
-                reinterpret_cast<TerrainGenerator*>(scenario->terrainGenerator),
-                reinterpret_cast<ClimateGenerator*>(scenario->climateGenerator));
+                /*p8=*/disasterOff, scenario->mapGenerator,
+                scenario->terrainGenerator,
+                scenario->climateGenerator);
         }
     } else {
         // ---- SAVED-SCENARIO branch -----------------------------------------

@@ -350,12 +350,6 @@ void* HuntAnimal::CreateInPlaceObject(void* storage) {
 // FUN_1400c8400 — HuntAnimal_Action_CopyCtor
 //   RCX=self, RDX=p2, R8=p3.  +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0(byte).
 // ============================================================
-void* ActChild_HuntAnimalCopyCtor_c8400(void* self, uint64_t* p2, uint64_t* p3) {
-    // B4 FORWARD: 1 outside caller (Work/work_act_hunt.cpp) holds the refs as uint64_t*.
-    return static_cast<Object::Base*>(new (self) HuntAnimal(
-        reinterpret_cast<CitizenComponent* const*>(p2), reinterpret_cast<HuntComponent* const*>(p3)));
-}
-
 // 0x1400c8400: +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0 (byte).
 HuntAnimal::HuntAnimal(CitizenComponent* const* hunter, HuntComponent* const* hunt)
     : _field20(*hunt),

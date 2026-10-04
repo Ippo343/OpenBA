@@ -534,7 +534,7 @@ uint32_t StatGoal::CountDistinctTracked(const Object::External* ext) const {
         // BST lookup at +0x100 keyed by regionKey -> bucket count.
         int bucketCount = 0;
         {
-            ProfessionBucketNode* node = ProfessionTreeRoot(cb);
+            ProfessionBucket* node = cb->field_0x100;
             while (node) {
                 if (regionKey < node->key) node = node->left;
                 else if (regionKey <= node->key) { bucketCount = node->count; break; }
@@ -543,8 +543,8 @@ uint32_t StatGoal::CountDistinctTracked(const Object::External* ext) const {
         }
         for (int bi = 0; bi < bucketCount; bi++) {
             // re-lookup node, then bucket entry [bi].
-            ProfessionBucketNode* node = ProfessionTreeRoot(cb);
-            ProfessionBucketNode* match = nullptr;
+            ProfessionBucket* node = cb->field_0x100;
+            ProfessionBucket* match = nullptr;
             while (node) {
                 if (regionKey < node->key) node = node->left;
                 else { match = node; if (regionKey <= node->key) break; node = node->right; }
@@ -620,7 +620,7 @@ uint32_t StatGoal::SumTrackedForProfession(const Object::External* ext) const {
     // BST at +0x100 keyed by `key` -> bucket count.
     int bucketCount = 0;
     {
-        ProfessionBucketNode* node = ProfessionTreeRoot(cb);
+        ProfessionBucket* node = cb->field_0x100;
         while (node) {
             if (key < node->key) node = node->left;
             else if (key <= node->key) { bucketCount = node->count; break; }
@@ -629,7 +629,7 @@ uint32_t StatGoal::SumTrackedForProfession(const Object::External* ext) const {
     }
     int total = 0;
     for (int bi = 0; bi < bucketCount; bi++) {
-        ProfessionBucketNode* node = ProfessionTreeRoot(cb);
+        ProfessionBucket* node = cb->field_0x100;
         while (node) {
             if (key < node->key) node = node->left;
             else { if (key <= node->key) break; node = node->right; }
@@ -667,7 +667,7 @@ static uint32_t Helper_86e0(const Object::External* ext) {
 
     int bucketCount = 0;
     {
-        ProfessionBucketNode* node = ProfessionTreeRoot(cb);
+        ProfessionBucket* node = cb->field_0x100;
         while (node) {
             if (key < node->key) node = node->left;
             else if (key <= node->key) { bucketCount = node->count; break; }
@@ -676,7 +676,7 @@ static uint32_t Helper_86e0(const Object::External* ext) {
     }
     int total = 0;
     for (int bi = 0; bi < bucketCount; bi++) {
-        ProfessionBucketNode* node = ProfessionTreeRoot(cb);
+        ProfessionBucket* node = cb->field_0x100;
         while (node) {
             if (key < node->key) node = node->left;
             else { if (key <= node->key) break; node = node->right; }
@@ -752,7 +752,7 @@ static uint32_t Helper_81b0(const Object::External* ext) {
     // BST at +0x160 keyed by keyObj -> bucket count.
     int bucketCount = 0;
     {
-        TemplateBucketNode* node = TemplateTreeRoot(cb);
+        TemplateBucket* node = cb->field_0x160;
         while (node) {
             if (keyObj < node->key) node = node->left;
             else if (keyObj <= node->key) { bucketCount = node->count; break; }
@@ -761,7 +761,7 @@ static uint32_t Helper_81b0(const Object::External* ext) {
     }
     int result = 0;
     for (int bi = 0; bi < bucketCount; bi++) {
-        TemplateBucketNode* node = TemplateTreeRoot(cb);
+        TemplateBucket* node = cb->field_0x160;
         ComponentEntity* entRef = nullptr;
         while (node) {
             if (keyObj < node->key) node = node->left;
@@ -785,7 +785,7 @@ static uint32_t Helper_7cf0(const Object::External* ext) {
 
     int bucketCount = 0;
     {
-        TemplateBucketNode* node = TemplateTreeRoot(cb);
+        TemplateBucket* node = cb->field_0x160;
         while (node) {
             if (keyObj < node->key) node = node->left;
             else if (keyObj <= node->key) { bucketCount = node->count; break; }
@@ -794,7 +794,7 @@ static uint32_t Helper_7cf0(const Object::External* ext) {
     }
     int result = 0;
     for (int bi = 0; bi < bucketCount; bi++) {
-        TemplateBucketNode* node = TemplateTreeRoot(cb);
+        TemplateBucket* node = cb->field_0x160;
         ComponentEntity* entRef = nullptr;
         while (node) {
             if (keyObj < node->key) node = node->left;

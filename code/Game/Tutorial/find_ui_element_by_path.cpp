@@ -148,8 +148,7 @@ Object::InternalPtr<UI::Element>* FindUIElementByPath_Impl(Object::InternalPtr<U
     // CheckPtr and `it.node->element` the InternalBasePtr(DialogInstance*).
     UI::Element* found = nullptr;
     for (auto it = ui->_dialogs.GetFirst(); it && found == nullptr; ++it) {
-        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
         if (!dialog || !dialog->IsA(dialogTypeId)) continue;
 
         if (controllerTypeId == 0 || partCount < 3) {

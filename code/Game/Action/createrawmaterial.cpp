@@ -376,19 +376,6 @@ void* CreateRawMaterial::CreateInPlaceObject(void* storage) {
 // int fields (+0x40=param_7, +0x44=param_8, +0x48=param_11), one FLOAT (+0x4c=param_3, the
 // XMM2 arg stored via MOVSS), and two bytes (+0x50=param_9, +0x51=1).
 // ============================================================
-void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float param_3,
-                                        uint64_t* param_4, uint64_t* param_5, uint64_t param_6,
-                                        uint32_t param_7, uint32_t param_8, uint8_t param_9,
-                                        uint64_t* param_10, uint32_t param_11) {
-    // B4 FORWARD: outside callers (Work/work_act_consume.cpp,
-    // Work/work_act_rawmat.cpp) hold the template as an integer and the refs as uint64_t*.
-    return static_cast<Object::Base*>(new (param_1) CreateRawMaterial(
-        reinterpret_cast<ComponentDescription*>(param_2), param_3,
-        reinterpret_cast<CitizenComponent* const*>(param_4),
-        reinterpret_cast<ComponentEntity* const*>(param_5), param_6, param_7, param_8, param_9,
-        reinterpret_cast<ComponentEntity* const*>(param_10), param_11));
-}
-
 // 0x1400c71a0: +0x20 = param_2 (raw) ; +0x28/+0x30/+0x38 = *param_4 / *param_5 /
 // *param_10 ; +0x40/+0x44/+0x48 = param_7/8/11 ; +0x4c = param_3 (MOVSS, the XMM2
 // float) ; +0x50 = param_9 ; +0x51 = 1. param_6 is not read.

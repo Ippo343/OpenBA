@@ -35,8 +35,7 @@
 // TutorialSetupDialog stamps (the compiler's), +0x20..+0x58 zeroed, +0x60 = -1,
 // +0x68 = 0, +0x70 = 0.
 TutorialSetupDialog::TutorialSetupDialog()
-    : shownPaths(nullptr), shownPathCount(0), shownPathCapacity(0),
-      dialogNames(nullptr), dialogNameCount(0), dialogNameCapacity(0),
+    : shownPaths(), dialogNames(),
       highlightPath(0), arrowRotation(0), _pad4C{}, highlightDialog(nullptr),
       toolbarRef{{}, -1, {}, nullptr},
       toolbarIndex(0), _pad74{} {}
@@ -48,16 +47,13 @@ System::String& TutorialSetupDialog::HighlightPath() {
 }
 
 // The dtor 0x1400e2bf0: ~String +0x58, ~String +0x40, then the two String
-// arrays (+0x30, then +0x20) — each an inlined Collection::Array<System::String>
+// arrays (+0x30, then +0x20: the members, destroyed by the compiler after this body) — each an inlined Collection::Array<System::String>
 // ::~Array (~String per element, MemFree the buffer, zero the header). The
 // compiler re-stamps TutorialSetup and runs ~External (the tree ran a guarded
 // ~Internal instead).
 TutorialSetupDialog::~TutorialSetupDialog() {
     toolbarRef.Name().~String();
     HighlightPath().~String();
-    // LEFT H5: the two String arrays are raw {data, count, capacity} triples.
-    reinterpret_cast<Collection::Array<System::String>*>(&dialogNames)->~Array();
-    reinterpret_cast<Collection::Array<System::String>*>(&shownPaths)->~Array();
 }
 
 // ============================================================
@@ -85,26 +81,26 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // 1st String array (+0x20)
-    int count1 = static_cast<int>(shownPathCount);
+    int count1 = shownPaths.GetSize();
     ser.Serialize(count1, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // (IO::Serializer::GetDirection, retail 0x180006210)
         ToolbarDescription_StringArrayResize(&shownPaths, static_cast<unsigned>(count1));   // 0x140028860
     }
     if (count1 > 0) {
-        System::String* p = shownPaths;
+        System::String* p = shownPaths.GetData();
         for (uint32_t i = 0; i < static_cast<uint32_t>(count1); ++i, ++p) {
             p->Serialize(&ser);
         }
     }
 
     // 2nd String array (+0x30)
-    int count2 = static_cast<int>(dialogNameCount);
+    int count2 = dialogNames.GetSize();
     ser.Serialize(count2, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {
         ToolbarDescription_StringArrayResize(&dialogNames, static_cast<unsigned>(count2));   // 0x140028860
     }
     if (count2 > 0) {
-        System::String* p = dialogNames;
+        System::String* p = dialogNames.GetData();
         for (uint32_t i = 0; i < static_cast<uint32_t>(count2); ++i, ++p) {
             p->Serialize(&ser);
         }
@@ -150,7 +146,7 @@ void TutorialSetupDialog::Begin() {
     ShowListedElements();        // 0x1400e29f0
     OpenHighlightDialog('\0');   // 0x1400e2700
 
-    int count2 = static_cast<int32_t>(dialogNameCount);
+    int count2 = dialogNames.GetSize();
     for (int i = 0; i < count2; ++i) {
         Object::InternalPtr<UI::DialogInstance> instance;
         FindDialogByName_Impl(&instance, &dialogNames[i]);
