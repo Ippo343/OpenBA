@@ -185,8 +185,8 @@ UNIT_TEST(wrk_leaf_consumeproduce) {
 UNIT_TEST(wrk_leaf_firework) {
     WRK_LEAF_SHAPE(FireWork, Work, 0x60);
     CHECK_EQ(offsetof(FireWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(FireWork, _field50), (size_t)0x50);
-    CHECK_EQ(offsetof(FireWork, _field58), (size_t)0x58);
+    CHECK_EQ(offsetof(FireWork, _citizens), (size_t)0x50);
+    CHECK_EQ(offsetof(FireWork, _citizens) + offsetof(FireWork::CitizenSet, _count), (size_t)0x58);
 }
 
 UNIT_TEST(wrk_leaf_fishingwork) {

@@ -98,6 +98,26 @@ void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg);  // 0x14001a6e0
 void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP);  // 0x140025520
 namespace IO { class Serializer; }
 void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);  // 0x1400296b0
+// The typed entry points a Work leaf's real `Collection::Set<T*>` member is handed to: one
+// retail body serves every 8-byte-key set (identical-code folding), so the Set's {root,
+// count} header is given to the ONE erased core here, once per entry point.
+#include "collection/Collection.h"
+template <class T>
+inline void* WorkBST_RegisterWork_1a30(Collection::Set<T*>* set, void* outResult, void* keyIBP) {
+    return WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(set), outResult, keyIBP);  // CAST-OK: elem_stride
+}
+template <class T>
+inline void WorkBST_BSTRemove_a6e0(Collection::Set<T*>* set, typename Collection::Set<T*>::Node* node) {
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(set), node);  // CAST-OK: elem_stride
+}
+template <class T>
+inline void WorkBST_BSTFindRemove_25520(Collection::Set<T*>* set, void* keyIBP) {
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(set), keyIBP);  // CAST-OK: elem_stride
+}
+template <class T>
+inline void WorkBST_BST_Serialize_296b0(Collection::Set<T*>* set, IO::Serializer* serializer) {
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(set), serializer);  // CAST-OK: elem_stride
+}
 
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40
