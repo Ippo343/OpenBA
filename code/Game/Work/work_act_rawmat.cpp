@@ -85,23 +85,20 @@ static inline float WAR_FloatBits(uint32_t bits) { float f; __builtin_memcpy(&f,
 // ============================================================
 // Build the gather-raw-material work-action chain (forester/gatherer-style) and
 // store it on the citizen's action stack (character +0x48).
-//   param_1 = citizen InternalBasePtr*
+//   param_1 = InternalPtr<CitizenComponent>* citizenRef
 //   param_2 = workId (u32)               -> CompleteTask param_2
-//   param_3 = longlong* (workEntity)     -> *param_3 used as SendComponentMessage #2 entity inner
+//   param_3 = InternalPtr<ComponentEntity>* workRef -> *param_3 used as SendComponentMessage #2 entity inner
 //   param_4 = float* worldPos            -> MoveTo destination
-//   param_5 = u64 (raw-material p2)      -> CreateRawMaterial param_2 (RDX, [RBP+0x67])
+//   param_5 = ComponentDescription* rawMatDesc -> CreateRawMaterial param_2 (RDX, [RBP+0x67])
 //   param_6 = char flag                  -> gates the CreateRawMaterial block ([RBP+0x6f])
 //   param_7 = float (raw-material p3)    -> CreateRawMaterial XMM2 ([RBP+0x77])
 //   param_8 = u32 (raw-material p8)      -> CreateRawMaterial p8 ([RBP+0x7f])
 //   param_9 = u32                        -> CompleteTask p5 / SendComponentMessage #2 p6 ([RBP+0x87])
-void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* workEntity,
-                                  float* worldPos, uint64_t rawMatP2, char flag6,
+void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef,
+                                  float* worldPos, ComponentDescription* rawMatDesc, char flag6,
                                   float rawMatP3, uint32_t rawMatP8, uint32_t param9) {
 
     // the action stack = character + 0x48 (disasm 0x1400bb7eb..0x1400bb802)
-    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
-    ComponentEntity* const* workRef = reinterpret_cast<ComponentEntity* const*>(workEntity);   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0 (param_3 is an entity reference)
-    ComponentDescription* rawMatDesc = reinterpret_cast<ComponentDescription*>(rawMatP2);   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0 (param_5 is the material)
     CharacterComponent* character = (*citizenRef)->character;
     void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
@@ -206,7 +203,7 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
 // action stack (character +0x48).
 //   param_1 = citizen InternalBasePtr*
 //   param_2 = workId (u32)               -> CompleteTask param_2
-//   param_3 = longlong* (workEntity)     -> *param_3 gates + feeds SendComponentMessage #2
+//   param_3 = InternalPtr<ComponentEntity>* (workRef) -> *param_3 gates + feeds SendComponentMessage #2
 //   param_4 = float* position            -> MoveTo destination
 //   param_5 = (unused in body; param-area only)
 //   param_6 = u64 (raw-material p2)      -> CreateRawMaterial param_2 (RDX, [RBP+0x68])

@@ -295,9 +295,9 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 WorkAct_GatherWorkCtor_bb7b0(
                                     actionBuf,                     // citizenIBP
                                     (uint32_t)field_20,            // work id / priority (self+0x20)
-                                    reinterpret_cast<int64_t*>(&entityRef),                    // entity ref ptr   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
+                                    &entityRef,                    // entity ref ptr
                                     pathPos,                       // position
-                                    reinterpret_cast<uint64_t>(rawMatRef),   // raw material ref   // LEFT: SIG WorkAct_GatherWorkCtor_bb7b0
+                                    reinterpret_cast<ComponentDescription*>(rawMatRef),   // raw material ref   // LEFT: FruitDescription::_ref30 is void* (FruitDescription.h; its Serialize takes &_ref30 untyped)
                                     altCellFlag,                   // alternating-cell flag
                                     rawMatAmount,                  // float, -> CreateRawMaterial XMM2
                                     (uint32_t)nearestCell,         // map cell index

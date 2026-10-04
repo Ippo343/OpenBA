@@ -373,7 +373,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
     if (field_50 == nullptr) {
         ++g_brExecClearPath;
-        int64_t actionRef = 0;   // a null InternalBasePtr
+        ComponentEntity* actionRef = nullptr;   // a null InternalBasePtr
 
         float velocity[3] = { 0.0f, 0.0f, 0.0f };
         Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
@@ -384,9 +384,9 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         CitizenComponent* citizenRef = *entityIBP;
 
         WorkAct_PerformWorkCtor_bffd0(
-            &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+            &citizenRef, field_20, terrainPos,
             (uint64_t)(uint32_t)targetCell,
-            (uint32_t)field_5c, 0xff, 1, 0, 0,
+            (uint32_t)field_5c, 0xff, 1, nullptr, 0,
             velocity, &actionRef);
 
         int priority = field_20;
@@ -400,7 +400,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         int available = StorageComponent_QueryAvailable(storageComp, (int64_t)field_50);   // LEFT: SIG StorageComponent_QueryAvailable (the forwarder's null guard)
 
         if (available > 0) {
-            int64_t actionRef = 0;   // a null InternalBasePtr
+            ComponentEntity* actionRef = nullptr;   // a null InternalBasePtr
 
             float velocity[3] = { 0.0f, 0.0f, 0.0f };
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
@@ -411,10 +411,10 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             CitizenComponent* citizenRef = *entityIBP;
 
             WorkAct_PerformWorkCtor_bffd0(
-                &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                &citizenRef, field_20, terrainPos,
                 (uint64_t)(uint32_t)targetCell,
                 (uint32_t)field_5c, 0xff, 1,
-                (int64_t)field_50, 0, velocity, &actionRef);   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                field_50, 0, velocity, &actionRef);
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &actionRef, priority);
@@ -462,10 +462,10 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             CitizenComponent* citizenRef = *entityIBP;
 
             WorkAct_PerformWorkCtor_bffd0(
-                &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                &citizenRef, field_20, terrainPos,
                 (uint64_t)(uint32_t)targetCell,
                 (uint32_t)field_5c, 0xff, 1,
-                (int64_t)field_50, 1, velocity, reinterpret_cast<int64_t*>(&foundStorageIBP));   // LEFT: SIG WorkAct_PerformWorkCtor_bffd0
+                field_50, 1, velocity, reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));   // LEFT: the scratch slot is reused for three types
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &foundStorageIBP, priority);

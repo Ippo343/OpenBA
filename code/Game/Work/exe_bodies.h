@@ -75,10 +75,10 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(::Objec
 
 // ---- work_act_perform.cpp
 void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint32_t workId, float* pos3, float* pos4, float* pos5, ComponentEntity* const* srcRef6);  // 0x1400ba9f0
-void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* roadP3, int roadP4, uint32_t completeRoadP5, uint8_t roadByte6, uint32_t completeTaskP7, int64_t consumeArg8, int loopCount9, float* pos10, int64_t* srcEntity11);  // 0x1400bffd0
+void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t workId, float* destination, int roadP4, uint32_t completeRoadP5, uint8_t roadByte6, uint32_t completeTaskP7, ComponentDescription* material, int loopCount9, float* pos10, ComponentEntity* const* srcRef11);  // 0x1400bffd0
 
 // ---- work_act_rawmat.cpp
-void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* workEntity, float* worldPos, uint64_t rawMatP2, char flag6, float rawMatP3, uint32_t rawMatP8, uint32_t param9);  // 0x1400bb7b0
+void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* worldPos, ComponentDescription* rawMatDesc, char flag6, float rawMatP3, uint32_t rawMatP8, uint32_t param9);  // 0x1400bb7b0
 void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* workRef, float* position, float param5_heading, ComponentDescription* rawMatDesc, float rawMatP3, uint32_t param8, uint32_t param9);  // 0x1400beae0
 
 // ---- work_base_accessor.cpp
