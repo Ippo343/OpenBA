@@ -226,8 +226,7 @@ void TutorialSetupDialog::SetAllDialogFlags(char show) {
     // pointer, so `it.node` is what retail hands to CheckPtr.
     int dialogs = 0;
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
         UI::Element* root = dialog->GetRoot().Get();
         if (root) {
             // Retail applies the flags to the root itself and then walks the
@@ -278,8 +277,7 @@ Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog
 
     // Same list, same order as retail's GetFirstDialog walk (see above).
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        // LEFT: UserInterface's list element is `DialogInstancePtr` = void* (R-UI's typedef).
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
+        UI::DialogInstance* dialog = it.node->element;
         if (dialog->IsA(tid)) {
             return dialog;
         }
