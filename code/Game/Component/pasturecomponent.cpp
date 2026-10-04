@@ -39,7 +39,9 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
-#include "Action/exe_bodies.h"   // the Pf_* map helpers
+#include "Action/exe_bodies.h"   // InteractNodeCount
+#include "Action/PathSearch.h"    // RegionGraph::MarkCellDirty
+#include "Game/PathfinderThread.h"   // PathfinderThread::SetCellTerrain
 
 // The exe helpers this file calls, by retail address:
 //   0x140004680 FindComponent<MapComponent>       0x140005500 FindComponent<AnimalComponent>
@@ -55,8 +57,7 @@
 void AnimalComponent::GetWanderBox(int16_t* outX, int16_t* outY, int16_t* outW, int16_t* outH,
                                    int size) const {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    const Map* map = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);
+    const Map* map = GameUpdateLoop::_singleton->m_game;
     int cell = habitatCell;
     int mapDim = map->size;
     short half = static_cast<short>(size / 2);
@@ -75,7 +76,7 @@ void AnimalComponent::GetWanderBox(int16_t* outX, int16_t* outY, int16_t* outW, 
 // B4 FORWARD: 1 outside caller file (animalcomponent.cpp).
 void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY,
                                       short* outW, short* outH, int size) {
-    reinterpret_cast<const AnimalComponent*>(selfP)->GetWanderBox(outX, outY, outW, outH, size);
+    reinterpret_cast<const AnimalComponent*>(selfP)->GetWanderBox(outX, outY, outW, outH, size);   // LEFT: B4 FORWARD (wave X: animalcomponent.cpp)
 }
 
 // 0x140128570: pasture capacity = footprint area / the per-animal area of the
@@ -109,7 +110,7 @@ int PastureComponent::ComputeCapacity() const {
 
 // B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
 uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
-    return static_cast<uint32_t>(reinterpret_cast<const PastureComponent*>(self)->ComputeCapacity());
+    return static_cast<uint32_t>(reinterpret_cast<const PastureComponent*>(self)->ComputeCapacity());   // LEFT: B4 FORWARD (wave X: Dialog/debugui.cpp)
 }
 
 // 0x140105ed0: let the animal wander from where it stands. Sets flag bit 0x400000
@@ -128,8 +129,7 @@ void AnimalComponent::ReleaseToWander() {
     ModelComponent* model = character->modelComponent;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    int mapW = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game)->size;
+    int mapW = GameUpdateLoop::_singleton->m_game->size;
     const Math::Vector3& pos = model->transform.translation;
     int x = (int)(pos.x + (float)(mapW >> 1));
     int y = (int)(pos.y + (float)(mapW >> 1));
@@ -284,8 +284,7 @@ void PastureComponent::Persist(IO::Stream& stream) {
     int64_t count = (int64_t)countBuf;
     if (count > 0 && entry) {
         for (int64_t i = 0; i < count; i++, entry++) {
-            // LEFT: InternalBasePtr has no typed view of a bare pointer slot.
-            reinterpret_cast<Object::InternalBasePtr*>(entry)->Serialize(ser);
+            reinterpret_cast<Object::InternalBasePtr*>(entry)->Serialize(ser);   // LEFT: InternalPtr slot held as T* (wave X)
             LivestockComponent* obj = *entry;
             if (obj != nullptr) {
                 if (!obj->IsDerivedFrom(LivestockComponent::TypeId())) {
@@ -334,16 +333,13 @@ void PastureComponent::OnEvent(int msgId) {
     InteractComponent* pos = _entity->FindComponent<InteractComponent>();   // 0x140002ed0
     if (!pos) return;
 
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+    Map* map = GameUpdateLoop::_singleton->m_game;
     if (!map) return;
     const int width = map->size;
-    // LEFT: Map::cells is untyped (GAME-b).
-    uint8_t* grid = reinterpret_cast<uint8_t*>(map->cells);
+    MapCell* grid = map->cells;
     if (!grid || width <= 0) return;
 
-    // LEFT: the Pf_* helpers take the component as int64_t (Action's bodies).
-    for (uint32_t i = 0; (int)i < Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 2); ++i) {
+    for (uint32_t i = 0; (int)i < InteractNodeCount(pos, 2); ++i) {   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         float p[3] = {0, 0, 0};
         Pf_EntityResolvePos_2e20(pos, p, 2, (int)i, nullptr);
         int x = (int)(p[0] + (float)(width >> 1));
@@ -352,19 +348,16 @@ void PastureComponent::OnEvent(int msgId) {
         if (y < 0) y = 0; if (y >= width) y = width - 1;
         const int cell = width * y + x;
 
-        uint8_t* terrain = grid + 0x29 + (uintptr_t)cell * 0x30;
+        uint8_t* terrain = &grid[cell].terrainType;   // +0x29
         const uint8_t was = *terrain;
         const bool wasRough = ((1u << (was & 0x1f)) & 0x1e0u) != 0;
         map->field_0xA2 = map->field_0xA2 | wasRough;
         *terrain = 2;
-        // LEFT: Map +0x70 / +0x68 are untyped (GAME-b); the helpers take int64_t.
         if (wasRough)
-            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->regionGraph),
-                                   cell % width, cell / width);
+            map->regionGraph->MarkCellDirty(cell % width, cell / width);   // 0x1400a8c90 (Pf_FineCellDirty_a8c90's body)
         // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only.
-        Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->pathfinder), cell, 2);
-        // LEFT: the cell's +0x08 is the entity on it (no cell type yet).
-        *reinterpret_cast<ComponentEntity**>(grid + 8 + (uintptr_t)cell * 0x30) = nullptr;
+        map->pathfinder->SetCellTerrain(cell, 2);   // 0x1400a6fe0 (Pf_EnqueueCmd2_a6fe0's body)
+        grid[cell].occupant = nullptr;   // +0x08 the entity on the cell
     }
 }
 

@@ -187,7 +187,7 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  
 void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 
 // ---- orchardcomponent.cpp
-void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830 B4 FORWARD to OrchardComponent::ValidateRefs
+// B.4 COMP-6: OrchardComponent_ValidateRefs had no caller left: deleted.
 
 // ---- pasturecomponent.cpp
 void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20 B4 FORWARD to AnimalComponent::GetWanderBox
@@ -198,15 +198,14 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  /
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 
 // ---- pasturecomponent_states.cpp
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770
+class Map;   // Game/Map.h
+extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)
 
 // ---- rawmaterialcomponent.cpp
 void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 
 // ---- residencecomponent.cpp
-void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);  // 0x140037ad0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::SetFamilyCount
-void ResidenceComponent_ResidenceInit(void* selfP);  // 0x140129ef0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::EvictResidents
-bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0 B4 FORWARD: 1 outside caller (standalone/death_harness.cpp) -> ResidenceComponent::IsFamilyFull (moved from citizencomponent.cpp)
+// B.4 COMP-6: the three forwarders (SetFamilyCount / EvictResidents / IsFamilyFull) had no caller left: deleted.
 
 // ---- statusiconcomponent.cpp
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)

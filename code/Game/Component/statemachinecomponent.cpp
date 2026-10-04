@@ -33,13 +33,11 @@
 using Controller = ControllerComponent::Controller;
 
 // The chain links of a node: +0x08 parent, +0x10 child.
-// LEFT: ControllerComponent::Controller declares them void* (_data08 / _data10,
-// COMP-c's header).
 static inline Controller* NodeParent(const Controller* node) {
-    return reinterpret_cast<Controller*>(node->_data08);
+    return node->_data08;
 }
 static inline Controller* NodeChild(const Controller* node) {
-    return reinterpret_cast<Controller*>(node->_data10);
+    return node->_data10;
 }
 
 // ============================================================
@@ -249,7 +247,7 @@ void StateMachine::Tick(void* time, char useAlt, char run) {
 // `time` is the Time* the node's Tick / TickAlt receive, carried as an integer by
 // the old signature (controller_state_table.h).
 void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) {
-    reinterpret_cast<StateMachine*>(smP)->Tick(reinterpret_cast<void*>(time), param3, param4);
+    reinterpret_cast<StateMachine*>(smP)->Tick(reinterpret_cast<void*>(time), param3, param4);   // LEFT: SIG StateMachine_TickReimpl (controller_state_table.h, COMP-2+3)
 }
 
 // ============================================================================

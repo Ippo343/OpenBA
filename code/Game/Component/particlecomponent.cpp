@@ -125,9 +125,9 @@ static MapComponent* PC_FindMap(ComponentEntity* entity) {
     return entity->FindComponent<MapComponent>();   // 0x140004680
 }
 
-// The scene the emitters are drawn in. LEFT: GameUpdateLoop::m_graphicsScene is void* (W0).
+// The scene the emitters are drawn in.
 static Graphics::Scene* PC_Scene() {
-    return reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
+    return GameUpdateLoop::_singleton->m_graphicsScene;
 }
 
 // Emitter-array (re)size — port of FUN_14000a640 (stride 0x18).
@@ -178,9 +178,8 @@ void ParticleComponent::Place(int index) {
         tf = model->transform;
     } else if (mapc && GameUpdateLoop::_singleton != nullptr) {
         // Centre cell of the entity's map footprint → terrain-height world pos
-        void* game = GameUpdateLoop::_singleton->m_game;
-        // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-        int W = game ? reinterpret_cast<const Map*>(game)->size : 0;
+        Map* game = GameUpdateLoop::_singleton->m_game;
+        int W = game ? game->size : 0;
         if (W > 0) {
             int idx = ((int)static_cast<int16_t>(mapc->tileY0) + ((int)static_cast<int16_t>(mapc->tileY1) >> 1)) * W
                     + ((int)static_cast<int16_t>(mapc->tileX1) >> 1) + (int)static_cast<int16_t>(mapc->tileX0);
@@ -689,7 +688,7 @@ void ParticleComponent::Tick(void* time) {
     if (!geoArr) return;
     float uvScale = PC_UVScale();
     // LEFT: Component::Tick takes void* (COMP-c's header).
-    const System::Time& elapsed = *reinterpret_cast<const System::Time*>(time);
+    const System::Time& elapsed = *reinterpret_cast<const System::Time*>(time);   // LEFT: SIG Component::Tick(void* time)
 
     for (int i = 0; i < total; i++) {
         ParticleEmitterSlot* ge = &geoArr[i];

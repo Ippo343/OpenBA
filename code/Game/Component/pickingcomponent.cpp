@@ -157,7 +157,7 @@ void PickingComponent_RegisterMesh(PickingComponent* pc) {
 // placement, the bridge tool).
 void PickingComponent_RegisterMeshForEntity(void* entityV) {
     if (!entityV) return;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // B4 FORWARD receiver
+    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // B4 FORWARD receiver  LEFT: SIG PickingComponent_RegisterMeshForEntity (Player callers)
     PickingComponent* pc = entity->FindComponent<PickingComponent>();
     if (pc) pc->RefreshMesh();
 }
@@ -190,7 +190,7 @@ void PickingComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize the userData InternalPtr
-    reinterpret_cast<Object::InternalBasePtr*>(&userData)->Serialize(ser);   // H5: the member is the raw pointer the IBP holds
+    reinterpret_cast<Object::InternalBasePtr*>(&userData)->Serialize(ser);   // H5: the member is the raw pointer the IBP holds  LEFT: InternalPtr member held as T* (wave X)
 
     // Validate: if not ComponentEntity, null it out
     // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =

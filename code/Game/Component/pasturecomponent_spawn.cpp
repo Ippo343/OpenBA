@@ -128,8 +128,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
             int16_t fh = static_cast<int16_t>(mc->tileY1);
             uint32_t dx = rng->Rand((uint32_t)fw);
             uint32_t dy = rng->Rand((uint32_t)fh);
-            // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-            const Map* grid = reinterpret_cast<const Map*>(w->m_game);
+            const Map* grid = w->m_game;
             float jitterY = fn_Random_RandFloatTol(rng);
             float jitterX = fn_Random_RandFloatTol(rng);
             if (grid) {
@@ -202,7 +201,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     if (!pasture) return;
     reinterpret_cast<PastureComponent*>(pasture)->SpawnLivestock(
-        reinterpret_cast<AnimalComponent* const*>(parentAnimalIBP));
+        reinterpret_cast<AnimalComponent* const*>(parentAnimalIBP));   // LEFT: B4 FORWARD (wave X: Dialog/debugui.cpp holds void*)
 }
 
 // ============================================================
@@ -212,8 +211,7 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
 // ============================================================
 extern "C" int Pasture_FillAllPastures() {
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-    CitizenBehavior* town = w ? reinterpret_cast<CitizenBehavior*>(w->m_citizenList) : nullptr;
+    CitizenBehavior* town = w ? w->m_citizenList : nullptr;
     if (!town) return 0;
     const int nPastures = town->pastureCount;
     PastureComponent** list = town->pastures;
@@ -292,7 +290,8 @@ extern "C" void Pasture_SetLivestockType(PastureComponent* pasture, ComponentDes
 // (sub_7140, pasturecomponent_states.cpp:287) pulls matching ones in once the player
 // builds a pasture and picks that type. Both of those are already ported and live.
 extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl) {
-    // LEFT: the start condition has no class here (starttown.cpp hands it as void*).
+    // LEFT (this body's sc reads): the start condition has no class here (starttown.cpp, GAME-4,
+    // hands it as void*); NOCLASS StartCondition {+0xec offX, +0xf0 offY, +0xf4 radius, +0xf8 groupCount}.
     uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
     if (!sc || !tmpl || !centre) return 0;
 
@@ -316,7 +315,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
     const float radius    = *reinterpret_cast<float*>(sc + 0xf4);
     const float yawSpread = kRdata_140172220;  // 0x140172220 = 180.0f
 
-    // LEFT: starttown.cpp hands the template as void*.
+    // LEFT: SIG StartTown_SpawnStartingHerd (starttown.cpp hands the template as void*).
     const ComponentDescription* templ = reinterpret_cast<const ComponentDescription*>(tmpl);
 
     int spawned = 0;
