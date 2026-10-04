@@ -72,7 +72,6 @@
 
 namespace RtObject {
 
-using RtSystem::String;
 using RtSystem::StringRefCount;
 using RtSystem::Sys;
 
@@ -159,7 +158,7 @@ static ResourceSet::Node* ResourceSetSuccessor(ResourceSet::Node* n) {
 // Diffable because ours and theirs both copy from the same `_path`, so the two
 // results are the SAME char* and an 8-byte compare is exact. The oracle call
 // takes one extra reference, which the scratch release below gives back.
-Filename* RtObject_External_GetPath(const External* self, Filename* ret) {
+System::Filename* RtObject_External_GetPath(const External* self, System::Filename* ret) {
 
     // ENDGAME B.3.1 step 2: retail's copy ctor (0x1800067d0), spelled as itself.
     // `ret` is the hidden return slot — raw, uninitialised bytes — so the object
@@ -198,7 +197,7 @@ Filename* RtObject_External_GetPath(const External* self, Filename* ret) {
 //     below, is case-SENSITIVE over the same kind of path. That asymmetry is
 //     real, not a transcription slip.
 const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
-                                              const Filename* path) {
+                                              const System::Filename* path) {
 
     const External* ours = nullptr;
 
@@ -207,9 +206,9 @@ const External* RtObject_ExternalFactory_Find(const ExternalFactory* self,
     // so both of the header's "twice on the working copy" calls are still spent
     // — including the in-place rewrite of the CALLER's shared buffer that note 2
     // says callers depend on, since the copy shares the buffer either way.
-    System::Filename key(Sys(*path));
+    System::Filename key(*path);
 
-    System::Filename ident = Sys(*path).GetPathIdentifer();
+    System::Filename ident = path->GetPathIdentifer();
     // `GetLength` (0x1800063c0) is retail's own null-or-empty test.
     if (ident.GetLength() == 0) {
         // Retail's inlined String::operator= plus the separate, single
@@ -264,7 +263,7 @@ uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
         // The class->POD cast is the registered entry point's signature, which
         // B31_RULES keeps until the whole family converts.
         System::Filename got;
-        RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&got));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        RtObject_External_GetPath(external, &got);
         System::Filename key(got);   // the second copy; transcribed, see above
 
         node = ResourceSetFind(&self->_resources, key._data);
@@ -286,8 +285,8 @@ uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self,
 // NOT leave the slot untouched — it copy-constructs from a null temporary, so
 // the caller gets a valid empty Filename. Both branches are transcribed, since
 // the empty-on-miss result is what the load path checks.
-Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
-                                                         Filename* ret, uint32_t id) {
+System::Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
+                                                                 System::Filename* ret, uint32_t id) {
 
     ReferenceSet::Node* n = self->_references._root;
     while (n != nullptr) {
@@ -368,7 +367,7 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
             // As GetReferenceId above: `got` is GetPath's hidden return slot,
             // `key` is retail's second copy, and both release before the read.
             System::Filename got;
-            RtObject_External_GetPath(prev, reinterpret_cast<Filename*>(&got));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+            RtObject_External_GetPath(prev, &got);
             System::Filename key(got);
 
             found = ResourceSetFind(&self->_resources, key._data);

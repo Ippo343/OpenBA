@@ -74,8 +74,6 @@
 namespace rtrefset {
 
 using RtObject::ReferenceEntry;
-using RtSystem::Filename;
-using RtSystem::String;
 
 ProbeCounters g_fc = {};
 
@@ -97,7 +95,7 @@ ProbeCounters g_fc = {};
 // The refcount release idiom retail inlines at 0x18002cbda. ENDGAME B.3.1
 // step 2: that idiom IS `~Filename` (0x180006980), retail's release asymmetry
 // included, so the helper forwards to the destructor instead of re-spelling it.
-static void ReleaseInline(Filename* f) {
+static void ReleaseInline(RtSystem::Filename* f) {
     RtSystem::Sys(*f).~Filename();
 }
 
@@ -461,10 +459,10 @@ Node** InsertCore(Set* set, Node** out, const ReferenceEntry* pair) {
 // garbage into `PairCtor`, which does not copy them either. The port leaves the
 // field uninitialised for the same reason.
 // ---------------------------------------------------------------------------
-Node** Insert(Set* set, Node** out, const uint32_t* key, const Filename* value) {
+Node** Insert(Set* set, Node** out, const uint32_t* key, const System::Filename* value) {
     ReferenceEntry tmp;
     tmp.id = *key;                     // DWORD; tmp._pad deliberately untouched
-    new (&tmp.path) System::Filename(RtSystem::Sys(*value));
+    new (&tmp.path) System::Filename(*value);
 
     InsertCore(set, out, &tmp);
 

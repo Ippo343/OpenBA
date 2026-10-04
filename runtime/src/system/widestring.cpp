@@ -593,18 +593,8 @@ int System::WideString::StrLength(const wchar_t* s) {
 // The return value is retail's `MOV RAX,RCX`, i.e. `self` itself.
 namespace RtSystem {
 
-WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src) {
-    new (Sys(self)) System::WideString(*Sys(src));
-    return self;
-}
-
-WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src) {
-    new (Sys(self)) System::WideString(src);
-    return self;
-}
-
-void RtSystem_WideString_Dtor(WideString* self) {
-    Sys(self)->~WideString();
-}
+// (B.4 wave X-R2: the CtorFromString / CtorFromChars / Dtor doors had no
+// caller left -- every holder is a `System::WideString` local now -- and are
+// gone with their declarations.)
 
 }  // namespace RtSystem

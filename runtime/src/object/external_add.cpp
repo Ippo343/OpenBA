@@ -95,7 +95,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
 
 namespace {
 
@@ -193,7 +192,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     // ENDGAME B.3.1 step 2. `tmp` is GetPath's hidden return slot: it is
     // declared null and CONSTRUCTED INTO by the call, never assigned to.
     System::Filename tmp;
-    RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&tmp));   // 0x180006250  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+    RtObject_External_GetPath(external, &tmp);   // 0x180006250
 
     // 1800be5d3 — the second reference the comment above is about, taken by
     // retail's copy ctor (0x1800067d0) and kept.
@@ -279,8 +278,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
         value.referenceId = 0xffffffffu;
 
         rtresset::Node* out = nullptr;
-        rtresset::Insert(set, &out,
-                         reinterpret_cast<const Filename*>(&path), &value);             // 1800be6bd  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        rtresset::Insert(set, &out, &path, &value);             // 1800be6bd
     }
 
     // ---- 1800be6c7..1800be6f7 -------------------------------------------

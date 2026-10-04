@@ -25,11 +25,6 @@ namespace RtSystem {
 void        RtSystem_WideString_Set(WideString* self, const wchar_t* src);
 // ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ   0x1800cacd0
 String*     RtSystem_WideString_AsUTF8(const WideString* self, String* ret);
-// ??0WideString@System@@QEAA@AEBVString@1@@Z      0x1800cab50
-WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src);
-// ??0WideString@System@@QEAA@PEBD@Z               0x1800cb110  (Wave 9 lane PLAT)
-WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src);
-// ??1WideString@System@@QEAA@XZ                   0x18000a730
-void        RtSystem_WideString_Dtor(WideString* self);
+
 
 }  // namespace RtSystem

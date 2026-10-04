@@ -285,10 +285,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     // NOTE THE ARGUMENT: CreatePath is given `path`, the function's ORIGINAL
     // argument, not the `.bmp` target built above (0x1800f29e6 `MOV RDX,R14`).
     ::IO::FileSystem* fs = ::IO::FileSystem::_singleton;
-    // LEFT (B.4 R-VIDEO): the member still takes the RtSystem view of the same
-    // Filename (R-IO's FileSystem.h). When it takes retail's
-    // `const System::Filename&` this line is `fs->CreatePath(pathRef)`.
-    fs->CreatePath(*reinterpret_cast<const RtSystem::Filename*>(path));   // 0x1800ae430
+    fs->CreatePath(*path);   // 0x1800ae430
 
     // The stream is a stack object retail constructs, uses and destroys in
     // place: a local, built by its real constructor (0x1800a8200) and destroyed

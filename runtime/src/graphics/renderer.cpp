@@ -76,6 +76,7 @@
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 #include "../../types/volume/Volume.h"           // RtVolume_Frustum_Projection
 #include "../../types/system/MemoryAllocator.h"
+#include "../system/pod_bridge.h"                 // B4 FORWARD AddTexture(RtSystem::String)
 
 using RtGraphics::Camera;
 using RtGraphics::MaterialInstance;
@@ -668,11 +669,11 @@ void MaterialInstance::SetMaterial(Object::ExternalPtr<Material> material) {
 // hand-derived-only rows, so the field's own trait-derived `SetSizeFill` would
 // run a bitwise copy with no refcount bump. That bridge is the reason this body
 // cannot simply say `_textures.SetSize(…)`, and it is stated at the helper.
-void MaterialInstance::AddTexture(const RtSystem::String& name,
+void MaterialInstance::AddTexture(const System::String& name,
                                   Object::ExternalPtr<Video::ImageBuffer> image) {
     MaterialTexture local;
     local.name = nullptr;
-    char* data = name.data;                          // System::String is one pointer
+    char* data = name._data;                         // System::String is one pointer
     if (data) {
         ++*reinterpret_cast<int32_t*>(data - 4);  // CAST-OK: string_header
         local.name = data;
@@ -687,6 +688,13 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
         int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);  // CAST-OK: string_header
         if (--*refCount == 0) RtMemFree(local.name - 8);
     }
+}
+
+// B4 FORWARD: code/Game/Dialog/mapui.cpp, moddialog.cpp, noiseui.cpp and
+// saveloaddialog.cpp still call this.
+void MaterialInstance::AddTexture(const RtSystem::String& name,
+                                  Object::ExternalPtr<Video::ImageBuffer> image) {
+    AddTexture(RtSystem::Sys(name), image);
 }
 
 }  // namespace Graphics

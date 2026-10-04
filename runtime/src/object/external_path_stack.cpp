@@ -73,7 +73,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
 using RtSystem::Sys;
 
 namespace {
@@ -113,12 +112,10 @@ PathStackCounters g_psc = {};
 //
 // `ext` is used, unlike in GetCompiledPath where the same call's result is
 // computed and DROPPED — see external_compiled.cpp.
-void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* path) {
+void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const System::Filename* path) {
     ++g_psc.pushCalls;
 
-    // ENDGAME B.3.1 step 2. `path` is the C entry point's POD parameter, so it
-    // reaches the class through the one transitional bridge.
-    const System::Filename& in = Sys(*path);
+    const System::Filename& in = *path;
 
     System::Filename ext   = in.GetPathExtension();              // [RBP-0x30]
     System::Filename fname = in.GetPathFilename(true);           // [RBP-0x38]

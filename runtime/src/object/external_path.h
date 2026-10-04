@@ -52,29 +52,28 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-
 // ?GetPathExtension@Filename@System@@QEBA?AV12@XZ           retail 0x1800c64f0
 // Hidden return slot: RCX = self, RDX = ret.
-Filename* RtSystem_Filename_GetPathExtension(const Filename* self, Filename* ret);
+System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
+                                                     System::Filename* ret);
 
 // ?GetPathStackFilename@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ
 //                                                          retail 0x1800bcf60
-Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self,
-                                                        Filename* ret);
+System::Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFactory* self,
+                                                                System::Filename* ret);
 
 // ?GetPathStackDirectory@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ
 //                                                          retail 0x1800bcfd0
-Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self,
-                                                         Filename* ret);
+System::Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalFactory* self,
+                                                                 System::Filename* ret);
 
 // ?ExpandRelativePath@ExternalFactory@Object@@QEBA?AVFilename@System@@AEBV34@_N@Z
 //                                                          retail 0x1800bd360
 // RCX = this, RDX = hidden return slot, R8 = path, R9B = appendIdentifier.
-Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
-                                                      Filename* ret,
-                                                      const Filename* path,
-                                                      bool appendIdentifier);
+System::Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* self,
+                                                              System::Filename* ret,
+                                                              const System::Filename* path,
+                                                              bool appendIdentifier);
 
 // The effectiveness control. Every counter is a branch taken INSIDE a ported
 // body, not a call to one: a large `calls` with an untaken branch is the

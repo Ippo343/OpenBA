@@ -81,9 +81,6 @@
 // is a static member of the real class now, so the local variadic declaration
 // this file used to carry for the `RtSystem_String_Format` shim is gone.
 
-using RtSystem::String;
-using RtSystem::WideString;
-using RtSystem::RtSystem_WideString_CtorFromString;
 
 // The platform seam — runtime/src/engine/engine_platform_win.cpp keeps
 // <windows.h> out of this file (PLAN.md §4.1 decision 1). Retail's call is
@@ -129,9 +126,7 @@ bool CompiledResourceExists(const System::Filename& compiled) {
     if (fs == nullptr) return false;
 
     if (fs->_existsInPackfileGate != 0) {
-        // ExistsInPackfile's parameter is still the RtSystem::Filename POD
-        // (FileSystem.h, not this block's).
-        if (fs->ExistsInPackfile(reinterpret_cast<const RtSystem::Filename&>(compiled)))   // 0x1800ab180
+        if (fs->ExistsInPackfile(compiled))   // 0x1800ab180
             return true;
     }
     if (fs->_platformExistsGate == 0) return false;
