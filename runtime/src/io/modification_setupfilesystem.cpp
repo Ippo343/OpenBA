@@ -179,6 +179,7 @@
 #include "../../types/system/WideString.h"
 #include "../../types/collection/Collection.h"   // rtpathid::Insert / SubtreeFree, RtColl_ArraySetSizeFill_180028cd0
 #include "../../types/io/Modification.h"         // RtColl_ArrayFilenameDtor_1800098d0
+#include "../collection/set_avl_pathid.h"          // rtpathid::Insert / SubtreeFree, PathIdNode / PathIdSet
 
 namespace RtIO {
 
@@ -189,32 +190,12 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// The snapshot's element and node. The Set is a STACK LOCAL of this function
+// The snapshot's element, node and {root, count} header are rtpathid's
+// (collection/set_avl_pathid.h): the Set is a STACK LOCAL of this function
 // ([RBP-0x49] root, [RBP-0x41] count), built by 0x180027380 and torn down
-// in-line at the end, so both layouts are this file's business.
-// ---------------------------------------------------------------------------
-struct PathIdNode {
-    char*       key;      // +0x00  compiled path (refcounted System::Filename)
-    uint32_t    value;    // +0x08  packfile id
-    uint32_t    _pad0c;
-    PathIdNode* parent;   // +0x10
-    PathIdNode* left;     // +0x18
-    PathIdNode* right;    // +0x20
-    int16_t     balance;  // +0x28
-    int16_t     height;   // +0x2a
-    uint32_t    _pad2c;
-};
-static_assert(offsetof(PathIdNode, value) == 0x08, "0x1800aef12 CMP [RBX+0x8],EAX");
-static_assert(offsetof(PathIdNode, left)  == 0x18, "0x1800aee9c MOV RBX,[RBX+0x18]");
-static_assert(offsetof(PathIdNode, right) == 0x20, "0x1800aeeeb MOV RBX,[RBX+0x20]");
-static_assert(sizeof(PathIdNode) == 0x30, "node alloc at 0x1800278c0 asks for 0x30");
-
-struct PathIdSet {
-    PathIdNode* root;   // [RBP-0x49]
-    int32_t     count;  // [RBP-0x41]
-    int32_t     _pad;
-};
+// in-line at the end.
+using rtpathid::PathIdNode;
+using rtpathid::PathIdSet;
 
 // The reload queue's element — `{uint32 typeId, External*, Filename}`, stride
 // 0x18, built at [RBP-0x71]. THE FOUR BYTES AT +0x04 ARE NEVER WRITTEN by
@@ -296,7 +277,7 @@ int StrCmpSigned(const char* a, const char* b) {
 // InsertCore`, which is what makes the lookup agree with the insert.
 PathIdNode* SnapshotFind(PathIdNode* node, const char* search) {
     while (node != nullptr) {
-        const char* nodeKey = node->key;
+        const char* nodeKey = node->element.key;
 
         bool goLeft = false;
         if (nodeKey != nullptr) {                              // 0x1800aee53
@@ -404,9 +385,9 @@ void Modification::SetupFileSystem() {
         }  // ~raw releases here, exactly where retail's 0x1800aec3c release sat
 
         const uint32_t id = fsObj->GetPackfileId(compiled);    // 0x1800aec9f
-        void* outSlot = nullptr;                               // [RBP-0x4?]
-        rtpathid::Insert(reinterpret_cast<rtsetavl::Set*>(&snapshot),       // 0x1800aecb7  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
-                         reinterpret_cast<rtsetavl::Node**>(&outSlot),  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+        PathIdNode* outSlot = nullptr;                         // [RBP-0x4?]
+        rtpathid::Insert(&snapshot,                         // 0x1800aecb7
+                         &outSlot,
                          &compiled._data, &id);
 
         ext = extFactoryObj->FindNext(kExternalTypeId, ext);   // 0x1800aecc8
@@ -451,7 +432,7 @@ void Modification::SetupFileSystem() {
 
         // `TEST RBX,RBX` at 0x1800aeefd is redundant on the found path and is
         // kept; the id compare is what decides.
-        if (hit != nullptr && hit->value != fsObj->GetPackfileId(compiled)) {
+        if (hit != nullptr && hit->element.value != fsObj->GetPackfileId(compiled)) {
             System::Filename compiled2;                         // [RBP+0x77]
             {
                 System::Filename raw2(ext->GetPath());   // 0x1800aef22  [RBP-0x51]
@@ -563,9 +544,9 @@ void Modification::SetupFileSystem() {
     // matching the listing.
     if (snapshot.root != nullptr) {
         PathIdNode* const root = snapshot.root;
-        rtpathid::SubtreeFree(&snapshot, reinterpret_cast<rtsetavl::Node*>(root->left));    // 0x1800af52d  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
-        rtpathid::SubtreeFree(&snapshot, reinterpret_cast<rtsetavl::Node*>(root->right));   // 0x1800af53a  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
-        ReleaseInline(&root->key);
+        rtpathid::SubtreeFree(&snapshot, root->left);    // 0x1800af52d
+        rtpathid::SubtreeFree(&snapshot, root->right);   // 0x1800af53a
+        ReleaseInline(&root->element.key);
         MemFree(root);
     }
 }
