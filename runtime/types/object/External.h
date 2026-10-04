@@ -98,23 +98,26 @@ using RtSystem::Filename;
 //     0x1800067d0 and then +0x08..+0x0f as ONE qword (0x18002c779).
 //   * Object::External::Load's dependency replay serializes +0x00 as a String
 //     and then TWO int32s, at +0x08 and +0x0c (0x1800bc7fc / 0x1800bc811).
-// So the tail IS two int32s; the array simply never needs to know that. The
-// field stays spelled as one qword because that is what the ARRAY writes, and
-// external_load.cpp is where the split is made, with its own citation.
+// So the tail IS two 32-bit words, both through SerializeUInt (+0x98), so
+// uint32_t. SetSize's one-qword copy of them is written as the two named
+// stores, in address order (H7).
 struct ExternalArrayElement {
-    char*    owned;   // +0x00 — a System::Filename: released with the String
-                      //         idiom by FUN_180006ac0, copied (and delimiter-
-                      //         normalised) by 0x1800067d0
-    uint64_t opaque;  // +0x08 — two int32s to the serializer; never touched by
-                      //         the destructor, copied whole by SetSize
+    Filename owned;       // +0x00 — a System::Filename (the RtSystem POD: the
+                          //         array's lifecycle is hand-written): released
+                          //         with the String idiom by FUN_180006ac0, copied
+                          //         (and delimiter-normalised) by 0x1800067d0
+    uint32_t field_0x08;  // +0x08 — SerializeUInt at 0x1800bc7fc; copied by SetSize
+    uint32_t field_0x0c;  // +0x0c — SerializeUInt at 0x1800bc811; copied by SetSize
 };
 static_assert(sizeof(ExternalArrayElement) == 0x10,
               "the destructor's element stride is 0x10 (FUN_180006ac0), and "
               "SetSize's SHL RCX,0x4 at 0x18002c70a agrees");
 static_assert(offsetof(ExternalArrayElement, owned)  == 0x00,
               "ExternalArrayElement::owned @ +0x00 (MOV RAX,[RBX] at 0x180006b0a)");
-static_assert(offsetof(ExternalArrayElement, opaque) == 0x08,
-              "ExternalArrayElement::opaque @ +0x08 (MOV [R14+0x8],RAX at 0x18002c77d)");
+static_assert(offsetof(ExternalArrayElement, field_0x08) == 0x08,
+              "ExternalArrayElement +0x08 (MOV [R14+0x8],RAX at 0x18002c77d; 0x1800bc7fc)");
+static_assert(offsetof(ExternalArrayElement, field_0x0c) == 0x0c,
+              "ExternalArrayElement +0x0c (0x1800bc811)");
 
 struct External {
     void*                              _vftable;   // +0x00

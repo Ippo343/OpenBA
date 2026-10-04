@@ -83,14 +83,14 @@ External::External() {
 External::~External() {
     RtObject::ExternalArrayElement* e = _refs._data;
     for (int i = 0; i < _refs._size; ++i, ++e) {
-        char* p = e->owned;
+        char* p = e->owned.data;
         if (p != nullptr) {
             if (--RtSystem::StringRefCount(p) == 0) {
-                e->owned = p - 8;
-                if (e->owned != nullptr)
-                    RtSystem::RtMemFree(e->owned);
+                e->owned.data = p - 8;
+                if (e->owned.data != nullptr)
+                    RtSystem::RtMemFree(e->owned.data);
             } else {
-                e->owned = nullptr;
+                e->owned.data = nullptr;
             }
         }
     }
