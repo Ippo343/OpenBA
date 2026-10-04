@@ -76,7 +76,7 @@ BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
                      uint32_t roadState, uint32_t terrainType)
     : Work(ownerIbp),
       field_48(nullptr),
-      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),   // LEFT: SIG BuildRoad ctor (roadDescExtra uint64_t; caller roadtool_calcpath.cpp, PLAYER)
+      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t
       field_58(static_cast<int32_t>(cellIdx)),
       field_5c(mapDescVal),
       field_60(static_cast<int32_t>(roadTypeExisting)),
@@ -321,7 +321,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             int workId = workComp->workId;
             CitizenComponent* citizenRef = *entityIBP;
 
-            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620
+            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;  // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (wave X family across two agents)
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;

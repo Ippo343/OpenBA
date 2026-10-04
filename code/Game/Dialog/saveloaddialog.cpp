@@ -250,14 +250,14 @@ void SaveLoadDialog::PopulateFileList() {
             // non-const handle.
             matInstFinal->SetMaterial(
                 Object::ExternalPtr<Graphics::Material>(
-                    const_cast<Graphics::Material*>(
+                    const_cast<Graphics::Material*>(  // LEFT: const_cast FindOrLoad returns a const External; SetMaterial takes a non-const ExternalPtr (ledger S3: decide at the close)
                         static_cast<const Graphics::Material*>(matExternal))));
 
             // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
             // LEFT: AddTexture takes the RtSystem::String POD mirror.
             System::String diffuseStr("diffuse");
             matInstFinal->AddTexture(
-                *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
+                *reinterpret_cast<const RtSystem::String*>(&diffuseStr),  // LEFT: POD RtSystem::String: MaterialInstance::AddTexture takes the POD mirror (runtime header outside this set)
                 Object::ExternalPtr<Video::ImageBuffer>(saveInfo.imageBuffer));
 
             matInstFinal->BuildParameters();

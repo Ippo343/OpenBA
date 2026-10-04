@@ -101,7 +101,7 @@ static WorkIdNode* FindTaskNode(const WorkScheduler* sched, int taskIdx) {
 // LEFT: 0x14001ca60 / 0x14001a6e0's C declarations (Work/exe_bodies.h, WORK-a's header)
 // take the tree header as uintptr_t*.
 static uintptr_t* TreeHeader(WorkSchedulerTree* tree) {
-    return reinterpret_cast<uintptr_t*>(tree);   // LEFT: SIG WorkCellBST_Remove_ca60 / WorkBST_BSTRemove_a6e0 (Work/exe_bodies.h)
+    return reinterpret_cast<uintptr_t*>(tree);  // LEFT: SIG WorkCellBST_Remove_ca60 (ICF over five node types) / WorkBST_BSTRemove_a6e0 (wave X family across two agents)
 }
 } // namespace
 
@@ -198,7 +198,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             } else if (k < wantKey) {
                 n = n->right;   // greater
             } else {
-                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),   // LEFT: SIG WorkBST_BSTRemove_a6e0
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),  // LEFT: SIG WorkBST_BSTRemove_a6e0 (wave X family across two agents)
                                        n);   // 0x14001a6e0
                 break;
             }
@@ -259,7 +259,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 namespace {
 // LEFT: CitizenComponent::meshInstance is raw storage (H5).
 static Graphics::MeshInstance* ToolMesh(CitizenComponent* citizen) {
-    return reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);   // LEFT: H5 CitizenComponent::meshInstance (CIT-4)
+    return reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (+0xB8) is raw storage for a Graphics::MeshInstance (CitizenComponent.h; declaring it makes its ctor / dtor run)
 }
 } // namespace
 
@@ -373,7 +373,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     // constructed Graphics::MeshInstance; in standalone a builder/worker showing its first
     // tool has never had that slot initialized (zeroed vtable). Default-construct it in
     // place with sceneId(+0x120) = -1 — the same guard showtool.cpp uses for carried items.
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {   // LEFT: H5 CitizenComponent::meshInstance (CIT-4): the vptr of the raw storage
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
         ::new (citizen->meshInstance) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         citizen->toolId = -1;   // +0x1D8 = +0xb8 + 0x120: sceneId = -1
     }
@@ -391,12 +391,12 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
     // attach the tool geometry to the model's "tool" node
     // LEFT: MeshInstance::_mesh (Runtime) is an untyped ExternalPtr handle.
-    const Graphics::GraphicsMesh* graphicsMesh = static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);   // LEFT: MeshInstance::_mesh ExternalPtrHandle (R-GFX)
+    const Graphics::GraphicsMesh* graphicsMesh = static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);  // LEFT: FIELD MeshInstance::_mesh is an ExternalPtrHandle (X-RL left it: readers in three sets)
     int nodeIdx = graphicsMesh ? graphicsMesh->GetNodeIndexFromName("tool") : -1;
     model->meshInstance.Attach(tool, nodeIdx);
 
     // MeshInstance::Update(time=0) via slot 1 (skip if the instance has no vtable)
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {   // LEFT: H5 CitizenComponent::meshInstance (CIT-4): the vptr of the raw storage
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {  // LEFT: FLOOR? vtable probe: tests whether the raw-storage MeshInstance (CitizenComponent::meshInstance, H5) was constructed
         System::Time timeVal;
         RtSystem_Time_Ctor(&timeVal, 0.0f);   // slot 0x140152b00
         static_cast<Graphics::Geometry*>(tool)->Update(timeVal);
@@ -418,7 +418,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
 // B4 FORWARD: outside callers (Component, Work files)
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
-    TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);   // LEFT: SIG ActCt_TaskCleanup_8e30
+    TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);  // LEFT: SIG ActCt_TaskCleanup_8e30 (wave X family across two agents)
 }
 
 

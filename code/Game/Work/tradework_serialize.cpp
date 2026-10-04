@@ -121,7 +121,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
 
             // LEFT: the key is an InternalPtr retail serializes through
             // InternalBasePtr::Serialize; the field is declared T*.
-            reinterpret_cast<Object::InternalBasePtr*>(&rec.citizen)->Serialize(ser);
+            reinterpret_cast<Object::InternalBasePtr*>(&rec.citizen)->Serialize(ser);  // LEFT: TradeWork's assignment citizen is a raw CitizenComponent* (TradeWork.h); retail serializes the slot as an InternalBasePtr
             // Validate the deserialized object against CitizenComponent (DWORD_1401c7158,
             // ENDGAME B.3.9 D5: by cell, read directly).
             if (rec.citizen != nullptr &&
@@ -147,7 +147,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
 
         while (node != nullptr) {
             // Serialize this node's citizen (+0x00), quantity (+0x10), resource (+0x08).
-            reinterpret_cast<Object::InternalBasePtr*>(&node->value.citizen)->Serialize(ser);   // LEFT: as above
+            reinterpret_cast<Object::InternalBasePtr*>(&node->value.citizen)->Serialize(ser);  // LEFT: TradeWork's assignment citizen is a raw CitizenComponent* (TradeWork.h); retail serializes the slot as an InternalBasePtr
             if (node->value.citizen != nullptr &&
                 !Object::IsDerivedFromNullSafe(node->value.citizen, CitizenComponent::TypeId())) {
                 node->value.citizen = nullptr;

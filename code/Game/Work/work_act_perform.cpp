@@ -88,7 +88,7 @@ static inline void* WAP_Alloc(uint64_t size, uint32_t align) {
 // 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
 // action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 static inline void  WAP_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);  // LEFT: CharacterComponent.h declares the +0x48 action stack as separate fields, not an ActionStack (ledger: a later round)
 }
 
 // Build an inline PerformWork action object into 'o' (0x48 alloc, already non-null).

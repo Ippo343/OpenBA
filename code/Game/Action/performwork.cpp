@@ -251,7 +251,7 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
 // Work/work_base_actionctor.cpp).
 PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
                          uint8_t param_6, int param_7)
-    : PerformWork(reinterpret_cast<CitizenComponent* const*>(entity), animIndex, actionType, time,
+    : PerformWork(reinterpret_cast<CitizenComponent* const*>(entity), animIndex, actionType, time,  // LEFT: SIG PerformWork(void* entity, ...): the outside callers' overload hands the citizen reference as void*
                   param_6 != 0, param_7) {}
 
 // 0x1400c9720 — the ctor body: after Action() the retail stores, in retail order.
@@ -281,8 +281,8 @@ PerformWork::PerformWork(CitizenComponent* const* citizen, float animIndex, uint
                 RtSystem_Time_Ctor(&scaleTime, compSecs);
                 // LEFT (2): retail calls Time::AsSeconds (0x140151318) on both Times; the tree
                 // reads each Time's low dword as float bits (known_port_issues 14a row 51).
-                float selfSecs  = *reinterpret_cast<const float*>(&requiredTime);
-                float scaleSecs = *reinterpret_cast<const float*>(&scaleTime);
+                float selfSecs  = *reinterpret_cast<const float*>(&requiredTime);  // LEFT: retail calls Time::AsSeconds (0x140151318); the tree reads the Time's low dword as float bits (known_port_issues 14a row 51)
+                float scaleSecs = *reinterpret_cast<const float*>(&scaleTime);  // LEFT: retail calls Time::AsSeconds (0x140151318); the tree reads the Time's low dword as float bits (known_port_issues 14a row 51)
                 System::Time prod;
                 prod._ticks = 0;
                 RtSystem_Time_Ctor(&prod, selfSecs * scaleSecs);

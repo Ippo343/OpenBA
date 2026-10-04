@@ -701,7 +701,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
                 nullptr, ibp, (int32_t)scenarioResIdx,
                 name,
                 (int32_t)seed, (int32_t)terrainSize, /*p8=*/!disastersOff,
-                static_cast<MapGenerator*>(mapGen), static_cast<TerrainGenerator*>(terrainGen), static_cast<ClimateGenerator*>(climateGen));
+                static_cast<MapGenerator*>(mapGen), static_cast<TerrainGenerator*>(terrainGen), static_cast<ClimateGenerator*>(climateGen));  // LEFT: B10 downcast after ResourceIsType (the generators are Object::External resources); castmetric reads the operand as void*
         }
 
         // Step 2: GameLoadDialogLoopT (0xB60 bytes) — retail inlines the subclass

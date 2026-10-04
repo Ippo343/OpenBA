@@ -143,7 +143,7 @@ void AttendanceComponent_ReleaseLink1650(CitizenComponent* self) {
     AttendanceComponent_ReleaseLinkSlot(self, self->field_0x230);
 }
 void AttendanceComponent_ReleaseLink59b0(void* workerP) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);   // LEFT: SIG AttendanceComponent_ReleaseLink59b0 (void*; outside callers)
+    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);  // LEFT: SIG AttendanceComponent_ReleaseLink59b0 (wave X family across two agents)
     AttendanceComponent_ReleaseLinkSlot(self, self->careBuilding);
 }
 
@@ -154,7 +154,7 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 // ============================================================
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
     return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks  LEFT: FWD (outside callers hold void*)
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks  LEFT: FWD (outside callers hold void*)  // LEFT: SIG AttendanceComponent_GetJobHostComponent (B4 FORWARD: its outside callers hold the entity as void*)
 }
 
 // ============================================================

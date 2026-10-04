@@ -114,7 +114,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
     // Step 3: Check max workers
     int treeCount = field_50;
     if (workComp->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: C signature
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
         workComp->workState = maxWorkers;
     }
     if (treeCount >= workComp->workState) {
@@ -198,7 +198,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
                 pathPos,                          // [RSP+0x20]: position
                 srcCellIdx,                       // [RSP+0x28]: srcCellIdx
                 (uint32_t)i,                      // [RSP+0x30]: cellIdx (integer, EBX)
-                reinterpret_cast<int64_t*>(&entityRef),   // [RSP+0x38]: entity ref from field_10 (LEFT: be6e0's C signature, WORK-b caller)
+                reinterpret_cast<int64_t*>(&entityRef),   // [RSP+0x38]: entity ref from field_10 (LEFT: be6e0's C signature, WORK-b caller)  // LEFT: SIG WorkAct_PlantWorkCtor_be6e0 (wave X family across two agents)
                 &typeConstVal,                    // [RSP+0x40]: type constant
                 0,                                // [RSP+0x48]: unused
                 (uint32_t)i                       // [RSP+0x50]: cellIdx again (integer, EBX)
@@ -229,7 +229,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
             insertKey.cell = i;
             insertKey._pad04 = 0;
             insertKey.citizen = *citizenRef;
-            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);   // LEFT: SIG WorkCellBST_Insert_9a40
+            WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&field_48), &insertResult, &insertKey);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
             // Mark cell as planted (not available)
             validityArray[i] = 1;
@@ -260,7 +260,7 @@ int PlantOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*
         } else if (param4 > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
             break;
         }
     }
@@ -285,7 +285,7 @@ int PlantOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*pa
         } else if (param4 > node->element.cell) {
             node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);   // LEFT: SIG WorkCellBST_Remove_ca60
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), node);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
             break;
         }
     }
@@ -424,7 +424,7 @@ cleanup:
                 } else if (collectArray[k] > bstNode->element.cell) {
                     bstNode = bstNode->right;
                 } else {
-                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);   // LEFT: SIG WorkCellBST_Remove_ca60
+                    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&field_48), bstNode);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
                     break;
                 }
             }
@@ -465,7 +465,7 @@ void PlantOrchard::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);   // LEFT: SIG WorkCellBST_Serialize_9de0
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&field_48), &ser);  // LEFT: H5 PlantOrchard.h holds the set as two raw fields (root, count) where retail has a Collection::Set (a Set member would run its dtor); the 0x14001ca60 / 0x140029a40 / 0x140029de0 bodies serve five node types (ICF)
 
     int cellCountBuf[2] = { field_60, 0 };
     ser.Serialize(cellCountBuf[0], nullptr);
