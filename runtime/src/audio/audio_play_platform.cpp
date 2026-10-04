@@ -357,7 +357,7 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
     XAUDIO2_BUFFER buf{};
     buf.Flags      = kXAudio2EndOfStream;
     buf.AudioBytes = static_cast<uint32_t>(bufferRef->_length);
-    buf.pAudioData = static_cast<const BYTE*>(bufferRef->_data);
+    buf.pAudioData = bufferRef->_data;   // SoundBuffer::_data is uint8_t* (BYTE)
     buf.PlayBegin  = playBegin;
     buf.PlayLength = 0;
     buf.LoopBegin  = 0;
