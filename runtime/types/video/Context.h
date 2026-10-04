@@ -501,11 +501,19 @@ public:
     // `?BindResources@` dereferences twice. The STAGING is 0x208..0x297, which
     // is exactly the two ranges `?Reset@` memsets (0x208 len 0x40, 0x248 len
     // 0x50) and exactly the two ranges `BindResources` uploads. The member is
-    // left undivided so no other file's offsets move; anything reading +0x200
-    // through this array is reading a pointer, not constant data.
-    // `?SetFog@` writes a second copy of the fog colour at +0x258 and
-    // `?SetLight@` publishes into +0x248..+0x287.
-    uint8_t  _pixelConstantStaging[0x98];               // 0x0200
+    // B4 wave X round 6: the block is a POD of its three parts (plain float
+    // arrays, no constructor: Context's ctor memsets the whole 0x98 bytes,
+    // context_ctor.cpp). The sixteen-byte rows of `pixel` are, by writer:
+    // [0] +0x248 SetLight's shadow dwords, [1] +0x258 `?SetFog@`'s second copy
+    // of the fog colour, [2] +0x268 SetLight's colour, [3] +0x278 SetLight's
+    // position, [4] +0x288 the per-frame vector (loops.cpp's time,
+    // gameupdateloop / menudialogloopt / minimap_paint).
+    struct PixelConstantStaging {
+        const VideoProgram* videoProgram;   // +0x00 (ctx +0x200)  SetVideoProgram 0x18001a040
+        float material[4][4];               // +0x08 (ctx +0x208)  Reset memsets 0x40; uploaded to _materialConstants
+        float pixel[5][4];                  // +0x48 (ctx +0x248)  Reset memsets 0x50; uploaded to _pixelConstants
+    };
+    PixelConstantStaging _pixelConstantStaging;          // 0x0200
 
     ConstantBuffer _materialConstants;                  // 0x0298
     ConstantBuffer _pixelConstants;                     // 0x02e0
@@ -605,6 +613,10 @@ static_assert(offsetof(Context, _scissor)               == 0x01e0, "Context::_sc
 static_assert(offsetof(Context, _vertexProgram)         == 0x01f0, "Context::_vertexProgram");
 static_assert(offsetof(Context, _pixelProgram)          == 0x01f8, "Context::_pixelProgram");
 static_assert(offsetof(Context, _pixelConstantStaging)  == 0x0200, "Context::_pixelConstantStaging");
+static_assert(sizeof(Context::PixelConstantStaging) == 0x98, "Context +0x200 .. +0x297");
+static_assert(offsetof(Context::PixelConstantStaging, videoProgram) == 0x00, "Context +0x200 _videoProgram");
+static_assert(offsetof(Context::PixelConstantStaging, material)     == 0x08, "Context +0x208 material staging (Reset 0x208 len 0x40)");
+static_assert(offsetof(Context::PixelConstantStaging, pixel)        == 0x48, "Context +0x248 pixel staging (Reset 0x248 len 0x50)");
 static_assert(offsetof(Context, _materialConstants)     == 0x0298, "Context::_materialConstants");
 static_assert(offsetof(Context, _pixelConstants)        == 0x02e0, "Context::_pixelConstants");
 static_assert(offsetof(Context, _viewProjection)        == 0x0328, "Context::_viewProjection");

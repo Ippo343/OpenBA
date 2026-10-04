@@ -313,10 +313,8 @@ void Video::Context::BindResources() {
     // companion sits one qword earlier than a Vertex/PixelProgram's; the typed
     // `VideoProgram::_data` says so.
     if (_dirty & 0x100u) {
-        // LEFT: +0x200 is `_videoProgram`, the first qword of
-        // `_pixelConstantStaging`, which Context.h keeps undivided (see the banner).
-        const VideoProgram* p =
-            *reinterpret_cast<const VideoProgram* const*>(_pixelConstantStaging);  // LEFT: FIELD Context::_pixelConstantStaging stays one byte block (X-RL left it: engine/loops.cpp and wave21_lane_gfxbody.cpp index it by byte)
+        // +0x200 is `_videoProgram`, the first qword of `_pixelConstantStaging`.
+        const VideoProgram* p = _pixelConstantStaging.videoProgram;
         p->_data->Bind(this, detail);
     }
 
@@ -386,8 +384,8 @@ void Video::Context::BindResources() {
         { 0x00800u, &_globalConstants,   &_viewProjection,                      kGlobalBytes   },
         { 0x01000u, &_instanceConstants, &_inverseScale,                        kInstanceBytes },
         { 0x02000u, &_lightConstants,    &_lightStaging,                        kLightBytes    },
-        { 0x08000u, &_materialConstants, _pixelConstantStaging + (0x208 - 0x200), kMaterialBytes },
-        { 0x10000u, &_pixelConstants,    _pixelConstantStaging + (0x248 - 0x200), kPixelBytes    },
+        { 0x08000u, &_materialConstants, _pixelConstantStaging.material,       kMaterialBytes },
+        { 0x10000u, &_pixelConstants,    _pixelConstantStaging.pixel,          kPixelBytes    },
     };
     for (const Upload& u : kUploads) {
         if ((_dirty & u.bit) == 0) continue;

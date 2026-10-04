@@ -319,7 +319,7 @@ extern "C" Video::Context* RtVideo_Context_Ctor(Video::Context* self, Video::Dev
     self->_vertexProgram     = nullptr;         // +0x1f0
     self->_pixelProgram      = nullptr;         // +0x1f8
     // +0x200..+0x297, nineteen qwords: `_videoProgram` and the pixel staging.
-    std::memset(self->_pixelConstantStaging, 0, sizeof(self->_pixelConstantStaging));
+    std::memset(&self->_pixelConstantStaging, 0, sizeof(self->_pixelConstantStaging));
 
     InitConstantBuffer(&self->_materialConstants, device);   // mc_
     InitConstantBuffer(&self->_pixelConstants, device);      // pc_
