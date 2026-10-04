@@ -152,8 +152,7 @@ int TradeComponent::PickMerchantTier() {
     const TradeTier* tiers = desc->_prices;
     int idx = 0;
     for (int i = 0; i < count; ++i) {
-        const CitizenBehavior* townState =
-            reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        const CitizenBehavior* townState = GameUpdateLoop::_singleton->m_citizenList;
         const int pop = townState->citizenCount;   // +0xa8
         if (pop >= 0 && pop < tiers[i].populationLimit)
             return idx;
@@ -230,8 +229,8 @@ char TradeComponent::EnterIdle() {
         Object::InternalPtr<TradeWork> workIBP(work);
 
         WorkComponent* sched2 = _entity->FindComponent<WorkComponent>();
-        // LEFT: 0x14012ec60 takes the WorkComponent as an integer (COMP-b's declaration).
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched2), 1, '\0', &workIBP);
+        // 0x14012ec60 takes the WorkComponent as an integer (Component/exe_bodies.h, wave X).
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(sched2), 1, '\0', &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
 
         // OUTCOME, not intent: report whether a TradeWork was really constructed and
         // whether the scheduler is holding one AFTER the post. "accepting was set" and
@@ -407,8 +406,8 @@ char TradeComponent::TickIdle(void* smV, const System::Time* deltaTime) {
 
     // Retail ticks the machine once first when it has no current state yet
     // (`if (*(char*)(sm+9) < 0)` at 14005ab6a), then requests 0x12.
-    // LEFT: the StateMachine bytes are untyped (COMP-e).
-    uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
+    // LEFT: the StateMachine bytes are untyped (Component/StateMachineComponent.h, COMP-3).
+    uint8_t* sm = reinterpret_cast<uint8_t*>(smV);   // LEFT: StateMachineComponent.h (COMP-3)
     if (sm && static_cast<int8_t>(sm[9]) < 0) {
         System::Time zeroTime = {0};
         RtSystem_Time_Ctor(&zeroTime, 0.0f);
@@ -436,9 +435,8 @@ char TradeComponent::Teardown() {
     ComponentEntity* entityIBP = _entity;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
-        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): one cast to the town
-        // manager; its trading-post list at +0x30.
-        CemeteryListErase_Reimpl(&reinterpret_cast<CitizenBehavior*>(gw->m_citizenList)->field_0x30,
+        // The town manager's trading-post list at +0x30.
+        CemeteryListErase_Reimpl(&gw->m_citizenList->field_0x30,
                     &entityIBP);
     }
 
