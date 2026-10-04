@@ -82,17 +82,16 @@ static int CountOccupiedBuildTiles_Impl(ClearAreaComponent* clearArea)
     int height  = (int)(int16_t)bc->tileY1;
 
     // The Map at gameWorld+0xF8: size = mapWidth, cells = the 0x30-byte cell array
-    // LEFT: GameUpdateLoop::m_game is void*; Map::cells is void*.
-    Map* map = (Map*)GameUpdateLoop::_singleton->m_game;
+    Map* map = GameUpdateLoop::_singleton->m_game;
     int mapWidth = map->size;
-    const uint8_t* tileArrayBase = (const uint8_t*)map->cells;
+    const MapCell* tileArrayBase = map->cells;
 
     int count = 0;
     for (int row = 0; row < height; ++row) {
         for (int col = 0; col < width; ++col) {
-            // Each tile entry is 0x30 bytes; occupant ptr is at offset +8
+            // Each tile entry is a 0x30-byte MapCell; occupant ptr is at offset +8
             int tileIndex = (originY + row) * mapWidth + originX + col;
-            void* occupant = *(void* const*)(tileArrayBase + 8 + (uintptr_t)tileIndex * 0x30);
+            const ComponentEntity* occupant = tileArrayBase[tileIndex].occupant;
             // Count tiles occupied by other entities (not self, not null)
             if (occupant != clearArea->_entity && occupant != nullptr) {
                 count++;
@@ -246,8 +245,7 @@ void BuildUI::OnCreated() {
             int compCount = resEntry->_subDescCount;
             RawMaterialDescription* resType = nullptr;
             for (int c = 0; c < compCount; c++) {
-                // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-                Object::Base* comp = reinterpret_cast<Object::Base*>(resEntry->_subDescs[c]);
+                Object::Base* comp = resEntry->_subDescs[c];
                 // Get TypeId via vtable[2] and compare with RawMaterialDescription
                 int typeId = comp->Type();
                 if (typeId == (int)RawMaterialDescription::TypeId()) {
@@ -411,16 +409,15 @@ void BuildUI::OnUpdateLayout() {
             int smCount = storage ? storage->slotCount : 0;
             uint64_t delivered = 0;
             if (smCount > 0) {
-                // LEFT: StorageComponent's items {resource, _count, _reserve} are raw
-                // (void* data, W0's header).
-                const uint8_t* smArray = (const uint8_t*)storage->storageSlots;
+                // StorageComponent's items {resource, _count, _reserve}.
+                const StorageComponent::Item* smArray = storage->storageSlots;
                 for (int j = 0; j < smCount; j++) {
-                    void* smEntry = *(void* const*)(smArray + j * 0x10);
+                    const ComponentDescription* smEntry = smArray[j]._resource;
                     if (smEntry == resEntry) {
                         if (j >= 0) {
                             // Delivered = item[j]._count - item[j]._reserve
-                            int count = *(const int*)(smArray + j * 0x10 + 8);
-                            int reserved = *(const int*)(smArray + j * 0x10 + 0xC);
+                            int count = smArray[j]._count;
+                            int reserved = smArray[j]._reserve;
                             delivered = (uint64_t)(uint32_t)(count - reserved);
                         }
                         break;
@@ -494,7 +491,7 @@ void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int3
             return;
         }
         char currentState = workplaceComp->isAccepting;
-        // LEFT: the body takes its receiver as int64_t (COMP-f's declaration).
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(workplaceComp), currentState == 0);
+        // WorkPlaceComponent_SetAccepting's member (a pure forwarder).
+        workplaceComp->SetAccepting(currentState == 0);
     }
 }
