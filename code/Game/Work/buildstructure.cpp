@@ -825,7 +825,7 @@ extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** bui
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
 // citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: the force harness drives it through a void* function pointer
+    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: SIG ForceWork::DriveWhenIdle (Game/force_work.h, X3-GAME) takes every driver as int (*)(void* work, void* citizenIBP)
 }
 
 // Execute-readiness gate for the force harness (no retail address). B3R: BuildStructure's
