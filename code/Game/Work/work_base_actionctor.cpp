@@ -95,7 +95,7 @@ static inline float WA_RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, s
 // 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
 // action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 static inline void WA_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent.h keeps the +0x48 ActionStack as separate fields (not this set's header)
 }
 
 static inline float WA_C_172124() { return kRdata_140172124; }

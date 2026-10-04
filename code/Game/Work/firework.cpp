@@ -485,7 +485,7 @@ Profession** FireWork::GetTarget(Profession** retbuf) {
 // reg_work_bst.cpp:19), so this is a plain transcription. ENDGAME B.3.8: the two
 // function-local lazy pointer caches are gone — the base call is the qualified
 // Work::Persist, the BST body is called by name (B38 D7).
-extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer);
+extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* serializer);
 void FireWork::Persist(IO::Stream& stream) {
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)

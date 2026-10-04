@@ -295,9 +295,8 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
 // path is an iterative in-order traversal using parent pointers, writing each node's
 // IBP (at node+0). Serializer read/write mode = *(int*)(*serializer + 8) == 0 (read).
 // Caller: void fn(void* bstRoot, void* serializer).
-void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
+void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* ser) {
     KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);   // LEFT: ERASED its callers pass the Serializer as void* beside the raw set (banner)
     int count = set->_count;
     ser->Serialize(count, nullptr);
     bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210

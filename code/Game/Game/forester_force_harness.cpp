@@ -130,7 +130,7 @@ static ForesterComponent* VerifyLodgeForester(ComponentEntity* lodge, bool dump)
 // ForesterWork — not Leisure/Wander — keeps driving the stack.
 extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     if (!ForceForesterEnvOn()) return false;
-    ComponentEntity* lodge = reinterpret_cast<ComponentEntity*>(g_pForceWorkBuilding);   // LEFT: g_pForceWorkBuilding is void* (GAME-4)
+    ComponentEntity* lodge = g_pForceWorkBuilding;
     if (!lodge || !citizen) return false;
     if (GameUpdateLoop::_singleton == nullptr) return false;
 
