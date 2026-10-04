@@ -1031,10 +1031,7 @@ void DebugUI::OnCreated() {
                 // Row text = StringTable::GetText(disease->stringTable(+0x20),
                 //                                 &out, disease->stringName(+0x28))
                 // — retail's 0x14006257c call, whose third argument Ghidra hides.
-                // LEFT: Disease's _stringTable is void* and _name raw String
-                // storage (H5) in GAME-a's header.
-                System::String textBuf = reinterpret_cast<const UI::StringTable*>(disease->_stringTable)  // B.3.6 bridge
-                    ->GetText(*reinterpret_cast<const System::String*>(&disease->_name));
+                System::String textBuf = disease->_stringTable->GetText(disease->_name);
                 UI::Sprite sprite;
                 this->diseaseCombo->AddItem(sprite, textBuf, nullptr);
             }
