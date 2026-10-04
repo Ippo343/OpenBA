@@ -30,6 +30,7 @@
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Entity/CitizenBehavior.h"
 
 // ============================================================
 // Helpers, called directly (B.3R): FUN_140002e10 FindComponent<WorkPlaceComponent>
@@ -93,7 +94,7 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // LEFT: this is a CitizenComponent member in retail (0x140115a50); the class and its
 // header are COMP-b's, so the body stays free on its void* receiver.
 void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);
+    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);   // LEFT: SIG AttendanceComponent_ReleasePartnerSlot (void*; outside callers, exe_bodies.h)
     AttendanceComponent*& slot = self->school;
     if (slot == nullptr) return;
 
@@ -104,7 +105,7 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
     // StatusIconComponent, null included (the tree's `if (mesh)` tested the slot address).
     StatusIconComponent* mesh = linked->_entity->FindComponent<StatusIconComponent>();   // 0x140002f90
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 2, '\0');   // LEFT: takes int64_t* (statusiconcomponent.cpp's declaration)
+    mesh->SetFlag(2, '\0');   // 0x14012c3f0 (CitizenComp_FUN_14012c3f0's member)
 
     slot = nullptr;
 
@@ -134,17 +135,17 @@ static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Attendan
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
     // StatusIconComponent, null included (the tree's `if (mesh)` tested the slot address).
     StatusIconComponent* mesh = linked->_entity->FindComponent<StatusIconComponent>();   // 0x140002f90
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 2, '\0');   // LEFT: takes int64_t*
+    mesh->SetFlag(2, '\0');   // 0x14012c3f0 (CitizenComp_FUN_14012c3f0's member)
 
     slot = nullptr;
 }
 
 void AttendanceComponent_ReleaseLink1650(void* workerP) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);
+    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);   // LEFT: SIG AttendanceComponent_ReleaseLink1650 (void*; outside callers)
     AttendanceComponent_ReleaseLinkSlot(self, self->field_0x230);
 }
 void AttendanceComponent_ReleaseLink59b0(void* workerP) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);
+    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);   // LEFT: SIG AttendanceComponent_ReleaseLink59b0 (void*; outside callers)
     AttendanceComponent_ReleaseLinkSlot(self, self->careBuilding);
 }
 
@@ -155,7 +156,7 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 // ============================================================
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
     return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks  LEFT: FWD (outside callers hold void*)
 }
 
 // ============================================================
@@ -333,7 +334,7 @@ void AttendanceComponent::Persist(IO::Stream& stream) {
     CitizenComponent** q = queue;
     for (int32_t i = 0; i < count && q; ++i, ++q) {
         // LEFT: the queue entries are InternalPtr<CitizenComponent> in retail, CitizenComponent* here
-        reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(ser);
+        reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(ser);   // LEFT: H5 queue is a raw CitizenComponent* triple
         if (*q == nullptr) continue;
         if (!::Object::IsDerivedFromNullSafe(*q, CitizenComponent::TypeId()))
             *q = nullptr;
@@ -342,13 +343,12 @@ void AttendanceComponent::Persist(IO::Stream& stream) {
 
 // [7] 0x1400443d0 — leave the town attendance registry (state 3's enter also calls
 // it through the vtable).
-// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the town list stays by offset.
 void AttendanceComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    const uintptr_t town = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* const town = GameUpdateLoop::_singleton->m_citizenList;
     if (!town) return;
     Object::InternalPtr<AttendanceComponent> selfIbp(this);
-    CemeteryListErase_Reimpl(reinterpret_cast<void*>(town + 0x60), &selfIbp);   // 0x140002cc0
+    CemeteryListErase_Reimpl(&town->attendanceComponents, &selfIbp);   // 0x140002cc0 (CitizenBehavior +0x60)
 }
 
 // [9] 0x140044370 — the elapsed-time argument is not read by retail's body.
@@ -392,8 +392,7 @@ uint32_t AttendanceComponent::CommandMask(int /*command*/) {
 void AttendanceComponent::Command(int /*command*/) {
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();
     const bool cur = wpc->isAccepting;
-    // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's declaration)
-    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), cur == 0);
+    wpc->SetAccepting(cur == 0);   // WorkPlaceComponent_SetAccepting's member
     if (wpc->isAccepting == 0)
         ProcessQueue();
 }

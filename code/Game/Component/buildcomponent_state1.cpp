@@ -53,6 +53,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
 #include "Game/ProfessionList.h"
 
 // GatherRawMaterials_Ctor_Impl (0x1400ec710) is declared in Work/exe_bodies.h.
@@ -81,8 +82,7 @@ static RawMaterialDescription* BCS1_FindRawMatDesc(ComponentDescription* matEnti
     Description** arr = matEntity->_subDescs;
     if (!arr) return nullptr;
     for (int i = 0; i < count; i++) {
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header)
-        Object::Base* comp = reinterpret_cast<Object::Base*>(arr[i]);
+        Description* comp = arr[i];
         if (!comp) continue;
         uint32_t t = comp->Type();
         if (t == tid) {
@@ -137,12 +137,10 @@ static bool BCS1_IsModelComplete(BuildComponent* buildComp) {
     Description* modelDescription = model->_description;
     ModelDescription* modelDesc = static_cast<ModelDescription*>(modelDescription);
     if (!modelDesc) return true;                              // advanced but no desc -> treat complete
-    void* groupArray = modelDesc->_meshGroups;
+    ModelMeshGroup* groupArray = modelDesc->_meshGroups;
     uint32_t groupCount = static_cast<uint32_t>(modelDesc->_meshGroupCount);
     if (!groupArray || variantIdx < 0 || (uint32_t)variantIdx >= groupCount) return true;
-    // LEFT: ModelDescription::_meshGroups is void* (no MeshGroup type yet, COMP-d)
-    int subCount = *reinterpret_cast<int32_t*>((uint8_t*)groupArray +
-                        (int64_t)variantIdx * 0x18 + 0x10);
+    int subCount = groupArray[variantIdx].meshCount;
     return (subCount > 1 && modelVariant >= subCount - 1);
 }
 
@@ -248,18 +246,16 @@ int BuildComponent::State1Enter(void* smNode) {
     }
 
     // register the site into the construction registry (townMgr+0xd0 / count +0xd8)
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the CitizenBehavior
-    // reads below stay by offset.
-    uintptr_t townMgr = 0;
+    CitizenBehavior* townMgr = nullptr;
     if (GameUpdateLoop::_singleton != nullptr)
-        townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+        townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> siteIbp(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
+        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &siteIbp);
         if (idx < 0) {
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            int newCount = *reinterpret_cast<int*>(townMgr + 0xd8) + 1;
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xd0))
+            // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            int newCount = townMgr->buildComponentCount + 1;
+            GameColl::AsArray<GameColl::Ptr8>(&townMgr->buildComponents)
                 .SetSizeFill(newCount, &siteIbp);
         }
     }
@@ -282,7 +278,7 @@ int BuildComponent::State1Enter(void* smNode) {
         }
         uintptr_t workIbp = 0;
         new (&workIbp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
+            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge  LEFT: SIG GatherRawMaterials_Ctor_Impl returns void*
 
         // find the WorkComponent (0x1401c8070) the work posts under
         WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
@@ -293,8 +289,7 @@ int BuildComponent::State1Enter(void* smNode) {
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
         // Needs the live-citizen action stack + pathfinder.
         if (workComp != nullptr) {
-            // LEFT: CitizenAI_WorkScheduler_Post takes the component as uintptr_t (COMP-b's declaration)
-            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x2001, 1, &workIbp);
+            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x2001, 1, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post (the component as uintptr_t)
         }
 
         // configure the site StorageComponent accept-mask + capacity
@@ -451,7 +446,7 @@ int BuildComponent::State1Enter(void* smNode) {
             // allocator's AssignHousing churn (which townMgr+0x100 population activates)
             // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
             if (townMgr) {
-                TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
+                TownRegistry_RegisterWorkplace(reinterpret_cast<int64_t>(townMgr), wpc);   // LEFT: SIG TownRegistry_RegisterWorkplace (int64_t, town_workplace_registry.cpp)
             }
         }
     }

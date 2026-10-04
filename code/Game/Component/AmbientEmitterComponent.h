@@ -29,7 +29,8 @@ namespace Audio { class SoundEffect; }
 // One emitter slot (0x10; Persist 0x140042f30, resize 0x140001770 default
 // {0, 1.0f, null}).
 struct AmbientEmitterSlot {
-    uint32_t            handle;   // +0x00 the Audio::Scene effect id (0 = not playing)
+    int32_t             handle;   // +0x00 the Audio::Scene effect id (0 = not playing); int: Persist
+                                  //       0x140042f30 serializes it through Serialize(int&) 0x1800061d0
     float               volume;   // +0x04
     Audio::SoundEffect* sound;    // +0x08 ExternalPtr<SoundEffect>
 };

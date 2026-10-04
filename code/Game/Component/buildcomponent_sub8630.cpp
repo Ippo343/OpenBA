@@ -73,19 +73,15 @@ bool BuildComponent::HaveAllMaterials() {
         int   costQty = matArr[i].quantity;   // +0x08 costQty
 
         // Delivered amount = matching site-storage slot's (total - reserved), else 0.
-        // LEFT: StorageComponent::storageSlots is void* (no slot type yet, COMP-e):
-        // the slot reads stay by offset.
         int delivered = 0;
         if (storage) {
             int slotCount = storage->slotCount;
-            uintptr_t* slots = reinterpret_cast<uintptr_t*>(storage->storageSlots);
+            StorageComponent::Item* slots = storage->storageSlots;
             if (slots) {
                 for (int s = 0; s < slotCount; s++) {
-                    if (reinterpret_cast<void*>(slots[s * 2]) == matType) {
-                        int total    = static_cast<int>(slots[s * 2 + 1]);  // +0x08
-                        int reserved = *reinterpret_cast<int*>(
-                            reinterpret_cast<uintptr_t>(slots) +
-                            static_cast<uintptr_t>(s) * 0x10 + 0xc);        // +0x0c
+                    if (slots[s]._resource == matType) {
+                        int total    = slots[s]._count;     // +0x08
+                        int reserved = slots[s]._reserve;   // +0x0c
                         delivered = total - reserved;
                         break;
                     }
@@ -104,5 +100,5 @@ bool BuildComponent::HaveAllMaterials() {
 // B4 FORWARD: 1 outside caller (code/Game/Game/construction_force_harness.cpp)
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
     if (!buildComp) return false;
-    return reinterpret_cast<BuildComponent*>(buildComp)->HaveAllMaterials();
+    return reinterpret_cast<BuildComponent*>(buildComp)->HaveAllMaterials();   // LEFT: FWD (wave X: its caller holds void*)
 }
