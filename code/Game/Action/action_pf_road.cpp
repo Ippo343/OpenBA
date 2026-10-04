@@ -32,6 +32,7 @@
 #include "Action/PathSearch.h"   // RegionGraph
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
+#include "Action/PathAvl.h"           // AvlInsert28 (0x14001a4f0), AvlTreeHead, AvlNode28
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
 #include "Component/exe_bodies.h"     // FloorComponent_FindResData
@@ -127,7 +128,7 @@ static_assert(offsetof(RoadBatch, maxY) == 0x38, "RoadBatch::maxY @ +0x38");
 // ------------------------------------------------------------
 //   ae270 Reimpl_TradeWork_helper_e270 (road normal)    ae180 Pf_TileShapeLut_ae180
 //   fa80  Pf_VectorResize60_fa80 (grow + dup element)   f250  Reimpl_Struct60B_Resize
-//   aa810 Pf_RayTriIntersect_aa810                       1a4f0 Pf_AvlInsertA_a4f0
+//   aa810 Pf_RayTriIntersect_aa810                       1a4f0 AvlInsert28
 //   a8420 Pf_DirtyCoarseCellB_8420                       123070 Pf_RecursiveChildSum_123070
 //   002ed0 WorkBase_FindComponent_2ed0                   003f60 ActCNR_FindComponent_3f60
 //   004680 FloorComponent_FindResData                    122e20 Pf_EntityResolvePos_2e20 (self-rec)
@@ -417,26 +418,26 @@ void WorldGeometry::MarkChunksDirty(int x, int y) {
     int qy = y / cs;
     int cw = _gridSize / cs;            // chunks per row
 
-    // LEFT: the dirty-chunk tree is two raw members (_dirtyTreeRoot / _dirtyTreeCount) of
-    // WorldGeometry (block GAME-c); 0x14001a4f0 takes it as one Set header.
-    int64_t* tree = reinterpret_cast<int64_t*>(&_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h _dirtyTreeRoot raw (GAME-2); SIG Pf_AvlInsertA_a4f0
-    uint64_t outNode = 0;     // local_res8
-    uint32_t key[2] = {0, 0}; // local_res10
+    // The dirty-chunk tree is two members (_dirtyTreeRoot / _dirtyTreeCount) of WorldGeometry;
+    // 0x14001a4f0 takes it as one Set header.
+    AvlTreeHead<AvlNode28>* tree = reinterpret_cast<AvlTreeHead<AvlNode28>*>(&_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h +0xE8 / +0xF0 are two members, not one AvlTreeHead<AvlNode28>
+    AvlNode28* outNode = nullptr;   // local_res8
+    int32_t key[2] = {0, 0};        // local_res10
 
     if ((x % cs == 0) && (-1 < qx - 1)) {
-        key[0] = static_cast<uint32_t>(cw * qy - 1 + qx);
-        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+        key[0] = static_cast<int32_t>(cw * qy - 1 + qx);
+        AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
     }
     if ((y % cs == 0) && (-1 < qy - 1)) {
-        key[0] = static_cast<uint32_t>((qy - 1) * cw + qx);
-        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+        key[0] = static_cast<int32_t>((qy - 1) * cw + qx);
+        AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
     }
     if ((x % cs == 0) && (y % cs == 0) && (-1 < qx - 1) && (-1 < qy - 1)) {
-        key[0] = static_cast<uint32_t>((qy - 1) * cw - 1 + qx);
-        Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+        key[0] = static_cast<int32_t>((qy - 1) * cw - 1 + qx);
+        AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
     }
-    key[0] = static_cast<uint32_t>(cw * qy + qx);
-    Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
+    key[0] = static_cast<int32_t>(cw * qy + qx);
+    AvlInsert28(tree, &outNode, key);   // 0x14001a4f0
 }
 
 

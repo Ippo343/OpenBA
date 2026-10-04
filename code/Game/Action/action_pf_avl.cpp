@@ -480,10 +480,6 @@ LAB_140025afa:
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node) {
     AvlRebalance(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28**>(node));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
 }
-// B4 FORWARD: 2 outside callers (Component/terraformcomponent.cpp, Player/roadtool_calcpath.cpp)
-extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
-    return reinterpret_cast<uint64_t*>(AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1), reinterpret_cast<AvlNode28**>(param_2), reinterpret_cast<const int32_t*>(param_3)));   // LEFT: SIG Pf_AvlInsertA_a4f0
-}
 
 // 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
 // {data@+0, count@+8, capacity@+0xC}) count to 0. Ghidra dropped the second

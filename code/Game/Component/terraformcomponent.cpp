@@ -25,7 +25,7 @@
 #include <cstdio>
 #include <new>
 #include <cstring>
-#include "Action/exe_bodies.h"      // Pf_AvlInsertA_a4f0
+#include "Action/exe_bodies.h"
 #include "Action/PathSearch.h"       // RegionGraph::MarkCellDirty
 #include "Game/PathfinderThread.h"   // PathfinderThread::SetCellTerrain
 #include "Component/TerraformComponent.h"
@@ -33,6 +33,7 @@
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
+#include "Action/PathAvl.h"           // AvlInsert28 (0x14001a4f0), AvlTreeHead, AvlNode28
 #include "Game/Map.h"
 #include "Game/exe_constants.h"
 
@@ -46,7 +47,7 @@
 // NOTE: the literal was previously 0x1400a4b50 (a dropped/transposed digit) which
 // lands mid-FUN_1400a4b30, an unrelated merchant-name binary search. The true callee
 // in TerraformComponent OnRemove is CitizenAI_impl_b150 @ 0x1400ab150.
-// CitizenAI_impl_a4f0 (0x14001a4f0, Pf_AvlInsertA_a4f0) — mark one region cell dirty.
+// CitizenAI_impl_a4f0 (0x14001a4f0, AvlInsert28) — mark one region cell dirty.
 // FUN_1400a8c90 (Pf_FineCellDirty_a8c90) — terrain tile visual update.
 // FUN_1400a6fe0 (Pf_EnqueueCmd2_a6fe0) — terrain type set.
 // DAT_140172230 == 256.0f, the heightmap scale.
@@ -72,24 +73,24 @@ void TerraformComponent_RegionRecalc(WorldGeometry* terrain, int x, int y) {
     int gy = y / cell;
     int dim = terrain->_gridSize / cell;
 
-    int64_t* regionMgr = reinterpret_cast<int64_t*>(&terrain->_dirtyTreeRoot);   // LEFT: SIG Pf_AvlInsertA_a4f0 (takes the root slot as int64_t*)
-    uint64_t scratch = 0;
-    uint32_t cellIdx;
+    AvlTreeHead<AvlNode28>* regionMgr = reinterpret_cast<AvlTreeHead<AvlNode28>*>(&terrain->_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h +0xE8 / +0xF0 are two members, not one AvlTreeHead<AvlNode28>
+    AvlNode28* scratch = nullptr;
+    int32_t cellIdx;
 
     if ((x % cell == 0) && (-1 < gx - 1)) {
-        cellIdx = (uint32_t)(dim * gy - 1 + gx);
-        Pf_AvlInsertA_a4f0(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
+        cellIdx = (int32_t)(dim * gy - 1 + gx);
+        AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
     }
     if ((y % cell == 0) && (-1 < gy - 1)) {
-        cellIdx = (uint32_t)((gy - 1) * dim + gx);
-        Pf_AvlInsertA_a4f0(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
+        cellIdx = (int32_t)((gy - 1) * dim + gx);
+        AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
     }
     if ((x % cell == 0) && (y % cell == 0) && (-1 < gx - 1) && (-1 < gy - 1)) {
-        cellIdx = (uint32_t)((gy - 1) * dim - 1 + gx);
-        Pf_AvlInsertA_a4f0(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
+        cellIdx = (int32_t)((gy - 1) * dim - 1 + gx);
+        AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
     }
-    cellIdx = (uint32_t)(dim * gy + gx);
-    Pf_AvlInsertA_a4f0(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
+    cellIdx = (int32_t)(dim * gy + gx);
+    AvlInsert28(regionMgr, &scratch, &cellIdx);   // 0x14001a4f0
 }
 
 
