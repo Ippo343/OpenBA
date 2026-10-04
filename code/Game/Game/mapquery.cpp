@@ -178,7 +178,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
     // outTri (param_5) receives the surface normal — only [2] (slope/flatness) is
     // consumed downstream (the tile classifier), but we fill a true unit normal.
     // LEFT: outTri is `void*` in the C declaration ~150 callers hold.
-    float* tri = (float*)outTri;
+    float* tri = (float*)outTri;   // LEFT: outTri is `void*` in the C declaration ~150 callers hold.
     if (tri)
         MapQuery_SampleNormal(worldGeom, inX, inZ, tri);
 
@@ -205,7 +205,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
                     // Picking::Scene::Intersect (import slot 0x140152428); the Scene is
                     // embedded at Map +0x08.
                     // LEFT: Map::pickingScene is raw storage (H5).
-                    const int hit = reinterpret_cast<const Picking::Scene*>(mapGrid->pickingScene)->Intersect(
+                    const int hit = reinterpret_cast<const Picking::Scene*>(mapGrid->pickingScene)->Intersect(   // LEFT: Map::pickingScene is raw storage (H5).
                         rayStart, rayDir, maxDist, hitPos, hitNormal);
                     if (hit >= 0 && hitPos.z > height) {
                         if (tri) {

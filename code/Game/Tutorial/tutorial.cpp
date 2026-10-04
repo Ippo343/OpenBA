@@ -45,7 +45,7 @@ Tutorial::Tutorial()
 // destroyed (8-byte ExternalPtr<TutorialStep> entries). The compiler then
 // runs ~External.
 Tutorial::~Tutorial() {
-    reinterpret_cast<Collection::Array<void*>*>(&steps)->~Array();   // B.3.2 bridge
+    reinterpret_cast<Collection::Array<void*>*>(&steps)->~Array();   // B.3.2 bridge   // LEFT: H5 Tutorial::steps is the raw triple of an Array<ExternalPtr<TutorialStep>> (Tutorial.h, not this agent's)
 }
 
 // ============================================================

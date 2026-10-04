@@ -60,7 +60,7 @@ static int MapTileGrid_Classify(void* game, int dim, int idx) {
 extern "C" void MapTileGrid_Build(void* gameVoid, int dim) {
     if (!gameVoid || dim <= 0) return;
     // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
-    Map* game = (Map*)gameVoid;
+    Map* game = (Map*)gameVoid;   // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
     game->size = dim;
 
     const int    count = dim * dim;

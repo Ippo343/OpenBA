@@ -59,7 +59,7 @@ public:
 
     // The embedded Audio::Scene (constructed through its ctor door, exactly as
     // retail's ctor calls the import; the class has no default constructor).
-    Audio::Scene* AudioScene() { return reinterpret_cast<Audio::Scene*>(_audioScene); }
+    Audio::Scene* AudioScene() { return reinterpret_cast<Audio::Scene*>(_audioScene); }   // LEFT: H5 _audioScene is raw storage of an Audio::Scene (no default ctor: its ctor door runs in the loop's ctor)
 
     static const void* Vtable();
 

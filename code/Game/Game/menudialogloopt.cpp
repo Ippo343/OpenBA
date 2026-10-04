@@ -126,7 +126,7 @@ static void MenuScene_Helper_8660(PlayerController& controller, float fovY_deg, 
     RtVolume_Frustum_Ctor_Perspective(&frustum, &nearS, &farS, &fovX, &fovY);
 
     // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
-    reinterpret_cast<Graphics::Camera*>(controller.camera)->SetFrustum(frustum);
+    reinterpret_cast<Graphics::Camera*>(controller.camera)->SetFrustum(frustum);   // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
 }
 
 // ============================================================
@@ -143,14 +143,14 @@ static void MenuScene_Helper_8660(PlayerController& controller, float fovY_deg, 
 // storage (H5: their ctor / dtor are menudialogloopt_stubs.cpp's, STANDALONE).
 template <typename T>
 static void AppendToDynArray(uint8_t* arrayStorage, const T& value) {
-    auto* arr = reinterpret_cast<Collection::Array<T>*>(arrayStorage);
+    auto* arr = reinterpret_cast<Collection::Array<T>*>(arrayStorage);   // LEFT: the loop's +0xbd0 / +0xbe0 / +0xbf0 arrays are raw {data, count|cap} storage (H5: their ctor / dtor are menudialogloopt_stubs.cpp's, STANDALONE).
     arr->SetSize(arr->GetSize() + 1, value);
 }
 
 // The loop's arrays, read by count / data (the same raw storage).
 template <typename T>
 static Collection::Array<T>& LoopArray(uint8_t* arrayStorage) {
-    return *reinterpret_cast<Collection::Array<T>*>(arrayStorage);
+    return *reinterpret_cast<Collection::Array<T>*>(arrayStorage);   // LEFT: H5 the loop's +0xbd0 / +0xbe0 / +0xbf0 arrays are raw {data, count|cap} storage (MenuDialogLoopT.h; a typed Array member makes a dtor run)
 }
 
 // ============================================================
@@ -544,7 +544,7 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
     // so IsDerivedFrom NULL-derefs on the lookup. Trust FindOrLoad's return — if it
     // gave us a non-NULL External and the path resolved, it's the right type.
     // LEFT: FindOrLoad returns a const External*; the loop holds a MenuScene*.
-    MenuScene* menuScene = const_cast<MenuScene*>(static_cast<const MenuScene*>(obj));
+    MenuScene* menuScene = const_cast<MenuScene*>(static_cast<const MenuScene*>(obj));   // LEFT: FindOrLoad returns a const External*; the loop holds a MenuScene*.
 
     self->_menuScene = menuScene;
 
@@ -557,12 +557,12 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
     // --- Allocate Renderer (0x50 bytes, alignment 4) ---
     // LEFT: the Renderer / Scene ctors are doors on the POD mirrors (R-GFX).
     Graphics::Renderer* renderer = static_cast<Graphics::Renderer*>(System::MemoryAllocator::MemAlloc(0x50, 4));
-    if (renderer) RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(renderer));
+    if (renderer) RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(renderer));   // LEFT: the Renderer / Scene ctors are doors on the POD mirrors (R-GFX).
     self->_renderer = renderer;
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---
     Graphics::Scene* gScene = static_cast<Graphics::Scene*>(System::MemoryAllocator::MemAlloc(0x78, 8));
-    if (gScene) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(gScene));
+    if (gScene) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(gScene));   // LEFT: the Renderer / Scene ctors are doors on the POD mirrors (R-GFX).
     self->_scene = gScene;
 
     // --- Allocate SunLight (0x108 bytes, alignment 8) ---
@@ -730,7 +730,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
     context->_unknown03b8 = menuScene->field_0x1B4;
     // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in
     // R-VIDEO's header).
-    std::memcpy(reinterpret_cast<uint8_t*>(context) + 0x288, &menuScene->field_0x1B4, 16);
+    std::memcpy(reinterpret_cast<uint8_t*>(context) + 0x288, &menuScene->field_0x1B4, 16);   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
     context->_dirty |= 0x10800;
 
     // Fog color Vector4 — the skyColor's RGB; the 4th component is fog density.
@@ -748,7 +748,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
     }
 
     // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
-    const Graphics::Camera& camera = *reinterpret_cast<const Graphics::Camera*>(transform->camera);
+    const Graphics::Camera& camera = *reinterpret_cast<const Graphics::Camera*>(transform->camera);   // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
 
     renderer->Draw(*context, alpha, *gScene, camera);
 }
@@ -801,7 +801,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(MenuDialogLoopT* self, float deltaSecon
     // 3. Convert to Transform3 (48B = 3x4 matrix) and apply to the Camera at +0x34.
     Math::Transform3 t3Buf = lookAt.AsTransform3();
     // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
-    reinterpret_cast<Graphics::Camera*>(transform->camera)->SetCameraToWorld(t3Buf);
+    reinterpret_cast<Graphics::Camera*>(transform->camera)->SetCameraToWorld(t3Buf);   // LEFT: PlayerController::camera (+0x34) is raw storage (H5).
 
     // Diagnostic: log the first few frames so we can verify the camera transform
     // is non-identity (the underlying bug we're fixing).
@@ -888,7 +888,7 @@ bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self) {
     // FindOrLoad returns a const External* (CONST:FindOrLoad stays); the
     // SoundEffect is that External (B10 downcast, no IsDerivedFrom: see above).
     Audio::SoundEffect* music = static_cast<Audio::SoundEffect*>(
-        const_cast<::Object::External*>(found));
+        const_cast<::Object::External*>(found));   // LEFT: FindOrLoad returns a const External*; the slot holds the SoundEffect non-const (PASS2_LEDGER S3, the close decides)
 
     self->_music = music;
     printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", (void*)music);

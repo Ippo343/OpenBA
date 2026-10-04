@@ -147,7 +147,7 @@ static CitizenDescription* FoundingCitizenDescription(void* citizenTemplate) {
     uint32_t want = TidCitizenDescription();
     if (citizenTemplate && want != 0) {
         // LEFT: starttown.cpp (its block) hands the template as void*.
-        const ComponentDescription* t = reinterpret_cast<const ComponentDescription*>(citizenTemplate);
+        const ComponentDescription* t = reinterpret_cast<const ComponentDescription*>(citizenTemplate);   // LEFT: the template is MapGenerator::ExternalRef::resolved, a void* (Game/MapGenerator.h: one ref type for every pool; not this agent's)
         int count = t->_subDescCount;    // +0x30
         Description** arr = t->_subDescs;   // +0x28
         for (int i = 0; i < count && arr; ++i) {
@@ -257,13 +257,13 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 
     // 1. allocate + copy-construct the entity from the (re-resolved) citizen template
     void* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
-    void* mem  = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
     ComponentEntity* ent = (mem && tmpl)
-                     ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl)   // 0x1400c3720
+                     ? ComponentEntity_CtorFromDescription(mem, tmpl)   // 0x1400c3720
                      : nullptr;
     if (!ent) {
         fprintf(stderr, "[FoundingSpawn] BAIL: CopyCtor produced no entity "
-                "(mem=%p tmpl=%p)\n", mem, tmpl);
+                "(mem=%p tmpl=%p)\n", static_cast<void*>(mem), tmpl);
         fflush(stderr);
         return nullptr;
     }
@@ -319,14 +319,14 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     if (GameUpdateLoop::_singleton != nullptr) {
         ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
         // LEFT: 0x140117080's port takes the profession as int64 (Component/exe_bodies.h).
-        if (profList) laborerProf = reinterpret_cast<int64_t>(profList->field_0x30);
+        if (profList) laborerProf = reinterpret_cast<int64_t>(profList->field_0x30);   // LEFT: 0x140117080's port takes the profession as int64 (Component/exe_bodies.h).
     }
 
     // 7. the whole per-citizen init
     int64_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     // LEFT: 0x140117080's port takes the component as int64 (Component/exe_bodies.h).
-    CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(comp), pos,   // 0x140117080
+    CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(comp), pos,   // 0x140117080   // LEFT: 0x140117080's port takes the component as int64 (Component/exe_bodies.h).
                                     static_cast<uint32_t>(genderSel == '\0'),
                                     isChild ? '\x01' : '\0', age, educated, &nullIBP,
                                     laborerProf);
@@ -334,7 +334,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     // 8. register with the world entity list under the template's category
     tmpl = FoundingSpawn_RefreshTemplate(startConfig, tmpl);
     // LEFT: the template comes back as the void* the ExternalRef caches.
-    int category = tmpl ? reinterpret_cast<const ComponentDescription*>(tmpl)->_category   // +0x20
+    int category = tmpl ? reinterpret_cast<const ComponentDescription*>(tmpl)->_category   // +0x20   // LEFT: the template is MapGenerator::ExternalRef::resolved, a void* (Game/MapGenerator.h: one ref type for every pool; not this agent's)
                         : 0;
     ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(entityList, &regIBP, category);   // 0x1400c48a0

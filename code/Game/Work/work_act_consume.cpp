@@ -83,7 +83,7 @@ static inline void* WCP_Alloc(uint64_t size) {
 // 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
 // action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 static inline void WCP_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent declares its +0x48 action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 }
 
 // Search a ComponentDescription's sub-descriptions for the one whose Type() (slot 2)
@@ -262,7 +262,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     // a read through the null receiver that faults exactly as retail's does. Not guarded.
     // LEFT: the null-receiver read is spelled as the address it faults on.
     uint32_t toolType = foundComp1 ? foundComp1->_u50
-                                   : *reinterpret_cast<uint32_t*>(0x50);
+                                   : *reinterpret_cast<uint32_t*>(0x50);   // LEFT: the null-receiver read is spelled as the address it faults on.
     // actionType = (toolType <= 0xa) ? toolType+9 : 8   (0x1400bf307..0x1400bf312)
     int actionType = 8;
     if (toolType <= 0xa) actionType = static_cast<int>(toolType) + 9;
@@ -296,7 +296,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
         // the second read through the null receiver, faulting as retail's does. Not guarded.
         // LEFT: the null-receiver read is spelled as the address it faults on.
         ConsumeProduceRecipe* recBase = foundComp2 ? foundComp2->_recipes
-                                                   : *reinterpret_cast<ConsumeProduceRecipe**>(0x28);
+                                                   : *reinterpret_cast<ConsumeProduceRecipe**>(0x28);   // LEFT: the null-receiver read is spelled as the address it faults on.
         if (recBase[idx].inputCount > 0) {
             // ConsumeRawMaterial_Action_Ctor3(self, &(*param_3)) (0x1400bf446..)
             obj = WCP_Alloc(0x38);            // LEA ECX,[RDX+0x30] => 0x38

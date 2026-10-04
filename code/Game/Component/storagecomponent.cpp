@@ -87,7 +87,7 @@ int StorageComponent::QueryAvailable(const ComponentDescription* material) const
 // B4 FORWARD: 1 outside caller (Work/buildroad.cpp). The null test is the tree's.
 int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
     if (!storageComp) return 0;
-    return reinterpret_cast<StorageComponent*>(storageComp)->QueryAvailable(
+    return reinterpret_cast<StorageComponent*>(storageComp)->QueryAvailable(   // LEFT: B4 FORWARD StorageComponent_QueryAvailable: its one caller (Work/buildroad.cpp, not this agent's) holds the storage as void*
         reinterpret_cast<const ComponentDescription*>(materialEntity));   // LEFT: B4 FORWARD (wave X: Work/buildroad.cpp passes void* / int64_t)
 }
 
@@ -127,7 +127,7 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
     // LEFT: its four callers' arrays (StorageComponent::storageSlots, the trade manifest, the
     // notify entries) are raw {data, count, capacity} triples (H5): the one erased core is
     // reached through the header view (the body's original C-style entry cast).
-    ((StoragePod16Array*)arrayBase)->SetSize(newCount);
+    ((StoragePod16Array*)arrayBase)->SetSize(newCount);   // LEFT: its four callers' arrays (StorageComponent::storageSlots, the trade manifest, the notify entries) are raw {data, count, capacity} triples (H5): the one erased core is...
 }
 
 // ============================================================================

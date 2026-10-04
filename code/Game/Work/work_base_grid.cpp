@@ -67,7 +67,7 @@ int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFl
 // Caller: uint64_t fn(uintptr_t mgr, void* citizenRef, int cellId, char flag)
 // LEFT: the six outside callers hand the scheduler as an integer (X-G2-WAIT).
 uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag) {
-    WorkScheduler* scheduler = reinterpret_cast<WorkScheduler*>(mgr);
+    WorkScheduler* scheduler = reinterpret_cast<WorkScheduler*>(mgr);   // LEFT: the six outside callers hand the scheduler as an integer (X-G2-WAIT).
     WorkSchedulerIdNode* node = scheduler->trees[0].root;
     for (;;) {
         for (;;) {
@@ -88,7 +88,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
     // [9] Validate, RCX only (0x1400f86ad); [4] Execute(&citizen, scheduler+0x130) (0x1400f86d3).
     work->Validate();
 
-    CitizenComponent* citizenCopy = *reinterpret_cast<CitizenComponent**>(citizenRef);
+    CitizenComponent* citizenCopy = *reinterpret_cast<CitizenComponent**>(citizenRef);   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (X-G2-WAIT): the citizen slot arrives as void*
     uint64_t uVar2 = static_cast<uint32_t>(work->Execute(&citizenCopy, &scheduler->time));
 
     if (static_cast<int>(uVar2) == 2)
@@ -97,7 +97,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int 
     if (static_cast<int>(uVar2) == 1) {
         if (flag != '\0') {
             work->Validate();   // [9] (0x1400f86f4)
-            citizenCopy = *reinterpret_cast<CitizenComponent**>(citizenRef);
+            citizenCopy = *reinterpret_cast<CitizenComponent**>(citizenRef);   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (X-G2-WAIT): the citizen slot arrives as void*
             // [5] Slot5(&citizen, scheduler+0x130) (0x1400f871a); the caller reads AL.
             uint64_t assignR = static_cast<uint32_t>(work->Slot5(&citizenCopy, &scheduler->time));
             if (static_cast<char>(assignR) != '\0')
@@ -138,9 +138,9 @@ int Work::TryAutoPickup(void* citizenRef) {
                 node = node->left;
             } else {
                 if (cellId <= node->key) {   // found
-                    void* citizenCopy = *reinterpret_cast<void**>(citizenRef);
+                    void* citizenCopy = *reinterpret_cast<void**>(citizenRef);   // LEFT: SIG WorkGrid_TryAssignWorkplace_f8620 (X-G2-WAIT): the citizen slot travels as void*
                     // LEFT: 0x1400f8620's C signature takes the scheduler as an integer.
-                    uint64_t r = WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(mgr), &citizenCopy,
+                    uint64_t r = WorkGrid_TryAssignWorkplace_f8620(reinterpret_cast<uintptr_t>(mgr), &citizenCopy,   // LEFT: 0x1400f8620's C signature takes the scheduler as an integer.
                                                                    cellId, '\x01');
                     if (static_cast<char>(r) != '\0') return 2;
                     keepElement = true;

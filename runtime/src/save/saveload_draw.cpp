@@ -692,7 +692,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // local, exactly as retail does (`MOV R9,[RBP+0x80]; MOV RAX,[R9+0x28]`).
     {
         const RtVideo::RenderBufferPrefix* rb =
-            static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
+            static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);   // LEFT: Context::_renderBuffer is void* (runtime/types/video/Context.h, X-RL FIELD left)
         sc._scissorX = 0;
         sc._scissorY = 0;
         sc._scissorW = rb->width;

@@ -1541,7 +1541,7 @@ void TownHallUI::UpdateAll() {
             entry.val1 = 0;
             entry.val2 = 0;
             void* retNode = nullptr;
-            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&invBST), &retNode,
+            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&invBST), &retNode,   // LEFT: SIG ToolbarUtility_BstInsert_4890 (Dialog/exe_bodies.h) takes the tree root as int64_t* and the record as uint64_t*
                                           reinterpret_cast<uint64_t*>(&entry));   // 0x140014890; LEFT: SIG ToolbarUtility_BstInsert_4890 (untyped)
         }
     }

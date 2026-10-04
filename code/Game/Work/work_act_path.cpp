@@ -68,7 +68,7 @@ static inline void* WAP2_Alloc(uint64_t size, uint32_t align) {
 // 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
 // action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 static inline void  WAP2_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent declares its +0x48 action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 }
 
 // Read a runtime Time qword via System::Time::Time(&buf, seconds); the original reads

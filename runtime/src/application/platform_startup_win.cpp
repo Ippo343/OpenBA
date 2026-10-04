@@ -165,7 +165,7 @@ int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
         if (n != nullptr) {                                 // 0x18009f965
             Node* found = nullptr;
             while (n != nullptr) {
-                const unsigned key = reinterpret_cast<const Element*>(n)->message;
+                const unsigned key = reinterpret_cast<const Element*>(n)->message;   // LEFT: the message-callback set's node is walked as its element (Application::_messageCallbacks' node type is the owner's header)
                 if (msg < key) {                            // 0x18009f976 JC
                     n = n->left;
                 } else if (key < msg) {                     // 0x18009f97b JNC
@@ -177,7 +177,7 @@ int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
             }
             if (found != nullptr) {                         // 0x18009f98e, retail re-tests
                 MessageCallbackFn cb =
-                    reinterpret_cast<const Element*>(found)->callback;
+                    reinterpret_cast<const Element*>(found)->callback;   // LEFT: the message-callback set's node is walked as its element (Application::_messageCallbacks' node type is the owner's header)
                 if (cb(hwnd, msg, static_cast<uint64_t>(wParam),
                        static_cast<int64_t>(lParam)) != 0) {
                     return 0;                               // 0x18009f99b -> 0x18009f9f0

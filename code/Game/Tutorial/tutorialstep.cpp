@@ -56,9 +56,9 @@ TutorialStep::TutorialStep()
 // destroy for the 8-byte ExternalPtr<T> entries) — then ~String on the
 // description (+0x38) and the title (+0x30). The compiler runs ~External.
 TutorialStep::~TutorialStep() {
-    reinterpret_cast<Collection::Array<void*>*>(&goals)->~Array();    // B.3.2 bridge
-    reinterpret_cast<Collection::Array<void*>*>(&setups)->~Array();   // B.3.2 bridge
-    reinterpret_cast<Collection::Array<void*>*>(&images)->~Array();   // B.3.2 bridge
+    reinterpret_cast<Collection::Array<void*>*>(&goals)->~Array();    // B.3.2 bridge   // LEFT: H5 TutorialStep's goals / setups / images are raw triples of Array<ExternalPtr<T>> (TutorialStep.h, not this agent's)
+    reinterpret_cast<Collection::Array<void*>*>(&setups)->~Array();   // B.3.2 bridge   // LEFT: H5 TutorialStep's goals / setups / images are raw triples of Array<ExternalPtr<T>> (TutorialStep.h, not this agent's)
+    reinterpret_cast<Collection::Array<void*>*>(&images)->~Array();   // B.3.2 bridge   // LEFT: H5 TutorialStep's goals / setups / images are raw triples of Array<ExternalPtr<T>> (TutorialStep.h, not this agent's)
     DescText().~String();
     TitleText().~String();
 }
@@ -91,10 +91,10 @@ Object::External* TutorialStep::Construct() {                     // 0x140028c90
 // LEFT H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor
 // destroys them by hand).
 System::String& TutorialStep::TitleText() {
-    return *reinterpret_cast<System::String*>(&titleStr);
+    return *reinterpret_cast<System::String*>(&titleStr);   // LEFT: H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor destroys them by hand).
 }
 System::String& TutorialStep::DescText() {
-    return *reinterpret_cast<System::String*>(&descStr);
+    return *reinterpret_cast<System::String*>(&descStr);   // LEFT: H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor destroys them by hand).
 }
 
 bool TutorialStep::Serialize(IO::Stream& stream) {

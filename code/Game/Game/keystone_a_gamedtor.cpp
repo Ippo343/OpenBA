@@ -215,7 +215,7 @@ PathfinderThread::~PathfinderThread() {
 
     // LEFT: the CriticalSection dtor is a door on the POD mirror (System::
     // CriticalSection is trivially destructible by design, Thread.h).
-    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(&lock));
+    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(&lock));   // LEFT: the CriticalSection dtor is a door on the POD mirror (System:: CriticalSection is trivially destructible by design, Thread.h).
     // tail-call: System::Thread::~Thread() -- the compiler's base chain.
 }
 
@@ -311,7 +311,7 @@ Map::~Map() {
     cellCapacity = 0;
 
     // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
-    reinterpret_cast<Picking::Scene*>(pickingScene)->Picking::Scene::~Scene();   // tail-call
+    reinterpret_cast<Picking::Scene*>(pickingScene)->Picking::Scene::~Scene();   // tail-call   // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
 }
 
 // B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The caller MemFrees

@@ -122,7 +122,7 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     if (!gameObjV || dim <= 0) return;
     // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*`
     // map and holds it as `void*` at one of its two calls.
-    Map* game = reinterpret_cast<Map*>(gameObjV);
+    Map* game = reinterpret_cast<Map*>(gameObjV);   // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map and holds it as `void*` at one of its two calls.
     if (game->pathfinder != nullptr) return;   // already seeded
 
     void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);
@@ -134,7 +134,7 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     PathfinderThread* pf = ::new (pfV) PathfinderThread(0x10000);
     // LEFT: the CriticalSection ctor is a door on the POD mirror (System::
     // CriticalSection is trivially constructible by design, Thread.h).
-    RtSystem_CriticalSection_Ctor(reinterpret_cast<RtSystem::CriticalSection*>(&pf->lock));
+    RtSystem_CriticalSection_Ctor(reinterpret_cast<RtSystem::CriticalSection*>(&pf->lock));   // LEFT: the CriticalSection ctor is a door on the POD mirror (System:: CriticalSection is trivially constructible by design, Thread.h).
     pf->nextToken  = 1;          // next result-slot generation id
     pf->runInline  = 1;          // priming runs SYNC (commands apply inline); flipped to 0 (async) after priming
     pf->queueTail  = nullptr;    // queue tail

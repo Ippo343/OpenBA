@@ -42,7 +42,7 @@ TutorialGoalButton::TutorialGoalButton() : elementPath(0), invertCheck(false), _
 // LEFT H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor
 // destroys it by hand).
 System::String& TutorialGoalButton::ElementPath() {
-    return *reinterpret_cast<System::String*>(&elementPath);
+    return *reinterpret_cast<System::String*>(&elementPath);   // LEFT: H5: the +0x20 String is raw storage (the ctor stores 0 inline, the dtor destroys it by hand).
 }
 
 // The dtor inside [0] 0x1400273b0: ~String on +0x20; the compiler re-stamps

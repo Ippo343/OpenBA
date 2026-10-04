@@ -104,7 +104,7 @@ static void TutRestrict_ResolveRefOrLoad(NamedExternalRef* ref) {
         }
     }
     // The factory hands out const Externals; the reference holds them mutable.
-    ref->resolved = const_cast<::Object::External*>(result);
+    ref->resolved = const_cast<::Object::External*>(result);   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
 }
 
 

@@ -168,7 +168,7 @@ Object::InternalPtr<UI::Element>* TutorialImageToolbarIcon::CreateElement(Object
             toolbar = ResolvedToolbar(_toolbarRef); // re-read after resolve
             spriteSheet = toolbar->_field28;
             // LEFT: Toolbar's +0x38 String is `void*` (DLG-d's header, H5).
-            spriteName = reinterpret_cast<const System::String*>(&toolbar->_field38);
+            spriteName = reinterpret_cast<const System::String*>(&toolbar->_field38);   // LEFT: Toolbar's +0x38 String is `void*` (DLG-d's header, H5).
         } else {
             // Has a template — walk it for its ToolbarDescription
             _toolbarRef.ResolveToolbar();
@@ -201,7 +201,7 @@ Object::InternalPtr<UI::Element>* TutorialImageToolbarIcon::CreateElement(Object
                 // Fallback: use toolbar's direct data (matchedComp stays null)
                 spriteSheet = toolbar->_field28;
                 // LEFT: as above.
-                spriteName = reinterpret_cast<const System::String*>(&toolbar->_field38);
+                spriteName = reinterpret_cast<const System::String*>(&toolbar->_field38);   // LEFT: as above.
             }
         }
     }

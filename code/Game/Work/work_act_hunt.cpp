@@ -67,7 +67,7 @@ static inline void* WAH_Alloc(uint64_t size, uint32_t align) {
 // 0x1400c54e0 ActionStackPush (Action.h). LEFT: CharacterComponent declares its +0x48
 // action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 static inline void  WAH_Append(void* list, const ::Object::InternalPtr<Action>* ibp) {
-    ActionStackPush(static_cast<ActionStack*>(list), ibp);
+    ActionStackPush(static_cast<ActionStack*>(list), ibp);   // LEFT: CharacterComponent declares its +0x48 action stack as separate fields, not an ActionStack (wave X), so the stack is void* here.
 }
 
 // The SendComponentMessage action goes into the character's +0x58 slot, the

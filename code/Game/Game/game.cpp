@@ -137,7 +137,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                 }
                 // Check if SelectDescription.type (+0x40) matches requested disaster type
                 if (selectDesc && static_cast<int>(selectDesc->_u40) == disasterType) {
-                    citizenList->RemoveEntity(const_cast<ComponentDescription*>(desc));   // 0x140091a20
+                    citizenList->RemoveEntity(const_cast<ComponentDescription*>(desc));   // 0x140091a20   // LEFT: FindNext returns a const ComponentDescription*; RemoveEntity takes it non-const (retail drops the const: PASS2_LEDGER S3, the close decides)
                 }
             }
         }

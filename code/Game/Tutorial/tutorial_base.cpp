@@ -55,7 +55,7 @@
 // typeId resolves lazily by name (cascade-safe: loads without type validation
 // if the name is not yet registered — never crashes).
 static inline void SerOne(void* field, void* serializer, const char* typeName) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: SerOne's callers hand the slot as void* (the tutorial array helpers)
                                 /*typeIdPtr*/ nullptr, typeName);
 }
 
@@ -67,7 +67,7 @@ static inline void SerOne(void* field, void* serializer, const char* typeName) {
 //   0x140029190  TutorialStep goals  (TutorialGoal)
 static void SerArray(void* serializer, int count, void* arrayData, const char* typeName) {
     if (!arrayData || count <= 0) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(arrayData);
+    uint8_t* base = reinterpret_cast<uint8_t*>(arrayData);   // LEFT: the 8-byte ExternalPtr slots of the callers' arrays arrive as void* (elem stride of SerArray's callers)
     for (int i = 0; i < count; ++i) {
         SerOne(base + static_cast<size_t>(i) * 8, serializer, typeName);
     }
@@ -156,7 +156,7 @@ void NamedExternalRef::ResolveToolbar() {
 
     // The factory hands out const Externals; the reference holds them mutable
     // (retail's ExternalPtr<T> is a plain T*).
-    resolved   = const_cast<::Object::External*>(result);
+    resolved   = const_cast<::Object::External*>(result);   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
     generation = factoryGen;
 }
 
@@ -219,7 +219,7 @@ static int CalcMaxWorkersGuarded(const WorkComponent* work) {
 // huntwork.cpp, marketwork.cpp, pasturework.cpp, plantarea.cpp,
 // plantorchard.cpp, tendarea.cpp, tradework.cpp).
 extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
-    return CalcMaxWorkersGuarded(reinterpret_cast<const WorkComponent*>(workComp));   // B4 FORWARD: the old signature
+    return CalcMaxWorkersGuarded(reinterpret_cast<const WorkComponent*>(workComp));   // B4 FORWARD: the old signature   // LEFT: SIG WorkComponent_CalcMaxWorkers (X-G2-WAIT, ~20 caller files)
 }
 
 // 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's

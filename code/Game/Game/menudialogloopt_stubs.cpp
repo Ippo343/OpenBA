@@ -104,7 +104,7 @@ static void EnsureCursorsLoaded() {
                             const char* name) {
         const System::Filename fn(name);
         // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-        UI::Cursor* ext = const_cast<UI::Cursor*>(
+        UI::Cursor* ext = const_cast<UI::Cursor*>(   // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
             static_cast<const UI::Cursor*>(efactory->FindOrLoad(fn)));
         slot = ext;
         printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
@@ -158,7 +158,7 @@ static void EnsureUISoundsLoaded() {
                             const char* name) {
         const System::Filename fn(name);
         // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-        Audio::SoundEffect* ext = const_cast<Audio::SoundEffect*>(
+        Audio::SoundEffect* ext = const_cast<Audio::SoundEffect*>(   // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
             static_cast<const Audio::SoundEffect*>(efactory->FindOrLoad(fn)));
         slot = ext;
         printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
@@ -205,7 +205,7 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
     const System::Filename sheetPath("Dialog/SpriteSheet.rsc");
     // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-    UI::SpriteSheet* spriteSheet = const_cast<UI::SpriteSheet*>(
+    UI::SpriteSheet* spriteSheet = const_cast<UI::SpriteSheet*>(   // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
         static_cast<const UI::SpriteSheet*>(efactory->FindOrLoad(sheetPath)));
     keyMap->spriteSheet = spriteSheet;
     printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
@@ -266,9 +266,9 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing
     // them as Collection::Array makes their dtor run; asked of the coordinator).
     for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
-        *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data
-        *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity
+        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(arr));   // MemFree(null) returns   // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing them as Collection::Array makes their dtor run; asked of the coordinator).
+        *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data   // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing them as Collection::Array makes their dtor run; asked of the coordinator).
+        *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity   // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing them as Collection::Array makes their dtor run; asked of the coordinator).
     }
     AudioScene()->~Scene();
 
@@ -456,7 +456,7 @@ void MenuDialogLoopT::Shutdown() {
     // ctor 0x1400d3f10 (0x14009ac9a) and adds it as a scene global; its class
     // is not settled from retail (the header's "TradeWork" comment is unverified).
     if (_dlcShip) {
-        Graphics::Geometry* ship = static_cast<Graphics::Geometry*>(_dlcShip);
+        Graphics::Geometry* ship = static_cast<Graphics::Geometry*>(_dlcShip);   // LEFT: +0xbc8 stays void*: retail builds it with MemAlloc(0xf0) + the exe ctor 0x1400d3f10 (0x14009ac9a) and adds it as a scene global; its class is not settled from retail (...
         scene()->RemoveGlobalObject(ship);
         if (ship) deleteGeometry(ship);
     }
@@ -464,22 +464,22 @@ void MenuDialogLoopT::Shutdown() {
     //    Count from +0xbe8, ids from +0xbf0 (uint32), objects from +0xbe0: the
     //    {data, count|cap} headers _instanceArray (+0xbe0) and _sceneIdArray (+0xbf0).
     //    LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
-    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(_instanceArray + 8); ++i) {
-        const uint32_t id = (*reinterpret_cast<const uint32_t* const*>(_sceneIdArray))[i];
+    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(_instanceArray + 8); ++i) {   // LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
+        const uint32_t id = (*reinterpret_cast<const uint32_t* const*>(_sceneIdArray))[i];   // LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
         scene()->RemoveObject(id);
-        if (Graphics::Geometry* o = (*reinterpret_cast<Graphics::Geometry* const* const*>(_instanceArray))[i]) deleteGeometry(o);
+        if (Graphics::Geometry* o = (*reinterpret_cast<Graphics::Geometry* const* const*>(_instanceArray))[i]) deleteGeometry(o);   // LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
     }
     // 6. +0xbb8 (the Transform block): freed.
     if (void* t = _transform) System::MemoryAllocator::MemFree(t);
     // 7. +0xba0 Graphics::Scene: ~Scene (??1Scene@Graphics@@ 0x1801026c0) then freed.
     // LEFT (R-GFX): the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
     if (void* g = _scene) {
-        RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(g));   // B.3.x bridge
+        RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(g));   // B.3.x bridge   // LEFT: R-GFX: the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
         System::MemoryAllocator::MemFree(g);
     }
     // 8. +0xb98 Graphics::Renderer: ~Renderer (??1Renderer@Graphics@@ 0x1800180a0) then freed.
     if (void* r = _renderer) {
-        RtGraphics_Renderer_Dtor(static_cast<RtGraphics::Renderer*>(r));   // B.3.x bridge
+        RtGraphics_Renderer_Dtor(static_cast<RtGraphics::Renderer*>(r));   // B.3.x bridge   // LEFT: R-GFX: the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
         System::MemoryAllocator::MemFree(r);
     }
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad (??1SaveLoad@Save@@ 0x1800c3c90) then freed.
@@ -503,7 +503,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // before returning (MainLoop owns it); retail's slot takes it by const&.
     // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
     // const& of retail's slot signature (our divergence, not retail's).
-    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
+    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge   // LEFT: the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
