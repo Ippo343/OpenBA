@@ -21,6 +21,7 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array
 
 namespace UI {
 class ScrollElement; class DocumentTextElement; class ComboElement;
@@ -44,8 +45,8 @@ public:
 
     // 0x140011cf0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the history Array at +0x68 before
-    // ~DialogController (0x140011d17); the tree never did (leak kept).
+    // The history Array at +0x68 is freed by its member dtor before
+    // ~DialogController, as retail (0x140011d17).
     ~HelpUI() override = default;                                 // [0] 0x140011cf0
     void OnCreated() override;   // [4] 0x14006a500
     void OnOpened() override {}   // [5] 0x14006a4f0  RET 0 in retail
@@ -64,11 +65,12 @@ public:
     Object::InternalPtr<UI::ContainerElement>    container;      // +0x58 scroll offsets
     int32_t currentPage = -1;      // +0x60 } the factory writes one qword -1
     int32_t historyIndex = -1;     // +0x64 }
-    // +0x68: Collection::Array<HelpHistoryEntry> in retail (0x140011cf0 frees it).
-    // H5: declared as its header until the member's ~Array runs (the leak above).
-    HelpHistoryEntry* historyData = nullptr;   // +0x68
-    int32_t historyCount = 0;                  // +0x70
-    int32_t historyCapacity = 0;               // +0x74
+    // +0x68: the history, Collection::Array<HelpHistoryEntry> (B.4 P2 DLG-1,
+    // behaviour: H5). Retail's ctor 0x14006a920 zeroes +0x68 / +0x70
+    // (0x14006a969 / 0x14006a96d): Array's default ctor. Retail's dtor
+    // 0x140011cf0 MemFrees +0x68 and zeroes +0x68 / +0x70 (0x140011d17..0x140011d27)
+    // before ~DialogController: the member's ~Array.
+    Collection::Array<HelpHistoryEntry> history;   // +0x68
 };
 
 static_assert(sizeof(HelpUI) == 0x78, "HelpUI is 0x78 (create 0x140011ca0 MemAlloc(0x78))");
@@ -81,6 +83,5 @@ static_assert(offsetof(HelpUI, buttonForward) == 0x50, "HelpUI::buttonForward @ 
 static_assert(offsetof(HelpUI, container) == 0x58, "HelpUI::container @ 0x58");
 static_assert(offsetof(HelpUI, currentPage) == 0x60, "HelpUI::currentPage @ 0x60");
 static_assert(offsetof(HelpUI, historyIndex) == 0x64, "HelpUI::historyIndex @ 0x64");
-static_assert(offsetof(HelpUI, historyData) == 0x68, "HelpUI::historyData @ 0x68");
-static_assert(offsetof(HelpUI, historyCount) == 0x70, "HelpUI::historyCount @ 0x70");
-static_assert(offsetof(HelpUI, historyCapacity) == 0x74, "HelpUI::historyCapacity @ 0x74");
+static_assert(offsetof(HelpUI, history) == 0x68, "HelpUI::history @ 0x68");
+static_assert(sizeof(Collection::Array<HelpHistoryEntry>) == 0x10, "Array is {data, count, capacity}");
