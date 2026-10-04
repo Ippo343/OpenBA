@@ -23,8 +23,18 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+#include "collection/Collection.h"
 
 namespace UI { class StringTable; }
+
+// The element rows of the two String-bearing pools (mapgenerator.cpp): the grow
+// bodies 0x14001b340 (0x18, ExternalRef) / 0x14001b4e0 (0x30, InitialStructure)
+// and the destroy bodies 0x14001b030 / 0x14001b0a0 that retail's dtor 0x14001aea0
+// runs per pool. B4 X7-GAME-A: the pools are `Collection::Array`s driven by them.
+namespace MapGeneratorRows {
+extern const rtcoll::ArraySpec kSpec_ExternalRef;        // exe 0x14001b340 / 0x14001b030
+extern const rtcoll::ArraySpec kSpec_InitialStructure;   // exe 0x14001b4e0 / 0x14001b0a0
+}  // namespace MapGeneratorRows
 
 class MapGenerator final : public Object::External {
     DECLARE_EXE_TYPE(MapGenerator)
@@ -48,7 +58,8 @@ public:
     // B4 P2 GAME-3: the pool owns its elements the way retail's member arrays
     // do: the ctor (0x1400a3030) zeroes both qwords, and each pool's destructor
     // is the one retail's dtor 0x14001aea0 runs at its offset, in member order
-    // (defined per element type in mapgenerator.cpp).
+    // (defined per element type in mapgenerator.cpp). B4 X7-GAME-A: only the
+    // InitialFamily pool is still this header (its dtor keeps a null test).
     template <class T>
     struct DynArrayHeader {
         T*       data = nullptr;  // +0x00: pointer to element array
@@ -73,6 +84,16 @@ public:
         int32_t  rotation;        // +0x28 _rotation
         uint8_t  _pad2C[4];       // +0x2C
     };
+
+    // The two String-bearing pools (B4 X7-GAME-A): `Array<T>` over the hand-derived
+    // rows above. Its ctor is the three zero stores retail's ctor 0x1400a3030
+    // writes per pool; its dtor is ClearCallback (each element's ~String when the
+    // count is positive, then MemFree + the three zero stores): 0x14001b030 /
+    // 0x14001b0a0 step for step, the bodies DynArrayHeader's dtors called.
+    using ExternalRefArray = Collection::Array<ExternalRef, Collection::DefaultAllocator,
+        Collection::ExplicitSpec<&MapGeneratorRows::kSpec_ExternalRef>>;
+    using InitialStructureArray = Collection::Array<InitialStructure, Collection::DefaultAllocator,
+        Collection::ExplicitSpec<&MapGeneratorRows::kSpec_InitialStructure>>;
 
     MapGenerator();                                               // 0x1400a3030
 
@@ -101,13 +122,13 @@ public:
     // count is retail's int32 at +0x68, the capacity +0x6C.
     DynArrayHeader<InitialFamily> families;  // +0x60 _citizens (dtor 0x14001af47: MemFree, zero both qwords)
 
-    DynArrayHeader<ExternalRef>      refArray1;   // +0x70: ExternalRef (0x18) pool (dtor 0x14001af41 -> 0x14001b030)
-    DynArrayHeader<InitialStructure> refArray2;   // +0x80: InitialStructure (0x30) pool (dtor 0x14001af37 -> 0x14001b0a0)
-    DynArrayHeader<ExternalRef>      refArray3;   // +0x90: ExternalRef pool (dtor 0x14001af2a -> 0x14001b030)
-    DynArrayHeader<ExternalRef>      refArray4;   // +0xA0: ExternalRef pool (dtor 0x14001af1d -> 0x14001b030)
-    DynArrayHeader<ExternalRef>      refArray5;   // +0xB0: ExternalRef pool (dtor 0x14001af10 -> 0x14001b030)
-    DynArrayHeader<ExternalRef>      refArray6;   // +0xC0: ExternalRef pool (dtor 0x14001af03 -> 0x14001b030)
-    DynArrayHeader<ExternalRef>      refArray7;   // +0xD0: ExternalRef pool (dtor 0x14001aef6 -> 0x14001b030)
+    ExternalRefArray      refArray1;   // +0x70: ExternalRef (0x18) pool (dtor 0x14001af41 -> 0x14001b030)
+    InitialStructureArray refArray2;   // +0x80: InitialStructure (0x30) pool (dtor 0x14001af37 -> 0x14001b0a0)
+    ExternalRefArray      refArray3;   // +0x90: ExternalRef pool (dtor 0x14001af2a -> 0x14001b030)
+    ExternalRefArray      refArray4;   // +0xA0: ExternalRef pool (dtor 0x14001af1d -> 0x14001b030)
+    ExternalRefArray      refArray5;   // +0xB0: ExternalRef pool (dtor 0x14001af10 -> 0x14001b030)
+    ExternalRefArray      refArray6;   // +0xC0: ExternalRef pool (dtor 0x14001af03 -> 0x14001b030)
+    ExternalRefArray      refArray7;   // +0xD0: ExternalRef pool (dtor 0x14001aef6 -> 0x14001b030)
 
     // +0xE0: Scalar generation parameters
     int32_t  paramE0;            // +0xE0
@@ -137,8 +158,8 @@ public:
 };
 
 static_assert(sizeof(MapGenerator::ExternalRef) == 0x18, "ExternalRef is 0x18");
-static_assert(sizeof(MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>) == 0x10, "DynArrayHeader is 0x10");
-static_assert(sizeof(MapGenerator::DynArrayHeader<MapGenerator::InitialStructure>) == 0x10, "DynArrayHeader is 0x10");
+static_assert(sizeof(MapGenerator::ExternalRefArray) == 0x10, "pool header is 0x10");
+static_assert(sizeof(MapGenerator::InitialStructureArray) == 0x10, "pool header is 0x10");
 static_assert(sizeof(MapGenerator::ExternalRef) == 0x18, "ExternalRef stride 0x18 (0x14001b030)");
 static_assert(sizeof(MapGenerator::InitialStructure) == 0x30, "InitialStructure stride 0x30 (0x14001b0a0)");
 static_assert(sizeof(MapGenerator) == 0x178, "MapGenerator is 0x178");
@@ -160,10 +181,8 @@ static_assert(offsetof(MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>
 static_assert(offsetof(MapGenerator::ExternalRef, factoryGen) == 0x08, "ExternalRef +0x08");
 static_assert(offsetof(MapGenerator::ExternalRef, resolved) == 0x10, "ExternalRef +0x10");
 
-// The three pool destructors (mapgenerator.cpp), declared before any use.
+// The InitialFamily pool's destructor (mapgenerator.cpp), declared before any use.
 template <> MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>::~DynArrayHeader();
-template <> MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>::~DynArrayHeader();
-template <> MapGenerator::DynArrayHeader<MapGenerator::InitialStructure>::~DynArrayHeader();
 static_assert(offsetof(MapGenerator, refArray1) == 0x70, "+0x70");
 static_assert(offsetof(MapGenerator, refArray2) == 0x80, "+0x80");
 static_assert(offsetof(MapGenerator, refArray3) == 0x90, "+0x90");

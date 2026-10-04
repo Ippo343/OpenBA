@@ -1272,10 +1272,10 @@ void GameUpdateLoop::Load() {
                             mapGen->subdivisions);
                     fprintf(stderr, "[startTown::DIAG]   pools: a0=%p a8(cnt)=%d | b0=%p b8(cnt)=%d | "
                             "c0=%p c8(cnt)=%d | d0=%p d8(cnt)=%d | e0=%d e4=%d e8=%d\n",
-                            mapGen->refArray4.data, mapGen->refArray4.count,
-                            mapGen->refArray5.data, mapGen->refArray5.count,
-                            mapGen->refArray6.data, mapGen->refArray6.count,
-                            mapGen->refArray7.data, mapGen->refArray7.count,
+                            mapGen->refArray4._data, mapGen->refArray4._size,
+                            mapGen->refArray5._data, mapGen->refArray5._size,
+                            mapGen->refArray6._data, mapGen->refArray6._size,
+                            mapGen->refArray7._data, mapGen->refArray7._size,
                             mapGen->paramE0, mapGen->paramE4,
                             mapGen->paramE8);
                 }

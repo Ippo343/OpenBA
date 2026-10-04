@@ -670,11 +670,11 @@ void TownMgr_AddAvailableAgri(CitizenBehavior* townMgr, ComponentDescription* de
 // the picked template before the availability add. The other two pools pass nullptr and
 // register availability only, exactly as retail does.
 static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Random* rng,
-                        const MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>& poolHdr,
+                        const MapGenerator::ExternalRefArray& poolHdr,
                         const int32_t& countField, const char* /*label*/,
                         const float* spawnCentre = nullptr) {
-    MapGenerator::ExternalRef* pool = poolHdr.data;
-    int      size  = poolHdr.count;
+    MapGenerator::ExternalRef* pool = poolHdr._data;
+    int      size  = poolHdr._size;
     int      count = countField;
     if (!pool || size <= 0 || count <= 0) return 0;
     int added = 0;
@@ -733,8 +733,8 @@ static void StartTown_SeedAvailableAgriculture(MapGenerator* sc, Map* game,
 // entry in the pool at startConfig+0x90 (count at +0x98), resolve its template
 // and spawn+register a copy. No transforms, no terrain queries.
 static int StartTown_SpawnSimplePool(MapGenerator* startConfig, EntityList* entityList) {
-    const int count = startConfig->refArray3.count;
-    MapGenerator::ExternalRef* pool = startConfig->refArray3.data;
+    const int count = startConfig->refArray3._size;
+    MapGenerator::ExternalRef* pool = startConfig->refArray3._data;
     if (count <= 0 || !pool) return 0;
     int spawned = 0;
     for (int i = 0; i < count; ++i) {
@@ -1521,8 +1521,8 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
 
 static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* entityList,
                                      Map* game, int spawnX, int spawnY) {
-    const int count = startConfig->refArray2.count;
-    MapGenerator::InitialStructure* pool = startConfig->refArray2.data;
+    const int count = startConfig->refArray2._size;
+    MapGenerator::InitialStructure* pool = startConfig->refArray2._data;
     if (count <= 0 || !pool) return 0;
     const uint32_t tidCreatePlaced  = CreatePlacedDescription::TypeId();
     const uint32_t tidMapComponent  = MapComponent::TypeId();
@@ -4915,8 +4915,8 @@ static void SeedInitialSpawn(ComponentEntity* ent, uint32_t tidSpawnComp,
 
 static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* world,
                                     int spawnX, int spawnY, int sizeSq) {
-    const int count = startConfig->refArray1.count;
-    MapGenerator::ExternalRef* pool = startConfig->refArray1.data;
+    const int count = startConfig->refArray1._size;
+    MapGenerator::ExternalRef* pool = startConfig->refArray1._data;
     if (count <= 0 || !pool) return 0;
     Map* game = world->m_game;
     if (!game) return 0;
@@ -5316,8 +5316,8 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     // DIAG — dump every spawn pool's count so we know what's populated.
     fprintf(stderr, "[startTown::spawn] pools: simple(+0x98)=%d bldg(+0x88)=%d "
             "resource(+0x78)=%d citizenFam(+0x68)=%d\n",
-            sc->refArray3.count, sc->refArray2.count,
-            sc->refArray1.count, sc->families.count);
+            sc->refArray3._size, sc->refArray2._size,
+            sc->refArray1._size, sc->families.count);
     fflush(stderr);
 
     // DIAG — fn-pointer state + per-pool first-entry resolution probe.
@@ -5334,10 +5334,10 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     // The first entry of each pool (the structure pool's entry starts with its ref).
     struct { const char* tag; MapGenerator::ExternalRef* first; int count; bool inlineRef; } probes[] = {
         { "citizenRef(+0x48)", &sc->templateRef, 1, true },
-        { "resource(+0x70)", sc->refArray1.data, sc->refArray1.count, false },
-        { "structure(+0x80)", sc->refArray2.data ? &sc->refArray2.data->structure : nullptr,
-          sc->refArray2.count, false },
-        { "simple(+0x90)", sc->refArray3.data, sc->refArray3.count, false },
+        { "resource(+0x70)", sc->refArray1._data, sc->refArray1._size, false },
+        { "structure(+0x80)", sc->refArray2._data ? &sc->refArray2._data->structure : nullptr,
+          sc->refArray2._size, false },
+        { "simple(+0x90)", sc->refArray3._data, sc->refArray3._size, false },
     };
     for (auto& p : probes) {
         MapGenerator::ExternalRef* base = p.first;
@@ -5446,8 +5446,8 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
         if (GameUpdateLoop::_singleton != nullptr)
             townMgr = GameUpdateLoop::_singleton->m_citizenList;
 
-        const int rmCount = sc->refArray4.count;
-        MapGenerator::ExternalRef* rmPool = sc->refArray4.data;
+        const int rmCount = sc->refArray4._size;
+        MapGenerator::ExternalRef* rmPool = sc->refArray4._data;
         int registered = 0;
         if (townMgr && rmPool) {
             for (int i = 0; i < rmCount; ++i) {
