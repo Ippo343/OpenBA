@@ -58,3 +58,17 @@ Branch and last commit; builds (debug / perf / unit: 918 / 0) and new warnings; 
 files and the tree; families DONE (count), families LEFT with the one-line reason each; forwarders deleted /
 kept with their remaining callers; `behaviour:` commits; B11 totals at -O2 and -O0 with one line per DIFF
 kind you read; `known_port_issues` rows added; what you did not verify.
+
+## Rounds 3 and 4: partitions (added by the coordinator)
+From round 3 the tree is cut by PARTITION, not by file list (`data/pass2x/round3.py` regenerates
+`assign/X3-<P>.lines.tsv`: every remaining cast with the reason tagged on its line):
+- **WORK**: `code/Game/Work/`, `code/Game/Action/`, `tests/unit/wrk_abi_test.cpp`
+- **COMP**: `code/Game/Component/`, `code/Game/Entity/` (its lines are the rows of `X3-GAME.lines.tsv` under those two directories)
+- **GAME**: the rest of `code/`, and `standalone/`
+- **RT**: `runtime/`, `engine/`, the other tests
+Cross-partition rule: an agent that retypes a declaration or member DEFINED in its partition may edit a
+reader / call-site line of it in another partition's file — that line only — and lists each such line. A
+declaration defined in another partition is not its own: the cast stays, tagged `// LEFT: SIG <name>`.
+Every cast left at hand-in carries a self-contained `// LEFT:` reason ("as above" and "not examined" are not
+reasons) or a `// CAST-OK:` marker. Vtable-word probes, callback contexts and the erased core's views of
+its own receiver are tagged `// LEFT: FLOOR? <what the cast does>` for the audit's ruling.

@@ -336,3 +336,5 @@ Metric at `f522f4eb`: **1,785** to remove (of which `dx11/` 240). Wave X round 2
 | 104 | X3-RT | `2ba6e08f` | `Serialize` of Vector2/3/4, Transform, Audio::Scene, String takes `IO::Serializer&` tree-wide (90 call lines), `MainLoopCallback` one element type per array, `InternalFactory::_random` a `System::Random`; `behaviour:` the unreachable by-retail-address launcher lookup deleted; two conflicts with the typed String members resolved by hand: 1245 -> 1228 in runtime + engine + tests | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `2ba6e08f`: **1,588** to remove (of which `dx11/` 240). Wave X round 3 done.
+
+`sa-stress` at `2ba6e08f`, QUIET machine: exit 0, update p95 2.29 ms, draw 1.25 (base 2.40 / 1.38). Recorded, not chased.
