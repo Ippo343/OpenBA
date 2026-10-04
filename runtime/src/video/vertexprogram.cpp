@@ -171,13 +171,13 @@ void RtVideo_VertexProgram_SerializeStreams(IO::Serializer& ser, int count, V0St
 
         V0Element* p = e->elements.data;                     // 180056e15
         for (int32_t k = 0; k < n; ++k, ++p) {               // 180056e22
-            p->name.Serialize(&ser);
-            p->semantic.Serialize(&ser);
+            p->name.Serialize(ser);
+            p->semantic.Serialize(ser);
             ser._readerWriter->SerializeUInt(p->format, nullptr);
             ser._readerWriter->SerializeInt(p->index, nullptr);
         }
 
-        e->name.Serialize(&ser);                             // 180056e6e
+        e->name.Serialize(ser);                             // 180056e6e
     }
 }
 
@@ -203,8 +203,8 @@ void SerializeLegacyV0(IO::Serializer& ser) {
     {
         V0Element* e = elements.data;
         for (int32_t i = 0; i < n; ++i, ++e) {
-            e->name.Serialize(&ser);
-            e->semantic.Serialize(&ser);
+            e->name.Serialize(ser);
+            e->semantic.Serialize(ser);
             rw->SerializeUInt(e->format, nullptr);
             rw->SerializeInt(e->index, nullptr);
         }

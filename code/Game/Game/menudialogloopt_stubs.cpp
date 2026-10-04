@@ -245,7 +245,7 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
     RtSystem_Random_Ctor(&_random);       // System::Random at +0x168  ??0Random@System@@ 0x1800c7f20
-    RtAudio_Scene_Ctor(_audioScene);      // Audio::Scene at +0xb30   ??0Scene@Audio@@ 0x1800e0160
+    RtAudio_Scene_Ctor(AudioScene());     // Audio::Scene at +0xb30   ??0Scene@Audio@@ 0x1800e0160
     // Zero-init the MenuDialogLoopT-specific fields (+0xb68..+0xbf8): every
     // field from _pendingLoop to the end of the class, pad included (retail's
     // qword stores).

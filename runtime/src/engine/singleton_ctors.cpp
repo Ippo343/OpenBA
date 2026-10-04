@@ -266,9 +266,7 @@ IO::Modification* Ctor_Modification(IO::Modification* self) {
     self->_persistIds._data     = nullptr;
     self->_persistIds._size     = 0;
     self->_persistIds._capacity = 0;
-    // `_random` is spelled with the `::Random` POD in Internal.h (not this
-    // block's); the ctor takes the System::Random class over the same bytes.
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(&self->_random));   // 0x1800c7f20   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    RtSystem_Random_Ctor(&self->_random);   // 0x1800c7f20
     ::Object::InternalFactory::_singleton = self;
     return self;
 }
@@ -360,7 +358,7 @@ IO::Persistence* Ctor_Persistence(IO::Persistence* self) {
     // class -- ??0Thread(0x10000), its vptr, the +0x40..+0x88 stores
     // (runtime/types/io/PersistenceWorker.h), the same steps in the same order.
     // It starts at +0x10, the worker's vptr (`_workerVtable`, Persistence.h).
-    ::new (reinterpret_cast<uint8_t*>(self) + offsetof(IO::Persistence, _workerVtable)) IO::PersistenceWorker();   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    ::new (reinterpret_cast<uint8_t*>(self) + offsetof(IO::Persistence, _workerVtable)) IO::PersistenceWorker();   // LEFT: H5 the embedded PersistenceWorker at +0x10 is the raw `_workerVtable` field of IO::Persistence (typed with the settings map and _savePath: ledger)
     self->_savePath.data = nullptr;
     IO::Persistence::_singleton = self;
     return self;

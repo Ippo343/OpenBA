@@ -179,7 +179,7 @@ namespace {
 // raw); the member is ?Serialize@String@System@@ 0x1800c9930. LEFT: the one
 // view of the raw field as the real `System::String`.
 inline void StrSer(void* str, IO::Serializer& ser) {
-    static_cast<System::String*>(str)->Serialize(&ser);   // LEFT: SIG the Serialize(void*) helper family (String / Vector / Transform: ledger, Serializer-typed family)
+    static_cast<System::String*>(str)->Serialize(ser);   // LEFT: H5 the caller's field is raw char* storage of a System::String (Animation.h keeps the names raw)
 }
 
 // B.4: the local `{ stream, rw }` pair every External::Serialize in this file

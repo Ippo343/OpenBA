@@ -164,7 +164,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     alignas(8) uint8_t ser[24];
     IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(stream, 3);
 
-    name.Serialize(ser);
+    name.Serialize(*s);
     s->Serialize(gender, nullptr);
     s->Serialize(age, nullptr);
     s->Serialize(maxAge, nullptr);

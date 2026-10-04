@@ -236,7 +236,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
 
     IO::Stream& io = stream;
     IO::Serializer outer(io, 2);
-    name.Serialize(&outer);
+    name.Serialize(outer);
     buildGeometry();
 
     // (3) The body serializer + version-gated extra. It MUST run: besides
@@ -313,7 +313,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
 
     // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
-    field_0x1B4.Serialize(&outer);   // +0x1B4
+    field_0x1B4.Serialize(outer);   // +0x1B4
     ambientColor.Serialize(outer);
     sunColor.Serialize(outer);
     skyColor.Serialize(outer);

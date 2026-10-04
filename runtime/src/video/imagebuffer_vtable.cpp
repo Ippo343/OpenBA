@@ -389,7 +389,7 @@ bool ImageBuffer::Serialize(IO::Stream& stream) {
         SerializeUnsigned(ser, _filter);                                    // +0x44
 
         // +0x48, a System::String (0x1800c9930).
-        _sourceName.Serialize(&ser);
+        _sourceName.Serialize(ser);
         ImageBufferDoorAccess::PlatformSerialize(this, ser);
     }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800f2820 .. 0x1800f2832
     return true;

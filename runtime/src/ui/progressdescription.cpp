@@ -89,12 +89,12 @@ bool ProgressDescription::Serialize(IO::Stream& streamArg) {
     rw->SerializeUInt(_unknown68, nullptr);
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // 180119fcd ExternalPtr<SpriteSheet>
-    _fillLeftName.Serialize(&ser);           // 180119fdb
-    _fillMiddleName.Serialize(&ser);         // 180119fec
-    _fillRightName.Serialize(&ser);          // 180119ffd
-    _trackLeftName.Serialize(&ser);          // 18011a00e
-    _trackMiddleName.Serialize(&ser);        // 18011a01f
-    _trackRightName.Serialize(&ser);         // 18011a030
+    _fillLeftName.Serialize(ser);           // 180119fdb
+    _fillMiddleName.Serialize(ser);         // 180119fec
+    _fillRightName.Serialize(ser);          // 180119ffd
+    _trackLeftName.Serialize(ser);          // 18011a00e
+    _trackMiddleName.Serialize(ser);        // 18011a01f
+    _trackRightName.Serialize(ser);         // 18011a030
     Object::SerializeExternal<UI::ElementDescription>(ser, _childDescription);       // 18011a041 ExternalPtr<ElementDescription>
 
     // The inlined ~Serializer deletes the ReaderWriter (18011a04f).

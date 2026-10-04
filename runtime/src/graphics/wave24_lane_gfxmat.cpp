@@ -359,7 +359,7 @@ namespace {
 // `System::String` member would make the element non-trivial and change its
 // array's lifecycle rows), so the String is viewed at the field.
 inline void SerString(void* field, IO::Serializer& ser) {
-    static_cast<System::String*>(field)->Serialize(&ser);   // LEFT: SIG the Serialize(void*) helper family (String / Vector / Transform: ledger, Serializer-typed family)
+    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: H5 the caller's field is raw storage of a System::String (MaterialTexture::name / MaterialConstant::_head: a String member changes the element array's lifecycle rows)
 }
 
 }  // namespace
@@ -494,7 +494,7 @@ void MeshInstance::Serialize(IO::Serializer& serializer) {
     // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
     // MeshAnimationState); the tree's 0x48 class is its prefix-compatible
     // superset, so the member is reached through a view of the same bytes.
-    reinterpret_cast<Graphics::AnimationState*>(&_animation)      // +0xd8, 0x1800fe250   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    reinterpret_cast<Graphics::AnimationState*>(&_animation)      // +0xd8, 0x1800fe250   // LEFT: H5 MeshInstance::_animation is retail's 0x18-byte AnimationState held raw (Mesh.h); the tree's Graphics::AnimationState is its 0x48 prefix-compatible superset (ledger finding)
         ->Graphics::AnimationState::Serialize(serializer);
 
     int32_t n = _materials._size;                                 // +0xd0

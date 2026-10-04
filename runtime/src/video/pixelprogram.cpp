@@ -113,7 +113,7 @@ void SerializeLegacyV0(IO::Serializer& ser) {
     rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_1800547e0(&strings8, n);
     for (int32_t i = 0; i < n; ++i)
-        strings8.data[i].Serialize(&ser);
+        strings8.data[i].Serialize(ser);
 
     n = 0;
     rw->SerializeInt(n, nullptr);
@@ -134,7 +134,7 @@ void SerializeLegacyV0(IO::Serializer& ser) {
     {
         V0Sampler* e = samplers.data;
         for (int32_t i = 0; i < n; ++i, ++e) {
-            e->name.Serialize(&ser);
+            e->name.Serialize(ser);
             rw->SerializeInt (e->unit,  nullptr);
             rw->SerializeBool(e->flagA, nullptr);
             rw->SerializeBool(e->flagB, nullptr);

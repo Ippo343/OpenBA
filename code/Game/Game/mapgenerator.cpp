@@ -363,7 +363,7 @@ void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader<Map
     MapGenerator::ExternalRef* e = pool.data;
     if (!e) return;
     for (int i = 0; i < n; ++i) {
-        e[i].strPtr.Serialize(&serializer);  // in place
+        e[i].strPtr.Serialize(serializer);  // in place
     }
 }
 } // namespace
@@ -374,12 +374,12 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, &serializer);   // +0x20 _stringTable ref
-    _field28.Serialize(&serializer);       // +0x28 _name
-    _field30.Serialize(&serializer);       // +0x30 _description
+    _field28.Serialize(serializer);       // +0x28 _name
+    _field30.Serialize(serializer);       // +0x30 _description
     serializer.Serialize(enabled, nullptr);        // +0x38 _exposed
     serializer.Serialize(subdivisions, nullptr);   // +0x3c _startAreaSize (townSize)
     serializer.Serialize(scale, nullptr);          // +0x40 _citizenRadius
-    templateRef.strPtr.Serialize(&serializer);       // +0x48 _citizen template ref
+    templateRef.strPtr.Serialize(serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
@@ -400,7 +400,7 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
         const int n = MG_SerializeCount(serializer, &refArray2, refArray2.count, 0x30);
         InitialStructure* e = refArray2.data;
         for (int i = 0; e && i < n; ++i) {   // FUN_14001b6c0, in place
-            e[i].structure.strPtr.Serialize(&serializer);   // _structure ref name
+            e[i].structure.strPtr.Serialize(serializer);   // _structure ref name
             serializer.Serialize(e[i].offsetX, nullptr);    // _offsetX
             serializer.Serialize(e[i].offsetY, nullptr);    // _offsetY
             serializer.Serialize(e[i].width, nullptr);      // _width
@@ -433,11 +433,11 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     serializer.Serialize(param114, nullptr);
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
-    descRef1.strPtr.Serialize(&serializer);       // descRef1 (terrain)
-    descRef2.strPtr.Serialize(&serializer);       // descRef2 (climate)
+    descRef1.strPtr.Serialize(serializer);       // descRef1 (terrain)
+    descRef2.strPtr.Serialize(serializer);       // descRef2 (climate)
     serializer.Serialize(terrainAmplitude, nullptr);   // terrainAmplitude
     serializer.Serialize(chunkSize, nullptr);          // chunkSize
-    descRef3.strPtr.Serialize(&serializer);       // descRef3 (vegetation)
+    descRef3.strPtr.Serialize(serializer);       // descRef3 (vegetation)
     serializer.Serialize(param170, nullptr);
 
     return true;   // retail returns AL=1

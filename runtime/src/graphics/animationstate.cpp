@@ -275,7 +275,7 @@ void RtGraphics_SerializeMeshNodes(IO::Serializer& ser, int count, GraphicsMesh:
     IO::ReaderWriter* rw = ser._readerWriter;
     for (int i = 0; i < count; ++i, ++p) {
         // LEFT (H5): `_name` is the RtSystem::String POD (GraphicsMesh.h's note).
-        reinterpret_cast<System::String*>(&p->_name)->Serialize(&ser);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        reinterpret_cast<System::String*>(&p->_name)->Serialize(ser);   // LEFT: H5 GraphicsMesh::Node::_name is the RtSystem::String POD (GraphicsMesh.h), viewed as the real System::String
         rw->SerializeInt(p->_parent, nullptr);
         rw->SerializeFloatArray(4, &p->_local.rotation.x, nullptr);
         rw->SerializeFloatArray(3, &p->_local.translation.x, nullptr);

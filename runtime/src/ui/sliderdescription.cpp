@@ -113,11 +113,11 @@ bool SliderDescription::Serialize(IO::Stream& streamArg) {
 
     Object::SerializeExternal<UI::ElementDescription>(ser, _childDescription);       // 1800d78e8 ExternalPtr<ElementDescription>
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // 1800d78f6 ExternalPtr<SpriteSheet>
-    _trackStartName.Serialize(&ser);         // 1800d7904
-    _trackMiddleName.Serialize(&ser);        // 1800d7915
-    _trackEndName.Serialize(&ser);           // 1800d7926
-    _thumbName.Serialize(&ser);              // 1800d7937
-    _thumbHotName.Serialize(&ser);           // 1800d7948
+    _trackStartName.Serialize(ser);         // 1800d7904
+    _trackMiddleName.Serialize(ser);        // 1800d7915
+    _trackEndName.Serialize(ser);           // 1800d7926
+    _thumbName.Serialize(ser);              // 1800d7937
+    _thumbHotName.Serialize(ser);           // 1800d7948
 
     rw->SerializeInt(_trackOffsetY, nullptr);
     rw->SerializeInt(_thumbMargin, nullptr);

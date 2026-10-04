@@ -89,7 +89,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     if (count1 > 0) {
         System::String* p = shownPaths.GetData();
         for (uint32_t i = 0; i < static_cast<uint32_t>(count1); ++i, ++p) {
-            p->Serialize(&ser);
+            p->Serialize(ser);
         }
     }
 
@@ -102,11 +102,11 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     if (count2 > 0) {
         System::String* p = dialogNames.GetData();
         for (uint32_t i = 0; i < static_cast<uint32_t>(count2); ++i, ++p) {
-            p->Serialize(&ser);
+            p->Serialize(ser);
         }
     }
 
-    HighlightPath().Serialize(&ser);
+    HighlightPath().Serialize(ser);
     TutWave_SerializeDialogRef(&highlightDialog, &ser);   // ExternalPtr<UI::Dialog> (0x140028650)
     ser.Serialize(arrowRotation, nullptr);
 
@@ -114,7 +114,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     System::Filename tempFilename;
     (void)tempFilename;
 
-    toolbarRef.Name().Serialize(&ser);
+    toolbarRef.Name().Serialize(ser);
 
     // On load: resolve the ExternalRef at +0x58 (FUN_14001b1d0 inlined): when
     // the factory generation moved, Find the name and keep it if it IsDerivedFrom

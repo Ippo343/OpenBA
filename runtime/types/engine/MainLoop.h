@@ -172,11 +172,16 @@ static_assert(offsetof(VideoResourceEntry, _path)   == 0x10, "VideoResourceEntry
 // pair. The two arrays use DIFFERENT Array instantiations (0x18004f8e0 vs
 // 0x18004f790) because the callback signatures differ — Update takes a
 // `const Time&`, Draw takes a `float` — but the element WIDTH is the same.
+// B.4 wave X: one element template, instantiated once per array with that
+// array's function type (`MainLoop::PostDrawFunc` / `PostUpdateFunc`), so
+// neither array's `_func` is a `void*` its reader reinterprets.
+template <class Func>
 struct MainLoopCallback {
-    void* _func;      // +0x00
-    void* _context;   // +0x08  passed back as the callback's first argument
+    Func  _func;      // +0x00
+    void* _context;   // +0x08  passed back as the callback's userData argument
 };
-static_assert(sizeof(MainLoopCallback) == 0x10, "MainLoopCallback is 0x10 bytes");
+static_assert(sizeof(MainLoopCallback<void (*)()>) == 0x10, "MainLoopCallback is 0x10 bytes");
+static_assert(offsetof(MainLoopCallback<void (*)()>, _context) == 0x08, "MainLoopCallback::_context");
 
 }  // namespace RtEngine
 
@@ -299,8 +304,10 @@ public:
 
     Engine*  _engine;             // +0x78  ctor arg; NOT owned
 
-    Collection::Array<RtEngine::MainLoopCallback> _postDraw;    // +0x80
-    Collection::Array<RtEngine::MainLoopCallback> _postUpdate;  // +0x90
+    using PostDrawCallback   = RtEngine::MainLoopCallback<PostDrawFunc>;
+    using PostUpdateCallback = RtEngine::MainLoopCallback<PostUpdateFunc>;
+    Collection::Array<PostDrawCallback>   _postDraw;    // +0x80
+    Collection::Array<PostUpdateCallback> _postUpdate;  // +0x90
 };
 
 static_assert(sizeof(MainLoop) == 0xa0, "MainLoop is 0xa0 bytes (exe MemAlloc(0xa0,8) 0x140041f77)");

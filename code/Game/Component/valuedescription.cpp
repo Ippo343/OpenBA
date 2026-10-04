@@ -51,9 +51,9 @@ ValueDescription::ValueDescription()
 bool ValueDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_sprite, &ser);
-    _name.Serialize(&ser);
+    _name.Serialize(ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
-    _s38.Serialize(&ser);
+    _s38.Serialize(ser);
     ser.Serialize(_i40, nullptr);
     ser.Serialize(_baseValue, nullptr);
     ser.Serialize(_weight, nullptr);

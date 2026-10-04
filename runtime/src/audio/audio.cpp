@@ -213,8 +213,7 @@ EffectSlot* FindEffectSlot(const Scene* self, uint32_t id) {
 // Build oracle only (no diff target: constructing the live object twice would
 // leak the first allocation).
 // ============================================================================
-void* RtAudio_Scene_Ctor(void* selfPtr) {
-    auto* self = static_cast<Scene*>(selfPtr);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+Scene* RtAudio_Scene_Ctor(Scene* self) {
     self->time = 0;
     self->playGeneration = 1;
     // ENDGAME B.3.2 closing pass: retail's three zero stores, written out.
@@ -242,12 +241,11 @@ void* RtAudio_Scene_Ctor(void* selfPtr) {
 // owned per-slot `positions` buffers first (FUN_180052110), then both outer
 // buffers, matching retail's order (+0x20 torn down before +0x10).
 // ============================================================================
-void RtAudio_Scene_Dtor(void* selfPtr) {
-    // B.3.7: the IMPLICIT destructor IS retail's body (Audio.h banner):
-    // ~Array<AttenutedEffect> (each slot's `positions`, then the buffer, +0x20)
-    // then ~Array<Channel> (+0x10), reverse declaration order.
-    reinterpret_cast<Audio::Scene*>(selfPtr)->~Scene();   // B.3.7 bridge   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
-}
+// B.3.7: the IMPLICIT destructor IS retail's body (Audio.h banner):
+// ~Array<AttenutedEffect> (each slot's `positions`, then the buffer, +0x20)
+// then ~Array<Channel> (+0x10), reverse declaration order. B.4 wave X: the
+// one caller (GameUpdateLoop::Shutdown) runs it by name; the void* forwarder
+// RtAudio_Scene_Dtor is gone.
 
 // ============================================================================
 // void Audio::Scene::AddEmitter(uint id, const Vector3& pos, float volume)
@@ -674,10 +672,8 @@ bool Configuration::Startup() {
 // (a real per-element copy-assign and destroy-range, not a byte trait), so it
 // stays a hand-derived `rtcoll::AsArray<&kSpec_EffectSlot>` bridge rather than
 // a plain `.SetSize(n)`. The row stays registered in array.cpp.
-void Scene::Serialize(void* serializer) {
-    // LEFT: the parameter is retail's `IO::Serializer&`; the one caller
-    // (code/Game/Game/gameupdateloop_serialize.cpp) still hands a `void*`.
-    auto* ser = static_cast<IO::Serializer*>(serializer);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+void Scene::Serialize(IO::Serializer& serializer) {
+    IO::Serializer* ser = &serializer;
 
     // Retail's stack-local Serializer: the caller's Stream, a null ReaderWriter
     // until the Encoding's factory (+0x20 writing, +0x18 reading, version 0)

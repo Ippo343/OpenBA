@@ -119,9 +119,9 @@ void MemoryStreamDtor(void* /*self*/) {
 // tests/unit/rt_port_stub.cpp's `g_unitResolveAddr` has, and the same shape
 // tests/unit/array_test.cpp already drives. With no hook installed the draw is
 // 0, which is what `_generation` is initialised to anyway.
-uint32_t (*g_unitInternalRandHook)(::Random*) = nullptr;
+uint32_t (*g_unitInternalRandHook)(System::Random*) = nullptr;
 
-uint32_t InternalRand(::Random* random) {
+uint32_t InternalRand(System::Random* random) {
     return g_unitInternalRandHook ? g_unitInternalRandHook(random) : 0u;
 }
 
@@ -136,8 +136,8 @@ void InternalMemFree(void* p) {
     System::MemoryAllocator::MemFree(p);                      // 0x1800c7ad0
 }
 // Wave 2 ported this and proved it bit-exact over 16,035,064 calls.
-uint32_t InternalRand(::Random* random) {
-    return reinterpret_cast<System::Random*>(random)->Rand();   // 0x1800c7f90  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+uint32_t InternalRand(System::Random* random) {
+    return random->Rand();   // 0x1800c7f90
 }
 
 // B.3.4 STREAMS (6/6) — `Internal::Clone`'s two `IO::MemoryStream` locals.

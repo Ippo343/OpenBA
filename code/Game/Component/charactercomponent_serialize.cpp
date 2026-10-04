@@ -103,7 +103,7 @@ void CharacterComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
-    field_0x2C.Serialize(&ser);
+    field_0x2C.Serialize(ser);
     ser.Serialize(field_0x3C, nullptr);
     ser.Serialize(field_0x38, nullptr);
     ser.Serialize(field_0x28, nullptr);

@@ -158,7 +158,7 @@ bool UIDescription::Serialize(IO::Stream& stream) {
             Reimpl_ExternalPtr_Serialize_StringTable(&e->ref08, &ser);
             Reimpl_ExternalPtr_Serialize_StringTable(&e->ref10, &ser);
             Reimpl_ExternalPtr_Serialize_StringTable(&e->ref18, &ser);
-            e->name.Serialize(&ser);
+            e->name.Serialize(ser);
         }
     }
     ser.Serialize(_valTail, nullptr);

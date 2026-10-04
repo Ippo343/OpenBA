@@ -851,7 +851,7 @@ void DestroyStringPair10Range(void* ignoredThis, uint8_t* base, int count) {
 static void ExtArrayElemAssign(RtObject::ExternalArrayElement* d,
                                const RtObject::ExternalArrayElement* s) {
     RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->owned),        // 18002c773  // LEFT: ExternalArrayElement::owned is char* (External.h), retail's Filename
-                                         reinterpret_cast<const RtSystem::Filename*>(&s->owned));  // LEFT: as above
+                                         reinterpret_cast<const RtSystem::Filename*>(&s->owned));  // LEFT: ExternalArrayElement::owned is char* (External.h), retail's Filename
     d->opaque = s->opaque;                   // 18002c779
 }
 void AssignExtArrayElem(uint8_t* d, const uint8_t* s) {
@@ -1085,7 +1085,7 @@ const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
 // reimplementing its String half.
 static void PkgEntryAssign(RtIO::PackageFileEntry* d, const RtIO::PackageFileEntry* s) {
     RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->name),        // 1800299bd  // LEFT: PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
-                                         reinterpret_cast<const RtSystem::Filename*>(&s->name));  // LEFT: as above
+                                         reinterpret_cast<const RtSystem::Filename*>(&s->name));  // LEFT: PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
     d->offset = s->offset;                   // 1800299c3
     d->size   = s->size;                     // 1800299c9
 }
@@ -2007,8 +2007,8 @@ void DestroyDrawGroup1f0Range(void* ignoredThis, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i) {
         uint8_t* e = base + static_cast<int64_t>(i) * 0x1f0;
         ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1e0));   // reverse order,  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1d0));   // as the CRT  // LEFT: as above
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1c0));   // iterator does  // LEFT: as above
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1d0));   // as the CRT  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1c0));   // iterator does  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
     }
 }
 void AssignDrawGroup1f0(uint8_t* d, const uint8_t* s) {
@@ -2313,7 +2313,7 @@ namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -2467,7 +2467,7 @@ J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
 void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
     void* r = RtColl_I32ArrayAssign(static_cast<Collection::Array<int32_t>*>(dst),  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
-                                    static_cast<const Collection::Array<int32_t>*>(src));  // LEFT: as above
+                                    static_cast<const Collection::Array<int32_t>*>(src));  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
     return r;
 }
 
@@ -2931,10 +2931,10 @@ void RtColl_ArrayReserve_18005f980(void* a) {
 void AssignModExternal18(uint8_t* d, const uint8_t* s) {
     *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
     /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);  // LEFT: as above
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
 
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d + 0x10),   // 0x1800067d0  // LEFT: as above
-                                         reinterpret_cast<const RtSystem::Filename*>(s + 0x10));  // LEFT: as above
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d + 0x10),   // 0x1800067d0  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
+                                         reinterpret_cast<const RtSystem::Filename*>(s + 0x10));  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
 }
 
 // The two destroy ranges. Both are ported AND registered in array_destroy.cpp
@@ -3272,7 +3272,7 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
 
 #define D1_J1_ENTRY(ADDR)                                                     \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -3388,7 +3388,7 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR elem_stride (a macro line takes no // marker) */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 

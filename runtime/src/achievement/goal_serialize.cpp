@@ -142,7 +142,7 @@ bool Goal::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(streamv, 0);
 
     _stringTable.Serialize(ser);                                    // 0x1800042a0, Goal+0x20
-    _text.Serialize(&ser);                                          // Goal+0x28
+    _text.Serialize(ser);                                          // Goal+0x28
 
     return true;   // ~Serializer deletes the ReaderWriter
 }

@@ -40,6 +40,7 @@
 
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
+#include "../../types/io/Stream.h"       // IO::Stream::_direction
 #include "string.h"
 #ifndef BANISHED_UNIT_TEST
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
@@ -891,20 +892,6 @@ int String::ToInteger(const char* s) {
 // note reference_slot3_wrapper_must_resolve_first.md, manufactured on purpose.
 
 namespace {
-// Minimal views of IO::Serializer / IO::Stream / IO::Encoding. Deliberately
-// local rather than including engine/types/io_serializer.h, which belongs to
-// the exe port; the offsets are the same and are static_asserted there.
-struct RtEncoding { void** vtable; };
-struct RtStream   { void** vtable; int32_t loadingFlag; int32_t pad; void* encoding; };
-struct RtSerializer { RtStream* stream; RtEncoding* encoding; };
-
-// B3X W0: `RtSerializer::encoding` is the Serializer's +0x08, i.e. the
-// IO::ReaderWriter, and it is called BY NAME below: SerializeUInt (+0x98),
-// SerializeUShortArray (+0x50), SerializeCharArray (+0x18).
-inline ::IO::ReaderWriter* Rw(RtEncoding* enc) {
-    return reinterpret_cast<::IO::ReaderWriter*>(enc);   // B.3.x bridge  // LEFT: Serialize's void* serializer (reserved for the closing wave)
-}
-
 // ---- the legacy UTF-16 branch --------------------------------------------
 // Retail decodes with FUN_1800c9fc0(1, p, end, &cp, 1) and re-encodes with
 // FUN_1800c9b60(cp, dst, 2). Both are MSVC-CRT jump-table dispatchers indexed
@@ -958,21 +945,25 @@ int Utf8EncodeOne(int32_t cp, char* dst) {
 }  // namespace
 
 // ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c9930
-void String::Serialize(void* serializerRaw) {
-    RtSerializer* ser = static_cast<RtSerializer*>(serializerRaw);  // LEFT: Serialize's void* serializer (reserved for the closing wave)
-    RtEncoding* enc = ser->encoding;
+// B4 FORWARD (see String.h): the rt::io POD Serializer views' entry.
+void String::Serialize(void* serializer) {
+    Serialize(*static_cast<::IO::Serializer*>(serializer));   // LEFT: SIG external_load.cpp / external_reftable.cpp build an rt::io POD Serializer (R-IO view)
+}
+
+void String::Serialize(::IO::Serializer& serializer) {
+    ::IO::ReaderWriter* const rw = serializer._readerWriter;   // +0x08
 
     // Length INCLUDING the terminator, with bit 31 as the "UTF-8 payload"
     // flag. On save this is what goes out; on load the call overwrites it.
     uint32_t n = _data ? static_cast<uint32_t>(StringLength(_data) + 1) : 0u;
     n |= 0x80000000u;
-    Rw(enc)->SerializeUInt(n, nullptr);                  // +0x98
+    rw->SerializeUInt(n, nullptr);                       // +0x98
 
     const bool legacyWide = ((n >> 31) & 1u) == 0u;
     n &= 0x7fffffffu;
 
     // Stream +0x08: 0 = loading/decode, non-zero = saving/encode.
-    const bool loading = (ser->stream->loadingFlag == 0);
+    const bool loading = (serializer._stream->_direction == 0);
     if (loading && n != 0)
         SetLength(static_cast<int>(n) - 1);
 
@@ -986,7 +977,7 @@ void String::Serialize(void* serializerRaw) {
         }
 
         uint8_t* buf = static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
-        Rw(enc)->SerializeUShortArray(static_cast<int>(n),
+        rw->SerializeUShortArray(static_cast<int>(n),
                                       reinterpret_cast<uint16_t*>(buf), nullptr);   // +0x50  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
 
         // Retail stops two bytes short: the trailing UTF-16 NUL is not decoded.
@@ -1026,7 +1017,7 @@ void String::Serialize(void* serializerRaw) {
         return;
     }
 
-    Rw(enc)->SerializeCharArray(static_cast<int>(n), _data, nullptr);   // +0x18
+    rw->SerializeCharArray(static_cast<int>(n), _data, nullptr);   // +0x18
 }
 
 // ============================================================

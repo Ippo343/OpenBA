@@ -143,7 +143,7 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
                 System::Filename pathBuf = ref->GetPath();
                 fnameBuf = pathBuf;
             }
-            fnameBuf.AsString().Serialize(&serializer);
+            fnameBuf.AsString().Serialize(serializer);
             if (static_cast<int>(serializer.GetDirection()) == 0)
                 ref = load(fnameBuf);
         }

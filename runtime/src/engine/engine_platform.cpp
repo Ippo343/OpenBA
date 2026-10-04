@@ -98,8 +98,6 @@
 // The platform seam. runtime/src/engine/engine_platform_win.cpp.
 bool RtEnginePlatformShiftHeld();
 long long RtEnginePlatformShowLauncherDialog();
-bool RtEnginePlatformLauncherFlagNoMods();
-bool RtEnginePlatformLauncherFlagReset();
 
 // ENDGAME B.3.7: `Engine::Engine` is the real class; a global
 // `using RtEngine::Engine;` is ill-formed next to `namespace Engine`.
@@ -189,7 +187,7 @@ void ResetConfigurations(EngineT* self) {
     // LEFT: the Set helper takes the rtsetavl::Set POD over the Persistence
     // object's settings map (Persistence.h / Collection.h, not this block's).
     if (void* ps = ::IO::Persistence::_singleton) {
-        rtsetclear::Clear(static_cast<rtsetavl::Set*>(ps));       // 0x18000f7d0   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        rtsetclear::Clear(static_cast<rtsetavl::Set*>(ps));       // 0x18000f7d0   // LEFT: H5 IO::Persistence holds its settings map as loose fields (_settingsMapRoot / _settingsMapCount at +0x00 / +0x08), so the erased Set core takes the object as its rtsetavl::Set header (typed with _savePath and the worker: ledger)
     }
 
     // Each Configuration below is freed without its destructor and rebuilt with
@@ -332,14 +330,14 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     _videoConfiguration->Save();
     _persistence->WriteSettings();                            // 0x1800b88e0
 
-    // 0x1800a17ff / 0x1800a18bf. The `||` short-circuit is retail's: the
-    // command line is consulted ONLY when the checkbox byte is zero.
-    if (RtEnginePlatformLauncherFlagNoMods()
-            || CommandLineHasKey(_configuration, "nomods"))
+    // 0x1800a17ff / 0x1800a18bf. Retail ORs the launcher dialog's checkbox
+    // byte (0x1801fc699 / 0x1801fc698) before the command line; with no
+    // launcher dialog in the standalone that byte is always 0, so only the
+    // command line decides.
+    if (CommandLineHasKey(_configuration, "nomods"))
         DisableAllModifications();
 
-    if (RtEnginePlatformLauncherFlagReset()
-            || CommandLineHasKey(_configuration, "reset"))
+    if (CommandLineHasKey(_configuration, "reset"))
         ResetConfigurations(this);
 
     return result == 1;   // 0x1800a1a97: IDOK from the launcher template

@@ -53,7 +53,7 @@ Disease::~Disease() {}
 bool Disease::Serialize(IO::Stream& stream) {
     IO::Serializer s(stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &s);
-    _name.Serialize(&s);
+    _name.Serialize(s);
     s.Serialize(_field30, nullptr);
     s.Serialize(_field34, nullptr);
     s.Serialize(_field38, nullptr);

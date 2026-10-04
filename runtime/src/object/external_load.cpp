@@ -371,8 +371,8 @@ extern "C" External* RtObject_External_Load(const System::Filename* path, Extern
                 for (int32_t i = 0; i < depCount; ++i, elem += 0x10) {
                     ++g_lc.deps;
                     reinterpret_cast<::System::String*>(elem)->Serialize(&ser);   // 1800bc7e9  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc  // LEFT: as above
-                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811  // LEFT: as above
+                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x08));  // 1800bc7fc  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+                    SerI32(ser.impl, reinterpret_cast<int32_t*>(elem + 0x0c));  // 1800bc811  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
                 }
 
                 // ---- 1800bc820..1800bc82b -------------------------------

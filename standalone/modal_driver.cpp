@@ -110,7 +110,7 @@
 #include "options.h"
 #include "ui/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4); B3R: RtUi_UserInterface_UpdateStandAloneUI
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4); UserInterface::UpdateStandAloneUI
 #include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree / _singleton
 
 namespace ModalDriver {
@@ -123,8 +123,7 @@ namespace {
 // MainLoop::_postDraw (+0x80) and ::_postUpdate (+0x90): Array<MainLoopCallback>
 // {data, count, cap}; DialogInstance::_ui (+0x10), ::_flags (+0x20, bit 0x20 =>
 // !DeleteOnClose), ::_result (+0x24, ?GetResult@ / ?SetDialogResult@).
-using Entry = RtEngine::MainLoopCallback;   // 16 bytes {_func, _context}; the array element type
-using EntryArray = Collection::Array<RtEngine::MainLoopCallback>;
+using Entry = ::Engine::MainLoop::PostUpdateCallback;   // 16 bytes {_func, _context}; the +0x90 element type
 
 // --- Configuration ---------------------------------------------------------
 bool s_parsed      = false;
@@ -160,13 +159,13 @@ void ParseEnv() {
 // Append `e` to the (array,count,cap) triple at `base+arrOff`. Reallocates
 // through the shipped allocator, the same one ShowDialog's inlined push uses,
 // and sets capacity == count so retail's own next push takes its grow path.
-bool AppendEntry(EntryArray& arr, const Entry& e) {
-    Entry* old   = arr._data;
+template <class E> bool AppendEntry(Collection::Array<E>& arr, const E& e) {
+    E* old   = arr._data;
     int    count = arr._size;
     if (count < 0) return false;
 
-    Entry* fresh = static_cast<Entry*>(
-        System::MemoryAllocator::MemAlloc((uint64_t)(count + 1) * sizeof(Entry), 8));
+    E* fresh = static_cast<E*>(
+        System::MemoryAllocator::MemAlloc((uint64_t)(count + 1) * sizeof(E), 8));
     if (!fresh) return false;
 
     for (int i = 0; i < count; ++i) fresh[i] = old[i];
@@ -184,7 +183,7 @@ bool AppendEntry(EntryArray& arr, const Entry& e) {
 // valid slot; MainLoop::Draw will call it, so it must be a real function that
 // returns. It takes no meaningful arguments under any x64 convention because it
 // touches none.
-void NoopDraw(void*, void*) {}
+void NoopDraw(Video::Context&, void*) {}
 
 // Find the front dialog of a live nested modal UI, or nullptr.
 //
@@ -216,17 +215,16 @@ UI::DialogInstance* FindModalDialog() {
     // an instrument confidently reporting nothing, about the wrong thing.
     //
     // B3R: OUR ShowDialog port (userinterface_showdialog.cpp) installs
-    // RtUi_UserInterface_UpdateStandAloneUI, the body registered at 0x180120310;
+    // UI::UserInterface::UpdateStandAloneUI (retail 0x180120310) itself;
     // it is compared by name.
-    // LEFT: MainLoopCallback::_func / ::_context are void* (engine/MainLoop.h, R-ENG).
-    void* const wantedPort = reinterpret_cast<void*>(&RtUi_UserInterface_UpdateStandAloneUI);   // LEFT: MainLoopCallback::_func (engine/MainLoop.h)
+    const ::Engine::MainLoop::PostUpdateFunc wantedPort = &UI::UserInterface::UpdateStandAloneUI;
 
     for (int i = 0; i < count; ++i) {
-        void* const fn = arr[i]._func;
+        const ::Engine::MainLoop::PostUpdateFunc fn = arr[i]._func;
         if (fn != wantedPort) continue;
         void* nestedUiCtx = arr[i]._context;
         if (!nestedUiCtx) continue;
-        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);   // LEFT: MainLoopCallback::_context (engine/MainLoop.h)
+        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);   // LEFT: FLOOR? callback void* context (MainLoop callback userData, retail PEAX)
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.
         auto* head = nestedUi->_dialogs._head;
         if (!head) continue;
@@ -237,7 +235,7 @@ UI::DialogInstance* FindModalDialog() {
 
 // The callback itself. Registered in MainLoop+0x90; runs on every fixed-timestep
 // tick of every Frame, nested or not. MUST ignore both arguments (quirk (a)).
-void Tick(void*, void*) {
+void Tick(const System::Time&, void*) {
     UI::DialogInstance* dialog = FindModalDialog();
     if (!dialog) { s_seenDialog = nullptr; s_seenTicks = 0; return; }
 
@@ -281,13 +279,12 @@ bool Poll() {
     // append must not be left dangling if the UPDATE one fails, or we would
     // have made the arrays UNEVEN in the direction quirk (b) tolerates (draw
     // longer than update is harmless; update longer than draw is the fault).
-    // LEFT: MainLoopCallback::_func is void* (engine/MainLoop.h, R-ENG).
-    Entry draw{ reinterpret_cast<void*>(&NoopDraw), ml };   // LEFT: MainLoopCallback::_func (engine/MainLoop.h)
+    ::Engine::MainLoop::PostDrawCallback draw{ &NoopDraw, ml };
     if (!AppendEntry(ml->_postDraw, draw)) {
         std::fprintf(stderr, "[ModalDriver] ARM FAILED: could not grow MainLoop+0x80\n");
         return false;
     }
-    Entry upd{ reinterpret_cast<void*>(&Tick), ml };   // LEFT: MainLoopCallback::_func (engine/MainLoop.h)
+    Entry upd{ &Tick, ml };
 
     if (!AppendEntry(ml->_postUpdate, upd)) {
         std::fprintf(stderr, "[ModalDriver] ARM FAILED: could not grow MainLoop+0x90 "

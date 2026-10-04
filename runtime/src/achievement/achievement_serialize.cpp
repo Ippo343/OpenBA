@@ -132,10 +132,10 @@ bool Achievement::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(stream, 0);
 
     _stringTable.Serialize(ser);                                    // +0x20 0x1800042a0
-    _title.Serialize(&ser);                                         // +0x28
-    _description.Serialize(&ser);                                   // +0x30
+    _title.Serialize(ser);                                         // +0x28
+    _description.Serialize(ser);                                   // +0x30
     _spriteSheet.Serialize(ser);                                    // +0x38 0x180004590
-    _spriteName.Serialize(&ser);                                    // +0x40
+    _spriteName.Serialize(ser);                                    // +0x40
 
     int count = _goals.GetSize();                                   // +0x50
     ser._readerWriter->SerializeInt(count, nullptr);                // +0xA0

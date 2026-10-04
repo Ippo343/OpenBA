@@ -2101,7 +2101,7 @@ void GameUpdateLoop::Shutdown() {
     // Audio::Scene
     if (m_audioScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Audio::Scene...\n");
-        RtAudio_Scene_Dtor(m_audioScene);
+        m_audioScene->~Scene();   // ??1Scene@Audio@@ 0x1800e0120
         System::MemoryAllocator::MemFree(m_audioScene);
     }
 

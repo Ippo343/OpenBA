@@ -160,7 +160,7 @@ bool TutorialGoalCount::Serialize(IO::Stream& stream) {
     ser.Serialize(targetCount, nullptr);
 
     // the type's name (+0x30) as String
-    typeRef.Name().Serialize(&ser);
+    typeRef.Name().Serialize(ser);
 
     // If loading (serializer version == 0), resolve the external ref
     int version = ser.GetVersion();
@@ -172,7 +172,7 @@ bool TutorialGoalCount::Serialize(IO::Stream& stream) {
     ser.Serialize(greaterOrEqual, nullptr);
 
     // elementName (+0x48) as String
-    ElementName().Serialize(&ser);
+    ElementName().Serialize(ser);
     return true;
 }
 

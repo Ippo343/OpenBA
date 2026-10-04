@@ -227,7 +227,7 @@ void EnableCursorBody(App* self, bool enabled, RtSink& out) {
     }
     if (found != nullptr) {
         CursorCallbackFn cb =
-            reinterpret_cast<const CursorCallbackElement*>(found)->callback;  // LEFT: as above
+            reinterpret_cast<const CursorCallbackElement*>(found)->callback;  // LEFT: rtsetavl::Node keeps its element opaque (erased AVL core, R-COLL / wave X)
         if (out.Call("Application message callback @ WM_SETCURSOR",
                      reinterpret_cast<const void*>(cb),  // CAST-OK: ptr_int
                      reinterpret_cast<int64_t>(self->_windowHandle),  // CAST-OK: win32

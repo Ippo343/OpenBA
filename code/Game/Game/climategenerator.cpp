@@ -87,7 +87,7 @@ bool ClimateGenerator::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, &s);
 
     // Serialize String at +0x28
-    _field28.Serialize(&s);
+    _field28.Serialize(s);
 
     // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
     s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8: retail serializes the raw byte as bool (a bool field would let the compiler normalise it)

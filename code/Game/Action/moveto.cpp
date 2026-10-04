@@ -161,7 +161,7 @@ void MoveTo::Persist(IO::Stream& stream) {
     ser.Serialize(pathCount, path, nullptr);
 
     // Destination position (+0x38) as Vector3
-    destination.Serialize(&ser);
+    destination.Serialize(ser);
 
     ser.Serialize(passFlags, nullptr);       // +0x5C uint
     ser.Serialize(moveAnimation, nullptr);   // +0x468

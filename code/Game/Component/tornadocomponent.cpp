@@ -663,7 +663,7 @@ void TornadoComponent::Persist(IO::Stream& stream) {
     IO::Stream* st = &stream;
     IO::Serializer ser(*st, 0);
 
-    path.target.Serialize(&ser);
+    path.target.Serialize(ser);
     ser.Serialize(path.index, nullptr);
 
     int pathCount = path.count;
@@ -678,13 +678,13 @@ void TornadoComponent::Persist(IO::Stream& stream) {
     Math::Vector3* pVec = path.points;
     if (pathCount > 0 && pVec) {
         for (int i = 0; i < pathCount; i++) {
-            pVec->Serialize(&ser);
+            pVec->Serialize(ser);
             ++pVec;   // sizeof(Math::Vector3) == 0xC
         }
     }
 
     damageCountdown.Serialize(ser);
-    position.Serialize(&ser);
+    position.Serialize(ser);
 }
 // ============================================================
 // TornadoComponent::Startup — vtable slot 4 (+0x20), 0x1400585a0

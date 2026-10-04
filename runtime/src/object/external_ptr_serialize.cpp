@@ -284,7 +284,7 @@ bool ExternalPtrSerializeBody(External* cur, IO::Serializer& ser,
             System::Filename tmp = cur->GetPath();               // [rbp+0x48]
             path = tmp;                         // operator=, as above
         }
-        path.AsString().Serialize(&ser);        // 0x180004500; load fills `path`
+        path.AsString().Serialize(ser);        // 0x180004500; load fills `path`
         // falls into the load tail
     }
 

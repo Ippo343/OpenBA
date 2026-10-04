@@ -60,7 +60,7 @@ void ClearBlockDescs(::IO::Persistence* p) {
     reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->_blockDescData)->~Array();  // 0x18002a930  // LEFT: H5 Persistence::_blockDescData (raw Array storage; behaviour commit owed)
 }
 void ClearBlockPtrs(::IO::Persistence* p) {
-    reinterpret_cast<Collection::Array<void*>*>(&p->_blockPtrData)->~Array();         // 0x180024aa0  // LEFT: H5 Persistence::_blockPtrData (as above)
+    reinterpret_cast<Collection::Array<void*>*>(&p->_blockPtrData)->~Array();         // 0x180024aa0  // LEFT: H5 Persistence::_blockPtrData (raw Array storage; behaviour commit owed)
 }
 
 }  // namespace

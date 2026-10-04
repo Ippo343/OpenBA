@@ -150,7 +150,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
         System::Filename tempFilename;
         (void)tempFilename;
 
-        toolRef.Name().Serialize(&serializer);
+        toolRef.Name().Serialize(serializer);
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
@@ -163,7 +163,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
         System::Filename tempFilename;
         (void)tempFilename;
 
-        cameraRef.Name().Serialize(&serializer);
+        cameraRef.Name().Serialize(serializer);
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210

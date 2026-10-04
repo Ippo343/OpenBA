@@ -255,7 +255,7 @@ bool Particle::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    rw->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);   // +0x78; LEFT: `_active` is the byte retail stores (Particle.h)   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    rw->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);   // +0x78; LEFT: `_active` is the byte retail stores (Particle.h)   // CAST-OK: byte_io
     rw->SerializeInt(_recordCount, nullptr);   // +0xa0
     rw->SerializeInt(_subCount, nullptr);      // +0xa0
 
@@ -612,7 +612,7 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
     // the ParticleSystem type record's id (ENDGAME B.3.9 TI-REST), read fresh.
     // LEFT: the handle is untyped (see ParticleInstance::SetParticle); the
     // derivation test is what licenses the downcast.
-    const Particle* const asParticle = static_cast<const Particle*>(particle.p);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+    const Particle* const asParticle = static_cast<const Particle*>(particle.p);   // LEFT: ParticleInstance's handle (ExternalPtrHandle::p, one alias for five types) is untyped; IsDerivedFrom just above licenses the downcast
     const ParticleSystem* const sys =
         asParticle->IsDerivedFrom(ParticleSystem::GetTypeInfo().typeId)
             ? static_cast<const ParticleSystem*>(asParticle) : nullptr;
@@ -820,7 +820,7 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
         // Six 16-bit indices, and every arithmetic step is 16-bit. The index
         // cursor is Context+0x20f0 (Context.h's `_unknown20f0`, not named yet:
         // LEFT, the one view of that qword as the uint16 cursor it is).
-        uint16_t* ip = reinterpret_cast<uint16_t*>(context._unknown20f0);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        uint16_t* ip = reinterpret_cast<uint16_t*>(context._unknown20f0);   // LEFT: Context::_unknown20f0 is uint64_t: code/ readers step it by bytes (geometry_draw.cpp) and as short / void* (statusicon_geometry.cpp, weather_particle_draw.cpp): typing it is a cross-file decision
         const uint16_t b = base;
         const uint16_t idx[6] = { static_cast<uint16_t>(b - 2), b,
                                   static_cast<uint16_t>(b - 1),
@@ -910,7 +910,7 @@ extern "C" void* RtGraphics_ParticlePool_OperatorNew() {
 extern "C" RtGraphics::ParticleBoundsRecord* RtGraphics_ParticlePoolRecord_Ctor(
         void* recv, const Graphics::Particle* particle) {
     RtGraphics::ParticleBoundsRecord* const r =
-        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: SIG the pool-record ctor door takes the pool's raw slot (void* recv) and builds the record in it
     r->_bounds.min.x = 1e8f;   r->_bounds.min.y = 1e8f;   r->_bounds.min.z = 1e8f;
     r->_bounds.max.x = -1e8f;  r->_bounds.max.y = -1e8f;  r->_bounds.max.z = -1e8f;
     r->_records._data     = nullptr;   // +0x18

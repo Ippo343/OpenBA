@@ -487,7 +487,7 @@ void GraphElement::AddGraph(uint32_t colour) {
     uint8_t tmp[0x18];
     // tmp[0x00..0x07] intentionally left uninitialised — see (1) above.
     *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
-    *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;   // LEFT: as above
+    *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
 
     // ENDGAME B.3.2 step 2 — `_seriesData` is GraphElement.h's raw
     // `Array<GraphSeries>` header (NON-TRIVIAL `kSpec_GraphSeries`), so it
@@ -497,7 +497,7 @@ void GraphElement::AddGraph(uint32_t colour) {
     rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(&_seriesData)
         ->SetSizeFill(_seriesCount + 1, tmp);
 
-    reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();   // LEFT: as above
+    reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
 
     _seriesData[old].colour = colour;
 }

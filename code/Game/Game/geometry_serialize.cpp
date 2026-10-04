@@ -275,7 +275,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
                 }
                 if (innerCount > 0 && outline.data) {
                     for (int j = 0; j < innerCount; ++j)
-                        outline.data[j].Serialize(&serializer);   // slot 0x1401526b8
+                        outline.data[j].Serialize(serializer);   // slot 0x1401526b8
                 }
             }
         }

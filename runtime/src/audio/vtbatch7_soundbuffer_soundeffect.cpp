@@ -220,8 +220,8 @@ bool SoundBuffer::Serialize(IO::Stream& streamv) {
     ser._readerWriter->SerializeBool(_streamed, nullptr);
 
     // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
-    _string28.Serialize(&ser);
-    _streamPath.Serialize(&ser);
+    _string28.Serialize(ser);
+    _streamPath.Serialize(ser);
 
     ser._readerWriter->SerializeFloat(_durationSeconds, nullptr);   // +0x80
 

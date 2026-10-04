@@ -107,7 +107,7 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
                 if (*slot) {
                     fnameBuf = (*slot)->GetPath();
                 }
-                fnameBuf.AsString().Serialize(&ser);
+                fnameBuf.AsString().Serialize(ser);
                 if (Reading(ser)) {
                     *slot = efactory->FindOrLoad(fnameBuf);
                 }

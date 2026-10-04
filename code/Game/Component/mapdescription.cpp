@@ -54,7 +54,7 @@ MapDescription::MapDescription()
 bool MapDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_cellType, nullptr);
-    _footprint.Serialize(&ser);
+    _footprint.Serialize(ser);
     ser.Serialize(_claimOnAdd, nullptr);
     ser.Serialize(_noOccupancy, nullptr);
     ser.Serialize(_showOnMap, nullptr);

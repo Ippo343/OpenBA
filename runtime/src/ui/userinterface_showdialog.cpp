@@ -102,12 +102,9 @@
 // ENDGAME B.3.6 block E: the three UserInterface doors this body used to reach
 // by name are members or doors of the same class now. The ctor and the dtor
 // STAY doors (B4b-2) and are called as the doors; the two static callbacks go
-// into MainLoop's arrays as the registered DOOR functions (the (context,
-// userData) shape MainLoop calls — and what ResolveExport returned for them,
-// since both are always registered).
+// into MainLoop's arrays as the class's own static members (B.4 wave X: their
+// (context, userData) shape IS MainLoop's PostDrawFunc / PostUpdateFunc).
 extern "C" void  RtUi_UserInterface_Dtor(UI::UserInterface* self);
-extern "C" void  RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, void* ui);
-extern "C" void  RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui);
 
 namespace {
 
@@ -131,8 +128,9 @@ namespace {
 static_assert(sizeof(UI::UserInterface) == 0x128, "the nested UI's Allocate size");
 
 // MainLoop's `_postDraw` (+0x80) / `_postUpdate` (+0x90) element.
-using Entry = RtEngine::MainLoopCallback;
-using CallbackArray = Collection::Array<RtEngine::MainLoopCallback>;
+// One element type per array (B.4 wave X): `F` is the array's function type.
+template <class F> using Entry = RtEngine::MainLoopCallback<F>;
+template <class F> using CallbackArray = Collection::Array<RtEngine::MainLoopCallback<F>>;
 
 // Retail inlines `EnterCriticalSection(alloc+0x640); Allocate(...);
 // LeaveCriticalSection(...)` six times in this body;
@@ -165,12 +163,13 @@ const double* SecondsPerTick(){ return &::System::Timer::_secondsPerTick; }
 //   for (i = start; i < newCount; ++i)
 //       arr[i] = (i < oldCount) ? old[i] : entry;
 //   if (old != arr && old) MemFree(old)
-void AppendCallback(CallbackArray& arr, const Entry& entry) {
+template <class F>
+void AppendCallback(CallbackArray<F>& arr, const Entry<F>& entry) {
     int oldCount = arr._size;
     int newCount = oldCount + 1;
     if (newCount == oldCount) return;
 
-    Entry* old = arr._data;
+    Entry<F>* old = arr._data;
     arr._size = newCount;
 
     if (newCount > arr._capacity) {
@@ -178,15 +177,15 @@ void AppendCallback(CallbackArray& arr, const Entry& entry) {
         if (newCount == oldCount + 1 && oldCount != 0)
             arr._capacity = newCount * 3;
         int cap = arr._capacity;
-        arr._data = static_cast<Entry*>(System::MemoryAllocator::MemAlloc((uint64_t)cap << 4, 8));
+        arr._data = static_cast<Entry<F>*>(System::MemoryAllocator::MemAlloc((uint64_t)cap << 4, 8));
     }
 
-    Entry* cur = arr._data;
+    Entry<F>* cur = arr._data;
     int i = (old == cur) ? oldCount : 0;
     for (; i < newCount; ++i) {
-        Entry* dst = cur ? (cur + i) : nullptr;
+        Entry<F>* dst = cur ? (cur + i) : nullptr;
         if (!dst) continue;                       // retail's `if (puVar17 != 0)`
-        const Entry* src = (i < oldCount) ? (old + i) : &entry;
+        const Entry<F>* src = (i < oldCount) ? (old + i) : &entry;
         *dst = *src;
     }
 
@@ -195,16 +194,17 @@ void AppendCallback(CallbackArray& arr, const Entry& entry) {
 
 // Retail's inlined removal-and-compaction, 0x180120179.. and 0x180120210..
 // Scans for every (fn, ctx) match and shifts the tail down over it.
-void RemoveCallback(CallbackArray& arr, void* fn, void* ctx) {
+template <class F>
+void RemoveCallback(CallbackArray<F>& arr, F fn, void* ctx) {
     int i = 0;
     int count = arr._size;
     if (count <= 0) return;
     do {
-        Entry* a0 = arr._data;
+        Entry<F>* a0 = arr._data;
         if (a0 && a0[i]._func == fn && a0[i]._context == ctx) {
             int j = i;
             while (j + 1 < arr._size) {
-                Entry* a = arr._data;
+                Entry<F>* a = arr._data;
                 if (a) a[j] = a[j + 1];
                 ++j;
             }
@@ -218,7 +218,9 @@ void RemoveCallback(CallbackArray& arr, void* fn, void* ctx) {
 
 // Target of defect 1 (see the negative-control block below). Never registered
 // in any shipping configuration.
-void DefectNoop(void*, void*) {}
+// One per array: each has that array's function type.
+void DefectNoop(Video::Context&, void*) {}
+void DefectNoop(const System::Time&, void*) {}
 
 }  // namespace
 
@@ -301,12 +303,14 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
 
     // 7 + 8. Register the draw and update callbacks, in that order. The entries
     //    are the registered DOORS (see the includes).
-    void* drawFn = (void*)&RtUi_UserInterface_DrawStandAloneUI;
-    void* updFn  = (void*)&RtUi_UserInterface_UpdateStandAloneUI;
+    const ::Engine::MainLoop::PostDrawFunc   drawFn = &UI::UserInterface::DrawStandAloneUI;
+    const ::Engine::MainLoop::PostUpdateFunc updFn  = &UI::UserInterface::UpdateStandAloneUI;
 
-    AppendCallback(::Engine::MainLoop::_singleton->_postDraw, Entry{ drawFn, nested });
+    AppendCallback(::Engine::MainLoop::_singleton->_postDraw,
+                   ::Engine::MainLoop::PostDrawCallback{ drawFn, nested });
     // Retail re-reads MainLoop::_singleton before the second append. Kept.
-    AppendCallback(::Engine::MainLoop::_singleton->_postUpdate, Entry{ updFn, nested });
+    AppendCallback(::Engine::MainLoop::_singleton->_postUpdate,
+                   ::Engine::MainLoop::PostUpdateCallback{ updFn, nested });
 
     // 9. The nested pump. Two exits: the dialog leaving nested->_dialogs, and
     //    Frame() returning true (quit). The dialog pointer is reloaded from the
@@ -335,9 +339,10 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
         // A no-op, NOT drawFn/updFn: a leaked real entry would have retail's
         // Frame calling UpdateStandAloneUI on a freed nested UI every tick, and
         // a control that crashes the subject measures nothing.
-        void* noop = (void*)&DefectNoop;
-        AppendCallback(::Engine::MainLoop::_singleton->_postDraw,   Entry{ noop, nullptr });
-        AppendCallback(::Engine::MainLoop::_singleton->_postUpdate, Entry{ noop, nullptr });
+        AppendCallback(::Engine::MainLoop::_singleton->_postDraw,
+                       ::Engine::MainLoop::PostDrawCallback{ &DefectNoop, nullptr });
+        AppendCallback(::Engine::MainLoop::_singleton->_postUpdate,
+                       ::Engine::MainLoop::PostUpdateCallback{ &DefectNoop, nullptr });
     }
 
     // 12. The result (`_result`, +0x24), re-read through the caller's InternalPtr.
@@ -345,6 +350,6 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     // which is no field.
     if (g_RtShowDialogDefect == 2)                                       // control
         return *reinterpret_cast<int*>(   // LEFT: the defect-2 control reads the low dword of _parent (+0x28), which is no field
-            reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);   // LEFT: as above
+            reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);   // LEFT: the defect-2 control reads the low dword of _parent (+0x28), which is no field
     return dialogArg->Get()->_result;
 }

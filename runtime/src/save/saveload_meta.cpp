@@ -362,7 +362,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
         // (0x1800c9930) is the class's own member now. `name` is the registered
         // entry point's POD parameter, so it comes through the one bridge.
-        name->Serialize(&ser);
+        name->Serialize(ser);
 
         // Retail serialises the ARGUMENT HOME SLOTS: it spills R8D/R9D at entry
         // (0x1800c1493/0x1800c1497) and hands their addresses to the scalar slot,
@@ -457,8 +457,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
         for (int32_t i = 0; i < count; ++i) {
             ModInfo* e = arr.data + i;
-            e->name.Serialize(&ser);
-            e->path.Serialize(&ser);
+            e->name.Serialize(ser);
+            e->path.Serialize(ser);
             rwc->SerializeUInt(e->versionMajor, nullptr);   // +0x98
             rwc->SerializeUInt(e->gameVersion,  nullptr);   // +0x98
             rwc->SerializeUInt(e->versionMinor, nullptr);   // +0x98

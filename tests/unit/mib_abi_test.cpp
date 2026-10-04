@@ -246,7 +246,7 @@ UNIT_TEST(mib_rp_controller_member_raw_dispatch) {
     ::ControllerLive::TableAddTransition(t, 14, nullptr);
 
     alignas(8) unsigned char owner[0x58] = {};
-    Ctl node(reinterpret_cast<Component*>(owner));   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    Ctl node(reinterpret_cast<Component*>(owner));   // LEFT: the test's owner is a zeroed 0x58-byte stand-in for the Component the controller ctor stores
     void** vt = *reinterpret_cast<void***>(&node);   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
     CHECK_EQ(reinterpret_cast<int (*)(void*, int)>(vt[0])(&node, 13), 0);          // FindState   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
     int desired = 14;

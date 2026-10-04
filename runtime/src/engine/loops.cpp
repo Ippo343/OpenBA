@@ -908,7 +908,7 @@ void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
     ctx->_unknown03b8.z = 0.0f;  ctx->_unknown03b8.w = 0.0f;
 
     // LEFT: `_pixelConstantStaging` is raw bytes (Context.h, R-VIDEO).
-    float* staging = reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    float* staging = reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);   // LEFT: Context::_pixelConstantStaging is one 0x98-byte block (+0x200 videoProgram, +0x208 material, +0x248 pixel constants); ~10 readers in runtime/video and code/ index it by byte: splitting it is its own sweep
     staging[0] = secs; staging[1] = 0.0f; staging[2] = 0.0f; staging[3] = 0.0f;
     ctx->_dirty |= 0x10800u;
 
@@ -1099,10 +1099,8 @@ void Engine::MainLoop::Draw(float dt) {
     // size is re-read from the array on every iteration (`cmp 0x88(%rdi),%esi`),
     // so a callback that appends is seen by this same loop. Reproduced.
     for (int32_t i = 0; i < _postDraw._size; ++i) {
-        RtEngine::MainLoopCallback e = _postDraw._data[i];
-        // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
-        // userinterface_showdialog.cpp appends through one element type).
-        reinterpret_cast<PostDrawFunc>(e._func)(*_context, e._context);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        PostDrawCallback e = _postDraw._data[i];
+        e._func(*_context, e._context);
     }
 
     {

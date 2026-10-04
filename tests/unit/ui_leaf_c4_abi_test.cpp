@@ -56,7 +56,7 @@
 namespace Object {
 namespace detail {
 extern InternalFactory* g_unitInternalFactory;
-extern uint32_t (*g_unitInternalRandHook)(::Random*);
+extern uint32_t (*g_unitInternalRandHook)(System::Random*);
 }  // namespace detail
 }  // namespace Object
 
@@ -97,11 +97,11 @@ const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
 
-uint32_t RandHook(::Random*) { return 7u; }
+uint32_t RandHook(System::Random*) { return 7u; }
 struct FactoryScope {
     ::Object::InternalFactory  factory;
     ::Object::InternalFactory* saved;
-    uint32_t (*savedRand)(::Random*);
+    uint32_t (*savedRand)(System::Random*);
     FactoryScope()
         : factory(),
           saved(::Object::detail::g_unitInternalFactory),

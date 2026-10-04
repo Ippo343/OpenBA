@@ -268,7 +268,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
     IO::Serializer serializer(stream, 1);
 
-    position.Serialize(&serializer);
+    position.Serialize(serializer);
 
     int localCount = slotCount;
     serializer.Serialize(localCount, nullptr);

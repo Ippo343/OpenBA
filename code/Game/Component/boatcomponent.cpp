@@ -96,11 +96,11 @@ void BoatComponent::Persist(IO::Stream& stream) {
     { IO::Serializer scope(io, 0); }
     IO::Serializer ser(io, 0);
     destination.Serialize(ser, ComponentEntity::TypeId());   // 0x140046635: MOV EDX,[0x1401c5d70]
-    dockPosition.Serialize(&ser);
+    dockPosition.Serialize(ser);
     ser.Serialize(dockHeading, nullptr);                                               // +0x4c float
     model.Serialize(ser, ModelComponent::TypeId());
     character.Serialize(ser, CharacterComponent::TypeId());
-    waypoint.Serialize(&ser);
+    waypoint.Serialize(ser);
     ser.Serialize(routeIndex, nullptr);
     int count = routeCount;
     ser.Serialize(count, nullptr);
@@ -111,7 +111,7 @@ void BoatComponent::Persist(IO::Stream& stream) {
     Math::Vector3* points = route;
     if (count > 0 && points) {
         for (int i = 0; i < count; i++)
-            points[i].Serialize(&ser);
+            points[i].Serialize(ser);
     }
 }
 

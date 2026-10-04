@@ -144,9 +144,6 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     }
 }
 
-extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, void* ui) {
-    UI::UserInterface::UpdateStandAloneUI(*time, ui);
-}
 
 // ============================================================================
 // ?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z
@@ -172,10 +169,6 @@ extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, 
 void UI::UserInterface::DrawStandAloneUI(Video::Context& context, void* ui) {
     ++g_drawEntries;
     static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP  // LEFT: SIG retail's callback user data is void* (PEAX, 0x1801203f0)
-}
-
-extern "C" void RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui) {
-    UI::UserInterface::DrawStandAloneUI(*videoContext, ui);
 }
 
 // ============================================================================

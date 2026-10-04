@@ -78,8 +78,8 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_field28, serializer);
 
     // String fields
-    _field30.Serialize(serializer);
-    _field38.Serialize(serializer);
+    _field30.Serialize(*serializer);
+    _field38.Serialize(*serializer);
 
     // Encoding vcall 0x98 (the uint door) for +0x48
     serializer->Serialize(_field48, nullptr);

@@ -168,7 +168,7 @@ void SerializeSubMeshesBody(IO::Serializer* ser, int32_t count, SubMesh* base) {
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
         // B.3.1 bridge: SubMesh::_name is a raw slot (PickingMesh.h says why).
-        reinterpret_cast<System::String&>(s->_name).Serialize(ser);  // LEFT: H5 PickingMesh.h SubMesh::_name is raw char* storage of a String (its ctor / dtor would run: a behaviour commit)
+        reinterpret_cast<System::String&>(s->_name).Serialize(*ser);  // LEFT: H5 PickingMesh.h SubMesh::_name is raw char* storage of a String (its ctor / dtor would run: a behaviour commit)
         rw->SerializeInt(s->_parent, nullptr);
         rw->SerializeFloatArray(4, &s->_local.rotation.x, nullptr);
         rw->SerializeFloatArray(3, &s->_local.translation.x, nullptr);
@@ -256,8 +256,8 @@ bool PickingMesh::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // B.3.1 bridge: the two Strings are the POD spelling (PickingMesh.h).
-    _string20.Serialize(&ser);
-    _string28.Serialize(&ser);
+    _string20.Serialize(ser);
+    _string28.Serialize(ser);
 
     IO::ReaderWriter* rwc = ser._readerWriter;
     const bool reading = (stream._direction == rt::io::kDirectionReading);

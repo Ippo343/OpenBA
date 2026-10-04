@@ -456,7 +456,7 @@ class InternalFactory;
 namespace detail {
 void*    InternalMemAlloc(uint64_t bytes, int align);
 void     InternalMemFree(void* p);
-uint32_t InternalRand(::Random* random);
+uint32_t InternalRand(System::Random* random);
 
 // The four `Collection::Array` instantiations retail emits for this class, one
 // body per element width, each at its own retail address. They are the Wave 3
@@ -643,14 +643,14 @@ public:
     Collection::Array<Internal*>&       GetObjects()          { return _objects; }
     const Collection::Array<Internal*>& GetObjects() const    { return _objects; }
     Collection::Array<int32_t>&         GetPersistIds()       { return _persistIds; }
-    ::Random&                           GetRandom()           { return _random; }
+    System::Random&                     GetRandom()           { return _random; }
 
     // PUBLIC for the same reason `Object::Factory::_types` is: the unconverted
     // C bodies and the exe-side audit (code/Game/Object/internal_factory_audit.h)
     // reach these directly, and `offsetof` on them has to be well formed.
     Collection::Array<Internal*> _objects;      // +0x00
     Collection::Array<int32_t>   _persistIds;   // +0x10
-    ::Random                     _random;       // +0x20
+    System::Random               _random;       // +0x20
 };
 
 static_assert(sizeof(InternalFactory) == 0x9e8,

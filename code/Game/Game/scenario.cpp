@@ -76,13 +76,13 @@ bool Scenario::Serialize(IO::Stream& stream) {
     serializer.Serialize(_field60, nullptr);   // B.3.4 bridge
     serializer.Serialize(_field64, nullptr);   // B.3.4 bridge
 
-    scenarioName.Serialize(&serializer);
+    scenarioName.Serialize(serializer);
 
     Reimpl_ExternalPtr_Serialize_MapGenerator(&mapGenerator, &serializer);
     Reimpl_ExternalPtr_Serialize_TerrainGenerator(&terrainGenerator, &serializer);
     Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climateGenerator, &serializer);
 
-    _field88.Serialize(&serializer);
+    _field88.Serialize(serializer);
 
     serializer.Serialize(_field68, nullptr);   // B.3.4 bridge
     serializer.Serialize(_field69, nullptr);   // B.3.4 bridge

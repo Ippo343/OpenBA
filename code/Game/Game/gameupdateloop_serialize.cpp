@@ -267,7 +267,7 @@ void EventLog::Serialize(IO::Stream& stream) {
             // LEFT: retail serializes the colour through the uint overload
             // (0x1400952c0); the tree's int overload is kept (an H8 question).
             ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);   // LEFT: retail serializes the colour through the uint overload (0x1400952c0); the tree's int overload is kept (an H8 question).
-            e.text.Serialize(&ser);
+            e.text.Serialize(ser);
             ser.Serialize(e.eventType, nullptr);
             ser.Serialize(e.severity, nullptr);
             ser.Serialize(e.tileIndex, nullptr);
@@ -300,7 +300,7 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
     // LEFT (H5): +0x1C is a Math::Vector4, declared as float[4]: a Vector4
     // member would give the class a constructor that runs in Load.
-    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(&ser);   // LEFT: H5: +0x1C is a Math::Vector4, declared as float[4]: a Vector4 member would give the class a constructor that runs in Load.
+    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(ser);   // LEFT: H5: +0x1C is a Math::Vector4, declared as float[4]: a Vector4 member would give the class a constructor that runs in Load.
     ser.Serialize(field_0x2C, nullptr);
     ser.Serialize(field_0x30, nullptr);
     ser.Serialize(field_0x44, nullptr);
@@ -527,7 +527,7 @@ void PlayerToolManager::Serialize(IO::Stream& stream) {
         for (uint32_t i = 0; i < (uint32_t)count; i++) {
             PlayerCameraView& e = cameraViews[i];
             // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
-            e.position.Serialize(&ser);
+            e.position.Serialize(ser);
             ser.Serialize(e.field_0x0C, nullptr);
             ser.Serialize(e.field_0x10, nullptr);
             ser.Serialize(e.field_0x14, nullptr);
@@ -753,7 +753,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
         ser.Serialize(m_scenarioIndex, nullptr);
 
     m_random->Serialize(ser);
-    m_saveName.Serialize(&ser);
+    m_saveName.Serialize(ser);
     ser.Serialize(m_scenarioCompleted, nullptr);
 
 
@@ -787,7 +787,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     // `anim=%p` it fed the [GUL::Serialize] fprintf all went in the closing pass:
     // a diagnostic that prints the address of a door nobody calls reports nothing.
     m_animationManager->Serialize(ser);
-    m_audioScene->Serialize(&ser);
+    m_audioScene->Serialize(ser);
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 

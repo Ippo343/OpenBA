@@ -763,9 +763,8 @@ Transform Transform::FromLookAt(const Vector3& from, const Vector3& to) {
 // (runtime/types/io/Serializer.h:488), called BY NAME. The old typedef passed
 // no `name` (R9 was whatever the caller left); every body in the family
 // ignores `name` (Serializer.h's banner), so passing nullptr changes nothing.
-void Transform::Serialize(void* serializer /* io::Serializer* */) {
-    ::IO::ReaderWriter* const rw = reinterpret_cast<::IO::Serializer*>(serializer)  // LEFT: Serialize(void*) is reserved for the closing wave
-                                       ->_readerWriter;   // +0x08 (B.3.x bridge)
+void Transform::Serialize(::IO::Serializer& serializer) {
+    ::IO::ReaderWriter* const rw = serializer._readerWriter;   // +0x08
     rw->SerializeFloatArray(4, &this->rotation.x, nullptr);     // +0x28  {x, y, z, w}
     rw->SerializeFloatArray(3, &this->translation.x, nullptr);  // +0x28  {x, y, z}
 }

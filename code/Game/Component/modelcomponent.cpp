@@ -158,7 +158,7 @@ void ModelComponent::Persist(IO::Stream& stream) {
     ser.Serialize(meshIndex, nullptr);
 
     // Math::Transform at +0x148 (slot 0x1401522e0).
-    transform.Serialize(&ser);
+    transform.Serialize(ser);
 
     ser.Serialize(yaw, nullptr);
 

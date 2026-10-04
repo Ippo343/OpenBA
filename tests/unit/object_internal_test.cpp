@@ -48,7 +48,7 @@
 namespace Object {
 namespace detail {
 extern InternalFactory* g_unitInternalFactory;
-extern uint32_t (*g_unitInternalRandHook)(::Random*);
+extern uint32_t (*g_unitInternalRandHook)(System::Random*);
 }  // namespace detail
 }  // namespace Object
 
@@ -63,7 +63,7 @@ int g_persistCalls = 0;
 int g_derivedDtorCalls = 0;
 
 uint32_t g_nextRand = 0;
-uint32_t RandHook(::Random*) { return g_nextRand; }
+uint32_t RandHook(System::Random*) { return g_nextRand; }
 
 // `InternalFactory::Get()` is one static pointer and the Rand hook is another.
 // A test that installs either must restore it, or the next test in link order
@@ -72,7 +72,7 @@ uint32_t RandHook(::Random*) { return g_nextRand; }
 struct FactoryScope {
     ::Object::InternalFactory  factory;
     ::Object::InternalFactory* saved;
-    uint32_t (*savedRand)(::Random*);
+    uint32_t (*savedRand)(System::Random*);
     FactoryScope()
         : factory(),
           saved(::Object::detail::g_unitInternalFactory),

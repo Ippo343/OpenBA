@@ -41,7 +41,7 @@ void AmbientEnvironmentComponent::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    position.Serialize(&ser);
+    position.Serialize(ser);
     ser.Serialize(regionX, nullptr);
     ser.Serialize(regionY, nullptr);
     ser.Serialize(regionWidth, nullptr);

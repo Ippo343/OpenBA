@@ -799,7 +799,7 @@ Graphics::MeshInstance::~MeshInstance() {
 // (code/Game/Player/tool_base_render.cpp); each parameter is viewed once.
 void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
     TriangleVertex* tv = static_cast<TriangleVertex*>(self);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
-    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: SIG as above
+    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
     tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
     tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
     tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));
@@ -825,9 +825,9 @@ void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h), as above.
 void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
     // B.4 LEFT: the outside caller's `void*` signature, as above.
-    EdgeVertex* ev = static_cast<EdgeVertex*>(self);   // LEFT: SIG as above
-    const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);   // LEFT: SIG as above
-    const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);   // LEFT: SIG as above
+    EdgeVertex* ev = static_cast<EdgeVertex*>(self);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
+    const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
+    const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
 
     ev->a.x = ta->x;  ev->b.x = tb->x;
     ev->a.y = ta->y;  ev->b.y = tb->y;
@@ -2478,7 +2478,7 @@ bool EdgeMesh::Set(int triCount, const void* triLists,
     const GraphicsMesh::TriangleList* const tris =
         static_cast<const GraphicsMesh::TriangleList*>(triLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
     const GraphicsMesh::TriangleList* const edges =
-        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);   // LEFT: SIG as above
+        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
 
     rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, triCount);
     for (int i = 0; i < _triangleLists._size; ++i)

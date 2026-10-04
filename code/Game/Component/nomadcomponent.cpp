@@ -251,10 +251,10 @@ void NomadComponent::Persist(IO::Stream& stream) {
     }
 
     // Serialize Vector3 at +0x30 (12 bytes)
-    spawnPoint.Serialize(&ser);
+    spawnPoint.Serialize(ser);
 
     // Serialize Vector3 at +0x3C (12 bytes)
-    meetPoint.Serialize(&ser);
+    meetPoint.Serialize(ser);
 
     // Serialize int at +0x50
     ser.Serialize(gender, nullptr);

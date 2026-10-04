@@ -82,7 +82,7 @@ inline void* MemAlloc(uint64_t bytes, int align) {
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) on a
 // System::String field held as raw char* storage (H5).
 inline void StringSerialize(char** field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);             // B.3.x bridge (H5)  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    reinterpret_cast<System::String*>(field)->Serialize(*ser);             // B.3.x bridge (H5)  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ---- fragment 3: the refcounted System::String release ---------------------

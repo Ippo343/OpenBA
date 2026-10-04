@@ -108,8 +108,8 @@ bool TutorialStep::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);   // 0x14000bf40
 
     // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
-    TitleText().Serialize(&serializer);
-    DescText().Serialize(&serializer);
+    TitleText().Serialize(serializer);
+    DescText().Serialize(serializer);
 
     // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
     auto leg = [&serializer](auto& data, int32_t count,

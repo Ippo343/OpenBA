@@ -134,7 +134,7 @@ bool TextDescription::Serialize(IO::Stream& streamv) {
 
     Object::SerializeExternal<UI::Font>(ser, _font);          // 18011ee8b ExternalPtr<Font>
     Object::SerializeExternal<UI::StringTable>(ser, _stringTable2);  // 18011ee99 ExternalPtr<StringTable>
-    reinterpret_cast<System::String*>(&_name)->Serialize(&ser);   // 18011eea7 String 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    reinterpret_cast<System::String*>(&_name)->Serialize(ser);   // 18011eea7 String 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     rw->SerializeBool(_b84, nullptr);
     rw->SerializeBool(_b85, nullptr);

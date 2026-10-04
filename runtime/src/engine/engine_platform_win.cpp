@@ -31,10 +31,14 @@
 //     pefile, not assumed;
 //   * the module's own HINSTANCE, 0x1801fc680, also unexported.
 //
-// So with the DLL present this is byte-faithful — we call the DLL's own proc
-// against the DLL's own template, exactly as retail does. With the DLL ABSENT
-// there is no template and no proc, and there is no honest way to synthesise
-// one here. This file therefore REFUSES BY NAME rather than jumping to null.
+// The standalone never maps the DLL (standalone/runtime_init.cpp
+// RuntimeDllNotMapped stops the boot if it is mapped), so there is no template
+// and no proc, and there is no honest way to synthesise one here. This file
+// therefore REFUSES BY NAME. (The branch that called the DLL's proc by module
+// base + retail address, and read the two launcher checkbox bytes 0x1801fc698 /
+// 0x1801fc699 the same way, was unreachable and is deleted: nothing resolves by
+// retail address. Without the dialog both bytes are 0, so PlatformConfigure
+// consults only the command line, as retail does when neither box is ticked.)
 //
 // That is a real behavioural divergence at cutover and it is written down
 // rather than smoothed over: an ATTENDED cutover run whose arming bit is set
@@ -54,25 +58,6 @@
 
 namespace {
 
-// GetModuleHandleW, not a cached ResolveInit handle: this file must be able to
-// tell "the DLL is loaded" from "it is not", and that is exactly the question
-// GetModuleHandleW answers. A null here IS the cutover condition.
-HMODULE RuntimeModule() {
-    return GetModuleHandleW(L"Runtime-x64.dll");
-}
-
-// The two launcher checkbox bytes the DLL's dialog proc writes. Unexported, so
-// they are reached as module-relative offsets off the loaded base — and only
-// ever when that base exists. At cutover both read as 0, which is precisely
-// what retail sees when neither box was ticked, so the caller's `|| command
-// line` fallback behaves correctly rather than accidentally.
-const uint8_t* LauncherFlagByte(uintptr_t ghidraAddr) {
-    HMODULE h = RuntimeModule();
-    if (!h) return nullptr;
-    return reinterpret_cast<const uint8_t*>(  // CAST-OK: win32
-        reinterpret_cast<uintptr_t>(h) + (ghidraAddr - 0x180000000ull));  // CAST-OK: win32
-}
-
 bool g_refusalPrinted = false;
 
 }  // namespace
@@ -84,16 +69,6 @@ bool RtEnginePlatformShiftHeld() {
 
 // Retail returns the DialogBoxParamW result and the caller compares it to 1.
 long long RtEnginePlatformShowLauncherDialog() {
-    HMODULE h = RuntimeModule();
-    if (h) {
-        // 0x1801fc680 is the DLL's HINSTANCE, which for a DLL IS its HMODULE —
-        // so `h` is that value, not a substitute for it.
-        DLGPROC proc = reinterpret_cast<DLGPROC>(  // CAST-OK: win32
-            reinterpret_cast<uintptr_t>(h) + (0x1800a1ae0ull - 0x180000000ull));  // CAST-OK: win32
-        return static_cast<long long>(
-            DialogBoxParamW(h, MAKEINTRESOURCEW(0x66), nullptr, proc, 0));
-    }
-
     if (!g_refusalPrinted) {
         g_refusalPrinted = true;
         fprintf(stderr,
@@ -106,16 +81,6 @@ long long RtEnginePlatformShowLauncherDialog() {
             "clears the arming bit).\n");
     }
     return 1;   // IDOK == Play
-}
-
-bool RtEnginePlatformLauncherFlagNoMods() {
-    const uint8_t* p = LauncherFlagByte(0x1801fc699);
-    return p && *p != 0;
-}
-
-bool RtEnginePlatformLauncherFlagReset() {
-    const uint8_t* p = LauncherFlagByte(0x1801fc698);
-    return p && *p != 0;
 }
 
 // ---------------------------------------------------------------------------

@@ -89,7 +89,7 @@ bool TutorialImageHotKey::Serialize(IO::Stream& stream) {
     IO::Serializer ser2(stream, 0);
 
     // Serialize String at +0x30
-    hotkeyRef.Name().Serialize(&ser2);
+    hotkeyRef.Name().Serialize(ser2);
 
     // If loading (version == 0), resolve the hotkey string to an External ref
     int version = ser2.GetVersion();

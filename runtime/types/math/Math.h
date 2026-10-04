@@ -83,6 +83,8 @@ constexpr float kBigPos = 1.0e8f;             // 0x4cbebc20
 constexpr float kBigNeg = -1.0e8f;            // 0xccbebc20
 }  // namespace RtMathConst
 
+namespace IO { class Serializer; }
+
 namespace Math {
 
 class Scalar;
@@ -133,9 +135,7 @@ public:
     Scalar  LengthSquared() const;                                  // 0x18006c860
     Vector2 Normalize() const;                                      // 0x18006c600
     Vector2 Normalize(Scalar& mag) const;                           // 0x18006c7b0
-    // Retail takes IO::Serializer&; IO::Serializer is not a typed struct in
-    // this header's layer, so the seam stays a void*. See the body.
-    void    Serialize(void* serializer);                            // 0x18005ff40
+    void    Serialize(IO::Serializer& serializer);                  // 0x18005ff40
 };
 static_assert(sizeof(Vector2) == 8, "Math::Vector2 must be 8 bytes");
 
@@ -161,7 +161,7 @@ public:
     Vector3 Normalize(Scalar& mag) const;                           // 0x180021a20
     Vector3 Normalize() const;                                      // 0x180021ae0
     bool    operator==(const Vector3& rhs) const;                   // 0x1800150a0
-    void    Serialize(void* serializer);                            // 0x1800150e0
+    void    Serialize(IO::Serializer& serializer);                  // 0x1800150e0
 };
 static_assert(sizeof(Vector3) == 12, "Math::Vector3 must be 12 bytes");
 
@@ -178,7 +178,7 @@ public:
     explicit Vector4(const Scalar& s);                              // 0x18001d750 (splat)
     Vector4(const Vector3& xyz, const Scalar& w_);                  // 0x18001e070
 
-    void Serialize(void* serializer);                               // 0x18001d360
+    void Serialize(IO::Serializer& serializer);                     // 0x18001d360
 };
 static_assert(sizeof(Vector4) == 16, "Math::Vector4 must be 16 bytes");
 
@@ -267,7 +267,7 @@ public:
     Matrix     AsMatrix() const;                                    // 0x18001e5f0
     Transform3 AsTransform3() const;                                // 0x18001fcd0
     Transform  Inverse() const;                                     // 0x18005db50
-    void       Serialize(void* serializer);                         // 0x180059b90
+    void       Serialize(IO::Serializer& serializer);               // 0x180059b90
 
     static Transform Identity();                                    // 0x18001fab0
     static Transform FromDirection(const Vector3& direction, const Vector3& offset);  // 0x180021d70
