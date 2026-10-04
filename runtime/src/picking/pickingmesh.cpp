@@ -256,8 +256,8 @@ bool PickingMesh::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // B.3.1 bridge: the two Strings are the POD spelling (PickingMesh.h).
-    reinterpret_cast<System::String&>(_string20).Serialize(&ser);  // LEFT: H5 PickingMesh.h holds the two Strings as the RtSystem POD (the class's dtor would run: a behaviour commit)
-    reinterpret_cast<System::String&>(_string28).Serialize(&ser);  // LEFT: as above
+    _string20.Serialize(&ser);
+    _string28.Serialize(&ser);
 
     IO::ReaderWriter* rwc = ser._readerWriter;
     const bool reading = (stream._direction == rt::io::kDirectionReading);
@@ -284,10 +284,11 @@ bool PickingMesh::Serialize(IO::Stream& stream) {
 // The compiler-emitted `_nodes.~Array()` that runs after this body therefore
 // sees an empty header: no element destroy (`_size` 0) and MemFree(null),
 // which retail's allocator tests inside (array.cpp ArrayDtorImpl) -- a no-op.
+// B4 X-RH: the releases of +0x28 then +0x20 (0x1801228ca / 0x1801228f4) are
+// the System::String members' destructors, which the compiler runs after that
+// no-op, in reverse declaration order, before ~External.
 PickingMesh::~PickingMesh() {
     SubMeshArrayDtor(&_nodes);
-    RtSystem::RtString_ReleaseInline(&_string28);
-    RtSystem::RtString_ReleaseInline(&_string20);
 }
 
 }  // namespace Picking
