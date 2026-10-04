@@ -94,8 +94,8 @@ namespace {
 // ?_singleton@FileSystem@IO@@0PEAV12@EA, ord 4811, retail 0x1801fc6a8.
 // Written by `??0FileSystem@IO@@QEAA@XZ`, which Wave 9 lane X ported; read here
 // through the PORT-AWARE door so it follows lane C2's mint at cutover.
-void** FileSystemSingletonSlot() {
-    return reinterpret_cast<void**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
+::IO::FileSystem** FileSystemSingletonSlot() {
+    return &::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 }  // namespace
@@ -132,7 +132,7 @@ bool Persistence::Startup() {
     // is guarded is whether the SLOT EXISTS at all: with no DLL that variable
     // exists only if the mint provides it. Our difference from retail, not a
     // guard over retail's logic.
-    if (void** fsSlot = ::FileSystemSingletonSlot()) {
+    if (::IO::FileSystem** fsSlot = ::FileSystemSingletonSlot()) {
         ::new (static_cast<void*>(&tmpPod)) System::Filename(          // B.3.x bridge
             static_cast<const ::IO::FileSystem*>(*fsSlot)->GetSaveDirectory());
     }

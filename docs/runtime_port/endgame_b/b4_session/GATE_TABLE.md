@@ -257,3 +257,11 @@ Metric at `24f32afa`: **6,728** to remove.
 | 62 | P2-CAI-3 (+ CIT-3) | `9732f3fe` | citizenai_growup, handlers 1-3, citizenaicomponent by name (row 280): 212 -> 66 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
 
 Metric at `9732f3fe`: **6,006** to remove.
+
+| 63 | P2-CAI-1 | `29a0cc08` | citizenai_actionctors builds actions through their constructors (eleven forwarders bypassed), candidatelist on typed records (rows 290-291): 182 -> 33 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 64 | P2-WORK-3 | `84d4450f` | the Work action builders construct through the Action constructors (same order at -O0, checked by the coordinator), `CharacterComponent::field_0x58` is `InternalPtr<Action>`, eleven dead forwarders deleted, `SIG_WORK.tsv`: 261 -> 160 in 20 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 65 | P2-CIT-2 | `01d45efa` | citizen_updatehealth, citizen_reassign_workers by name; the radius query on `CharacterGridWalker` (retail 0x140092990) (rows 330-333): 151 -> 9 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 66 | P2-CIT-1 | `161eaec4` | citizen_employ_cascade, lifeevent_handler, assign_citizens by name (rows 310-311): 255 -> 43 in seven files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 67 | P2-R-IO | `33d41e34` | ReaderWriter fields typed, `ModArrayOf<T>`, `ModSetNode` int16 balance / height, FileSystem entry points take the real String / Filename; byte-level views marked `byte_io`: 215 -> 104 in 31 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+
+Metric at `33d41e34`: **5,291** to remove.

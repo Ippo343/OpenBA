@@ -69,6 +69,7 @@
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"    // B.4 W1 COMP-b: description fields by name
 #include "Game/ProfessionList.h"
+#include "Entity/CitizenBehavior.h"   // m_citizenList->citizens (+0xA0)
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 
@@ -214,10 +215,10 @@ void CitizenComponent::OnRemove() {
             // CitizenList_AssignWorker_c3d0 is CitizenBehavior's body (LEFT free,
             // int64_t receiver and key).
             void* result = CitizenList_AssignWorker_c3d0(
-                reinterpret_cast<int64_t>(gw->m_citizenList), retbuf,
-                reinterpret_cast<int64_t*>(&nearIBP),
-                reinterpret_cast<int64_t>(profession));      // 0x14008c3d0
-            CitizenComponent* replacement = result ? *reinterpret_cast<CitizenComponent**>(result) : nullptr;
+                reinterpret_cast<int64_t>(gw->m_citizenList), retbuf,   // LEFT: SIG CitizenList_AssignWorker_c3d0 (Component/exe_bodies.h, wave X)
+                reinterpret_cast<int64_t*>(&nearIBP),   // LEFT: SIG CitizenList_AssignWorker_c3d0
+                reinterpret_cast<int64_t>(profession));      // 0x14008c3d0  LEFT: SIG CitizenList_AssignWorker_c3d0
+            CitizenComponent* replacement = result ? *reinterpret_cast<CitizenComponent**>(result) : nullptr;   // LEFT: SIG CitizenList_AssignWorker_c3d0 (void* return)
 
             CitizenComponent* target;
             int   eventType;
@@ -226,7 +227,7 @@ void CitizenComponent::OnRemove() {
                 target = this; eventType = 0x10; name = nullptr;   // nobody to take the job
             } else {
                 // the deceased's name (+0x28, H5 raw System::String: its data pointer)
-                name = *reinterpret_cast<const char**>(&this->name);
+                name = *reinterpret_cast<const char**>(&this->name);   // LEFT: H5 CitizenComponent::name (CitizenComponent.h, CIT-4)
                 target = replacement;
                 eventType = 0xf;                                    // replacement found
             }
@@ -236,12 +237,12 @@ void CitizenComponent::OnRemove() {
         // ---- 7. trade-work list + any dialog bound to our entity ---------------
         ComponentEntity* ownerIBP = _entity;
         // NomadComp_FUN_140103480 is the tool manager's body (LEFT free, int64_t receiver).
-        NomadComp_FUN_140103480(reinterpret_cast<int64_t>(gw->m_toolManager), &ownerIBP);   // 0x140103480
+        NomadComp_FUN_140103480(reinterpret_cast<int64_t>(gw->m_toolManager), &ownerIBP);   // 0x140103480  LEFT: SIG NomadComp_FUN_140103480 (Component/exe_bodies.h, wave X)
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------
         CitizenComponent* selfIBP = this;
-        uint8_t* townMgr = reinterpret_cast<uint8_t*>(gw->m_citizenList);   // void* member: raw
+        CitizenBehavior* townMgr = gw->m_citizenList;
         if (townMgr)
-            CemeteryListErase_Reimpl(townMgr + 0xa0, &selfIBP);   // 0x140002cc0
+            CemeteryListErase_Reimpl(&townMgr->citizens, &selfIBP);   // 0x140002cc0, +0xA0
     }
 }

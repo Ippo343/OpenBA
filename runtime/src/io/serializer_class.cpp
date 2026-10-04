@@ -82,17 +82,17 @@ namespace IO {
 // +0x10 Write, +0x18 Read, +0x20 SetCurrentPos, +0x28 GetCurrentPos.
 // ---------------------------------------------------------------------------
 namespace rw_stream {
-bool Write(void* s, int32_t n, void* src) {
-    return static_cast<Stream*>(s)->Write(n, src);   // slot 2 +0x10
+bool Write(Stream* s, int32_t n, void* src) {
+    return s->Write(n, src);   // slot 2 +0x10
 }
-bool Read(void* s, int32_t n, void* dst) {
-    return static_cast<Stream*>(s)->Read(n, dst);    // slot 3 +0x18
+bool Read(Stream* s, int32_t n, void* dst) {
+    return s->Read(n, dst);    // slot 3 +0x18
 }
-void SetPos(void* s, int32_t pos) {
-    static_cast<Stream*>(s)->SetCurrentPos(pos);     // slot 4 +0x20
+void SetPos(Stream* s, int32_t pos) {
+    s->SetCurrentPos(pos);     // slot 4 +0x20
 }
-int32_t GetPos(void* s) {
-    return static_cast<int32_t>(static_cast<Stream*>(s)->GetCurrentPos());  // slot 5 +0x28
+int32_t GetPos(Stream* s) {
+    return static_cast<int32_t>(s->GetCurrentPos());  // slot 5 +0x28
 }
 }  // namespace rw_stream
 

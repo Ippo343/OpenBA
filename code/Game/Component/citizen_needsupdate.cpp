@@ -48,6 +48,7 @@
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"    // B.4 W1 COMP-b: description fields by name
 #include "Component/ResidenceComponent.h"
+#include "Component/StatusIconComponent.h"   // statusIcon->SetFlag (0x14012c3f0)
 #include "Entity/ComponentEntity.h"           // FindComponent<T>
 #include "Component/exe_bodies.h"
 #include "Game/exe_constants.h"
@@ -65,11 +66,11 @@ static inline float RdataF(uint32_t bits) {
 // accumulate the credit: +0xac is the running happiness total, +0xa8 the last delta.
 // (Retail derefs +0x280 unconditionally; the != 0 guard is a standalone-only safety
 // for a citizen whose StatusIconComponent is not yet live — a no-op in practice.)
-// CitizenComp_FUN_14012c3f0 is StatusIconComponent's body (LEFT free, int64_t* receiver).
+// 0x14012c3f0 is StatusIconComponent::SetFlag.
 // ============================================================
 void CitizenComponent::AddHappiness(int param) {
     if (statusIcon) {
-        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 4, 0);
+        statusIcon->SetFlag(4, 0);
     }
     field_0xAC += param;
     field_0xA8  = param;
@@ -90,8 +91,7 @@ void CitizenComponent::AdvanceSchooling() {
     int32_t threshold  = desc ? desc->maxEducation : 0;
     float   perUnitSec = desc ? desc->_f11c : 0.0f;
     float budgetSecs = perUnitSec * RdataF(kRdata_14017225c);   // 3600.0f
-    // schoolTime is a System::Time held as its int64 ticks (CitizenComponent.h).
-    float elapsed = reinterpret_cast<const System::Time*>(&schoolTime)->AsSeconds();
+    float elapsed = schoolTime.AsSeconds();
     if (*counter < threshold && elapsed <= budgetSecs) return;
 
     *counter = threshold;
@@ -128,7 +128,7 @@ void CitizenComponent::WarmAt(ComponentEntity* target) {
     if (r1 == nullptr) return;
 
     ResidenceComponent* r2 = target->FindComponent<ResidenceComponent>();
-    if (ResidenceCheck_2ac30(reinterpret_cast<int64_t>(r2))) {
+    if (ResidenceCheck_2ac30(reinterpret_cast<int64_t>(r2))) {   // LEFT: SIG ResidenceCheck_2ac30 (Component/exe_bodies.h, wave X)
         coldness = 0.0f;
     }
 }
@@ -144,7 +144,7 @@ void CitizenComponent::WarmAt(ComponentEntity* target) {
 // (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =
 // extra (read from the retail body's jump table).
 void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
-    ComponentEntity* const* param_3 = static_cast<ComponentEntity* const*>(data);
+    ComponentEntity* const* param_3 = static_cast<ComponentEntity* const*>(data);   // LEFT: SIG Component::OnMessage (void* data, Component.h)
     int param_4 = static_cast<int>(arg0);
     if (static_cast<unsigned>(message) > 8) return;   // retail: CMP EDX,8 / JA ret
 

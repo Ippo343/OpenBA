@@ -115,6 +115,13 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_constants.h"
+#include "Game/Map.h"                       // Map::size / cells / PathDistance
+#include "Game/ProfessionList.h"            // professions (+0x20), field_0x30 default
+#include "Entity/CitizenBehavior.h"         // citizens (+0xA0), field_0x100 bucket tree
+#include "Entity/ComponentEntity.h"         // FindComponent<T>
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/WorkPlaceComponent.h"
 
 namespace {
 
@@ -125,15 +132,15 @@ namespace {
 //   - either endpoint in an invalid region -> Euclidean grid distance
 //   - otherwise CalcPathCost; if < 2 (adjacent/degenerate) -> Euclidean
 static const int kUnreachable = 0x1000000;
-int ComputeCost(int32_t* pathData, int fromCell, int toCell) {
+int ComputeCost(Map* map, int fromCell, int toCell) {
     if (fromCell < 0 || toCell < 0) return kUnreachable;
     // The body returns its bool in the low byte of a uint64 (work_base_reimpl.cpp).
     if (!static_cast<bool>(static_cast<uint8_t>(
-            WorkBase_ValidateCell_a00f0(pathData, 0xe1f, static_cast<uint32_t>(fromCell),
+            WorkBase_ValidateCell_a00f0(reinterpret_cast<int32_t*>(map), 0xe1f, static_cast<uint32_t>(fromCell),   // LEFT: SIG WorkBase_ValidateCell_a00f0 (Work/exe_bodies.h, wave X)
                                         static_cast<int>(static_cast<uint32_t>(toCell))))))
         return kUnreachable;
 
-    int W = pathData[0];
+    int W = map->size;   // +0x00
     if (W <= 0) return kUnreachable;
     auto euclid = [&]() -> int {
         int dx = fromCell / W - toCell / W;
@@ -142,63 +149,58 @@ int ComputeCost(int32_t* pathData, int fromCell, int toCell) {
         return d < 0 ? kUnreachable : d;
     };
 
-    int64_t nav = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(pathData) + 0x80);
-    int regionA = *reinterpret_cast<int*>(nav + 0x18 + static_cast<int64_t>(fromCell) * 0x30);
-    int regionB = *reinterpret_cast<int*>(nav + 0x18 + static_cast<int64_t>(toCell)   * 0x30);
+    MapCell* nav = map->cells;               // +0x80, stride 0x30
+    int regionA = nav[fromCell].regionId;    // +0x18
+    int regionB = nav[toCell].regionId;
     if (regionA < 0 || regionB < 0) return euclid();
 
-    int cost = Pf_IsDstReachable_f810(pathData, static_cast<uint32_t>(fromCell),
-                                      static_cast<uint32_t>(toCell), 0);
+    int cost = map->PathDistance(static_cast<uint32_t>(fromCell),
+                                 static_cast<uint32_t>(toCell), 0);   // 0x14009f810
     if (cost < 2) cost = euclid();
     return cost;
 }
 
 
 // Read a citizen out of the townMgr citizen array, resolving the lazy IBP.
-inline void* CitizenAt(uintptr_t citArray, int i) {
-    void* c = *reinterpret_cast<void**>(citArray + static_cast<int64_t>(i) * 8);
+inline CitizenComponent* CitizenAt(CitizenComponent** citArray, int i) {
+    CitizenComponent* c = citArray[i];
     return c;
 }
 
 // idle + healthy + not-busy gate (identical in phase 1 and phase 3).
-inline bool IsIdleHealthy(void* citizenV) {
-    uint8_t* c = reinterpret_cast<uint8_t*>(citizenV);
-    void* healthComp = *reinterpret_cast<void**>(c + 0x288);
+inline bool IsIdleHealthy(CitizenComponent* c) {
+    CitizenDescription* healthComp = c->description;   // +0x288
     if (!healthComp) return false;
-    if (*reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(healthComp) + 0x44) >
-        *reinterpret_cast<float*>(c + 0x3c))
+    if (healthComp->adultAge > c->age)                 // desc +0x44 vs +0x3c
         return false;                                   // sick/starving
-    if (*reinterpret_cast<void**>(c + 0x208) != 0) return false;  // busy in an action
+    if (c->school != nullptr) return false;             // +0x208 busy in an action
     return true;
 }
 
 // Find the workplace component inside an assigned entity (+0x248 value), or null.
-inline void* FindWorkplaceComp(void* entityRaw) {
-    if (!entityRaw) return nullptr;
-    void* raw = entityRaw;
-    int64_t outIBP[2] = {0, 0};
-    AttendanceComponent_GetJobHostComponent(raw, outIBP);   // 0x140002e10
-    void* comp = reinterpret_cast<void*>(outIBP[0]);
+// (0x140002e10, the tree's AttendanceComponent_GetJobHostComponent, is this type scan.)
+inline WorkPlaceComponent* FindWorkplaceComp(ComponentEntity* entity) {
+    if (!entity) return nullptr;
+    WorkPlaceComponent* comp = entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     return comp;
 }
 
 // Grid cell id of an entity (its Position component). Returns -1 when absent.
-inline int CellOfEntity(void* entityRaw) {
-    if (!entityRaw) return -1;
-    void* raw = entityRaw;
-    return Pf_EntityAnchorCell_7fb0(&raw, nullptr);   // 0x140087fb0
+inline int CellOfEntity(ComponentEntity* entity) {
+    if (!entity) return -1;
+    ComponentEntity* raw = entity;
+    return EntityAnchorCell(&raw, nullptr);   // 0x140087fb0
 }
 
 // Phase-1/3 normalization: an idle citizen whose current workplace requires a
 // profession different from its own is unassigned back to the default laborer key.
-void NormalizeMismatched(void* citizenV, uintptr_t reg) {
-    uint8_t* c = reinterpret_cast<uint8_t*>(citizenV);
-    void* assigned = *reinterpret_cast<void**>(c + 0x248);
+void NormalizeMismatched(CitizenComponent* c, ProfessionList* reg) {
+    ComponentEntity* assigned = c->workplace;   // +0x248
     if (!assigned) return;
-    void* wpComp = FindWorkplaceComp(assigned);
+    WorkPlaceComponent* wpComp = FindWorkplaceComp(assigned);
     if (!wpComp) return;                                // no workplace comp -> nothing to sync
-    int64_t reqProf   = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(wpComp) + 0x48);
-    int64_t curProf   = *reinterpret_cast<int64_t*>(c + 0x1f0);
+    Profession* reqProf = wpComp->profession;   // +0x48
+    Profession* curProf = c->profession;        // +0x1f0
 
     // A building can carry MORE THAN ONE WorkPlaceComponent — a construction workplace
     // (so citizens can be assigned to build it) plus the production one. FindWorkplaceComp
@@ -208,33 +210,32 @@ void NormalizeMismatched(void* citizenV, uintptr_t reg) {
 
     if (reqProf == curProf) return;                     // already matches
 
-    int64_t defaultKey = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(reg) + 0x30);
+    Profession* defaultKey = reg->field_0x30;   // +0x30
     // skip if already reset (default profession AND no workplace)
-    if (curProf == defaultKey && *reinterpret_cast<int64_t*>(c + 0x248) == 0) return;
+    if (curProf == defaultKey && c->workplace == nullptr) return;
 
-    int64_t nullWp = 0;
-    CitizenComp_AssignHousing(static_cast<CitizenComponent*>(citizenV), &nullWp);   // clear +0x248
-    *reinterpret_cast<int64_t*>(c + 0x1f0) = defaultKey;
+    c->SetWorkplace(nullptr);   // 0x140111ee0: clear +0x248
+    c->profession = defaultKey;
 }
 
 // Walk the town workplace map (townMgr+0x100), keyed by profession id.
 // Returns {listPtr, count} for `key`, or {0,0} if absent.
-struct WorkplaceList { uintptr_t list; int count; };
-WorkplaceList LookupWorkplaces(uintptr_t mapRoot, uint64_t key) {
-    uint64_t* node = reinterpret_cast<uint64_t*>(mapRoot);
+struct WorkplaceList { ComponentEntity** list; int count; };
+WorkplaceList LookupWorkplaces(ProfessionBucket* mapRoot, Profession* key) {
+    ProfessionBucket* node = mapRoot;
     while (node) {
-        if (key < node[0])       node = reinterpret_cast<uint64_t*>(node[4]);   // left
-        else if (key > node[0])  node = reinterpret_cast<uint64_t*>(node[5]);   // right
-        else return { static_cast<uintptr_t>(node[1]),                          // list @ +0x08
-                      static_cast<int>(node[2]) };                              // count @ +0x10
+        if (key < node->key)       node = node->left;    // +0x20
+        else if (key > node->key)  node = node->right;   // +0x28
+        else return { node->entities,                    // list @ +0x08
+                      node->count };                     // count @ +0x10
     }
-    return { 0, 0 };
+    return { nullptr, 0 };
 }
 
 // ---- scratch containers ----------------------------------------------------
 struct Candidate {
     int32_t cost;
-    void*   citizen;
+    CitizenComponent* citizen;
     int32_t fromCell;
     int32_t toCell;
     // Ordered by (cost, citizen) — matches the retail cost-tree comparator; the
@@ -246,7 +247,7 @@ struct Candidate {
 };
 
 struct NeedEntry {
-    void* workplaceComp;   // c80e0 component (owner entity @ +0x10, reqProf @ +0x48)
+    WorkPlaceComponent* workplaceComp;   // c80e0 component (owner entity @ +0x10, reqProf @ +0x48)
     int   cellId;          // workplace grid cell
     int   remaining;       // seats still to fill this pass (starts = rosterCount)
     // WPC+0x60 = the workplace's LIVE WORKER COUNT, not its capacity. Retail uses it
@@ -266,7 +267,7 @@ struct NeedEntry {
 
 // Remove the candidate for `citizen` from a need's cost-tree (linear; N is small).
 // Returns true if the removed candidate had been the need's best (begin()).
-bool DropCitizen(NeedEntry& e, void* citizen) {
+bool DropCitizen(NeedEntry& e, CitizenComponent* citizen) {
     for (auto it = e.candidates.begin(); it != e.candidates.end(); ++it) {
         if (it->citizen == citizen) {
             bool wasBest = (it == e.candidates.begin());
@@ -297,15 +298,15 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     (void)ctxV;   // ctx (PathGraph) — its cache is subsumed by ComputeCost
 
-    uintptr_t gw  = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    uintptr_t reg      = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
-    uintptr_t townMgr  = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
-    int32_t*  pathData = *reinterpret_cast<int32_t**>(gw + 0xf8);
+    GameUpdateLoop*  gw       = GameUpdateLoop::_singleton;
+    ProfessionList*  reg      = gw->m_professionList;   // +0xb0
+    CitizenBehavior* townMgr  = gw->m_citizenList;      // +0xf0
+    Map*             pathData = gw->m_game;             // +0xf8
     if (!reg || !townMgr || !pathData) return;
 
-    uintptr_t citArray = *reinterpret_cast<uintptr_t*>(townMgr + 0xa0);
-    int       citCount = *reinterpret_cast<int32_t*>(townMgr + 0xa8);
-    uintptr_t mapRoot  = *reinterpret_cast<uintptr_t*>(townMgr + 0x100);
+    CitizenComponent** citArray = townMgr->citizens;      // +0xa0
+    int                citCount = townMgr->citizenCount;  // +0xa8
+    ProfessionBucket*  mapRoot  = townMgr->field_0x100;   // +0x100
     float     uvScale  = kRdata_14017214c;   // g_fUVScale 0x14017214c
 
     // Hold the roster-only guard for every AssignHousing call below (no early returns
@@ -315,7 +316,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 
     // ---------- Phase 1: housing-sync ----------
     for (int i = 0; i < citCount; ++i) {
-        void* c = CitizenAt(citArray, i);
+        CitizenComponent* c = CitizenAt(citArray, i);
         if (!c) continue;
         if (!IsIdleHealthy(c)) continue;
         NormalizeMismatched(c, reg);
@@ -323,19 +324,19 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 
     // ---------- Phase 2: need-table ----------
     std::vector<NeedEntry> needs;
-    uintptr_t profArray = *reinterpret_cast<uintptr_t*>(reg + 0x20);
-    int       profCount = *reinterpret_cast<int32_t*>(reg + 0x28);
+    Profession** profArray = reg->professions.GetData();   // +0x20
+    int          profCount = reg->professions.GetSize();   // +0x28
     for (int p = 0; p < profCount; ++p) {
-        uint64_t key = *reinterpret_cast<uint64_t*>(profArray + static_cast<int64_t>(p) * 8);
+        Profession* key = profArray[p];
         WorkplaceList wl = LookupWorkplaces(mapRoot, key);
         for (int j = 0; j < wl.count; ++j) {
-            void* entity = *reinterpret_cast<void**>(wl.list + static_cast<int64_t>(j) * 8);
-            void* wpComp = FindWorkplaceComp(entity);
+            ComponentEntity* entity = wl.list[j];
+            WorkPlaceComponent* wpComp = FindWorkplaceComp(entity);
             if (!wpComp) continue;
             // +0x60 = LIVE WORKER COUNT (capacity is WorkComponent+0x30, never read
             // here). The `== 0` skip is what makes this allocator a rebalancer only:
             // an unstaffed workplace is invisible to it. Faithful to retail.
-            int rosterCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wpComp) + 0x60);
+            int rosterCount = wpComp->workerCount;   // +0x60
             if (rosterCount == 0) continue;
             NeedEntry e;
             e.workplaceComp = wpComp;
@@ -347,21 +348,21 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     }
 
     // ---------- Phase 3: idle set + profession counts + candidates ----------
-    std::set<void*> idle;
-    std::map<int64_t, int> profNeed;    // profession key -> idle-laborer count
+    std::set<CitizenComponent*> idle;
+    std::map<Profession*, int> profNeed;    // profession key -> idle-laborer count
     for (int i = 0; i < citCount; ++i) {
-        void* c = CitizenAt(citArray, i);
+        CitizenComponent* c = CitizenAt(citArray, i);
         if (!c) continue;
         if (!IsIdleHealthy(c)) continue;
 
         idle.insert(c);
-        int64_t prof = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(c) + 0x1f0);
+        Profession* prof = c->profession;   // +0x1f0
         ++profNeed[prof];
 
         NormalizeMismatched(c, reg);    // embedded normalization (mirrors LAB_1400d4e57)
 
         // source cell = the citizen's residence (+0x238) grid cell, or -1
-        void* residence = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(c) + 0x238);
+        ComponentEntity* residence = c->home;   // +0x238
         int srcCell = residence ? CellOfEntity(residence) : -1;
 
         for (auto& e : needs) {
@@ -388,23 +389,22 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         NeedEntry& e = needs[ni];
         if (e.candidates.empty() || e.remaining <= 0) continue;
 
-        void* citizen = e.candidates.begin()->citizen;   // nearest available laborer
-        uint8_t* wp   = reinterpret_cast<uint8_t*>(e.workplaceComp);
-        int64_t reqProf   = *reinterpret_cast<int64_t*>(wp + 0x48);
-        int64_t wpEntity  = *reinterpret_cast<int64_t*>(wp + 0x10);   // owner entity IBP value
+        CitizenComponent* citizen = e.candidates.begin()->citizen;   // nearest available laborer
+        WorkPlaceComponent* wp = e.workplaceComp;
+        Profession*      reqProf  = wp->profession;   // +0x48
+        ComponentEntity* wpEntity = wp->_entity;      // +0x10 owner entity IBP value
 
-        uint8_t* c = reinterpret_cast<uint8_t*>(citizen);
-        if (*reinterpret_cast<int64_t*>(c + 0x1f0) != reqProf ||
-            *reinterpret_cast<int64_t*>(c + 0x248) != wpEntity) {
-            int64_t wpArg = wpEntity;
-            CitizenComp_AssignHousing(static_cast<CitizenComponent*>(citizen), &wpArg);  // set +0x248 = workplace
-            *reinterpret_cast<int64_t*>(c + 0x1f0) = reqProf;        // set profession
+        CitizenComponent* c = citizen;
+        if (c->profession != reqProf ||
+            c->workplace != wpEntity) {
+            c->SetWorkplace(wpEntity);   // 0x140111ee0: set +0x248 = workplace
+            c->profession = reqProf;     // set profession
         }
 
         // decrement this citizen's profession need
         // Retail decrements the count under the workplace's required profession
         // (= the citizen's post-assignment +0x1f0), which is what we look up here.
-        auto pit = profNeed.find(*reinterpret_cast<int64_t*>(c + 0x1f0));
+        auto pit = profNeed.find(c->profession);
         if (pit != profNeed.end() && --pit->second == 0) profNeed.erase(pit);
         idle.erase(citizen);
         e.remaining -= 1;
@@ -429,12 +429,11 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 
     // ---------- Phase 5B: cleanup — clear workplace of leftover idle laborers ----------
     while (!profNeed.empty() && !idle.empty()) {
-        int64_t key = profNeed.rbegin()->first;      // greatest profession key
-        void*   c   = *idle.begin();                 // smallest idle citizen ptr
-        uint8_t* cb = reinterpret_cast<uint8_t*>(c);
+        Profession*       key = profNeed.rbegin()->first;   // greatest profession key
+        CitizenComponent* c   = *idle.begin();              // smallest idle citizen ptr
 
-        if (*reinterpret_cast<int64_t*>(cb + 0x1f0) != key ||
-            *reinterpret_cast<int64_t*>(cb + 0x248) != 0) {
+        if (c->profession != key ||
+            c->workplace != nullptr) {
             // This arm strips the workplace off ANY citizen in `idle`, including one
             // correctly seated at a building, and that is RETAIL BEHAVIOUR — checked
             // 2026-08-25, do not "fix" it. Retail's Phase 3 gate (0x1400d43b0, the
@@ -448,9 +447,8 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
             // It was not: measured, this arm never fired for that case. The real cause
             // was an unguarded b310 in ConsumeProduce_Execute pausing the building
             // (see consumeproduce.cpp).
-            int64_t nullWp = 0;
-            CitizenComp_AssignHousing(static_cast<CitizenComponent*>(c), &nullWp);
-            *reinterpret_cast<int64_t*>(cb + 0x1f0) = key;
+            c->SetWorkplace(nullptr);   // 0x140111ee0
+            c->profession = key;
         }
         idle.erase(idle.begin());
         auto pit = profNeed.find(key);

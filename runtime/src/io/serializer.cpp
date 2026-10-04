@@ -163,7 +163,7 @@ using rt::io::Stream;
 // views are cross-asserted field for field in runtime/types/io/Serializer.h,
 // which is what makes this cast honest rather than hopeful.
 static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
-    return reinterpret_cast<IO::Serializer*>(self);
+    return reinterpret_cast<IO::Serializer*>(self);  // LEFT: SIG the RtSerializer_* forwarders take the rt::io::Serializer POD (the exe import-slot family, wave X)
 }
 
 #define RT_SER_SCALAR(FN, T)                                                   \
