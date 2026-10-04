@@ -51,8 +51,6 @@ static int SelDiagOn() {
     return s;
 }
 
-// Forward decl (full header is included in the STANDALONE factory block at file end).
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 // ============================================================
 // EditTool Slot10 (vtable +0x50) — "is this the entity I have selected?"
@@ -713,7 +711,7 @@ extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI) {
             fflush(stdout);
         }
     }
-    EntityUI_SetEditMode_Impl(entityUI, 0);
+    entityUI->SelectTool(nullptr);
     tool = manager->currentTool;
     return EditTool_IsEditTool(tool) ? static_cast<EditTool*>(tool) : nullptr;
 }

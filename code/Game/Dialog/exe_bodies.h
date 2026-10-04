@@ -45,9 +45,7 @@ extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserIn
 // (callers use EditTool::SelectEntity, Player/EditTool.h).
 
 // ---- entityui.cpp
-// fn_EntityUI_SetEditMode — reimplemented in entityui.cpp as EntityUI_SetEditMode_Impl
-// FUN_140102b60: sets player controller edit state (BST lookup + Factory::CreateObject)
-void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+// fn_EntityUI_SetEditMode (FUN_140102b60) is PlayerToolManager::SelectTool (Game/PlayerToolManager.h).
 
 // fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
 // FUN_140102e30: BST insert/update for entity tracking

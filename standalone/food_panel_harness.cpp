@@ -43,7 +43,7 @@
 #include "Dialog/RadiusUI.h"
 #include "Dialog/ToolUI.h"
 #include "Dialog/WorkPlaceUI.h"
-#include "Dialog/exe_bodies.h"      // EntityUI_SetEditMode_Impl
+#include "Dialog/exe_bodies.h"
 #include "Component/exe_bodies.h"   // CitizenComp_TryEnrolInSchool (0x140111840)
 #include "object/TypeInfo.h"        // Object::IsDerivedFromNullSafe
 #include <cstdint>
@@ -499,12 +499,12 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
         // the drag endCell pair rather than a selected entity, and the close handler
         // used to hand it to Entity_impl_cb40 regardless of type.
         if (ValOn(Opt().foodPanelArmBuildTool)) {
-            void* tmpl = StartTown_ResolveTemplateByPath("Template\\Pasture.rsc");
+            ComponentDescription* tmpl = StartTown_ResolveTemplateByPath("Template\\Pasture.rsc");
             if (!tmpl) {
                 std::fprintf(stderr, "[FoodPanel]   teardown: Pasture template unresolved — "
                              "build tool NOT armed\n");
             } else {
-                EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SIG EntityUI_SetEditMode_Impl (uint64_t mode; Dialog/exe_bodies.h, wave X)
+                entityUI->SelectTool(tmpl);   // 0x140102b60
                 Tool* armed = entityUI->currentTool;                          // +0x28
                 std::fprintf(stderr, "[FoodPanel]   teardown: armed build tool %p at "
                              "EntityUI+0x28 before the close click\n", armed);

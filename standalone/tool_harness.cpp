@@ -51,7 +51,7 @@
 #include "Player/Tool.h"
 #include "Player/exe_bodies.h"            // UpdateToolUI_fc60 (0x1400ffc60)
 #include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, ActHunt_DynArraySetCount_3110
-#include "Dialog/exe_bodies.h"            // EntityUI_SetEditMode_Impl
+#include "Dialog/exe_bodies.h"
 #include "Dialog/dialog_exe_helpers.h"    // Dialog_FindComponent_d6c0 (0x14000d6c0)
 #include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
@@ -356,7 +356,7 @@ void FireActivatePlacement(PlayerToolManager* entityUI) {
     Tool* before = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness] SetEditMode(entityUI=%p, descriptor=%p) — activating PlacementTool "
            "via the tool-mode tree (activeTool before=%p)...\n", entityUI, tmpl, before);
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
+    entityUI->SelectTool(tmpl);   // 0x140102b60
 
     Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
@@ -398,7 +398,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
             kTemplates[1] = "Template\\DirtRoad.rsc";
         }
     }
-    void* tmpl = nullptr;
+    ComponentDescription* tmpl = nullptr;
     const char* used = nullptr;
     for (const char* path : kTemplates) {
         fprintf(stderr, "[ToolHarness][road] resolving template \"%s\"...\n", path);
@@ -410,7 +410,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
 
     fprintf(stderr, "[ToolHarness][road] SetEditMode(entityUI=%p, descriptor=%p from %s) — "
            "activating RoadTool via the tool-mode tree...\n", entityUI, tmpl, used);
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
+    entityUI->SelectTool(tmpl);   // 0x140102b60
 
     Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness][road] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
@@ -594,7 +594,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
     if (!tmpl) { fprintf(stderr, "[ToolHarness][pasture] ERROR: template resolve failed\n"); return; }
 
     fprintf(stderr, "[ToolHarness][pasture] SetEditMode — activating FencedTool via the tree...\n");
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
+    entityUI->SelectTool(tmpl);   // 0x140102b60
 
     Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness][pasture] after SetEditMode: activeTool=%p\n", tool);
@@ -2312,7 +2312,7 @@ bool UpgradeOpenDialog() {
     EditTool* tool = static_cast<EditTool*>(s_up_entityUI->currentTool);
     if (!tool) {
         fprintf(stderr, "[Upgrade] installing default EditTool via SetEditMode(pc,0)...\n");
-        EntityUI_SetEditMode_Impl(s_up_entityUI, 0);
+        s_up_entityUI->SelectTool(nullptr);
         tool = static_cast<EditTool*>(s_up_entityUI->currentTool);
     }
     if (!tool) {
@@ -2552,11 +2552,11 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
     const char* tmplPath = Opt().bridgeTemplate;
     if (!tmplPath || !tmplPath[0]) tmplPath = "Template\\WoodBridge.rsc";
     fprintf(stderr, "[ToolHarness][bridge] resolving template \"%s\"...\n", tmplPath);
-    void* tmpl = StartTown_ResolveTemplateByPath(tmplPath);
+    ComponentDescription* tmpl = StartTown_ResolveTemplateByPath(tmplPath);
     fprintf(stderr, "[ToolHarness][bridge]   -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness][bridge] ERROR: template did not resolve\n"); return; }
 
-    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));   // LEFT: SetEditMode's uint64_t mode (Dialog/exe_bodies.h)
+    entityUI->SelectTool(tmpl);   // 0x140102b60
     Tool* tool = entityUI->currentTool;
     fprintf(stderr, "[ToolHarness][bridge] after SetEditMode: activeTool=%p\n", tool);
     if (!tool) {
@@ -2812,7 +2812,7 @@ void BridgeSelectFire(PlayerToolManager* entityUI) {
     // The bridge harness left the BridgeTool active at entityUI+0x28; swap back to the
     // default EditTool (the one a player would be holding when they click a bridge).
     // The current tool is taken as the EditTool (SelectEntity refuses any other tool).
-    EntityUI_SetEditMode_Impl(entityUI, 0);
+    entityUI->SelectTool(nullptr);
     EditTool* tool = entityUI ? static_cast<EditTool*>(entityUI->currentTool)
                               : nullptr;
     if (!tool) {

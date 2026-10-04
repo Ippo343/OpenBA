@@ -51,12 +51,12 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Dialog/WorkPlaceUI.h"
-#include "Dialog/exe_bodies.h"   // EntityUI_SetEditMode_Impl
+#include "Dialog/exe_bodies.h"
 #include "Entity/ComponentEntity.h"   // B4: the component array by name
 #include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "ui/DialogInstance.h"        // B4: the open dialog's controller array
 
-// EditTool_Harness*: Player/edittool_funcs.h. EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
+// EditTool_Harness*: Player/edittool_funcs.h. SetEditMode: PlayerToolManager::SelectTool.
 
 namespace {
 
