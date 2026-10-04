@@ -107,6 +107,7 @@
 #include "Element.h"
 #include "NumberDescription.h"   // NumberDescription::NumberType
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
+#include "../system/String.h"     // System::String — the +0xd0 member
 
 // ENDGAME B.3 step 6, block C3: the POD below moved from `UI::` to `RtUI::`
 // (B4b-1) when the real class took the retail name; widgets_input.cpp's two
@@ -175,10 +176,11 @@ public:
     // ??0Element (Element()), then _font, _mode, _cachedText, _intValue,
     // _floatValue, _showSign zero (+0xcc and the tail pad unwritten), then
     // CacheText() — which formats the (zero) value into _cachedText.
+    // B4 X-RH: the +0xd0 zero (0x180118ca5) is the System::String member's
+    // default constructor, run before this body (nothing reads it in between).
     NumberElement() : Element() {
         _font       = nullptr;
         _mode       = 0;
-        _cachedText = nullptr;
         _intValue   = 0;
         _floatValue = 0.0f;
         _showSign   = 0;
@@ -188,8 +190,9 @@ public:
     // [0] 0x18004ab80 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xe8`, the element size).
     // `??1NumberElement@UI@@UEAA@XZ` (0x180118ce0). VIRTUAL (B3X W1);
-    // numberelement.cpp holds retail's body (release _cachedText); the
-    // compiler chains ~Element.
+    // retail's body is the release of _cachedText (0x180118d00..0x180118d36),
+    // which is the String member's destructor (B4 X-RH); the compiler chains
+    // ~Element after it.
     ~NumberElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -229,7 +232,7 @@ public:
     Font*    _font;          // +0xc0  ExternalPtr<UI::Font>
     int32_t  _mode;          // +0xc8  0 int, 1 float (GetNumberType)
     uint32_t _padCC;         // +0xcc  never written by the ctor
-    char*    _cachedText;    // +0xd0  owning, refcounted System::String
+    System::String _cachedText;  // +0xd0  owning (ctor 0x180118ca5, dtor 0x180118d00)
     int32_t  _intValue;      // +0xd8
     float    _floatValue;    // +0xdc
     uint8_t  _showSign;      // +0xe0
