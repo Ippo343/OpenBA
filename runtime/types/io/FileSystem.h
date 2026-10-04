@@ -266,7 +266,21 @@ static_assert(offsetof(FileInfo, _name1)     == 0x28, "OpenFile: MOV [RBP-0x8],0
 // invite exactly the silent substitution that comment forbids, so
 // `IO::FileSystem::FindFiles` takes a pointer to this incomplete type instead —
 // which is all the declaration needs and all the retail signature pins.
-struct FilenameArray;
+//
+// B.4 P2 R-IO: DEFINED here now, so FindFiles' four callers (FileSystem::
+// LoadPackages, Modification::RefreshList, the save-list job and FindFilesImpl
+// itself) hold the out-parameter as this one type instead of four local
+// spellings cast to it. Still the plain 16-byte header, NOT
+// `Collection::Array<System::Filename>` -- the hand-derived spec rule above
+// stands; `data` is the `RtSystem::Filename` POD element every caller bridges.
+struct FilenameArray {
+    RtSystem::Filename* data;       // +0x00
+    int32_t             size;       // +0x08
+    int32_t             capacity;   // +0x0c
+};
+static_assert(sizeof(FilenameArray) == 0x10, "Collection::Array is 16 bytes");
+static_assert(offsetof(FilenameArray, size)     == 0x08, "0x180026880: MOV EBP,[RCX+0x8]");
+static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[RCX+0xc]");
 
 // ---- IO::FileSystem --------------------------------------------------------
 // Full-size fields at +0x00/+0x08 are RtSystem::String, NOT RtSystem::Filename:
@@ -461,7 +475,7 @@ public:
     System::Filename GetSourceDirectory() const;
 
     // ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z  0x1800ab050
-    uint32_t GetPackfileId(const RtSystem::Filename& path) const;
+    uint32_t GetPackfileId(const System::Filename& path) const;
 
     // ---- commit 5a: the members whose doors live in the four NON-§D files --
     // Each keeps retail's name; the door keeps its own name, its registration
@@ -489,7 +503,7 @@ public:
     // member returns the qword itself and the door keeps the hidden return slot
     // it has always had. Inventing a DateTime here to make the signature look
     // like the mangling would be a new class with no layout evidence.
-    uint64_t GetFileTimeStamp(const RtSystem::Filename& path) const;
+    uint64_t GetFileTimeStamp(const System::Filename& path) const;
 
     // -- filesystem_createfile_win.cpp --------------------------------------
     // ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z     0x1800ae430
@@ -566,7 +580,7 @@ public:
     // The two String parameters keep the POD spelling the registered door has,
     // because the door IS this body and the recursion lives in the file-local
     // `FindFilesImpl`, which is where the class spellings already are.
-    void FindFiles(const RtSystem::String& dir, const RtSystem::String& pattern,
+    void FindFiles(const System::String& dir, const System::String& pattern,
                    bool recursive, RtIO::FilenameArray* out) const;
 
     // ??1FileSystem@IO@@QEAA@XZ                                    0x1800ac6d0

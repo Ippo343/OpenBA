@@ -187,10 +187,8 @@ void IO::PersistenceWorker::GetSaveListJob() {
         // is the conversion retail performs by pointer cast (Filename.h).
         System::String dir(saveDir.AsString() + kSaveSubDir);       // [RBP+0x50]
 
-        fs->FindFiles(                                              // 0x1800b6315  B.3.x bridge
-            *reinterpret_cast<const RtSystem::String*>(&dir),
-            *reinterpret_cast<const RtSystem::String*>(&pattern),
-            false, reinterpret_cast<RtIO::FilenameArray*>(&found));
+        fs->FindFiles(dir, pattern,                                 // 0x1800b6315
+            false, reinterpret_cast<RtIO::FilenameArray*>(&found));  // LEFT: this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)
 
         // ~dir, ~saveDir, ~pattern are retail's release sequence at
         // 0x1800b631b/0x1800b6343/0x1800b636c, now the three destructors
@@ -219,8 +217,7 @@ void IO::PersistenceWorker::GetSaveListJob() {
         }
 
         // THE FULL FOUND PATH, not the base name — see the banner.
-        entry.sortKey = fs->GetFileTimeStamp(                   // 0x1800b644a
-            *reinterpret_cast<const RtSystem::Filename*>(&found.data[i]));
+        entry.sortKey = fs->GetFileTimeStamp(found.data[i]);    // 0x1800b644a
 
         // retail 0x18002ae20 — Array<SaveGameInfo>::SetSize(n, &fill), the
         // append idiom. Hand-derived row (kSpec_SaveGameInfo), bridged the

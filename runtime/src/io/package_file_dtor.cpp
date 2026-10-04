@@ -239,8 +239,8 @@ IO::PackageFile::~PackageFile() {
     // `Collection::Array<System::String>` over the two POD headers.
     // LEFT: the two headers stay loose {data, size, capacity} fields
     // (tests/unit/b39_io_classes_test.cpp pins `_stringArray30Count`).
-    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray30)->~Array();  // B.3.2 bridge
-    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray20)->~Array();  // B.3.2 bridge
+    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray30)->~Array();  // B.3.2 bridge  // LEFT: H5 PackageFile::_stringArray20 / _stringArray30 are raw storage of Collection::Array<String>
+    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray20)->~Array();  // B.3.2 bridge  // LEFT: H5 PackageFile::_stringArray20 / _stringArray30 are raw storage of Collection::Array<String>
 
     // 0x1800b4679 — the tail into ~External is the compiler's.
 }

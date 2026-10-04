@@ -119,28 +119,27 @@ using RtSystem::RtString_ReleaseInline;
 // read by nothing, exactly as retail's RCX is not.
 namespace IO {
 
-uint64_t FileSystem::GetFileTimeStamp(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+uint64_t FileSystem::GetFileTimeStamp(const System::Filename& path) const {
 
     // WideString ws(*path) -- ??0WideString@System@@QEAA@AEBVString@1@@Z,
     // constructed into the POD slot and released by hand below, as before.
-    struct { void* data; } ws = { nullptr };                     // 0x1800ae28f
+    struct { wchar_t* data; } ws = { nullptr };   // WideString::_data                     // 0x1800ae28f
     ::new (static_cast<void*>(&ws)) System::WideString(           // B.3.x bridge
-        *reinterpret_cast<const System::String*>(path));         // 0x1800ae294
+        path.AsString());                                        // 0x1800ae294
 
-    const HANDLE h = ::CreateFileW(static_cast<LPCWSTR>(ws.data),
+    const HANDLE h = ::CreateFileW(ws.data,
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
 
     RtIO::RtString_ReleaseInline(
-        reinterpret_cast<RtSystem::String*>(&ws));               // 0x1800ae2c9
+        reinterpret_cast<RtSystem::String*>(&ws));               // 0x1800ae2c9  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
 
     // 0x1800ae2f5 — rejects exactly NULL and INVALID_HANDLE_VALUE. See banner.
-    const uint64_t hm1 = reinterpret_cast<uint64_t>(h) - 1u;
+    const uint64_t hm1 = reinterpret_cast<uint64_t>(h) - 1u;  // CAST-OK: ptr_int
     if (hm1 <= static_cast<uint64_t>(-3)) {
         FILETIME lastWrite;                                      // [RSP+0x40]
         if (::GetFileTime(h, nullptr, nullptr, &lastWrite) != 0) {
             ::CloseHandle(h);                                    // 0x1800ae321
-            return *reinterpret_cast<const uint64_t*>(&lastWrite);
+            return *reinterpret_cast<const uint64_t*>(&lastWrite);  // CAST-OK: win32
         }
         ::CloseHandle(h);                                        // 0x1800ae319
     }
