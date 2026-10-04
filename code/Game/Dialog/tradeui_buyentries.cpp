@@ -133,16 +133,15 @@ Description* FindComp(const ComponentDescription* entity, uint32_t typeId) {
 
 } // namespace
 
-extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
+extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray) {
     PtrArray* out = static_cast<PtrArray*>(outArray);   // LEFT: SIG TradeUI_GetBuyEntries_59670 (the out array is TradeUI::_purchaseItems / a StackArray<ComponentDescription*> by caller)
     if (!out) return;
 
     // Retail opens with FUN_140001bb0(out, 0) — the stride-8 resize-to-zero. Its only
     // observable effect is count = 0; the buffer and capacity are retained.
     out->count = 0;
-    if (!tradeState) return;
+    if (!ts) return;
 
-    const TradeComponent* ts = reinterpret_cast<const TradeComponent*>(tradeState);   // LEFT: SIG TradeUI_GetBuyEntries_59670 (Dialog/exe_bodies.h; caller tradecomponent_dock.cpp)
     Description* tradeDescBase = ts->_description;
     if (tradeDescBase && !::Object::IsDerivedFromNullSafe(tradeDescBase, TradeDescription::TypeId())) {
         tradeDescBase = nullptr;
