@@ -58,7 +58,7 @@
 using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
 
 // LEFT: declared nowhere else (its body: Game/town_storage_seed.cpp).
-extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
+extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp);
 // CemeteryListErase_Reimpl (0x140002cc0): Component/exe_bodies.h.
 
 // state-2 ENTER — port of StorageLocationDescription_helper_d230.

@@ -814,7 +814,7 @@ void ProfessionUI::HandleSpinner(int profIndex) {
 
             // Request a worker slot
             ComponentEntity* retBuf[2] = {nullptr, nullptr};
-            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, reinterpret_cast<uint64_t>(profId));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)  // LEFT: SIG FindAvailableBuilding
+            FindAvailableBuilding(citizenList, retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             ComponentEntity* slot = retBuf[0];
 
             // Try to find a citizen: idle -> working -> student -> any

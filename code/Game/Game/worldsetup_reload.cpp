@@ -88,7 +88,9 @@ extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedS
 
     // The IBP the caller handed us is copied to a local BEFORE the ctor runs, and
     // the ctor stores that copy at gameLoop+0x150 (retail: local_40 = *param_4).
-    uint64_t ibpCopy = retvalIbpPtr ? *reinterpret_cast<const uint64_t*>(retvalIbpPtr) : 0;   // LEFT: the ctor takes the scenario IBP's 8 bytes by value where retail takes a const InternalPtr<AchievementInstance>& (0x140098085; known_port_issues row 663)
+    Object::InternalPtr<Achievement::AchievementInstance> ibpCopy;   // null unless the caller hands one
+    Object::InternalBasePtr& ibpCopyBase = ibpCopy;
+    if (retvalIbpPtr) ibpCopyBase = *retvalIbpPtr;
 
     // The scenario index: retail keeps R8's low dword.
     const int32_t scenario = scenarioIdx;

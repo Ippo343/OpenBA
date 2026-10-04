@@ -175,5 +175,5 @@ void Goal_RefArray_Resize(NamedExternalRefArray* arr, uint32_t newCount) {
     if (!arr) return;
     // LEFT: the element ops are a uint8_t ArraySpec row (above), so the typed
     // header is driven as that Array instantiation.
-    reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));   // LEFT: the element ops are a uint8_t ArraySpec row (above), so the typed header is driven as that Array instantiation.
+    reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));   // LEFT: H5 NamedExternalRefArray (goal_exe_helpers.h) is a raw {data, count, capacity} triple whose owners free it by hand through 0x14001b030 (Game_DestroyStringArray18, shared with MapGenerator's ref pools): a typed Array member needs that dtor and NamedExternalRef::name typed together
 }

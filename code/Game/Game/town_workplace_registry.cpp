@@ -73,35 +73,12 @@ Component* FindComponentByTypeId(const ComponentEntity* entity, uint32_t typeId)
     return nullptr;
 }
 
-// One node of CitizenBehavior's +0x100 profession tree (0x38 bytes, key
-// ExternalPtr<Profession> compared as an unsigned qword; the node's value is an
-// Array<InternalPtr<ComponentEntity>> of workplace buildings). The same record
-// Dialog/townhall_helpers.cpp declares for its reader; CitizenBehavior::field_0x100
-// is `void*` (WORK-a's header types no node), hence the one view below.
-struct ProfessionTreeNode {
-    uint64_t             key;              // +0x00
-    ComponentEntity**    workplaces;       // +0x08 Array<InternalPtr<ComponentEntity>> data
-    int32_t              workplaceCount;   // +0x10
-    int32_t              workplaceCap;     // +0x14
-    ProfessionTreeNode*  parent;           // +0x18
-    ProfessionTreeNode*  left;             // +0x20
-    ProfessionTreeNode*  right;            // +0x28
-    int32_t              balance;          // +0x30
-    int32_t              _pad34;           // +0x34
-};
-static_assert(sizeof(ProfessionTreeNode) == 0x38, "profession tree node 0x38");
-static_assert(offsetof(ProfessionTreeNode, workplaces) == 0x08, "node +0x08");
-static_assert(offsetof(ProfessionTreeNode, workplaceCount) == 0x10, "node +0x10");
-static_assert(offsetof(ProfessionTreeNode, left) == 0x20, "node +0x20");
-static_assert(offsetof(ProfessionTreeNode, right) == 0x28, "node +0x28");
-
-// The town manager arrives as the int64_t its outside callers hold (Component,
-// Dialog, starttown); the tree root is CitizenBehavior::field_0x100.
-CitizenBehavior* TownOf(int64_t townMgr) {
-    return reinterpret_cast<CitizenBehavior*>(townMgr);   // LEFT: int64_t town parameter of outside callers
-}
-ProfessionTreeNode* TreeRoot(const CitizenBehavior* town) {
-    return reinterpret_cast<ProfessionTreeNode*>(town->field_0x100._root);   // LEFT: this file's ProfessionTreeNode view of CitizenBucketNode<Profession> (it types the node's +0x30 as one int32), kept while ResidenceComponent_impl_7230 hands back void*
+// CitizenBehavior's +0x100 profession tree is a Collection::Set of
+// CitizenBucket<Profession> (Entity/CitizenBehavior.h, B.4 X5-COMP): the node's
+// key is the profession, compared as an unsigned qword (a pointer compare), its
+// value the Array<InternalPtr<ComponentEntity>> of workplace buildings.
+ProfessionBucket* TreeRoot(const CitizenBehavior* town) {
+    return town->field_0x100._root;
 }
 } // namespace
 
@@ -115,15 +92,14 @@ ProfessionTreeNode* TreeRoot(const CitizenBehavior* town) {
 // workplace against the node's entity array; append if absent. Faithful 1:1.
 // ============================================================
 extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** param_2, const Profession* profession) {
-    const uint64_t param_3 = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int (the tree key is the pointer compared unsigned)
-
     // BST search for the key (key<node -> left[+0x20]; key>node -> right[+0x28]; == -> found).
-    ProfessionTreeNode* node = TreeRoot(town);                         // root
-    ProfessionTreeNode* found = nullptr;                               // puVar3
+    // The key is the profession's address, compared unsigned (a pointer compare).
+    ProfessionBucket* node = TreeRoot(town);                           // root
+    ProfessionBucket* found = nullptr;                                 // puVar3
     while (node != nullptr) {
-        if (param_3 < node->key) {                     // *node = key at +0x00
+        if (profession < node->element.key) {          // *node = key at +0x00
             node = node->left;                                         // left (+0x20)
-        } else if (param_3 <= node->key) {
+        } else if (profession <= node->element.key) {
             found = node;                                              // exact match
             break;
         } else {
@@ -135,17 +111,17 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
     if (found == nullptr) {
         void* out = nullptr;
         int64_t emptyRec[2] = { 0, 0 };   // array record: +0x00 data / +0x08 count+cap
-        uint64_t key = param_3;
+        uint64_t key = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int (0x140017230's key slot holds the profession's address as a qword)
         ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(&town->field_0x100._root),   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
                                      &out, &key, emptyRec);
-        found = reinterpret_cast<ProfessionTreeNode*>(out);     // *out = the new node  // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+        found = reinterpret_cast<ProfessionBucket*>(out);     // *out = the new node  // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
         if (found == nullptr) return;
     }
 
     // Dedup the workplace ref against the node's entity array (base +0x08, count +0x10).
     // param_2 points at the caller's InternalPtr<ComponentEntity> local.
-    int count = found->workplaceCount;                // +0x10 count
-    ComponentEntity** arrBase = found->workplaces;    // +0x08 array data
+    int count = found->element.entities._size;        // +0x10 count
+    ComponentEntity** arrBase = found->element.entities._data;   // +0x08 array data
     for (int i = 0; i < count; ++i) {
         if (arrBase[i] == *param_2) {
             return;   // already registered — no duplicate
@@ -153,7 +129,7 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
     }
 
     // Append: 003110(&node.array (node+0x08), count+1, workplaceRef).
-    ActHunt_DynArraySetCount_3110(&found->workplaces, count + 1, param_2);   // 0x140003110
+    ActHunt_DynArraySetCount_3110(&found->element.entities, count + 1, param_2);   // 0x140003110
 }
 
 // ------------------------------------------------------------
@@ -162,13 +138,12 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
 // WorkPlaceComponent_OnCreate's copy of *(WPC+0x10) into a stack local before insert.
 // Skips key==0 (residence-roster WorkPlaceComponents, e.g. houses — not employers).
 // ------------------------------------------------------------
-extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp) {
-    if (townMgr == 0 || workplaceComp == nullptr) return;
-    const WorkPlaceComponent* wpc = reinterpret_cast<const WorkPlaceComponent*>(workplaceComp);   // LEFT: void* parameter of outside callers
+extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* wpc) {
+    if (townMgr == nullptr || wpc == nullptr) return;
     const Profession* key = wpc->profession;
     if (key == nullptr) return;   // no profession -> not an employer workplace
     ComponentEntity* refLocal = wpc->_entity;
-    ResidenceComponent_impl_95a0(TownOf(townMgr), &refLocal, key);
+    ResidenceComponent_impl_95a0(townMgr, &refLocal, key);
 }
 
 // ============================================================
@@ -194,20 +169,20 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 // BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in the default-on table: unproven
 // behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
 // ============================================================
-extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey) {
-    if (townMgr == 0 || GameUpdateLoop::_singleton == nullptr) return;
+extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey) {
+    if (townMgr == nullptr || GameUpdateLoop::_singleton == nullptr) return;
 
     // BST search for the key (same walk as the reader below).
-    ProfessionTreeNode* node = TreeRoot(TownOf(townMgr));
-    ProfessionTreeNode* found = nullptr;
+    ProfessionBucket* node = TreeRoot(townMgr);
+    ProfessionBucket* found = nullptr;
     while (node != nullptr) {
-        if (professionKey < node->key)       node = node->left;   // left
-        else if (professionKey <= node->key) { found = node; break; }
+        if (professionKey < node->element.key)       node = node->left;   // left
+        else if (professionKey <= node->element.key) { found = node; break; }
         else                                 node = node->right;  // right
     }
     if (found == nullptr) return;
 
-    uint32_t count = static_cast<uint32_t>(found->workplaceCount);   // +0x10 count
+    uint32_t count = static_cast<uint32_t>(found->element.entities._size);   // +0x10 count
     if (static_cast<int>(count) < 2) return;                 // 0/1 entries -> nothing to do
 
     System::Random* rng = GameUpdateLoop::_singleton->m_random;
@@ -216,7 +191,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {
         uint32_t j = rng->Rand(static_cast<uint32_t>(count));
         if (static_cast<uint32_t>(i) == j) continue;
-        ComponentEntity** base = found->workplaces;          // +0x08 array data
+        ComponentEntity** base = found->element.entities._data;   // +0x08 array data
         ComponentEntity* tmp = base[i];
         base[i] = base[static_cast<int>(j)];
         base[static_cast<int>(j)] = tmp;
@@ -234,7 +209,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 //     param_2 = out    (InternalBasePtr* the caller receives; also the return value)
 //     param_3 = professionKey
 // ============================================================
-extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey) {
+extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey) {
 
     // Type-ids resolved self-contained (do NOT read the shared .rdata DWORDs):
     // the classes' TypeId() (caller batch CB6; was a lazy by-name cache).
@@ -246,12 +221,12 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
 
     // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
     // key>node -> right[+0x28]; == -> found).
-    ProfessionTreeNode* node = TreeRoot(TownOf(townMgr));   // root
-    ProfessionTreeNode* found = nullptr;
+    ProfessionBucket* node = TreeRoot(townMgr);   // root
+    ProfessionBucket* found = nullptr;
     while (node != nullptr) {
-        if (professionKey < node->key) {                  // *node = key at +0x00
+        if (professionKey < node->element.key) {          // *node = key at +0x00
             node = node->left;                            // left  (+0x20)
-        } else if (professionKey <= node->key) {
+        } else if (professionKey <= node->element.key) {
             found = node;                                 // exact match
             break;
         } else {
@@ -267,10 +242,10 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
     }
 
     // Step 3: scan the profession node's building array (base +0x08, count +0x10).
-    int count = found->workplaceCount;                     // +0x10 count
+    int count = found->element.entities._size;             // +0x10 count
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
-        ComponentEntity* buildingIBP = found->workplaces[i];
+        ComponentEntity* buildingIBP = found->element.entities._data[i];
         ComponentEntity* building = buildingIBP;
         if (building == nullptr) continue;
 

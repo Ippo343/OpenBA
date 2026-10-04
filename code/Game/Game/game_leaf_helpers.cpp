@@ -270,8 +270,8 @@ void Game_MenuSceneArrayDtor(void* self) {
 // free the two arrays at +0x60 / +0x50. Scene = (*g_pGameWorldSingleton)+0x60.
 // ------------------------------------------------------------------
 void Game_WeatherDtor(WeatherSimulation* self) {
-    int count = self->effectCount;                 // +0x58
-    Graphics::Geometry** arr = self->effects;      // +0x50
+    int count = self->effects.GetSize();           // +0x58
+    Graphics::Geometry** arr = self->effects._data;   // +0x50
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     Graphics::Scene* scene = gw ? gw->m_graphicsScene : nullptr;
     if (arr && count > 0) {
@@ -292,9 +292,10 @@ void Game_WeatherDtor(WeatherSimulation* self) {
     // (re-decompiled 2026-09-13: MemFree, data = 0, one qword over
     // size+capacity). +0x50 holds Geometry* — `Array<void*>`, trait-derived:
     // byteCopy, no init, no destroy, align 8. +0x60's element is not pinned.
-    // LEFT: both arrays are declared as the Array's three fields (H5).
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->emitters)->~Array();          // LEFT: WeatherSimulation.h (GAME-2): raw Array triple (H5)
-    reinterpret_cast<Collection::Array<void*>*>(&self->effects)->~Array();  // LEFT: WeatherSimulation.h (GAME-2): raw Array triple (H5)
+    // No C++ dtor runs (Shutdown MemFrees the block): the members' ~Array are
+    // called here, in retail's order (0x140093f24 then 0x140093f36).
+    self->emitters.~Array();
+    self->effects.~Array();
 }
 
 // ------------------------------------------------------------------
@@ -322,9 +323,9 @@ void Game_TerrainResolveMaterial(void* refTriple) {
     if (ref->factoryGen == factoryGen) return;
 
     System::Filename fnameBuf(ref->strPtr);  // String @ +0
-    void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge  // LEFT: const_cast ExternalFactory::Find returns a const External* (ledger S3: decide at the close)
+    ::Object::External* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge  // LEFT: const_cast ExternalFactory::Find returns a const External* (ledger S3: decide at the close)
 
-    void* result = nullptr;
+    ::Object::External* result = nullptr;
     if (obj) {
         // Retail: IsDerivedFrom against [0x140151350] (?_typeInfo@MaterialInstance@
         // Graphics@@); ENDGAME B.3.9 TI-REST: the class accessor.

@@ -551,7 +551,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
     if (add) {
         // Add one worker: request a slot, then convert idle -> working -> student -> any.
         ComponentEntity* retBuf[2] = {nullptr, nullptr};
-        FindAvailableBuilding(reinterpret_cast<int64_t>(town), retBuf, reinterpret_cast<uint64_t>(profession));   // 0x14008d100  // LEFT: SIG FindAvailableBuilding (int64_t town, uint64_t key)
+        FindAvailableBuilding(town, retBuf, profession);   // 0x14008d100
         ComponentEntity* slot = retBuf[0];
         ComponentEntity* slotCopy = slot;
         // Each strategy returns its `out` argument, so the result is read there.

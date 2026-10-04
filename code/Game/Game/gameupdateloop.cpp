@@ -530,10 +530,9 @@ extern "C" const char* GameUpdateLoop_SimProfName(int phase) {
 }
 
 bool GameUpdateLoop::Update(const System::Time& timeRef) {
-    // Retail's slot takes the Time by const&; the tick bodies below take a mutable
-    // Time* / int64_t* (EntityList::Update, Weather_ResetTime_Reimpl,
-    // CitizenBehavior::Update), so the body holds it through a mutable pointer.
-    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge  // LEFT: const_cast the tick bodies take a mutable Time* (EntityList::Update, Weather_ResetTime_Reimpl, CitizenBehavior::Update; headers outside this set) where retail's slot passes const&
+    // Retail's slot takes the Time by const&; the tick bodies below take it as a
+    // const Time* (CitizenBehavior::Update still as a mutable int64_t*, below).
+    const System::Time* time = &timeRef;
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
     // in-game world build) is not yet implemented, so on the new-game path
     // m_game (+0xF8) is still null when the loader chain transitions in. Every
@@ -825,7 +824,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                m_citizenList->Update(&time->_ticks);   // 0x14008c2b0
+                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -849,8 +848,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
         // Step 4: Achievement check
         TRACE("[GameUpdateLoop::Update] checking achievements (scenarioInstance=%p, completed=%d)...\n",
-               m_scenarioInstance, (int)m_scenarioCompleted);
-        if (m_scenarioInstance != nullptr && m_scenarioCompleted == 0) {
+               m_scenarioInstance.Get(), (int)m_scenarioCompleted);
+        if (m_scenarioInstance.Get() != nullptr && m_scenarioCompleted == 0) {
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
             m_scenarioInstance->Update(*time);   // B.3.7 bridge
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
@@ -1403,10 +1402,10 @@ void GameUpdateLoop::Draw(float alpha) {
             WeatherSimulation* weather = m_weather;
             if (weather && videoCtx) {
                 // The four floats +0x1c..+0x28 (copied as they are, never computed on).
-                Math::Vector4 params(weather->field_0x1C[0],   // snow coverage
-                                     weather->field_0x1C[1],
-                                     weather->field_0x1C[2],
-                                     weather->field_0x1C[3]);
+                Math::Vector4 params(weather->field_0x1C.x,   // snow coverage
+                                     weather->field_0x1C.y,
+                                     weather->field_0x1C.z,
+                                     weather->field_0x1C.w);
                 static int s_forceSnow = -1;
                 static float s_snowVal = 0.0f;
                 if (s_forceSnow < 0) {
@@ -1464,7 +1463,6 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
-        // LEFT: PlayerController::camera is raw storage (H5).
         m_renderer->Draw(
             *videoCtx, alpha,
             *m_graphicsScene,
@@ -1490,7 +1488,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 9: Quicksave screenshot
     if (m_quickSavePressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quicksave screenshot...\n");
-        GameUpdateLoop_TakeScreenshot((void*)this);   // 0x140095da0
+        TakeScreenshot();   // 0x140095da0
         TRACE("[GameUpdateLoop::Draw] quicksave screenshot done\n");
     }
 
@@ -1554,7 +1552,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 13: Quickload screenshot (after UI draw)
     if (m_quickLoadPressed != 0) {
         TRACE("[GameUpdateLoop::Draw] processing quickload screenshot...\n");
-        GameUpdateLoop_TakeScreenshot((void*)this);   // 0x140095da0
+        TakeScreenshot();   // 0x140095da0
         TRACE("[GameUpdateLoop::Draw] quickload screenshot done\n");
     }
 
@@ -1987,10 +1985,9 @@ void GameUpdateLoop::Shutdown() {
     }
 
     // Delete scenario instance
-    if (m_scenarioInstance != nullptr) {
+    if (m_scenarioInstance.Get() != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown] deleting scenario instance...\n");
-        reinterpret_cast< ::Object::InternalBasePtr*>(&m_scenarioInstance)->DeletePtr(  // LEFT: GameUpdateLoop.h declares m_scenarioInstance as a raw pointer where retail has an InternalPtr (H5, W0 header outside this set)
-            );   // B.3.3 bridge
+        m_scenarioInstance.DeletePtr();
     }
 
     // Free/destroy all subsystems
@@ -2290,7 +2287,9 @@ GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
 // stamp (the compiler's), then every field below — the same stores the three
 // door-then-stamp construction sites outside this block write by hand
 // (newgamedialog.cpp, saveloaddialog.cpp, tutorial_next_scenario.cpp).
-GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
+GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState,
+                               const Object::InternalPtr<Achievement::AchievementInstance>& scenarioIbp,
+                               int32_t scenarioIndex,
                                const System::String& saveName, int32_t seed,
                                int32_t mapSize, bool disasters, MapGenerator* mapConfig,
                                TerrainGenerator* terrainConfig, ClimateGenerator* climateConfig)
@@ -2335,7 +2334,7 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIb
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;
-    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor takes the scenario IBP's 8 bytes by value where retail takes a const InternalPtr<AchievementInstance>& (0x140098085; known_port_issues row 663)
+    m_scenarioInstance  = scenarioIbp;   // *param_3 (0x1400981c3)
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }

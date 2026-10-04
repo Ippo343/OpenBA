@@ -236,7 +236,7 @@ void DebugUI::OnWeatherComboChanged() {
     int drawCount = (int)env->_weatherCount;
     EnvironmentDescription::WeatherChoice* descArray = env->_weatherArray;  // {descriptor, audio descriptor} pairs
 
-    Graphics::Geometry** geometryArray = drawMgr->effects;  // R14+0x50 (WeatherParticleGeometry each)
+    Graphics::Geometry** geometryArray = drawMgr->effects._data;  // R14+0x50 (WeatherParticleGeometry each)
     // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
     // PORT GAP audio branch below reads it in retail.
 
@@ -834,7 +834,7 @@ void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
         return;
 
     // Get citizen list from game world (+0xF0)
-    void* citizenList = game->m_citizenList;
+    CitizenBehavior* citizenList = game->m_citizenList;
 
     switch (b) {
     // --- Resource spawn buttons ---

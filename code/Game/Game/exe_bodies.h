@@ -79,7 +79,8 @@ void Game_TriggerDisasterByType_Impl(int disasterType);
 //
 // Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
 // and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
-void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count);
+class CitizenBehavior;
+void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count);
 
 // ---- game_leaf_helpers.cpp
 void Game_DestroyStringArray18(void* arrayHeader);  // 0x14001b030
@@ -189,23 +190,23 @@ extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const Ge
 
 // ---- town_storage_seed.cpp
 class Component; class MapGenerator;
-extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);  // 0x14012d230
+extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp);  // 0x14012d230
 extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity);  // 0x140107ff0
 extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 0x1400a1f00
 
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
 extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEntity** workplaceRef, const Profession* profession);  // 0x1400895a0
-extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey);  // 0x140089470
-extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);  // 0x14008d100
-extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
+extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey);  // 0x140089470
+extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey);  // 0x14008d100
+class WorkPlaceComponent;
+extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h
 extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)
 
 // ---- w2_takescreenshot.cpp
-extern "C" void GameUpdateLoop_TakeScreenshot(void* self);  // 0x140095da0  B4 FORWARD -> GameUpdateLoop::TakeScreenshot (2 outside calls: gameupdateloop.cpp)
 
 // ---- weather_particles.cpp
 extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
@@ -223,7 +224,8 @@ extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const S
 // extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
 // the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
 // reused by callers that need the tolerance-range primitive.
-extern "C" float fn_Random_RandFloatTol(void* self);
+namespace System { class Random; }
+extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }

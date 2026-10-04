@@ -87,7 +87,7 @@
 #include "system/Filename.h"
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
-extern "C" void Minimap_CreateAndUpload(void* mapObj);
+extern "C" void Minimap_CreateAndUpload(Minimap* mapObj);
 // code/Game/Game/weather_particles.cpp — ports FUN_1400942c0 (enable half; the
 // ambient-audio entity spawn is not ported there yet — see WeatherSim_Serialize).
 extern "C" void WeatherEffect_SetEnabled(WeatherSimulation* sim, int slot, int enable);
@@ -196,47 +196,8 @@ const rtcoll::ArraySpec kSpec_EventEntry = {             // exe 0x1400199a0
 using EventEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
                                           Collection::ExplicitSpec<&kSpec_EventEntry>>;
 
-// Camera view {Vector3 pos, float a, float b, float c, bool used}, stride
-// 0x1c, align 4. Copy writes +0x00..+0x18 and leaves +0x19..+0x1b (retail's
-// 4x-unrolled dword loop plus the bool); init memsets the whole stride.
-// Partial copy, so byteCopy=false; trivially destructible.
-// The element is PlayerCameraView (Game/PlayerToolManager.h).
-void CopyCamView(PlayerCameraView* dst, const PlayerCameraView* src) {
-    dst->position.x = src->position.x;   // +0x00..+0x17 (was one 0x18-byte copy)
-    dst->position.y = src->position.y;
-    dst->position.z = src->position.z;
-    dst->field_0x0C = src->field_0x0C;
-    dst->field_0x10 = src->field_0x10;
-    dst->field_0x14 = src->field_0x14;
-    dst->used = src->used;               // +0x18, the raw byte
-}
-// retail memsets the whole 0x1C stride: every named field, the pad included (H7)
-void ZeroCamView(PlayerCameraView* dst) {
-    dst->position.x = 0.0f;
-    dst->position.y = 0.0f;
-    dst->position.z = 0.0f;
-    dst->field_0x0C = 0.0f;
-    dst->field_0x10 = 0.0f;
-    dst->field_0x14 = 0.0f;
-    dst->used = false;
-    dst->_pad19[0] = 0;
-    dst->_pad19[1] = 0;
-    dst->_pad19[2] = 0;
-}
-void AssignCamView(uint8_t* dst, const uint8_t* src) {
-    rtcoll::AssignAs<PlayerCameraView, &CopyCamView>(dst, src);
-}
-void InitCamView(uint8_t* dst) {
-    rtcoll::InitAs<PlayerCameraView, &ZeroCamView>(dst);
-}
-const rtcoll::ArraySpec kSpec_CamView = {                // exe 0x14002e000
-    "Array<CameraView>", 0x1c, 4,
-    &AssignCamView, &InitCamView, nullptr, false,
-    /*assign unwritten*/ 0x19, 0x1c,
-    /*init   unwritten*/ 0,    0,
-    /*seed zero       */ 0,    0 };
-using CamViewArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_CamView>>;
+// (The camera-view row, 0x14002e000, is PlayerToolManager::cameraViews' own:
+// PlayerToolManagerRows::kSpec_CamView, PlayerToolManager.h.)
 
 }  // namespace
 
@@ -298,16 +259,14 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
     ser.Serialize(field_0x14, nullptr);
     ser.Serialize(temperature, nullptr);
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
-    // LEFT (H5): +0x1C is a Math::Vector4, declared as float[4]: a Vector4
-    // member would give the class a constructor that runs in Load.
-    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(ser);   // LEFT: H5: +0x1C is a Math::Vector4, declared as float[4]: a Vector4 member would give the class a constructor that runs in Load.
+    field_0x1C.Serialize(ser);
     ser.Serialize(field_0x2C, nullptr);
     ser.Serialize(field_0x30, nullptr);
     ser.Serialize(field_0x44, nullptr);
     ser.Serialize(field_0x48, nullptr);
     ser.Serialize(seasonStep, nullptr);
 
-    int slotCount = effectCount;
+    int slotCount = effects.GetSize();
     for (int i = 0; i < slotCount; i++) {
         Graphics::Geometry** slot = &effects[i];
         bool active = (*slot != nullptr);
@@ -331,11 +290,7 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
 // hdr = { void* data; int count; int cap }. Element: { Vector3 pos; float a;
 // float b; float c; bool used } (0x1c bytes). Retail body is a 4x-unrolled
 // copy loop — ported as a plain loop with identical semantics.
-// ENDGAME B.3.2 step 2: see the kSpec_CamView row above EventLog_Resize_199a0.
-extern "C" void CamViewArray_Resize_e000(void* hdrVoid, int newCount) {
-    // B.3.2 bridge: EntityUI+0x70 is still a raw header.
-    reinterpret_cast<CamViewArray*>(hdrVoid)->SetSize(newCount);   // LEFT: PlayerToolManager.h (PLAYER): cameraViews is three raw fields, not a Collection::Array (H5)
-}
+// (Its body is PlayerToolManager::cameraViews.SetSize since B.4 X6-GAME-A.)
 
 // ============================================================
 // 0x14002e2e0 — goal-ref tree serialize (EntityUI +0x50)
@@ -413,12 +368,11 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
     if (static_cast<int>(serializer->GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // LOAD
         for (int i = 0; i < count; i++) {
-            ComponentEntity* key = nullptr;
+            Object::InternalPtr<ComponentEntity> keyPtr;   // the key's InternalPtr (null)
             int a = 0, b = 0;
             bool used = false;
-            // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has
-            // no typed slot accessor here).
-            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has no typed slot accessor here).
+            keyPtr.Object::InternalBasePtr::Serialize(*serializer);
+            ComponentEntity* key = keyPtr.Get();
             if (key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;
             serializer->Serialize(a, nullptr);
             serializer->Serialize(b, nullptr);
@@ -478,7 +432,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
         if (!cur) return;
         while (cur->left) cur = cur->left;
         while (cur) {
-            reinterpret_cast<Object::InternalBasePtr*>(&cur->key)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has no typed slot accessor here)
+            reinterpret_cast<Object::InternalBasePtr*>(&cur->key)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: TrackedEntityNode::key (PlayerToolManager.h) is a ComponentEntity* where retail holds an InternalPtr<ComponentEntity>; Serialize stores PersistObject's result back into the node's own slot even when saving, so no local copy can stand in, and typing the key changes its readers in seven X6-GAME-B files
             if (cur->key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key, s_tidCompEnt))
                 cur->key = nullptr;
             serializer->Serialize(cur->x, nullptr);
@@ -519,10 +473,10 @@ void PlayerToolManager::Serialize(IO::Stream& stream) {
         IbpTree_Serialize_e470(&field_0x60, &field_0x68, &ser);
     }
     if (ser.GetVersion() > 1) {
-        int count = cameraViewCount;
+        int count = cameraViews.GetSize();
         ser.Serialize(count, nullptr);
         if (!IsSaving(&stream)) {
-            CamViewArray_Resize_e000(&cameraViews, count);
+            cameraViews.SetSize(count);   // 0x14002e000
         }
         for (uint32_t i = 0; i < (uint32_t)count; i++) {
             PlayerCameraView& e = cameraViews[i];
@@ -635,7 +589,7 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
         ComponentEntity** slot = hdr->_data;
         for (int i = 0; i < count; i++, slot++) {
             // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: EntityList.h (X6-CW) holds each bucket element as ComponentEntity* (IBPArray) where retail holds an InternalPtr<ComponentEntity>: Serialize writes the slot itself
             if (*slot != nullptr && s_tidCompEnt &&
                 !::Object::IsDerivedFromNullSafe(*slot, s_tidCompEnt)) {
                 *slot = nullptr;
@@ -760,10 +714,10 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     // retail returns early here and this IBP is NOT the one that faults. Kept
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
-    reinterpret_cast<Object::InternalBasePtr*>(&m_scenarioInstance)->Serialize(ser);   // B.3.4 bridge   // LEFT: GameUpdateLoop::m_scenarioInstance is an InternalPtr held as a raw pointer (GameUpdateLoop.h, not this agent's)
-    if (m_scenarioInstance != nullptr) {
+    m_scenarioInstance.Object::InternalBasePtr::Serialize(ser);
+    if (m_scenarioInstance.Get() != nullptr) {
         uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
-        if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance, achTid))
+        if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance.Get(), achTid))
             m_scenarioInstance = nullptr;
     }
 

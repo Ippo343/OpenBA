@@ -50,6 +50,8 @@
 #include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
 #include "Minimap.h"                 // m_imageCapture's class (B.4 GAME-a)
 #include "MapGenerator.h"            // m_mapConfig's class (B.4 GAME-a)
+#include "Game/TerrainGenerator.h"     // m_terrainConfig->_field80
+#include "Game/TerrainHeightfield.h"  // TerrainSizeRow
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -345,14 +347,6 @@ namespace {
 void AssignPtr8(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 1>>(d, s);
 }
-const rtcoll::ArraySpec kSpec_Ptr8NoInit = {             // exe 0x1400191f0
-    "Array<void*> (no tail init)", 8, 8,
-    &AssignPtr8, nullptr, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using Ptr8NoInitArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                          Collection::ExplicitSpec<&kSpec_Ptr8NoInit>>;
 
 // 0x14002e000 element: camera view {Vector3 pos, float a, float b, float c,
 // bool used}, stride 0x1c, align 4. Copy writes +0x00..+0x18 (the 4x-unrolled
@@ -385,30 +379,26 @@ void AssignCamView(uint8_t* d, const uint8_t* s) {
 void InitCamView(uint8_t* d) {
     rtcoll::InitAs<PlayerCameraView, &ZeroCamView>(d);
 }
-const rtcoll::ArraySpec kSpec_CamViewLoad = {            // exe 0x14002e000
+
+}  // namespace
+
+// WeatherSimulation::effects' row (WeatherSimulation.h).
+const rtcoll::ArraySpec WeatherSimulationRows::kSpec_Ptr8NoInit = {   // exe 0x1400191f0
+    "Array<void*> (no tail init)", 8, 8,
+    &AssignPtr8, nullptr, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+
+// PlayerToolManager::cameraViews' row (PlayerToolManager.h).
+const rtcoll::ArraySpec PlayerToolManagerRows::kSpec_CamView = {   // exe 0x14002e000
     "Array<CameraView>", 0x1c, 4,
     &AssignCamView, &InitCamView, nullptr, false,
     /*assign unwritten*/ 0x19, 0x1c,
     /*init   unwritten*/ 0x19, 0x1c,
     /*seed zero       */ 0,    0 };
-using CamViewLoadArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                           Collection::ExplicitSpec<&kSpec_CamViewLoad>>;
 
-}  // namespace
 
-// FUN_1400191f0 — stride-8 pointer-array resize; copies existing, does NOT zero new slots.
-static void* Reimpl_FUN_1400191f0(void* hdr, int n) {
-    // B.3.2 bridge: the +0x50 header is still raw bytes in an unconverted struct.
-    reinterpret_cast<Ptr8NoInitArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
-
-// FUN_14002e000 — stride-0x1c (28-byte) struct-array resize; copies existing, zero-fills new.
-static void* Reimpl_FUN_14002e000(void* hdr, int n) {
-    // B.3.2 bridge: EntityUI+0x70 is still a raw header.
-    reinterpret_cast<CamViewLoadArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
 
 
 // (B4 X5-COMP: the three CitizenBehavior element rows this file carried —
@@ -483,37 +473,28 @@ static void WorkScheduler_Construct(WorkScheduler* scheduler) {
 }
 
 // FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
-static_assert(std::is_trivially_default_constructible<WeatherSimulation>::value,
-              "placement new of WeatherSimulation runs no code");
+// Load's placement new runs the members' ctors (the Vector4 at +0x1C and the two
+// Arrays at +0x50 / +0x60 zero themselves, as retail's 0x140093fa3..0x140093fab
+// and 0x140094008..0x140094014 do); this body writes the rest.
 static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->environment = nullptr;
     w->climate = nullptr;
     w->field_0x10 = 0;
     w->field_0x14 = 4;                        // default count = 4
     w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
-    w->field_0x1C[0] = 0.0f;                  // +0x1C..+0x2B: two qword stores (H7: named stores)
-    w->field_0x1C[1] = 0.0f;
-    w->field_0x1C[2] = 0.0f;
-    w->field_0x1C[3] = 0.0f;
     w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
     w->field_0x30 = 0.0f;
-    uint8_t rng1[2520];
-    uint8_t rng2[2520];
+    System::Random rng1;   // trivial class: no code until the ctor door below
+    System::Random rng2;
     uint32_t seed1 = 0, seed2 = 0;
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng1));   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
-    seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
-    seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // LEFT: 2520-byte stack buffers, wider than System::Random (POD:RtSystem::Random)
+    RtSystem_Random_Ctor(&rng1);
+    seed1 = rng1.Rand();
+    RtSystem_Random_Ctor(&rng2);
+    seed2 = rng2.Rand();
     RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
     w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
     w->field_0x48 = 0.0f;
     w->seasonStep = -1;
-    w->effects = nullptr;
-    w->effectCount = 0;                       // +0x58 / +0x5C: one qword store
-    w->effectCapacity = 0;
-    w->emitters = nullptr;
-    w->emitterCount = 0;                      // +0x68 / +0x6C: one qword store
-    w->emitterCapacity = 0;
     w->disasterTime._ticks = 0;
 }
 
@@ -524,12 +505,10 @@ void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* clim
     climate = climateGen;
     if (env) {
         int count = env->_weatherCount;          // env+0x30
-        Reimpl_FUN_1400191f0(&effects, count);
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
-        // new tail zeroed. Element is an 8-byte object handle (byte-copy, zeroing).
-        GameColl::AsArray<GameColl::Ptr8>(&emitters).SetSize(count);
-        int n0 = effectCount;
-        Graphics::Geometry** arr0 = effects;
+        effects.SetSize(count);    // 0x1400191f0
+        emitters.SetSize(count);   // 0x1400032e0
+        int n0 = effects.GetSize();
+        Graphics::Geometry** arr0 = effects._data;
         for (int i = 0; i < n0; ++i) arr0[i] = nullptr;
     }
     if (climateGen) {
@@ -590,11 +569,13 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
         fovX = atanf(halfW / den) * kTwo * kRad2Deg;
     }
     const Math::Scalar nearS(nearZ), farS(farZ), fovXS(fovX), fovYS(fovY);
+    // Raw storage: a ::Frustum local would run its zeroing
+    // default ctor (the Vector4 planes) before the ctor door.
     uint8_t frustum[0xC0];
-    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
+    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: a ::Frustum local runs its implicit default ctor (Vector4 zeroes each of the six planes) before the perspective ctor 0x1800fa1e0; this body hands it an untouched stack block
         &nearS, &farS, &fovXS, &fovYS);
     camera.SetFrustum(
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge  // LEFT: SIG RtVolume_Frustum_Ctor_Perspective returns void* here and fills a 0xC0 stack buffer wider than ::Frustum (0x64)
+        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // LEFT: the Frustum lives in a raw 0xC0 stack block (a ::Frustum local would run its Vector4-zeroing default ctor first); the ctor door's result is held as void*
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
@@ -617,9 +598,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x58 = 0;
     field_0x60 = nullptr;
     field_0x68 = 0;
-    cameraViews = nullptr;
-    cameraViewCount = 0;                      // +0x78 / +0x7c: one qword store
-    cameraViewCapacity = 0;
+    // +0x70: the Array member's own ctor zeroes data / count / capacity.
     field_0x80 = false;
     field_0x88 = nullptr;
     field_0x90 = nullptr;
@@ -627,7 +606,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x9C = -1;
     field_0xA0 = -1;
     field_0xA4 = false;
-    Reimpl_FUN_14002e000(&cameraViews, 5);
+    cameraViews.SetSize(5);   // 0x14002e000
 }
 
 // ============================================================
@@ -823,7 +802,7 @@ void GameUpdateLoop::Load() {
         if (mem) {
             const Math::Scalar nearZ(2.0f), farZ(70.0f), fovX(60.0f), fovY(aspect * 60.0f);
             uint8_t frustum[0xC0] = {};
-            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: the 0xC0 stack buffer is wider than ::Frustum (0x64)
+            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: the 0xC0 stack block is zeroed as bytes (a ::Frustum local would run its Vector4-zeroing default ctor per plane instead)
             RtVolume_Frustum_Ctor_Perspective(fr, &nearZ, &farZ, &fovX, &fovY);
             pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
@@ -1177,8 +1156,8 @@ void GameUpdateLoop::Load() {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
             // Map dimension from the terrain size-table row (sizeRow[0]).
-            int32_t* sizeTable = *(int32_t**)((uint8_t*)terrainGen + 0x80);   // LEFT: TerrainGenerator.h (GAME-4) H5 _field80
-            uint32_t dim = sizeTable ? *(uint32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : 0;   // LEFT: TerrainGenerator.h (GAME-4) H5 _field80 (0x44-byte rows)
+            const TerrainSizeRow* sizeTable = terrainGen->_field80;   // +0x80, 0x44-byte rows
+            uint32_t dim = sizeTable ? sizeTable[sizeIdx].mapSize : 0;
 
             // Retail call site 0x1400975c7, immediately after the map dimension is
             // read and BEFORE the +0x148 tile arrays: size the TownManager's coarse
@@ -1476,7 +1455,7 @@ void GameUpdateLoop::Load() {
             if (scenario && achTypeId)
                 checked = ::Object::IsDerivedFromNullSafe(scenario, achTypeId) ? scenario : nullptr;
 
-            Achievement::AchievementInstance* inst = m_scenarioInstance;
+            Achievement::AchievementInstance* inst = m_scenarioInstance.Get();
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
                     achievementId, (void*)inst, (void*)scenario, (void*)checked,

@@ -35,12 +35,26 @@
 #include <cstddef>
 #include "system/Value.h"            // System::Time (8 bytes, trivial)
 #include "utility/PerlinNoise.h"     // RtUtility::PerlinNoise (0x10, trivial)
+#include "math/Math.h"               // Math::Vector4 (+0x1C)
+#include "collection/Collection.h"   // Collection::Array (+0x50, +0x60)
 
 class EnvironmentDescription;   // Component/EnvironmentDescription.h
 class ClimateGenerator;         // Game/ClimateGenerator.h
 class ComponentEntity;
 namespace Graphics { class Geometry; }
 namespace IO { class Stream; }
+
+// The two arrays' rows: +0x50 grows through 0x1400191f0 (stride 8, align 8,
+// byte copy, the new tail left UNINITIALISED), +0x60 through 0x1400032e0
+// (rtcoll::kSpec_PtrZero: stride 8, align 8, the new tail zeroed). Neither has
+// an element destroy; 0x140093eb0 frees +0x60 then +0x50 (MemFree, data = 0,
+// one qword over size + capacity).
+namespace WeatherSimulationRows { extern const rtcoll::ArraySpec kSpec_Ptr8NoInit; }   // 0x1400191f0 (gameupdateloop_load.cpp)
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }                             // 0x1400032e0 (runtime/src/collection/array.cpp)
+using WeatherEffectArray  = Collection::Array<Graphics::Geometry*, Collection::DefaultAllocator,
+                                              Collection::ExplicitSpec<&WeatherSimulationRows::kSpec_Ptr8NoInit>>;
+using WeatherEmitterArray = Collection::Array<ComponentEntity*, Collection::DefaultAllocator,
+                                              Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
 
 class WeatherSimulation {
 public:
@@ -49,19 +63,15 @@ public:
     int32_t                 field_0x10;      // +0x10 (Serialize int); non-zero stops snow and the disaster roll
     int32_t                 field_0x14;      // +0x14 ctor 4 (Serialize int)
     float                   temperature;     // +0x18 (Serialize float); CitizenComponent::Update's cold test
-    float                   field_0x1C[4];   // +0x1C Math::Vector4 (Vector4::Serialize)
+    Math::Vector4           field_0x1C;      // +0x1C (Vector4::Serialize); ctor zero (0x140093fa3 / 0x140093fa7)
     float                   field_0x2C;      // +0x2C eases toward field_0x30 (Update)
     float                   field_0x30;      // +0x30 target (Bind: climate+0x34)
     RtUtility::PerlinNoise  noise;           // +0x34 ctor PerlinNoise(0.25, 4, rand, rand)
     float                   field_0x44;      // +0x44 eases toward field_0x48 (Update)
     float                   field_0x48;      // +0x48
     int32_t                 seasonStep;      // +0x4C 0..47 from Calendar::yearTime (ctor -1)
-    Graphics::Geometry**    effects;         // +0x50 Array data: the weather particle effects (env+0x30 of them)
-    int32_t                 effectCount;     // +0x58
-    int32_t                 effectCapacity;  // +0x5C
-    ComponentEntity**       emitters;        // +0x60 Array<InternalPtr<ComponentEntity>> data: each effect's sound entity
-    int32_t                 emitterCount;    // +0x68
-    int32_t                 emitterCapacity; // +0x6C
+    WeatherEffectArray      effects;         // +0x50 the weather particle effects (env+0x30 of them); ctor zero 0x140094008 / 0x14009400c
+    WeatherEmitterArray     emitters;        // +0x60 Array<InternalPtr<ComponentEntity>>: each effect's sound entity; ctor zero 0x140094010 / 0x140094014
     System::Time            disasterTime;    // +0x70 += dt (Update's disaster roll)
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
@@ -88,9 +98,5 @@ static_assert(offsetof(WeatherSimulation, field_0x44) == 0x44, "WeatherSimulatio
 static_assert(offsetof(WeatherSimulation, field_0x48) == 0x48, "WeatherSimulation +0x48");
 static_assert(offsetof(WeatherSimulation, seasonStep) == 0x4C, "WeatherSimulation::seasonStep @ +0x4C");
 static_assert(offsetof(WeatherSimulation, effects) == 0x50, "WeatherSimulation::effects @ +0x50");
-static_assert(offsetof(WeatherSimulation, effectCount) == 0x58, "WeatherSimulation::effectCount @ +0x58");
-static_assert(offsetof(WeatherSimulation, effectCapacity) == 0x5C, "WeatherSimulation::effectCapacity @ +0x5C");
 static_assert(offsetof(WeatherSimulation, emitters) == 0x60, "WeatherSimulation::emitters @ +0x60");
-static_assert(offsetof(WeatherSimulation, emitterCount) == 0x68, "WeatherSimulation::emitterCount @ +0x68");
-static_assert(offsetof(WeatherSimulation, emitterCapacity) == 0x6C, "WeatherSimulation::emitterCapacity @ +0x6C");
 static_assert(offsetof(WeatherSimulation, disasterTime) == 0x70, "WeatherSimulation::disasterTime @ +0x70");

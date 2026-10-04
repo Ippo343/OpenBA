@@ -1655,7 +1655,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
             Profession* const profKey = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
 
             ComponentEntity* retBuf[2] = {nullptr, nullptr};
-            FindAvailableBuilding(reinterpret_cast<int64_t>(townKey), retBuf, reinterpret_cast<uint64_t>(profKey));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)  // LEFT: SIG FindAvailableBuilding
+            FindAvailableBuilding(townKey, retBuf, profKey);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
             ComponentEntity* slot = retBuf[0];
 
             // Try idle -> working -> student -> any. Each strategy returns its

@@ -58,7 +58,7 @@
 
 // GatherRawMaterials_Ctor_Impl (0x1400ec710) is declared in Work/exe_bodies.h.
 // town_workplace_registry.cpp — register a workplace into townMgr+0x100 (profession map).
-extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
+extern "C" void  TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);
 
 // ---- Exe helpers, called directly --------------------------------------------------
 // FUN_140004740 InteractComponent_FindWorkplaceComponent(entity, retIBP) -> retIBP
@@ -444,7 +444,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
             // allocator's AssignHousing churn (which townMgr+0x100 population activates)
             // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
             if (townMgr) {
-                TownRegistry_RegisterWorkplace(reinterpret_cast<int64_t>(townMgr), wpc);   // LEFT: SIG TownRegistry_RegisterWorkplace (int64_t, town_workplace_registry.cpp)
+                TownRegistry_RegisterWorkplace(townMgr, wpc);
             }
         }
     }

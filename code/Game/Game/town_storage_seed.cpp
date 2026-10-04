@@ -202,14 +202,12 @@ static int Seed_CanAccept_cd80(const StorageComponent* storageComp, const Compon
 // 1:1: appends the component's owning ENTITY pointer (*(comp+0x10)) to the
 // town storage-location list (townMgr+0x00 base / +0x08 count / +0x0c cap)
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
-extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) {
+extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp) {
     CitizenBehavior* townMgr = TownMgr();
     if (!townMgr || !storageLocationComp) {
         return;
     }
-    // LEFT: the void* parameter of the outside callers (storagelocationcomponent.cpp,
-    // starttown.cpp); the object is a Component (its +0x10 entity).
-    ComponentEntity* entityRef = reinterpret_cast<const Component*>(storageLocationComp)->_entity;   // LEFT: void* parameter of outside callers
+    ComponentEntity* entityRef = storageLocationComp->_entity;   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
     ActHunt_DynArraySetCount_3110(&townMgr->field_0x00._data, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the

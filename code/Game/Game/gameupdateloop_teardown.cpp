@@ -64,14 +64,13 @@
 // a `void*` there (WorkScheduler +0x20), and the tool registry's {root, count} header.
 namespace {
 
-inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
-inline void*&    P(void* base, int off)   { return *reinterpret_cast<void**>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
-inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
+inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }   // LEFT: the offset helpers of the two sites below (PathGraph::m_pairs, the tool registry count)
+inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }   // LEFT: the offset helpers of the two sites below (PathGraph::m_pairs, the tool registry count)
 
 inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }
 
 // B.3.2 bridge: the owning structs are still untyped bytes.
-inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }   // LEFT: the offset helpers of this file's teardowns of raw-triple members (H5: CitizenBehavior.h / PlayerToolManager.h declare those arrays as three raw fields)
+inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }   // LEFT: the offset helpers of the two sites below (PathGraph::m_pairs, the tool registry count)
 
 // MSVC's __ehvec_dtor_iter: destroy the elements of an embedded array in
 // REVERSE order. Retail reaches these through the CRT helper at 0x14003ad30;
@@ -94,7 +93,7 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
     // Array<ArrayHdr>::~Array — the trait-derived row's destroy is ~ArrayHdr on
     // each of `count` 0x10-byte elements in ascending order (retail's loop),
     // then ArrayDtorImpl on the outer header.
-    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: its one caller left (geometry_draw.cpp) holds WorldGeometry::_arrays[4] as a raw {data, count, capacity} triple (H5)
+    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: its one caller (~WorldGeometry, geometry_draw.cpp) holds _contourOutlines as RawArray<RawArray<Vector2>> (Action/PathSearch.h, X6-CW); a Collection::Array member would be destroyed after ~WorldGeometry's body, where retail frees it inside the body between +0x1f0 and +0x1d0
 }
 
 // ============================================================
@@ -110,7 +109,7 @@ extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
     }
     self->m_bstRoot = nullptr;
     self->m_bstCount = 0;
-    Arr(self, 0x00).~Array();   // LEFT: CitizenBehavior.h (ENT): PathGraph::m_pairs is three raw fields, not a Collection::Array (H5)
+    Arr(self, 0x00).~Array();   // LEFT: PathGraph::m_pairs (Entity/CitizenBehavior.h, X6-CW) is three raw fields, not a Collection::Array (H5)
 }
 
 // ============================================================
@@ -181,7 +180,7 @@ extern "C" void IbpTree_Clear_2de90(ToolRegistryNode** hdrV) {
         MemFree(root);
     }
     *hdrV = nullptr;
-    I32(hdrV, 0x08) = 0;   // LEFT: the registry header is two raw fields (PlayerToolManager +0x10 root / +0x18 count, PlayerToolManager.h): the count is reached from the root slot
+    I32(hdrV, 0x08) = 0;   // LEFT: 0x14002de90 takes the {root, count} header by its root slot; PlayerToolManager +0x10 root / +0x18 count are two separate members (field_0x10 / field_0x18), so no header record exists to name the count through
 }
 
 // ============================================================
@@ -266,11 +265,10 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
     // drop the IBP.
     if (self->currentTool != nullptr) {
         self->currentTool->Shutdown();   // slot 5
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->currentTool)->DeletePtr(   // LEFT: H5 PlayerToolManager::currentTool is a bare Tool*, retail an InternalPtr<Tool> (PlayerToolManager.h, not this agent's)
-            );   // LEFT: PlayerToolManager.h (PLAYER): currentTool is a bare Tool*, retail an InternalPtr<Tool> (H5)
+        reinterpret_cast< ::Object::InternalBasePtr*>(&self->currentTool)->DeletePtr();   // LEFT: PlayerToolManager::currentTool is a bare Tool* where retail holds an InternalPtr<Tool> (ctor 0x1401025fe, DeletePtr 0x14010250c); typing it rewrites its reader lines in eight X6-GAME-B / X6-CW files
     }
 
-    Arr(self, 0x70).~Array();   // LEFT: PlayerToolManager.h (PLAYER): cameraViews is three raw fields, not a Collection::Array (H5)
+    self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
 
     // Two trees with kids at +0x20/+0x28 (+0x60 then +0x50).
     struct EntitySet { TrackedEntityNode** root; int32_t* count; };

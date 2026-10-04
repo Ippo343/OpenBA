@@ -138,16 +138,15 @@ static CitizenComponent* FoundingSpawn_FindCitizenComp(ComponentEntity* entity) 
 // sub-description array (raw pointers, no IBPs; match on vtable+0x10 GetTypeId, then
 // IsDerivedFrom-validate). Result cached per template — retail re-scans on each
 // impl_0dd0 call, but the scan draws no RNG and reads nothing mutable.
-static CitizenDescription* FoundingCitizenDescription(void* citizenTemplate) {
-    static void* s_tmpl = nullptr;
+static CitizenDescription* FoundingCitizenDescription(const ComponentDescription* citizenTemplate) {
+    static const ComponentDescription* s_tmpl = nullptr;
     static CitizenDescription* s_desc = nullptr;
     static bool  s_cached = false;
     if (s_cached && citizenTemplate == s_tmpl) return s_desc;   // includes the null case
     CitizenDescription* found = nullptr;
     uint32_t want = TidCitizenDescription();
     if (citizenTemplate && want != 0) {
-        // LEFT: starttown.cpp (its block) hands the template as void*.
-        const ComponentDescription* t = reinterpret_cast<const ComponentDescription*>(citizenTemplate);   // LEFT: the template is MapGenerator::ExternalRef::resolved, a void* (Game/MapGenerator.h: one ref type for every pool; not this agent's)
+        const ComponentDescription* t = citizenTemplate;
         int count = t->_subDescCount;    // +0x30
         Description** arr = t->_subDescs;   // +0x28
         for (int i = 0; i < count && arr; ++i) {
@@ -185,9 +184,6 @@ static CitizenDescription* FoundingCitizenDescription(void* citizenTemplate) {
     return found;
 }
 
-extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
-    return FoundingCitizenDescription(citizenTemplate);
-}
 
 static System::Random* FoundingSpawn_Rng() {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
@@ -199,7 +195,7 @@ static System::Random* FoundingSpawn_Rng() {
 // place in the stream retail consumes it (immediately before the sub_1040 call it
 // feeds), so the caller must not hoist them.
 // ---------------------------------------------------------------------------
-extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
+extern "C" float StartTown_FoundingAdultAge(const ComponentDescription* citizenTemplate) {
     const CitizenDescription* desc = FoundingCitizenDescription(citizenTemplate);
     System::Random* rng = FoundingSpawn_Rng();
     if (!desc || !rng) return 0.0f;
@@ -213,7 +209,7 @@ extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
     return r * (ageMax * kAdultAgeBias - ageMin) + ageMin;
 }
 
-extern "C" float StartTown_FoundingChildAge(void* citizenTemplate) {
+extern "C" float StartTown_FoundingChildAge(const ComponentDescription* citizenTemplate) {
     const CitizenDescription* desc = FoundingCitizenDescription(citizenTemplate);
     System::Random* rng = FoundingSpawn_Rng();
     if (!desc || !rng) return 0.0f;
@@ -223,11 +219,11 @@ extern "C" float StartTown_FoundingChildAge(void* citizenTemplate) {
 
 // Retail's two FUN_14001b1d0 calls (steps 1 and 8) — see deviation (c). Returns the
 // template pointer the CopyCtor source and the entity-list category are both read from.
-static void* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, void* fallback) {
+static ComponentDescription* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, ComponentDescription* fallback) {
     if (!startConfig) return fallback;
     if (::Object::ExternalFactory::_singleton)
         ResolveExternalByName_Impl(&startConfig->templateRef);   // +0x48
-    void** cache = &startConfig->templateRef.resolved;           // +0x58
+    ::Object::External** cache = &startConfig->templateRef.resolved;   // +0x58
     if (*cache == nullptr && fallback != nullptr) {
         *cache = fallback;                       // restore what FindOrLoad had loaded
         if (s_trace < 24) { ++s_trace;
@@ -236,7 +232,8 @@ static void* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, void* fall
             fflush(stderr);
         }
     }
-    return *cache ? *cache : fallback;
+    // The citizen template is a ComponentDescription (the template pools name ComponentDescription resources).
+    return *cache ? static_cast<ComponentDescription*>(*cache) : fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +245,7 @@ static void* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, void* fall
 // Returns the new entity (raw pointer); *outCitizenComp receives the CheckPtr'd
 // CitizenComponent the family links are written through.
 // ---------------------------------------------------------------------------
-extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startConfig, void* citizenTemplate,
+extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startConfig, ComponentDescription* citizenTemplate,
                                                           void* entityList, const float base[3],
                                                           float age, char genderSel, char educated,
                                                           CitizenComponent** outCitizenComp) {
@@ -256,7 +253,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     System::Random* rng = FoundingSpawn_Rng();
 
     // 1. allocate + copy-construct the entity from the (re-resolved) citizen template
-    void* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
+    ComponentDescription* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
     ComponentEntity* ent = (mem && tmpl)
                      ? ComponentEntity_CtorFromDescription(mem, tmpl)   // 0x1400c3720
@@ -333,8 +330,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 
     // 8. register with the world entity list under the template's category
     tmpl = FoundingSpawn_RefreshTemplate(startConfig, tmpl);
-    // LEFT: the template comes back as the void* the ExternalRef caches.
-    int category = tmpl ? reinterpret_cast<const ComponentDescription*>(tmpl)->_category   // +0x20   // LEFT: the template is MapGenerator::ExternalRef::resolved, a void* (Game/MapGenerator.h: one ref type for every pool; not this agent's)
+    int category = tmpl ? tmpl->_category   // +0x20
                         : 0;
     ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(entityList, &regIBP, category);   // 0x1400c48a0

@@ -55,7 +55,7 @@ void GoalDialog::OnOpened() {
     }
 
     // The scenario's AchievementInstance (the game's +0x150)
-    Achievement::AchievementInstance* goalListObj = GameUpdateLoop::_singleton->m_scenarioInstance;
+    Achievement::AchievementInstance* goalListObj = GameUpdateLoop::_singleton->m_scenarioInstance.Get();
 
     if (goalListObj != nullptr) {
         const Achievement::GoalList* goalList = &goalListObj->_goalList;
@@ -180,7 +180,7 @@ void GoalDialog::OnOpened() {
 // Original: 0x140069640.
 
 void GoalDialog::OnUpdateLayout() {
-    Achievement::AchievementInstance* goalListObj = GameUpdateLoop::_singleton->m_scenarioInstance;
+    Achievement::AchievementInstance* goalListObj = GameUpdateLoop::_singleton->m_scenarioInstance.Get();
 
     int count = goals._size;
 

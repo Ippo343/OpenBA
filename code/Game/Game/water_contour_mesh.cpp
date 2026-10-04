@@ -201,10 +201,10 @@ void WeldInit(WeldSet<T>* s, int estimate) {
     int cap = 16;
     while (cap < estimate * 2) cap <<= 1;
     s->mask = cap - 1;
-    s->buckets = (int32_t*)std::malloc((size_t)cap * sizeof(int32_t));   // LEFT: GAME-c weld scratch (std::malloc, as before B.4)
+    s->buckets = (int32_t*)std::malloc((size_t)cap * sizeof(int32_t));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
     for (int i = 0; i < cap; ++i) s->buckets[i] = -1;
     s->chainCap = estimate > 0 ? estimate : 16;
-    s->chain = (int32_t*)std::malloc((size_t)s->chainCap * sizeof(int32_t));   // LEFT: GAME-c weld scratch
+    s->chain = (int32_t*)std::malloc((size_t)s->chainCap * sizeof(int32_t));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
 }
 
 template <class T>
@@ -228,7 +228,7 @@ uint16_t WeldAdd(WeldSet<T>* s, const T* key) {
     VecPush(&s->verts, *key, 2);
     if (idx >= s->chainCap) {
         int32_t nc = s->chainCap * 2;
-        s->chain = (int32_t*)std::realloc(s->chain, (size_t)nc * sizeof(int32_t));   // LEFT: GAME-c weld scratch
+        s->chain = (int32_t*)std::realloc(s->chain, (size_t)nc * sizeof(int32_t));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
         s->chainCap = nc;
     }
     s->chain[idx] = s->buckets[b];
@@ -269,9 +269,9 @@ void fb00_BuildBody(const TerrainHeightfield* hf, int bodyIdx, RawArray<OutVtx>*
     // --- Stage A (approx): banks = centerline +/- radius along per-node normal.
     // --- Stage B (faithful): arc-length V along the centerline (shared across
     //     the width band so the texture flows straight along the spine).
-    V2*    bankL = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: GAME-c body scratch (std::malloc, as before B.4)
-    V2*    bankR = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: GAME-c body scratch
-    float* vCoord = (float*)std::malloc((size_t)ptCount * sizeof(float)); // LEFT: GAME-c body scratch
+    V2*    bankL = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
+    V2*    bankR = (V2*)std::malloc((size_t)ptCount * sizeof(V2));        // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
+    float* vCoord = (float*)std::malloc((size_t)ptCount * sizeof(float)); // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
     if (!bankL || !bankR || !vCoord) {
         if (bankL) std::free(bankL);
         if (bankR) std::free(bankR);
@@ -362,7 +362,7 @@ inline V2    V2Norm(V2 a) { float l = V2Len(a); return (l < 1e-8f) ? V2{ 0.0f, 0
 void V2Push(V2List* L, V2 v) {
     if (L->n >= L->cap) {
         int nc = L->cap ? L->cap * 2 : 128;
-        L->d = (V2*)std::realloc(L->d, (size_t)nc * sizeof(V2));   // LEFT: GAME-c bank scratch (std::realloc, as before B.4)
+        L->d = (V2*)std::realloc(L->d, (size_t)nc * sizeof(V2));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
         L->cap = nc;
     }
     L->d[L->n++] = v;
@@ -423,7 +423,7 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
 
     // --- Build edge records (shifted endpoints +0.5x / -0.5y, DAT_140172114=0.5). ---
     int ne = ptCount - 1;
-    Edge* edges = (Edge*)std::malloc((size_t)ne * sizeof(Edge));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
+    Edge* edges = (Edge*)std::malloc((size_t)ne * sizeof(Edge));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
     if (!edges) return;
     for (int i = 0; i < ne; ++i) {
         V2 p0 = { CLx(i) + 0.5f,     CLy(i) - 0.5f };
@@ -483,8 +483,8 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
     }
 
     // --- Matching (sub_bdf0): nearest bank point to each RAW centerline node. ---
-    int* lm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
-    int* rm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: GAME-c body scratch
+    int* lm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
+    int* rm = (int*)std::malloc((size_t)ptCount * sizeof(int));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
     if (!lm || !rm) {
         std::free(edges); std::free(leftBank.d); std::free(rightBank.d);
         std::free(lm); std::free(rm);
@@ -532,8 +532,8 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
         if (cnt < 1) cnt = 1;
         if (sumL / (float)cnt < kMinArcGate || sumR / (float)cnt < kMinArcGate) continue;  // degenerate gate
 
-        V2* Lr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: GAME-c body scratch (std::malloc, as before B.4)
-        V2* Rr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: GAME-c body scratch
+        V2* Lr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
+        V2* Rr = (V2*)std::malloc((size_t)cnt * sizeof(V2));   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
         if (!Lr || !Rr) { std::free(Lr); std::free(Rr); break; }
         ResampleRange(leftBank.d, prevL, cL, cnt, Lr);
         ResampleRange(rightBank.d, prevR, cR, cnt, Rr);
@@ -543,7 +543,7 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
             prevMid = mid; haveMid = true;
             float v = gMidArc / kVDenom + kVOffset;   // V = cumulative flow arc / 32 - 16
             V2Push(&gL, Lr[j]); V2Push(&gR, Rr[j]);
-            if (gN >= gCap) { gCap = gCap ? gCap * 2 : 256; gV = (float*)std::realloc(gV, (size_t)gCap * sizeof(float)); }   // LEFT: GAME-c body scratch
+            if (gN >= gCap) { gCap = gCap ? gCap * 2 : 256; gV = (float*)std::realloc(gV, (size_t)gCap * sizeof(float)); }   // LEFT: a CRT malloc / realloc result (the tree's own contour scratch, not a retail allocation): the tier-I allocation shape covers MemAlloc / Allocate only; the close decides
             gV[gN++] = v;
         }
         std::free(Lr); std::free(Rr);

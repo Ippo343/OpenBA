@@ -171,7 +171,7 @@ void TutorialInstance::LoadNextScenario() {
     fflush(stderr);
 
     // The null InternalBasePtr<AchievementInstance> the ctor's p3 receives.
-    uint64_t ibpCopy = 0;
+    const Object::InternalPtr<Achievement::AchievementInstance> ibpCopy;
 
     Engine::UpdateLoop* pGameLoop = nullptr;
 

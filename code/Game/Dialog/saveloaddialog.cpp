@@ -669,7 +669,7 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
             // String (null COW pointer), not String("") (a 1-byte "" buffer).
             const System::String nameStr;
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
-                savedState, /*scenarioIbp=*/0, /*scenarioIndex=*/-1, nameStr,
+                savedState, /*scenarioIbp=*/Object::InternalPtr<Achievement::AchievementInstance>(), /*scenarioIndex=*/-1, nameStr,
                 0, 0, /*p8=*/true, nullptr, nullptr, nullptr);
         }
 
