@@ -8,13 +8,15 @@
 // memory project_player_tool_harness.
 #pragma once
 
+class PlayerToolManager;   // code/Game/Game/PlayerToolManager.h
+
 extern "C" {
 
 // Called once per in-game frame from GameUpdateLoop_Update (after the world is
 // built). entityUI = GameUpdateLoop::m_toolManager; frameNum = the loop's frame
 // counter (used to settle before firing). No-op unless BANISHED_TOOL_HARNESS
 // is set. Fires its tool sequence exactly once.
-void ToolHarness_Tick(void* entityUI, int frameNum);
+void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum);
 
 }  // extern "C"
 
