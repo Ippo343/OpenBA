@@ -153,8 +153,6 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3);
 // ---- action_pf_avl.cpp
 extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node);  // 0x14000e450
 extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node);  // 0x14000e580
-extern "C" int64_t Pf_AvlRotateL_14c70(int64_t* root, int64_t node);  // 0x140014c70
-extern "C" int64_t Pf_AvlRotateR_14da0(int64_t* root, int64_t node);  // 0x140014da0
 extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node);  // 0x140013480
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
 extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x14001a4f0
