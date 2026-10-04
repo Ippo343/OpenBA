@@ -33,15 +33,14 @@
 #include "Component/OrchardComponent.h"
 #include "Dialog/OrchardUI.h"
 #include "Player/EditTool.h"
+#include "Player/edittool_funcs.h"   // EditTool_HarnessAcquire / _HarnessSelectEntity
 #include "Entity/ComponentEntity.h"   // B4: the component array by name
 #include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
 #include "ui/DialogInstance.h"        // B4: the open dialog's controller array
 #include "Dialog/exe_bodies.h"   // EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp): EntityUI_SetEditMode_Impl
 
-// EditTool select-by-entity harness hook (standalone/tool_harness.cpp) — opens the
+// EditTool select-by-entity harness hook (Player/edittool_funcs.h) — opens the
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.
-extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
-extern "C" void* EditTool_HarnessAcquire(void* entityUI);
 
 namespace {
 
@@ -74,13 +73,13 @@ void Init() {
 // is what actually writes comp+0x60 in retail. Deliberately does NOT synthesize a
 // pointer: if any step in this real path fails, comp+0x60 is left alone and the
 // failure is logged, not papered over.
-bool TryAssignRealTreeType(void* entityUI, ComponentEntity* orchEnt, OrchardComponent* orchComp) {
+bool TryAssignRealTreeType(PlayerToolManager* entityUI, ComponentEntity* orchEnt, OrchardComponent* orchComp) {
     if (!entityUI) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: entityUI null\n");
         return false;
     }
 
-    void* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
+    EditTool* tool = EditTool_HarnessAcquire(entityUI);   // rejects a non-EditTool
     if (!tool) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: EditTool activation "
                         "FAILED (no tool at entityUI+0x28) — is BANISHED_LIVE_TOOLS=1?\n");
@@ -88,9 +87,7 @@ bool TryAssignRealTreeType(void* entityUI, ComponentEntity* orchEnt, OrchardComp
     }
 
     int opened = EditTool_HarnessSelectEntity(tool, orchEnt);
-    // LEFT: `tool` is the void* EditTool_HarnessAcquire returns and EditTool::entityRef
-    // (+0x28, the open dialog) is a uint64_t in PLAYER's header.
-    UI::DialogInstance* dialog = *reinterpret_cast<UI::DialogInstance**>(static_cast<uint8_t*>(tool) + 0x28);
+    UI::DialogInstance* dialog = tool->entityRef;   // +0x28, the open dialog
     fprintf(stderr, "[OrchardForceStart]     select orchard ent=%p -> opened=%d dialog=%p\n",
             static_cast<void*>(orchEnt), opened, static_cast<void*>(dialog));
     if (!dialog) {
@@ -139,7 +136,7 @@ bool TryAssignRealTreeType(void* entityUI, ComponentEntity* orchEnt, OrchardComp
     // LEFT: that argument is an InternalPtr<Element>* and the harness hands it the
     // element itself (the old raw dispatch's value); naming it would change the value.
     oui->OnElementEvent(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,   // LEFT: the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)
         0, 0, 0, nullptr);
 
     ComponentDescription* treeTypeAfter = orchComp->treeType;          // +0x60
@@ -149,7 +146,7 @@ bool TryAssignRealTreeType(void* entityUI, ComponentEntity* orchEnt, OrchardComp
     return treeTypeAfter != nullptr;
 }
 
-void FireForceStart(void* entityUI, int frameNum) {
+void FireForceStart(PlayerToolManager* entityUI, int frameNum) {
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: gameWorld singleton null — cannot run\n", frameNum);
@@ -252,16 +249,14 @@ void FireForceStart(void* entityUI, int frameNum) {
         // ~0.9 ms of UI update per frame (measured in the BANISHED_STRESS PostSim phase:
         // 0.95 ms vs 0.06 ms once it closed on its own thousands of frames later), which
         // is harness noise in a perf baseline. Close it the way a right-click does.
-        // LEFT: the void* tool and EditTool::entityRef's uint64_t (PLAYER's harness
-        // entry and header).
-        if (void* tool = EditTool_HarnessAcquire(entityUI)) {
-            uintptr_t dlg = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(tool) + 0x28);
+        if (EditTool* tool = EditTool_HarnessAcquire(entityUI)) {
+            UI::DialogInstance* dlg = tool->entityRef;   // +0x28
             if (dlg) {
                 // EditTool::Shutdown is CloseInfoDialog(this, this->entityRef), and
                 // entityRef (+0x28) is the dlg just read.
-                reinterpret_cast<EditTool*>(tool)->EditTool::Shutdown();   // B.3.8 bridge
+                tool->EditTool::Shutdown();
                 fprintf(stderr, "[OrchardForceStart] frame=%d: closed the last orchard panel (%p)\n",
-                        frameNum, reinterpret_cast<void*>(dlg));
+                        frameNum, static_cast<void*>(dlg));
             }
         }
     }
@@ -270,7 +265,10 @@ void FireForceStart(void* entityUI, int frameNum) {
 
 }  // namespace
 
-extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum) {
+// The tool manager (gameupdateloop.cpp hands its `m_toolManager`; its local
+// declaration still spells the parameter void*).
+extern "C" void OrchardForceStart_Tick(PlayerToolManager* entityUI, int frameNum) {
+
     Init();
     if (!s_enabled) return;
     if (s_fired) return;
