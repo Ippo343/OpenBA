@@ -370,7 +370,7 @@ using IntPairArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 void ResizeStride0x10(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x140/+0x150 are still raw 0x10-byte
     // headers in an unconverted exe struct.
-    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);   // LEFT: SIG ResizeStride0x10 (caller Entity/citizenbehavior.cpp); CitizenBehavior.h (ENT) +0x140/+0x150 are raw headers (H5)
+    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);   // LEFT: CitizenBehavior.h +0x140 / +0x150 (and the v5 clamp's +0x160) are raw {data, count, cap} triples (H5): the one erased core through the header view
 }
 
 // ------------------------------------------------------------
@@ -380,7 +380,7 @@ void ResizeStride0x10(void* hdr, int n) {
 // ------------------------------------------------------------
 void ResizeStride0x20(void* hdr, int n) {
     // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
-    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);   // LEFT: SIG ResizeStride0x20 (caller Entity/citizenbehavior.cpp); CitizenBehavior.h (ENT) +0x170 is a raw header (H5)
+    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);   // LEFT: CitizenBehavior.h +0x170 is a raw {data, count, cap} triple (H5): the one erased core through the header view
 }
 
 namespace {
@@ -498,8 +498,11 @@ CompRefNode* CompRefTreeSucc(CompRefNode* n) {
 // declared void*), `countField` its count.
 void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* serializer,
                           fn_KeyResolve_t keyFn) {
-    // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
-    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);   // LEFT: CitizenBehavior.h (ENT): field_0x100 / field_0x160 are void* tree roots
+    // LEFT: the roots are CitizenBehavior.h's ProfessionBucket* / TemplateBucket*
+    // (CitizenBucketNode<Key>), whose +0x30 is one int32 where 0x140014b40 reads an
+    // int16 balance + int16 height: this body walks its own CompRefNode until that
+    // header's node carries the pair (not this block's header).
+    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);   // LEFT: CitizenBehavior.h CitizenBucketNode::balance (int32, retail int16 + int16)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -608,8 +611,9 @@ LegacyNode* LegacyTreeSucc(LegacyNode* n) {
     return parent;
 }
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
-    // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
-    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);   // LEFT: CitizenBehavior.h (ENT): field_0x160 is a void* tree root
+    // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
+    // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
+    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);   // LEFT: +0x160 read as a second node type (legacy path)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -643,8 +647,9 @@ void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Seriali
             }
             if (!dup) {
                 *countField = *countField + 1;
-                // LEFT: the shared AVL retrace takes int64_t* (Component/exe_bodies.h).
-                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360   // LEFT: SIG CitizenAI_Reg_helper_e360(int64_t*) (wave X)
+                // LEFT: 0x14000e360's typed body is citizenai_housing_idle.cpp's Helper_e360
+                // (WorkCandidateNode, not a template; X-G1-2's file): the C entry takes int64_t*.
+                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360   // LEFT: SIG CitizenAI_Reg_helper_e360(int64_t*)
             }
         }
     } else {
