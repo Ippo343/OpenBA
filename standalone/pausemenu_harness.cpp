@@ -108,7 +108,9 @@ int Paused(UI::UserInterface* ui) { return (int)ui->PausesGame(); }
 
 }  // namespace
 
-extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
+// The tool manager (gameupdateloop.cpp hands its `m_toolManager`; its local
+// declaration still spells the parameter void*).
+extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
     Init();
     if (s_openFrame <= 0) return;
 
@@ -144,7 +146,7 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                     // LEFT (this and the two calls below): the dialogs arrive as void*
                     // from ModDialog_LastOpened / ModDetailsDialog_LastOpened /
                     // EntityUI_OpenPauseMenu (DLG's files).
-                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
+                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge  // LEFT: ModDetailsDialog_LastOpened returns void* (mod_dialog_vtables.cpp, DLG)
                         nullptr, 0x12, id, 0, 0, 0, nullptr);
                 }
             } else {
@@ -156,8 +158,8 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
                     // old raw call already passed) are the harness's choice:
                     // retail has no such caller.
                     void* nullElem = nullptr;
-                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge
-                        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),
+                    static_cast<UI::DialogInstance*>(dlg)->OnElementEvent(   // B.3.x bridge  // LEFT: ModDialog_LastOpened returns void* (mod_dialog_vtables.cpp, DLG)
+                        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullElem),   // LEFT: a raw null local handed as InternalPtr<Element>* (an InternalPtr local would construct / destroy)
                         0x12, id, 0, 0, 0, nullptr);
                 }
             }
@@ -203,8 +205,8 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
         if (frameNum - s_worldSeenAt < s_openFrame) return;
         // Retail passes gameWorld+0x120 (the EntityUI). GameUpdateLoop hands us the
         // same pointer as m_toolManager; fall back to the world field if it is null.
-        void* eui = entityUI ? entityUI
-                             : static_cast<void*>(gameWorld->m_toolManager);   // +0x120
+        PlayerToolManager* eui = entityUI ? entityUI
+                                          : gameWorld->m_toolManager;   // +0x120
         std::fprintf(stderr, "[PauseMenu] frame %d - opening (entityUI=%p ui=%p pausesGame=%d)\n",
                      frameNum, eui, static_cast<void*>(ui), Paused(ui));
         s_dialog   = EntityUI_OpenPauseMenu(eui);
@@ -216,9 +218,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
             s_clicked = true;
             return;
         }
-        // LEFT (three reads): the dialog's vtable word, compared later to tell a live
-        // dialog from a destroyed one; it has no name.
-        s_vtable = *reinterpret_cast<void**>(s_dialog);
+        // The dialog's vtable word (three reads), compared later to tell a live
+        // dialog from a destroyed one: a liveness probe, it has no name.
+        s_vtable = *reinterpret_cast<void**>(s_dialog);   // CAST-OK: crash_walk
         int cnt = 0;
         int idx = DialogListIndex(ui, s_dialog, &cnt);
         std::fprintf(stderr, "[PauseMenu] pause dialog=%p vtable=%p (UI array index=%d of %d) "
@@ -236,7 +238,7 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
             std::fprintf(stderr, "[PauseMenu] frame %d - still up? UI array index=%d of %d "
                                  "vtableIntact=%d pausesGame=%d\n",
                          frameNum, i, c,
-                         (int)(*reinterpret_cast<void**>(s_dialog) == s_vtable), Paused(ui));
+                         (int)(*reinterpret_cast<void**>(s_dialog) == s_vtable), Paused(ui));   // CAST-OK: crash_walk
         }
         return;
     }
@@ -244,7 +246,7 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
 
     int cnt = 0;
     int idx = DialogListIndex(ui, s_dialog, &cnt);
-    void* nowVtable = *reinterpret_cast<void**>(s_dialog);
+    void* nowVtable = *reinterpret_cast<void**>(s_dialog);   // CAST-OK: crash_walk
     std::fprintf(stderr, "[PauseMenu] frame %d - dialog=%p vtable=%p (was %p) "
                          "UI array index=%d of %d pausesGame=%d\n",
                  frameNum, s_dialog, nowVtable, s_vtable, idx, cnt, Paused(ui));
@@ -260,8 +262,9 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
     // by the old raw 4-argument call; the by-name call passes 0 / nullptr. The
     // four trailing arguments are the harness's choice: retail has no such caller.
     std::fprintf(stderr, "[PauseMenu] dispatching OnCommand(msg=0x12, id=%d)\n", s_buttonId);
-    static_cast<UI::DialogInstance*>(s_dialog)->OnElementEvent(   // B.3.x bridge
+    static_cast<UI::DialogInstance*>(s_dialog)->OnElementEvent(   // B.3.x bridge  // LEFT: EntityUI_OpenPauseMenu returns void* (toolbardialog.cpp, DLG)
         nullptr, 0x12, s_buttonId, 0, 0, 0, nullptr);
+
     s_clickedAt = frameNum;
     std::fprintf(stderr, "[PauseMenu] OnCommand returned\n");
 }
