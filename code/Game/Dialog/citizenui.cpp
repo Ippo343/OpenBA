@@ -221,14 +221,13 @@ void CitizenUI::OnCreated() {
     textAction      = static_cast<UI::TextElement*>(FindElemInTree(parentElem, "textAction"));
 
     // --- Icon groups (heart/star arrays built from group children) ---
-    // LEFT: the icon groups are raw storage (H5), reached by address.
     {
-        UI::Element* groupHearts = FindElemInTree(parentElem, "groupHearts");
-        CitizenUI_BuildIconArray_Impl((uintptr_t)heartIcons, (uintptr_t)&groupHearts);
+        Object::InternalPtr<UI::Element> groupHearts(FindElemInTree(parentElem, "groupHearts"));
+        CitizenUI_BuildIconArray_Impl(heartsWhole, heartsHalf, &groupHearts);
     }
     {
-        UI::Element* groupStars = FindElemInTree(parentElem, "groupStars");
-        CitizenUI_BuildIconArray_Impl((uintptr_t)starIcons, (uintptr_t)&groupStars);
+        Object::InternalPtr<UI::Element> groupStars(FindElemInTree(parentElem, "groupStars"));
+        CitizenUI_BuildIconArray_Impl(starsWhole, starsHalf, &groupStars);
     }
 
     // --- Button elements (found via DialogInstance, with element IDs) ---
@@ -409,8 +408,8 @@ void CitizenUI::OnUpdateLayout() {
     {
         CitizenDescription* hd = aiDesc ? aiDesc : citizenDesc;
         if (CitUI_OkPtr(hd)) {
-            CitizenUI_UpdateIconDisplay_Impl((uintptr_t)heartIcons, ai->health, hd->maxHealth);
-            CitizenUI_UpdateIconDisplay_Impl((uintptr_t)starIcons, ai->happiness, hd->maxHappiness);
+            CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf, ai->health, hd->maxHealth);
+            CitizenUI_UpdateIconDisplay_Impl(starsWhole, starsHalf, ai->happiness, hd->maxHappiness);
         }
     }
 
