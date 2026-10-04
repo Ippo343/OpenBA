@@ -338,3 +338,9 @@ Metric at `f522f4eb`: **1,785** to remove (of which `dx11/` 240). Wave X round 2
 Metric at `2ba6e08f`: **1,588** to remove (of which `dx11/` 240). Wave X round 3 done.
 
 `sa-stress` at `2ba6e08f`, QUIET machine: exit 0, update p95 2.29 ms, draw 1.25 (base 2.40 / 1.38). Recorded, not chased.
+
+| 105 | X4-GAME | `cf521d31` | the standalone diagnostics read MeshInstance / GraphicsMesh / AnimationState by name, `g_StandaloneNewGameDialog` and the bridge harness globals typed, `EntityUI_OpenPauseMenu` deleted, the `EntityUI_*_SA` entries take `PlayerToolManager*`; vague tags restated: 541 -> 498 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 106 | X4-WORK | `ef292b04` | `behaviour:` GatherRawMaterials, BuildStructure, ClearStorage hold their arrays and citizen set as members in retail's teardown order (0x1400ec650 / 0x1400e5920 / 0x1400e73b0); five signatures typed, three forwarders deleted (rows 642-643; one conflict in workplaceui.cpp resolved to the member call): 204 -> 167 | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok (ui with row 107) | 0 |
+| 107 | X4-COMP | `8ac8fef0` | `behaviour:` EntityList is a real class: arrays `Collection::Array<ComponentEntity*>`, trees `Collection::Set`, ctor / dtor in retail's sequence (0x1400c3f90 / 0x1400c3e60), the memset construct and hand-written teardown deleted; three forwarders deleted, `ComponentEntity_CtorFromDescription` typed (rows 650-651): 173 -> 163 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `8ac8fef0`: **1,479** to remove (of which `dx11/` 240).
