@@ -29,6 +29,8 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Calendar.h"
+#include "Game/WeatherSimulation.h"
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -118,7 +120,7 @@ void FruitComponent::Startup() {
 // [9] 0x140049de0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void FruitComponent::Update(void* time) {
-    const System::Time* pDeltaTime = static_cast<const System::Time*>(time);
+    const System::Time* pDeltaTime = static_cast<const System::Time*>(time);   // LEFT: SIG Component::Update (Component.h)
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless Startup ran. _unk18(+0x18) is the FruitDescription set
@@ -161,9 +163,8 @@ void FruitComponent::Update(void* time) {
     // (uint)month > 4.
     if (fruitFlag != 0) {
         if (GameUpdateLoop::_singleton != nullptr) {
-            // GameUpdateLoop::m_dayCounter is still void* (GAME-a): its Time at +8 is LEFT.
-            const uintptr_t dayCounter = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_dayCounter);
-            float seasonSecs = reinterpret_cast<const System::Time*>(dayCounter + 8)->AsSeconds();   // B.3.4b bridge
+            const Calendar* dayCounter = GameUpdateLoop::_singleton->m_dayCounter;   // +0x128
+            float seasonSecs = dayCounter->yearTime.AsSeconds();   // +0x08
             float secsPerYear   = kSecsPerYear;
             float monthsPerYear = kMonthsPerYear;
             unsigned int monthIdx =
@@ -176,9 +177,8 @@ void FruitComponent::Update(void* time) {
     // currentTemp = *(*(world+0x130)+0x18)
     float currentTemp = 0.0f;
     if (GameUpdateLoop::_singleton != nullptr) {
-        // GameUpdateLoop::m_weather is still void* (GAME-a): the temperature (+0x18) is LEFT.
-        const uintptr_t weather = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_weather);
-        currentTemp = *reinterpret_cast<const float*>(weather + 0x18);
+        const WeatherSimulation* weather = GameUpdateLoop::_singleton->m_weather;   // +0x130
+        currentTemp = weather->temperature;   // +0x18
     }
 
     // tempDelta = |currentTemp - resData->+0x24| / resData->+0x28
