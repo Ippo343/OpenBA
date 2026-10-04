@@ -435,3 +435,38 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - thread_win.cpp's four vtable slot calls: FLOOR §5 says not floor; the inventory tagged them `FLOOR:vslot`.
 - Mirror types still named (X-R1's table): `RtObject::External` (15 files), `Internal` (code x11 + 6),
   `InternalBasePtr`, `InternalFactory`, `BaseTypeInfo` (8), `Factory` / `TypeNode` (11).
+
+## Wave X round 1 hand-ins (X-RH, X-G1-1/2/3 and their continuations, X-R2, X-R3)
+### Facts
+- Typed on main: the work scheduler entry points; the citizen find / target helpers; the nine CitizenAI action
+  builders; the work action ctors; the TownHall helpers; UIFade (`UI::UserInterface*`); the dialog ctor entries
+  (`const UI::Dialog*`); `ExternalPtrSerializeGeneric<T>`; `ToolRegistryNode` teardown; `Work/GridTile.h`;
+  `CitizenAIComponent::leisureTimer` (`System::Time`); ProfessionNode / AgricultureNode / PathCostNode /
+  CompRefNode balance + height are two int16.
+- `behaviour:` members on main: FileStream, CharacterSet, NumberElement, Dialog, ImageBuffer, PickingMesh,
+  FileSystem (three `Filename`), `External::_path`, PackageFile, Font, `HighlightComponent::transform`.
+### Findings that block a typed member (do not retry without the named prerequisite)
+- Work leaves' citizen sets: retail holds a real `Set` member (FireWork dtor 0x1400e9ac0 runs its inlined
+  Clear after the body); the tree's FireWork dtor frees nothing (row 553). Needs ONE agent owning every Work
+  leaf header + `tests/unit/wrk_abi_test.cpp` (it names the count fields) + the `WorkBST_*` / `WorkCellBST_*` /
+  `WorkLeaf_Bst*` entry points (about 70 casts).
+- `HighlightComponent::edgeMeshInstance`: retail constructs it in the ctor; the tree builds it lazily and
+  uses a null vptr as its "never outlined" test (row 573).
+- `TextElement::_cachedText` (released before the `_params` array), `SpriteCapture::_sprites` (destroyed
+  first), `EditElement::_text` / `_filter` (noiseui.cpp:154 passes `_text` to `ToFloat(const char*)`),
+  FileInfo names (built in raw return slots), Persistence (`_savePath`, the embedded worker and the settings
+  map must be typed together), `Mod` / `ResourceEntry` / `ReferenceEntry` / `PathStackEntry` (elements of
+  erased containers with hand-written lifecycles), TutorialStep / MenuDialogLoopT arrays (order reversed).
+- WideString: four sites free the WideString before the Strings built from it where retail frees it last
+  (rows 580-582): the POD and its doors stay there.
+- `StateMachine_TickReimpl`'s integer tick (row 510), `HuntComponent::Update` (row 511), SpawnSubResource
+  calls the Particle finder where retail calls the Model finder (rows 400 / 550 / 552).
+### Close / audit
+- B4 FORWARD overloads kept for code callers: `FileSystem::Exists(const RtSystem::Filename&)`
+  (w2_takescreenshot.cpp:161), `MaterialInstance::AddTexture(const RtSystem::String&)` (mapui, moddialog,
+  noiseui, saveloaddialog).
+- Mirror counts after X-R3: `Sys()` 64 lines / 26 files, `SysFile()` 25 / 4, `RtSystem::String` 58 files,
+  `RtSystem::Filename` 38: none deletable yet.
+- Vtable-word probes (tripwires, profiler keys) are tagged `// LEFT: FLOOR? vtable probe`: the audit decides
+  whether FLOOR.md gets a `vptr_probe` category; `ReportBadSelectionRef` must keep its integer receiver (typed
+  as the final class, GCC devirtualises the probe).
