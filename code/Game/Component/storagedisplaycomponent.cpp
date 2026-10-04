@@ -301,12 +301,12 @@ void StorageDisplayComponent::SetPileMesh(int index, float fraction, ComponentDe
     Pile& pile = piles[index];
     int32_t objId = pile.sceneId;
     if (objId >= 0) {
-        if (pile.mesh._mesh.p == mesh) {
+        if (pile.mesh._mesh.Get() == mesh) {
             return;   // already showing this mesh (steady-state early-out)
         }
         scene->RemoveObject(objId);
     }
-    pile.mesh.SetMesh(Graphics::ExternalPtrHandle{mesh});
+    pile.mesh.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
     pile.sceneId = scene->AddObject(&pile.mesh);
 }
 

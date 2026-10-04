@@ -484,7 +484,7 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
         // Its AddDrawItems slot is MeshInstance's: the downcast stays in Geometry's hierarchy.
         Graphics::MeshInstance* mi = static_cast<Graphics::MeshInstance*>(geo);
 
-        void* mesh = mi->_mesh.p;   // +0xc0 ExternalPtr<GraphicsMesh>, an untyped POD here
+        void* mesh = mi->_mesh.Get();   // +0xc0 ExternalPtr<GraphicsMesh>
         if (!Readable(mesh)) continue;
         ++instances;
 

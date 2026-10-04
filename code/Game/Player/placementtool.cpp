@@ -693,7 +693,7 @@ void PlacementTool::Startup() {
     Graphics::GraphicsMesh* mesh = entryBase->meshes[subCount - 1];
 
     if (meshInstance) {
-        meshInstance->SetMesh(Graphics::ExternalPtrHandle{mesh});
+        meshInstance->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
     }
 
     // --- Update hierarchy ---

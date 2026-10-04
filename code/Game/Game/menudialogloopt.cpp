@@ -206,7 +206,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
 
     // SetMesh(meshArray[meshIdx]) — value passed is the 8-byte ExternalPtr.
     Graphics::GraphicsMesh* mesh = meshArr[meshIdx];
-    inst->SetMesh(Graphics::ExternalPtrHandle{mesh});
+    inst->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
 
     // Geometry::SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem.position)).
     Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
@@ -229,7 +229,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
         // The `mats.GetData()` term is the old `&& matData`, kept because
         // nothing here proves GetSize() is 0 whenever _data is null.
         for (int32_t m = 0; m < mats.GetSize() && mats.GetData(); ++m) {
-            inst->SetMaterialInstance(m, Graphics::ExternalPtrHandle{mats[m].Get()});
+            inst->SetMaterialInstance(m, Object::ExternalPtr<Graphics::MaterialInstance>(mats[m].Get()));
         }
         matSlots = mats.GetSize();
     }
@@ -590,7 +590,7 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
     // --- SetMesh from MenuScene::terrainMesh (the GraphicsMesh ExternalPtr) ---
     Graphics::GraphicsMesh* meshExt = menuScene->terrainMesh;
     if (mainMesh && meshExt) {
-        mainMesh->SetMesh(Graphics::ExternalPtrHandle{meshExt});
+        mainMesh->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshExt));
     }
 
     // --- Time(0.0f) construction + Update vtable[+0x08] dispatch on the MeshInstance ---

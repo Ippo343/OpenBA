@@ -683,8 +683,7 @@ const ::Graphics::AnimationState* RtInstancedPoolSlot(const ::Graphics::MeshInst
 // constructor, re-read against retail 0x1800170c0's listing: `CALL 0x180015b60`
 // (Geometry's copy ctor -- the base in the init list), the MeshInstance stamp
 // (the compiler's), then the stores below in retail's order.
-Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other) {
-    _mesh = other._mesh;
+Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other), _mesh(other._mesh) {
 
     _materials._data = nullptr;
     _materials._size = 0;
@@ -752,8 +751,7 @@ Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other
 // ??1MeshInstance 0x180017060 before ~Geometry -- the B.3.8 `InitFields` /
 // `ReleaseFields` split, now the members themselves (B.4: by name).
 // ============================================================================
-Graphics::MeshInstance::MeshInstance() {
-    _mesh.p = nullptr;
+Graphics::MeshInstance::MeshInstance() : _mesh(nullptr) {   // +0xc0 first, 0x1800fffe8
     _materials._data = nullptr;
     _materials._size = 0;
     _materials._capacity = 0;
@@ -1999,9 +1997,8 @@ void MeshInstance::UpdateHierarchy() {
 //                                                        retail 0x1800ffe80
 // One store, no bounds check — retail has none and CLAUDE.md forbids adding one.
 // ---------------------------------------------------------------------------
-void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
-    // LEFT: `ExternalPtrHandle` is the untyped handle its code/Game callers hold.
-    _materials._data[index] = static_cast<MaterialInstance*>(value.p);   // LEFT: SIG the ExternalPtrHandle parameter keeps its pointee as void* (its code/Game callers hold the handle)
+void MeshInstance::SetMaterialInstance(int index, Object::ExternalPtr<MaterialInstance> value) {
+    _materials._data[index] = value;
 }
 
 // ---------------------------------------------------------------------------
@@ -2012,10 +2009,9 @@ void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
 // of Arrays, so the source of the copy is its `_data` (the first skin's
 // Array header), not the address of the field. Read the stars, not the offsets.
 // ---------------------------------------------------------------------------
-void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
+void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
     _mesh = mesh;
-    // LEFT: the untyped `ExternalPtrHandle` its code/Game callers hold.
-    const GraphicsMesh* const newMesh = static_cast<const GraphicsMesh*>(mesh.p);   // LEFT: SIG ExternalPtrHandle (as SetMaterialInstance)
+    const GraphicsMesh* const newMesh = mesh.Get();
     rtcoll::RtColl_ArrayAssign_180014c70(&_materials, newMesh->_skinMaterials._data);
 
     if (_materials._size > 0) {
@@ -2051,6 +2047,19 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
     }
 }
 
+// B4 FORWARD: action_base_complete.cpp, buildcomponent_state8.cpp and
+// gameupdateloop_load.cpp hold their GraphicsMesh as a void*;
+// action_base_movedeps.cpp its AnimationGroup.
+void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
+    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: B4 FORWARD for the three void* callers
+}
+void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
+                                 const System::Time* startTime, const System::Time* blendTime,
+                                 float weight) {
+    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: B4 FORWARD for the void* caller (action_base_movedeps.cpp)
+                  index, startTime, blendTime, weight);
+}
+
 // ---------------------------------------------------------------------------
 // ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…HAEBVTime@…1M@Z
 //                                                        retail 0x1800ff840
@@ -2059,17 +2068,15 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
 // which is exactly where the recorded pointer-typed-as-int trap bites, so they
 // are typed against the callee's mangled name rather than guessed.
 // ---------------------------------------------------------------------------
-void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
+void MeshInstance::PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int index,
                                  const System::Time* startTime, const System::Time* blendTime,
                                  float weight) {
     // ENDGAME B.3.5 caller batch. `GetMesh()->_nodes` is the embedded
     // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
-    // LEFT: the `_animation` view (see SetMesh) and the untyped group handle
-    // are this member's declared signature, which its code/Game callers hold.
+    // LEFT: the `_animation` view (see SetMesh).
     reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: POD as SetMesh
         ->::Graphics::AnimationState::PlayAnimation(
-            Object::ExternalPtr<::Graphics::AnimationGroup>(
-                static_cast<::Graphics::AnimationGroup*>(group.p)),   // LEFT: SIG ExternalPtrHandle (as SetMaterialInstance)
+            group,
             index,
             GetMesh()->GetNodes(),
             *startTime,
@@ -2305,11 +2312,9 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
 // to a re-entrant reader, so the four stay four statements. Read in the order
 // edge (+0x38), mask (+0x28), skinEdge (+0x40), skinMask (+0x30).
 // ---------------------------------------------------------------------------
-void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
+void EdgeMeshInstance::SetMesh(Object::ExternalPtr<EdgeMesh> mesh, MeshInstance* followed) {
     _followed = followed;
-    // LEFT: SIG EdgeMeshInstance::SetMesh(ExternalPtrHandle) is the untyped
-    // handle its code/Game caller holds; `_mesh` itself is typed.
-    EdgeMesh* const em = static_cast<EdgeMesh*>(mesh.p);   // LEFT: SIG ExternalPtrHandle (as SetMaterialInstance)
+    EdgeMesh* const em = mesh.Get();
     _mesh = em;
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_edgeMaterial->_shaderClass) & 0x1f);
     _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_maskMaterial->_shaderClass) & 0x1f);
@@ -2320,6 +2325,11 @@ void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
     // member (scene.cpp:1373) and `this` IS a Geometry, so the call is qualified
     // and non-virtual, as retail's is.
     this->::Graphics::Geometry::SetBounds(em->_aabb);
+}
+
+// B4 FORWARD: tool_base_render.cpp:607 holds its EdgeMesh as a void*.
+void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
+    SetMesh(Object::ExternalPtr<EdgeMesh>(static_cast<EdgeMesh*>(mesh.p)), followed);  // LEFT: B4 FORWARD for the void* caller (tool_base_render.cpp:607)
 }
 
 // ---------------------------------------------------------------------------
