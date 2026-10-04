@@ -358,12 +358,11 @@ static_assert(offsetof(Renderer, contextSerial)    == 0x44, "Renderer::contextSe
 // NO REAL CONSTRUCTOR, NO REAL DESTRUCTOR (ENDGAME §B.1 decision 2, B4b-2,
 // B35_RULES §11)
 // -------------------------------------------------------------------------
-// `??0Camera(const Frustum&, const Transform3&, bool)` (0x1800fe960),
 // `??0Camera()` (0x1800fe7f0), `??0Renderer()` (0x180105180) and
-// `??1Renderer()` (0x1800180a0) keep their doors — `fn_Graphics_Camera_Ctor`
-// and `fn_Graphics_Renderer_Ctor` are named in B35_RULES §11's leave list. They
-// are DECLARED below so no caller batch has to edit this header and left
-// UNDEFINED; `Renderer`'s ctor additionally must not become an init-list,
+// `??1Renderer()` (0x1800180a0) keep their doors — `fn_Graphics_Renderer_Ctor`
+// is named in B35_RULES §11's leave list. (`??0Camera(const Frustum&, const
+// Transform3&, bool)` 0x1800fe960 is a defined member since B.4 wave X round 4.)
+// `Renderer`'s ctor must not become an init-list,
 // because RULE B5-13 requires +0x3c and +0x4c stay unwritten.
 //
 // RULE B5-7: nothing below adds a static initialiser, a lazy singleton or a
@@ -404,10 +403,8 @@ public:
     Camera& operator=(const Camera& src) = default;       // 0x180017c40  door: renderer.cpp
 
     // `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
-    // @ 0x1800fe960 — PORTED, and it STAYS A DOOR (B4b-2, §11's leave list:
-    // `fn_Graphics_Camera_Ctor` and its four call sites are not retired in
-    // step 5). Declared so no caller batch has to edit this header, and
-    // deliberately left UNDEFINED.
+    // @ 0x1800fe960 — defined in renderer.cpp (its disassembly quoted there);
+    // `RtGraphics_Camera_Ctor` forwards to it for its POD-typed callers.
     Camera(const ::Frustum& frustum, const Math::Transform3& cameraToWorld, bool zUp);
 
     // ---- the ten non-constructor exports ----------------------------------
