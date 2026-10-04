@@ -4308,8 +4308,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
 // world position the colonists are jittered around (citizen Foundation-F).
 static int StartTown_SpawnCitizens(MapGenerator* startConfig, EntityList* entityList,
                                    Map* game, int spawnX, int spawnY) {
-    const int famCount  = static_cast<int32_t>(startConfig->boolIntCount);   // read as int32 (Serialize int&)
-    MapGenerator::InitialFamily* families = startConfig->boolIntArray;
+    const int famCount  = startConfig->families.count;   // read as int32 (Serialize int&)
+    MapGenerator::InitialFamily* families = startConfig->families.data;
     if (famCount <= 0 || !families) return 0;
     // Town-centre world position (same tile->world mapping as the camera) +
     // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
@@ -5041,7 +5041,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
     int spawned = 0;
     for (int e = 0; e < count; ++e) {
         MapGenerator::ExternalRef* entry = &pool[e];
-        const char* ename = entry->strPtr ? (char*)entry->strPtr : "(null)";   // LEFT: ExternalRef::strPtr is the String's raw storage (H5, MapGenerator.h GAME-b)
+        const char* ename = entry->strPtr._data ? entry->strPtr._data : "(null)";
         fprintf(stderr, "[startTown::res] begin [%d] name=\"%.48s\"\n", e, ename);
         fflush(stderr);
         ComponentDescription* tmpl = StartTown_ResolveTemplate(entry);
@@ -5396,7 +5396,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     fprintf(stderr, "[startTown::spawn] pools: simple(+0x98)=%d bldg(+0x88)=%d "
             "resource(+0x78)=%d citizenFam(+0x68)=%d\n",
             sc->refArray3.count, sc->refArray2.count,
-            sc->refArray1.count, static_cast<int32_t>(sc->boolIntCount));
+            sc->refArray1.count, sc->families.count);
     fflush(stderr);
 
     // DIAG — fn-pointer state + per-pool first-entry resolution probe.
@@ -5407,7 +5407,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     // we can tell a deserialize bug (garbage text) from a missing-resource issue
     // (correct text but Find fails). System::String = ptr to char buffer.
     auto dumpStr = [](MapGenerator::ExternalRef* ref) -> const char* {
-        char* p = (char*)ref->strPtr;   // LEFT: ExternalRef::strPtr is the String's raw storage (H5, MapGenerator.h GAME-b)
+        char* p = ref->strPtr._data;
         return p ? p : "(null)";
     };
     // The first entry of each pool (the structure pool's entry starts with its ref).

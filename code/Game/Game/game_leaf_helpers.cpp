@@ -79,20 +79,20 @@ using ExternalRef = MapGenerator::ExternalRef;
 using InitialStructure = MapGenerator::InitialStructure;
 
 void CopyExternalRef(ExternalRef* d, const ExternalRef* s) {
-    new (&d->strPtr) System::String(*reinterpret_cast<const System::String*>(&s->strPtr));   // +0x00  // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+    new (&d->strPtr) System::String(s->strPtr);   // +0x00
     d->factoryGen = s->factoryGen;   // +0x08
     d->resolved = s->resolved;       // +0x10
 }
 // Generation seed is -1, not 0: 0 is a live ExternalFactory generation and
 // would make the lazy resolver take its "cache valid" early-out on a null.
 void ZeroExternalRef(ExternalRef* d) {
-    d->strPtr = nullptr;             // +0x00 qword 0
+    d->strPtr._data = nullptr;       // +0x00 qword 0 (raw element memory)
     d->factoryGen = -1;              // +0x08
     d->resolved = nullptr;           // +0x10 qword 0
 }
 void DestroyExternalRefs(ExternalRef* elems, int count) {
     for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(&elems[i].strPtr)->~String();   // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+        elems[i].strPtr.~String();
 }
 void AssignRefTriple18(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<ExternalRef, &CopyExternalRef>(d, s);
@@ -116,7 +116,7 @@ using RefTriple18Array = Collection::Array<uint8_t, Collection::DefaultAllocator
                                            Collection::ExplicitSpec<&kSpec_RefTriple18>>;
 
 void CopyInitialStructure(InitialStructure* d, const InitialStructure* s) {
-    new (&d->structure.strPtr) System::String(*reinterpret_cast<const System::String*>(&s->structure.strPtr));   // +0x00  // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+    new (&d->structure.strPtr) System::String(s->structure.strPtr);   // +0x00
     d->structure.factoryGen = s->structure.factoryGen;   // +0x08
     d->structure.resolved = s->structure.resolved;       // +0x10
     d->offsetX  = s->offsetX;    // +0x18
@@ -126,7 +126,7 @@ void CopyInitialStructure(InitialStructure* d, const InitialStructure* s) {
     d->rotation = s->rotation;   // +0x28
 }
 void ZeroInitialStructure(InitialStructure* d) {
-    d->structure.strPtr = nullptr;      // +0x00 qword 0
+    d->structure.strPtr._data = nullptr;   // +0x00 qword 0 (raw element memory)
     d->structure.factoryGen = -1;       // +0x08 generation -1
     d->structure.resolved = nullptr;    // +0x10 qword 0
     d->offsetX = 0;                     // _offsetX/_offsetY (one qword 0 before; H7)
@@ -137,7 +137,7 @@ void ZeroInitialStructure(InitialStructure* d) {
 }
 void DestroyInitialStructures(InitialStructure* elems, int count) {
     for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(&elems[i].structure.strPtr)->~String();   // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+        elems[i].structure.strPtr.~String();
 }
 void AssignInitialStructure30(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<InitialStructure, &CopyInitialStructure>(d, s);
@@ -322,7 +322,7 @@ void Game_TerrainResolveMaterial(void* refTriple) {
     int factoryGen = efactory->_generation;   // factory+8
     if (ref->factoryGen == factoryGen) return;
 
-    System::Filename fnameBuf(*reinterpret_cast<const System::String*>(&ref->strPtr));  // String @ +0  // LEFT: MapGenerator.h (GAME-3): ExternalRef::strPtr is raw String storage (H5)
+    System::Filename fnameBuf(ref->strPtr);  // String @ +0
     void* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge
 
     void* result = nullptr;

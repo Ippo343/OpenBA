@@ -24,13 +24,19 @@
 #include "Object/exe_type.h"
 #include "system/String.h"
 
+namespace UI { class StringTable; }
+
 class MapGenerator final : public Object::External {
     DECLARE_EXE_TYPE(MapGenerator)
 
 public:
     // An External reference stored as String + factoryGen + resolvedPtr (0x18).
+    // B4 P2 GAME-3 (H5): the name is a real System::String. Retail's inlined
+    // ExternalRef ctor in 0x1400a3030 stores qword 0 (String()), dword -1, qword 0;
+    // its dtor (0x14001aea0, per ref) is ~String alone. The field keeps the name
+    // `strPtr` its readers use.
     struct ExternalRef {
-        void*    strPtr;        // +0x00: System::String data pointer
+        System::String strPtr;  // +0x00: the referenced External's name
         int32_t  factoryGen;    // +0x08: factory generation counter (-1 = unresolved)
         uint8_t  _pad0C[4];     // +0x0C: padding
         void*    resolved;      // +0x10: resolved External* pointer
@@ -39,11 +45,16 @@ public:
     // element (B.4 GAME-c: the element per pool is the stride retail's dtor
     // 0x14001aea0 destroys it with: 0x14001b030 = 0x18 ExternalRef, 0x14001b0a0 =
     // 0x30 InitialStructure).
+    // B4 P2 GAME-3: the pool owns its elements the way retail's member arrays
+    // do: the ctor (0x1400a3030) zeroes both qwords, and each pool's destructor
+    // is the one retail's dtor 0x14001aea0 runs at its offset, in member order
+    // (defined per element type in mapgenerator.cpp).
     template <class T>
     struct DynArrayHeader {
-        T*       data;          // +0x00: pointer to element array
-        int32_t  count;         // +0x08: number of elements
-        int32_t  capacity;      // +0x0C: allocated capacity
+        T*       data = nullptr;  // +0x00: pointer to element array
+        int32_t  count = 0;       // +0x08: number of elements
+        int32_t  capacity = 0;    // +0x0C: allocated capacity
+        ~DynArrayHeader();
     };
 
     // One _citizens entry (stride 8, 0x14001b270; Serialize: bool, int).
@@ -75,7 +86,7 @@ public:
     virtual Object::External* Construct();                        // [8] 0x14001ae20
 
 public:
-    void*    _field20;           // +0x20: ExternalPtr (_stringTable)
+    UI::StringTable* _field20;   // +0x20: ExternalPtr<StringTable> (_stringTable)
     System::String _field28;     // +0x28: _name (B.4 GAME-b: the ctor stored 0, the dtor ran ~String last)
     System::String _field30;     // +0x30: _description
     uint8_t  enabled;            // +0x38: bool, default 1 (_exposed)
@@ -86,9 +97,9 @@ public:
 
     ExternalRef templateRef;     // +0x48: _citizen template ref
 
-    // +0x60: InitialFamily array (8-byte elements, raw MemAlloc/MemFree)
-    InitialFamily* boolIntArray; // +0x60: data
-    uint64_t boolIntCount;       // +0x68: count (serialized as int32)
+    // +0x60: InitialFamily array (8-byte elements, raw MemAlloc/MemFree); the
+    // count is retail's int32 at +0x68, the capacity +0x6C.
+    DynArrayHeader<InitialFamily> families;  // +0x60 _citizens (dtor 0x14001af47: MemFree, zero both qwords)
 
     DynArrayHeader<ExternalRef>      refArray1;   // +0x70: ExternalRef (0x18) pool (dtor 0x14001af41 -> 0x14001b030)
     DynArrayHeader<InitialStructure> refArray2;   // +0x80: InitialStructure (0x30) pool (dtor 0x14001af37 -> 0x14001b0a0)
@@ -144,8 +155,15 @@ static_assert(offsetof(MapGenerator, enabled) == 0x38, "+0x38");
 static_assert(offsetof(MapGenerator, subdivisions) == 0x3C, "+0x3C");
 static_assert(offsetof(MapGenerator, scale) == 0x40, "+0x40");
 static_assert(offsetof(MapGenerator, templateRef) == 0x48, "+0x48");
-static_assert(offsetof(MapGenerator, boolIntArray) == 0x60, "+0x60");
-static_assert(offsetof(MapGenerator, boolIntCount) == 0x68, "+0x68");
+static_assert(offsetof(MapGenerator, families) == 0x60, "+0x60");
+static_assert(offsetof(MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>, count) == 0x08, "+0x68 count");
+static_assert(offsetof(MapGenerator::ExternalRef, factoryGen) == 0x08, "ExternalRef +0x08");
+static_assert(offsetof(MapGenerator::ExternalRef, resolved) == 0x10, "ExternalRef +0x10");
+
+// The three pool destructors (mapgenerator.cpp), declared before any use.
+template <> MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>::~DynArrayHeader();
+template <> MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>::~DynArrayHeader();
+template <> MapGenerator::DynArrayHeader<MapGenerator::InitialStructure>::~DynArrayHeader();
 static_assert(offsetof(MapGenerator, refArray1) == 0x70, "+0x70");
 static_assert(offsetof(MapGenerator, refArray2) == 0x80, "+0x80");
 static_assert(offsetof(MapGenerator, refArray3) == 0x90, "+0x90");

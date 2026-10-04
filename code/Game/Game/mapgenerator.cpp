@@ -52,23 +52,14 @@ MapGenerator::MapGenerator() {
     subdivisions = 8;     // grid subdivision count
     scale = 2.0f;         // terrain scale
 
-    // ExternalRef at +0x48 (String + factoryGen + resolvedPtr)
-    templateRef.strPtr = nullptr;
+    // ExternalRef at +0x48 (String + factoryGen + resolvedPtr); the name is the
+    // member's String() (qword 0, retail 0x1400a3080)
     templateRef.factoryGen = -1;  // 0xFFFFFFFF = unresolved
     templateRef.resolved = nullptr;
 
-    // BoolInt array at +0x60
-    boolIntArray = nullptr;
-    boolIntCount = 0;
-
-    // Dynamic arrays at +0x70 through +0xD8 (all zeroed)
-    memset(&refArray1, 0, sizeof(refArray1));  // +0x70
-    memset(&refArray2, 0, sizeof(refArray2));  // +0x80
-    memset(&refArray3, 0, sizeof(refArray3));  // +0x90
-    memset(&refArray4, 0, sizeof(refArray4));  // +0xA0
-    memset(&refArray5, 0, sizeof(refArray5));  // +0xB0
-    memset(&refArray6, 0, sizeof(refArray6));  // +0xC0
-    memset(&refArray7, 0, sizeof(refArray7));  // +0xD0
+    // The InitialFamily array at +0x60 and the dynamic arrays at +0x70 through
+    // +0xD8: the members' initialisers zero both qwords of each (retail
+    // 0x1400a308e..0x1400a30eb).
 
     // Scalar generation parameters (+0xE0 through +0x114)
     paramE0 = 0;
@@ -87,7 +78,6 @@ MapGenerator::MapGenerator() {
     param114 = 0;
 
     // ExternalRef at +0x118 (terrain description)
-    descRef1.strPtr = nullptr;
     descRef1.factoryGen = -1;
     descRef1.resolved = nullptr;
 
@@ -95,7 +85,6 @@ MapGenerator::MapGenerator() {
     terrainAmplitude = 6.0f;
 
     // ExternalRef at +0x138 (climate description)
-    descRef2.strPtr = nullptr;
     descRef2.factoryGen = -1;
     descRef2.resolved = nullptr;
 
@@ -103,7 +92,6 @@ MapGenerator::MapGenerator() {
     chunkSize = 16;
 
     // ExternalRef at +0x158 (vegetation description)
-    descRef3.strPtr = nullptr;
     descRef3.factoryGen = -1;
     descRef3.resolved = nullptr;
 }
@@ -114,32 +102,31 @@ MapGenerator::MapGenerator() {
 // Retail body (0x14001aea0, verified against the disassembly's CALL list —
 // three String dtors, 5x b030, 1x b0a0, 1x b030, MemFree, three String dtors,
 // then a tail JMP to External::~External, which is the compiler's chain here).
-// Field order is load-bearing (reverse construction order), so it is kept
-// literal rather than folded into a loop. Moved here from
-// unreg_lane1_mapgenerator_dtorbody.cpp, whose registered door now delegates.
-MapGenerator::~MapGenerator() {
-    // Three trailing description-file references.
-    reinterpret_cast<System::String*>(&descRef3.strPtr)->~String();   // B.3.1 bridge: the COW pointers
-    reinterpret_cast<System::String*>(&descRef2.strPtr)->~String();
-    reinterpret_cast<System::String*>(&descRef1.strPtr)->~String();
+// That is exactly reverse member order, so the members' own destructors run it
+// (B4 P2 GAME-3): descRef3 / descRef2 / descRef1 (~String of each ref's name),
+// refArray7 .. refArray1 (the pool destructors below), families (+0x60),
+// templateRef, _field30, _field28, then ~External.
+MapGenerator::~MapGenerator() {}
 
-    // Seven resource/biome arrays, high offset first.
-    Game_DestroyStringArray18(&refArray7);
-    Game_DestroyStringArray18(&refArray6);
-    Game_DestroyStringArray18(&refArray5);
-    Game_DestroyStringArray18(&refArray4);
-    Game_DestroyStringArray18(&refArray3);
-    Game_DestroyStringArray30(&refArray2);   // 0x30-byte elements
-    Game_DestroyStringArray18(&refArray1);
-
-    // The plain bool/int buffer at +0x60 (header is {data, count} — retail
-    // zeroes both qwords, so +0x68 goes with it).
-    if (boolIntArray) Object::detail::InternalMemFree(boolIntArray);
-    boolIntArray = nullptr;
-    boolIntCount = 0;
-
-    // templateRef; then the compiler destroys _field30 and _field28 (members).
-    reinterpret_cast<System::String*>(&templateRef.strPtr)->~String();
+// The pool destructors 0x14001b030 / 0x14001b0a0 (game_leaf_helpers.cpp), and
+// the InitialFamily pool's, which retail inlines at 0x14001af47: MemFree the
+// data, then zero both qwords of the header.
+template <>
+MapGenerator::DynArrayHeader<MapGenerator::ExternalRef>::~DynArrayHeader() {
+    Game_DestroyStringArray18(this);
+}
+template <>
+MapGenerator::DynArrayHeader<MapGenerator::InitialStructure>::~DynArrayHeader() {
+    Game_DestroyStringArray30(this);   // 0x30-byte elements
+}
+template <>
+MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>::~DynArrayHeader() {
+    // retail calls MemFree unconditionally (0x14001af4b); the tree's null test
+    // stays (known_port_issues 14d)
+    if (data) Object::detail::InternalMemFree(data);
+    data = nullptr;
+    count = 0;
+    capacity = 0;
 }
 
 // ============================================================
@@ -240,12 +227,22 @@ bool MG_IsLoading(IO::Serializer& serializer) {
 // stride 8 — InitialFamily {bool _educated@0, int _maxChildCount@4}, exe 0x14001b270.
 // Retail's assign is one qword; its init writes byte 0 and dword 4, leaving
 // [1,4) untouched.
+using ExternalRef      = MapGenerator::ExternalRef;
+using InitialFamily    = MapGenerator::InitialFamily;
+using InitialStructure = MapGenerator::InitialStructure;
+
+void CopyMGFamily(InitialFamily* d, const InitialFamily* s) {
+    *d = *s;   // the eight bytes, padding included (it is a declared member)
+}
+void ZeroMGFamily(InitialFamily* e) {
+    e->educated = false;     // byte 0
+    e->maxChildCount = 0;    // dword 4
+}
 void AssignMGFamily(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+    rtcoll::AssignAs<InitialFamily, &CopyMGFamily>(d, s);
 }
 void MG_InitFamily(uint8_t* e) {
-    *e = 0;
-    *(int32_t*)(e + 4) = 0;
+    rtcoll::InitAs<InitialFamily, &ZeroMGFamily>(e);
 }
 // stays explicit: `init` writes byte 0 and dword 4 and deliberately leaves
 // [1,4) untouched — an `init unwritten` extent, i.e. a probe contract, not a
@@ -262,19 +259,28 @@ using MGFamilyArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // stride 0x18 — ExternalRef {String@0, gen@8, resolved@0x10}, exe 0x14001b340.
 // Neither arm writes [0x0c,0x10); the tail seed of -1 is load-bearing (see
 // goal_exe_helpers.cpp).
+void CopyMGRef(ExternalRef* d, const ExternalRef* s) {
+    new (&d->strPtr) System::String(s->strPtr);   // +0x00
+    d->factoryGen = s->factoryGen;                // +0x08 dword
+    d->resolved = s->resolved;                    // +0x10 qword
+}
+void ZeroMGRef(ExternalRef* e) {
+    e->strPtr._data = nullptr;   // +0x00 qword 0 (raw element memory)
+    e->factoryGen = -1;          // +0x08
+    e->resolved = nullptr;       // +0x10 qword 0
+}
+void DestroyMGRefs(ExternalRef* elems, int count) {
+    for (int i = 0; i < count; ++i)
+        elems[i].strPtr.~String();
+}
 void AssignMGRef(uint8_t* d, const uint8_t* s) {
-    new (d) System::String(*reinterpret_cast<const System::String*>(s));     // +0x00
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+    rtcoll::AssignAs<ExternalRef, &CopyMGRef>(d, s);
 }
 void MG_InitRef(uint8_t* e) {
-    *(uint64_t*)e          = 0;
-    *(int32_t*)(e + 8)     = -1;
-    *(uint64_t*)(e + 0x10) = 0;
+    rtcoll::InitAs<ExternalRef, &ZeroMGRef>(e);
 }
-void DestroyMGRef(void* /*ignoredThis*/, uint8_t* base, int count) {
-    for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x18)->~String();
+void DestroyMGRef(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<ExternalRef, &DestroyMGRefs>(ignoredThis, base, count);
 }
 // stays explicit: String copy-ctor `assign` (byteCopy=false) plus a real
 // `destroy`, a -1 generation seed, and an unwritten extent at [0x0c,0x10).
@@ -291,20 +297,34 @@ using MGRefArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // _width@0x20, _height@0x24, _rotation@0x28}, exe 0x14001b4e0. Retail's assign
 // copies +0x08 (dword), +0x10 (qword), +0x18..+0x28 (five dwords) after the String
 // copy-ctor; its init leaves [0x0c,0x10) and [0x2c,0x30) untouched, as does assign.
+void CopyMGStructure(InitialStructure* d, const InitialStructure* s) {
+    CopyMGRef(&d->structure, &s->structure);
+    d->offsetX  = s->offsetX;    // +0x18
+    d->offsetY  = s->offsetY;    // +0x1c
+    d->width    = s->width;      // +0x20
+    d->height   = s->height;     // +0x24
+    d->rotation = s->rotation;   // +0x28
+}
+void ZeroMGStructure(InitialStructure* e) {
+    ZeroMGRef(&e->structure);
+    e->offsetX = 0;              // _offsetX, _offsetY (one qword 0 before; H7)
+    e->offsetY = 0;
+    e->width = -1;               // _width = _height = -1 (one qword before; H7)
+    e->height = -1;
+    e->rotation = 0;             // _rotation
+}
+void DestroyMGStructures(InitialStructure* elems, int count) {
+    for (int i = 0; i < count; ++i)
+        elems[i].structure.strPtr.~String();
+}
 void AssignMGStructure(uint8_t* d, const uint8_t* s) {
-    AssignMGRef(d, s);
-    for (int off = 0x18; off <= 0x28; off += 4)
-        *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
+    rtcoll::AssignAs<InitialStructure, &CopyMGStructure>(d, s);
 }
 void MG_InitStructure(uint8_t* e) {
-    MG_InitRef(e);
-    *(uint64_t*)(e + 0x18) = 0;                        // _offsetX, _offsetY
-    *(uint64_t*)(e + 0x20) = 0xFFFFFFFFFFFFFFFFULL;    // _width = _height = -1
-    *(int32_t*)(e + 0x28)  = 0;                        // _rotation
+    rtcoll::InitAs<InitialStructure, &ZeroMGStructure>(e);
 }
-void DestroyMGStructure(void* /*ignoredThis*/, uint8_t* base, int count) {
-    for (int i = 0; i < count; ++i)
-        reinterpret_cast<System::String*>(base + static_cast<int64_t>(i) * 0x30)->~String();
+void DestroyMGStructure(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<InitialStructure, &DestroyMGStructures>(ignoredThis, base, count);
 }
 // stays explicit: same as kSpec_MGRef, plus a -1 seed for _width/_height at
 // +0x20 and a second unwritten extent at [0x2c,0x30).
@@ -321,9 +341,9 @@ using MGStructureArray = Collection::Array<uint8_t, Collection::DefaultAllocator
 void MG_Resize(void* header, int newCount, int stride) {
     // B.3.2 bridge: the MapGenerator pools are still raw DynArrayHeader fields.
     switch (stride) {
-    case 8:    reinterpret_cast<MGFamilyArray*>(header)->SetSize(newCount);    break;
-    case 0x18: reinterpret_cast<MGRefArray*>(header)->SetSize(newCount);       break;
-    case 0x30: reinterpret_cast<MGStructureArray*>(header)->SetSize(newCount); break;
+    case 8:    reinterpret_cast<MGFamilyArray*>(header)->SetSize(newCount);    break;   // LEFT: SIG MG_Resize (DynArrayHeader is not a Collection::Array; the one erased core is reached through it)
+    case 0x18: reinterpret_cast<MGRefArray*>(header)->SetSize(newCount);       break;   // LEFT: SIG MG_Resize (DynArrayHeader is not a Collection::Array; the one erased core is reached through it)
+    case 0x30: reinterpret_cast<MGStructureArray*>(header)->SetSize(newCount); break;   // LEFT: SIG MG_Resize (DynArrayHeader is not a Collection::Array; the one erased core is reached through it)
     default:   break;   // no such pool exists; the three callers below are the only ones
     }
 }
@@ -343,8 +363,7 @@ void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader<Map
     MapGenerator::ExternalRef* e = pool.data;
     if (!e) return;
     for (int i = 0; i < n; ++i) {
-        // LEFT: ExternalRef::strPtr is the String's raw storage (H5).
-        reinterpret_cast<System::String*>(&e[i].strPtr)->Serialize(&serializer);  // in place
+        e[i].strPtr.Serialize(&serializer);  // in place
     }
 }
 } // namespace
@@ -360,13 +379,12 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     serializer.Serialize(enabled, nullptr);        // +0x38 _exposed
     serializer.Serialize(subdivisions, nullptr);   // +0x3c _startAreaSize (townSize)
     serializer.Serialize(scale, nullptr);          // +0x40 _citizenRadius
-    // LEFT: ExternalRef::strPtr is the String's raw storage (H5: the dtor's order).
-    reinterpret_cast<System::String*>(&templateRef.strPtr)->Serialize(&serializer);       // +0x48 _citizen template ref
+    templateRef.strPtr.Serialize(&serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        const int n = MG_SerializeCount(serializer, &boolIntArray, static_cast<int32_t>(boolIntCount), 8);
-        InitialFamily* e = boolIntArray;
+        const int n = MG_SerializeCount(serializer, &families, families.count, 8);
+        InitialFamily* e = families.data;
         for (int i = 0; e && i < n; ++i) {
             serializer.Serialize(e[i].educated, nullptr);        // _educated
             serializer.Serialize(e[i].maxChildCount, nullptr);   // _maxChildCount
@@ -382,8 +400,7 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
         const int n = MG_SerializeCount(serializer, &refArray2, refArray2.count, 0x30);
         InitialStructure* e = refArray2.data;
         for (int i = 0; e && i < n; ++i) {   // FUN_14001b6c0, in place
-            // LEFT: ExternalRef::strPtr is the String's raw storage (H5).
-            reinterpret_cast<System::String*>(&e[i].structure.strPtr)->Serialize(&serializer);   // _structure ref name
+            e[i].structure.strPtr.Serialize(&serializer);   // _structure ref name
             serializer.Serialize(e[i].offsetX, nullptr);    // _offsetX
             serializer.Serialize(e[i].offsetY, nullptr);    // _offsetY
             serializer.Serialize(e[i].width, nullptr);      // _width
@@ -416,12 +433,11 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     serializer.Serialize(param114, nullptr);
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
-    // LEFT: ExternalRef::strPtr is the String's raw storage (H5: the dtor's order).
-    reinterpret_cast<System::String*>(&descRef1.strPtr)->Serialize(&serializer);       // descRef1 (terrain)
-    reinterpret_cast<System::String*>(&descRef2.strPtr)->Serialize(&serializer);       // descRef2 (climate)
+    descRef1.strPtr.Serialize(&serializer);       // descRef1 (terrain)
+    descRef2.strPtr.Serialize(&serializer);       // descRef2 (climate)
     serializer.Serialize(terrainAmplitude, nullptr);   // terrainAmplitude
     serializer.Serialize(chunkSize, nullptr);          // chunkSize
-    reinterpret_cast<System::String*>(&descRef3.strPtr)->Serialize(&serializer);       // descRef3 (vegetation)
+    descRef3.strPtr.Serialize(&serializer);       // descRef3 (vegetation)
     serializer.Serialize(param170, nullptr);
 
     return true;   // retail returns AL=1
