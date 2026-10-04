@@ -598,14 +598,14 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             if (flags & 4) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD RtObject::Internal (the mirror X-R1 listed; its door takes the mirror)
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
                 ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
                                               owner->stagingUpdate.count + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD RtObject::Internal (the mirror X-R1 listed; its door takes the mirror)
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge   // LEFT: POD InternalBasePtr::_ptr (the InternalBasePtr ctor takes RtObject::Internal*; RT retypes _ptr to Object::Internal* this round)
                 ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
                                               owner->stagingPostUpdate.count + 1, &ibp);   // 0x140003110
             }
