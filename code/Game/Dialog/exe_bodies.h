@@ -22,6 +22,10 @@
 #include "system/Value.h"   // System::Random (fn_GetCurrentProductIndex); was reached through engine_funcs.h
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
+#include "runtime/types/ui/DialogController.h"     // SA_DialogEntityAlive
+#include "Entity/ComponentEntity.h"                // ComponentEntity::_entityFlags
+#include "Component/TrackerComponent.h"            // fn_TrackerComponent_Rebuild
+#include "Component/ConsumeProduceComponent.h"     // fn_GetCurrentProductIndex
 
 class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
 class TradeUI;         // code/Game/Dialog/TradeUI.h
@@ -149,45 +153,49 @@ extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* ext
 // roster/storage in either state crashed live 2026-07-20 (upgrade path
 // demolishing a house with its panel open). Wrappers bail — the panel freezes
 // until the dialog closes.
-inline bool SA_DialogEntityAlive(void* self) {
-    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+// (B.4 P2 DLG-1: the controller's +0x28 is DialogController::_dataSource; its
+// +0x40 the entity's ComponentEntity::_entityFlags, read as the tree always did
+// whatever the data source is.)
+inline bool SA_DialogEntityAlive(const UI::DialogController* self) {
+    const Object::Base* e = self->_dataSource;
     if (!e) return false;
-    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+    if ((static_cast<const ComponentEntity*>(e)->_entityFlags >> 10) & 1)
         return false;
     return true;
 }
 
 // TrackerComponent rebuild: FUN_14000d9d0 — moves/rebuilds tracker item arrays
 // Called when game world item count changes.
-// param_1 = dst array descriptor (uint64_t[2]: ptr, count+capacity)
-// param_2 = src array descriptor (uint64_t[2]: ptr, count+capacity)
+// param_1 = dst array descriptor, param_2 = src array descriptor: each a
+// TrackerComponent::EntryArray {data, count, capacity}.
 // Frees old dst buffer, allocates count*16 bytes, copies 16-byte entries from src.
 inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
     if (dstArray == srcArray) return;
-    uint64_t* dst = (uint64_t*)dstArray;
-    uint64_t* src = (uint64_t*)srcArray;
-    System::MemoryAllocator::MemFree((void*)*dst);
-    dst[1] = 0;
-    dst[0] = 0;
-    int count = (int)(uint32_t)src[1];  // low 32 bits of src[1]
-    dst[1] = (uint64_t)(uint32_t)count;
+    // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp, DLG-2, hands the
+    // addresses of TrackerComponent's +0x38 / +0x28 field triples as void*).
+    TrackerComponent::EntryArray* dst = reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);
+    TrackerComponent::EntryArray* src = reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);
+    System::MemoryAllocator::MemFree(dst->data);
+    dst->count = 0;          // the old qword store over count | capacity
+    dst->capacity = 0;
+    dst->data = nullptr;
+    int count = src->count;
+    dst->count = count;      // the qword store (uint32)count: capacity 0
+    dst->capacity = 0;
     if (count > 0) {
-        // High word of dst[1]+4 = capacity (same as count on fresh alloc)
-        *(int*)((uintptr_t)dst + 0xc) = count;
-        void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)count * 16, 8);
-        *dst = (uint64_t)newBuf;
+        // capacity = count on the fresh allocation
+        dst->capacity = count;
+        dst->data = static_cast<TrackerComponent::Entry*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)count * 16, 8));
     }
     // Copy entries
-    if ((int)(uint32_t)dst[1] > 0) {
-        uint8_t* dstBuf = (uint8_t*)*dst;
-        uint8_t* srcBuf = (uint8_t*)*src;
-        int n = (int)(uint32_t)dst[1];
+    if (dst->count > 0) {
+        TrackerComponent::Entry* dstBuf = dst->data;
+        TrackerComponent::Entry* srcBuf = src->data;
+        int n = dst->count;
         for (int i = 0; i < n; i++) {
             if (dstBuf) {
-                uint64_t* d = (uint64_t*)(dstBuf + (uintptr_t)i * 16);
-                uint64_t* s = (uint64_t*)(srcBuf + (uintptr_t)i * 16);
-                d[0] = s[0];
-                d[1] = s[1];
+                dstBuf[i] = srcBuf[i];   // the 16 bytes (two qwords)
             }
         }
     }
@@ -197,18 +205,20 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
 // Reads +0x50 product index; if not -1 (0xffffffff), returns it directly.
 // If -1, performs weighted random selection from +0x58 float array (count at +0x60)
 // using System::Random::RandFloat on the game singleton's Random at +0xd8.
-inline uint32_t fn_GetCurrentProductIndex(void* component) {
-    uintptr_t c = (uintptr_t)component;
-    uint32_t idx = *(uint32_t*)(c + 0x50);
+// B.4 P2 DLG-1: typed on its one caller's ConsumeProduceComponent (consumeproduceui.cpp).
+// A second port of 0x140119470 is PickConsumeRecipe (Action/action_child_ctors2.cpp);
+// it differs (it guards a null game / Random), so the two are not merged here.
+inline uint32_t fn_GetCurrentProductIndex(const ConsumeProduceComponent* component) {
+    uint32_t idx = static_cast<uint32_t>(component->consumeResourceId);
     if ((int)idx < 0) {
         if (idx != 0xffffffff) return 0;
-        int count = *(int*)(c + 0x60);
-        float* weights = *(float**)(c + 0x58);
+        int count = component->consumeCount;
+        float* weights = component->consumeRates;
         float totalWeight = 0.0f;
         for (int i = 0; i < count; i++) totalWeight += weights[i];
-        void* randomPtr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
-        // B.3.4b bridge: ?RandFloat@Random@System@@QEAAMXZ (0x1800c7d40).
-        float randVal = reinterpret_cast<System::Random*>(randomPtr)->RandFloat();
+        System::Random* randomPtr = GameUpdateLoop::_singleton->m_random;
+        // ?RandFloat@Random@System@@QEAAMXZ (0x1800c7d40).
+        float randVal = randomPtr->RandFloat();
         float accum = 0.0f;
         for (int i = 0; i < count; i++) {
             accum += weights[i];
