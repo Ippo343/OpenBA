@@ -63,19 +63,8 @@
 #include "Game/Profession.h"
 #include "Game/ProfessionList.h"
 #include "Game/PlayerToolManager.h"
-
-// FUN_140011050 — Entity::FindComponent<CitizenAIComponent>, the component whose +0x28
-// holds the citizen's current action-state index (the Action text on this panel and on
-// the Follow dialog). Retail compares against [0x1401c70e8] = CitizenAIComponent's
-// type id (0x140011093) and IsDerivedFrom-checks with it (0x1400110ec).
-// ENDGAME B.3.9 CB: by the class static. The old spelling went through
-// TypeId_CitizenAIComponent, which a since-deleted EnsureGlobals() pointed at a
-// "ProfessionComponent" by-name id (no such class) or a static 0, so the finder found
-// nothing and the Action line was skipped.
-void fn_FindComponent_CitizenAI(void* entity, void* retval) {
-    uint32_t tid = CitizenAIComponent::TypeId();
-    Entity_FindComponentByExeTypeId(entity, retval, &tid);
-}
+#include "Game/WorkScheduler.h"        // WorkScheduler::trees (GameUpdateLoop +0x118)
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode
 
 // A partially-initialized standalone citizen can leave CitizenAI description/pointer
 // fields as garbage (0, the -1 unresolved-IBP sentinel, or non-canonical high values
@@ -138,28 +127,27 @@ static inline bool CitUI_OkTextParam(const UI::TextElement* elem) {
 // ============================================================
 // WorldGrid_FindEntity (0x1400f9a60)
 // ============================================================
-// BST search: finds the Work at tile index `tileIndex` in the world work tree.
-// worldGrid+0x30 = root node ptr.
-// Node layout (piVar1): *piVar1 = key (tile index), *(piVar1+6) = left, *(piVar1+8) = right
-// On match: the node's +0x08 (the Work InternalBasePtr, 8 bytes); else null.
-// LEFT: the tree (GameUpdateLoop +0x118) and its nodes have no class.
-static Work* WorldGrid_FindEntity_Impl(void* worldGrid, int tileIndex)
+// BST search: finds the Work with id `tileIndex` in the work scheduler's first
+// id tree (GameUpdateLoop +0x118 is the WorkScheduler; +0x30 is trees[0], its
+// nodes WorkSchedulerIdNode: key +0x00, work +0x08, left +0x18, right +0x20).
+// On match: the node's Work; else null.
+static Work* WorldGrid_FindEntity_Impl(const WorkScheduler* scheduler, int tileIndex)
 {
-    int* piVar1 = *(int**)((uintptr_t)worldGrid + 0x30);
+    const WorkSchedulerIdNode* piVar1 = scheduler->trees[0].root;
     while (true) {
         if (piVar1 == nullptr) {
             return nullptr;
         }
-        if (*piVar1 <= tileIndex) {
-            if (tileIndex <= *piVar1) {
+        if (piVar1->key <= tileIndex) {
+            if (tileIndex <= piVar1->key) {
                 // Match
-                return *(Work**)(piVar1 + 2);
+                return piVar1->work.Get();
             }
             // Go right
-            piVar1 = *(int**)(piVar1 + 8);
+            piVar1 = piVar1->right;
         } else {
             // Go left
-            piVar1 = *(int**)(piVar1 + 6);
+            piVar1 = piVar1->left;
         }
     }
 }
@@ -551,7 +539,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
         // Find the CitizenComponent on the entity
-        uint64_t citizenAIRef = 0;
+        CitizenComponent* citizenAIRef = nullptr;
         fn_FindComponent_Citizen(entity, &citizenAIRef);
 
         // Load Dialog/Follow.rsc resource
@@ -575,7 +563,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
             FollowDialog* fd = ::new (followMem) FollowDialog(
                 _dialog->_ui, checkedRes, Object::InternalPtr<UI::DialogInstance>());
 
-            fd->citizen = reinterpret_cast<CitizenComponent*>(citizenAIRef);   // entity to follow (the citizen IBP)
+            fd->citizen = citizenAIRef;   // entity to follow (the citizen IBP)
             fd->citizenUI = this;                      // controller back-reference
             // +0xC8 textFollow / +0xD0 textAction: zeroed by the ctor, set by slot 4.
 

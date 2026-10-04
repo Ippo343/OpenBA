@@ -30,12 +30,8 @@ class TradeUI;         // code/Game/Dialog/TradeUI.h
 extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14005e230
 
 // ---- citizenui.cpp
-// fn_FindComponent_CitizenAI — FUN_140011050, Entity::FindComponent<CitizenAIComponent>
-// (compares against [0x1401c70e8] at 0x140011093, IsDerivedFrom at 0x1400110ec).
-// ENDGAME B.3.9 CB: defined in code/Game/Dialog/citizenui.cpp over
-// CitizenAIComponent::TypeId(); the cell is unregistered, so the old inline over
-// the cell pointer only worked when a dialog re-pointed that global.
-void fn_FindComponent_CitizenAI(void* entity, void* retval);
+// B.4 P2 DLG-1: fn_FindComponent_CitizenAI (0x140011050) had no caller; deleted
+// (callers use ComponentEntity::FindComponent<CitizenAIComponent>()).
 
 // ---- edittool_select.cpp
 // B4 FORWARD to EditTool::SelectEntity (Player/EditTool.h) for the outside callers.
