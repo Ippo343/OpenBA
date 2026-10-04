@@ -49,7 +49,7 @@
 
 
 // The demo foundation's OWNER entity (starttown.cpp, set alongside g_pConstructionDemoSite).
-extern "C" void* g_pConstructionDemoEntity;
+extern "C" ComponentEntity* g_pConstructionDemoEntity;
 
 // PHASE GATHER — GatherRawMaterials Work wrappers (gatherrawmaterials.cpp).
 extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);

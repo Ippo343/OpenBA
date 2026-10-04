@@ -109,7 +109,7 @@ static RawMaterialDescription* BCS1_FindRawMatDesc(ComponentDescription* matEnti
 extern "C" { void* g_pConstructionDemoSite = nullptr; }
 // The demo foundation's OWNER entity (set by StartTown alongside g_pConstructionDemoSite).
 // The construction force harness uses it as the GatherRawMaterials/BuildStructure work-area.
-extern "C" { void* g_pConstructionDemoEntity = nullptr; }
+extern "C" { ComponentEntity* g_pConstructionDemoEntity = nullptr; }
 
 // Best-effort completion check: a force-completed building has its ModelComponent build
 // variant (+0x166) at the final sub-mesh of a multi-stage group; a genuine foundation

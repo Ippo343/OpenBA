@@ -54,7 +54,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // The force-worked ForesterLodge (starttown.cpp, BANISHED_LIVE_WORKPLACE).
-extern void* g_pForceWorkBuilding;
+extern ComponentEntity* g_pForceWorkBuilding;
 
 // ForesterWork Execute-readiness (code/Game/Work/foresterwork.cpp): true once every sub-fn /
 // type-id global / .rdata float that ForesterWork::Execute actually derefs is resolved

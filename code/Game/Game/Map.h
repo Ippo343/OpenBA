@@ -24,7 +24,7 @@
 //                            count +0x88 (Serialize(int&) + resize
 //                            0x14009aa90), capacity +0x8C
 //   +0x90 int16[9]           Serialize(9, short*) (0x14009f100); ctor zero
-//   +0xA2 bool               ctor 1; the loader sets it to 1
+//   +0xA2 uint8_t            ctor 1; the loader sets it to 1
 //   +0x68 / +0x70            the pathfinder worker and the coarse region graph
 //                            (typed by B.4 ACT-a)
 //   +0xA8..+0xE8             ONE pooled cell queue (Action/PathSearch.h), the
@@ -112,13 +112,16 @@ public:
                                  //       0x140046b2c hands it to 0x1400a6fe0)
     RegionGraph* regionGraph;    // +0x70 ctor 0; the coarse region graph (e8c0 MemAlloc(0x108) +
                                  //       0x1400a8670; 0x140046b1b hands it to 0x1400a8c90)
-    int64_t* regionPairCache;    // +0x78 ctor 0; the region pair cache (Update hands it to 0x1400a5d10,
-                                 //       whose tree body takes int64_t*)
+    RegionPairCache* regionPairCache;   // +0x78 ctor 0; the region pair cache (Action/PathSearch.h:
+                                 //       MemAlloc(0x38) in the e8c0 tail; Update hands it to
+                                 //       0x1400a5d10, the dtor 0x14009ed60 frees it)
     MapCell* cells;              // +0x80 cell Array data (MapCell, stride 0x30)
     int32_t  cellCount;          // +0x88 cell Array count (Serialize int&)
     int32_t  cellCapacity;       // +0x8C cell Array capacity
     int16_t  field_0x90[9];      // +0x90 Serialize(9, short*)
-    bool     field_0xA2;         // +0xA2 ctor 1
+    uint8_t  field_0xA2;         // +0xA2 ctor 1; the zones-stale flag, a raw byte (B.4 H8): retail ORs
+                                 //       a byte into it (known_port_issues row 311); every
+                                 //       writer in the tree stores 0 / 1
     uint8_t  _padA3[5];          // +0xA3
     MapCellQueue cellQueue;      // +0xA8 the zone flood fill's pooled work queue (0x14009c170:
                                  //       tail +0xA8, head +0xB0, count +0xB8, node pool +0xC0;

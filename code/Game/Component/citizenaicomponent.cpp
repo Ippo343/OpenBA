@@ -47,7 +47,7 @@
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
-extern void* g_pForceWorkBuilding;
+extern ComponentEntity* g_pForceWorkBuilding;
 
 // Phase B production harness (production_harness.cpp, env BANISHED_LIVE_PRODUCTION).
 // One-shot: drives a faithful log-production accounting event at the ForesterLodge and

@@ -52,12 +52,6 @@ static UI::StringTable* HelpTopicAt(::Object::ExternalList* extList, int index) 
     return isStringTable ? static_cast<UI::StringTable*>(entry) : nullptr;
 }
 
-// The history array as the Collection::Array retail's is.
-// LEFT (H5): the header is declared field by field until the member's ~Array
-// runs (HelpUI.h); this is the one view of it as the class.
-static Collection::Array<HelpHistoryEntry>& History(HelpUI* self) {
-    return *reinterpret_cast<Collection::Array<HelpHistoryEntry>*>(&self->historyData);
-}
 
 // ============================================================
 // HelpUI::LoadPage (FUN_140069f20) — Load help page content
@@ -101,7 +95,7 @@ void HelpUI::LoadPage() {
     // retail's helper passed 4 — not 8 — as MemAlloc's alignment argument for this
     // array (alignof(HelpHistoryEntry)), and it left a GROWN tail uninitialised,
     // which the trivially default-constructible element reproduces.
-    Collection::Array<HelpHistoryEntry>& hist = History(this);
+    Collection::Array<HelpHistoryEntry>& hist = history;
 
     // Truncate history to (historyIndex + 1) entries — removes forward history.
     hist.SetSize(historyIndex + 1);
@@ -206,7 +200,7 @@ namespace helpui_sa {
                self->document.Get(), self->comboTopics.Get(),
                self->buttonBack.Get(), self->buttonForward.Get(),
                self->container.Get(), self->currentPage,
-               self->historyIndex, self->historyCount, topics,
+               self->historyIndex, self->history._size, topics,
                topics
                    ? topics->GetResourceCount()
                    : -1);
@@ -336,7 +330,7 @@ void HelpUI::OnCreated() {
 void HelpUI::OnUpdateLayout() {
     if (!helpui_sa::CheckOnce()) return;
     int pageIndex = historyIndex;
-    int pageCount = historyCount;
+    int pageCount = history._size;
 
     // Enable prev button if not on first page
     // (standalone guard: a failed "buttonBack"/"buttonForward" lookup leaves the
@@ -373,7 +367,7 @@ void HelpUI::OnUpdateLayout() {
 // find an element, treat the event as unhandled.
 static bool HelpUI_NavReady(const HelpUI* self) {
     return self->scroll.Get() && self->document.Get() && self->comboTopics.Get() &&
-           self->container.Get() && self->historyData;
+           self->container.Get() && self->history._data;
 }
 
 // Back / forward: save the scroll value, step the history index by `step`,
@@ -383,14 +377,14 @@ static void HelpUI_StepHistory(HelpUI* self, int step) {
     int histIdx = self->historyIndex;
 
     // Save current scroll position before navigating
-    self->historyData[histIdx].scrollY = self->scroll->GetCurrentValue();
+    self->history[histIdx].scrollY = self->scroll->GetCurrentValue();
 
     // Move one entry
     histIdx += step;
     self->historyIndex = histIdx;
 
     // Page index from history
-    int pageIdx = self->historyData[histIdx].pageIndex;
+    int pageIdx = self->history[histIdx].pageIndex;
 
     // Look up StringTable from ExternalList
     ::Object::ExternalList* extList = GetHelpExternalList();
@@ -403,11 +397,11 @@ static void HelpUI_StepHistory(HelpUI* self, int step) {
 
     // Restore scroll position from history
     histIdx = self->historyIndex;
-    float savedScroll = self->historyData[histIdx].scrollY;
+    float savedScroll = self->history[histIdx].scrollY;
     self->container->SetOffsets(0, (int)savedScroll);
 
     // Update combo to show current page
-    int comboIdx = self->historyData[histIdx].pageIndex;
+    int comboIdx = self->history[histIdx].pageIndex;
     self->comboTopics->SetCurrentItem(comboIdx);
 }
 
@@ -441,7 +435,7 @@ void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
 
         if (targetIdx >= 0) {
             // Save current scroll position to history
-            historyData[historyIndex].scrollY = scroll->GetCurrentValue();
+            history[historyIndex].scrollY = scroll->GetCurrentValue();
 
             // Navigate to target page
             comboTopics->SetCurrentItem(targetIdx);

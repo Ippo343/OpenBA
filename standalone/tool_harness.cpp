@@ -88,7 +88,7 @@ extern "C" void* RemovalTool_Factory_SA(void);
 //     building DESCRIPTION ComponentEntity for descriptionPtr (+0x20).
 extern "C" void* PlacementTool_Factory_SA(void);
 extern "C" int   PlacementTool_HarnessStartupProbe(void* toolSelf);
-extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
+extern "C" class ComponentDescription* StartTown_ResolveTemplateByPath(const char* path);
 // Phase 2: drive the faithful CREATE path (helper_d650) for a chosen centre cell.
 extern "C" int   PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell);
 // Phase 3B: drive the ghost-preview pipeline (Scene::AddObject + TransformFromYaw +
@@ -123,7 +123,7 @@ extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);
 extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool);
 // A captured founding-house building entity (starttown.cpp) — a definitive UIDescription-
 // bearing entity, independent of the region-map/cursor pick.
-extern "C" void* StartTown_GetFoundingHouseEntity(int index);
+extern "C" ComponentEntity* StartTown_GetFoundingHouseEntity(int index);
 extern "C" int   StartTown_GetFoundingHouseCount();
 
 // Track A: run the ClearAreaComponent footprint sweep (0x140117d60 port) on a
@@ -2220,7 +2220,7 @@ void FireClearHarvest() {
 // (BANISHED_DESTROY_TRACE=1) — this only supplies the click.
 
 // The demo foundation's owner entity (starttown.cpp; set alongside g_pConstructionDemoSite).
-extern "C" void* g_pConstructionDemoEntity;
+extern "C" ComponentEntity* g_pConstructionDemoEntity;
 
 enum UpgradeStage { UP_IDLE = 0, UP_WAIT_BUILT, UP_DIALOG_OPEN, UP_DONE };
 UpgradeStage s_up_stage      = UP_IDLE;

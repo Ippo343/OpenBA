@@ -114,7 +114,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
 
     // Caller batch CB6: `self` is the GameUpdateLoop (its one caller is Draw's
     // `this`); its fields are read by name.
-    GameUpdateLoop* const gul = static_cast<GameUpdateLoop*>(self);   // B.3.8 bridge
+    GameUpdateLoop* const gul = static_cast<GameUpdateLoop*>(self);   // LEFT: SIG Weather_SunUpdate (gameupdateloop.cpp)
     Graphics::SunLight* sun = gul->m_sunLight;   // +0x100
     // B.3.5: the `!fn_Graphics_SunLight_Set` term is gone with the door call;
     // the `!sun` object test is retail's and stays.
@@ -226,7 +226,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     if (ctx) {
         // ?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z.
         // LEFT: ctx is the caller's void* (gameupdateloop.cpp declares this entry untyped).
-        reinterpret_cast<Video::Context*>(ctx)->SetFog(
+        reinterpret_cast<Video::Context*>(ctx)->SetFog(   // LEFT: SIG Weather_SunUpdate
             fogNear, fogFar, Math::Vector4(fogCol[0], fogCol[1], fogCol[2], fogCol[3]));
     }
 }
