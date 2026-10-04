@@ -93,7 +93,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 2: the two accumulators ---
-    leisureTimer += dt;
+    leisureTimer._ticks += dt;
     dataC8 += dt;
 
     // --- Phase 3: the citizen's own StorageComponent (what it carries) ---
@@ -542,7 +542,7 @@ static std::atomic<int> s_caiForceWorkLog{0};   // the [ForceWork] trace cap
 // re-writes them, as it did when the inert factory zero-filled them.
 CitizenAIComponent::CitizenAIComponent()
     : state(0xc), queuedState(-1), seekingFood(false), seekingWarmth(false), _pad32{},
-      citizen(nullptr), timers{}, leisureTimer(0), dataC8(0) {
+      citizen(nullptr), timers{}, leisureTimer{0}, dataC8(0) {
     OrFlagsInCtor(0x89);
 }
 

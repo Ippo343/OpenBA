@@ -700,7 +700,8 @@ static void EntityList_CloseDialogsForDyingEntities() {
             if (ctrl != nullptr) {
                 Object::Base* ds = ctrl->_dataSource;   // +0x28
                 // The data source's +0x40 entity flags, read with no type check (standalone-only code)
-                if (ds && ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ds) + 0x40) >> 10) & 1))   // LEFT: unchecked Object::Base -> ComponentEntity read
+                // (unchecked: the tree's EntityUI controllers hold a ComponentEntity; B10's check is not made here, as before)
+                if (ds && ((static_cast<const ComponentEntity*>(ds)->_entityFlags >> 10) & 1))
                     toClose[nClose++] = dialog;
             }
         }

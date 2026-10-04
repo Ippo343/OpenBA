@@ -714,7 +714,7 @@ LAB_14010ae8a:
             citizen->field_0x30 = -1;
             citizen->statusFlags |= 4;
             citizen->field_0xB0 = 0;
-            leisureTimer = 0;
+            leisureTimer._ticks = 0;
             uVar41 = 1;
         }
 

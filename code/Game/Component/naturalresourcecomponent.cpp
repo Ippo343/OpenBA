@@ -39,15 +39,15 @@
 // nothing called) are the bodies by name.
 
 //
-// NOT INSTALLED (B.4 COMP-d): retail's finder 0x140005200 is FindComponent<ParticleComponent>
-// (cell 0x1401c4720, the same finder diseasecomponent.cpp uses), and a ParticleComponent is
-// 0x48 bytes, yet this body reads its +0x28 as a Graphics::MeshInstance. The tick bit it
-// clears is set by AnimateNaturalResource (0x140126440), which animates the MODEL
-// component (0x140003f60). Installing it as slot 8 needs a ruling on that read.
+// NOT INSTALLED (B.4 COMP-d). X-G1-1b read 0x140125c40: retail's finder is 0x140003f60 =
+// FindComponent<ModelComponent> (CALL at 0x140125c60, cell 0x1401c7a50), and the +0x28 it
+// reads is the ModelComponent's MeshInstance. THE TREE CALLS THE WRONG FINDER here (0x140005200,
+// FindComponent<ParticleComponent>, cell 0x1401c4720): known_port_issues 14a row 552. Not fixed
+// (B.4 changes no behaviour); installing slot 8 with the ModelComponent finder is the fix.
 void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
     ParticleComponent* found = self->_entity->FindComponent<ParticleComponent>();   // 0x140005200
 
-    // LEFT: retail reads the found component's +0x28 as a MeshInstance (see above).
+    // LEFT: the wrong finder (row 552): retail reads the ModelComponent's +0x28 MeshInstance.
     bool isAnimating = reinterpret_cast<const Graphics::MeshInstance*>(
         reinterpret_cast<const uint8_t*>(found) + 0x28)->IsAnimating();
     if (isAnimating) return;

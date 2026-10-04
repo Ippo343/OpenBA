@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "Component/Component.h"
+#include "system/Value.h"            // System::Time (leisureTimer)
 #include "Object/exe_type.h"
 
 class CitizenComponent;
@@ -110,7 +111,7 @@ public:
     int64_t  timers[16];         // +0x40 System::Time per state: ValidateAndEnterState enters a
                                  //       state only while its timer is < 1; Decide counts them down
                                  //       (version < 5 streams carry 14, +0xB0/+0xB8 then = Time(0))
-    int64_t  leisureTimer;       // +0xC0 System::Time (version > 2): += dt (Decide); the leisure
+    System::Time leisureTimer;   // +0xC0 System::Time (version > 2): += dt (Decide); the leisure
                                  //       candidate's priority reads its seconds
     int64_t  dataC8;             // +0xC8 System::Time (version > 3): += dt (Decide), reset to 0
                                  //       while the citizen carries nothing; the LongTermPlan

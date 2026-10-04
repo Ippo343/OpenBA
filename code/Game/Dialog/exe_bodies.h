@@ -31,9 +31,10 @@ class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
 class TradeUI;         // code/Game/Dialog/TradeUI.h
 
 // ---- autosavedialog.cpp
-namespace UI { class UserInterface; class DialogInstance; }
+namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
-extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x14005e230
+class AutoSaveDialog;  // code/Game/Dialog/AutoSaveDialog.h
+extern "C" AutoSaveDialog* AutoSaveDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x14005e230
 
 // ---- citizenui.cpp
 // B.4 P2 DLG-1: fn_FindComponent_CitizenAI (0x140011050) had no caller; deleted
@@ -55,7 +56,8 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
                                  uint32_t x, uint32_t y);
 
 // ---- eventnotifydialog.cpp
-extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140068ab0
+class EventNotifyDialog;  // code/Game/Dialog/EventNotifyDialog.h
+extern "C" EventNotifyDialog* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140068ab0
 
 // ---- optionsdialog.cpp
 // Free: reads the GameContainer (Game/game.h) through its first argument.

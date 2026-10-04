@@ -374,12 +374,12 @@ void CitizenComponent::Update(const System::Time* timeArg) {
         System::String localRes8;
         Disease* profData = disease;
         if (profData) {
-            void* stringTable = profData->_stringTable;
+            const UI::StringTable* stringTable = profData->_stringTable;
             {
                 // GetText(self, retval, textIndex) — Ghidra drops R8 (textIndex)
                 // textIndex is likely 0 for single-entry profession name tables
                 ::new (&localRes8) System::String(
-                    reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge  // LEFT: Game/Disease.h _stringTable void* (GAME-1)
+                    stringTable->GetText(0));
                 char* deathStr = localRes8._data;
                 char r = HandleLifeEvent(3, deathStr);
                 if (r != 0) return;

@@ -1154,14 +1154,14 @@ found_speed:
 // B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp). The door at 0x1400b9910
 // (fn_ToolbarDialog_Ctor in GameUpdateLoop::Startup): placement-news the class.
 // parentPtr is an InternalPtr* the ctor copies, as retail does.
-ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, UI::UserInterface* userInterface, const void* dialog,
+ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, UI::UserInterface* userInterface, const UI::Dialog* dialog,
                                        const Object::InternalPtr<UI::DialogInstance>* parentPtr,
                                        const Toolbar* toolbarData) {
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentPtr)
         parent = *parentPtr;
     return ::new (self) ToolbarDialog(userInterface,
-                                      static_cast<const UI::Dialog*>(dialog), parent,   // LEFT: the caller holds the found resource as void* (ExternalList::Find's _ptr, GameUpdateLoop::Startup)
+                                      dialog, parent,
                                       toolbarData);
 }
 

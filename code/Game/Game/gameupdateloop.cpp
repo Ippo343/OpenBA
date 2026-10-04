@@ -113,6 +113,8 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
 #include "Component/exe_bodies.h"        // CitizenComp_AssignHousing
 #include "Dialog/exe_bodies.h"           // ApplyKeyMapToUI_Impl, Toolbar_ShowGroup_Impl
 #include "Dialog/ToolbarDialog.h"        // ToolbarDialog_Ctor_Impl
+#include "Dialog/AutoSaveDialog.h"       // AutoSaveDialog (a UI::DialogInstance)
+#include "Dialog/EventNotifyDialog.h"    // EventNotifyDialog (a UI::DialogInstance)
 #include "Entity/CitizenBehavior.h"      // m_citizenList's class: CitizenBehavior::Update
 #include "graphics/Animation.h"          // RtGraphics_AnimationManager_Dtor
 #include "picking/Scene.h"
@@ -1705,7 +1707,7 @@ void GameUpdateLoop::Startup() {
     // ribbon just below the toolbar; see EventNotifyDialog_Update). Null if the
     // toolbar was not created (LIVE_TOOLBAR off), in which case the ribbon Update
     // early-returns on the null parent, so we skip creating the ribbon too.
-    void* g_ribbonParentToolbar = nullptr;
+    ToolbarDialog* g_ribbonParentToolbar = nullptr;
 
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
@@ -1718,7 +1720,7 @@ void GameUpdateLoop::Startup() {
         // when preload is on); if that is empty or misses, fall back to
         // ExternalFactory::FindOrLoad (the path OpenToolDialog/ToggleAll use — loads
         // the .rsc directly, robust in standalone where m_resourceList is empty).
-        void* foundBase = nullptr;
+        ::Object::External* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI] (0x140097c83)
         if (_resourceList)
             foundBase = _resourceList
@@ -1731,10 +1733,10 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
 
-        void* dialogRes = nullptr;
+        const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr) {
             if (::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId())) {   // 0x140097cba
-                dialogRes = foundBase;
+                dialogRes = static_cast<const UI::Dialog*>(foundBase);
             }
         }
 
@@ -1756,11 +1758,8 @@ void GameUpdateLoop::Startup() {
         // Add to UI (only if the dialog was actually constructed).
         if (toolbar) {
             g_ribbonParentToolbar = toolbar;  // parent for the EventNotify ribbon
-            int64_t dialogPtr[1];
-            new (dialogPtr) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(toolbar));   // B.3.3 bridge
-            m_userInterface->AddDialog(  // B.3.6 bridge
-                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
+            ::Object::InternalPtr<UI::DialogInstance> dialogPtr(toolbar);
+            m_userInterface->AddDialog(&dialogPtr);
             fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
                     "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", static_cast<void*>(toolbar),
                     toolbar->toolbarItems.GetSize(), toolbar->buttonElements.GetSize(),
@@ -1781,7 +1780,7 @@ void GameUpdateLoop::Startup() {
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
     if (g_ribbonParentToolbar != nullptr) {
         System::Filename filename("Dialog/EventNotify.rsc");
-        void* foundBase = nullptr;
+        ::Object::External* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
         if (_resourceList)
             foundBase = _resourceList
@@ -1793,29 +1792,25 @@ void GameUpdateLoop::Startup() {
                 ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
-        void* dialogRes = nullptr;
+        const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
-            dialogRes = foundBase;
+            dialogRes = static_cast<const UI::Dialog*>(foundBase);
 
         fprintf(stderr, "[HUD] EventNotify: foundBase=%p dialogRes=%p parentToolbar=%p\n",
                 foundBase, dialogRes, g_ribbonParentToolbar);
         fflush(stderr);
 
         void* mem = System::MemoryAllocator::MemAlloc(0xF0, 8);
-        void* eventNotify = nullptr;
+        EventNotifyDialog* eventNotify = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> parentIBP;
-            new (&parentIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(g_ribbonParentToolbar));   // B.3.3 bridge
+            new (&parentIBP) ::Object::InternalPtr<UI::DialogInstance>(g_ribbonParentToolbar);
             eventNotify = EventNotifyDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &parentIBP);
         }
 
         if (eventNotify) {
-            int64_t dialogPtr[1];
-            new (dialogPtr) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(eventNotify));   // B.3.3 bridge
-            m_userInterface->AddDialog(  // B.3.6 bridge
-                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
+            ::Object::InternalPtr<UI::DialogInstance> dialogPtr(eventNotify);
+            m_userInterface->AddDialog(&dialogPtr);
             fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
             fflush(stderr);
         } else if (mem) {
@@ -1836,7 +1831,7 @@ void GameUpdateLoop::Startup() {
     // passes a null parent IBP here too).
     {
         System::Filename filename("Dialog/AutoSave.rsc");
-        void* foundBase = nullptr;
+        ::Object::External* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
         if (_resourceList)
             foundBase = _resourceList
@@ -1848,23 +1843,20 @@ void GameUpdateLoop::Startup() {
                 ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
-        void* dialogRes = nullptr;
+        const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
-            dialogRes = foundBase;
+            dialogRes = static_cast<const UI::Dialog*>(foundBase);
 
         void* mem = System::MemoryAllocator::MemAlloc(0xD0, 8);
-        void* autoSave = nullptr;
+        AutoSaveDialog* autoSave = nullptr;
         if (mem != nullptr && dialogRes != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> nullParent;   // the InternalBasePtr ctor: one store
             autoSave = AutoSaveDialog_Ctor_Standalone(mem, m_userInterface, dialogRes, &nullParent);
         }
 
         if (autoSave) {
-            int64_t dialogPtr[1];
-            new (dialogPtr) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(autoSave));   // B.3.3 bridge
-            m_userInterface->AddDialog(  // B.3.6 bridge
-                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
+            ::Object::InternalPtr<UI::DialogInstance> dialogPtr(autoSave);
+            m_userInterface->AddDialog(&dialogPtr);
         } else if (mem) {
             System::MemoryAllocator::MemFree(mem);
         }
