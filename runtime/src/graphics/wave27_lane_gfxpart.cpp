@@ -89,7 +89,7 @@
 #include "../../types/graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
 #include "../../types/video/Context.h"      // ENDGAME B.3.5 caller batch: Video::Context
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
-#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_MaterialInstance
+#include "../../types/object/External.h"         // Object::SerializeExternal<MaterialInstance>
 #include "../../types/object/TypeInfo.h"         // Object::Base::IsDerivedFrom
 #include "../../types/system/Value.h"            // System::Random::NextGroup
 #include "../../types/system/MemoryAllocator.h"
@@ -263,9 +263,7 @@ bool Particle::Serialize(IO::Stream& streamv) {
     // (UNNAMED in the export directory) — RtObject_ExternalPtrSerialize_
     // MaterialInstance, by name. LEFT: it takes object's POD spellings
     // (External.h).
-    RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(&_material),
-        reinterpret_cast<rt::io::Serializer*>(&ser));
+    Object::SerializeExternal<Graphics::MaterialInstance>(ser, _material);
 
     if (stream._direction == IO::kReading && _active != 0) {
         // 0x180062110, `Collection::Array<void*>::SetSize` (UNNAMED): stride 8,

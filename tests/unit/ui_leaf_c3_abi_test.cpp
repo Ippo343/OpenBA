@@ -714,7 +714,7 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         CHECK(e->_font == nullptr);
         CHECK_EQ(e->_mode, 0);
         CHECK_EQ(e->_padCC, 0xCDCDCDCDu);
-        CHECK(e->_cachedText == nullptr);
+        CHECK(e->_cachedText._data == nullptr);
         CHECK_EQ(e->_intValue, 0);
         CHECK(e->_floatValue == 0.0f);
         CHECK_EQ((int)e->_showSign, 0);

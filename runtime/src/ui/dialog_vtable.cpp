@@ -205,6 +205,9 @@
 #include "../../types/ui/Dialog.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
+#include "../../types/ui/ElementDescription.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/ui/DialogControllerConfig.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_ExtStr10at08 etc.
 
 
@@ -330,10 +333,7 @@ using rt::io::Stream;
 // element-walk bodies of runtime/types/object/External.h (0x180038f90
 // ElementDescription, 0x180004590 SpriteSheet, 0x1800756d0
 // DialogControllerConfig, 0x1800493d0 / 0x18002f170 the two array walks).
-RtObject::External** ExtField(void* field) {
-    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-}
-void StringSerialize(void* field, Serializer* ser) {
+void StringSerialize(void* field, IO::Serializer* ser) {
     reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
@@ -395,11 +395,11 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
     // pair inlined at 0x1801130e3..0x18011310b and 0x1801132eb (version 0).
     IO::Serializer serializer(streamv, 0);
     IO::ReaderWriter* const rw = serializer._readerWriter;
-    Serializer& ser = *reinterpret_cast<Serializer*>(&serializer);   // LEFT: SIG the ExternalPtr<T>::Serialize thunks take rt::io::Serializer* (External.h, R-OBJ; wave X)
+    IO::Serializer& ser = serializer;
 
     rw->SerializeUInt(_defaultFlags, nullptr);                               // +0x40
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_rootDescription), &ser);        // +0x38
-    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), &ser);            // +0x20
+    Object::SerializeExternal<UI::ElementDescription>(ser, _rootDescription);        // +0x38
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // +0x20
     StringSerialize(&_spriteName, &ser);                     // +0x28
     rw->SerializeUInt(_backgroundColor, nullptr);                            // +0x30
 
@@ -415,7 +415,7 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
         // RE-READ after SetSize: it reallocates.
         RtUI::DialogNamedTemplate* e = _namedTemplates;                 // stride 0x10
         for (int32_t i = 0; i < count; ++i, ++e) {
-            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&e->_description), &ser);   // entry+0x00
+            Object::SerializeExternal<UI::ElementDescription>(ser, e->_description);   // entry+0x00
             StringSerialize(&e->_name, &ser);             // entry+0x08
         }
     }
@@ -427,8 +427,8 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_templates)
                 ->SetSize(count);          // retail 0x1800492d0
-        RtObject_ExternalPtrArraySerialize_ElementDescription(          // 0x1800493d0
-            &ser, count, ExtField(_templates));
+        Object::SerializeExternalArray<UI::ElementDescription>(          // 0x1800493d0
+            ser, count, _templates);
     }
 
     // -- array 3: _controllerConfigs (+0x48), count +0x50, stride 0x20 ------
@@ -441,8 +441,8 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
         ElementController* e = _controllerConfigs;                      // stride 0x20
         for (int32_t i = 0; i < count; ++i, ++e) {
             rw->SerializeUInt(e->_typeId, nullptr);                     // entry+0x00 _typeId
-            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&e->_elementDesc), &ser);   // entry+0x08 _elementDesc
-            RtObject_ExternalPtrSerialize_DialogControllerConfig(ExtField(&e->_config), &ser);    // entry+0x10 _config
+            Object::SerializeExternal<UI::ElementDescription>(ser, e->_elementDesc);   // entry+0x08 _elementDesc
+            Object::SerializeExternal<UI::DialogControllerConfig>(ser, e->_config);    // entry+0x10 _config
             StringSerialize(&e->_name, &ser);             // entry+0x18 _name
         }
     }
@@ -454,8 +454,8 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_references)
                 ->SetSize(count);          // retail 0x18002f070
-        RtObject_ExternalPtrArraySerialize_External(                    // 0x18002f170
-            &ser, count, ExtField(_references));
+        Object::SerializeExternalArray<Object::External>(                    // 0x18002f170
+            ser, count, _references);
     }
 
     rw->SerializeInt(_drawLevel, nullptr);    // +0x34 — the FIELD, not a copy. LAST.

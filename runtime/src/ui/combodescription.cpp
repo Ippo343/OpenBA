@@ -93,9 +93,9 @@ bool ComboDescription::Serialize(IO::Stream& streamv) {
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_listDesc), IoSer(&ser));    // 180112a1b
-    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_itemDesc), IoSer(&ser));    // 180112a2c
-    RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), IoSer(&ser)); // 180112a3d
+    Object::SerializeExternal<UI::ElementDescription>(ser, _listDesc);    // 180112a1b
+    Object::SerializeExternal<UI::ElementDescription>(ser, _itemDesc);    // 180112a2c
+    Object::SerializeExternal<UI::StringTable>(ser, _stringTable); // 180112a3d
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 180112a55
     return true;

@@ -37,6 +37,8 @@ namespace System { class Filename; }
 
 namespace Collision2D {
 
+class Surface;
+
 class CollisionMesh : public Object::External {
 public:
     // ---- the element types (collisionmesh.cpp's banner) ----
@@ -90,7 +92,7 @@ public:
     Collection::Array<Vec2>     _ptsA;      // +0x30
     Collection::Array<Vec2>     _ptsB;      // +0x40
     Collection::Array<Face>     _faces;     // +0x50
-    Collection::Array<void*>    _surfaces;  // +0x60  ExternalPtr<Surface>
+    Collection::Array<Surface*> _surfaces;  // +0x60  ExternalPtr<Surface> (B4 H4: typed; same array traits as void*)
 };
 
 static_assert(sizeof(CollisionMesh::Vec2) == 8, "Vec2 is 8 bytes");

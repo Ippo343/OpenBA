@@ -214,10 +214,9 @@ Dialog::~Dialog() {
     rtcoll::RtColl_ArrayDtorElem_180039280(&_controllerConfigs);       // 180112e82  +0x48
 
     // ---- the System::String release at +0x28, ASYMMETRY AND ALL ------------
-    // String's own Release (0x1800c9870): the freeing branch leaves the field
-    // at `data - 8`, the sharing branch nulls it (180112e88..180112eaa).
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_spriteName));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    // 180112e88..180112eaa: B4 X-RH — `_spriteName` is a System::String
+    // member, so this release is its destructor, which the compiler runs after
+    // this body (after the four arrays) and before ~External: retail's order.
 
     // 180112eba: the TAIL-JMP to ~External is the compiler's chain.
 }

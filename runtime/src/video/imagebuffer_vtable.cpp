@@ -388,9 +388,8 @@ bool ImageBuffer::Serialize(IO::Stream& stream) {
         SerializeUnsigned(ser, _addressW);                                  // +0x40
         SerializeUnsigned(ser, _filter);                                    // +0x44
 
-        // +0x48, a System::String (0x1800c9930). LEFT (B.3.x bridge): the field
-        // is a void* for the reason ImageBuffer.h gives at +0x48.
-        reinterpret_cast<System::String*>(&_sourceName)->Serialize(&ser);
+        // +0x48, a System::String (0x1800c9930).
+        _sourceName.Serialize(&ser);
         ImageBufferDoorAccess::PlatformSerialize(this, ser);
     }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800f2820 .. 0x1800f2832
     return true;

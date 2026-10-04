@@ -126,9 +126,9 @@ bool ListDescription::Serialize(IO::Stream& streamv) {
 
     IO::ReaderWriter* rw = ser._readerWriter;                                     // 1800d485a
 
-    RtObject_ExternalPtrSerialize_ElementDescription(rtdesc::ExtField(&_partDescs[0]), rtdesc::IoSer(&ser));  // 1800d4868
-    RtObject_ExternalPtrSerialize_ElementDescription(rtdesc::ExtField(&_partDescs[1]), rtdesc::IoSer(&ser));  // 1800d4876
-    RtObject_ExternalPtrSerialize_SpriteSheet(rtdesc::ExtField(&_spriteSheet), rtdesc::IoSer(&ser));   // 1800d4884
+    Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[0]);  // 1800d4868
+    Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[1]);  // 1800d4876
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 1800d4884
     rtdesc::StringSerialize(&_spriteName, &ser);   // 1800d4895
 
     rw->SerializeUInt(_hoverColor, nullptr);

@@ -53,69 +53,34 @@
 #include "../../types/object/Internal.h"   // Object::detail::InternalMemAlloc
 #include "../../types/collection/Collection.h"   // B3R: rtcoll::RtColl_ArraySetSize_18002f070
 
-namespace {
-
-// Same Serializer-pair shape as runtime/src/ui/groupdescription.cpp; retail
-// vtable offsets into Encoding/ReaderWriter, RETAIL not profile
-// (reference_encoding_vtable_offsets_differ_between_builds.md).
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;             // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;  // +0x10
-};
-struct Serializer {
-    Stream* stream;   // +0x00
-    void*   readerWriter;  // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-constexpr int kEncCreateReader = 0x18;   // CALL [RAX+0x18]
-constexpr int kEncCreateWriter = 0x20;   // CALL [RAX+0x20]
-// B3X W0: the ReaderWriter's [RAX+0xa0] (SerializeInt) and [RAX] (slot 0,
-// the deleting destructor) are called by name below.
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-
-}  // namespace
+#include "../../types/io/Serializer.h"   // B.4 P2 X: the real IO::Serializer pair
+#include "../../types/io/Stream.h"
 
 namespace Object {
 
 // ---- slot 5 — ?Serialize@ExternalList@Object@@UEAA_NAEAVStream@IO@@@Z  0x1800bfa20
 // The body the retired `RtObject_ExternalList_Serialize` door carried, moved
-// here unchanged (ENDGAME B.3.9 OBJ).
-bool ExternalList::Serialize(IO::Stream& streamv) {
-    void* const streamvRaw = &streamv;
-    Stream* stream = static_cast<Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-
-    Serializer ser = { stream, nullptr };
-
-    void* factory = stream->encodingFactory;
-    void** fvt    = VTableOf(factory);
-    const int which = (stream->mode == 0) ? kEncCreateReader : kEncCreateWriter;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-    ser.readerWriter = rw;
+// here unchanged (ENDGAME B.3.9 OBJ). B.4 P2 wave X: the hand-built pair, its
+// file-local `Stream` / `Serializer` shadows and the raw encoding-factory slot
+// call are the real `IO::Serializer` — its ctor (0x1800b9960) is the same
+// `{stream, nullptr}` + `CreateReader` / `CreateWriter` (+0x18 / +0x20, by
+// direction, version 0), and its dtor (0x1800b99b0) the same `if (rw) slot 0,
+// flags 1` at the end of the body.
+bool ExternalList::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     int32_t n = _count;
-    reinterpret_cast<::IO::ReaderWriter*>(rw)->SerializeInt(n, nullptr);   // +0xa0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+    ser._readerWriter->SerializeInt(n, nullptr);   // +0xa0
 
-    if (ser.stream->mode == 0) {
+    if (stream._direction == IO::kReading) {
         rtcoll::RtColl_ArraySetSize_18002f070(&_resources, n);   // 0x18002f070
     }
 
-    // The ExternalPtrArraySerialize_External thunk (external_ptr_serialize.cpp),
-    // an unexported internal: 0x18002f170.
-    RtObject_ExternalPtrArraySerialize_External(
-        reinterpret_cast<rt::io::Serializer*>(&ser), n,  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-        reinterpret_cast<RtObject::External**>(_resources));  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+    // ExternalPtr<Object::External>'s array form, an unexported internal:
+    // 0x18002f170.
+    SerializeExternalArray<External>(ser, n, _resources);
 
-    if (rw != nullptr) {
-        delete reinterpret_cast<::IO::ReaderWriter*>(rw);        // slot 0 (B.3.x bridge)  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
-    }
-    return true;
+    return true;   // ~Serializer: `if (rw) delete rw` (slot 0, flags 1)
 }
 
 // ?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ  0x180007460

@@ -66,27 +66,17 @@ void ReleaseStringLocal(char*& slot) {
     int32_t* rc = &RtSystem::StringRefCount(p);
     if (--*rc == 0) { slot = p - 8; MemFree(slot); }
 }
-void ReleaseStringField(char*& field) {
-    char* p = field;
-    if (p == nullptr) return;
-    int32_t* rc = &RtSystem::StringRefCount(p);
-    if (--*rc == 0) {
-        field = field - 8;
-        MemFree(field);
-    } else {
-        field = nullptr;
-    }
-}
 
 }  // namespace
 
 namespace UI {
 
 // ??1NumberElement@UI@@UEAA@XZ 0x180118ce0 — retail's body, moved here from
-// the retired door (ENDGAME B.3.9 UI-A): release the cached text; the restamp
-// and the chain into ~Element are the compiler's.
+// the retired door (ENDGAME B.3.9 UI-A): release the cached text
+// (0x180118d00..0x180118d36); the restamp and the chain into ~Element are the
+// compiler's. B4 X-RH: the release is the System::String member's destructor,
+// run after this empty body and before ~Element: retail's order.
 NumberElement::~NumberElement() {
-    ReleaseStringField(_cachedText);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,12 +92,12 @@ void NumberElement::CacheText() {
         const char* fmt = (_showSign != 0) ? "%+i" : "%i";
         // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730): retslot = `tmp`.
         new (static_cast<void*>(&tmp)) System::String(System::String::Format(fmt, _intValue));
-        AssignString(_cachedText, tmp);
+        AssignString(_cachedText._data, tmp);
     } else {
         const char* fmt = (_showSign != 0) ? "%+.2f" : "%.2f";
         new (static_cast<void*>(&tmp)) System::String(
             System::String::Format(fmt, static_cast<double>(_floatValue)));
-        AssignString(_cachedText, tmp);
+        AssignString(_cachedText._data, tmp);
     }
     ReleaseStringLocal(tmp);
 }
@@ -120,7 +110,7 @@ void NumberElement::ComputeSize() {
     _layoutWidth  = 0;      // one qword store clears both
     _layoutHeight = 0;
 
-    const char* text = _cachedText;
+    const char* text = _cachedText._data;
     int32_t len = 0;
     if (text != nullptr)
         len = RtSystem::StringLength(text);                    // System::String length
@@ -184,7 +174,7 @@ void NumberElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
 
     Font* font = _font;
     ctx.AddFont(Object::ExternalPtr<Font>(font),
-                *reinterpret_cast<const System::String*>(&_cachedText),   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                _cachedText,
                 false, 0, 0, -1,
                 _layoutLeft,
                 (font->_lineHeight - font->_baseLine) + _layoutTop,

@@ -173,10 +173,12 @@ enum FontJustify : int32_t {
 // ############################################################################
 
 namespace System { class Filename; class String; }
+namespace Graphics { class MaterialInstance; }
 
 namespace UI {
 
 class SpriteSheet;
+class CharacterSet;
 
 class Font : public Object::External {
 public:
@@ -263,7 +265,7 @@ public:
 public:
     // ---- the 0x70 bytes Font adds (public: the doors and AddFont read them) --
     RtSystem::String                   _string20;      // +0x20  System::String
-    void*                              _field28;       // +0x28  serialized by 0x180076e90
+    CharacterSet*                      _field28;       // +0x28  ExternalPtr<CharacterSet>, serialized by 0x180076e90 (B4 H4: typed)
     Collection::Array<int32_t>         _charToGlyph;   // +0x30  codepoint -> glyph index
     Collection::Array<Kerning>         _glyphs;        // +0x40  GetKern
     int32_t                            _lineHeight;    // +0x50  GetHeight
@@ -271,7 +273,7 @@ public:
     int32_t                            _ellipsisWidth; // +0x58
     int32_t                            _spaceWidth;    // +0x5c  GetSpaceWidth
     Object::ExternalPtr<SpriteSheet>   _spriteSheet;   // +0x60  GetSpriteSheet
-    void*                              _material;      // +0x68  ExternalPtr<MaterialInstance>
+    Graphics::MaterialInstance*        _material;      // +0x68  ExternalPtr<MaterialInstance> (B4 H4: typed)
     int32_t                            _field70;       // +0x70
     int32_t                            _field74;       // +0x74
     RtSystem::String                   _string78;      // +0x78  System::String

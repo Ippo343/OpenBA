@@ -26,10 +26,6 @@
 #include <cstdio>
 
 #include "../../types/object/Internal.h"
-#include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.9 TI-REST: T::TypeId()
-#include "../../types/achievement/Goal.h"
-
-using RtObject::InternalBasePtr;
 
 // Both are C++-linkage bodies in namespace RtObject (internal.cpp, type_system.cpp).
 // B.3.4 block 3: the serializer parameter is the REAL `IO::Serializer`; it was
@@ -60,23 +56,10 @@ bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId) {
 }
 }  // namespace Object
 
-extern "C" void RtObject_InternalPtrArray_Serialize(::IO::Serializer* ser, int count,
-                                                    InternalBasePtr* elems, uint32_t typeId) {
-    // TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): the callers
-    // still spell the POD; it goes with the POD in step 2.
-    using TypedPtr = ::Object::InternalPtr<RtObject::Internal>;
-    TypedPtr::SerializeArray(*ser, count, reinterpret_cast<TypedPtr*>(elems), typeId);  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-}
-
-// ENDGAME B.3.9 TI-REST (B39_RULES D6): T's type id is the class's own
-// `DEFINE_TYPE` record's, read fresh per call (retail: the first dword of
-// ?_typeInfo@T@Achievement@@, 0x1801f98d0 / 0x1801f9940). The by-name thunk
-// macro over the minted records went with them.
-extern "C" void RtObject_InternalPtrArraySerialize_AchievementInstance(
-        ::IO::Serializer* ser, int count, InternalBasePtr* elems) {
-    RtObject_InternalPtrArray_Serialize(ser, count, elems, Achievement::AchievementInstance::TypeId());
-}
-extern "C" void RtObject_InternalPtrArraySerialize_GoalInstance(
-        ::IO::Serializer* ser, int count, InternalBasePtr* elems) {
-    RtObject_InternalPtrArray_Serialize(ser, count, elems, Achievement::GoalInstance::TypeId());
-}
+// B.4 P2 wave X (X-R1): the registered shim and its two per-T thunks
+// (0x180009a20 AchievementInstance, 0x180009fa0 GoalInstance) are retired; the
+// two callers (achievement_serialize.cpp, achievement_vtable.cpp) name
+// `Object::InternalPtr<T>::SerializeArray(ser, count, data, T::TypeId())` over
+// their typed `Array<InternalPtr<T>>` directly. T's type id is the class's own
+// DEFINE_TYPE record's, read fresh per call (retail: the first dword of
+// ?_typeInfo@T@Achievement@@, 0x1801f98d0 / 0x1801f9940).
