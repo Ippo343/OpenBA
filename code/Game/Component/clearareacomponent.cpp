@@ -14,6 +14,7 @@
 #include "Component/coll_bridge.h"
 #include "Component/MapComponent.h"
 #include "Game/Map.h"
+#include "Entity/EntityList.h"
 #include "Entity/ComponentEntity.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
@@ -63,13 +64,13 @@ int ClearAreaComponent::FootprintSweep() {
     int16_t width    = static_cast<int16_t>(mc->tileX1);
     int16_t height   = static_cast<int16_t>(mc->tileY1);
 
-    // GameUpdateLoop::m_game (+0xf8) and m_entityList (+0xe8) are still void* (GAME-a)
-    // and Map's cells are untyped (GAME-b): the grid and removal-array reads are LEFT.
-    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
+    // GameUpdateLoop::m_game (+0xf8) and m_entityList (+0xe8): the cells and the
+    // removal array (EntityList::removalList, +0xD0) by name.
+    const Map* map = gw->m_game;
     if (!map) return 0;
     int gridWidth = map->size;
-    uintptr_t tileArray = reinterpret_cast<uintptr_t>(map->cells);
-    uintptr_t entityList = reinterpret_cast<uintptr_t>(gw->m_entityList);
+    const MapCell* tileArray = map->cells;
+    EntityList* entityList = gw->m_entityList;
     if (!tileArray || !entityList) return 0;
 
     int marked = 0;
@@ -77,8 +78,7 @@ int ClearAreaComponent::FootprintSweep() {
         for (int col = 0; col < width; ++col) {
             int cell = (startRow + row) * gridWidth + (startCol + col);
             // entity ptr slot at cell*0x30 + 0x08 (matches 7d60's "+ 8 + (...)*0x30")
-            ComponentEntity* occ = *reinterpret_cast<ComponentEntity**>(
-                tileArray + static_cast<uintptr_t>(cell) * 0x30 + 8);
+            ComponentEntity* occ = tileArray[static_cast<uintptr_t>(cell)].occupant;
 
             // Skip empty cells and the building's own entity.
             if (occ == nullptr || occ == _entity) continue;
@@ -86,8 +86,8 @@ int ClearAreaComponent::FootprintSweep() {
 
             // Mark + push (the proven backend).
             ActHunt_MarkEntityRemoval_c2ea0(occ);
-            uintptr_t rl = entityList + 0xD0;
-            int cnt = *reinterpret_cast<int*>(rl + 0x8);
+            IBPArray* rl = &entityList->removalList;
+            int cnt = rl->count;
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(rl).SetSizeFill(cnt + 1, &occ);
             ++marked;
@@ -159,7 +159,7 @@ extern "C" void* ClearAreaComponent_HarnessFind(void* entityV, uint32_t* outFlag
     if (!entityV) return nullptr;
     uint32_t wantTid = ClearAreaComponent::TypeId();
     if (!wantTid) return nullptr;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // B4 FORWARD (tool_harness.cpp)
+    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // LEFT: B4 FORWARD (tool_harness.cpp)
     if (!entity->_components) return nullptr;
     for (int i = 0; i < entity->_componentCount; ++i) {
         Component* c = entity->_components[i].Get();
@@ -175,13 +175,13 @@ extern "C" void* ClearAreaComponent_HarnessFind(void* entityV, uint32_t* outFlag
 // Harness entry: run the footprint sweep on a REAL live ClearAreaComponent (reads its
 // own +0x10 owner) — exactly what a de-inerted component's Update tick would do.
 extern "C" int ClearAreaComponent_HarnessSweepComp(void* realComp) {
-    return reinterpret_cast<ClearAreaComponent*>(realComp)->FootprintSweep();   // B4 FORWARD (tool_harness.cpp)
+    return reinterpret_cast<ClearAreaComponent*>(realComp)->FootprintSweep();   // LEFT: B4 FORWARD (tool_harness.cpp)
 }
 
 // Read a live component's +0x10 owner field (to confirm it's wired to its entity).
 extern "C" void* ClearAreaComponent_HarnessOwner(void* realComp) {
     if (!realComp) return nullptr;
-    return reinterpret_cast<ClearAreaComponent*>(realComp)->_entity;   // B4 FORWARD (tool_harness.cpp)
+    return reinterpret_cast<ClearAreaComponent*>(realComp)->_entity;   // LEFT: B4 FORWARD (tool_harness.cpp)
 }
 
 // Harness entry: run the footprint sweep for a given building entity. Builds a
@@ -192,6 +192,6 @@ extern "C" int ClearAreaComponent_HarnessSweep(void* ownerEntity) {
     alignas(8) uint8_t buf[sizeof(ClearAreaComponent)];
     std::memset(buf, 0, sizeof(buf));
     ClearAreaComponent* comp = reinterpret_cast<ClearAreaComponent*>(buf);        // harness-only
-    comp->_entity = reinterpret_cast<ComponentEntity*>(ownerEntity);             // B4 FORWARD (tool_harness.cpp)
+    comp->_entity = reinterpret_cast<ComponentEntity*>(ownerEntity);             // LEFT: B4 FORWARD (tool_harness.cpp)
     return comp->FootprintSweep();
 }

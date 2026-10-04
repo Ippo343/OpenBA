@@ -46,9 +46,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x
 class Action;
 void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime);  // 0x1400c4f80
 
-// ---- charmanager.cpp
-extern "C" void CharMgr_sub_8660(float* mgrF, int idx);  // 0x140018660
-
 // ---- citizen_assign_citizens.cpp
 extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
 
@@ -146,9 +143,6 @@ extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410  B4 FO
 
 // ---- decalcomponent.cpp
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00
-
-// ---- destroycomponent_state6.cpp
-extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP);  // 0x14000b630
 
 // ---- destroycomponent_workerrelease.cpp
 extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax);  // 0x14012fb00
