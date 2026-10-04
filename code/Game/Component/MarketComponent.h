@@ -30,7 +30,7 @@ public:
     // 0x140008440: no body
     ~MarketComponent() override = default;                              // [0]  0x140008440
     void        Persist(IO::Stream& stream) override;                         // [3]  0x14004ead0
-    uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14004ea40
+    ::Object::InternalPtr<Work>* CreateWork(::Object::InternalPtr<Work>* out) override;                    // [18] 0x14004ea40
 };
 
 static_assert(sizeof(MarketComponent) == 0x50, "MarketComponent is 0x50 (create 0x140008220)");

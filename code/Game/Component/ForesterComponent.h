@@ -33,7 +33,7 @@ public:
     void        Persist(IO::Stream& stream) override;                         // [3]  0x14011f960
     uint32_t    CommandMask(int command) override;                      // [13] 0x14011f920
     void        Command(int command) override;                          // [14] 0x14011f890
-    uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14011f780
+    ::Object::InternalPtr<Work>* CreateWork(::Object::InternalPtr<Work>* out) override;                    // [18] 0x14011f780
 
     // Persist 0x14011f960: Serialize(bool&) +0x50, Serialize(bool&) +0x51; the ctor
     // stores the pair as one word 0x101 (both on).

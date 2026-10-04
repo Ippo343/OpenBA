@@ -30,7 +30,7 @@ public:
     // 0x140006d60: no body
     ~HerbalistComponent() override = default;                           // [0]  0x140006d60
     void        Persist(IO::Stream& stream) override;                         // [3]  0x14004b200
-    uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14004b160
+    ::Object::InternalPtr<Work>* CreateWork(::Object::InternalPtr<Work>* out) override;                    // [18] 0x14004b160
 };
 
 static_assert(sizeof(HerbalistComponent) == 0x50, "HerbalistComponent is 0x50 (create 0x140006b40)");

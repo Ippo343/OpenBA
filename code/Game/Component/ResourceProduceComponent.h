@@ -39,6 +39,9 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
+#include "object/Internal.h"   // Object::InternalPtr (slot 18's out slot)
+
+class Work;
 
 // The ONE tag of the shared ResourceProduce state table (was in an anonymous
 // namespace in resourceproducecomponent_states.cpp; the member type needs it).
@@ -62,7 +65,7 @@ public:
     Controller* GetController() override { return &_controller; }   // [17] 0x140004080
     // [18] pure: mint the building's Work, hand it back through `out` (an
     // InternalBasePtr slot) and return `out`. Retail RCX = this, RDX = out.
-    virtual uintptr_t* CreateWork(uintptr_t* out) = 0;              // [18] _purecall
+    virtual ::Object::InternalPtr<Work>* CreateWork(::Object::InternalPtr<Work>* out) = 0;              // [18] _purecall
     virtual char  OnEnterProducing() { return 0; }                  // [19] 0x140006b10
     virtual char  OnExitProducing() { return 0; }                   // [20] 0x140006b10
     virtual char  ProduceTick(const System::Time* time) { (void)time; return 0; } // [21] 0x140006b10

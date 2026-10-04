@@ -40,7 +40,6 @@
 // ============================================================================
 #include "Object/factory_registration.h"
 
-extern "C" uintptr_t* HerbalistComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
 
 // 0x14004b2a0: the RP ctor (CALL 0x14012b3d0) and the compiler's stamp. Nothing else.
 HerbalistComponent::HerbalistComponent() : ResourceProduceComponent() {}
@@ -65,6 +64,6 @@ void       HerbalistComponent::Persist(IO::Stream& stream) {
     // Empty serializer block (subclass compat)
     { IO::Serializer scope(stream, 0); }
 }
-uintptr_t* HerbalistComponent::CreateWork(uintptr_t* out) { return HerbalistComponent_CreateWork(this, out); } // [18] 0x14004b160
+// [18] HerbalistComponent::CreateWork is defined in resourceproduce_creatework.cpp.
 
 DEFINE_EXE_TYPE(HerbalistComponent, "ResourceProduceComponent")
