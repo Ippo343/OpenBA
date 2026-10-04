@@ -113,9 +113,18 @@ void CopyMapCell(MapCell* d, const MapCell* s) {
     d->occupant = s->occupant;          // +0x08
     d->field_0x10 = s->field_0x10;      // +0x10
     d->regionId = s->regionId;          // +0x18
-    for (int k = 0; k < 9; ++k)         // +0x1C..+0x24
-        d->field_0x1C[k] = s->field_0x1C[k];
+    d->field_0x1C[0] = s->field_0x1C[0];   // +0x1C..+0x24, the 9-byte block
+    d->field_0x1C[1] = s->field_0x1C[1];
+    d->field_0x1C[2] = s->field_0x1C[2];
+    d->field_0x1C[3] = s->field_0x1C[3];
+    d->field_0x1C[4] = s->field_0x1C[4];
+    d->field_0x1C[5] = s->field_0x1C[5];
+    d->field_0x1C[6] = s->field_0x1C[6];
+    d->field_0x1C[7] = s->field_0x1C[7];
+    d->field_0x1C[8] = s->field_0x1C[8];
+
     d->zone = s->zone;                  // +0x26
+
     d->footprintCount = s->footprintCount;   // +0x28
     d->terrainType = s->terrainType;    // +0x29
     d->field_0x2A = s->field_0x2A;      // +0x2A
