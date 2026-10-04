@@ -41,7 +41,7 @@
 #include <cstdlib>
 #include <cstring>
 
-extern "C" void CitizenList_AddWorker_91130(int64_t townMgr, uint64_t professionKey);
+extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);
 
 namespace {
 
@@ -94,13 +94,11 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
 
     s_fired = true;
     Profession* const builder = profMgr->field_0x38;  // +0x38
-    // LEFT: CitizenList_AddWorker_91130 (CIT) takes the town manager as int64 and the
-    // profession as a uint64 key; the key is also what the log prints.
-    const uint64_t builderKey = reinterpret_cast<uintptr_t>(builder);   // LEFT: SIG CitizenList_AddWorker_91130 (uint64_t key; wave X)
+    const uint64_t builderKey = reinterpret_cast<uintptr_t>(builder);   // LEFT: the log line prints the key as %016llx
     const int before = CountProfession(townMgr, builder);
 
     for (int i = 0; i < s_want; ++i)
-        CitizenList_AddWorker_91130(reinterpret_cast<int64_t>(townMgr), builderKey);   // LEFT: SIG CitizenList_AddWorker_91130 (int64_t town; wave X)
+        CitizenList_AddWorker_91130(townMgr, builder);
 
     const int after = CountProfession(townMgr, builder);
 

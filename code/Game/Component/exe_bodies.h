@@ -58,7 +58,11 @@ extern "C" void* CitizenEmploy_Strat_cbf0(int64_t townMgr, void* out, int64_t* a
 extern "C" void* CitizenEmploy_Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008ca20
 extern "C" void* CitizenEmploy_Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c5f0
 extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c4b0
-extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c3d0
+class CitizenBehavior;   // Entity/CitizenBehavior.h
+class Profession;        // Game/Profession.h
+class ComponentEntity;   // Entity/ComponentEntity.h
+extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
+extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
 
 // ---- citizen_lifeevent.cpp
 

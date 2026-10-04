@@ -210,15 +210,11 @@ void CitizenComponent::OnRemove() {
         ProfessionList* professionRoot = gw->m_professionList;
         Profession* defaultProfession = professionRoot ? professionRoot->field_0x30 : nullptr;
         if (professionRoot && profession != defaultProfession) {
-            alignas(8) uint8_t retbuf[16] = {0};
+            CitizenComponent* retbuf[2] = { nullptr, nullptr };
             ComponentEntity* nearIBP = formerHouse;
-            // CitizenList_AssignWorker_c3d0 is CitizenBehavior's body (LEFT free,
-            // int64_t receiver and key).
-            void* result = CitizenList_AssignWorker_c3d0(
-                reinterpret_cast<int64_t>(gw->m_citizenList), retbuf,   // LEFT: SIG CitizenList_AssignWorker_c3d0 (Component/exe_bodies.h, wave X)
-                reinterpret_cast<int64_t*>(&nearIBP),   // LEFT: SIG CitizenList_AssignWorker_c3d0
-                reinterpret_cast<int64_t>(profession));      // 0x14008c3d0  LEFT: SIG CitizenList_AssignWorker_c3d0
-            CitizenComponent* replacement = result ? *reinterpret_cast<CitizenComponent**>(result) : nullptr;   // LEFT: SIG CitizenList_AssignWorker_c3d0 (void* return)
+            CitizenComponent** result = CitizenList_AssignWorker_c3d0(
+                gw->m_citizenList, retbuf, &nearIBP, profession);   // 0x14008c3d0
+            CitizenComponent* replacement = result ? *result : nullptr;
 
             CitizenComponent* target;
             int   eventType;
