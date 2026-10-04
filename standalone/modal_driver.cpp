@@ -136,7 +136,7 @@ bool s_armed       = false;
 int  s_dismissed   = 0;
 
 // Per-modal state. The callback cannot receive a context (see quirk (a)).
-void* s_seenDialog = nullptr;
+UI::DialogInstance* s_seenDialog = nullptr;
 int   s_seenTicks  = 0;
 
 void ParseEnv() {
@@ -193,7 +193,7 @@ void NoopDraw(void*, void*) {}
 // ctx is the nested UserInterface -- and this works identically whether the
 // ShowDialog that registered it was the shipped DLL's or ours, which is the
 // property the twin-subject differential depends on.
-void* FindModalDialog() {
+UI::DialogInstance* FindModalDialog() {
     ::Engine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return nullptr;
 
@@ -219,14 +219,14 @@ void* FindModalDialog() {
     // RtUi_UserInterface_UpdateStandAloneUI, the body registered at 0x180120310;
     // it is compared by name.
     // LEFT: MainLoopCallback::_func / ::_context are void* (engine/MainLoop.h, R-ENG).
-    void* const wantedPort = reinterpret_cast<void*>(&RtUi_UserInterface_UpdateStandAloneUI);
+    void* const wantedPort = reinterpret_cast<void*>(&RtUi_UserInterface_UpdateStandAloneUI);   // LEFT: MainLoopCallback::_func (engine/MainLoop.h)
 
     for (int i = 0; i < count; ++i) {
         void* const fn = arr[i]._func;
         if (fn != wantedPort) continue;
         void* nestedUiCtx = arr[i]._context;
         if (!nestedUiCtx) continue;
-        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);
+        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);   // LEFT: MainLoopCallback::_context (engine/MainLoop.h)
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.
         auto* head = nestedUi->_dialogs._head;
         if (!head) continue;
@@ -238,15 +238,13 @@ void* FindModalDialog() {
 // The callback itself. Registered in MainLoop+0x90; runs on every fixed-timestep
 // tick of every Frame, nested or not. MUST ignore both arguments (quirk (a)).
 void Tick(void*, void*) {
-    void* dialog = FindModalDialog();
+    UI::DialogInstance* dialog = FindModalDialog();
     if (!dialog) { s_seenDialog = nullptr; s_seenTicks = 0; return; }
 
     if (dialog != s_seenDialog) { s_seenDialog = dialog; s_seenTicks = 0; }
     if (++s_seenTicks < s_ticks) return;
 
-    // LEFT: the UI's dialog-list element is void* (ui/UserInterface.h
-    // DialogInstancePtr, R-UI): the one cast that names the dialog.
-    UI::DialogInstance* d = reinterpret_cast<UI::DialogInstance*>(dialog);
+    UI::DialogInstance* d = dialog;
     UI::UserInterface*  ui = d->_ui;
     uint32_t  flags = d->_flags;
 
@@ -284,12 +282,13 @@ bool Poll() {
     // have made the arrays UNEVEN in the direction quirk (b) tolerates (draw
     // longer than update is harmless; update longer than draw is the fault).
     // LEFT: MainLoopCallback::_func is void* (engine/MainLoop.h, R-ENG).
-    Entry draw{ reinterpret_cast<void*>(&NoopDraw), ml };
+    Entry draw{ reinterpret_cast<void*>(&NoopDraw), ml };   // LEFT: MainLoopCallback::_func (engine/MainLoop.h)
     if (!AppendEntry(ml->_postDraw, draw)) {
         std::fprintf(stderr, "[ModalDriver] ARM FAILED: could not grow MainLoop+0x80\n");
         return false;
     }
-    Entry upd{ reinterpret_cast<void*>(&Tick), ml };
+    Entry upd{ reinterpret_cast<void*>(&Tick), ml };   // LEFT: MainLoopCallback::_func (engine/MainLoop.h)
+
     if (!AppendEntry(ml->_postUpdate, upd)) {
         std::fprintf(stderr, "[ModalDriver] ARM FAILED: could not grow MainLoop+0x90 "
                              "(the +0x80 no-op stays; draw-longer-than-update is safe)\n");
