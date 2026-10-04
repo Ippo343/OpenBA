@@ -107,7 +107,7 @@ void ScrollElement::ComputeSize() {
 // ComputeSize that flipped it would not be seen here. Reproduced.
 // ---------------------------------------------------------------------------
 void ScrollElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->ComputeLayout(x, y, right, bottom);
 
     const uint8_t vertical = _vertical;
@@ -154,7 +154,7 @@ void ScrollElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
 // colour and again before the bar colour, on the same register. Retail's.
 // ---------------------------------------------------------------------------
 void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->Draw(context, alpha);
 
     uint32_t raw = _color;

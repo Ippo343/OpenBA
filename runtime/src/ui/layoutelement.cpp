@@ -117,7 +117,7 @@ void LayoutElement::ComputeSize() {
 // slot 5 — ?ComputeLayout@LayoutElement@UI@@UEAAXHHHH@Z   0x1800d2af0
 // ---------------------------------------------------------------------------
 void LayoutElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->ComputeLayout(x, y, right, bottom);
 
     ComputeSize();                                            // slot 4, virtual
@@ -189,7 +189,7 @@ void LayoutElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
             Element* grand = child->_children[g];
             if (grand != nullptr) grand->AdjustUpperLeft(dx, dy);   // 0x180115840
         }
-        if (Element* b = static_cast<Element*>(child->_border))
+        if (Element* b = child->_border)
             b->AdjustUpperLeft(dx, dy);                             // 0x180115840
         n = _children.GetSize();
     }
@@ -199,7 +199,7 @@ void LayoutElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
 // slot 6 — ?Draw@LayoutElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d2a40
 // ---------------------------------------------------------------------------
 void LayoutElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = _border)
         border->Draw(context, alpha);
 
     const int32_t n = _children.GetSize();

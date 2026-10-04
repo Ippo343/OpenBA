@@ -202,7 +202,7 @@ Dialog::~Dialog() {
     // exactly like `Collection::Array<void*>` (data/size/capacity), so the
     // conversion bridges at the use site with a `reinterpret_cast`.
     // LEFT: 0x180009460 has no named body; the triple is viewed as the Array.
-    reinterpret_cast<Collection::Array<void*>*>(&_references)->~Array();  // +0x78 retail 0x180009460
+    reinterpret_cast<Collection::Array<void*>*>(&_references)->~Array();  // +0x78 retail 0x180009460  // LEFT: H5 Dialog::_references is a raw {ptr,count,cap} triple, not an Array member (its dtor would start to run)
     rtcoll::RtColl_ArrayDtor_180039440(&_templates);                      // +0x68 retail 0x180039440
 
     // The last two (+0x58 `_namedTemplates`, +0x48 `_controllerConfigs`) are
@@ -217,7 +217,7 @@ Dialog::~Dialog() {
     // String's own Release (0x1800c9870): the freeing branch leaves the field
     // at `data - 8`, the sharing branch nulls it (180112e88..180112eaa).
     System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_spriteName));
+        *reinterpret_cast<System::String*>(&_spriteName));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
     // 180112eba: the TAIL-JMP to ~External is the compiler's chain.
 }

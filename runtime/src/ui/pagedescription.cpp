@@ -76,18 +76,13 @@ void PageDescription::Destruct() { this->~PageDescription(); }          // 0x180
 // leaf's table, whose slot 5 is this function), then one kScalarInt over
 // `_activePage` through a SECOND ReaderWriter opened on the same stream.
 bool PageDescription::Serialize(IO::Stream& streamv) {
-    void* const streamvRaw = &streamv;
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamvRaw);   // LEFT: file-local shadow of IO::Stream (H10; dies with its owner)
-
     GroupDescription::Serialize(streamv);                       // 1800d542a
 
-    rtdesc::Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800d545a
+    IO::Serializer ser(streamv, 0);                             // 1800d545a (inlined ctor)
 
-    rw->SerializeInt(_activePage, nullptr);
+    ser._readerWriter->SerializeInt(_activePage, nullptr);
 
-    if (rw != nullptr) delete rw;                    // 1800d547d
-    return true;
+    return true;                                // ~Serializer 1800d547d (inlined)
 }
 
 // ============================================================================
@@ -114,23 +109,23 @@ Object::InternalPtr<Element>* PageDescription::CreateInstance(
     if (raw != nullptr)                                        // 1800d5323
         elem = ::new (raw) PageElement();                      // 1800d5328..1800d5344 inlined ctor
 
-    void* slot = elem;                                         // 1800d5350
-    UI::ElementDescription::CreateInstance(                   // 1800d535d
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+    Object::InternalPtr<Element> slot(elem);                   // 1800d5350
+    UI::ElementDescription::CreateInstance(&slot);             // 1800d535d
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 1800d5362 / 1800d53c9
-        void* desc = _children._data[i];                       // 1800d5377
+        ElementDescription* desc = _children._data[i];         // 1800d5377
 
-        void** made = rtdesc::DialogCreateElement(dialog, &slot, desc);
+        // ?CreateElement@Dialog@UI@@ 0x180112ed0, its result into the same slot.
+        slot = dialog->UI::Dialog::CreateElement(Object::ExternalPtr<ElementDescription>(desc));
 
-        Element* child = *reinterpret_cast<Element**>(made);   // 1800d5388
+        Element* child = slot.Get();                           // 1800d5388
         if (child != nullptr)
             child->_parent = elem;                             // 1800d5390
 
         rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
                                                elem->_children._size + 1,
-                                               made);          // 1800d53a9
+                                               &slot);         // 1800d53a9
 
         for (Element* n = elem; n != nullptr; n = n->_parent)  // 1800d53b1..1800d53c5
             n->_flags |= kElementFlagNeedsSizeCalc;

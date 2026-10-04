@@ -391,7 +391,7 @@ UNIT_TEST(ui_elementdescription_slot_order_is_retails) {
 UNIT_TEST(ui_element_slot11_getborder_carries_the_hidden_return_slot) {
     FactoryScope scope;
     ElementProbe probe{};
-    probe._border = reinterpret_cast<void*>(static_cast<uintptr_t>(0xB0B0B0B0));
+    probe._border = reinterpret_cast<UI::Element*>(static_cast<uintptr_t>(0xB0B0B0B0));
     void* raw = static_cast<void*>(&probe);
     const void* const* vtBefore = VTableOf(raw);
 

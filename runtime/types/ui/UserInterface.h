@@ -137,16 +137,11 @@ namespace UI {
 // `prev` at +0x08, which pins sizeof(T) == 8 through
 // `Node = align8(sizeof T) + 0x10` (Collection.h).
 //
-// It is spelled `void*` rather than `DialogInstance*` on purpose: lane B owns
-// runtime/types/ui/DialogInstance.h, nothing in lane C dereferences a
-// DialogInstance through a typed pointer, and an incomplete type declared
-// twice in two lanes' headers is a needless way to make one lane's edit break
-// another's build. The offsets lane C's port DOES read out of a
-// DialogInstance (+0x20 flags, +0x50 root element) are spelled as raw
-// offsets, with the evidence, at their use site in runtime/src/ui/
-// userinterface.cpp.
+// B.4 P2 (R-UI, H4): spelled as the typed `DialogInstance*` (the one pointer
+// the InternalPtr holds); layout unchanged: 8 bytes, node stride 0x18.
 // ============================================================
-typedef void* DialogInstancePtr;
+class DialogInstance;
+typedef DialogInstance* DialogInstancePtr;
 
 // ============================================================
 // UI::UserInterface::ClipRegion — 4 ints, 0x10 bytes, at +0xfc.
@@ -190,7 +185,7 @@ class Element;
 // string names the dwords, so they keep typed guess names.
 // ============================================================
 struct Event {
-    void*    dialog;     // +0x00  DialogInstance* (the list's element type)
+    DialogInstancePtr dialog; // +0x00  the list's element type (B4 P2 H4: typed)
     Element* element;    // +0x08
     int32_t  eventId;    // +0x10
     int32_t  arg14;      // +0x14
@@ -303,6 +298,7 @@ class Cursor;
 class Sprite;
 class SpriteCapture;
 class SpriteContext;
+class SpriteSheet;
 class ToolTipDialog;
 
 class UserInterface {
@@ -362,7 +358,7 @@ public:
     bool IsDialogOpen(Object::InternalPtr<DialogInstance>* dialog) const {
         auto* node = _dialogs._head;
         if (node == nullptr) return false;
-        void* const want = *reinterpret_cast<void* const*>(dialog);
+        void* const want = *reinterpret_cast<void* const*>(dialog);   // LEFT: the header only forward-declares InternalPtr (unit test links this inline body alone)
         do {
             if (node->element == want) return true;
             node = node->next;
@@ -466,7 +462,7 @@ public:
     uint8_t           _dragDropActive;                           // +0x088
     uint8_t           _pad89[7];                                 // +0x089 never written
 
-    void* _audioScene;                                           // +0x090 Audio::Scene*
+    Audio::Scene* _audioScene;                                           // +0x090 Audio::Scene* (B4 P2 H4: typed)
     // ExternalPtr<Audio::SoundEffect>, one per UI sound id. Play(id) reads
     // _sounds[id] and queues it on _audioScene; Update calls Play(0) whenever
     // it drained a non-empty _addDialogs, which is the "dialog opened" sound.
@@ -481,7 +477,7 @@ public:
     // UI::Sprite, 0x10 bytes: {ExternalPtr<SpriteSheet>, int32 index, pad},
     // copied wholesale by SetFullscreenFadeSprite (padding included). The
     // ctor's `index = -1` is the engine's empty-sprite value.
-    void*   _fadeSpriteSheet;                                    // +0x0e0
+    SpriteSheet* _fadeSpriteSheet;                               // +0x0e0  (B4 P2 H4: typed; SetFade copies Sprite::spriteSheet)
     int32_t _fadeSpriteIndex;                                    // +0x0e8 init -1
     int32_t _pad0ec;                                             // +0x0ec never written
 

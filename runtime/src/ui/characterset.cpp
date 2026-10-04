@@ -118,7 +118,7 @@ bool CharacterSet::Serialize(IO::Stream& streamv) {
 // compiler chains ~External (retail's tail JMP at 0x1800cb892).
 CharacterSet::~CharacterSet() {
     System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_string20));    // 1800cb860..1800cb88a
+        *reinterpret_cast<System::String*>(&_string20));    // 1800cb860..1800cb88a  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 }  // namespace UI

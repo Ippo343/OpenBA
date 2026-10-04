@@ -161,7 +161,7 @@ public:
     Collection::Array<void*> _userData; // +0x108 element = void*
     int32_t  _currentItem;              // +0x118 ctor -1 (dword); ?GetCurrentItem@
     uint32_t _pad11c;                   // +0x11C written by nothing
-    void*    _openDialog;               // +0x120 (stays void*: widgets_input.cpp, R-UI-b, casts it to uint8_t*) InternalPtr<UI::ComboDialog> the popup;
+    ComboDialog* _openDialog;           // +0x120 InternalPtr<UI::ComboDialog> the popup (B4 P2 H4: typed);
                                         //        ctor 0; Update stores the new dialog
 };
 

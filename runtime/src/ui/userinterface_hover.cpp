@@ -346,9 +346,8 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
     void* const mem = RtUi_ToolTipDialog_OperatorNew(0xc0);            // 0x1801208f0
     ToolTipDialog* tip = nullptr;
     if (mem) {
-        // B.4 LEFT: `Element::_toolTipDialog` (+0x40) is `void*` (R-UI-a).
         tip = ::new (mem) ToolTipDialog(                               // 0x180120907..0x18012092e
-            self, static_cast<const Dialog*>(elem->_toolTipDialog),
+            self, elem->_toolTipDialog,
             *dialog, Object::InternalPtr<Element>(elem));
     } else {
         ++g_tipAllocFailed;                                            // 0x18012093a

@@ -251,7 +251,7 @@ void ContainerElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h)
 // The visibility flag is NOT tested here (unlike GroupElement's loop); only the
 // null test is.
 void ContainerElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    Element* border = static_cast<Element*>(_border);
+    Element* border = _border;
     if (border != nullptr) border->Draw(context, alpha);
 
     alpha = DimAlpha(this, alpha);

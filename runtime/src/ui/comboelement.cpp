@@ -138,8 +138,8 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
             if (item->_params._size > 0) {
                 rtuielem::SetNeedsSizeCalc(item);
                 // LEFT (H5): both Strings are held as raw char* storage.
-                *reinterpret_cast<System::String*>(item->_params._data) =        // 0x1800c9810
-                    *reinterpret_cast<const System::String*>(&_strings._data[i]);
+                *reinterpret_cast<System::String*>(item->_params._data) =        // 0x1800c9810  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                    *reinterpret_cast<const System::String*>(&_strings._data[i]);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                 item->CacheText();                                    // 0x18011ec10
             }
 
@@ -204,8 +204,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 // chains ~ButtonElement / ~Element.
 namespace UI {
 ComboElement::~ComboElement() {
-    // LEFT: _openDialog stays void* (widgets_input.cpp, R-UI-b).
-    ComboDialog* const open = static_cast<ComboDialog*>(_openDialog);
+    ComboDialog* const open = _openDialog;
     if (open != nullptr) {
         Object::InternalPtr<DialogInstance> slot(open);
         open->_ui->CloseDialog(&slot);                                   // 0x180120f20

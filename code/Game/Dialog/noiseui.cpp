@@ -98,8 +98,7 @@ void NoiseUI::SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
     *sheetOut = newSheet;
 
     // The sheet's material instance (+0x30).
-    // LEFT: SpriteSheet::m_field30 is uint64_t (R-UI's header).
-    (*sheetOut)->m_field30 = reinterpret_cast<uint64_t>(*materialOut);
+    (*sheetOut)->m_field30 = *materialOut;
 
     // Get image dimensions
     int imgW = image->Width();

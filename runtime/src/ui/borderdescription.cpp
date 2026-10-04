@@ -84,7 +84,7 @@ void BorderDescription::Destruct() { this->~BorderDescription(); }
 BorderDescription::~BorderDescription() {
     for (int i = 8; i >= 0; --i)                              // 18010fb45 .. 18010fcca
         System::StringPrivateAccess::Release(
-            *reinterpret_cast<System::String*>(&_spriteName[i]));
+            *reinterpret_cast<System::String*>(&_spriteName[i]));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ  0x180040ad0
