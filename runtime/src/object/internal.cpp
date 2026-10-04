@@ -225,7 +225,7 @@ void InternalBasePtrSerializeBody(Internal** self,
 
     // A one-byte `char` through the bool slot (+0x78), as retail passes it.
     char present = (*self != nullptr) ? 1 : 0;
-    enc->SerializeBool(*reinterpret_cast<bool*>(&present), nullptr);  // LEFT: R-IO SerializeBool takes bool&; retail passes the one-byte char (H8: a bool would normalise it)
+    enc->SerializeBool(*reinterpret_cast<bool*>(&present), nullptr);  // retail hands the one-byte char to the bool slot (H8)  // CAST-OK: byte_io
     if (present == 0) {
         *self = nullptr;
         return;
@@ -241,10 +241,10 @@ void InternalBasePtrSerializeBody(Internal** self,
         index = p->_factoryIndex;
         type = p->Type();   // slot 2 +0x10
     }
-    const uint32_t gen = (*self != nullptr) ? (*self)->_generation : 0u;
+    uint32_t gen = (*self != nullptr) ? (*self)->_generation : 0u;   // written by SerializeUInt on a load
 
     enc->SerializeInt(index, nullptr);                          // +0xa0
-    enc->SerializeUInt(const_cast<uint32_t&>(gen), nullptr);    // +0x98  // LEFT: SIG the door's `const uint32_t& gen` against SerializeUInt(uint32_t&) (R-IO / wave X)
+    enc->SerializeUInt(gen, nullptr);                           // +0x98
     enc->SerializeUInt(type, nullptr);                          // +0x98
 
     // ?PersistObject@InternalFactory@Object@@ (0x1800bff10), the member by
