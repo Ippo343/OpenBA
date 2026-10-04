@@ -477,6 +477,13 @@ public:
     int32_t             _saveCount;          // +0x88
     uint8_t             _pad8c[0x04];        // +0x8C — NOT pinned
     RtSystem::String    _savePath;           // +0x90 — POD; ~Persistence frees it
+    // LEFT: H5 _savePath / _pendingFilename stay POD (B4 X-R3). Retail's dtor
+    // 0x1800b7fb0 releases +0x90 FIRST (0x1800b7fc6), then ~PersistenceWorker
+    // (0x1800b8000), then the settings map (JMP 0x18000f7d0): member order. A
+    // typed _savePath alone would be released AFTER the body's two hand calls;
+    // the embedded worker (+0x10, loose fields here) and the map must become
+    // members in the same commit. _pendingFilename IS PersistenceWorker::
+    // _pendingFilename (worker+0x30), released by the worker's dtor.
 
     // ?_singleton@Persistence@IO@@0PEAV12@EA (0x1801fc6b8) -- the class static
     // (ENDGAME B.3.9 IO, B39_RULES D7). Defined in persistence.cpp;

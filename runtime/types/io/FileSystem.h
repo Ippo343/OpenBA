@@ -242,6 +242,12 @@ struct FileInfo {
     void*    winHandle;   // +0x18 — the Win32 HANDLE (INVALID_HANDLE_VALUE when there is none)
     RtSystem::String _name0;   // +0x20 — a Filename (the copy ctor is ??0Filename@)
     RtSystem::String _name1;   // +0x28
+    // LEFT: H5 _name0 / _name1 stay POD. FileInfo is built in RAW return slots
+    // (CreateFileW / OpenFile placement-construct both names, 0x1800acc82/8e,
+    // 0x1800acbae/bc) and destroyed by explicit calls at retail's positions
+    // (~FileInfo 0x18000c180). Typed, every `FileInfo tmp;` would construct
+    // them first (twice) and destroy them at scope end: OpenFile / CreateFileW
+    // must return by value first (B4 X-R3).
 };
 static_assert(sizeof(FileInfo) == 0x30, "FileInfo is 0x30 bytes (OpenFile's frame)");
 static_assert(offsetof(FileInfo, size)       == 0x08,
