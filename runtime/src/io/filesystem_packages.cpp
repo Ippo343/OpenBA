@@ -594,9 +594,8 @@ static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndex
 namespace IO {
 
 System::Filename FileSystem::GetPackDirectory() const {
-    // `packDirectory` is a `RtSystem::String` member, read as a Filename
-    // exactly as retail's `LEA RDX,[RCX+0x10]` does.
-    return System::Filename(RtIO::SysFile(_packDirectory));
+    // The Filename copy ctor on +0x10, as retail's `LEA RDX,[RCX+0x10]`.
+    return System::Filename(_packDirectory);
 }
 
 void FileSystem::ClosePackages() {
@@ -767,7 +766,7 @@ void FileSystem::LoadPackages() {
         PackageFile* pkg = nullptr;
         if (block != nullptr)
             pkg = ::new (block) IO::PackageFile();   // B.3.9 IO: the real ctor
-        pkg->IO::PackageFile::ReadPackfile(RtIO::SysFile(_userPackFilenames[i]));
+        pkg->IO::PackageFile::ReadPackfile(_userPackFilenames[i]);
         RtIO::AppendPackfile(this, pkg);
     }
 

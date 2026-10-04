@@ -592,9 +592,8 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 
         ComponentEntity* e = *entSlot;
         if (e->_entityList != nullptr) {
-            // LEFT: ComponentEntity::_entityList is void* (Entity/ComponentEntity.h):
-            // retail re-reads the owner it has just stored.
-            EntityList* owner = static_cast<EntityList*>(e->_entityList);
+            // Retail re-reads the owner it has just stored.
+            EntityList* owner = e->_entityList;
             uint32_t flags = e->_entityFlags;
             if (flags & 4) {
                 void* ibp = nullptr;

@@ -469,7 +469,7 @@ UNIT_TEST(b39_pickingmesh_ctor_makes_retails_stores) {
     std::memset(buf, 0xCD, sizeof buf);
     Picking::PickingMesh* m = ::new (buf) Picking::PickingMesh();
     CHECK(static_cast<void*>(m) == static_cast<void*>(buf));
-    CHECK(m->_path.data == nullptr);
+    CHECK(m->_path._data == nullptr);
     CHECK(m->_refs._data == nullptr);
     CHECK_EQ(m->_refs._size, 0);
     CHECK_EQ(m->_refs._capacity, 0);

@@ -599,12 +599,10 @@ void FileSystem::CloseFile(RtIO::FileInfo& infoRef) {
 // (`reference_a_written_recipe_can_be_wrong.md` is exactly this shape — two
 // destructors that look interchangeable and are not).
 // ============================================================================
-// THE THREE `RtSystem::String` MEMBERS STAY PODs, and it is THIS BODY that is
-// the reason. Retyping +0x00/+0x08/+0x10 to `System::String` would give
-// `~FileSystem()` three IMPLICIT member destructors running IN ADDITION to the
-// three explicit releases below — the B31 `RtSystem::String` double-free,
-// reached from the other direction. The releases stay explicit and by hand,
-// exactly as retail's three inlined idioms are.
+// STEP 5 IS THE COMPILER'S. The three directories are `System::Filename`
+// members (B4 X-R3): they are destroyed after this body, in reverse
+// declaration order (+0x10, +0x08, +0x00), which is retail's 0x1800ac720 ..
+// 0x1800ac79c, each under its own unwind state as member destructors are.
 FileSystem::~FileSystem() {
     ++RtIO::g_fcc.fsDtor;
 
@@ -624,13 +622,8 @@ FileSystem::~FileSystem() {
     RtIO::PodArrayDtor(
         reinterpret_cast<RtIO::PodArray*>(&_packfiles));  // 1800ac71a  // LEFT: H5 FileSystem::_packfiles is raw storage of a Collection::Array<PackageFile*>
 
-    // Step 5
-    // The three path fields are `RtSystem::String` members, so ~String is
-    // invoked on them explicitly; it is the same inlined release retail emits
-    // at each of the three addresses.
-    RtIO::Sys(_packDirectory).~String();              // 1800ac720  +0x10
-    RtIO::Sys(_dataDirectory).~String();              // 1800ac74a  +0x08
-    RtIO::Sys(_sourceDirectory).~String();            // 1800ac775  +0x00
+    // Step 5: ~Filename on _packDirectory, _dataDirectory, _sourceDirectory, run
+    // by the compiler after this body (1800ac720 / 1800ac74a / 1800ac775).
 }
 
 }  // namespace IO

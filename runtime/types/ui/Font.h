@@ -193,8 +193,9 @@ public:
     // ExternalPtr zero themselves (+0x30/+0x38, +0x40/+0x48, +0x60); +0x58 is a
     // DWORD store and +0x5c is NEVER written (retail — `_spaceWidth` is what
     // the allocator left until Serialize fills it).
+    // The four Strings' null stores (180031d2a, 180031d55 / 59 / 60) are the
+    // members' own constructors, run in declaration order before this body.
     Font() : Object::External() {
-        _string20.data = nullptr;                        // 180031d2a
         _field28       = nullptr;                        // 180031d2e
         _lineHeight    = 0;                              // 180031d42 (qword: +0x50/+0x54)
         _baseLine      = 0;
@@ -202,15 +203,12 @@ public:
         _material      = nullptr;                        // 180031d4d
         _field70       = 0;                              // 180031d51 (qword: +0x70/+0x74)
         _field74       = 0;
-        _string78.data = nullptr;                        // 180031d55
-        _string80.data = nullptr;                        // 180031d59
-        _string88.data = nullptr;                        // 180031d60
     }
 
     // [0] 0x180032130 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x90`, the element size).
-    // 0x1801175a0 — the retired door's body (font.cpp); the compiler runs the
-    // two ~Array and chains ~External.
+    // 0x1801175a0 — retail's sequence is the members' destructors in reverse
+    // declaration order (font.cpp): the body is empty.
     ~Font() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
@@ -264,7 +262,7 @@ public:
 
 public:
     // ---- the 0x70 bytes Font adds (public: the doors and AddFont read them) --
-    RtSystem::String                   _string20;      // +0x20  System::String
+    System::String                     _string20;      // +0x20  ctor 180031d2a, dtor 180117664
     CharacterSet*                      _field28;       // +0x28  ExternalPtr<CharacterSet>, serialized by 0x180076e90 (B4 H4: typed)
     Collection::Array<int32_t>         _charToGlyph;   // +0x30  codepoint -> glyph index
     Collection::Array<Kerning>         _glyphs;        // +0x40  GetKern
@@ -276,9 +274,9 @@ public:
     Graphics::MaterialInstance*        _material;      // +0x68  ExternalPtr<MaterialInstance> (B4 H4: typed)
     int32_t                            _field70;       // +0x70
     int32_t                            _field74;       // +0x74
-    RtSystem::String                   _string78;      // +0x78  System::String
-    RtSystem::String                   _string80;      // +0x80  System::String
-    RtSystem::String                   _string88;      // +0x88  System::String
+    System::String                     _string78;      // +0x78  ctor 180031d55, dtor 18011762a
+    System::String                     _string80;      // +0x80  ctor 180031d59, dtor 1801175f8
+    System::String                     _string88;      // +0x88  ctor 180031d60, dtor 1801175c5
 };
 
 static_assert(sizeof(Font) == 0x90, "sizeof(UI::Font) == 0x90 (MOV EDX,0x90 at 0x18003214f)");

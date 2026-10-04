@@ -208,7 +208,6 @@
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // B.4 R-ENG: Sys(External::_path)
 #include "../object/external_compiled.h"   // B3R: GetCompiledPath by name
 #include "../../types/video/Context.h"     // B3R: RtVideo_Context_Dtor
 #include "../../types/collection/Collection.h"   // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
@@ -678,7 +677,7 @@ void Engine::MainLoop::OnVideoRestart() {
             // the operator would normalise twice on the taken branch and the
             // release/adopt pair stays spelled out, in class terms, through the
             // transitional private accessors (cookbook, DELIMITERS, last case).
-            System::Filename& dst = RtSystem::Sys(r->_object->_path);
+            System::Filename& dst = r->_object->_path;
             if (dst._data != r->_path._data) {
                 System::StringPrivateAccess::Release(dst.AsString());
                 // Release leaves `data - 8` in the slot on the FREEING arm

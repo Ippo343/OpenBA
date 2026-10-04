@@ -45,7 +45,7 @@
 #include <cstddef>
 #include <cstdint>
 #include "Component/exe_bodies.h"
-#include "Player/exe_bodies.h"          // TradeWork_impl_4b40 (0x140014b40)
+#include "Player/exe_bodies.h"          // Avl38Retrace (0x140014b40)
 #include "system/MemoryAllocator.h"     // System::MemoryAllocator::MemAlloc / MemFree
 
 namespace {
@@ -203,9 +203,7 @@ RecordNode** InsertRecord(RecordTree* tree, RecordNode** out, const Record* src)
 rebalance:
     {
         RecordNode* retraceCursor = cursor;    // &local_res8 (the descent node)
-        // LEFT: the shared retrace takes the tree and its cursor as int64_t* (PLAYER's body).
-        TradeWork_impl_4b40(reinterpret_cast<int64_t*>(tree),
-                            reinterpret_cast<int64_t*>(&retraceCursor));   // 0x140014b40
+        Avl38Retrace(&tree->root, &retraceCursor);   // 0x140014b40 (the shared AVL retrace)
         tree->count = tree->count + 1;
         *out = newNode;
     }

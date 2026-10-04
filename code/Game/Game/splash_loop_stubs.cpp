@@ -246,7 +246,7 @@ void GameLoadDialogLoopT::Startup() {
     // populated by an upstream load), and it runs BEFORE step 2 starts the loader
     // thread, so it is not concurrent with it. The reveal gets a normal
     // first-tick dt and animates frame-by-frame.
-    void* ui = &_ui;
+    UI::UserInterface* ui = &_ui;
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
 }
@@ -335,7 +335,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // splash — just after the loader has finished rather than beside it.
     if (!EngineLoader::IsBusy()) {
         if (ChunkedSceneLoader::IsArmed()) {
-            void* ui = &_ui;
+            UI::UserInterface* ui = &_ui;
             int64_t revealCap = (::System::Timer::_ticksPerSecond > 0)
                 ? ::System::Timer::_ticksPerSecond / 4 : 0;
             float revealAlpha = UIFade::GetCurrentAlpha(ui);
@@ -440,7 +440,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // signals completion separately.
     if (!EngineLoader::IsBusy() && _elapsedTicks >= _delayTicks &&
         worldReady) {
-        void* ui = &_ui;
+        UI::UserInterface* ui = &_ui;
 
         if (g_fadeOutInitiatedFor != this) {
             g_fadeOutInitiatedFor = this;
