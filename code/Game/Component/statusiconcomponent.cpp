@@ -704,7 +704,7 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     Component* model = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
     // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
     // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
-    if (model && PerfX::IconCull() && PerfX::ModelCulled(model)) {
+    if (model && PerfX::IconCull() && PerfX::ModelCulled(static_cast<ModelComponent*>(model))) {   // found by ModelComponent::TypeId() (B10)
         PerfX::Count(PerfX::kCntIconCulled);
         PerfX::NoteDeferred(this, [](void* o) {
             reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge  LEFT: SIG PerfX::NoteDeferred (SA: the callback takes void*)
