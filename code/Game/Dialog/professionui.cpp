@@ -611,8 +611,8 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     }
 
     // Iterate all citizens
-    int citizenCount = citizenMgr->citizenCount;
-    CitizenComponent** citizenArray = citizenMgr->citizens;
+    int citizenCount = citizenMgr->citizens._size;
+    CitizenComponent** citizenArray = citizenMgr->citizens._data;
 
     for (int i = 0; i < citizenCount; i++) {
         // CheckPtr on citizen IBP (original does this)
@@ -672,17 +672,17 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         Profession* profKey = profArrayPtr[p];
 
         // Look up profession in world BST at citizenMgr+0x100 to get entity count
-        ProfessionBucket* bstNode = citizenMgr->field_0x100;
+        ProfessionBucket* bstNode = citizenMgr->field_0x100._root;
         int entityCount = 0;
 
         while (bstNode) {
-            Profession* nodeKey = bstNode->key;
+            Profession* nodeKey = bstNode->element.key;
             if (profKey < nodeKey) {
                 bstNode = bstNode->left;
             } else if (profKey > nodeKey) {
                 bstNode = bstNode->right;
             } else {
-                entityCount = bstNode->count;
+                entityCount = bstNode->element.entities._size;
                 break;
             }
         }
@@ -690,13 +690,13 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         int totalWorkers = 0;
         for (int e = 0; e < entityCount; e++) {
             // Re-search BST each iteration (original does this to get fresh entity list)
-            ProfessionBucket* bstNode2 = citizenMgr->field_0x100;
+            ProfessionBucket* bstNode2 = citizenMgr->field_0x100._root;
             ComponentEntity** freshEntityList = nullptr;
             while (bstNode2) {
-                Profession* nk = bstNode2->key;
+                Profession* nk = bstNode2->element.key;
                 if (profKey < nk) { bstNode2 = bstNode2->left; }
                 else if (profKey > nk) { bstNode2 = bstNode2->right; }
-                else { freshEntityList = bstNode2->entities; break; }
+                else { freshEntityList = bstNode2->element.entities._data; break; }
             }
             if (!freshEntityList) continue;
 
@@ -882,8 +882,8 @@ void ProfessionUI::HandleButton(int profIndex) {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
     CitizenBehavior* citizenMgr = game->m_citizenList;
-    int citizenCount = citizenMgr->citizenCount;
-    CitizenComponent** citizenArray = citizenMgr->citizens;
+    int citizenCount = citizenMgr->citizens._size;
+    CitizenComponent** citizenArray = citizenMgr->citizens._data;
 
     // Get the profession ID for this index (compared with the citizens' raw field)
     Profession* profId = game->m_professionList->professions.GetData()[profIndex];

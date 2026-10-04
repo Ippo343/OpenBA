@@ -213,8 +213,8 @@ extern "C" int Pasture_FillAllPastures() {
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
     CitizenBehavior* town = w ? w->m_citizenList : nullptr;
     if (!town) return 0;
-    const int nPastures = town->pastureCount;
-    PastureComponent** list = town->pastures;
+    const int nPastures = town->pastures._size;
+    PastureComponent** list = town->pastures._data;
     if (nPastures <= 0 || !list) return 0;
 
     int spawned = 0;

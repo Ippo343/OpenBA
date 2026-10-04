@@ -374,7 +374,7 @@ void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
     }
     int cat = ResourceCategory(material);   // 0x140088f90
     if (cat >= 0) {
-        town->professionResources[cat]._field10 += quantity;
+        town->professionResources._data[cat]._field10 += quantity;
     }
 }
 

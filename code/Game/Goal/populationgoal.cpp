@@ -75,7 +75,7 @@ Achievement::Goal::GoalState PopulationGoal::CheckGoalState() const {
     if (worldData == nullptr) return static_cast<GoalState>(0);
 
     // Compare the citizen count (+0xA8) against targetPop
-    int currentPop = worldData->citizenCount;
+    int currentPop = worldData->citizens._size;
     return static_cast<GoalState>((currentPop >= targetPop) ? 1 : 0);
 }
 

@@ -44,8 +44,8 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
     CitizenBehavior* town = gameWorld->m_citizenList;   // +0xF0
     if (!Readable(town)) return;
 
-    CitizenComponent** arr = town->citizens;            // +0xA0
-    const int  n = town->citizenCount;                  // +0xA8
+    CitizenComponent** arr = town->citizens._data;            // +0xA0
+    const int  n = town->citizens._size;                  // +0xA8
     if (!arr || n <= 0 || n > 100000) return;
 
     // Count only frames that have a populated town, so frame 1 is the first frame

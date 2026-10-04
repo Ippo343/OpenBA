@@ -97,35 +97,35 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
 // old elements, writes the material into the new tail slot, and frees the old buffer.
 void CitizenBehavior::RegisterRawMaterial(ComponentDescription* material) {
     // Scan for existing entry
-    int count = field_0x118;
-    ComponentDescription** arr = field_0x110;
+    int count = field_0x110._size;
+    ComponentDescription** arr = field_0x110._data;
     for (int64_t i = 0; i < count; i++) {
         if (arr[i] == material) {
             return;
         }
     }
 
-    int oldCount = field_0x118;
+    int oldCount = field_0x110._size;
     int newCount = oldCount + 1;
     if (newCount == oldCount) return; // unreachable, matches original guard
 
-    ComponentDescription** oldBuf = field_0x110;
-    field_0x118 = newCount;
+    ComponentDescription** oldBuf = field_0x110._data;
+    field_0x110._size = newCount;
 
-    if (field_0x11C < newCount) {
-        field_0x11C = newCount;
+    if (field_0x110._capacity < newCount) {
+        field_0x110._capacity = newCount;
         if (oldCount != 0) {
-            field_0x11C = newCount * 3;
+            field_0x110._capacity = newCount * 3;
         }
-        field_0x110 = static_cast<ComponentDescription**>(
-            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)field_0x11C << 3), 8));
+        field_0x110._data = static_cast<ComponentDescription**>(
+            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)field_0x110._capacity << 3), 8));
     }
 
     int start = 0;
-    if (oldBuf == field_0x110) {
+    if (oldBuf == field_0x110._data) {
         start = oldCount;
     }
-    ComponentDescription** dst = field_0x110;
+    ComponentDescription** dst = field_0x110._data;
     for (int i = start; i < newCount; i++) {
         ComponentDescription** slot = dst + i;
         if (slot) {
@@ -137,7 +137,7 @@ void CitizenBehavior::RegisterRawMaterial(ComponentDescription* material) {
         }
     }
 
-    if (oldBuf != field_0x110) {
+    if (oldBuf != field_0x110._data) {
         System::MemoryAllocator::MemFree(oldBuf);
     }
 }

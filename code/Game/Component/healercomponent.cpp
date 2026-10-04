@@ -75,16 +75,16 @@ char HealerComponent::StateBuiltEnter() {
     CitizenBehavior* town = TownManager();
     if (!town) return 0;
 
-    const int count = town->healerCount;
+    const int count = town->healers._size;
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&town->healers).SetSizeFill(count + 1, &self);
+    town->healers.SetSizeFill(count + 1, &self);
 
     {
         static int n = 0;
         if (n < 8) { ++n;
             fprintf(stderr, "[Healer] hospital REGISTERED: comp=%p townMgr=%p "
                             "healerCount=%d\n", static_cast<void*>(this), static_cast<void*>(town),
-                    town->healerCount);
+                    town->healers._size);
             fflush(stderr);
         }
     }
@@ -176,7 +176,7 @@ void HealerComponent::OnRemove() {
     if (GameUpdateLoop::_singleton != nullptr) {
         CitizenBehavior* town = TownManager();
         if (town)
-            CemeteryListErase_Reimpl(&town->healers, &self);   // 0x140002cc0
+            CemeteryListErase_Reimpl(&town->healers._data, &self);   // 0x140002cc0
     }
 }
 

@@ -58,7 +58,7 @@ static int GetResourceLimitByIdx(int resourceIndex) {
     if (!worldSingleton) return 0;
     CitizenBehavior* subObj = worldSingleton->m_citizenList;
     if (!subObj) return 0;
-    ProfessionResourceEntry* arrayBase = subObj->professionResources;
+    ProfessionResourceEntry* arrayBase = subObj->professionResources._data;
     if (!arrayBase) return 0;
     return arrayBase[resourceIndex].maxCount;
 }
@@ -69,7 +69,7 @@ static void SetResourceLimitByIdx(int resourceIndex, int value) {
     if (!worldSingleton) return;
     CitizenBehavior* subObj = worldSingleton->m_citizenList;
     if (!subObj) return;
-    ProfessionResourceEntry* arrayBase = subObj->professionResources;
+    ProfessionResourceEntry* arrayBase = subObj->professionResources._data;
     if (!arrayBase) return;
     arrayBase[resourceIndex].maxCount = value;
 }

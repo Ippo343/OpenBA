@@ -227,8 +227,8 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
 
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
-    int               resCount = townMgr->field_0x28;
-    ComponentEntity** resArray = townMgr->field_0x20;
+    int               resCount = townMgr->field_0x20._size;
+    ComponentEntity** resArray = townMgr->field_0x20._data;
 
     std::set<ResidenceComponent*> empties;   // retail local_b8: available (occupant==0) residences
     std::set<CostRes, CostCmp>    occupied;  // retail local_98: keyed by relocation cost

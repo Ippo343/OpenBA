@@ -239,11 +239,11 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
     Map* mapGrid = map;
     int best = 0x7fffffff;
     *found = nullptr;
-    if (list->field_0x28 < 1) return found;
+    if (list->field_0x20._size < 1) return found;
 
     int idx = 0;
     do {
-        ComponentEntity* cand = list->field_0x20[idx];
+        ComponentEntity* cand = list->field_0x20._data[idx];
 
         Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
@@ -255,7 +255,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
         if (cost < best) {
             uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
             if (static_cast<char>(valid) != '\0') {
-                ComponentEntity* self_00 = list->field_0x20[idx];
+                ComponentEntity* self_00 = list->field_0x20._data[idx];
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
                 ResidenceComponent* storComp = self_00->FindComponent<ResidenceComponent>();
                 bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
@@ -269,7 +269,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
             }
         }
         ++idx;
-    } while (idx < list->field_0x28);
+    } while (idx < list->field_0x20._size);
     return found;
 }
 
@@ -323,10 +323,10 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
     }
 
     // -------- Phase B: market candidate list (param_1[2] / count param_1[3]) --------
-    if (0 < list->field_0x18) {
+    if (0 < list->field_0x10._size) {
         int i = 0;
         do {
-            ComponentEntity* cand = list->field_0x10[i];
+            ComponentEntity* cand = list->field_0x10._data[i];
             ComponentEntity* candIBP = cand;
             uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
             int cost = CellCost(map, cell, param_3);
@@ -353,14 +353,14 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
             }
             ++i;
-        } while (i < list->field_0x18);
+        } while (i < list->field_0x10._size);
     }
 
     // -------- Phase C: raw-material / storage candidate list (param_1[0] / count param_1[1]) --------
-    if (0 < list->field_0x08) {
+    if (0 < list->field_0x00._size) {
         int i = 0;
         do {
-            ComponentEntity* cand = list->field_0x00[i];
+            ComponentEntity* cand = list->field_0x00._data[i];
             ComponentEntity* candIBP = cand;
             uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
             int cost = CellCost(map, cell, param_3);
@@ -420,14 +420,14 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
             }
             ++i;
-        } while (i < list->field_0x08);
+        } while (i < list->field_0x00._size);
     }
 
     // -------- Phase D: residence candidate list (param_1[4] / count param_1[5]) --------
-    if (0 < list->field_0x28) {
+    if (0 < list->field_0x20._size) {
         int i = 0;
         do {
-            ComponentEntity* cand = list->field_0x20[i];
+            ComponentEntity* cand = list->field_0x20._data[i];
 
             // ResidenceComponent on the entity (comp-list1 at cand+0x30 / +0x38)
             ResidenceComponent* resComp = static_cast<ResidenceComponent*>(
@@ -490,7 +490,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
             }
             ++i;
-        } while (i < list->field_0x28);
+        } while (i < list->field_0x20._size);
     }
 
     return ret;

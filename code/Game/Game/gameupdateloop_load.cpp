@@ -410,147 +410,11 @@ static void* Reimpl_FUN_14002e000(void* hdr, int n) {
     return hdr;
 }
 
-// helper @ 0x14000f9e0 — deep-copy of an inner stride-4 (uint32) array header (16 bytes).
-static Collection::Array<int32_t>* Reimpl_TradeComponent_helper_f9e0(Collection::Array<int32_t>* d,
-                                                                     const Collection::Array<int32_t>* s) {
-    if (d == s) return d;
-    void* old = d->_data;
-    if (old) System::MemoryAllocator::MemFree(old);
-    d->_size = 0;
-    d->_data = nullptr;
-    int32_t cnt = s->_size;
-    d->_size = cnt;
-    if (cnt > 0) {
-        d->_capacity = cnt;
-        d->_data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4));
-    }
-    int32_t newCnt = d->_size;
-    if (newCnt > 0) {
-        int32_t* dp = d->_data;
-        int32_t* sp = s->_data;
-        for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
-    }
-    return d;
-}
 
-namespace {
-
-// 0x140017640 element: one inner {int32* data, int32 count, int32 cap}
-// header, stride 0x10, align 8. Copy-construct = zero the header then the
-// 0x14000f9e0 deep copy (an operator= over a zeroed lhs); init = zero the
-// header; destroy = free the inner buffer and zero the header — this body
-// zeroed on BOTH the truncation and the realloc arm, so the row is exact.
-// The spec row's element is raw bytes; each element is one inner Array<int32>
-// (LEFT: the ArraySpec hooks take uint8_t*).
-void CopyIntAssocOuterL(Collection::Array<int32_t>* dst, const Collection::Array<int32_t>* s) {
-    dst->_data = nullptr;                     // +0x00
-    dst->_size = 0;                           // +0x08 / +0x0c: one qword store (H7: two stores)
-    dst->_capacity = 0;
-    Reimpl_TradeComponent_helper_f9e0(dst, s);
-}
-void ZeroIntAssocOuterL(Collection::Array<int32_t>* dst) {
-    dst->_data = nullptr;
-    dst->_size = 0;                           // one qword store (H7)
-    dst->_capacity = 0;
-}
-void DestroyIntAssocOuterRange(Collection::Array<int32_t>* elems, int count) {
-    for (int i = 0; i < count; ++i) {
-        Collection::Array<int32_t>* e = &elems[i];
-        System::MemoryAllocator::MemFree(e->_data);
-        e->_data = nullptr;
-        e->_size = 0;                         // one qword store (H7)
-        e->_capacity = 0;
-    }
-}
-void AssignIntAssocOuterL(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<Collection::Array<int32_t>, &CopyIntAssocOuterL>(d, s);
-}
-void InitIntAssocOuterL(uint8_t* d) {
-    rtcoll::InitAs<Collection::Array<int32_t>, &ZeroIntAssocOuterL>(d);
-}
-void DestroyIntAssocOuterL(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuterRange>(ignoredThis, base, count);
-}
-const rtcoll::ArraySpec kSpec_IntAssocOuterL = {         // exe 0x140017640
-    "Array<Array<int32>>", 0x10, 8,
-    &AssignIntAssocOuterL, &InitIntAssocOuterL, &DestroyIntAssocOuterL, false,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using IntAssocOuterLArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                              Collection::ExplicitSpec<&kSpec_IntAssocOuterL>>;
-
-// 0x1400177c0 element: ProfessionResourceEntry, stride 0x20, align 8. Copy =
-// four qwords (the whole stride); init = {0, 100, 0, 0} written as u64@0,
-// u64@8, u32@0x10, u64@0x18 so +0x14..+0x17 is left untouched; trivially
-// destructible.
-// The element is ProfessionResourceEntry (Entity/CitizenBehavior.h).
-void ZeroProfResEntry(ProfessionResourceEntry* e) {
-    e->currentCount  = 0;       // +0x00 / +0x04: retail's u64 0 (H7: two stores)
-    e->previousCount = 0;
-    e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
-    e->field_0x0C    = 0;
-    e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
-    e->timer._ticks  = 0;       // +0x18 u64
-}
-void AssignProfResEntryL(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 4>>(d, s);   // the whole stride, four qwords
-}
-void InitProfResEntryL(uint8_t* d) {
-    rtcoll::InitAs<ProfessionResourceEntry, &ZeroProfResEntry>(d);
-}
-const rtcoll::ArraySpec kSpec_ProfResEntryL = {          // exe 0x1400177c0
-    "Array<ProfessionResourceEntry>", 0x20, 8,
-    &AssignProfResEntryL, &InitProfResEntryL, nullptr, true,
-    /*assign unwritten*/ 0,    0,
-    /*init   unwritten*/ 0x14, 0x18,
-    /*seed zero       */ 0,    0 };
-using ProfResEntryLArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                             Collection::ExplicitSpec<&kSpec_ProfResEntryL>>;
-
-// 0x14000f090 element: two qwords, stride 0x10, align 8. Copy = whole
-// stride; init = zero; trivially destructible.
-void ZeroPod16(uint64_t* w) {
-    w[0] = 0;
-    w[1] = 0;
-}
-void AssignPod16(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 2>>(d, s);
-}
-void InitPod16(uint8_t* d) {
-    rtcoll::InitAs<uint64_t, &ZeroPod16>(d);
-}
-const rtcoll::ArraySpec kSpec_Pod16 = {                  // exe 0x14000f090
-    "Array<{u64,u64}>", 0x10, 8,
-    &AssignPod16, &InitPod16, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using Pod16Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                     Collection::ExplicitSpec<&kSpec_Pod16>>;
-
-}  // namespace
-
-// FUN_140017640 (TradeComponent_impl_f760_sub_7640) — stride-0x10 array of inner-array headers.
-static void* Reimpl_FUN_140017640(void* hdr, int n) {
-    // B.3.2 bridge: CitizenBehavior+0x150 / TownManager+0x140 are still raw headers.
-    reinterpret_cast<IntAssocOuterLArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
-
-// TradeComponent_impl_f760_sub_77c0 @ 0x1400177c0 — stride-0x20 resize; new slots {0,100,0,0}.
-static void* Reimpl_TradeComponent_sub_77c0(void* hdr, int n) {
-    // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
-    reinterpret_cast<ProfResEntryLArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
-
-// FUN_14000f090 — stride-0x10 POD resize; copies 2x u64, zero-fills new.
-static void* Reimpl_FUN_14000f090(void* hdr, int n) {
-    // B.3.2 bridge: CitizenBehavior+0x180 is still a raw header.
-    reinterpret_cast<Pod16Array*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
+// (B4 X5-COMP: the three CitizenBehavior element rows this file carried —
+// 0x140017640 with 0x14000f9e0, 0x1400177c0, 0x14000f090 — and their Reimpl_
+// resize bridges are the class's members' rows now: CitizenBehaviorRows,
+// Entity/CitizenBehavior.h.)
 
 // ============================================================
 // Subsystem constructors (verified bodies)
@@ -587,11 +451,10 @@ PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float p
 }
 
 // (0x1400c3f90, the EntityList ctor, is EntityList::EntityList since B.4
-// X4-COMP: Load's placement new runs it.) The classes below are trivially
+// X4-COMP, and 0x140090a30, the CitizenBehavior ctor, CitizenBehavior::
+// CitizenBehavior since B.4 X5-COMP: Load's placement new runs them.) The classes below are trivially
 // constructible: Load begins their lifetime with a placement new (no code) and
 // runs their ctor body on it.
-static_assert(std::is_trivially_default_constructible<CitizenBehavior>::value,
-              "placement new of CitizenBehavior runs no code");
 static_assert(std::is_trivially_default_constructible<Calendar>::value,
               "placement new of Calendar runs no code");
 static_assert(std::is_trivially_default_constructible<EventLog>::value,
@@ -600,35 +463,6 @@ static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
 static_assert(std::is_trivially_default_constructible<Minimap>::value,
               "placement new of Minimap runs no code");
-
-// 0x140090a30 — the CitizenBehavior (town manager) ctor's body (+0xF0, 0x1c0).
-// Trivially constructible (the static_assert above).
-static void CitizenBehavior_Construct(CitizenBehavior* cb) {
-    memset(cb, 0, offsetof(CitizenBehavior, _pad1B4));   // zero +0x00..+0x1B3
-    Reimpl_TradeComponent_sub_77c0(&cb->professionResources, 0x15);
-    ProfessionResourceEntry* prices = cb->professionResources;
-    if (prices) {
-        static const int32_t kDefaultPrices[21] = {
-            200, 200, 200, 200, 50, 5000, 100, 50, 500, 200, 200,
-            1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
-        };
-        for (int i = 0; i < 21; ++i)
-            prices[i].maxCount = kDefaultPrices[i];
-    }
-    Reimpl_FUN_14000f090(&cb->notifyEntries, 2);
-    Reimpl_FUN_140017640(&cb->field_0x150, 0x47);
-    cb->field_0x1A8 = 0.0f;                   // retail's dword store of 0 (the same bits)
-    PathGraph* sub = static_cast<PathGraph*>(System::MemoryAllocator::MemAlloc(0x28, 4));
-    if (sub) {
-        sub->m_pairs = nullptr;
-        sub->m_pairCount = 0;                 // +0x08 / +0x0C: one qword store (H7: two stores)
-        sub->m_pairCapacity = 0;
-        sub->m_pendingIdx = -1;
-        sub->m_bstRoot = nullptr;
-        sub->m_bstCount = 0;
-    }
-    cb->pathGraph = sub;
-}
 
 // 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8
 // (raw storage, H5: constructed by hand, as the tree always has).
@@ -1020,8 +854,7 @@ void GameUpdateLoop::Load() {
     // Step 10 — town/trade manager (+0xF0, 0x1c0) — exe ctor 0x140090a30.
     {
         void* mem = AllocSub<void>(0x1c0, 4);
-        CitizenBehavior* cb = mem ? new (mem) CitizenBehavior : nullptr;
-        if (cb) CitizenBehavior_Construct(cb);
+        CitizenBehavior* cb = mem ? new (mem) CitizenBehavior : nullptr;   // 0x140090a30
         m_citizenList = cb;
     }
 
@@ -1366,12 +1199,12 @@ void GameUpdateLoop::Load() {
                 CitizenBehavior* townMgr = m_citizenList;
                 if (townMgr && dim > 0) {
                     const int coarse = (int)dim >> 3;
-                    Reimpl_FUN_140017640(&townMgr->field_0x140, coarse * coarse);
+                    townMgr->field_0x140.SetSize(coarse * coarse);   // 0x140017640
                     fprintf(stderr, "[TownMgr] coarse cell index sized: dim=%u coarse=%d "
                             "buckets=%d base=%p (FireWork water search indexes this; a "
                             "null base faults at coarseCell*0x10)\n",
                             dim, coarse, coarse * coarse,
-                            townMgr->field_0x140);
+                            townMgr->field_0x140._data);
                     fflush(stderr);
                 }
             }

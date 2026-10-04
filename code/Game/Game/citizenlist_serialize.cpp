@@ -162,22 +162,22 @@ typedef void (*fn_KeyResolve_t)(void* field, void* serializer);
 // if they come out zero, citizens have no homes, no jobs and no services, which
 // looks like "everyone froze, then starved".
 void RegistryCensus(const CitizenBehavior* cb, const char* leg, const char* when) {
-    static const struct { int32_t CitizenBehavior::* count; const char* name; } kReg[] = {
-        {&CitizenBehavior::field_0x08, "entA"},   {&CitizenBehavior::field_0x18, "entB"},
-        {&CitizenBehavior::field_0x28, "residence"}, {&CitizenBehavior::field_0x38, "entC"},
-        {&CitizenBehavior::cemeteryCount, "cemetery"},
-        {&CitizenBehavior::happinessComponentCount, "happiness"},
-        {&CitizenBehavior::attendanceComponentCount, "attendance"},
-        {&CitizenBehavior::healerCount, "healer"},
-        {&CitizenBehavior::livestockCount, "livestock"}, {&CitizenBehavior::pastureCount, "pasture"},
-        {&CitizenBehavior::citizenCount, "citizen"}, {&CitizenBehavior::herdCount, "herd"},
-        {&CitizenBehavior::populationCount, "population"},
-        {&CitizenBehavior::buildComponentCount, "build"},
-        {&CitizenBehavior::wellCount, "well"}, {&CitizenBehavior::diseaseCount, "disease"},
+    const struct { int32_t count; const char* name; } kReg[] = {
+        {cb->field_0x00._size, "entA"},   {cb->field_0x10._size, "entB"},
+        {cb->field_0x20._size, "residence"}, {cb->field_0x30._size, "entC"},
+        {cb->cemeteries._size, "cemetery"},
+        {cb->happinessComponents._size, "happiness"},
+        {cb->attendanceComponents._size, "attendance"},
+        {cb->healers._size, "healer"},
+        {cb->livestock._size, "livestock"}, {cb->pastures._size, "pasture"},
+        {cb->citizens._size, "citizen"}, {cb->herds._size, "herd"},
+        {cb->populations._size, "population"},
+        {cb->buildComponents._size, "build"},
+        {cb->wells._size, "well"}, {cb->diseases._size, "disease"},
     };
     std::fprintf(stderr, "[TownCensus] %s %s:", leg, when);
     for (const auto& r : kReg)
-        std::fprintf(stderr, " %s=%d", r.name, cb->*r.count);
+        std::fprintf(stderr, " %s=%d", r.name, r.count);
     std::fprintf(stderr, "\n");
     std::fflush(stderr);
 }
@@ -217,183 +217,23 @@ void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serialize
     }
 }
 
-// ------------------------------------------------------------
-// FUN_14000f9e0 — deep-copy of an inner stride-4 (int32) array header
-// (16 bytes: {ptr,count,cap}) used when 140017640 grows the outer array.
-// ------------------------------------------------------------
-void DeepCopyInner04Array(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
-    if (d == s) return;
-    void* old = d->_data;
-    if (old) System::MemoryAllocator::MemFree(old);
-    d->_size = 0;
-    d->_data = nullptr;
-    int32_t cnt = s->_size;
-    d->_size = cnt;
-    if (cnt > 0) {
-        d->_capacity = cnt;
-        if (System::MemoryAllocator::_singleton)
-            d->_data =
-                static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4));
-    }
-    int32_t newCnt = d->_size;
-    if (newCnt > 0) {
-        int32_t* dp = d->_data;
-        int32_t* sp = s->_data;
-        if (dp && sp) for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
-    }
-}
-
-// ------------------------------------------------------------
-// ENDGAME B.3.2 step 2: the three resize bodies below WERE hand-written
-// copies of `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp). Each is
-// now one `Collection::Array<>::SetSize` driven by an `ArraySpec` row that
-// spells out the site's element ops. Compared arm for arm before the swap:
-// exact-equal early return, `_size` stored before the capacity test,
-// treble-on-single-append-from-non-empty, copy the preserved prefix only when
-// the block moved, init the new tail, destroy the truncated tail in place /
-// the whole old buffer on a realloc, then free. Two deliberate differences,
-// identical to the ones code/Game/Goal/goal_exe_helpers.cpp documents: the
-// allocation goes through the LOCKING static `MemAlloc` (0x1800c7a50) instead
-// of the unlocked instance `Allocate` this file reached through `fn_MemAlloc`
-// (same allocator, same heap), and the "fn_MemAlloc unavailable" scaffold
-// guards are gone (fn_MemAlloc is resolved before any serializer runs).
-// ------------------------------------------------------------
-namespace {
-
-// FUN_140017640 element: one inner {int32* data, int32 count, int32 cap}
-// header, stride 0x10, align 8. Copy-construct = zero the header then the
-// 0x14000f9e0 deep copy (an operator= over a zeroed lhs); init = zero the
-// header; destroy = free the inner buffer and zero the header. The old body
-// zeroed the header only on the in-place truncation arm and not on the
-// realloc arm; there the header lives in the old block that is freed on the
-// very next line, so the two extra stores are unobservable. (The second port
-// of the same address, gameupdateloop_load.cpp, zeroes on both arms — this
-// row reproduces that one exactly.)
-// B4 P2 GAME-1: each element is one inner Collection::Array<int32_t>, reached
-// through Collection.h's element adapters (the gameupdateloop_load.cpp form of
-// the same row). Retail's qword zero over +0x08..+0x0F is the two named
-// int32 stores (H7).
-void CopyIntAssocOuter(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
-    d->_data = nullptr;       // +0x00
-    d->_size = 0;             // +0x08 / +0x0C (H7: two stores)
-    d->_capacity = 0;
-    DeepCopyInner04Array(d, s);
-}
-void ZeroIntAssocOuter(Collection::Array<int32_t>* d) {
-    d->_data = nullptr;
-    d->_size = 0;             // (H7)
-    d->_capacity = 0;
-}
-void DestroyIntAssocOuters(Collection::Array<int32_t>* elems, int count) {
-    for (int i = 0; i < count; ++i) {
-        Collection::Array<int32_t>* e = &elems[i];
-        System::MemoryAllocator::MemFree(e->_data);
-        e->_data = nullptr;
-        e->_size = 0;         // (H7)
-        e->_capacity = 0;
-    }
-}
-void AssignIntAssocOuter(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<Collection::Array<int32_t>, &CopyIntAssocOuter>(d, s);
-}
-void InitIntAssocOuter(uint8_t* d) {
-    rtcoll::InitAs<Collection::Array<int32_t>, &ZeroIntAssocOuter>(d);
-}
-void DestroyIntAssocOuter(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuters>(ignoredThis, base, count);
-}
-const rtcoll::ArraySpec kSpec_IntAssocOuter = {          // exe 0x140017640
-    "Array<Array<int32>>", 0x10, 8,
-    &AssignIntAssocOuter, &InitIntAssocOuter, &DestroyIntAssocOuter, false,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using IntAssocOuterArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                             Collection::ExplicitSpec<&kSpec_IntAssocOuter>>;
-
-// FUN_1400177c0 element: ProfessionResourceEntry, stride 0x20, align 8.
-// Copy = whole-stride byte copy; init = {0, 100, 0, 0} written as
-// u64@0, u64@8, u32@0x10, u64@0x18, so +0x14..+0x17 is left untouched;
-// trivially destructible.
-void AssignProfResEntry(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x20); }
-// The element is ProfessionResourceEntry (Entity/CitizenBehavior.h).
-void ZeroProfResEntry(ProfessionResourceEntry* e) {
-    e->currentCount  = 0;       // +0x00 / +0x04: retail's u64 0 (H7: two stores)
-    e->previousCount = 0;
-    e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
-    e->field_0x0C    = 0;
-    e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
-    e->timer._ticks  = 0;       // +0x18 u64
-}
-void InitProfResEntry(uint8_t* d) {
-    rtcoll::InitAs<ProfessionResourceEntry, &ZeroProfResEntry>(d);
-}
-const rtcoll::ArraySpec kSpec_ProfResEntry = {           // exe 0x1400177c0
-    "Array<ProfessionResourceEntry>", 0x20, 8,
-    &AssignProfResEntry, &InitProfResEntry, nullptr, true,
-    /*assign unwritten*/ 0,    0,
-    /*init   unwritten*/ 0x14, 0x18,
-    /*seed zero       */ 0,    0 };
-using ProfResEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                            Collection::ExplicitSpec<&kSpec_ProfResEntry>>;
-
-// FUN_140017f60 element: two int32, stride 8, align 4. Copy = 8-byte copy,
-// init = zero, trivially destructible.
-// Retail moves the pair as one qword: the word-wise adapter at retail's width.
-void ZeroWord8(uint64_t* w) { *w = 0; }
-void AssignIntPair(uint8_t* d, const uint8_t* s) {
-    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 1>>(d, s);
-}
-void InitIntPair(uint8_t* d) { rtcoll::InitAs<uint64_t, &ZeroWord8>(d); }
-
-const rtcoll::ArraySpec kSpec_IntPair = {                // exe 0x140017f60
-    "Array<{int32,int32}>", 8, 4,
-    &AssignIntPair, &InitIntPair, nullptr, true,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using IntPairArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_IntPair>>;
-
-}  // namespace
-
-// ResizeStride0x10 / ResizeStride0x20 have external linkage (B3R R5): CitizenBehavior's
-// ctor (code/Game/Entity/citizenbehavior.cpp) calls them by name through
-// Game/exe_bodies.h. The file's anonymous namespace closes around them.
+// (B4 X5-COMP: the three element rows of +0x140 / +0x150, +0x170 and +0x130 —
+// 0x140017640 with its inner deep copy 0x14000f9e0, 0x1400177c0, 0x140017f60 — are
+// CitizenBehavior's members' rows now: Entity/citizenbehavior.cpp,
+// CitizenBehaviorRows in Entity/CitizenBehavior.h.)
 }  // namespace
 
 // ------------------------------------------------------------
-// FUN_140017640 ("StatsArray::Init") — stride-0x10 outer array resize
-// {ptr,count/cap}[N]; each element itself a stride-4 int array header,
-// deep-copied via DeepCopyInner04Array on grow, freed on shrink.
-// Same address engine_funcs.h's fn_StatsArray_Init resolves.
+// FUN_140017640 ("StatsArray::Init") — stride-0x10 outer array resize.
+// Its one caller left is the version-5 clamp below, which hands it the +0x160
+// TREE header (a defect of the tree's, dead at version 6); every Array member
+// of CitizenBehavior calls its own SetSize.
 // ------------------------------------------------------------
 void ResizeStride0x10(void* hdr, int n) {
-    // B.3.2 bridge: CitizenBehavior+0x140/+0x150 are still raw 0x10-byte
-    // headers in an unconverted exe struct.
-    reinterpret_cast<IntAssocOuterArray*>(hdr)->SetSize(n);   // LEFT: CitizenBehavior.h +0x140 / +0x150 (and the v5 clamp's +0x160) are raw {data, count, cap} triples (H5): the one erased core through the header view
-}
-
-// ------------------------------------------------------------
-// FUN_1400177c0 ("ProfResArray::Init") — stride-0x20 resize; new slots
-// default to {0, 100, 0, 0} (matches ProfessionResourceEntry ctor defaults).
-// Same address engine_funcs.h's fn_ProfResArray_Init resolves.
-// ------------------------------------------------------------
-void ResizeStride0x20(void* hdr, int n) {
-    // B.3.2 bridge: CitizenBehavior+0x170 is still a raw header.
-    reinterpret_cast<ProfResEntryArray*>(hdr)->SetSize(n);   // LEFT: CitizenBehavior.h +0x170 is a raw {data, count, cap} triple (H5): the one erased core through the header view
+    reinterpret_cast<CitizenIntAssocArray*>(hdr)->SetSize(n);   // LEFT: the version-5 clamp passes the +0x160 Set header as an Array<Array<int32>> (the tree's defect, dead at version 6)
 }
 
 namespace {
-
-// ------------------------------------------------------------
-// FUN_140017f60 — stride-8 (two int32) array resize; grows ×3 on the
-// classic "exactly one past capacity" pattern, zero-fills new entries.
-// ------------------------------------------------------------
-void ResizeStride08Pair(void* hdr, int newCount) {
-    // B.3.2 bridge: CitizenBehavior+0x130 is still a raw header.
-    reinterpret_cast<IntPairArray*>(hdr)->SetSize(newCount);   // LEFT: CitizenBehavior.h (ENT): +0x130 is a raw header (H5)
-}
 
 // ------------------------------------------------------------
 // int-assoc array (stride-0x10 outer, resized via ResizeStride0x10; each
@@ -408,15 +248,14 @@ void SerializeIntArray(IO::Serializer* serializer, int32_t count, int32_t* data)
     serializer->Serialize(count, data, nullptr);
 }
 
-// `outer` is the first field of the {Array<int32>* data, count, cap} header.
-void SerializeIntAssocArray(Collection::Array<int32_t>** outer, int32_t* countField,
-                            IO::Serializer* serializer) {
-    int32_t count = *countField;
+// `outer` is CitizenBehavior +0x140 / +0x150 (an Array<Array<int32>>, 0x140017640).
+void SerializeIntAssocArray(CitizenIntAssocArray& outer, IO::Serializer* serializer) {
+    int32_t count = outer._size;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
-    if (loading) ResizeStride0x10(outer, count);
+    if (loading) outer.SetSize(count);
 
-    Collection::Array<int32_t>* slot = *outer;
+    Collection::Array<int32_t>* slot = outer._data;
     for (int32_t i = 0; i < count; ++i) {
         int32_t innerCount = slot->_size;
         serializer->Serialize(innerCount, nullptr);
@@ -447,30 +286,22 @@ struct IbpArrayHeader {             // a Collection::Array<InternalPtr<Component
     int32_t           count;        // +0x08
     int32_t           capacity;     // +0x0C
 };
-struct CompRefNode {
-    uint64_t       key;             // +0x00 the ExternalPtr key (serialized by the key resolver)
-    IbpArrayHeader values;          // +0x08
-    CompRefNode*   parent;          // +0x18
-    CompRefNode*   left;            // +0x20
-    CompRefNode*   right;           // +0x28
-    int16_t        balance;         // +0x30 right height - left height (0x140014b40)
-    int16_t        height;          // +0x32
-    uint8_t        _pad34[4];       // +0x34
-};
-static_assert(sizeof(CompRefNode) == 0x38, "CompRefNode is MemAlloc(0x38)");
-static_assert(offsetof(CompRefNode, values) == 0x08, "CompRefNode::values @ +0x08");
-static_assert(offsetof(CompRefNode, parent) == 0x18, "CompRefNode::parent @ +0x18");
-static_assert(offsetof(CompRefNode, left) == 0x20, "CompRefNode::left @ +0x20");
-static_assert(offsetof(CompRefNode, right) == 0x28, "CompRefNode::right @ +0x28");
-static_assert(offsetof(CompRefNode, balance) == 0x30, "CompRefNode::balance @ +0x30");
-static_assert(offsetof(CompRefNode, height) == 0x32, "CompRefNode::height @ +0x32");
-
-CompRefNode* AllocCompRefTreeNode(uint64_t key, CompRefNode* parent, const IbpArrayHeader& val) {
+// The nodes are CitizenBehavior's bucket-tree nodes (CitizenBucketNode<Key>,
+// Entity/CitizenBehavior.h: 0x38 bytes, {key, entity Array} element, parent
+// +0x18, left +0x20, right +0x28, int16 balance / height +0x30 / +0x32).
+// The loaded entity Array header is MOVED into the node as its three fields
+// (not copied-then-freed): the element's Array has a deep operator=.
+template <class Key>
+CitizenBucketNode<Key>* AllocCompRefTreeNode(Key* key, CitizenBucketNode<Key>* parent,
+                                             const IbpArrayHeader& val) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
-    CompRefNode* n = static_cast<CompRefNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    CitizenBucketNode<Key>* n =
+        static_cast<CitizenBucketNode<Key>*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
-    n->key = key;
-    n->values = val;                 // +0x08..+0x18: value header (moved, not copied-then-freed)
+    n->element.key = key;
+    n->element.entities._data     = val.data;       // +0x08..+0x18: value header (moved)
+    n->element.entities._size     = val.count;
+    n->element.entities._capacity = val.capacity;
     n->parent = parent;              // +0x18
     n->left = nullptr;               // +0x20
     n->right = nullptr;              // +0x28
@@ -479,15 +310,17 @@ CompRefNode* AllocCompRefTreeNode(uint64_t key, CompRefNode* parent, const IbpAr
     return n;
 }
 
-CompRefNode* CompRefTreeMin(CompRefNode* n) {
+template <class Node>
+Node* CompRefTreeMin(Node* n) {
     if (!n) return nullptr;
     while (n->left) n = n->left;
     return n;
 }
-CompRefNode* CompRefTreeSucc(CompRefNode* n) {
+template <class Node>
+Node* CompRefTreeSucc(Node* n) {
     if (!n) return nullptr;
     if (n->right) return CompRefTreeMin(n->right);
-    CompRefNode* parent = n->parent;
+    Node* parent = n->parent;
     while (parent && parent->right == n) {
         n = parent;
         parent = parent->parent;
@@ -495,48 +328,46 @@ CompRefNode* CompRefTreeSucc(CompRefNode* n) {
     return parent;
 }
 
-// `rootField` is the tree header's root slot (CitizenBehavior +0x100 / +0x160,
-// declared void*), `countField` its count.
-void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* serializer,
+// `tree` is CitizenBehavior +0x100 / +0x160 (a Collection::Set of buckets).
+template <class Key>
+void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serializer,
                           fn_KeyResolve_t keyFn) {
-    // LEFT: the roots are CitizenBehavior.h's ProfessionBucket* / TemplateBucket*
-    // (CitizenBucketNode<Key>), whose +0x30 is one int32 where 0x140014b40 reads an
-    // int16 balance + int16 height: this body walks its own CompRefNode until that
-    // header's node carries the pair (not this block's header).
-    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);   // LEFT: CitizenBehavior.h CitizenBucketNode::balance (int32, retail int16 + int16)
+    using Node = CitizenBucketNode<Key>;
+    Node** rootPtr = &tree._root;
+    int32_t* countField = &tree._count;
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
 
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
-            uint64_t key = 0;
+            Key* key = nullptr;
             if (keyFn) keyFn(&key, serializer);
             IbpArrayHeader val = {nullptr, 0, 0};
             SerializeIBPArray(&val.data, &val.count, serializer, ComponentEntity::TypeId());
 
             if (*rootPtr == nullptr) {
-                *rootPtr = AllocCompRefTreeNode(key, nullptr, val);
+                *rootPtr = AllocCompRefTreeNode(key, static_cast<Node*>(nullptr), val);
                 *countField = *countField + 1;
                 continue;
             }
-            CompRefNode* cur = *rootPtr;
-            CompRefNode* insertedNode = nullptr;
+            Node* cur = *rootPtr;
+            Node* insertedNode = nullptr;
             bool dup = false;
             for (;;) {
-                if (key < cur->key) {
-                    CompRefNode* left = cur->left;
+                if (key < cur->element.key) {
+                    Node* left = cur->left;
                     if (!left) {
                         insertedNode = AllocCompRefTreeNode(key, cur, val);
                         cur->left = insertedNode;
                         break;
                     }
                     cur = left;
-                } else if (key <= cur->key) {
+                } else if (key <= cur->element.key) {
                     dup = true;   // matches original: already present, skip insert + count++
                     break;
                 } else {
-                    CompRefNode* right = cur->right;
+                    Node* right = cur->right;
                     if (!right) {
                         insertedNode = AllocCompRefTreeNode(key, cur, val);
                         cur->right = insertedNode;
@@ -551,11 +382,12 @@ void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* 
             }
         }
     } else {
-        CompRefNode* root = *rootPtr;
-        CompRefNode* node = CompRefTreeMin(root);
+        Node* root = *rootPtr;
+        Node* node = CompRefTreeMin(root);
         while (node) {
-            if (keyFn) keyFn(&node->key, serializer);
-            SerializeIBPArray(&node->values.data, &node->values.count, serializer, ComponentEntity::TypeId());
+            if (keyFn) keyFn(&node->element.key, serializer);
+            SerializeIBPArray(&node->element.entities._data, &node->element.entities._size,
+                              serializer, ComponentEntity::TypeId());
             node = CompRefTreeSucc(node);
         }
     }
@@ -659,52 +491,52 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
     const char* leg = SerializerLoading(ser) ? "LOAD" : "SAVE";
     RegistryCensus(this, leg, "enter");
 
-    SerializeIBPArray(&field_0x00, &field_0x08, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&field_0x10, &field_0x18, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&field_0x30, &field_0x38, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&field_0x20, &field_0x28, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&healers, &healerCount, ser, HealerComponent::TypeId());
-    SerializeIBPArray(&citizens, &citizenCount, ser, CitizenComponent::TypeId());
+    SerializeIBPArray(&field_0x00._data, &field_0x00._size, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&field_0x10._data, &field_0x10._size, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&field_0x30._data, &field_0x30._size, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&field_0x20._data, &field_0x20._size, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&healers._data, &healers._size, ser, HealerComponent::TypeId());
+    SerializeIBPArray(&citizens._data, &citizens._size, ser, CitizenComponent::TypeId());
 
     // Unconditional TREE #1 (residence/path-graph style, string-table key).
-    SerializeCompRefTree(&field_0x100, &field_0x108, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
+    SerializeCompRefTree(field_0x100, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
 
-    SerializeIBPArray(&pastures, &pastureCount, ser, PastureComponent::TypeId());
-    SerializeIBPArray(&cemeteries, &cemeteryCount, ser, CemeteryComponent::TypeId());
-    SerializeIBPArray(&happinessComponents, &happinessComponentCount, ser, HappinessComponent::TypeId());
-    SerializeIBPArray(&attendanceComponents, &attendanceComponentCount, ser, AttendanceComponent::TypeId());
-    SerializeIBPArray(&livestock, &livestockCount, ser, LivestockComponent::TypeId());
-    SerializeIBPArray(&herds, &herdCount, ser, HerdComponent::TypeId());
+    SerializeIBPArray(&pastures._data, &pastures._size, ser, PastureComponent::TypeId());
+    SerializeIBPArray(&cemeteries._data, &cemeteries._size, ser, CemeteryComponent::TypeId());
+    SerializeIBPArray(&happinessComponents._data, &happinessComponents._size, ser, HappinessComponent::TypeId());
+    SerializeIBPArray(&attendanceComponents._data, &attendanceComponents._size, ser, AttendanceComponent::TypeId());
+    SerializeIBPArray(&livestock._data, &livestock._size, ser, LivestockComponent::TypeId());
+    SerializeIBPArray(&herds._data, &herds._size, ser, HerdComponent::TypeId());
 
     if (ser->GetVersion() > 0) {
-        SerializeIBPArray(&diseases, &diseaseCount, ser, DiseaseComponent::TypeId());
+        SerializeIBPArray(&diseases._data, &diseases._size, ser, DiseaseComponent::TypeId());
     }
 
-    SerializeIBPArray(&populations, &populationCount, ser, PopulationComponent::TypeId());
-    SerializeIBPArray(&buildComponents, &buildComponentCount, ser, BuildComponent::TypeId());
+    SerializeIBPArray(&populations._data, &populations._size, ser, PopulationComponent::TypeId());
+    SerializeIBPArray(&buildComponents._data, &buildComponents._size, ser, BuildComponent::TypeId());
 
     // ExternalPtr<ComponentDescription>[] arrays, resized via Array<Ptr8>::SetSize
     // (FUN_140001bb0) then bulk-serialized via Reimpl_ExternalPtrArray_Serialize
     // (0x1400049c0), matching FUN_140001bb0(hdr,count) + FUN_1400049c0(ser,count,ptr,p4).
     {
-        int32_t count = field_0x118;
+        int32_t count = field_0x110._size;
         ser->Serialize(count, nullptr);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
-            GameColl::AsArray<GameColl::Ptr8>(&field_0x110).SetSize(count);
+            field_0x110.SetSize(count);
         // LEFT: the array body takes the element base as long long (Game/exe_bodies.h,
         // serialize_externals_array.cpp).
-        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x110, nullptr);   // 0x1400049c0
+        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x110._data, nullptr);   // 0x1400049c0
     }
     {
-        int32_t count = field_0x128;
+        int32_t count = field_0x120._size;
         ser->Serialize(count, nullptr);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
-            GameColl::AsArray<GameColl::Ptr8>(&field_0x120).SetSize(count);
-        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x120, nullptr);   // 0x1400049c0
+            field_0x120.SetSize(count);
+        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x120._data, nullptr);   // 0x1400049c0
     }
 
     // LEFT: the three clocks are declared int64_t (CitizenBehavior.h, block WORK-a).
@@ -712,42 +544,42 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
     field_0x198.Serialize(*ser);
 
     // "Stats" int-assoc array at +0x150.
-    SerializeIntAssocArray(&field_0x150, &field_0x158, ser);
+    SerializeIntAssocArray(field_0x150, ser);
 
     // TREE #2 (BuildComponentRef key) on the live path (version>=2, always true
     // at version 6); legacy key/int BST otherwise (DEAD — see file header).
     if (ser->GetVersion() < 2) {
-        SerializeLegacyKeyIntTree(&field_0x160, &field_0x168, ser);
+        SerializeLegacyKeyIntTree(&field_0x160._root, &field_0x160._count, ser);
     } else {
-        SerializeCompRefTree(&field_0x160, &field_0x168, ser,
+        SerializeCompRefTree(field_0x160, ser,
             &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140002340
     }
     if (ser->GetVersion() == 5) {
         // LEFT: resizes the +0x160 TREE header as an array of arrays (the tree's, dead
         // at version 6; retail sizes +0x150 to 0x47 here on a load, 0x14008fe50).
-        ResizeStride0x10(&field_0x160 /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
+        ResizeStride0x10(&field_0x160._root /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
     }
 
-    SerializeIBPArray(&wells, &wellCount, ser, WellComponent::TypeId());
+    SerializeIBPArray(&wells._data, &wells._size, ser, WellComponent::TypeId());
 
     // Stride-8 int-pair array at +0x130.
     {
-        int32_t count = field_0x138;
+        int32_t count = field_0x130._size;
         ser->Serialize(count, nullptr);
         bool loading = SerializerLoading(ser);
-        if (loading) ResizeStride08Pair(&field_0x130, count);
-        int32_t* pairs = field_0x130;
+        if (loading) field_0x130.SetSize(count);
+        WaterCellPair* pairs = field_0x130._data;
         for (int32_t i = 0; i < count; ++i) {
-            ser->Serialize(pairs[i * 2 + 0], nullptr);
-            ser->Serialize(pairs[i * 2 + 1], nullptr);
+            ser->Serialize(pairs[i].cellA, nullptr);
+            ser->Serialize(pairs[i].cellB, nullptr);
         }
     }
 
     if (ser->GetVersion() > 4) {
-        SerializeIntAssocArray(&field_0x140, &field_0x148, ser);
+        SerializeIntAssocArray(field_0x140, ser);
     }
     if (ser->GetVersion() == 5) {
-        ResizeStride0x10(&field_0x140, 0);
+        field_0x140.SetSize(0);
     }
 
     if (ser->GetVersion() < 4) {
@@ -758,12 +590,12 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         // a real pre-release save hitting this path needs a fresh Ghidra pass before
         // it can be trusted, so we intentionally stop short of guessing here.
     } else {
-        int32_t profCount = professionResourceCount;
+        int32_t profCount = professionResources._size;
         ser->Serialize(profCount, nullptr);
         bool loading = SerializerLoading(ser);
-        if (loading) ResizeStride0x20(&professionResources, profCount);
+        if (loading) professionResources.SetSize(profCount);
         if (profCount > 0) {
-            ProfessionResourceEntry* entry = professionResources;
+            ProfessionResourceEntry* entry = professionResources._data;
             for (int32_t i = 0; i < profCount; ++i) {
                 ser->Serialize(entry->currentCount, nullptr);
                 ser->Serialize(entry->previousCount, nullptr);
@@ -777,17 +609,17 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
                 ++entry;
             }
         }
-        if (professionResourceCount != 0x15) {
-            ResizeStride0x20(&professionResources, 0x15);
+        if (professionResources._size != 0x15) {
+            professionResources.SetSize(0x15);
         }
 
-        int32_t sumCount = notifyEntryCount;
+        int32_t sumCount = notifyEntries._size;
         ser->Serialize(sumCount, nullptr);
         if (loading) {
-            StorageComponent_DynArrayResize(&notifyEntries, sumCount);   // FUN_14000f090
+            notifyEntries.SetSize(sumCount);   // FUN_14000f090
         }
         if (sumCount > 0) {
-            ResourceNotifyEntry* entry = notifyEntries;
+            ResourceNotifyEntry* entry = notifyEntries._data;
             for (int32_t i = 0; i < sumCount; ++i) {
                 ser->Serialize(entry->current, nullptr);
                 ser->Serialize(entry->maxCapacity, nullptr);
@@ -826,23 +658,23 @@ static uint32_t DWORD_1401c79e0_TypeId() {
 }
 
 void CitizenBehavior::PostLoad() {
-    if (field_0x148 >= 1) return;   // already populated
+    if (field_0x140._size >= 1) return;   // already populated
 
     Map* mapGrid = GameUpdateLoop::_singleton->m_game;
     int side = mapGrid->size >> 3;
-    ResizeStride0x10(&field_0x140, side * side);
+    field_0x140.SetSize(side * side);
     std::fprintf(stderr, "[CitPostLoad] mapGrid=%p mapWidth=%d side=%d cells=%d "
             "cellMap=%p residence{ptr=%p count=%d} ent{ptr=%p count=%d}\n",
             static_cast<void*>(mapGrid), mapGrid->size, side, side * side,
-            static_cast<void*>(field_0x140),
-            static_cast<void*>(field_0x130),
-            field_0x138,
-            static_cast<void*>(wells),
-            wellCount);
+            static_cast<void*>(field_0x140._data),
+            static_cast<void*>(field_0x130._data),
+            field_0x130._size,
+            static_cast<void*>(wells._data),
+            wells._size);
     std::fflush(stderr);
 
     int idx = 0;
-    int32_t residenceCount = field_0x138;
+    int32_t residenceCount = field_0x130._size;
     if (residenceCount > 0) {
         // +0x130 is the STRIDE-8 int-pair array (ResizeStride08Pair in Serialize
         // above); retail walks it with `lVar11 += 8` and reads only the low int
@@ -850,14 +682,14 @@ void CitizenBehavior::PostLoad() {
         // element from the pair's HIGH half, which is not a cell index at all —
         // the resulting x/y ran off the 32x32 cell map and AddCellEntry wrote
         // through a wild record pointer.
-        int32_t* residenceCells = field_0x130;
+        WaterCellPair* residenceCells = field_0x130._data;
         int mapWidth = mapGrid->size;
         for (; idx < residenceCount; ++idx) {
-            int cell = residenceCells[idx * 2];
+            int cell = residenceCells[idx].cellA;
             if (cell < 0 || cell >= mapWidth * mapWidth) {
                 std::fprintf(stderr, "[CitPostLoad] residence[%d] cell=%d pairHi=%d "
                         "x=%d y=%d cellIdx=%d (max %d)\n",
-                        idx, cell, residenceCells[idx * 2 + 1],
+                        idx, cell, residenceCells[idx].cellB,
                         cell % mapWidth, cell / mapWidth,
                         (mapWidth >> 3) * ((cell / mapWidth) >> 3) + ((cell % mapWidth) >> 3),
                         side * side);
@@ -868,9 +700,9 @@ void CitizenBehavior::PostLoad() {
     }
 
     idx = 0;
-    int32_t entCount = wellCount;
+    int32_t entCount = wells._size;
     if (entCount > 0) {
-        WellComponent** entArr = wells;
+        WellComponent** entArr = wells._data;
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
             WellComponent* entIBP = entArr[idx];

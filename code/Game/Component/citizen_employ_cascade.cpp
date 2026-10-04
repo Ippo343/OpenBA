@@ -113,13 +113,13 @@ inline void SeatWorker(CitizenComponent* citizen, ComponentEntity* avail, Profes
 // townMgr+0x28 count). Uses System::Random::Rand(*(gw+0xd8), n).
 // ============================================================================
 void Shuffle896a0(CitizenBehavior* townMgr) {
-    uint32_t n = townMgr->field_0x28;
+    uint32_t n = townMgr->field_0x20._size;
     System::Random* rng = GameUpdateLoop::_singleton->m_random;   // +0xd8
     if ((int)n <= 1) return;
     for (int64_t i = 0; (int64_t)i < (int)n; ++i) {
         uint32_t j = rng->Rand(static_cast<uint32_t>(n));
         if ((uint32_t)i != j) {
-            ComponentEntity** base = townMgr->field_0x20;
+            ComponentEntity** base = townMgr->field_0x20._data;
             ComponentEntity* tmp = base[i];
             base[i] = base[(int)j];
             base[(int)j] = tmp;
@@ -132,9 +132,9 @@ void Shuffle896a0(CitizenBehavior* townMgr) {
 // ============================================================================
 CitizenComponent** Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out,
                               ComponentEntity** availPtr, Profession* profKey) {
-    int cnt = townMgr->citizenCount;
+    int cnt = townMgr->citizens._size;
     for (int i = 0; i < cnt; ++i) {
-        CitizenComponent* cz = townMgr->citizens[i];
+        CitizenComponent* cz = townMgr->citizens._data[i];
         if (AdultIdle(cz)) {
             if (cz->profession == LaborerKey()) {
                 SeatWorker(cz, *availPtr, profKey);
@@ -158,9 +158,9 @@ CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
     uint32_t availCell = (uint32_t)EntityAnchorCell(&availAnchorArg, nullptr);   // 0x140087fb0
     int bestDist = 0x7ffffff;
     CitizenComponent* best = nullptr;
-    int cnt = townMgr->citizenCount;
+    int cnt = townMgr->citizens._size;
     for (int i = 0; i < cnt; ++i) {
-        CitizenComponent* cz = townMgr->citizens[i];
+        CitizenComponent* cz = townMgr->citizens._data[i];
         if (AdultIdle(cz)) {
             if (cz->profession == LaborerKey()) {
                 if (cz->home != nullptr) {
@@ -199,9 +199,9 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
     int bestDist = 0x7ffffff;             // iVar14
     ComponentEntity* bestRes = nullptr;   // local_70
 
-    int cnt = townMgr->citizenCount;
+    int cnt = townMgr->citizens._size;
     for (int i = 0; i < cnt; ++i) {       // local_60 = i * 8
-        CitizenComponent* cz = townMgr->citizens[i];   // local_80
+        CitizenComponent* cz = townMgr->citizens._data[i];   // local_80
         if (!AdultIdle(cz)) continue;
         if (cz->profession != profKey) continue;
 
@@ -298,9 +298,9 @@ CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
 
     Shuffle896a0(townMgr);
 
-    int houseCnt = townMgr->field_0x28;
+    int houseCnt = townMgr->field_0x20._size;
     for (int h = 0; h < houseCnt; ++h) {   // local_50[0] = h * 8
-        ComponentEntity* house = townMgr->field_0x20[h];   // local_60
+        ComponentEntity* house = townMgr->field_0x20._data[h];   // local_60
         ResidenceComponent* c7cf0 = FindResidenceComp(house);   // local_70
         int recCount = c7cf0->residentSlotCount;
         for (int r = 0; r < recCount; ++r) {
@@ -377,11 +377,11 @@ extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP) 
     }
 
     if (!fail) {
-        before = townMgr->field_0x28;
+        before = townMgr->field_0x20._size;
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        GameColl::AsArray<GameColl::Ptr8>(&townMgr->field_0x20)
+        townMgr->field_0x20
             .SetSizeFill(before + 1, &houseEntityIBP);
-        after = townMgr->field_0x28;
+        after = townMgr->field_0x20._size;
         // The append is the only thing that advances the count. If it did not move, the
         // array primitive is not writing the count field we (and retail) read at +0x28 —
         // a different failure from any of the guards above, so name it separately.
@@ -571,6 +571,6 @@ void CitizenComponent::OnAdded() {
     CitizenComponent* ref[2] = { nullptr, nullptr };
     ref[0] = this;   // the InternalBasePtr ctor's one store
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&townMgr->citizens)
-        .SetSizeFill(townMgr->citizenCount + 1, ref);
+    townMgr->citizens
+        .SetSizeFill(townMgr->citizens._size + 1, ref);
 }

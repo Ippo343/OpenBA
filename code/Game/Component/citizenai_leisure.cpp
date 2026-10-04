@@ -235,11 +235,11 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
     int matchCount = 0;           // pvVar18 / pvVar19 (entries written)
     HappinessComponent** curArr = nullptr;   // pvVar21 / pvVar6 (current array ptr)
 
-    int listCount = param_1->happinessComponentCount;
+    int listCount = param_1->happinessComponents._size;
     if (listCount > 0) {
         int idx = 0;
         do {
-            HappinessComponent* const* slot = &param_1->happinessComponents[idx];
+            HappinessComponent* const* slot = &param_1->happinessComponents._data[idx];
             ComponentEntity* entObj = (*slot)->_entity;
 
             // find the entity's InteractComponent (scan its component array @ entObj+0x30)
@@ -269,13 +269,13 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             }
 
             if (cost < param_4 * 2 && (static_cast<char>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
-                HappinessComponent* node = param_1->happinessComponents[idx];
+                HappinessComponent* node = param_1->happinessComponents._data[idx];
                 Description* prim = node->_description;
                 HappinessDescription* narrowed = Object::IsDerivedFromNullSafe(prim, s_tid_HappinessDescription)
                     ? static_cast<HappinessDescription*>(prim) : nullptr;
                 if ((narrowed == nullptr || narrowed->_happinessType != 5)
                     && node->registered) {
-                    HappinessComponent** listBase = param_1->happinessComponents;
+                    HappinessComponent** listBase = param_1->happinessComponents._data;
                     uint32_t oldN = static_cast<uint32_t>(matchCount);
                     uint32_t newN = oldN + 1;
                     // grow array geometrically when needed

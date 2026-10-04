@@ -399,8 +399,8 @@ void PopulationComponent::OnAdded() {
 
     Object::InternalPtr<PopulationComponent> selfRef(this);
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(&townMgr->populations)
-        .SetSizeFill(townMgr->populationCount + 1, &selfRef);
+    townMgr->populations
+        .SetSizeFill(townMgr->populations._size + 1, &selfRef);
 
 }
 // ============================================================
@@ -416,7 +416,7 @@ void PopulationComponent::OnRemove() {
     if (!townMgr) return;
 
     Object::InternalPtr<PopulationComponent> selfRef(this);
-    CemeteryListErase_Reimpl(&townMgr->populations, &selfRef);   // 0x140002cc0
+    CemeteryListErase_Reimpl(&townMgr->populations._data, &selfRef);   // 0x140002cc0
 }
 
 // [9] 0x140054070. RDX is a pointer to the elapsed System::Time (EntityList

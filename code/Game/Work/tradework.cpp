@@ -199,8 +199,8 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     }
 
     // ---- 2. PASS 1: build import/export lists over all resource types --------
-    int resCount = resList ? resList->field_0x118 : 0;                    // pplVar30[0x23]
-    ComponentDescription** resArr = resList ? resList->field_0x110 : nullptr;   // pplVar30[0x22]
+    int resCount = resList ? resList->field_0x110._size : 0;                    // pplVar30[0x23]
+    ComponentDescription** resArr = resList ? resList->field_0x110._data : nullptr;   // pplVar30[0x22]
     for (int i = 0; i < resCount; i++) {
         ComponentDescription* resType = resArr[i];
 
@@ -306,7 +306,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
         ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorPrimary, cell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                            resType, qty, 1, searchPos, srcStorIBP);
         if (srcStorPrimary == nullptr) { continue; }
 
@@ -348,7 +348,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
         ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(resList), &srcStorage, cell,   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                            resType, 1, 0, srcPos, srcIBP);
         if (srcStorage == nullptr) continue;
 

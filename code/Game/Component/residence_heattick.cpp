@@ -149,7 +149,7 @@ char ResidenceComponent::HeatTick(const System::Time* dt) {
                 int cat = ResourceCategory(stack);   // 0x140088f90 (ActRm_GetResourceCategory_88f90's body; its first argument is unused)
                 if (cat >= 0) {
                     // The counter rows (consumed count at +0xC) — same deref as the eat loop.
-                    ProfessionResourceEntry* rows = townMgr->professionResources;
+                    ProfessionResourceEntry* rows = townMgr->professionResources._data;
                     if (rows)
                         rows[cat].field_0x0C += 1;
                 }

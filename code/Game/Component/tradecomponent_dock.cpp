@@ -528,7 +528,7 @@ void TradeComponent::AutoTrade() {
                     // so the body (which reads the material only) is called with it alone.
                     const int cat = ResourceCategory(resource);   // 0x140088f90
                     if (cat >= 0) {
-                        townMgr->professionResources[cat].field_0x0C += 1;
+                        townMgr->professionResources._data[cat].field_0x0C += 1;
                     }
 
                     // Take the unit out of storage, by identity. An entry that reaches

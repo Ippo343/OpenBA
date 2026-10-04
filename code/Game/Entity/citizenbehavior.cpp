@@ -319,8 +319,8 @@ void PathGraph::BuildPathGraph() {
     // Retail (0x1400d70c0): lVar3 = *(gw+0xf0), loop over *(int*)(lVar3+0x28)
     // entries of *(longlong*)(lVar3+0x20) — the CitizenBehavior/town RESIDENCE
     // list, NOT gw+0xb0 (that is the ProfessionList, used only in Step 4 keys).
-    int buildingCount = town->field_0x28;
-    ComponentEntity** buildingArray = town->field_0x20;
+    int buildingCount = town->field_0x20._size;
+    ComponentEntity** buildingArray = town->field_0x20._data;
 
     // Dynamic array for building grid IDs
     int* buildingCells = nullptr;
@@ -408,15 +408,15 @@ void PathGraph::BuildPathGraph() {
         Profession* profKey = buildingList->professions.GetData()[gi];
 
         // Look up profession BST at citizenBehavior+0x100
-        ProfessionBucket* profNode = town->field_0x100;
+        ProfessionBucket* profNode = town->field_0x100._root;
         int entityCount = 0;
         while (profNode != nullptr) {
-            if (profKey < profNode->key) {
+            if (profKey < profNode->element.key) {
                 profNode = profNode->left;
-            } else if (profKey > profNode->key) {
+            } else if (profKey > profNode->element.key) {
                 profNode = profNode->right;
             } else {
-                entityCount = profNode->count;
+                entityCount = profNode->element.entities._size;
                 break;
             }
         }
@@ -424,12 +424,12 @@ void PathGraph::BuildPathGraph() {
         // For each entity in this profession group
         for (int64_t ei = 0; ei < entityCount; ei++) {
             // Re-lookup profession BST (same pattern as decompiled code)
-            ProfessionBucket* lookupNode = town->field_0x100;
+            ProfessionBucket* lookupNode = town->field_0x100._root;
             ProfessionBucket* foundNode = nullptr;
             while (lookupNode != nullptr) {
-                if (profKey < lookupNode->key) {
+                if (profKey < lookupNode->element.key) {
                     lookupNode = lookupNode->left;
-                } else if (profKey > lookupNode->key) {
+                } else if (profKey > lookupNode->element.key) {
                     lookupNode = lookupNode->right;
                 } else {
                     foundNode = lookupNode;
@@ -439,7 +439,7 @@ void PathGraph::BuildPathGraph() {
             if (!foundNode) break;
 
             // Get entity IBP from the profession node's entity array
-            ComponentEntity* entityIBP = foundNode->entities[ei];
+            ComponentEntity* entityIBP = foundNode->element.entities._data[ei];
 
             // Get grid cell ID for this entity
             int entityCell = -1;
@@ -606,7 +606,7 @@ void PathGraph::BuildPathGraph() {
 void CitizenBehavior::CountResources() {
     // --- Phase 0: Shift currentCount -> previousCount and zero currentCount ---
     // The profResources array is 21 entries of 0x20 bytes each (total 0x2A0).
-    ProfessionResourceEntry* profRes = professionResources;
+    ProfessionResourceEntry* profRes = professionResources._data;
     if (profRes) {
         for (int e = 0; e < 21; e++) {
             profRes[e].previousCount = profRes[e].currentCount;
@@ -616,7 +616,7 @@ void CitizenBehavior::CountResources() {
 
     // --- Zero notification summary at +0x180 (the two ResourceNotifyEntry records:
     // [0] = normal resources, [1] = tools / health / clothing / textile) ---
-    ResourceNotifyEntry* notifySummary = notifyEntries;
+    ResourceNotifyEntry* notifySummary = notifyEntries._data;
     if (notifySummary) {
         notifySummary[0].maxCapacity = 0;  // +0x04: normal resource worker count
         notifySummary[0].current = 0;      // +0x00: normal resource total
@@ -721,10 +721,10 @@ void CitizenBehavior::CountResources() {
     // --- Phase 1: Iterate first entity array (+0x00/+0x08) ---
     // These entities have StorageComponent; their items are tallied for both
     // profession resource counts AND notification summaries.
-    int64_t firstCount = static_cast<int64_t>(field_0x08);
+    int64_t firstCount = static_cast<int64_t>(field_0x00._size);
     for (int64_t idx = 0; idx < firstCount; idx++) {
         // Find StorageComponent on this entity
-        Component* storageComp = findComponent(field_0x00[idx], StorageComponent::TypeId());
+        Component* storageComp = findComponent(field_0x00._data[idx], StorageComponent::TypeId());
         // (found by the type id and IsDerivedFrom above: B10)
         StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
@@ -798,10 +798,10 @@ void CitizenBehavior::CountResources() {
 
     // --- Phase 2: Iterate second entity array (+0x10/+0x18) ---
     // Same logic as Phase 1 but WITHOUT notification summary updates.
-    int64_t secondCount = static_cast<int64_t>(field_0x18);
+    int64_t secondCount = static_cast<int64_t>(field_0x10._size);
     for (int64_t idx = 0; idx < secondCount; idx++) {
         // Find StorageComponent on this entity
-        Component* storageComp = findComponent(field_0x10[idx], StorageComponent::TypeId());
+        Component* storageComp = findComponent(field_0x10._data[idx], StorageComponent::TypeId());
         StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
         // Read item count from storage (+0x30)
@@ -868,7 +868,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
 
     // Part 1: Check profession resource thresholds (21 entries)
     for (int i = 0; i < 21; i++) {
-        int64_t* timer = &professionResources[i].timer._ticks;
+        int64_t* timer = &professionResources._data[i].timer._ticks;
 
         // Decrement timer
         *timer -= *deltaTime;
@@ -877,15 +877,15 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
             // Reset timer to zero (will be set to interval if notification fires)
             *timer = 0;
 
-            int32_t maxCount = professionResources[i].maxCount;
-            int32_t currentCount = professionResources[i].currentCount;
-            int32_t previousCount = professionResources[i].previousCount;
+            int32_t maxCount = professionResources._data[i].maxCount;
+            int32_t currentCount = professionResources._data[i].currentCount;
+            int32_t previousCount = professionResources._data[i].previousCount;
 
             // Profession 3 (Fisherman): combine with profession 9 (Stonecutter)
             if (i == 3) {
-                maxCount += professionResources[9].maxCount;
-                currentCount += professionResources[9].currentCount;
-                previousCount += professionResources[9].previousCount;
+                maxCount += professionResources._data[9].maxCount;
+                currentCount += professionResources._data[9].currentCount;
+                previousCount += professionResources._data[9].previousCount;
             }
 
             int32_t threshold = maxCount / 20; // 5% threshold
@@ -914,7 +914,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
     // (huge -> 95%-full always true) and the "timer" writes stomped +0x188 â€”
     // that was the type-24 event spam (thousands of storage-full posts/minute).
     for (int i = 0; i < 2; i++) {
-        ResourceNotifyEntry* notifyBase = notifyEntries;
+        ResourceNotifyEntry* notifyBase = notifyEntries._data;
         if (!notifyBase) break;
         int64_t* timer = &notifyBase[i].timer._ticks;
 
@@ -983,8 +983,8 @@ void CitizenBehavior::CollectStats() {
     // where the header names the field differently: `happinessSum` sums +0x50
     // (`health`), `healthSum` sums +0x80 (`happiness`), `dead` counts a non-null
     // +0x208 (`school`), `working` a non-zero +0x1E4 (`clothingLevel`).
-    int citizenCount = this->citizenCount;
-    CitizenComponent** citizenArray = citizens;
+    int citizenCount = this->citizens._size;
+    CitizenComponent** citizenArray = citizens._data;
 
     float happinessSum = 0.0f;
     float healthSum = 0.0f;
@@ -1073,7 +1073,7 @@ void CitizenBehavior::CollectStats() {
         // Retail (0x14008a730): local_res8 = **(ulonglong**)(param_1+0xa0) â€”
         // the array base, ONE deref gives array[0] (the citizen), then its
         // Component +0x18 description.
-        Description* descBase = citizens[0]->_description;
+        Description* descBase = citizens._data[0]->_description;
         CitizenDescription* citizenDesc = nullptr;
         if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
             citizenDesc = static_cast<CitizenDescription*>(descBase);   // after the type check (B10)
@@ -1086,7 +1086,7 @@ void CitizenBehavior::CollectStats() {
         }
 
         // Re-read first citizen for CitizenDescription+0x70 (same single-deref as above).
-        descBase = citizens[0]->_description;
+        descBase = citizens._data[0]->_description;
         citizenDesc = nullptr;
         if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
             citizenDesc = static_cast<CitizenDescription*>(descBase);   // after the type check (B10)
@@ -1121,11 +1121,11 @@ void CitizenBehavior::CollectStats() {
     // 21 professions, 3 values each, at hist + 0x80 + profIdx*0x30 + {0, 0x10, 0x20}
     // The +0x150 data is an array of Collection::Array<int32_t> (0x10 each): [0..7]
     // the population series, then three series per profession entry.
-    Collection::Array<int32_t>* hist = field_0x150;
+    Collection::Array<int32_t>* hist = field_0x150._data;
 
     for (int prof = 0; prof < 21; prof++) {
         Collection::Array<int32_t>* histSlot = &hist[8 + prof * 3];   // hist + 0x80 + prof * 0x30
-        const ProfessionResourceEntry& profEntry = professionResources[prof];
+        const ProfessionResourceEntry& profEntry = professionResources._data[prof];
 
         // Every push below is Collection::Array<T>::SetSize(n, fill) — B.3.2,
         // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes
@@ -1161,7 +1161,178 @@ void CitizenBehavior::CollectStats() {
     // -- Phase 4: Clear per-tick accumulators in profResources --
     // Clear +0x0C and +0x10 of each ProfessionResourceEntry
     for (int e = 0; e < 21; e++) {
-        professionResources[e].field_0x0C = 0;  // +0x0C of entry
-        professionResources[e]._field10 = 0;    // +0x10 of entry
+        professionResources._data[e].field_0x0C = 0;  // +0x0C of entry
+        professionResources._data[e]._field10 = 0;    // +0x10 of entry
+    }
+}
+
+// ============================================================
+// The element rows of CitizenBehavior's hand-derived arrays (B4 X5-COMP)
+// ============================================================
+// Moved here from Game/citizenlist_serialize.cpp (and the second port of the
+// same three addresses in Game/gameupdateloop_load.cpp, deleted): they are the
+// rows of the class's own members now (CitizenBehaviorRows in the header). Each
+// is one `Collection::Array<>::SetSize` over the erased core `rtcoll::SetSizeCore`
+// (exact-equal early return, `_size` stored first, the treble on a single append
+// to a non-empty array, copy the preserved prefix only when the block moved,
+// init the new tail, destroy the truncated tail / the old buffer, then free).
+namespace {
+
+// FUN_14000f9e0 — the inner Array<int32> deep copy (operator=) that 0x140017640
+// runs when the outer array reallocates.
+void DeepCopyInner04Array(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
+    if (d == s) return;
+    void* old = d->_data;
+    if (old) System::MemoryAllocator::MemFree(old);
+    d->_size = 0;
+    d->_data = nullptr;
+    int32_t cnt = s->_size;
+    d->_size = cnt;
+    if (cnt > 0) {
+        d->_capacity = cnt;
+        if (System::MemoryAllocator::_singleton)
+            d->_data =
+                static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4));
+    }
+    int32_t newCnt = d->_size;
+    if (newCnt > 0) {
+        int32_t* dp = d->_data;
+        int32_t* sp = s->_data;
+        if (dp && sp) for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
+    }
+}
+
+// 0x140017640 element: one inner Array<int32>, stride 0x10, align 8. Copy-construct
+// = zero the header then the 0x14000f9e0 deep copy; init = zero the header;
+// destroy = free the inner buffer and zero the header (retail's qword zero over
+// +0x08..+0x0F is the two named int32 stores, H7).
+void CopyIntAssocOuter(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
+    d->_data = nullptr;       // +0x00
+    d->_size = 0;             // +0x08 / +0x0C (H7: two stores)
+    d->_capacity = 0;
+    DeepCopyInner04Array(d, s);
+}
+void ZeroIntAssocOuter(Collection::Array<int32_t>* d) {
+    d->_data = nullptr;
+    d->_size = 0;             // (H7)
+    d->_capacity = 0;
+}
+void DestroyIntAssocOuters(Collection::Array<int32_t>* elems, int count) {
+    for (int i = 0; i < count; ++i) {
+        Collection::Array<int32_t>* e = &elems[i];
+        System::MemoryAllocator::MemFree(e->_data);
+        e->_data = nullptr;
+        e->_size = 0;         // (H7)
+        e->_capacity = 0;
+    }
+}
+void AssignIntAssocOuter(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<Collection::Array<int32_t>, &CopyIntAssocOuter>(d, s);
+}
+void InitIntAssocOuter(uint8_t* d) {
+    rtcoll::InitAs<Collection::Array<int32_t>, &ZeroIntAssocOuter>(d);
+}
+void DestroyIntAssocOuter(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuters>(ignoredThis, base, count);
+}
+
+// 0x1400177c0 element: ProfessionResourceEntry, stride 0x20, align 8. Copy = the
+// whole stride as four qwords; init = {0, 100, 0, 0} written as u64@0, u64@8,
+// u32@0x10, u64@0x18, so +0x14..+0x17 is left untouched; trivially destructible.
+void ZeroProfResEntry(ProfessionResourceEntry* e) {
+    e->currentCount  = 0;       // +0x00 / +0x04: retail's u64 0 (H7: two stores)
+    e->previousCount = 0;
+    e->maxCount      = 100;     // +0x08 / +0x0C: retail's u64 100 (H7: two stores)
+    e->field_0x0C    = 0;
+    e->_field10      = 0;       // +0x10 u32; +0x14 left untouched
+    e->timer._ticks  = 0;       // +0x18 u64
+}
+void AssignProfResEntry(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 4>>(d, s);   // the whole stride, four qwords
+}
+void InitProfResEntry(uint8_t* d) {
+    rtcoll::InitAs<ProfessionResourceEntry, &ZeroProfResEntry>(d);
+}
+
+// 0x140017f60 element: WaterCellPair, stride 8, align 4. Copy = one qword (retail
+// moves the pair as one qword: the word-wise adapter at retail's width), init =
+// zero, trivially destructible.
+void ZeroWord8(uint64_t* w) { *w = 0; }
+void AssignIntPair(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 1>>(d, s);
+}
+void InitIntPair(uint8_t* d) { rtcoll::InitAs<uint64_t, &ZeroWord8>(d); }
+
+}  // namespace
+
+namespace CitizenBehaviorRows {
+const rtcoll::ArraySpec kSpec_IntAssocOuter = {          // exe 0x140017640
+    "Array<Array<int32>>", 0x10, 8,
+    &AssignIntAssocOuter, &InitIntAssocOuter, &DestroyIntAssocOuter, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+const rtcoll::ArraySpec kSpec_ProfResEntry = {           // exe 0x1400177c0
+    "Array<ProfessionResourceEntry>", 0x20, 8,
+    &AssignProfResEntry, &InitProfResEntry, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x14, 0x18,
+    /*seed zero       */ 0,    0 };
+const rtcoll::ArraySpec kSpec_IntPair = {                // exe 0x140017f60
+    "Array<{int32,int32}>", 8, 4,
+    &AssignIntPair, &InitIntPair, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+}  // namespace CitizenBehaviorRows
+
+// ============================================================
+// CitizenBehavior::CitizenBehavior (0x140090a30)
+// ============================================================
+// The members' ctors are retail's first stores: each Array's data qword and its
+// size + capacity qword (0x140090a4d..0x140090af5, +0x110..+0x158, +0x170 /
+// +0x180), each Set's root qword and dword count (+0x100 at 0x140090b08 /
+// 0x140090b0b, +0x160 at 0x140090b60 / 0x140090b63). The body is the rest.
+CitizenBehavior::CitizenBehavior() {
+    field_0x190._ticks = 0;                   // 0x140090b82
+    field_0x198._ticks = 0;                   // 0x140090b89
+    field_0x1A0._ticks = 0;                   // 0x140090b90
+    field_0x1AC = 0;                          // 0x140090b97: one qword store over +0x1AC / +0x1B0 (H7: two stores)
+    field_0x1B0 = 0;
+    professionResources.SetSize(0x15);        // 0x1400177c0
+    ProfessionResourceEntry* prices = professionResources._data;
+    if (prices) {
+        static const int32_t kDefaultPrices[21] = {
+            200, 200, 200, 200, 50, 5000, 100, 50, 500, 200, 200,
+            1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
+        };
+        for (int i = 0; i < 21; ++i)
+            prices[i].maxCount = kDefaultPrices[i];
+    }
+    notifyEntries.SetSize(2);                 // 0x14000f090
+    field_0x150.SetSize(0x47);                // 0x140017640
+    field_0x1A8 = 0.0f;                       // retail's dword store of 0 (the same bits)
+    PathGraph* sub = static_cast<PathGraph*>(System::MemoryAllocator::MemAlloc(0x28, 4));
+    if (sub) {
+        sub->m_pairs = nullptr;
+        sub->m_pairCount = 0;                 // +0x08 / +0x0C: one qword store (H7: two stores)
+        sub->m_pairCapacity = 0;
+        sub->m_pendingIdx = -1;
+        sub->m_bstRoot = nullptr;
+        sub->m_bstCount = 0;
+    }
+    pathGraph = sub;
+}
+
+// ============================================================
+// CitizenBehavior::~CitizenBehavior (0x1400907b0)
+// ============================================================
+// The body is retail's first step: the PathGraph's members (0x1400171b0), then
+// its block (pathGraph is not zeroed). The members are then destroyed in
+// reverse declaration order, which is retail's sequence from 0x1400907e9 on.
+CitizenBehavior::~CitizenBehavior() {
+    if (pathGraph) {
+        ArrayPlusTree_Clear_171b0(pathGraph);
+        System::MemoryAllocator::MemFree(pathGraph);
     }
 }

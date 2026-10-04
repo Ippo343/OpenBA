@@ -24,6 +24,7 @@
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 #include "collection/Collection.h"   // rtcoll::SetSizeCore row (StorageComponent_DynArrayResize)
+#include "Entity/CitizenBehavior.h"   // CitizenBehaviorRows::kSpec_Pod16 (declared there, defined here)
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -113,14 +114,19 @@ void AssignStoragePod16(uint8_t* d, const uint8_t* s) {
 void InitStoragePod16(uint8_t* d) {
     rtcoll::InitAs<uint64_t, &ZeroStoragePod16>(d);
 }
-const rtcoll::ArraySpec kSpec_StoragePod16 = {           // exe 0x14000f090
+}  // namespace
+// The row is also CitizenBehavior +0x180's (notifyEntries, Entity/CitizenBehavior.h).
+namespace CitizenBehaviorRows {
+const rtcoll::ArraySpec kSpec_Pod16 = {                  // exe 0x14000f090
     "Array<{u64,u64}>", 0x10, 8,
     &AssignStoragePod16, &InitStoragePod16, nullptr, true,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
+}  // namespace CitizenBehaviorRows
+namespace {
 using StoragePod16Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                            Collection::ExplicitSpec<&kSpec_StoragePod16>>;
+                                            Collection::ExplicitSpec<&CitizenBehaviorRows::kSpec_Pod16>>;
 }  // namespace
 
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {

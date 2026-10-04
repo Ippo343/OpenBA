@@ -249,7 +249,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             Object::InternalPtr<ComponentEntity> excludeIBP = nullptr;  // Original: local null-initialized IBP (NOT &self->field_10)
 
-            PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: CitizenBehavior's sixteen lists are raw triples (ENT, H5)
+            PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(worldEntityList),   // LEFT: SIG PickBestDropTarget (Action/exe_bodies.h) takes the RawArray<ComponentEntity*> view of CitizenBehavior's lists, which are Collection::Array members since X5-COMP
                 &foundEntity, citizenCell,
                 cost->material, 1, '\0', searchPos,
                 &excludeIBP);   // 0x14008d590

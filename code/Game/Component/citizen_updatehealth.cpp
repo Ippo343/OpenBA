@@ -194,9 +194,9 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
         return;
     }
 
-    int attendance = mgr->attendanceComponentCount;   // townMgr+0x60/+0x68 — what sub_1930 walks
-    int buildings  = mgr->field_0x28;                 // townMgr+0x20/+0x28 — the real building list
-    int citizens   = mgr->citizenCount;               // townMgr+0xa8
+    int attendance = mgr->attendanceComponents._size;   // townMgr+0x60/+0x68 — what sub_1930 walks
+    int buildings  = mgr->field_0x20._size;                 // townMgr+0x20/+0x28 — the real building list
+    int citizens   = mgr->citizens._size;               // townMgr+0xa8
 
     if (attendance <= 0) {
         // NOT an assertion of absence. Say plainly that we cannot answer yet.
@@ -227,7 +227,7 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
     // Registry is populated — an answer here is now meaningful.
     s_censusDone = true;
     uint32_t tidWpc = WorkPlaceComponent::TypeId();
-    AttendanceComponent** arr = mgr->attendanceComponents;
+    AttendanceComponent** arr = mgr->attendanceComponents._data;
     int withWpc = 0, matches = 0;
     for (int i = 0; i < attendance && arr && tidWpc; i++) {
         AttendanceComponent* comp = arr[i];
@@ -306,8 +306,8 @@ static void PlagueBootReport(CitizenComponent* citizen) {
 extern "C" char CitizenComp_AnyCitizenSick(const CitizenBehavior* mgr) {
     EnsureInit();
     if (!mgr) return 0;
-    int count = mgr->citizenCount;
-    CitizenComponent* const* arr = mgr->citizens;
+    int count = mgr->citizens._size;
+    CitizenComponent* const* arr = mgr->citizens._data;
     for (int i = 0; i < count; i++) {
         const CitizenComponent* citizen = arr[i];
         if (citizen->disease != nullptr) return 1;

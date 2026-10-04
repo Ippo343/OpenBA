@@ -109,8 +109,8 @@ bool TownList(CitizenComponent*** outList, int* outCount, CitizenBehavior** outT
     CitizenBehavior* townMgr = gw->m_citizenList;      // +0xf0
     if (!townMgr) return false;
     *outTownMgr = townMgr;
-    *outList  = townMgr->citizens;                     // +0xa0
-    *outCount = townMgr->citizenCount;                 // +0xa8
+    *outList  = townMgr->citizens._data;                     // +0xa0
+    *outCount = townMgr->citizens._size;                 // +0xa8
     return *outList != nullptr && *outCount > 0;
 }
 
@@ -377,10 +377,10 @@ void Census(int frameNum) {
     // empty in standalone's start town, so report them next to the gate counts — an
     // "ELIGIBLE=0 / noGuardian=0" census means nothing without knowing whether the finder
     // it depends on had anything to find.
-    ComponentEntity** reg = townMgr->field_0x20;           // +0x20
-    int     regN  = townMgr->field_0x28;                   // +0x28
-    void*   bst   = townMgr->field_0x100;                  // +0x100
-    int     bldgN = townMgr->attendanceComponentCount;     // +0x68
+    ComponentEntity** reg = townMgr->field_0x20._data;           // +0x20
+    int     regN  = townMgr->field_0x20._size;                   // +0x28
+    void*   bst   = townMgr->field_0x100._root;                  // +0x100
+    int     bldgN = townMgr->attendanceComponents._size;     // +0x68
     std::fprintf(stderr, "[FamilyCensus]   townMgr=%p buildingRegistry(+0x20)=%p count(+0x28)=%d "
                  "profBST(+0x100)=%p bldgCount(+0x68)=%d\n",
                  static_cast<void*>(townMgr), static_cast<void*>(reg), regN,
@@ -524,7 +524,7 @@ void ForceBirths(int frameNum) {
     std::fflush(stderr);
     if (want == 0) return;
 
-    int before = townMgr->citizenCount;                    // +0xa8
+    int before = townMgr->citizens._size;                    // +0xa8
     for (int i = 0; i < want; i++) {
         std::fprintf(stderr, "[BirthHarness] delivering %d/%d from mother=%p\n",
                      i + 1, want, static_cast<void*>(mothers[i]));
@@ -533,7 +533,7 @@ void ForceBirths(int frameNum) {
     }
     std::fprintf(stderr, "[BirthHarness] done — town citizen list %d -> %d "
                  "(+%d expected if CitizenComponent::OnAdd is live)\n",
-                 before, townMgr->citizenCount, want);
+                 before, townMgr->citizens._size, want);
     std::fflush(stderr);
 }
 }  // namespace
@@ -577,7 +577,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                     v->HandleLifeEvent(3, nullptr);                      // 0x140116dd0
                 }
                 std::fprintf(stderr, "[DeathHarness] family kill done — list = %d entries "
-                             "(was %d)\n", townMgr->citizenCount, n);    // +0xa8
+                             "(was %d)\n", townMgr->citizens._size, n);    // +0xa8
                 std::fflush(stderr);
             }
         }
@@ -611,8 +611,8 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
             CitizenBehavior* tm = nullptr; CitizenComponent** l; int c;
             int readyPlots = 0, cemN = 0;
             if (TownList(&l, &c, &tm) && tm) {
-                cemN = tm->cemeteryCount;                        // +0x48
-                CemeteryComponent** arr = tm->cemeteries;        // +0x40
+                cemN = tm->cemeteries._size;                        // +0x48
+                CemeteryComponent** arr = tm->cemeteries._data;        // +0x40
                 for (int i = 0; i < cemN && arr; ++i) {
                     CemeteryComponent* comp = arr[i];
                     if (!comp) continue;
@@ -664,6 +664,6 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
 
     std::fprintf(stderr, "[DeathHarness] done — town citizen list = %d entries "
                  "(was %d; expect %d if OnRemove is live, unchanged if it is not)\n",
-                 townMgr->citizenCount, n, n - want);      // +0xa8
+                 townMgr->citizens._size, n, n - want);      // +0xa8
     std::fflush(stderr);
 }

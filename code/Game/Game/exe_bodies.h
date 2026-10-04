@@ -19,7 +19,6 @@
 // Internal linkage in the defining file (static / anonymous namespace):
 // not declared -- that would change linkage, which this step does not do.
 //   ResizeStride0x10                       0x140017640  (citizenlist_serialize.cpp:339, anonymous namespace)
-//   ResizeStride0x20                       0x1400177c0  (citizenlist_serialize.cpp:350, anonymous namespace)
 
 #include <cstdint>
 // The inline bodies' own needs (they reached these through engine/funcs/engine_funcs.h
@@ -114,7 +113,6 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , U
 // ---- gameupdateloop_teardown.cpp
 struct EntityList; class CitizenBehavior; class PlayerToolManager; class WorkScheduler;
 extern "C" void EntityList_Shutdown_c3d30(EntityList* self);  // 0x1400c3d30
-extern "C" void CitizenList_Dtor_907b0(CitizenBehavior* self);  // 0x1400907b0
 extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self);  // 0x1401024d0
 extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self);  // 0x1400f8ff0
 
@@ -275,7 +273,6 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 
 // ---- citizenlist_serialize.cpp (B3R G-Game: external linkage given; read by citizenbehavior.cpp)
 void ResizeStride0x10(void* hdr, int n);  // 0x140017640
-void ResizeStride0x20(void* hdr, int n);  // 0x1400177c0
 
 // ---- B3R G-Game: bodies of this module called directly (formerly through local extern
 // prototypes in geometry_serialize.cpp / worldgen.cpp); not registered.

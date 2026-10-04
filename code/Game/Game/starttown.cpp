@@ -653,14 +653,13 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
 // are reconciled against retail (known_port_issues 14).
 void TownMgr_AddAvailableAgri(CitizenBehavior* townMgr, ComponentDescription* desc) {
     if (!townMgr || !desc || !System::MemoryAllocator::_singleton) return;
-    ComponentDescription** arr = townMgr->field_0x120;
-    int     count = townMgr->field_0x128;
+    ComponentDescription** arr = townMgr->field_0x120._data;
+    int     count = townMgr->field_0x120._size;
     // Dedup: already present -> nothing to do.
     for (int i = 0; i < count; ++i)
         if (arr && arr[i] == desc) return;
 
-    // B.3.2 bridge: TownManager+0x120 is still a raw {data,count,cap} triple.
-    reinterpret_cast<Collection::Array<void*>*>(&townMgr->field_0x120)->SetSize(count + 1, desc);   // LEFT: field_0x120 is raw {data,count,cap} storage (H5: an Array member would run a ctor/dtor; CitizenBehavior.h W0)
+    townMgr->field_0x120.SetSize(count + 1, desc);   // the stride-8 append with a fill
 }
 
 // Seed one agri pool: pick `count` random entries from the `size`-entry pool and
@@ -715,7 +714,7 @@ static void StartTown_SeedAvailableAgriculture(MapGenerator* sc, Map* game,
         haveCentre = true;
     }
 
-    int before = townMgr->field_0x128;
+    int before = townMgr->field_0x120._size;
     int p = SeedAgriPool(sc, townMgr, rng, sc->refArray5, sc->paramE0, "plants");
     int t = SeedAgriPool(sc, townMgr, rng, sc->refArray6, sc->paramE4, "trees");
     int a = SeedAgriPool(sc, townMgr, rng, sc->refArray7, sc->paramE8, "livestock",
@@ -725,7 +724,7 @@ static void StartTown_SeedAvailableAgriculture(MapGenerator* sc, Map* game,
                 "starting herd SKIPPED\n", game);
     fprintf(stderr, "[AgriSeed] available-agriculture seeded: plants=%d trees=%d "
             "livestock=%d; townMgr+0x120 count %d -> %d\n",
-            p, t, a, before, townMgr->field_0x128);
+            p, t, a, before, townMgr->field_0x120._size);
     fflush(stderr);
 }
 
@@ -3631,8 +3630,8 @@ static void StartTown_RegisterTownCitizens() {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     auto alreadyListed = [&](const CitizenComponent* c) -> bool {
         if (!townMgr) return false;
-        CitizenComponent** arr = townMgr->citizens;
-        int n = townMgr->citizenCount;
+        CitizenComponent** arr = townMgr->citizens._data;
+        int n = townMgr->citizens._size;
         for (int i = 0; i < n && arr; i++)
             if (arr[i] == c) return true;
         return false;
@@ -3702,8 +3701,8 @@ static void StartTown_SeedLaborerProfessions() {
         fflush(stderr);
         return;
     }
-    CitizenComponent** czArr = citList->citizens;
-    int      czCnt = citList->citizenCount;
+    CitizenComponent** czArr = citList->citizens._data;
+    int      czCnt = citList->citizens._size;
     int seeded = 0, adults = 0;
     for (int i = 0; czArr && i < czCnt; ++i) {
         CitizenComponent* cz = czArr[i];
@@ -4046,8 +4045,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     // Pick an edible raw-material template (RawMaterialDescription+0x5c & 0x20 = edible)
     // from the town template pool (townMgr+0x110 base / +0x118 count).
     uint32_t tidRawMat = RawMaterialDescription::TypeId();
-    int tmplCount = townMgr->field_0x118;
-    ComponentDescription** tmplArr = townMgr->field_0x110;
+    int tmplCount = townMgr->field_0x110._size;
+    ComponentDescription** tmplArr = townMgr->field_0x110._data;
     ComponentDescription* foodTmpl = nullptr;
     uint32_t foodFlags = 0;
     // [STAND-IN, NOT THE FIX] Firewood. The residence heat tick (0x140129970) pins the

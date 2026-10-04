@@ -156,16 +156,16 @@ Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
             refCopy.Name().~String();
 
             // BST lookup in the +0x160 template tree
-            TemplateBucket* node = worldData->field_0x160;
+            TemplateBucket* node = worldData->field_0x160._root;
             while (node != nullptr) {
-                const Object::External* nodeKey = node->key;
+                const Object::External* nodeKey = node->element.key;
                 if (lookupKey < nodeKey) {
                     node = node->left;    // +0x20
                 } else if (lookupKey > nodeKey) {
                     node = node->right;   // +0x28
                 } else {
                     // Found matching node — check its entity count (+0x10)
-                    if (node != nullptr && node->count > 0) {
+                    if (node != nullptr && node->element.entities._size > 0) {
                         matchCount++;
                     }
                     break;
@@ -241,15 +241,15 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     // per distinct built building type).
     TemplateBucket* stack[64];
     int sp = 0, dumped = 0;
-    TemplateBucket* node = worldData->field_0x160;
+    TemplateBucket* node = worldData->field_0x160._root;
     fprintf(stderr, "[GoalProbe] world building BST @ %p:\n",
-            static_cast<void*>(&worldData->field_0x160));
+            static_cast<void*>(&worldData->field_0x160._root));
     while ((node || sp) && dumped < 64) {
         while (node && sp < 64) { stack[sp++] = node; node = node->left; }
         if (!sp) break;
         node = stack[--sp];
         fprintf(stderr, "[GoalProbe]   key=%p count=%d\n",
-                static_cast<const void*>(node->key), node->count);
+                static_cast<const void*>(node->element.key), node->element.entities._size);
         dumped++;
         node = node->right;
     }

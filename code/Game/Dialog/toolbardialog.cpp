@@ -144,9 +144,9 @@ void ToolbarDialog::ChangeSpeed(int direction) {
 
 // The +0x160 node of `key`, or null.
 static TemplateBucket* Toolbar_FindTemplateNode(const CitizenBehavior* town, const void* key) {
-    TemplateBucket* node = town->field_0x160;
+    TemplateBucket* node = town->field_0x160._root;
     while (node != nullptr) {
-        const void* nodeKey = node->key;
+        const void* nodeKey = node->element.key;
         if (nodeKey > key) {
             node = node->left;
         } else if (nodeKey < key) {
@@ -164,7 +164,7 @@ static TemplateBucket* Toolbar_FindTemplateNode(const CitizenBehavior* town, con
 static ComponentEntity* Toolbar_FindEntity_Impl(const CitizenBehavior* town, const void* key, int index) {
     TemplateBucket* node = Toolbar_FindTemplateNode(town, key);
     if (node != nullptr) {
-        return node->entities[index];
+        return node->element.entities._data[index];
     }
     return nullptr;
 }
@@ -235,7 +235,7 @@ void ToolbarDialog::UpdateButtons() {
                 // The town's count of the template
                 int entityCount = 0;
                 TemplateBucket* node = Toolbar_FindTemplateNode(town, typeId);
-                if (node != nullptr) entityCount = node->count;
+                if (node != nullptr) entityCount = node->element.entities._size;
                 enabled = entityCount < matchedComponent->_val0;
             }
 
@@ -252,7 +252,7 @@ void ToolbarDialog::UpdateButtons() {
             // The town's count of the template
             int entityCount = 0;
             TemplateBucket* node = Toolbar_FindTemplateNode(town, typeId);
-            if (node != nullptr) entityCount = node->count;
+            if (node != nullptr) entityCount = node->element.entities._size;
 
             bool enabled = entityCount > 0;
             elem->Enable(enabled);

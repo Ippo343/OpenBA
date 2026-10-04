@@ -58,7 +58,7 @@ extern "C" void FoodStockCensus_Tick(int frame) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     CitizenBehavior* tracker = gw->m_citizenList;                     // +0xf0
     if (!tracker) return;
-    const ProfessionResourceEntry* table = tracker->professionResources;   // +0x170
+    const ProfessionResourceEntry* table = tracker->professionResources._data;   // +0x170
     if (!table) return;
 
     int changed = 0;

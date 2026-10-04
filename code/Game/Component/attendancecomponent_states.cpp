@@ -100,8 +100,8 @@ char AttendanceComponent::AllFull() {
     CitizenBehavior* const town = AC_TownObject();
     if (!town) return 1;
 
-    AttendanceComponent* const* base = town->attendanceComponents;
-    const int       count = town->attendanceComponentCount;
+    AttendanceComponent* const* base = town->attendanceComponents._data;
+    const int       count = town->attendanceComponents._size;
     const Description* myDesc = _description;
 
     for (int i = 0; i < count && base; ++i) {
@@ -155,8 +155,8 @@ char AttendanceComponent::State2Enter() {
     if (town) {
         Object::InternalPtr<AttendanceComponent> selfIbp(this);
         // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        const int32_t newCount = town->attendanceComponentCount + 1;
-        GameColl::AsArray<GameColl::Ptr8>(&town->attendanceComponents)
+        const int32_t newCount = town->attendanceComponents._size + 1;
+        town->attendanceComponents
             .SetSizeFill(newCount, &selfIbp);
     }
 

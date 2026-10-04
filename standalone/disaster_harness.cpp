@@ -211,12 +211,12 @@ CitizenBehavior* TownMgr() {
 // Read one registry: the town's typed array and its count (the three registries
 // below: +0x20/+0x28, +0xA0/+0xA8, +0xF0/+0xF8).
 template <class T>
-bool Registry(T** CitizenBehavior::*arrField, int32_t CitizenBehavior::*cntField,
+bool Registry(CitizenPtrList<T> CitizenBehavior::*list,
               T*** outArr, int* outCount) {
     CitizenBehavior* town = TownMgr();
     if (!town) return false;
-    *outArr   = town->*arrField;
-    *outCount = town->*cntField;
+    *outArr   = (town->*list)._data;
+    *outCount = (town->*list)._size;
     return *outArr != nullptr && *outCount > 0;
 }
 
@@ -301,7 +301,7 @@ struct Cand { ComponentEntity* entity; FireComponent* fire; int x; int y; long d
 
 void ForceFire(int frameNum, int want) {
     ComponentEntity** arr = nullptr; int n = 0;
-    if (!Registry(&CitizenBehavior::field_0x20, &CitizenBehavior::field_0x28, &arr, &n)) {
+    if (!Registry(&CitizenBehavior::field_0x20, &arr, &n)) {
         DLOG("Fire", "frame %d: structure registry (townMgr+0x20/+0x28) empty or absent "
              "— nothing to ignite\n", frameNum);
         return;
@@ -539,7 +539,7 @@ void ForceSick(int frameNum, int want) {
     }
 
     CitizenComponent** arr = nullptr; int n = 0;
-    if (!Registry(&CitizenBehavior::citizens, &CitizenBehavior::citizenCount, &arr, &n)) {
+    if (!Registry(&CitizenBehavior::citizens, &arr, &n)) {
         DLOG("Sick", "frame %d: citizen registry (townMgr+0xA0/+0xA8) empty — "
              "nobody infected\n", frameNum);
         return;
@@ -606,7 +606,7 @@ void ForceSick(int frameNum, int want) {
 
 void ForceInfest(int frameNum, int want) {
     DiseaseComponent** arr = nullptr; int n = 0;
-    if (!Registry(&CitizenBehavior::diseases, &CitizenBehavior::diseaseCount, &arr, &n)) {
+    if (!Registry(&CitizenBehavior::diseases, &arr, &n)) {
         DLOG("Infest", "frame %d: DiseaseComponent registry (townMgr+0xF0/+0xF8) empty "
              "or absent — is BANISHED_LIVE_CROPDISEASE set? DiseaseComponent's slot 6 "
              "OnAdded is the ONLY thing that fills that registry, and it is installed "

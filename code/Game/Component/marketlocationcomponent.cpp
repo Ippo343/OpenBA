@@ -60,8 +60,8 @@ static char MarketLoc_State2Enter(MarketLocationComponent* self, StateMachine* /
     ComponentEntity* entityPtr = self->_entity;
     CitizenBehavior* town = MarketTown();
     // B.3.2 bridge: 0x140003110 is Collection::Array<void*>::SetSize(n, fill).
-    const int count = town->field_0x18;
-    GameColl::AsArray<GameColl::Ptr8>(&town->field_0x10)
+    const int count = town->field_0x10._size;
+    town->field_0x10
         .SetSizeFill(count + 1, &entityPtr);
     return 0;
 }
@@ -165,7 +165,7 @@ void MarketLocationComponent::OnRemove() {
     ComponentEntity* entityPtr = _entity;
 
     // Erase the owner entity from the town's market-location list
-    CemeteryListErase_Reimpl(&MarketTown()->field_0x10, &entityPtr);   // 0x140002cc0
+    CemeteryListErase_Reimpl(&MarketTown()->field_0x10._data, &entityPtr);   // 0x140002cc0
 }
 
 DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")

@@ -713,7 +713,7 @@ void TownHallUI::UpdateGraph() {
     // Arrays, one per series; series 0's count is the current tick).
     CitizenBehavior* town =
         GameUpdateLoop::_singleton->m_citizenList;
-    const Collection::Array<int>* history = town->field_0x150;
+    const Collection::Array<int>* history = town->field_0x150._data;
 
     // Cache game tick
     cachedGameTick = history[0]._size;
@@ -851,13 +851,13 @@ void TownHallUI::UpdateGeneral() {
     CitizenBehavior* town =
         GameUpdateLoop::_singleton->m_citizenList;
 
-    int totalCitizens = town->citizenCount;
+    int totalCitizens = town->citizens._size;
     int adults = 0, students = 0, children = 0, familyCount = 0;
     float clothedSum = 0.0f, educatedSum = 0.0f, healthSum = 0.0f, happinessSum = 0.0f;
     float perCitizen = (totalCitizens > 0) ? (1.0f / (float)totalCitizens) : 0.0f;
 
     for (int i = 0; i < totalCitizens; i++) {
-        CitizenComponent* citizen = town->citizens[i];
+        CitizenComponent* citizen = town->citizens._data[i];
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
@@ -908,7 +908,7 @@ void TownHallUI::UpdateGeneral() {
     textMonth->SetText(&monthCopy);
 
     // Home count
-    int homeCount = town->field_0x28;
+    int homeCount = town->field_0x20._size;
     numberHomes->SetValue(static_cast<int32_t>(homeCount));
 
     // Citizen counts
@@ -937,7 +937,7 @@ void TownHallUI::UpdateGeneral() {
         TownHall_GroupRatingUpdate(&groupHearts, 0.0f, 1.0f);   // 0x14006aed0
         TownHall_GroupRatingUpdate(&groupStars, 0.0f, 1.0f);   // 0x14006aed0
     } else {
-        CitizenComponent* firstCitizen = town->citizens[0];
+        CitizenComponent* firstCitizen = town->citizens._data[0];
         Description* desc = firstCitizen->_description;
         CitizenDescription* citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
             ? static_cast<CitizenDescription*>(desc) : nullptr;
@@ -946,7 +946,7 @@ void TownHallUI::UpdateGeneral() {
                               citizenDesc->maxHealth);
 
         // Re-read first citizen for the happiness maximum
-        firstCitizen = town->citizens[0];
+        firstCitizen = town->citizens._data[0];
         desc = firstCitizen->_description;
         citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
             ? static_cast<CitizenDescription*>(desc) : nullptr;
@@ -999,14 +999,14 @@ void TownHallUI::UpdateProfessions() {
 
     if (prodCount > 0) {
         for (int i = 0; i < prodCount; i++) {
-            int stock = town->professionResources[i].currentCount;
+            int stock = town->professionResources._data[i].currentCount;
 
             prodLimits[i].stock->SetValue(static_cast<int32_t>(stock));
 
             int usedCur = TownHall_QueryProductionStat(town, resIdx - 1, currentYearTick, endTick);   // 0x140090f20
-            int usedStock = town->professionResources[i].field_0x0C;
+            int usedStock = town->professionResources._data[i].field_0x0C;
             int prodCur = TownHall_QueryProductionStat(town, resIdx, currentYearTick, endTick);   // 0x140090f20
-            int prodStock = town->professionResources[i]._field10;
+            int prodStock = town->professionResources._data[i]._field10;
             int usedPrev = TownHall_QueryProductionStat(town, resIdx - 1, prevStart, prevEnd);   // 0x140090f20
             int prodPrev = TownHall_QueryProductionStat(town, resIdx, prevStart, prevEnd);   // 0x140090f20
 
@@ -1253,10 +1253,10 @@ void TownHallUI::UpdateAgriculture() {
     // Build temporary BST from the town's description list (+0x120/+0x128)
     AgricultureNode* tempBSTRoot = nullptr;
     int tempBSTCount = 0;
-    int entityCount = town->field_0x128;
+    int entityCount = town->field_0x120._size;
 
     for (int i = 0; i < entityCount; i++) {
-        const ComponentDescription* entityPtr = town->field_0x120[i];
+        const ComponentDescription* entityPtr = town->field_0x120._data[i];
 
         if (!tempBSTRoot) {
             // First node — allocate root
@@ -1406,9 +1406,9 @@ void TownHallUI::UpdateInventory() {
         Profession* profTypeId = profList->professions.GetData()[p];
 
         // Look up profession type in the town's profession tree (+0x100)
-        ProfessionBucket* bstNode = town->field_0x100;
+        ProfessionBucket* bstNode = town->field_0x100._root;
         while (bstNode) {
-            Profession* nodeKey = bstNode->key;
+            Profession* nodeKey = bstNode->element.key;
             if (profTypeId < nodeKey)
                 bstNode = bstNode->left;
             else if (profTypeId > nodeKey)
@@ -1419,12 +1419,12 @@ void TownHallUI::UpdateInventory() {
 
         int slotCount = 0;
         if (bstNode) {
-            slotCount = bstNode->count;
+            slotCount = bstNode->element.entities._size;
         }
 
         // For each slot in the profession BST node
         for (int slot = 0; slot < slotCount; slot++) {
-            ComponentEntity* entity = bstNode->entities[slot];
+            ComponentEntity* entity = bstNode->element.entities._data[slot];
 
             // Push the entity into this profession row's entity array at +0x30.
             // B.3.2 bridge: ProfessionRow::entities is Collection::Array<ComponentEntity*>
@@ -1469,9 +1469,9 @@ void TownHallUI::UpdateInventory() {
     }
 
     // Phase 3: Count adult citizens per profession
-    int citizenCount = town->citizenCount;
+    int citizenCount = town->citizens._size;
     for (int c = 0; c < citizenCount; c++) {
-        CitizenComponent* citizen = town->citizens[c];
+        CitizenComponent* citizen = town->citizens._data[c];
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
@@ -1524,9 +1524,9 @@ void TownHallUI::UpdateAll() {
 
     // Phase 1: For each tracked description (+0x110/+0x118),
     // zero or insert entry in invBST
-    int trackedCount = town->field_0x118;
+    int trackedCount = town->field_0x110._size;
     for (int i = 0; i < trackedCount; i++) {
-        ComponentDescription* entityPtr = town->field_0x110[i];
+        ComponentDescription* entityPtr = town->field_0x110._data[i];
 
         // Look up in invBST
         InventoryNode* bstNode = InvBST_Find(invBST, entityPtr);
@@ -1556,8 +1556,8 @@ void TownHallUI::UpdateAll() {
     // GameColl::ArrayAt view over someone else's bytes.
     Collection::Array<ComponentEntity*> entityArr;
 
-    ComponentEntity** const lists[4] = { town->field_0x00, town->field_0x10, town->field_0x20, town->field_0x30 };
-    const int32_t listCounts[4] = { town->field_0x08, town->field_0x18, town->field_0x28, town->field_0x38 };
+    ComponentEntity** const lists[4] = { town->field_0x00._data, town->field_0x10._data, town->field_0x20._data, town->field_0x30._data };
+    const int32_t listCounts[4] = { town->field_0x00._size, town->field_0x10._size, town->field_0x20._size, town->field_0x30._size };
     for (int listIdx = 0; listIdx < 4; listIdx++) {
         for (int j = 0; j < listCounts[listIdx]; j++) {
             entityArr.SetSize(entityArr.GetSize() + 1, lists[listIdx][j]);
@@ -1727,8 +1727,8 @@ bool TownReady() {
     if (!townMgr || !profList) return false;
     if (profList->professions.GetSize() <= 0 || profList->professions.GetData() == nullptr) return false;
     if (gw->m_dayCounter == nullptr) return false;
-    if (townMgr->field_0x150 == nullptr) return false;           // stat-history series
-    if (townMgr->professionResources == nullptr) return false;   // production records
+    if (townMgr->field_0x150._data == nullptr) return false;           // stat-history series
+    if (townMgr->professionResources._data == nullptr) return false;   // production records
     return true;
 }
 
@@ -1771,13 +1771,13 @@ void DiagPrint(const char* where, const TownHallUI* self) {
                 static_cast<void*>(gw), gw->m_citizenList, static_cast<void*>(profList),
                 profList ? profList->professions.GetSize() : -1,
                 gw->m_dayCounter,
-                townMgr ? townMgr->field_0x150 : nullptr,
-                townMgr ? static_cast<void*>(townMgr->professionResources) : nullptr);
+                townMgr ? townMgr->field_0x150._data : nullptr,
+                townMgr ? static_cast<void*>(townMgr->professionResources._data) : nullptr);
         // UpdateGeneral's two data sources: the town citizen list (+0xa0/+0xa8,
         // CitizenComponent_OnAdd) and the residence list (+0x20/+0x28, helper_9de0).
         if (townMgr)
             fprintf(stderr, "[TownHallSA]   citizens(+0xa8)=%d homes(+0x28)=%d\n",
-                    townMgr->citizenCount, townMgr->field_0x28);
+                    townMgr->citizens._size, townMgr->field_0x20._size);
     } else {
         fprintf(stderr, "[TownHallSA]   GameUpdateLoop::_singleton=%p\n",
                 static_cast<void*>(GameUpdateLoop::_singleton));
@@ -1894,7 +1894,7 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
     }
     CitizenBehavior* town =
         GameUpdateLoop::_singleton->m_citizenList;
-    int currentTick = town->field_0x150[0]._size;
+    int currentTick = town->field_0x150._data[0]._size;
 
     if (this->cachedGameTick != currentTick) {
         this->cachedGameTick = currentTick;

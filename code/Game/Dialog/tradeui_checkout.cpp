@@ -256,7 +256,7 @@ void TradeUI::OnTradeButton() {
             {
                 int cat = ResourceCategory(resEntity);   // 0x140088f90 (its first argument, the storage, is never read)
                 if (cat >= 0) {
-                    town->professionResources[cat].field_0x0C += qty;
+                    town->professionResources._data[cat].field_0x0C += qty;
                 }
             }
 

@@ -154,7 +154,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // material
     int materialIdx = (int)cropDesc->_type;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources[materialIdx];
+    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources._data[materialIdx];
     bool atCapacity = resEntry.maxCount <= resEntry.currentCount;
 
     // The status icon's flag 2 from the capacity (0x140002f90, 0x14012c3f0)

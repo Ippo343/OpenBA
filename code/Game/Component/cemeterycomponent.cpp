@@ -185,9 +185,9 @@ char CemeteryComponent::EnterBuilt() {
     if (!townMgr) return 0;
 
     Object::InternalPtr<CemeteryComponent> ibp(this);
-    const int count = townMgr->cemeteryCount;
+    const int count = townMgr->cemeteries._size;
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&townMgr->cemeteries)
+    townMgr->cemeteries
         .SetSizeFill(count + 1, &ibp);
 
     Map* const world = GameUpdateLoop::_singleton->m_game;
@@ -250,7 +250,7 @@ char CemeteryComponent::EnterBuilt() {
             fprintf(stderr, "[Cemetery] graveyard REGISTERED: comp=%p townMgr=%p "
                             "cemeteryCount=%d plots=%d claimed=%d\n",
                     static_cast<void*>(this), static_cast<void*>(townMgr),
-                    townMgr->cemeteryCount, plotCount, claimed);
+                    townMgr->cemeteries._size, plotCount, claimed);
             fflush(stderr);
         }
     }
@@ -435,7 +435,7 @@ void CemeteryComponent::OnRemove() {
 
     if (GameUpdateLoop::_singleton != nullptr) {
         CitizenBehavior* subObj = GameUpdateLoop::_singleton->m_citizenList;
-        CemeteryListErase_Reimpl(&subObj->cemeteries, &ptrBuf);   // 0x140002cc0 (+0x40)
+        CemeteryListErase_Reimpl(&subObj->cemeteries._data, &ptrBuf);   // 0x140002cc0 (+0x40)
     }
 }
 

@@ -10,7 +10,7 @@
 //
 //   0x1400c3d30  EntityList::Shutdown
 //   0x1400c3e60  EntityList::~EntityList   (since B.4 X4-COMP: the class dtor, entitylist.cpp)
-//   0x1400907b0  CitizenList::~CitizenList
+//   0x1400907b0  CitizenList::~CitizenList  (since B.4 X5-COMP: CitizenBehavior::~CitizenBehavior, citizenbehavior.cpp)
 //   0x1401024d0  EntityUI::~EntityUI
 //   0x1400f8ff0  Tutorial::~Tutorial
 //
@@ -83,36 +83,9 @@ void VectorDtorIter(T (&elements)[N], Dtor dtor) {
 
 } // namespace
 
-// ============================================================
-// 0x1400174e0 — recursive node free, children +0x20/+0x28, owns a buffer at +0x08
-// ============================================================
-// The nodes of CitizenBehavior's two entity-bucket trees (+0x100 profession,
-// +0x160 template: CitizenBucketNode<Key>, Entity/CitizenBehavior.h). Retail
-// has ONE body for both key types (B13): one template here.
-template <class Key>
-void TreeNodeFree_174e0(void* hdrV, CitizenBucketNode<Key>* node) {
-    if (!node) return;
-    TreeNodeFree_174e0(hdrV, node->left);
-    TreeNodeFree_174e0(hdrV, node->right);
-    Arr(node, 0x08).~Array();   // LEFT: CitizenBehavior.h (ENT): the bucket's entity Array is three raw fields (H5)
-    MemFree(node);
-}
-
-// ============================================================
-// 0x1400173d0 — clear a {root,count} tree of TreeNodeFree_174e0 nodes
-// ============================================================
-template <class Key>
-void Tree_Clear_173d0(CitizenBucketNode<Key>*& root, int32_t& count) {
-    CitizenBucketNode<Key>* node = root;
-    if (node) {
-        TreeNodeFree_174e0(&root, node->left);
-        TreeNodeFree_174e0(&root, node->right);
-        Arr(node, 0x08).~Array();   // LEFT: CitizenBehavior.h (ENT): the bucket's entity Array is three raw fields (H5)
-        MemFree(node);
-    }
-    root = nullptr;
-    count = 0;
-}
+// (0x1400174e0 / 0x1400173d0, the bucket trees' subtree free and Clear, are
+// Collection::Set's DestroySubtree / Clear since B.4 X5-COMP: CitizenBehavior's
+// +0x100 / +0x160 are Set members, cleared by ~CitizenBehavior.)
 
 // ============================================================
 // 0x1400175d0 — array of {ptr,count} sub-arrays: free each, then the array
@@ -121,7 +94,7 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
     // Array<ArrayHdr>::~Array — the trait-derived row's destroy is ~ArrayHdr on
     // each of `count` 0x10-byte elements in ascending order (retail's loop),
     // then ArrayDtorImpl on the outer header.
-    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: CitizenBehavior.h (ENT) +0x140 / +0x150 and WorldGeometry::_arrays[4] are raw {data, count, capacity} fields (H5)
+    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: its one caller left (geometry_draw.cpp) holds WorldGeometry::_arrays[4] as a raw {data, count, capacity} triple (H5)
 }
 
 // ============================================================
@@ -280,36 +253,8 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
     self->shuttingDown = false;
 }
 
-// ============================================================
-// 0x1400907b0 — CitizenList::~CitizenList
-// ============================================================
-// A long run of {ptr,count} arrays at qword indices 0..0x31, plus a few
-// structured members: the path graph at +0x1B8, trees at +0x160 / +0x100, and
-// two array-of-arrays at +0x150 / +0x140. Retail frees strictly back to front.
-extern "C" void CitizenList_Dtor_907b0(CitizenBehavior* self) {
-    if (self->pathGraph) {
-        ArrayPlusTree_Clear_171b0(self->pathGraph);
-        MemFree(self->pathGraph);
-    }
-
-    // Qword index i is the header at byte offset i*8; CitizenBehavior.h declares
-    // each as three raw fields, so ArrayHdr throughout.
-    Arr(self, 0x30 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): notifyEntries is three raw fields, not a Collection::Array (H5)
-    Arr(self, 0x2e * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): professionResources is three raw fields, not a Collection::Array (H5)
-
-    Tree_Clear_173d0(self->field_0x160, self->field_0x168);
-    ArrayOfArrays_Clear_175d0(&self->field_0x150);
-    ArrayOfArrays_Clear_175d0(&self->field_0x140);
-
-    Arr(self, 0x26 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): field_0x130 is three raw fields, not a Collection::Array (H5)
-    Arr(self, 0x24 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): field_0x120 is three raw fields, not a Collection::Array (H5)
-    Arr(self, 0x22 * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): field_0x110 is three raw fields, not a Collection::Array (H5)
-
-    Tree_Clear_173d0(self->field_0x100, self->field_0x108);
-
-    for (int idx = 0x1e; idx >= 0; idx -= 2)
-        Arr(self, idx * 8).~Array();   // LEFT: CitizenBehavior.h (ENT): the sixteen +0x00..+0xF0 lists are three raw fields each (H5)
-}
+// (0x1400907b0, CitizenList::~CitizenList, is CitizenBehavior::~CitizenBehavior
+// since B.4 X5-COMP: Entity/citizenbehavior.cpp; Shutdown calls it.)
 
 // ============================================================
 // 0x1401024d0 — EntityUI::~EntityUI

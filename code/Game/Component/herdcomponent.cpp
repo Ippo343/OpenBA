@@ -527,7 +527,7 @@ void HerdComponent::OnRemove() {
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
     HerdComponent* selfRef = this;
-    CemeteryListErase_Reimpl(&townMgr->herds, &selfRef);   // 0x140002cc0
+    CemeteryListErase_Reimpl(&townMgr->herds._data, &selfRef);   // 0x140002cc0
 }
 
 // ============================================================
@@ -600,7 +600,7 @@ void HerdComponent::OnAdded() {
 
     HerdComponent* selfRef = this;
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&townMgr->herds).SetSizeFill(townMgr->herdCount + 1, &selfRef);
+    townMgr->herds.SetSizeFill(townMgr->herds._size + 1, &selfRef);
 }
 
 // [7] 0x140121e20: HerdComponent::OnRemove above.

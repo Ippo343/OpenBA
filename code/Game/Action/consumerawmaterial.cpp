@@ -194,7 +194,7 @@ int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
         int categoryIndex = ResourceCategory(matEntry->material);   // 0x140088f90
         if (categoryIndex >= 0) {
-            town->professionResources[categoryIndex].field_0x0C += consumedCount;
+            town->professionResources._data[categoryIndex].field_0x0C += consumedCount;
         }
 
         matIdx++;

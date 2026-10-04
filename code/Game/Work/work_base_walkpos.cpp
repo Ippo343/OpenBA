@@ -171,7 +171,7 @@ uint64_t Work::StepProgress(CitizenComponent** citizen, uint32_t cellA, uint32_t
             System::Time cap = {0};
             RtSystem_Time_Ctor(&cap, static_cast<float>(field104) * 300.0f);
 
-            if ((mapInfo->citizenCount / 2 < field_40) &&
+            if ((mapInfo->citizens._size / 2 < field_40) &&
                 (field_30._ticks < cap._ticks)) {
                 field_30._ticks *= 2;
             }

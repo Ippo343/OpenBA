@@ -355,11 +355,11 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
                 // The profession bucket tree (0x1400172f0 compares the key as an
                 // unsigned qword: the profession's address).
                 Profession* const prof = wpc->profession;                     // +0x48
-                ProfessionBucket* node = townMgr->field_0x100;                // +0x100
+                ProfessionBucket* node = townMgr->field_0x100._root;                // +0x100
                 while (node) {
-                    if (prof < node->key)      node = node->left;             // +0x20
-                    else if (prof > node->key) node = node->right;            // +0x28
-                    else { bucket = node->count; break; }                     // +0x10
+                    if (prof < node->element.key)      node = node->left;             // +0x20
+                    else if (prof > node->element.key) node = node->right;            // +0x28
+                    else { bucket = node->element.entities._size; break; }                     // +0x10
                 }
             }
             // WPC+0x48 is seated from `WorkPlaceDescription+0x20`, but only retail's f670
@@ -585,8 +585,8 @@ void FollowUp(int frameNum) {
         if (tm) {
             const Profession* keyP = w->profession;                         // +0x48
             const uint64_t key = reinterpret_cast<uint64_t>(keyP);  // printed as the key  // CAST-OK: ptr_int
-            CitizenComponent** czArr = tm->citizens;                        // +0xa0
-            const int czN = tm->citizenCount;                               // +0xa8
+            CitizenComponent** czArr = tm->citizens._data;                        // +0xa0
+            const int czN = tm->citizens._size;                               // +0xa8
             int total = 0, noRec = 0, k30 = 0, k28 = 0, linked228 = 0, linked230 = 0;
             for (int i = 0; i < czN && czArr; ++i) {
                 CitizenComponent* cz = czArr[i];
@@ -631,8 +631,8 @@ void FollowUp(int frameNum) {
             // student" pair — if neither resolves to this building, the mismatch is the
             // whole story and the owning building tells us which key is which.
             {
-                AttendanceComponent** bArr = tm->attendanceComponents;     // +0x60
-                const int bN = tm->attendanceComponentCount;                // +0x68
+                AttendanceComponent** bArr = tm->attendanceComponents._data;     // +0x60
+                const int bN = tm->attendanceComponents._size;                // +0x68
                 const Profession* want[2] = {nullptr, nullptr};
                 if (czArr && czN > 0) {
                     if (CitizenComponent* cz0 = czArr[0]) {

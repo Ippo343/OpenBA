@@ -41,8 +41,8 @@ static void PastureTendHarness_Tick(int frameNum) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
     if (!gs) return;
-    int n = gs->pastureCount;                                         // +0x98
-    PastureComponent** list = gs->pastures;                           // +0x90
+    int n = gs->pastures._size;                                         // +0x98
+    PastureComponent** list = gs->pastures._data;                           // +0x90
     if (n <= 0 || !list) return;
     for (int i = 0; i < n; ++i) {
         PastureComponent* pasture = list[i];
@@ -90,8 +90,8 @@ static void PastureProduceHarness_Tick(int frameNum) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
     if (!gs) return;
-    int n = gs->pastureCount;                                         // +0x98
-    PastureComponent** list = gs->pastures;                           // +0x90
+    int n = gs->pastures._size;                                         // +0x98
+    PastureComponent** list = gs->pastures._data;                           // +0x90
     if (n <= 0 || !list) return;
     for (int i = 0; i < n; ++i) {
         PastureComponent* pasture = list[i];

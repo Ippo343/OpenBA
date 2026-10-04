@@ -148,7 +148,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         if (s_fwCalls <= 4 || (s_fwCalls % 250) == 0) {
             fprintf(stderr, "[FireWork] water search #%d: townMgr=%p buckets=%p "
                     "centerCell=%u radius=%d -> found=%d  (census: found=%d missed=%d)\n",
-                    s_fwCalls, (void*)townMgr, (void*)townMgr->field_0x140, centerCell,
+                    s_fwCalls, (void*)townMgr, (void*)townMgr->field_0x140._data, centerCell,
                     searchRadius, (int)found, s_fwFound, s_fwMissed);
             fflush(stderr);
         }

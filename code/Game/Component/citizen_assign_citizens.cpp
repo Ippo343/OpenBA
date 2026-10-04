@@ -224,10 +224,10 @@ struct WorkplaceList { ComponentEntity** list; int count; };
 WorkplaceList LookupWorkplaces(ProfessionBucket* mapRoot, Profession* key) {
     ProfessionBucket* node = mapRoot;
     while (node) {
-        if (key < node->key)       node = node->left;    // +0x20
-        else if (key > node->key)  node = node->right;   // +0x28
-        else return { node->entities,                    // list @ +0x08
-                      node->count };                     // count @ +0x10
+        if (key < node->element.key)       node = node->left;    // +0x20
+        else if (key > node->element.key)  node = node->right;   // +0x28
+        else return { node->element.entities._data,                    // list @ +0x08
+                      node->element.entities._size };                     // count @ +0x10
     }
     return { nullptr, 0 };
 }
@@ -304,9 +304,9 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     Map*             pathData = gw->m_game;             // +0xf8
     if (!reg || !townMgr || !pathData) return;
 
-    CitizenComponent** citArray = townMgr->citizens;      // +0xa0
-    int                citCount = townMgr->citizenCount;  // +0xa8
-    ProfessionBucket*  mapRoot  = townMgr->field_0x100;   // +0x100
+    CitizenComponent** citArray = townMgr->citizens._data;      // +0xa0
+    int                citCount = townMgr->citizens._size;  // +0xa8
+    ProfessionBucket*  mapRoot  = townMgr->field_0x100._root;   // +0x100
     float     uvScale  = kRdata_14017214c;   // g_fUVScale 0x14017214c
 
     // Hold the roster-only guard for every AssignHousing call below (no early returns
