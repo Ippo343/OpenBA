@@ -51,6 +51,7 @@
 #include "Entity/CitizenBehavior.h"   // CitizenBehavior::pastures (GameUpdateLoop::m_citizenList)
 #include "Entity/ComponentEntity.h"
 #include "Game/Map.h"                 // Map::size (GameUpdateLoop::m_game)
+#include "Game/MapGenerator.h"        // the start condition's herd parameters (+0xec..+0xf8)
 #include "math/Math.h"
 #include <new>
 #include "object/TypeInfo.h"
@@ -288,13 +289,10 @@ extern "C" void Pasture_SetLivestockType(PastureComponent* pasture, ComponentDes
 // (0x140123c70) files them into gameState+0x80, and the pasture state-2 adopt pass
 // (sub_7140, pasturecomponent_states.cpp:287) pulls matching ones in once the player
 // builds a pasture and picks that type. Both of those are already ported and live.
-extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl) {
-    // LEFT (this body's sc reads): the start condition has no class here (starttown.cpp, GAME-4,
-    // hands it as void*); NOCLASS StartCondition {+0xec offX, +0xf0 offY, +0xf4 radius, +0xf8 groupCount}.
-    uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
+extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl) {
     if (!sc || !tmpl || !centre) return 0;
 
-    const int groupCount = *reinterpret_cast<int32_t*>(sc + 0xf8);
+    const int groupCount = sc->paramF8;   // +0xf8
     if (groupCount <= 0) return 0;
 
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
@@ -309,13 +307,12 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
     // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
     bool female = rng->Rand(2u) == 0u;
 
-    const float offX      = *reinterpret_cast<float*>(sc + 0xec);
-    const float offY      = *reinterpret_cast<float*>(sc + 0xf0);
-    const float radius    = *reinterpret_cast<float*>(sc + 0xf4);
+    const float offX      = sc->paramEC;   // +0xec
+    const float offY      = sc->paramF0;   // +0xf0
+    const float radius    = sc->paramF4;   // +0xf4
     const float yawSpread = kRdata_140172220;  // 0x140172220 = 180.0f
 
-    // LEFT: SIG StartTown_SpawnStartingHerd (starttown.cpp hands the template as void*).
-    const ComponentDescription* templ = reinterpret_cast<const ComponentDescription*>(tmpl);
+    const ComponentDescription* templ = tmpl;
 
     int spawned = 0;
     for (int i = 0; i < groupCount; ++i) {
@@ -358,7 +355,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
 
     std::fprintf(stderr, "[StartHerd] spawned %d/%d livestock from template %p "
                  "at (%.1f,%.1f) radius=%.1f\n",
-                 spawned, groupCount, tmpl, centre[0] + offX, centre[1] + offY, radius);
+                 spawned, groupCount, static_cast<void*>(tmpl), centre[0] + offX, centre[1] + offY, radius);
     std::fflush(stderr);
     return spawned;
 }

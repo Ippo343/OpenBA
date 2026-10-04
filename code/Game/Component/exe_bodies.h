@@ -140,7 +140,7 @@ char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2); 
 
 // ---- citizencomponent_lifecycle.cpp
 void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V);  // 0x1401168a0
-void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* );  // 0x1400302a0
+void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
@@ -212,6 +212,8 @@ class PastureComponent;
 class AnimalComponent;
 extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
+class MapGenerator;   // Game/MapGenerator.h
+extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
 
 // ---- pasturecomponent_states.cpp
 class Map;   // Game/Map.h

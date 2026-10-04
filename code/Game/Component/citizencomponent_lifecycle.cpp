@@ -169,8 +169,7 @@ static inline int ProfessionPriorityOf(ComponentEntity* handle) {
 // ============================================================
 // CitizenComp_SortByProfession_02a0 (0x1400302a0) — see file-header note.
 // ============================================================
-void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* /*tmpV*/) {
-    ComponentEntity** array = reinterpret_cast<ComponentEntity**>(arrV);   // LEFT: SIG CitizenComp_SortByProfession_02a0 (Component/exe_bodies.h, wave X)
+void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* /*tmpV*/) {
     if (!array || n < 2) return;
     std::sort(array, array + n, [](ComponentEntity* a, ComponentEntity* b) {
         return ProfessionPriorityOf(a) < ProfessionPriorityOf(b);

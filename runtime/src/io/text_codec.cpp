@@ -485,7 +485,7 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
                                           void* /*unused*/) {
     if (count <= 0) return;                                        // 0x180029bb0
 
-    char** slot = static_cast<char**>(datav);                      // R12  // LEFT: SIG RtIo_SerializeStringArray (callers hand String* / raw Array data, wave X)
+    char** slot = static_cast<char**>(datav);                      // R12  // LEFT: SIG RtIo_SerializeStringArray: two element types by caller (System::String* from PackageFile / Pixel- / VertexProgram, char* from AnimatedImageDescription::_frameNames / DocumentTextDescription::_frameNamesData, Array<String>s held as char*)
 
     for (int32_t i = 0; i < count; ++i, ++slot) {                  // 0x180029bf0
         // `len + 1`, or 0 for a null String. The length lives at `str - 8`

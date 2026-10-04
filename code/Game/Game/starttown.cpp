@@ -628,9 +628,7 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
 // StartTown_SpawnStartingHerd (code/Game/Component/pasturecomponent_spawn.cpp) and is
 // now called below.
 
-// The starting-herd spawn (retail FUN_1400a0b10), ported alongside the other animal-spawn
-// bodies in code/Game/Component/pasturecomponent_spawn.cpp.
-extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl);
+// The starting-herd spawn (retail FUN_1400a0b10): Component/exe_bodies.h.
 
 // Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
 // body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
