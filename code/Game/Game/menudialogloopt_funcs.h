@@ -11,6 +11,8 @@ class MenuDialogLoopT;
 class MenuScene;
 struct MenuSceneMesh;
 namespace Graphics { class Scene; class GraphicsMesh; }
+namespace System { class Time; }
+namespace Video { class Context; }
 
 // B.4 GAME-b: the loop is typed wherever the caller holds it typed (the slots in
 // standalone/menudialogloopt_stubs.cpp pass `this`); LoadSceneA1 / A3 and
@@ -119,7 +121,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menu
 // particle-only array at MenuDLT+0xbd0. Calls vtable+0x08 (Update(Time*)) on
 // each particle so emitters spawn/age sprites. Caller is the per-frame
 // Stub_Update path after the camera derivation step.
-void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, void* time);
+void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* time);
 
 // MenuDialogLoopT_DrawScene_PhaseA — mirror the 3D `if (self+0xb90)` block of
 // MenuDLT::Draw (exe 0x14009b440). Caller invokes this BEFORE UI::Draw.
@@ -128,7 +130,7 @@ void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, void* time);
 // context is the live Video::Context (engine_singleton+0x10).
 //
 // No-op if self+0xb90 (the MenuScene External) is null.
-void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, void* context);
+void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video::Context* context);
 
 // MenuDialogLoopT_TickAudio — per-frame Audio::Device::Update tick.
 //
@@ -153,7 +155,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, void* 
 // Caller invokes this each tick from the loop's Update slot, passing the
 // current Time pointer (System::Time, 8-byte engine-tick value, same as
 // what's passed to MenuDLT::Update).
-void MenuDialogLoopT_TickAudio(void* time);
+void MenuDialogLoopT_TickAudio(const System::Time* time);
 
 // MenuDialogLoopT_LoadMusic — mirror the first block of MenuDLT::Load (exe
 // 0x14009a930): load Audio/Music/Menu.rsc via ExternalFactory::FindOrLoad and
@@ -217,7 +219,7 @@ void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self);
 // Calls Audio::Scene::Update(scene@+0xb30, elapsedTime, Time(0),
 //   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f) as a member call. Caller passes
 // the frame's System::Time pointer.
-void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, void* time);
+void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time);
 
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
 // MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the

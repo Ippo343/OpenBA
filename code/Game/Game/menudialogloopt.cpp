@@ -63,6 +63,7 @@
 #include <cstdlib>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
+#include "audio/SoundEffect.h" // Audio::SoundEffect : Object::External (the menu music)
 
 // ============================================================
 // The loop handed as `void*`
@@ -444,10 +445,9 @@ void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menu
 //   }
 // Without this, particles are added to the scene but never simulate — emitters
 // don't spawn sprites, so chimneys don't smoke.
-void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, void* time) {
+void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* time) {
     if (!self || !time) return;
-    // LEFT: menudialogloopt_stubs.cpp (STANDALONE) hands the frame time as `void*`.
-    const System::Time& now = *reinterpret_cast<const System::Time*>(time);
+    const System::Time& now = *time;
 
     // Retail reads the +0xbd0 array AS `Geometry**` (exe 0x14009b6e0).
     Collection::Array<Graphics::Geometry*>& particles =
@@ -685,19 +685,15 @@ bool MenuDialogLoopT_LoadScene_PhaseA(MenuDialogLoopT* self) {
 // ============================================================
 // Phase A: Draw — render menu scene with sun lighting + fog
 // ============================================================
-void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, void* contextV) {
+void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video::Context* context) {
     MenuScene* menuScene = self->_menuScene;
-    if (!menuScene || !contextV) return;
-    // LEFT: menudialogloopt_stubs.cpp (STANDALONE) hands MainLoop's context as `void*`.
-    Video::Context* context = reinterpret_cast<Video::Context*>(contextV);
+    if (!menuScene || !context) return;
 
     // B.3.5: SunLight::Set, Context::SetFog and — since batch K1 —
     // `Graphics::Renderer::Draw` are all members.
     PlayerController* transform = self->_transform;
     Graphics::Renderer* renderer = self->_renderer;
-    // LEFT: +0xbb0 is void* (menudialogloopt_stubs.cpp, STANDALONE, walks it
-    // through a `void* MenuDialogLoopT::*` list with +0xba8 and +0xbc8).
-    Graphics::SunLight* sunLight = reinterpret_cast<Graphics::SunLight*>(self->_sunLight);
+    Graphics::SunLight* sunLight = self->_sunLight;
     Graphics::Scene* gScene = self->_scene;
     if (!transform || !renderer || !sunLight || !gScene) return;
 
@@ -836,7 +832,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(MenuDialogLoopT* self, float deltaSecon
 // ============================================================
 // Pull Audio::Device live from MainLoop::_engine->GetAudioDevice()
 // (Engine::Engine::GetAudioDevice at Runtime 0x18000c970: +0x6d0).
-void MenuDialogLoopT_TickAudio(void* time) {
+void MenuDialogLoopT_TickAudio(const System::Time* time) {
     if (!time) return;
     if (!::Engine::MainLoop::_singleton) {
         static bool warned = false;
@@ -870,12 +866,11 @@ void MenuDialogLoopT_TickAudio(void* time) {
     static int tickCount = 0;
     if (tickCount < 3) {
         printf("[MenuDLT::TickAudio] tick=%d audioDevice=%p time=%p -> Audio::Device::Update\n",
-               tickCount, (void*)audioDevice, time);
+               tickCount, (void*)audioDevice, (const void*)time);
         ++tickCount;
     }
 
-    // LEFT: menudialogloopt_stubs.cpp (STANDALONE) hands the frame time as `void*`.
-    audioDevice->Update(*reinterpret_cast<const System::Time*>(time));
+    audioDevice->Update(*time);
 }
 
 // ============================================================
@@ -900,9 +895,9 @@ bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self) {
 
     System::Filename fnBuf("Audio/Music/Menu.rsc");  // System::Filename
     const ::Object::External* found = ::Object::ExternalFactory::_singleton->FindOrLoad(fnBuf);
-    // LEFT: FindOrLoad returns a const External*; Audio::SoundEffect is a
-    // runtime class whose header this TU does not include as an External.
-    Audio::SoundEffect* music = reinterpret_cast<Audio::SoundEffect*>(
+    // FindOrLoad returns a const External* (CONST:FindOrLoad stays); the
+    // SoundEffect is that External (B10 downcast, no IsDerivedFrom: see above).
+    Audio::SoundEffect* music = static_cast<Audio::SoundEffect*>(
         const_cast<::Object::External*>(found));
 
     self->_music = music;
@@ -1034,13 +1029,12 @@ void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self) {
 // Application::IsPaused / Audio::Scene::Pause(channel 2) transition logic). This
 // is what advances the music stream each frame — without it PlayEffect starts
 // the music but it never progresses.
-void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, void* time) {
+void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time) {
     if (!self || !time) return;
 
     Audio::Scene* audioScene = self->AudioScene();   // the embedded Audio::Scene (+0xb30)
 
-    // LEFT: menudialogloopt_stubs.cpp (STANDALONE) hands the frame time as `void*`.
-    System::Time elapsed = *reinterpret_cast<const System::Time*>(time);
+    System::Time elapsed = *time;
     System::Time timeZero; timeZero._ticks = 0;            // Time(0), passed by value
     const Math::Vector3 listener(0.0f, 0.0f, 0.0f);         // origin listener (2D menu music)
 
