@@ -36,6 +36,10 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"   // adultAge (+0x44)
+#include "Entity/CitizenBehavior.h"         // the town manager's arrays (+0x20, +0xA0)
+#include "Entity/ComponentEntity.h"         // _components / FindComponent<T>
+#include "Game/ProfessionList.h"            // field_0x30 (the laborer profession)
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"   // Pf_EntityAnchorCell_7fb0 (0x140087fb0)
 #include "Work/exe_bodies.h"     // WorkBase_CalcDistance_8830 (0x140008830)
@@ -62,39 +66,32 @@ void EnsureFns() {
     s_init = true;
 }
 
-inline uintptr_t GW()          { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
-inline int64_t   TownMgr()     { return *reinterpret_cast<int64_t*>(GW() + 0xf0); }
-inline int*      GameObj()     { return *reinterpret_cast<int**>(GW() + 0xf8); }
-inline int64_t   LaborerKey()  { return *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(GW() + 0xb0) + 0x30); }
-inline void Ctor(void* self, void* obj) { new (self) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
+// The default (laborer) profession: *(gw+0xb0)+0x30, re-read at every use.
+inline Profession* LaborerKey()  { return GameUpdateLoop::_singleton->m_professionList->field_0x30; }
 
 // citizen adult (desc+0x44 <= cz+0x3c) && idle (cz+0x208 == 0). No CheckPtr (caller
 // already CheckPtr'd; the exe reads these two fields before the mid-check CheckPtr).
-inline bool AdultIdle(int64_t cz) {
-    return (*reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0x44)
-              <= *reinterpret_cast<float*>(cz + 0x3c))
-        && (*reinterpret_cast<int64_t*>(cz + 0x208) == 0);
+inline bool AdultIdle(CitizenComponent* cz) {
+    return (cz->description->adultAge <= cz->age)
+        && (cz->school == nullptr);
 }
 
 // Find the ResidenceComponent (c7cf0) on an entity — mirrors the exe's inline scan
 // (stop at first GetTypeId match; return it only if IsDerivedFrom too, else null).
-void* FindResidenceComp(int64_t entity) {
+ResidenceComponent* FindResidenceComp(ComponentEntity* entity) {
     int i = 0;
-    int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
-    int cnt = *reinterpret_cast<int*>(entity + 0x38);
-    int64_t off = 0;
+    Object::InternalPtr<Component>* arr = entity->_components;   // +0x30
+    int cnt = entity->_componentCount;                            // +0x38
     while (i < cnt) {
-        void* elem = reinterpret_cast<void*>(arr + off);
-        void* comp = *reinterpret_cast<void**>(elem);
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+        Component* comp = arr[i].Get();
+        uint32_t tid = comp->Type();   // slot 2
         if (tid == s_tidResidence) {
-            void* elem2 = reinterpret_cast<void*>(arr + off);
-            void* compVal = *reinterpret_cast<void**>(elem2);
-            return Object::IsDerivedFromNullSafe(compVal, s_tidResidence) ? compVal : nullptr;
+            Component* compVal = arr[i].Get();
+            return Object::IsDerivedFromNullSafe(compVal, s_tidResidence)
+                       ? static_cast<ResidenceComponent*>(compVal) : nullptr;
         }
-        ++i; off += 8;
-        cnt = *reinterpret_cast<int*>(entity + 0x38);   // faithful re-read
+        ++i;
+        cnt = entity->_componentCount;   // faithful re-read
     }
     return nullptr;
 }
@@ -102,13 +99,12 @@ void* FindResidenceComp(int64_t entity) {
 // Seat epilogue shared by all four strategies: if the citizen isn't already this
 // profession at this building, AssignHousing(citizen,&building) (-> +0x248) and set
 // +0x1f0 = profKey. `avail` = the workplace building IBP value.
-inline void SeatWorker(int64_t citizen, int64_t avail, int64_t profKey) {
-    int64_t bldg = avail;
-    if ((*reinterpret_cast<int64_t*>(citizen + 0x1f0) != profKey) ||
-        (*reinterpret_cast<int64_t*>(citizen + 0x248) != bldg)) {
-        int64_t local = bldg;
-        CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(citizen), &local);
-        *reinterpret_cast<int64_t*>(citizen + 0x1f0) = profKey;
+inline void SeatWorker(CitizenComponent* citizen, ComponentEntity* avail, Profession* profKey) {
+    ComponentEntity* bldg = avail;
+    if ((citizen->profession != profKey) ||
+        (citizen->workplace != bldg)) {
+        citizen->SetWorkplace(bldg);   // 0x140111ee0
+        citizen->profession = profKey;
     }
 }
 
@@ -116,17 +112,17 @@ inline void SeatWorker(int64_t citizen, int64_t avail, int64_t profKey) {
 // 0x1400896a0 — Fisher-Yates shuffle of the town house list (townMgr+0x20 array,
 // townMgr+0x28 count). Uses System::Random::Rand(*(gw+0xd8), n).
 // ============================================================================
-void Shuffle896a0(int64_t townMgr) {
-    uint32_t n = *reinterpret_cast<uint32_t*>(townMgr + 0x28);
-    void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
+void Shuffle896a0(CitizenBehavior* townMgr) {
+    uint32_t n = townMgr->field_0x28;
+    System::Random* rng = GameUpdateLoop::_singleton->m_random;   // +0xd8
     if ((int)n <= 1) return;
     for (int64_t i = 0; (int64_t)i < (int)n; ++i) {
-        uint32_t j = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n));   // B.3.4b bridge
+        uint32_t j = rng->Rand(static_cast<uint32_t>(n));
         if ((uint32_t)i != j) {
-            int64_t base = *reinterpret_cast<int64_t*>(townMgr + 0x20);
-            int64_t tmp = *reinterpret_cast<int64_t*>(base + i * 8);
-            *reinterpret_cast<int64_t*>(base + i * 8) = *reinterpret_cast<int64_t*>(base + (int64_t)(int)j * 8);
-            *reinterpret_cast<int64_t*>(base + (int64_t)(int)j * 8) = tmp;
+            ComponentEntity** base = townMgr->field_0x20;
+            ComponentEntity* tmp = base[i];
+            base[i] = base[(int)j];
+            base[(int)j] = tmp;
         }
     }
 }
@@ -134,20 +130,20 @@ void Shuffle896a0(int64_t townMgr) {
 // ============================================================================
 // 0x14008c4b0 — strategy 4: first adult+idle+laborer in townMgr+0xa0 -> seat.
 // ============================================================================
-void* Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    int cnt = *reinterpret_cast<int*>(townMgr + 0xa8);
-    int64_t off = 0;
-    for (int i = 0; i < cnt; ++i, off += 8) {
-        int64_t cz = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(townMgr + 0xa0));
+CitizenComponent** Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out,
+                              ComponentEntity** availPtr, Profession* profKey) {
+    int cnt = townMgr->citizenCount;
+    for (int i = 0; i < cnt; ++i) {
+        CitizenComponent* cz = townMgr->citizens[i];
         if (AdultIdle(cz)) {
-            if (*reinterpret_cast<int64_t*>(cz + 0x1f0) == LaborerKey()) {
+            if (cz->profession == LaborerKey()) {
                 SeatWorker(cz, *availPtr, profKey);
-                *reinterpret_cast<int64_t*>(out) = cz;
+                *out = cz;
                 return out;
             }
         }
     }
-    Ctor(out, nullptr);
+    *out = nullptr;
     return out;
 }
 
@@ -155,33 +151,33 @@ void* Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // 0x14008ca20 — strategy 2: nearest (to avail) adult+idle laborer that already HAS
 // a residence (+0x238) -> seat.
 // ============================================================================
-void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    int* game = GameObj();
-    int64_t availAnchorArg = *availPtr;
-    uint32_t availCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&availAnchorArg, nullptr);
+CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
+                              ComponentEntity** availPtr, Profession* profKey) {
+    int* game = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT: SIG WorkBase_CalcDistance_8830 (int* map; Work/exe_bodies.h, wave X)
+    ComponentEntity* availAnchorArg = *availPtr;
+    uint32_t availCell = (uint32_t)EntityAnchorCell(&availAnchorArg, nullptr);   // 0x140087fb0
     int bestDist = 0x7ffffff;
-    int64_t best = 0;
-    int cnt = *reinterpret_cast<int*>(townMgr + 0xa8);
-    int64_t off = 0;
-    for (int i = 0; i < cnt; ++i, off += 8) {
-        int64_t cz = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(townMgr + 0xa0));
+    CitizenComponent* best = nullptr;
+    int cnt = townMgr->citizenCount;
+    for (int i = 0; i < cnt; ++i) {
+        CitizenComponent* cz = townMgr->citizens[i];
         if (AdultIdle(cz)) {
-            if (*reinterpret_cast<int64_t*>(cz + 0x1f0) == LaborerKey()) {
-                if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
-                    int64_t resAnchor = *reinterpret_cast<int64_t*>(cz + 0x238);
-                    uint32_t czCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&resAnchor, nullptr);
+            if (cz->profession == LaborerKey()) {
+                if (cz->home != nullptr) {
+                    ComponentEntity* resAnchor = cz->home;   // +0x238
+                    uint32_t czCell = (uint32_t)EntityAnchorCell(&resAnchor, nullptr);
                     int d = WorkBase_CalcDistance_8830(game, czCell, availCell);
                     if (d <= bestDist) { best = cz; bestDist = d; }
                 }
             }
         }
     }
-    if (best != 0) {
+    if (best != nullptr) {
         SeatWorker(best, *availPtr, profKey);
-        *reinterpret_cast<int64_t*>(out) = best;
+        *out = best;
         return out;
     }
-    Ctor(out, nullptr);
+    *out = nullptr;
     return out;
 }
 
@@ -191,28 +187,28 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // holds an idle laborer; pick the nearest such donor; seat one of its laborers.
 // (If *availPtr==0 seats immediately during the scan.)
 // ============================================================================
-void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    int* game = GameObj();
+CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
+                              ComponentEntity** availPtr, Profession* profKey) {
+    int* game = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT: SIG WorkBase_CalcDistance_8830 (int* map; Work/exe_bodies.h, wave X)
     int bestRecordIdx = -1;               // local_74
     uint32_t availCell = 0xffffffff;      // local_78
-    if (*availPtr != 0) {
-        int64_t availAnchorArg = *availPtr;
-        availCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&availAnchorArg, nullptr);
+    if (*availPtr != nullptr) {
+        ComponentEntity* availAnchorArg = *availPtr;
+        availCell = (uint32_t)EntityAnchorCell(&availAnchorArg, nullptr);   // 0x140087fb0
     }
     int bestDist = 0x7ffffff;             // iVar14
-    int64_t bestRes = 0;                  // local_70
+    ComponentEntity* bestRes = nullptr;   // local_70
 
-    int cnt = *reinterpret_cast<int*>(townMgr + 0xa8);
-    int64_t off = 0;                      // local_60
-    for (int i = 0; i < cnt; ++i, off += 8) {
-        int64_t cz = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(townMgr + 0xa0));   // local_80
+    int cnt = townMgr->citizenCount;
+    for (int i = 0; i < cnt; ++i) {       // local_60 = i * 8
+        CitizenComponent* cz = townMgr->citizens[i];   // local_80
         if (!AdultIdle(cz)) continue;
-        if (*reinterpret_cast<int64_t*>(cz + 0x1f0) != profKey) continue;
+        if (cz->profession != profKey) continue;
 
-        int64_t res = *reinterpret_cast<int64_t*>(cz + 0x238);   // local_90 = their residence
-        if (res == 0) continue;
-        int64_t resAnchor = res;                                 // local_68
-        uint32_t resCell = (uint32_t)Pf_EntityAnchorCell_7fb0(&resAnchor, nullptr);
+        ComponentEntity* res = cz->home;  // local_90 = their residence (+0x238)
+        if (res == nullptr) continue;
+        ComponentEntity* resAnchor = res;                        // local_68
+        uint32_t resCell = (uint32_t)EntityAnchorCell(&resAnchor, nullptr);
         int d = bestDist;
         if ((int)availCell >= 0) {
             d = WorkBase_CalcDistance_8830(game, resCell, availCell);
@@ -220,25 +216,24 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
         }
 
         // walk res's c7cf0 roster for an idle laborer. Entity_FindComponent_Storage
-        // writes the found component into its out-IBP directly (hidden return).
-        int64_t c7cf0 = 0;                                       // local_98 (IBP)
-        CitizenComp_Entity_FindComponent_Storage(res, &c7cf0);
-        int recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
-        int64_t recBase = 0;
+        // (0x140008090) is the ResidenceComponent type scan.
+        ResidenceComponent* c7cf0 = res->FindComponent<ResidenceComponent>();   // local_98 (IBP)
+        int recCount = c7cf0->residentSlotCount;                  // +0x58
+        ResidenceComponent::Family* recBase = nullptr;
         for (int r = 0; r < recCount; ++r) {
-            recBase = *reinterpret_cast<int64_t*>(c7cf0 + 0x50);
-            int slotCount = *reinterpret_cast<int*>(recBase + 8 + (int64_t)r * 0x10);
+            recBase = c7cf0->residentSlots;                       // +0x50
+            int slotCount = recBase[r].count;
             bool matched = false;
-            int64_t memberData = *reinterpret_cast<int64_t*>(recBase + (int64_t)r * 0x10);
+            Object::InternalPtr<CitizenComponent>* memberData = recBase[r].members;
             for (int m = 0; m < slotCount; ++m) {
-                recBase = *reinterpret_cast<int64_t*>(c7cf0 + 0x50);
-                memberData = *reinterpret_cast<int64_t*>(recBase + (int64_t)r * 0x10);
-                int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
+                recBase = c7cf0->residentSlots;
+                memberData = recBase[r].members;
+                CitizenComponent* member = memberData[m].Get();
                 if (AdultIdle(member)) {
-                    if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) {
-                        if (*availPtr == 0) {
+                    if (member->profession == LaborerKey()) {
+                        if (*availPtr == nullptr) {
                             SeatWorker(member, *availPtr, profKey);
-                            *reinterpret_cast<int64_t*>(out) = member;
+                            *out = member;
                             return out;
                         }
                         bestRes = res; bestDist = d; bestRecordIdx = r;
@@ -246,35 +241,33 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
                         break;
                     }
                 }
-                slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)r * 0x10);
+                slotCount = c7cf0->residentSlots[r].count;
             }
             (void)matched;
-            recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
+            recCount = c7cf0->residentSlotCount;
         }
     }
 
     // Post-scan: seat from the best donor residence's record bestRecordIdx.
-    if (bestRes != 0) {
-        void* comp = FindResidenceComp(bestRes);
-        int64_t c7cf0 = 0;
-        Ctor(&c7cf0, comp);
-        int64_t recAddr = *reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)bestRecordIdx * 0x10;
-        int slotCount = *reinterpret_cast<int*>(recAddr + 8);
+    if (bestRes != nullptr) {
+        ResidenceComponent* c7cf0 = FindResidenceComp(bestRes);
+        ResidenceComponent::Family* recAddr = &c7cf0->residentSlots[bestRecordIdx];
+        int slotCount = recAddr->count;
         for (int m = 0; m < slotCount; ++m) {
-            int64_t memberData = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)bestRecordIdx * 0x10);
-            int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
-            if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) {
+            Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[bestRecordIdx].members;
+            CitizenComponent* member = memberData[m].Get();
+            if (member->profession == LaborerKey()) {
                 if (AdultIdle(member)) {
                     SeatWorker(member, *availPtr, profKey);
-                    *reinterpret_cast<int64_t*>(out) = member;
+                    *out = member;
                     return out;
                 }
             }
-            slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)bestRecordIdx * 0x10);
+            slotCount = c7cf0->residentSlots[bestRecordIdx].count;
         }
     }
 
-    Ctor(out, nullptr);
+    *out = nullptr;
     return out;
 }
 
@@ -297,57 +290,53 @@ void* Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // townMgr+0x100 profession BST, roster >= capacity, or WPC+0x50 == 0 — NOT of a
 // missing null check here.
 // ============================================================================
-void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    int64_t bestHouse = 0;   // local_58
+CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
+                              ComponentEntity** availPtr, Profession* profKey) {
+    ComponentEntity* bestHouse = nullptr;   // local_58
     int bestCount = 0;       // iVar9
     int bestRecordIdx = -1;  // iVar13
 
     Shuffle896a0(townMgr);
 
-    int houseCnt = *reinterpret_cast<int*>(townMgr + 0x28);
-    int64_t hoff = 0;        // local_50[0]
-    for (int h = 0; h < houseCnt; ++h, hoff += 8) {
-        int64_t house = *reinterpret_cast<int64_t*>(hoff + *reinterpret_cast<int64_t*>(townMgr + 0x20));   // local_60
-        void* comp = FindResidenceComp(house);
-        int64_t c7cf0 = 0;   // local_70
-        Ctor(&c7cf0, comp);
-        int recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
+    int houseCnt = townMgr->field_0x28;
+    for (int h = 0; h < houseCnt; ++h) {   // local_50[0] = h * 8
+        ComponentEntity* house = townMgr->field_0x20[h];   // local_60
+        ResidenceComponent* c7cf0 = FindResidenceComp(house);   // local_70
+        int recCount = c7cf0->residentSlotCount;
         for (int r = 0; r < recCount; ++r) {
             int laborerN = 0;   // iVar6
-            int slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)r * 0x10);
+            int slotCount = c7cf0->residentSlots[r].count;
             for (int m = 0; m < slotCount; ++m) {
-                int64_t memberData = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)r * 0x10);
-                int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
+                Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[r].members;
+                CitizenComponent* member = memberData[m].Get();
                 if (AdultIdle(member)) {
-                    if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) laborerN++;
+                    if (member->profession == LaborerKey()) laborerN++;
                 }
-                slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)r * 0x10);
+                slotCount = c7cf0->residentSlots[r].count;
             }
             if (bestCount < laborerN) { bestHouse = house; bestCount = laborerN; bestRecordIdx = r; }
-            recCount = *reinterpret_cast<int*>(c7cf0 + 0x58);
+            recCount = c7cf0->residentSlotCount;
         }
     }
 
-    if (bestHouse != 0) {
-        void* comp = FindResidenceComp(bestHouse);
-        int64_t c7cf0 = 0;
-        Ctor(&c7cf0, comp);
-        int slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)bestRecordIdx * 0x10);
+    if (bestHouse != nullptr) {
+        ResidenceComponent* c7cf0 = FindResidenceComp(bestHouse);
+        int slotCount = c7cf0->residentSlots[bestRecordIdx].count;
         for (int m = 0; m < slotCount; ++m) {
-            int64_t memberData = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + (int64_t)bestRecordIdx * 0x10);
-            int64_t member = *reinterpret_cast<int64_t*>((int64_t)m * 8 + memberData);
+            Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[bestRecordIdx].members;
+            CitizenComponent* member = memberData[m].Get();
             if (AdultIdle(member)) {
-                if (*reinterpret_cast<int64_t*>(member + 0x1f0) == LaborerKey()) {
+                if (member->profession == LaborerKey()) {
                     SeatWorker(member, *availPtr, profKey);
-                    *reinterpret_cast<int64_t*>(out) = member;
+                    *out = member;
                     return out;
                 }
             }
-            slotCount = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(c7cf0 + 0x50) + 8 + (int64_t)bestRecordIdx * 0x10);
+            slotCount = c7cf0->residentSlots[bestRecordIdx].count;
         }
     }
 
-    Ctor(out, nullptr);
+    *out = nullptr;
     return out;
 }
 
@@ -377,22 +366,22 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
     EnsureFns();
 
     const char* fail = nullptr;
-    int64_t townMgr = 0;
+    CitizenBehavior* townMgr = nullptr;
     int before = -1, after = -1;
 
     if (!houseEntityIBP)              fail = "houseEntityIBP == 0";
     else if (!GameUpdateLoop::_singleton) fail = "GameUpdateLoop::_singleton == 0 (no GameWorld yet)";
     else {
-        townMgr = TownMgr();
-        if (townMgr == 0)             fail = "townMgr (gameWorld+0xf0) == 0";
+        townMgr = GameUpdateLoop::_singleton->m_citizenList;
+        if (townMgr == nullptr)       fail = "townMgr (gameWorld+0xf0) == 0";
     }
 
     if (!fail) {
-        before = *reinterpret_cast<int*>(townMgr + 0x28);
+        before = townMgr->field_0x28;
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x20))
+        GameColl::AsArray<GameColl::Ptr8>(&townMgr->field_0x20)
             .SetSizeFill(before + 1, &houseEntityIBP);
-        after = *reinterpret_cast<int*>(townMgr + 0x28);
+        after = townMgr->field_0x28;
         // The append is the only thing that advances the count. If it did not move, the
         // array primitive is not writing the count field we (and retail) read at +0x28 —
         // a different failure from any of the guards above, so name it separately.
@@ -423,39 +412,40 @@ extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey
     EnsureFns();
     if (townMgr == 0 || GameUpdateLoop::_singleton == nullptr) return 0;
     if (professionKey == 0) return 0;
-    int64_t profKey = (int64_t)professionKey;
+    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(townMgr);   // LEFT: SIG CitizenEmploy_SeatWorkers (outside callers: starttown.cpp, standalone harnesses)
+    Profession* profKey = reinterpret_cast<Profession*>(professionKey);    // LEFT: SIG CitizenEmploy_SeatWorkers
 
     int seated = 0;
     for (int i = 0; i < count; ++i) {
-        int64_t availOut[2] = { 0, 0 };
-        FindAvailableBuilding(townMgr, availOut, (uint64_t)profKey);
-        int64_t avail = availOut[0];
+        ComponentEntity* availOut[2] = { nullptr, nullptr };
+        FindAvailableBuilding(townMgr, availOut, professionKey);
+        ComponentEntity* avail = availOut[0];
 
-        int64_t result[2];
-        int64_t availArg;
+        CitizenComponent* result[2];
+        ComponentEntity* availArg;
 
-        result[0] = 0; availArg = avail;
-        Strat_cbf0(townMgr, result, &availArg, profKey);
-        int64_t seatedCz = result[0];
-        if (seatedCz == 0) {
-            if (avail != 0) {
-                result[0] = 0; availArg = avail;
-                Strat_ca20(townMgr, result, &availArg, profKey);
+        result[0] = nullptr; availArg = avail;
+        Strat_cbf0(town, result, &availArg, profKey);
+        CitizenComponent* seatedCz = result[0];
+        if (seatedCz == nullptr) {
+            if (avail != nullptr) {
+                result[0] = nullptr; availArg = avail;
+                Strat_ca20(town, result, &availArg, profKey);
                 seatedCz = result[0];
             }
-            if (seatedCz == 0) {
-                result[0] = 0; availArg = avail;
-                Strat_c5f0(townMgr, result, &availArg, profKey);
+            if (seatedCz == nullptr) {
+                result[0] = nullptr; availArg = avail;
+                Strat_c5f0(town, result, &availArg, profKey);
                 seatedCz = result[0];
-                if (seatedCz == 0) {
-                    result[0] = 0; availArg = avail;
-                    Strat_c4b0(townMgr, result, &availArg, profKey);
+                if (seatedCz == nullptr) {
+                    result[0] = nullptr; availArg = avail;
+                    Strat_c4b0(town, result, &availArg, profKey);
                     seatedCz = result[0];
                 }
             }
         }
 
-        if (seatedCz != 0) {
+        if (seatedCz != nullptr) {
             ++seated;
         } else {
             break;   // no candidate this round -> stop
@@ -480,33 +470,35 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
     EnsureFns();
     if (townMgr == 0 || availEntity == 0 || GameUpdateLoop::_singleton == nullptr) return 0;
     if (professionKey == 0) return 0;
-    int64_t profKey = static_cast<int64_t>(professionKey);
+    CitizenBehavior* town     = reinterpret_cast<CitizenBehavior*>(townMgr);       // LEFT: SIG CitizenEmploy_SeatWorkersAt (outside caller: buildcomponent_state8.cpp)
+    ComponentEntity* availEnt = reinterpret_cast<ComponentEntity*>(availEntity);   // LEFT: SIG CitizenEmploy_SeatWorkersAt
+    Profession*      profKey  = reinterpret_cast<Profession*>(professionKey);      // LEFT: SIG CitizenEmploy_SeatWorkersAt
 
     int seated = 0;
     for (int i = 0; i < count; ++i) {
-        int64_t result[2];
-        int64_t availArg;
+        CitizenComponent* result[2];
+        ComponentEntity* availArg;
 
-        result[0] = 0; availArg = availEntity;
-        Strat_cbf0(townMgr, result, &availArg, profKey);
-        int64_t seatedCz = result[0];
-        if (seatedCz == 0) {
-            result[0] = 0; availArg = availEntity;
-            Strat_ca20(townMgr, result, &availArg, profKey);
+        result[0] = nullptr; availArg = availEnt;
+        Strat_cbf0(town, result, &availArg, profKey);
+        CitizenComponent* seatedCz = result[0];
+        if (seatedCz == nullptr) {
+            result[0] = nullptr; availArg = availEnt;
+            Strat_ca20(town, result, &availArg, profKey);
             seatedCz = result[0];
-            if (seatedCz == 0) {
-                result[0] = 0; availArg = availEntity;
-                Strat_c5f0(townMgr, result, &availArg, profKey);
+            if (seatedCz == nullptr) {
+                result[0] = nullptr; availArg = availEnt;
+                Strat_c5f0(town, result, &availArg, profKey);
                 seatedCz = result[0];
-                if (seatedCz == 0) {
-                    result[0] = 0; availArg = availEntity;
-                    Strat_c4b0(townMgr, result, &availArg, profKey);
+                if (seatedCz == nullptr) {
+                    result[0] = nullptr; availArg = availEnt;
+                    Strat_c4b0(town, result, &availArg, profKey);
                     seatedCz = result[0];
                 }
             }
         }
 
-        if (seatedCz != 0) {
+        if (seatedCz != nullptr) {
             ++seated;
             // A real retail Builder-profession citizen has NO producing workplace: work flows
             // through the task-reservation system (+0x208 / town task-mgr), not AssignWorkplace,
@@ -516,10 +508,9 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
             // build site" distraction. Clear it faithfully via AssignWorkplace(&null,-1) (proper
             // worker-list detach + +0x238=0 / +0x240=-1) so the healthy-branch gather block,
             // gated `if(+0x238!=0)`, is skipped and the builder falls through to Idle -> build.
-            int64_t prevWp = *reinterpret_cast<int64_t*>(seatedCz + 0x238);
-            if (prevWp != 0) {
-                int64_t nullIBP = 0;
-                CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(seatedCz), &nullIBP, -1);
+            ComponentEntity* prevWp = seatedCz->home;   // +0x238
+            if (prevWp != nullptr) {
+                seatedCz->SetHome(nullptr, -1);         // 0x1401163d0
             }
         } else {
             break;
@@ -535,17 +526,27 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
 // the town-hall panel is promoted in standalone, that path is live, so expose the
 // file-static strategies for RegisterExeAddr (standalone/reg_townhallui.cpp).
 // ============================================================================
+// The C signatures stay for their outside callers (professionui.cpp, townhallui.cpp,
+// workplaceui.cpp); each argument is typed once here.
 extern "C" void* CitizenEmploy_Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    EnsureFns(); return Strat_cbf0(townMgr, out, availPtr, profKey);
+    EnsureFns();
+    return Strat_cbf0(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_cbf0 (Component/exe_bodies.h, wave X)
+                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_cbf0
 }
 extern "C" void* CitizenEmploy_Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    EnsureFns(); return Strat_ca20(townMgr, out, availPtr, profKey);
+    EnsureFns();
+    return Strat_ca20(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_ca20 (Component/exe_bodies.h, wave X)
+                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_ca20
 }
 extern "C" void* CitizenEmploy_Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    EnsureFns(); return Strat_c5f0(townMgr, out, availPtr, profKey);
+    EnsureFns();
+    return Strat_c5f0(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_c5f0 (Component/exe_bodies.h, wave X)
+                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_c5f0
 }
 extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
-    EnsureFns(); return Strat_c4b0(townMgr, out, availPtr, profKey);
+    EnsureFns();
+    return Strat_c4b0(reinterpret_cast<CitizenBehavior*>(townMgr), reinterpret_cast<CitizenComponent**>(out),   // LEFT: SIG CitizenEmploy_Strat_c4b0 (Component/exe_bodies.h, wave X)
+                      reinterpret_cast<ComponentEntity**>(availPtr), reinterpret_cast<Profession*>(profKey));   // LEFT: SIG CitizenEmploy_Strat_c4b0
 }
 
 // CitizenList::AssignWorker (0x14008c3d0) — the top-level seat cascade the exe's
@@ -598,30 +599,34 @@ extern "C" void CitizenList_AddWorker_91130(int64_t townMgr, uint64_t profession
     CitizenList_AssignWorker_c3d0(townMgr, out, &availArg, static_cast<int64_t>(professionKey));
 }
 
-extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgrV, void* outV, int64_t* availPtrV, int64_t profKeyV) {
     EnsureFns();
-    alignas(8) uint8_t local[16] = {0};
-    int64_t avail = *availPtr;
-    void* r = Strat_cbf0(townMgr, local, &avail, profKey);
-    int64_t won = *reinterpret_cast<int64_t*>(r);
-    if (won == 0) {
+    CitizenBehavior*   townMgr  = reinterpret_cast<CitizenBehavior*>(townMgrV);     // LEFT: SIG CitizenList_AssignWorker_c3d0 (Component/exe_bodies.h, wave X)
+    CitizenComponent** out      = reinterpret_cast<CitizenComponent**>(outV);       // LEFT: SIG CitizenList_AssignWorker_c3d0
+    ComponentEntity**  availPtr = reinterpret_cast<ComponentEntity**>(availPtrV);   // LEFT: SIG CitizenList_AssignWorker_c3d0
+    Profession*        profKey  = reinterpret_cast<Profession*>(profKeyV);          // LEFT: SIG CitizenList_AssignWorker_c3d0
+    alignas(8) CitizenComponent* local[2] = { nullptr, nullptr };
+    ComponentEntity* avail = *availPtr;
+    CitizenComponent** r = Strat_cbf0(townMgr, local, &avail, profKey);
+    CitizenComponent* won = *r;
+    if (won == nullptr) {
         avail = *availPtr;
-        if (avail != 0) {
+        if (avail != nullptr) {
             r = Strat_ca20(townMgr, local, &avail, profKey);
-            won = *reinterpret_cast<int64_t*>(r);
+            won = *r;
         }
-        if (won == 0) {
+        if (won == nullptr) {
             avail = *availPtr;
             r = Strat_c5f0(townMgr, local, &avail, profKey);
-            won = *reinterpret_cast<int64_t*>(r);
-            if (won == 0) {
+            won = *r;
+            if (won == nullptr) {
                 avail = *availPtr;
                 Strat_c4b0(townMgr, out, &avail, profKey);
                 return out;
             }
         }
     }
-    *reinterpret_cast<int64_t*>(out) = won;
+    *out = won;
     return out;
 }
 
@@ -631,11 +636,11 @@ extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64
 void CitizenComponent::OnAdded() {
     EnsureFns();
     if (GameUpdateLoop::_singleton == nullptr) return;
-    int64_t townMgr = TownMgr();
-    if (townMgr == 0) return;
-    int64_t ref[2] = { 0, 0 };
-    Ctor(ref, this);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
+    if (townMgr == nullptr) return;
+    CitizenComponent* ref[2] = { nullptr, nullptr };
+    ref[0] = this;   // the InternalBasePtr ctor's one store
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xa0))
-        .SetSizeFill(*reinterpret_cast<int*>(townMgr + 0xa8) + 1, ref);
+    GameColl::AsArray<GameColl::Ptr8>(&townMgr->citizens)
+        .SetSizeFill(townMgr->citizenCount + 1, ref);
 }

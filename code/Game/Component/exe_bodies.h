@@ -66,7 +66,6 @@ extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64
 // ---- citizen_lifeevent.cpp
 
 // ---- citizen_lifeevent_handler.cpp
-extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType, const char* strParam);  // 0x140116dd0
 
 // ---- citizen_needsupdate.cpp
 

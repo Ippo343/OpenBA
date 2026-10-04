@@ -71,9 +71,9 @@ void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* st
         uint8_t uiStr[16];
         ::new (uiStr) UI::String(
             Object::ExternalPtr<UI::StringTable>(titleSrc->stringTable),
-            *reinterpret_cast<const System::String*>(&titleSrc->stringName));   // H5 raw String
+            titleSrc->stringName);   // +0x30
         ::new (&titleStr) System::String(
-            reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
+            reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge  LEFT: H5 raw UI::String local (a typed local would run ~UI::String)
     } else {
         titleStr.Set("");   // == String("") (ctor is default + Set)
     }
