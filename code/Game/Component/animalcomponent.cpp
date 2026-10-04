@@ -717,7 +717,7 @@ void AnimalComponent::Update(const System::Time* time) {
                 ActionStack* stack = &character->actionStack;
                 WorkBase_TaskListCleanup_c5400(stack);
 
-                void* action = nullptr;
+                Action* action = nullptr;
                 void* mem = (::System::MemoryAllocator::_singleton)
                                 ? ::System::MemoryAllocator::MemAlloc(0x480, 8)
                                 : nullptr;
@@ -730,10 +730,8 @@ void AnimalComponent::Update(const System::Time* time) {
                 // the same degradation retail takes when MemAlloc fails
                 // (0x140106a8e: MOV RAX,RDI with RDI == 0).
 
-                int64_t actionIBP = 0;
-                new (&actionIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<::Object::Internal*>(action));   // B.3.3 bridge   // LEFT: `action` is a void* local holding the MoveTo (COMP's file)
-                Pf_ActStackPush_54e0(stack, &actionIBP);
+                ::Object::InternalPtr<Action> actionIBP = action;
+                ActionStackPush(stack, &actionIBP);
                 moveTimer._ticks = 0;
 
                 if (s_traceMoveTo++ < kTraceCap) {

@@ -53,6 +53,8 @@
 #include "Action/SendComponentMessage.h"   // 0x1400cb1d0, by name
 #include "Action/CompleteTask.h"           // 0x1400c5da0, by name
 #include "Action/MoveTo.h"                 // 0x1400c9170, by name
+#include "Action/ShowTool.h"               // 0x140042890, by name
+#include "Action/PerformWork.h"            // 0x1400c9720, by name
 
 namespace {
 
@@ -135,80 +137,80 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
     // --- CompleteTask (0x38) -> PUSH ---
     {
         void* mem = Alloc(0x38);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
             ComponentEntity* outIBP = nullptr;
             CitizenComponent* ent = *citizenRef;   // citizen
             act = ::new (mem) CompleteTask(priority, &ent, &outIBP, taskParam);   // 0x1400c5da0
         }
-        void* ibp = act;
-        Pf_ActStackPush_54e0(stack, &ibp);
+        ::Object::InternalPtr<Action> ibp = act;
+        ActionStackPush(stack, &ibp);
     }
 
     // --- SendComponentMessage #2 (msg c7008 idle / c75f0 alt, target=building) -> PUSH ---
     {
         void* mem = Alloc(0x40);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
             ComponentEntity* outIBP = nullptr;
             uint32_t msgId = (altAnim & 0xff) ? s_msg75f0 : s_msg7008;
             ComponentEntity* bldg = building ? building->Get() : nullptr;   // building entity
             act = ::new (mem) SendComponentMessage(&bldg, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
-        void* ibp = act;
-        Pf_ActStackPush_54e0(stack, &ibp);
+        ::Object::InternalPtr<Action> ibp = act;
+        ActionStackPush(stack, &ibp);
     }
 
     // --- ShowTool #1 (tool = -1) -> PUSH ---
     {
         void* mem = Alloc(0x30);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
             CitizenComponent* ent = *citizenRef;
-            act = ActChild_ShowToolCtor_42890(mem, &ent, -1);
+            act = ::new (mem) ShowTool(&ent, -1);   // 0x140042890
         }
-        void* ibp = act;
-        Pf_ActStackPush_54e0(stack, &ibp);
+        ::Object::InternalPtr<Action> ibp = act;
+        ActionStackPush(stack, &ibp);
     }
 
     // --- PerformWork (0x48, timed 3.0s, heading anim) -> PUSH ---
     {
         void* mem = Alloc(0x48);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
             CitizenComponent* ent = *citizenRef;
             System::Time workTime;
             RtSystem_Time_Ctor(&workTime, 3.0f);   // DAT_140172180
             uint32_t actionType = (uVar2 != 0) ? 0xd : 0x10;
-            act = Pf_PerformWorkCtor7_9720(mem, &ent, heading, actionType, workTime._ticks, 1, -1);
+            act = ::new (mem) PerformWork(&ent, heading, actionType, workTime._ticks, 1, -1);   // 0x1400c9720
         }
-        void* ibp = act;
-        Pf_ActStackPush_54e0(stack, &ibp);
+        ::Object::InternalPtr<Action> ibp = act;
+        ActionStackPush(stack, &ibp);
     }
 
     // --- MoveTo (0x480, Fast, to the citizen entity's CharacterComponent) -> PUSH ---
     {
         void* mem = Alloc(0x480);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
             CharacterComponent* mover = citizen->_entity->FindComponent<CharacterComponent>();
             act = ::new (mem) MoveTo(&mover, 2 /*pathType Fast*/, 0, position, 0xe1f, 0, -1.0f /*DAT_140172280*/);   // 0x1400c9170
         }
-        void* ibp = act;
-        Pf_ActStackPush_54e0(stack, &ibp);
+        ::Object::InternalPtr<Action> ibp = act;
+        ActionStackPush(stack, &ibp);
     }
 
     // --- ShowTool #2 (tool = uVar2 ? 4(Saw) : 7(Knife)) -> PUSH ---
     {
         void* mem = Alloc(0x30);
-        void* act = nullptr;
+        Action* act = nullptr;
         if (mem) {
             CitizenComponent* ent = *citizenRef;
             int toolType = (uVar2 != 0) ? 4 : 7;
-            act = ActChild_ShowToolCtor_42890(mem, &ent, toolType);
+            act = ::new (mem) ShowTool(&ent, toolType);   // 0x140042890
         }
-        void* ibp = act;
-        Pf_ActStackPush_54e0(stack, &ibp);
+        ::Object::InternalPtr<Action> ibp = act;
+        ActionStackPush(stack, &ibp);
     }
 
 }

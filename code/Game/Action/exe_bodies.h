@@ -95,7 +95,6 @@ void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
 
 // ---- action_child_ctors.cpp
-void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType);  // 0x140042890
 class ComponentEntity;        // Entity/ComponentEntity.h
 float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
@@ -112,8 +111,6 @@ extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
-void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_);  // 0x1400c54e0
-void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
 class Component;              // Component/Component.h
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h

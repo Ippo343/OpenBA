@@ -238,21 +238,6 @@ void* PerformWork::CreateInPlaceObject(void* storage) {
 // component's +0x114 seconds (Time::Time(comp.f114); self.time = AsSeconds * AsSeconds).
 // animIndex arrives in XMM2 (a float); keep it as a 32-bit store at +0x28.
 // ============================================================
-void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType,
-                               int64_t time, uint8_t param_6, int param_7) {
-    // B4 FORWARD: outside callers (the Work action
-    // builders) hold the citizen reference as void*.
-    return static_cast<Object::Base*>(
-        new (self) PerformWork(entity, animIndex, actionType, time, param_6, param_7));
-}
-
-// B4 FORWARD: the untyped spelling of 0x1400c9720 for the by-name outside sites that hold
-// the citizen reference as void* / uint64_t* (Component/citizenai_actionctors.cpp,
-// Work/work_base_actionctor.cpp).
-PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
-                         uint8_t param_6, int param_7)
-    : PerformWork(reinterpret_cast<CitizenComponent* const*>(entity), animIndex, actionType, time,  // LEFT: SIG PerformWork(void* entity, ...): the outside callers' overload hands the citizen reference as void*
-                  param_6 != 0, param_7) {}
 
 // 0x1400c9720 — the ctor body: after Action() the retail stores, in retail order.
 PerformWork::PerformWork(CitizenComponent* const* citizen, float animIndex, uint32_t actionType,

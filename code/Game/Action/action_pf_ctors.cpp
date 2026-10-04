@@ -191,14 +191,6 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: outside callers in animalcomponent, citizenai_actionctors, citizenai_handlers,
-// nomadcomponent_states, build_actions, work_act_clear, work_act_consume, work_act_hunt,
-// work_act_path, work_act_perform, work_act_rawmat, work_base_actionctor
-void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_) {
-    ActionStackPush(stack,
-                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));   // LEFT: SIG Pf_ActStackPush_54e0: its callers (animalcomponent.cpp, citizenai_handlers.cpp, nomadcomponent_states.cpp, build_actions.cpp) hold the action as int64_t / Action* / void* locals built by placement or by void*-returning ctors, not as an InternalPtr<Action>
-}
-
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Entity, Game, Player, Work)
 
 // ---- action_pf_roots_route.cpp's C spellings (kept here: that file's reinterpret column
