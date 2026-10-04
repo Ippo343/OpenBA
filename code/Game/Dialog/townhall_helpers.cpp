@@ -76,9 +76,9 @@ UI::Element* FindImage(UI::Element* row, const char* name) {
 // ImageElements (heart/star icons) as InternalPtrs.
 // ===========================================================================
 extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
-    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);
+    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: SIG TownHall_GroupRatingInit (callers in townhallui.cpp, wave X)
     const Object::InternalPtr<UI::Element>* groupElem =
-        reinterpret_cast<const Object::InternalPtr<UI::Element>*>(groupIBPPtr);
+        reinterpret_cast<const Object::InternalPtr<UI::Element>*>(groupIBPPtr);   // LEFT: SIG TownHall_GroupRatingInit (callers in townhallui.cpp, wave X)
     int childCount = groupElem->Get()->ChildCount();
     for (int i = 0; i < childCount; i++) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
@@ -99,7 +99,7 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
 // the half icon shows only at 2i+1 == halfSteps. (DAT_140172114 = 0.5f.)
 // ===========================================================================
 extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxValue) {
-    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);
+    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: SIG TownHall_GroupRatingUpdate (callers in townhallui.cpp, wave X)
     int wholeCount = group->whole.GetSize();
     int halfSteps = (int)((value / maxValue) * (float)(wholeCount * 2) + 0.5f);
     int odd = 1;
@@ -176,8 +176,8 @@ void ProfRow_Free(ProfRow* row) {
 // examples) rather than the trait-derived blob. It stays hand-rolled until this
 // array gets its own spec or its owning struct becomes a real class (§B.2).
 extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entry) {
-    ProfRowArray* rows = reinterpret_cast<ProfRowArray*>(arrayBase);
-    const ProfRow* fill = reinterpret_cast<const ProfRow*>(entry);
+    ProfRowArray* rows = reinterpret_cast<ProfRowArray*>(arrayBase);   // LEFT: SIG TownHall_ProfArrayPush (callers in townhallui.cpp, wave X)
+    const ProfRow* fill = reinterpret_cast<const ProfRow*>(entry);   // LEFT: SIG TownHall_ProfArrayPush (callers in townhallui.cpp, wave X)
     int oldCount = rows->size;
     if (newCount == oldCount) return;
     ProfRow* oldBuf = rows->data;
@@ -223,8 +223,8 @@ static_assert(sizeof(ProdRow) == 0x28, "production row stride 0x28");
 } // namespace
 
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry) {
-    Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);
-    rows->SetSize(newCount, *reinterpret_cast<const ProdRow*>(entry));
+    Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);   // LEFT: SIG TownHall_ProdArrayPush (callers in townhallui.cpp, wave X)
+    rows->SetSize(newCount, *reinterpret_cast<const ProdRow*>(entry));   // LEFT: SIG TownHall_ProdArrayPush (callers in townhallui.cpp, wave X)
 }
 
 // ===========================================================================
@@ -302,8 +302,8 @@ Avl28Node* Avl28_RotR(Avl28Node** root, Avl28Node* n) {
 } // namespace
 
 extern "C" void TownHall_AvlRebalance28(void* treeRoot, void* nodePtr) {
-    Avl28Node** root = reinterpret_cast<Avl28Node**>(treeRoot);
-    Avl28Node** cur = reinterpret_cast<Avl28Node**>(nodePtr);
+    Avl28Node** root = reinterpret_cast<Avl28Node**>(treeRoot);   // LEFT: SIG TownHall_AvlRebalance28 (callers in townhallui.cpp, wave X)
+    Avl28Node** cur = reinterpret_cast<Avl28Node**>(nodePtr);   // LEFT: SIG TownHall_AvlRebalance28 (callers in townhallui.cpp, wave X)
     while (*cur != nullptr) {
         Avl28Node* n = *cur;
         Avl28Node* parent = n->parent;
@@ -335,7 +335,7 @@ extern "C" void TownHall_AvlRebalance28(void* treeRoot, void* nodePtr) {
 // [startTick, endTick] (clamped to [0, count-1]).
 // ===========================================================================
 extern "C" int TownHall_QueryProductionStat(void* townMgr, int seriesIdx, int startTick, int endTick) {
-    const CitizenBehavior* town = reinterpret_cast<const CitizenBehavior*>(townMgr);
+    const CitizenBehavior* town = reinterpret_cast<const CitizenBehavior*>(townMgr);   // LEFT: SIG TownHall_QueryProductionStat (callers in townhallui.cpp, wave X)
     const Collection::Array<int32_t>* seriesBase = town->field_0x150;
     if (!seriesBase) return 0;
     const Collection::Array<int32_t>& series = seriesBase[seriesIdx];
@@ -414,10 +414,10 @@ bool InvDescLess(const InvEntry* a, const InvEntry* b) {
 } // namespace
 
 extern "C" void TownHall_InventorySortAsc(void* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvNameLess);
+    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvNameLess);   // LEFT: SIG TownHall_InventorySortAsc (callers in townhallui.cpp, wave X)
 }
 extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvDescLess);
+    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvDescLess);   // LEFT: SIG TownHall_InventorySortDesc (callers in townhallui.cpp, wave X)
 }
 
 // ===========================================================================
@@ -433,22 +433,9 @@ extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*)
 // ===========================================================================
 namespace {
 
-// The town's profession tree node (0x38; CitizenBehavior +0x100): the key is
-// the ExternalPtr<Profession>, compared as an unsigned qword; the value the
-// profession's workplaces.
-struct ProfessionTreeNode {
-    uint64_t             key;              // +0x00
-    ComponentEntity**    workplaces;       // +0x08 Array<InternalPtr<ComponentEntity>> data
-    int32_t              workplaceCount;   // +0x10
-    int32_t              _pad14;           // +0x14
-    ProfessionTreeNode*  parent;           // +0x18
-    ProfessionTreeNode*  left;             // +0x20
-    ProfessionTreeNode*  right;            // +0x28
-    int32_t              balance;          // +0x30
-    int32_t              _pad34;           // +0x34
-};
-static_assert(sizeof(ProfessionTreeNode) == 0x38, "profession tree node 0x38");
-static_assert(offsetof(ProfessionTreeNode, left) == 0x20, "");
+// The town's profession tree (CitizenBehavior +0x100) is ProfessionBucket
+// (Entity/CitizenBehavior.h): the key is the ExternalPtr<Profession>, compared
+// as an unsigned qword; the value the profession's workplaces.
 
 // The workplace's WorkPlaceComponent (the tree's null entity test kept).
 WorkPlaceComponent* FindWorkPlaceComp(ComponentEntity* entity) {
@@ -474,7 +461,7 @@ void DemoteToLaborer(CitizenComponent* citizen, Profession* laborer) {
 } // namespace
 
 extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) {
-    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(citizenList);
+    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(citizenList);   // LEFT: SIG TownHall_RemoveWorker (callers in townhallui.cpp, workplaceui.cpp, professionui.cpp, wave X)
     if (!town || GameUpdateLoop::_singleton == nullptr) return;
     const ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
     if (!professions) return;
@@ -494,21 +481,20 @@ extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) 
 
     // Pass 2: the profession's tree node — the workplace with the most
     // rostered workers.
-    // LEFT: CitizenBehavior::field_0x100 is `void*` (GAME-a's header; its node type is not declared there).
-    ProfessionTreeNode* node = reinterpret_cast<ProfessionTreeNode*>(town->field_0x100);
-    ProfessionTreeNode* found = nullptr;
+    ProfessionBucket* node = town->field_0x100;
+    ProfessionBucket* found = nullptr;
     while (node) {
-        uint64_t k = node->key;
-        if (professionId < k)      node = node->left;
-        else if (professionId > k) node = node->right;
+        const Profession* k = node->key;
+        if (profession < k)      node = node->left;
+        else if (profession > k) node = node->right;
         else { found = node; break; }
     }
-    if (found && found->workplaceCount > 0) {
-        int wpCount = found->workplaceCount;
+    if (found && found->count > 0) {
+        int wpCount = found->count;
         ComponentEntity* bestEntity = nullptr;
         int bestWorkers = 0;
         for (int i = 0; i < wpCount; i++) {
-            ComponentEntity* ent = found->workplaces[i];
+            ComponentEntity* ent = found->entities[i];
             WorkPlaceComponent* comp = FindWorkPlaceComp(ent);
             if (!comp) continue;
             int workers = comp->workerCount;
