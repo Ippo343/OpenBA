@@ -68,6 +68,7 @@
 #include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Entity/CitizenBehavior.h"   // the town's raw-material list (+0x110 / +0x118)
 
 
 // Retail's sell/buy tables call the min/max setter through exe .rdata dispatch slot
@@ -216,7 +217,7 @@ static void TradeUI_CloneTableCells(const TradeUI* self, UI::TableElement* table
 static const UI::ElementDescription* TradeUI_GetTableTemplate(UI::TableElement* table) {
     UI::Element* firstChild = table->Child(0).Get();
     if (!firstChild) return nullptr;
-    return reinterpret_cast<const UI::ElementDescription*>(firstChild->_description);   // LEFT: Element::_description is void* (R-UI-a)
+    return firstChild->_description;
 }
 
 // ============================================================
@@ -229,7 +230,7 @@ static ::Object::Base* FindDescComponent(const ComponentDescription* descEntity,
     if (!descEntity) return nullptr;
     int count = descEntity->_subDescCount;
     for (int i = 0; i < count; i++) {
-        ::Object::Base* comp = reinterpret_cast<::Object::Base*>(descEntity->_subDescs[i]);   // LEFT: _subDescs is void** (COMP-c)
+        ::Object::Base* comp = descEntity->_subDescs[i];
         int tid = comp->Type();
         if ((uint32_t)tid == typeId) {
             if (::Object::IsDerivedFromNullSafe(comp, typeId))
@@ -296,8 +297,8 @@ void TradeUI::RefreshSellTable()
     StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
     // Get resource table from game world singleton (+0xf0 = resource manager)
-    void* resourceMgr = GameUpdateLoop::_singleton->m_citizenList;
-    int resourceCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(resourceMgr) + 0x118);   // LEFT: CitizenBehavior (WORK-a)
+    CitizenBehavior* resourceMgr = GameUpdateLoop::_singleton->m_citizenList;
+    int resourceCount = resourceMgr->field_0x118;
 
     // Clear sell data array at +0x30 (stride 0x20)
     _sellItems.Clear();   // 0x140016050
@@ -309,29 +310,28 @@ void TradeUI::RefreshSellTable()
             RawMaterialDescription* resTypeComp = nullptr;
 
             // Get resource entity from resource table
-            ComponentDescription* resEntity = (*reinterpret_cast<ComponentDescription***>(
-                reinterpret_cast<uintptr_t>(resourceMgr) + 0x110))[ri];   // LEFT: CitizenBehavior (WORK-a)
-            const uintptr_t resKey = reinterpret_cast<uintptr_t>(resEntity);
+            ComponentDescription* resEntity = resourceMgr->field_0x110[ri];
+            const ComponentDescription* resKey = resEntity;
 
             // Search the post's storage BST for this resource
-            uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->stockRoot);   // LEFT: TradeComponent tree (COMP-f)
+            TradeResourceNode* bstNode = trade->stockRoot;
             bool found = false;
             while (bstNode != nullptr) {
-                if (resKey < *bstNode) {
+                if (resKey < bstNode->resource) {
                     // left at +0x18. Confirmed byte-exact: the node is
                     // { key +0x00, value +0x08, parent +0x10, left +0x18,
                     //   right +0x20, balance +0x28 } -- see the layout block in
                     // tradecomponent_serialize.cpp (disassembled from this field's
                     // own insert/rotate bodies) and retail's descent in
                     // TutorialGoalCount::Check case 7 (0x1400df290).
-                    bstNode = (uintptr_t*)bstNode[3];  // left
-                } else if (resKey <= *bstNode) {
+                    bstNode = bstNode->left;  // left
+                } else if (resKey <= bstNode->resource) {
                     // Found — check if count (at node+0x08) > 0
-                    if (bstNode != nullptr && (int)bstNode[1] != 0) {
+                    if (bstNode != nullptr && bstNode->quantity != 0) {
                         // Find ValueDescription and ResourceType in resource entity
                         int descCount = resEntity->_subDescCount;
                         for (int d = 0; d < descCount; d++) {
-                            ::Object::Base* comp = reinterpret_cast<::Object::Base*>(resEntity->_subDescs[d]);   // LEFT: COMP-c
+                            ::Object::Base* comp = resEntity->_subDescs[d];
                             int tid = comp->Type();
                             if ((uint32_t)tid == RawMaterialDescription::TypeId()) {
                                 if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId()))
@@ -341,7 +341,7 @@ void TradeUI::RefreshSellTable()
                         }
                         // Find ValueDescription
                         for (int d = 0; d < descCount; d++) {
-                            ::Object::Base* comp = reinterpret_cast<::Object::Base*>(resEntity->_subDescs[d]);   // LEFT: COMP-c
+                            ::Object::Base* comp = resEntity->_subDescs[d];
                             int tid = comp->Type();
                             if ((uint32_t)tid == ValueDescription::TypeId()) {
                                 if (::Object::IsDerivedFromNullSafe(comp, ValueDescription::TypeId()))
@@ -353,7 +353,7 @@ void TradeUI::RefreshSellTable()
                     }
                     break;
                 } else {
-                    bstNode = (uintptr_t*)bstNode[4];  // right
+                    bstNode = bstNode->right;  // right
                 }
             }
 
@@ -375,9 +375,9 @@ void TradeUI::RefreshSellTable()
     // Check trade state: buildState byte +0x52 (or +0x50 if negative)
     bool tradeActive = false;
     if (buildStateComp) {
-        int8_t state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);   // LEFT: StateMachineComponent bytes (COMP-e)
+        int8_t state52 = buildStateComp->stateMachine.pendingState;
         int8_t stateVal = state52;
-        if (state52 < 0) stateVal = *(int8_t*)((uintptr_t)buildStateComp + 0x50);   // LEFT: COMP-e
+        if (state52 < 0) stateVal = buildStateComp->stateMachine.currentInput;
         tradeActive = (stateVal == 0x13);
     }
 
@@ -409,12 +409,12 @@ void TradeUI::RefreshSellTable()
             int orderQty = 0;
             int smOrderCount = storage->slotCount;
             if (smOrderCount > 0) {
-                uintptr_t* orderArr = reinterpret_cast<uintptr_t*>(storage->storageSlots);   // LEFT: StorageComponent item (W0 raw storage)
+                StorageComponent::Item* orderArr = storage->storageSlots;
                 for (int j = 0; j < smOrderCount; j++) {
-                    if (orderArr[j * 2] == reinterpret_cast<uintptr_t>(sellData.resource)) {
+                    if (orderArr[j]._resource == sellData.resource) {
                         if (j >= 0) {
-                            orderQty = (int)orderArr[j * 2 + 1]
-                                       - *(int*)((uintptr_t)&orderArr[j * 2 + 1] + 4);
+                            orderQty = orderArr[j]._count
+                                       - orderArr[j]._reserve;
                         }
                         break;
                     }
@@ -528,8 +528,7 @@ void TradeUI::RefreshBuyTable()
             // No active order — text stays default
         } else {
             // Get order entry from trade description
-            uintptr_t orderEntry = reinterpret_cast<uintptr_t>(tradeDesc->_merchants)
-                                   + (uintptr_t)orderIdx * 0x48;   // LEFT: the merchant record (COMP-f)
+            const TradeMerchant* orderEntry = tradeDesc->_merchants + orderIdx;
 
             // Set parameter 0: order name string
             System::String orderNameBuf;
@@ -537,8 +536,8 @@ void TradeUI::RefreshBuyTable()
             textElem->SetParameter(0, orderNameBuf);
 
             // Set parameter 1: UI string from order entry
-            UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)orderEntry)),
-                             *reinterpret_cast<const System::String*>(orderEntry + 8));   // LEFT: COMP-f
+            UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(orderEntry->stringTable),
+                             orderEntry->name);
             // Convert to System::String
             System::String sysStrBuf;
             ::new (&sysStrBuf) System::String(uiStr.operator System::String());
@@ -554,12 +553,11 @@ void TradeUI::RefreshBuyTable()
     }
 
     // Phase 3: Build buy entries from trade orders
-    int tradeOrderCount = *(int*)((uintptr_t)trade + 0x58);   // LEFT: TradeComponent (COMP-f)
+    int tradeOrderCount = trade->manifestCount;
     if (tradeOrderCount > 0) {
         for (int oi = 0; oi < tradeOrderCount; oi++) {
             // Get trade order entry
-            ComponentDescription* orderEntry =
-                *reinterpret_cast<ComponentDescription**>((uintptr_t)trade->manifest + (uintptr_t)oi * 0x10);   // LEFT: COMP-f
+            ComponentDescription* orderEntry = trade->manifest[oi].good;
 
             // Find ValueDescription in order entry's description
             ValueDescription* valDesc = static_cast<ValueDescription*>(
@@ -571,16 +569,16 @@ void TradeUI::RefreshBuyTable()
     }
 
     // Phase 4: Populate buy table UI cells
-    int buyCount = *(int*)((uintptr_t)trade + 0x58);   // LEFT: TradeComponent (COMP-f)
+    int buyCount = trade->manifestCount;
     uint64_t buyCountU = (uint64_t)buyCount;
 
     if (buyCount > 0) {
-        uintptr_t buyDataOffset = 0;
+        uintptr_t buyDataIndex = 0;
         for (int i = 0; i < buyCount; i++) {
             BuyRow& buyUI = _buyRows[i];
 
-            uintptr_t* buyOrder = (uintptr_t*)((uintptr_t)trade->manifest + buyDataOffset);   // LEFT: COMP-f
-            ComponentDescription* orderDesc = reinterpret_cast<ComponentDescription*>(*buyOrder);
+            TradeManifestLine* buyOrder = trade->manifest + buyDataIndex;
+            ComponentDescription* orderDesc = buyOrder->good;
 
             // Find ValueDescription
             ValueDescription* valDesc = static_cast<ValueDescription*>(
@@ -596,15 +594,15 @@ void TradeUI::RefreshBuyTable()
 
             // Set quantity number (buyUI+0x18)
             buyUI.quantity->SetValue(
-                static_cast<int32_t>(*(int*)((uintptr_t)buyOrder + 0x0C)));
+                static_cast<int32_t>(buyOrder->stock));
 
             // Set price number (buyUI+0x08)
             buyUI.price->SetValue(
-                static_cast<int32_t>((int)buyOrder[1]));
+                static_cast<int32_t>(buyOrder->price));
 
             // Set spinner min/max (buyUI+0x10 is a SpinnerElement, exe slot 0x140151cf8)
             buyUI.spinner->SetMinMax(
-                0, *(int*)((uintptr_t)buyOrder + 0x0C));
+                0, buyOrder->stock);
 
             // Set spinner increment
             SetSpinnerIncrement(buyUI.spinner);
@@ -617,7 +615,7 @@ void TradeUI::RefreshBuyTable()
             buyUI.quantity->Enable(true);
             buyUI.price->Enable(true);
 
-            buyDataOffset += 0x10;
+            buyDataIndex += 1;
         }
     }
 
@@ -665,8 +663,7 @@ void TradeUI::RefreshBuyTable()
     // Phase 7: Set order combo current item and enabled state
     int comboIdx = 0;
     if (trade->tradeId >= 0) {
-        comboIdx = *(int*)((uintptr_t)trade->merchantOrders
-                    + (uintptr_t)trade->tradeId * 0x20 + 8);   // LEFT: COMP-f
+        comboIdx = trade->merchantOrders[trade->tradeId].orderKind;
     }
     _comboOrder->SetCurrentItem(comboIdx);
 
@@ -713,13 +710,12 @@ void TradeUI::RefreshBuyTable()
             _purchaseRows[pi].check->Enable(true);
 
             // Check if this purchase entity is in the current order's selection list
-            uintptr_t orderData = (uintptr_t)trade->tradeId * 0x20
-                                  + (uintptr_t)trade->merchantOrders;   // LEFT: COMP-f
-            int selCount = *(int*)(orderData + 0x18);
+            TradeMerchantOrder* orderData = trade->merchantOrders + trade->tradeId;
+            int selCount = orderData->goodsCount;
             if (selCount > 0) {
-                uintptr_t* selList = *(uintptr_t**)(orderData + 0x10);
+                ComponentDescription** selList = orderData->goods;
                 for (int si = 0; si < selCount; si++) {
-                    if (selList[si] == reinterpret_cast<uintptr_t>(_purchaseItems[pi].resource)) {
+                    if (selList[si] == _purchaseItems[pi].resource) {
                         _purchaseRows[pi].check->_checked = 1;
                         break;
                     }
@@ -918,7 +914,7 @@ void TradeUI::OnCreated() {
         if (buildComp) {
             int compCount = buildComp->_subDescCount;
             for (int c = 0; c < compCount; c++) {
-                ::Object::Base* comp = reinterpret_cast<::Object::Base*>(buildComp->_subDescs[c]);   // LEFT: COMP-c
+                ::Object::Base* comp = buildComp->_subDescs[c];
                 int typeId = comp->Type();
                 if (typeId == (int)SelectDescription::TypeId()) {
                     ::Object::Base* selectComp = nullptr;
@@ -1104,7 +1100,7 @@ static int FindResourceValue(const ComponentDescription* resourceEntity) {
     if (!resourceEntity) return 0;
     int compCount = resourceEntity->_subDescCount;
     for (int k = 0; k < compCount; k++) {
-        ::Object::Base* comp = reinterpret_cast<::Object::Base*>(resourceEntity->_subDescs[k]);   // LEFT: COMP-c
+        ::Object::Base* comp = resourceEntity->_subDescs[k];
         if (!comp) continue;
         // Call vtable+0x10 to get type ID
         int typeId = comp->Type();
@@ -1197,8 +1193,8 @@ void TradeUI::OnUpdateLayout() {
     StateMachineComponent* buildState = entity->FindComponent<StateMachineComponent>();
 
     // State byte at +0x52 (primary), +0x50 (fallback if negative)
-    int8_t stateByte = *(int8_t*)((uintptr_t)buildState + 0x52);   // LEFT: COMP-e
-    if (stateByte < 0) stateByte = *(int8_t*)((uintptr_t)buildState + 0x50);   // LEFT: COMP-e
+    int8_t stateByte = buildState->stateMachine.pendingState;
+    if (stateByte < 0) stateByte = buildState->stateMachine.currentInput;
     bool merchantArrived = (stateByte == 0x13);
 
     // --- Enable/disable buttonDismiss (enabled when merchant is present) ---
@@ -1240,7 +1236,7 @@ void TradeUI::OnUpdate(const System::Time& /*time*/) {
 
     // Check if order count changed
     int selfOrderCount = _buyItems._size;
-    int buildingOrderCount = *(int*)((uintptr_t)trade + 0x58);   // LEFT: COMP-f
+    int buildingOrderCount = trade->manifestCount;
 
     if (selfOrderCount != buildingOrderCount) {
         // Order count changed — refresh sell, buy, and order tables
@@ -1442,7 +1438,7 @@ void TradeUI::UpdateBuyTotals() {
     int total = 0;
     int buyCount = _buyItems._size;
 
-    uintptr_t resourceTypeBase = (uintptr_t)trade->manifest;   // LEFT: COMP-f
+    TradeManifestLine* resourceTypeBase = trade->manifest;
     for (int i = 0; i < buyCount; i++) {
         int qty = _buyItems[i].quantity;
         if (qty != 0) {
@@ -1457,7 +1453,7 @@ void TradeUI::UpdateBuyTotals() {
             // [-8] off it, i.e. i*0x10 + 8 — NOT i*0x10 - 8. Transcribing the
             // "-8" literally read entry i-1's price and, at i == 0, read eight
             // bytes off the front of the array.
-            int price = *(int*)(resourceTypeBase + (uintptr_t)i * 0x10 + 8);
+            int price = resourceTypeBase[i].price;
             total += price * qty;
         }
     }
@@ -1552,8 +1548,8 @@ void TradeUI::OnComboOrder() {
 
     // Store to the post's current order slot +8
     int curSlot = trade->tradeId;
-    uintptr_t ordersBase = (uintptr_t)trade->merchantOrders;   // LEFT: COMP-f
-    *(uint32_t*)(ordersBase + (uintptr_t)(uint32_t)curSlot * 0x20 + 8) = comboIdx;
+    TradeMerchantOrder* ordersBase = trade->merchantOrders;
+    ordersBase[static_cast<uint32_t>(curSlot)].orderKind = comboIdx;   // the index is zero-extended (as the tree's)
 }
 
 // ============================================================
@@ -1572,8 +1568,8 @@ void TradeUI::OnOrderAmountSpinner(int idx) {
     int val = _orderRows[idx].spinner->GetValue();
 
     // Store to the post's order amount table: trade.ordersAmt (+0x40) + idx*0xc + 8
-    uintptr_t ordersAmt = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
-    *(int*)(ordersAmt + (uintptr_t)idx * 0xc + 8) = val;
+    TradeBuyOrder* ordersAmt = trade->buyOrders;
+    ordersAmt[idx].amount = val;
 }
 
 // ============================================================
@@ -1588,23 +1584,23 @@ void TradeUI::OnOrderSpinner(int idx, int idx2) {
         ? static_cast<ComponentEntity*>(source) : nullptr;
     TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    uintptr_t ordersBase = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
+    TradeBuyOrder* ordersBase = trade->buyOrders;
 
     // Swap 12-byte entries at idx and idx2 (stride 0xc)
-    uintptr_t a = ordersBase + (uintptr_t)idx  * 0xc;
-    uintptr_t b = ordersBase + (uintptr_t)idx2 * 0xc;
+    TradeBuyOrder* a = ordersBase + idx;
+    TradeBuyOrder* b = ordersBase + idx2;
 
-    uint32_t a0 = *(uint32_t*)(a + 0);
-    uint32_t a1 = *(uint32_t*)(a + 4);
-    uint32_t a2 = *(uint32_t*)(a + 8);
+    uint32_t a0 = a->rawMaterialFlags;
+    int32_t  a1 = a->categoryIndex;
+    int32_t  a2 = a->amount;
 
-    *(uint32_t*)(a + 0) = *(uint32_t*)(b + 0);
-    *(uint32_t*)(a + 4) = *(uint32_t*)(b + 4);
-    *(uint32_t*)(a + 8) = *(uint32_t*)(b + 8);
+    a->rawMaterialFlags = b->rawMaterialFlags;
+    a->categoryIndex    = b->categoryIndex;
+    a->amount           = b->amount;
 
-    *(uint32_t*)(b + 0) = a0;
-    *(uint32_t*)(b + 4) = a1;
-    *(uint32_t*)(b + 8) = a2;
+    b->rawMaterialFlags = a0;
+    b->categoryIndex    = a1;
+    b->amount           = a2;
 }
 
 // ============================================================
@@ -1738,13 +1734,13 @@ void TradeUI::RefreshOrderQuantityDisplay() {
             // Search StorageComponent's item list for this resource entity
             // List entries: pairs [resource_entity_ptr, qty] each 0x10 bytes (2 x 8-byte)
             int listCount = storageComp->slotCount;
-            void** itemList = reinterpret_cast<void**>(storageComp->storageSlots);   // LEFT: StorageComponent item (W0 raw storage)
+            StorageComponent::Item* itemList = storageComp->storageSlots;
 
             int foundQty = 0;
             for (int64_t j = 0; j < listCount; j++) {
-                if (itemList[j * 2] == resourceEntity) {
+                if (itemList[j]._resource == resourceEntity) {
                     if (j >= 0) {
-                        foundQty = (int)(uintptr_t)itemList[j * 2 + 1];
+                        foundQty = itemList[j]._count;
                     }
                     break;
                 }
@@ -1784,8 +1780,8 @@ void TradeUI::RefreshSellSpinnerValues() {
     StateMachineComponent* bsComp = entity->FindComponent<StateMachineComponent>();
 
     // Byte at +0x52 (fallback +0x50 if negative) compared to 0x13 (merchant arrived).
-    int8_t stateByte = *(int8_t*)((uintptr_t)bsComp + 0x52);   // LEFT: COMP-e
-    if (stateByte < 0) stateByte = *(int8_t*)((uintptr_t)bsComp + 0x50);   // LEFT: COMP-e
+    int8_t stateByte = bsComp->stateMachine.pendingState;
+    if (stateByte < 0) stateByte = bsComp->stateMachine.currentInput;
     bool merchantArrived = (stateByte == 0x13);
 
     if (sellCount > 0) {
@@ -1798,12 +1794,12 @@ void TradeUI::RefreshSellSpinnerValues() {
 
             // Search StorageComponent's item list for current stored qty
             int listCount = storageComp->slotCount;
-            void** itemList = reinterpret_cast<void**>(storageComp->storageSlots);   // LEFT: W0 raw storage
+            StorageComponent::Item* itemList = storageComp->storageSlots;
             int storedQty = 0;
             for (int64_t j = 0; j < listCount; j++) {
-                if (itemList[j * 2] == resourceEntity) {
+                if (itemList[j]._resource == resourceEntity) {
                     if (j >= 0) {
-                        storedQty = (int)(uintptr_t)itemList[j * 2 + 1];
+                        storedQty = itemList[j]._count;
                     }
                     break;
                 }
@@ -1855,7 +1851,7 @@ void TradeUI::RefreshOrderDisplay() {
 
     int iVar7 = 0;
 
-    int orderCount = *(int*)((uintptr_t)trade + 0x48);   // LEFT: COMP-f
+    int orderCount = trade->buyOrderCount;
     if (orderCount <= 0) return;
 
     for (int64_t idx = 0; idx < orderCount; idx++) {
@@ -1863,16 +1859,15 @@ void TradeUI::RefreshOrderDisplay() {
         OrderRow& uiEntry = _orderRows[(int)idx];
 
         // Read order amount from the post's orders array (stride 0xc)
-        int64_t orderOff = idx * 0xc;
-        uintptr_t ordersBase = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
-        int amount = *(int*)(ordersBase + orderOff + 8);
+        TradeBuyOrder* ordersBase = trade->buyOrders;
+        int amount = ordersBase[idx].amount;
 
         // Set spinner value (uiEntry[3] = offset +0x18)
         uiEntry.spinner->SetValue(amount);
 
         // Get the description and typeIdx for sprite/string lookups
-        uintptr_t ordersBase2 = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
-        int typeIdx = *(int*)(ordersBase2 + orderOff + 4);
+        TradeBuyOrder* ordersBase2 = trade->buyOrders;
+        int typeIdx = ordersBase2[idx].categoryIndex;
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
         Description* description = trade->_description;
@@ -1881,8 +1876,8 @@ void TradeUI::RefreshOrderDisplay() {
             ? static_cast<TradeDescription*>(description) : nullptr;
 
         // Sprite name is at pairs + (typeIdx*3 + 1)*8 (the 0x18-stride pair array)
-        uintptr_t entriesBase = (uintptr_t)tradeDesc->_pairs;   // LEFT: COMP-f
-        const System::String* spriteName = (const System::String*)(entriesBase + ((int64_t)typeIdx * 3 + 1) * 8);
+        TradeGoodsCategory* entriesBase = tradeDesc->_pairs;
+        const System::String* spriteName = &entriesBase[typeIdx].spriteName;
         UI::Sprite spriteTemp(::Object::ExternalPtr<UI::SpriteSheet>(tradeDesc->_ref20), *spriteName);
 
         // Copy constructed sprite to local for SetSprite (matches MOVAPS/MOVDQA in original)
@@ -1891,8 +1886,8 @@ void TradeUI::RefreshOrderDisplay() {
         uiEntry.label->SetSprite(&spriteLocal);
 
         // Get the description and typeIdx AGAIN for string lookup (original re-reads)
-        uintptr_t ordersBase3 = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
-        typeIdx = *(int*)(ordersBase3 + orderOff + 4);
+        TradeBuyOrder* ordersBase3 = trade->buyOrders;
+        typeIdx = ordersBase3[idx].categoryIndex;
 
         description = trade->_description;
         isTradeDesc = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
@@ -1900,8 +1895,8 @@ void TradeUI::RefreshOrderDisplay() {
             ? static_cast<TradeDescription*>(description) : nullptr;
 
         // String name is at pairs + typeIdx*0x18 + 0x10
-        entriesBase = (uintptr_t)tradeDesc->_pairs;   // LEFT: COMP-f
-        const System::String* stringName = (const System::String*)(entriesBase + (int64_t)typeIdx * 0x18 + 0x10);
+        entriesBase = tradeDesc->_pairs;
+        const System::String* stringName = &entriesBase[typeIdx].textName;
         UI::String stringTemp(::Object::ExternalPtr<UI::StringTable>(tradeDesc->_ref28), *stringName);
 
         // Copy constructed string to local for SetText (matches MOVAPS/MOVDQA in original)
@@ -1915,7 +1910,7 @@ void TradeUI::RefreshOrderDisplay() {
         if (idx == 0) {
             uiEntry.upButton->Enable(false);
         } else {
-            if (iVar7 == *(int*)((uintptr_t)trade + 0x48) - 1) {   // LEFT: COMP-f
+            if (iVar7 == trade->buyOrderCount - 1) {
                 uiEntry.downButton->Enable(false);
             }
         }
@@ -1943,22 +1938,21 @@ void TradeUI::RefreshOrderDisplay() {
 
 void TradeUI::RefreshDisplay() {
     // Get the raw-material list from game world singleton (+0xF0)
-    void* tradeList = GameUpdateLoop::_singleton->m_citizenList;
-    int entityCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tradeList) + 0x118);   // LEFT: CitizenBehavior (WORK-a)
+    CitizenBehavior* tradeList = GameUpdateLoop::_singleton->m_citizenList;
+    int entityCount = tradeList->field_0x118;
 
     // Clear display entries array at self+0x50
     _storageItems.Clear();   // 0x140016200
 
     // Build display entries: for each entity, find ResourceType + ValueDescription
     for (int i = 0; i < entityCount; i++) {
-        ComponentDescription* entity = (*reinterpret_cast<ComponentDescription***>(
-            reinterpret_cast<uintptr_t>(tradeList) + 0x110))[i];   // LEFT: CitizenBehavior (WORK-a)
+        ComponentDescription* entity = tradeList->field_0x110[i];
 
         RawMaterialDescription* resourceComp = nullptr;
         {
             int compCount = entity ? entity->_subDescCount : 0;
             for (int c = 0; c < compCount; c++) {
-                ::Object::Base* comp = reinterpret_cast<::Object::Base*>(entity->_subDescs[c]);   // LEFT: COMP-c
+                ::Object::Base* comp = entity->_subDescs[c];
                 if (!comp) continue;
                 if ((uint32_t)comp->Type() == RawMaterialDescription::TypeId()) {
                     if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId()))
@@ -1971,7 +1965,7 @@ void TradeUI::RefreshDisplay() {
         {
             int compCount = entity ? entity->_subDescCount : 0;
             for (int c = 0; c < compCount; c++) {
-                ::Object::Base* comp = reinterpret_cast<::Object::Base*>(entity->_subDescs[c]);   // LEFT: COMP-c
+                ::Object::Base* comp = entity->_subDescs[c];
                 if (!comp) continue;
                 if ((uint32_t)comp->Type() == ValueDescription::TypeId()) {
                     if (::Object::IsDerivedFromNullSafe(comp, ValueDescription::TypeId()))
@@ -2042,12 +2036,12 @@ void TradeUI::RefreshDisplay() {
         // Result = countA - countB (available = total - committed)
         int invCount = 0;
         int scItemCount = storage->slotCount;
-        uintptr_t scItems = (uintptr_t)storage->storageSlots;   // LEFT: W0 raw storage
+        StorageComponent::Item* scItems = storage->storageSlots;
         for (int j = 0; j < scItemCount; j++) {
-            uintptr_t itemAddr = scItems + (uintptr_t)j * 0x10;
-            if (*(uintptr_t*)itemAddr == reinterpret_cast<uintptr_t>(entry.resource)) {
+            StorageComponent::Item* itemAddr = scItems + j;
+            if (itemAddr->_resource == entry.resource) {
                 if (j >= 0) {
-                    invCount = *(int*)(itemAddr + 8) - *(int*)(itemAddr + 0xC);
+                    invCount = itemAddr->_count - itemAddr->_reserve;
                 }
                 break;
             }
@@ -2059,15 +2053,15 @@ void TradeUI::RefreshDisplay() {
         // Lookup trade order amount from TradeComponent BST (tree at +0x60)
         // Node: {key(+0), value(+8), color(+10), left(+18), right(+20)}
         int orderAmt = 0;
-        const uintptr_t key = reinterpret_cast<uintptr_t>(entry.resource);
-        uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->stockRoot);   // LEFT: COMP-f
+        const ComponentDescription* key = entry.resource;
+        TradeResourceNode* bstNode = trade->stockRoot;
         while (bstNode != nullptr) {
-            if (key < *bstNode) {
-                bstNode = (uintptr_t*)bstNode[3];  // left child at +0x18
-            } else if (key > *bstNode) {
-                bstNode = (uintptr_t*)bstNode[4];  // right child at +0x20
+            if (key < bstNode->resource) {
+                bstNode = bstNode->left;   // left child at +0x18
+            } else if (key > bstNode->resource) {
+                bstNode = bstNode->right;  // right child at +0x20
             } else {
-                orderAmt = (int)bstNode[1];  // value at +0x08
+                orderAmt = bstNode->quantity;  // value at +0x08
                 break;
             }
         }
