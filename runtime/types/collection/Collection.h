@@ -1191,12 +1191,10 @@ struct AvlGeneric {
 // pointer and the two spellings agree byte for byte. The retrace never touches
 // `_count`, exactly like the other three widths.
 //
-// These three keep their `void*` signatures: they are defined in R-IO's
-// modification_refresh.cpp. The two rotations have no caller (the template
-// reaches a width's rotations only through its retrace).
+// The retrace keeps its `void*` signature: it is defined in R-IO's
+// modification_refresh.cpp. (Its two rotations, 0x180027e20 / 0x180027f50, had
+// no body and no caller left; their declarations were deleted in B.4 wave X.)
 void  PortedRetrace8(void* set, void** slot);         // 0x1800274c0
-void* PortedRotateLeft8(void* set, void* n);          // 0x180027e20
-void* PortedRotateRight8(void* set, void* n);         // 0x180027f50
 
 // The other three widths take the erased node and container types of their
 // ported core (B.4 R-COLL: typed at the core, set_core.cpp forwards with no

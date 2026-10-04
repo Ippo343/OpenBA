@@ -399,7 +399,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
     // ---- PACKED ---------------------------------------------------------
     // The pack index is the TOP BYTE of the tag (§1).
     const uint32_t packIndex =
-        static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(&fi->handle)[3]);  // LEFT: retail reads the TOP BYTE of the tag (MOVZX byte [+3]); a shift would change the load width
+        static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(&fi->handle)[3]);  // retail reads the TOP BYTE of the tag (MOVZX byte [+3]); a shift would change the load width  // CAST-OK: byte_io
     PackageFile* const pkg = _packfiles[packIndex];          // 1800ace31/39
 
     RtIO::FileInfo pack = pkg->IO::PackageFile::GetFileInfo();  // 1800ace3d

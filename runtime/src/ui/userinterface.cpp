@@ -687,7 +687,7 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
     // `DeviceData` slot 8 (+0x40) `SetImageBuffer(image, hotX, hotY)`
     // (CompanionData.h).
     Video::DeviceData* const backend =
-        reinterpret_cast<Video::DeviceData*>(Video::Device::_singleton->deviceData);   // LEFT: FIELD Video::Device::deviceData is void* (Device.h, R-GFX-1)
+        Video::Device::_singleton->deviceData;
 
     const SpriteSheet* sheet = cursor->_spriteSheet.Get();
     const Graphics::MaterialInstance* const material =
