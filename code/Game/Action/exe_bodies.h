@@ -214,9 +214,6 @@ void Pf_HerdStartMigration_122340(void* param_1);  // 0x140122340 B4 FORWARD -> 
 
 // ---- action_pf_roots_road.cpp
 void Pf_ZoneRefresh_9c480(int* param_1);  // 0x14009c480
-void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, unsigned int param_3);  // 0x14009f2f0
-void Pf_RefreshRegionHeight_9e0e0(unsigned int* param_1, int param_2, int param_3, int param_4, int param_5);  // 0x14009e0e0
-void Pf_FinalizeRoadTile_9c640(unsigned int* param_1, int param_2, uint8_t param_3, unsigned int param_4);  // 0x14009c640
 
 // ---- action_pf_roots_route.cpp
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80

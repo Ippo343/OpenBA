@@ -135,11 +135,6 @@ void Map::SetTerrainType(int param_2, uint param_3) {
     pathfinder->SetCellTerrain(param_2, static_cast<int>(param_3));   // 0x1400a6fe0
 }
 
-// B4 FORWARD: 2 outside callers (Component/keystone_a_map.cpp, Player/keystone_a_removalcalcpath.cpp)
-void Pf_SetTileRoadFlag_9f2f0(int* param_1, int param_2, uint param_3) {
-    reinterpret_cast<Map*>(param_1)->SetTerrainType(param_2, param_3);
-}
-
 // ============================================================
 // 0x14009e0e0 — clear the terrain height words over a cell rect + refresh. (Ghidra:
 //   CitizenAI_impl_e0e0.) For each cell of [x0..x1] x [y0..y1]: build a Vector3 at the
@@ -190,11 +185,6 @@ void Map::ResetTerrainHeights(int param_2, int param_3, int param_4, int param_5
     GameUpdateLoop::_singleton->m_worldGeometry->RebuildRoadMesh(this);   // 0x1400af370
 }
 
-// B4 FORWARD: 1 outside caller (Component/clearareacomponent_states.cpp)
-void Pf_RefreshRegionHeight_9e0e0(uint* param_1, int param_2, int param_3, int param_4, int param_5) {
-    reinterpret_cast<Map*>(param_1)->ResetTerrainHeights(param_2, param_3, param_4, param_5);
-}
-
 // ============================================================
 // 0x14009c640 — finalize a road cell edit. (Ghidra: CompleteRoad_helper_c640.)
 //   If type == 2 (removal): footprintCount -1, field_0x2A / field_0x2B = 0xff / 0 (one
@@ -242,9 +232,4 @@ void Map::FinishRoadCell(int param_2, uint8_t param_3, uint param_4) {
     } while (true);
 LAB_14009c6d2:
     GameUpdateLoop::_singleton->m_worldGeometry->RebuildRoadMesh(this);   // 0x1400af370
-}
-
-// B4 FORWARD: 1 outside caller (Action/completeroad.cpp)
-void Pf_FinalizeRoadTile_9c640(uint* param_1, int param_2, uint8_t param_3, uint param_4) {
-    reinterpret_cast<Map*>(param_1)->FinishRoadCell(param_2, param_3, param_4);
 }
