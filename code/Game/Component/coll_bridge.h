@@ -238,11 +238,11 @@ inline Collection::Array<T>& AsArray(void* header) {
 }
 template <class T>
 inline const Collection::Array<T>& AsArray(const void* header) {
-    return *reinterpret_cast<const Collection::Array<T>*>(header);   // B.3.2 bridge   // LEFT: ERASED the B.3.2 bridge: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
+    return *reinterpret_cast<const Collection::Array<T>*>(header);   // B.3.2 bridge   // LEFT: ERASED the coll_bridge Array view: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
 }
 template <class T>
 inline Collection::Array<T>& AsArray(uintptr_t header) {
-    return *reinterpret_cast<Collection::Array<T>*>(header);   // B.3.2 bridge   // LEFT: ERASED the B.3.2 bridge: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
+    return *reinterpret_cast<Collection::Array<T>*>(header);   // B.3.2 bridge   // LEFT: ERASED the coll_bridge Array view: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
 }
 
 // Same cast, for the very common "the array is at a raw byte offset inside a
@@ -250,16 +250,16 @@ inline Collection::Array<T>& AsArray(uintptr_t header) {
 // `DlgArray<N>(self, off)` under the one vocabulary.
 template <class T>
 inline Collection::Array<T>& ArrayAt(uintptr_t base, int off) {
-    return *reinterpret_cast<Collection::Array<T>*>(base + off);   // B.3.2 bridge   // LEFT: ERASED the B.3.2 bridge: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last (ArrayAt: achievementdialog, buildrequirementui, townhallui, bridgetool_calcpath)
+    return *reinterpret_cast<Collection::Array<T>*>(base + off);   // B.3.2 bridge   // LEFT: ERASED the coll_bridge Array view: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last (ArrayAt: achievementdialog, buildrequirementui, townhallui, bridgetool_calcpath)
 }
 template <class T>
 inline Collection::Array<T>& ArrayAt(void* base, int off) {
-    return ArrayAt<T>(reinterpret_cast<uintptr_t>(base), off);   // LEFT: ERASED the B.3.2 bridge: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
+    return ArrayAt<T>(reinterpret_cast<uintptr_t>(base), off);   // LEFT: ERASED the coll_bridge Array view: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
 }
 template <class T>
 inline const Collection::Array<T>& ArrayAt(const void* base, int off) {
-    return *reinterpret_cast<const Collection::Array<T>*>(   // LEFT: ERASED the B.3.2 bridge: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
-        reinterpret_cast<uintptr_t>(base) + off);   // B.3.2 bridge   // LEFT: ERASED the B.3.2 bridge: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
+    return *reinterpret_cast<const Collection::Array<T>*>(   // LEFT: ERASED the coll_bridge Array view: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
+        reinterpret_cast<uintptr_t>(base) + off);   // B.3.2 bridge   // LEFT: ERASED the coll_bridge Array view: its ~80 caller files hold Arrays as raw triples (H5); it dies with the last
 }
 
 }  // namespace GameColl
