@@ -77,7 +77,7 @@
 #include "Component/MapComponent.h"
 
 // LEFT in this file (B4 P2 DLG-2): the town's worker functions
-// (CitizenEmploy_Strat_*, FindAvailableBuilding, TownHall_RemoveWorker) take the
+// (CitizenEmploy_Strat_*, FindAvailableBuilding) take the
 // citizen list and the profession as integers and are called from other blocks'
 // files: one cast per argument, `// LEFT: SIG` (wave X).
 
@@ -853,8 +853,8 @@ next_iter:
         uint64_t toRemove = (uint64_t)(uint32_t)(current - desired);
         do {
             CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);   // LEFT: SIG TownHall_RemoveWorker
-            TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
+            Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx];
+            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
     }

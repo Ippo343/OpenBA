@@ -1136,12 +1136,7 @@ void TownHallUI::UpdateProduction() {
     int sortComboIdx = sortCombo->_currentItem;
 
     // Collect entries from invBST in-order traversal
-    struct ProdEntry {
-        const ComponentDescription* entityPtr;
-        void*    resourceTypeComp;
-        int      value;
-        int      _pad;
-    };
+    using ProdEntry = TownHallInventoryEntry;   // Dialog/TownHallUI.h
 
     // B.3.2 bridge: this is a local Collection::Array<ProdEntry> — retail's
     // hand-inlined SetSize over a stack-local {data,size,capacity} triple, not a
@@ -1167,7 +1162,7 @@ void TownHallUI::UpdateProduction() {
 
             // Push entry into dynamic array
             entryArr.SetSize(entryArr.GetSize() + 1,
-                             ProdEntry{entityPtr, resourceComp, counterVal, 0});
+                             ProdEntry{entityPtr, static_cast<RawMaterialDescription*>(resourceComp), counterVal, 0});
 
             node = InvBST_Next(node);
         }
@@ -1689,9 +1684,9 @@ void TownHallUI::OnProfessionSpinner(int index) {
     if (desired < current) {
         int toRemove = current - desired;
         for (int i = 0; i < toRemove; i++) {
-            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index]);   // LEFT: SIG TownHall_RemoveWorker takes uint64_t (Dialog/exe_bodies.h, DLG-2)
-            TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
+            CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
+            Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
+            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
         }
     }
 

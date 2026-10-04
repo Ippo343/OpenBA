@@ -43,11 +43,12 @@
 #include "Entity/CitizenBehavior.h"
 #include "Entity/ComponentEntity.h"
 #include "Dialog/exe_bodies.h"
+#include "Dialog/TownHallUI.h"   // TownHallInventoryEntry
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-// B4 DLG-d: every entry point below keeps its `void*` signature (B4 FORWARD):
-// the callers are townhallui.cpp / workplaceui.cpp (DLG-e, running) and
-// professionui.cpp. Each names its argument once, as the retail object below.
+// B4 X-G1-2b: the entry points take their retail objects; the two rating-group
+// bodies and the two array pushes keep a `void*` array argument because
+// TownHallUI's arrays are raw {data, count, capacity} storage (H5).
 
 namespace {
 
@@ -73,21 +74,19 @@ UI::Element* FindImage(UI::Element* row, const char* name) {
 // For each child row of the group element, cache the "whole" and "half"
 // ImageElements (heart/star icons) as InternalPtrs.
 // ===========================================================================
-extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
-    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: SIG TownHall_GroupRatingInit (callers in townhallui.cpp, wave X)
-    const Object::InternalPtr<UI::Element>* groupElem =
-        reinterpret_cast<const Object::InternalPtr<UI::Element>*>(groupIBPPtr);   // LEFT: SIG TownHall_GroupRatingInit (callers in townhallui.cpp, wave X)
-    int childCount = groupElem->Get()->ChildCount();
+extern "C" void TownHall_GroupRatingInit(void* rating, UI::Element* const* groupElem) {
+    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: H5 TownHallUI::RatingGroup is raw {data, count, capacity} storage (~TownHallUI frees it by hand)
+    int childCount = (*groupElem)->ChildCount();
     for (int i = 0; i < childCount; i++) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
-        UI::Element* whole = FindImage(groupElem->Get()->Child(i).Get(), "whole");
+        UI::Element* whole = FindImage((*groupElem)->Child(i).Get(), "whole");
         group->whole.SetSize(group->whole.GetSize() + 1, whole);
 
         // child(i) -> FindElement("half") -> cast ImageElement -> push
-        UI::Element* half = FindImage(groupElem->Get()->Child(i).Get(), "half");
+        UI::Element* half = FindImage((*groupElem)->Child(i).Get(), "half");
         group->half.SetSize(group->half.GetSize() + 1, half);
 
-        childCount = groupElem->Get()->ChildCount();   // faithful re-read
+        childCount = (*groupElem)->ChildCount();   // faithful re-read
     }
 }
 
@@ -97,7 +96,7 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
 // the half icon shows only at 2i+1 == halfSteps. (DAT_140172114 = 0.5f.)
 // ===========================================================================
 extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxValue) {
-    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: SIG TownHall_GroupRatingUpdate (callers in townhallui.cpp, wave X)
+    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: H5 TownHallUI::RatingGroup is raw {data, count, capacity} storage (~TownHallUI frees it by hand)
     int wholeCount = group->whole.GetSize();
     int halfSteps = (int)((value / maxValue) * (float)(wholeCount * 2) + 0.5f);
     int odd = 1;
@@ -229,8 +228,7 @@ extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entr
 // 0x140090f20 — sum a town history series (CitizenBehavior +0x150) over
 // [startTick, endTick] (clamped to [0, count-1]).
 // ===========================================================================
-extern "C" int TownHall_QueryProductionStat(void* townMgr, int seriesIdx, int startTick, int endTick) {
-    const CitizenBehavior* town = reinterpret_cast<const CitizenBehavior*>(townMgr);   // LEFT: SIG TownHall_QueryProductionStat (callers in townhallui.cpp, wave X)
+extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick) {
     const Collection::Array<int32_t>* seriesBase = town->field_0x150;
     if (!seriesBase) return 0;
     const Collection::Array<int32_t>& series = seriesBase[seriesIdx];
@@ -255,13 +253,8 @@ extern "C" int TownHall_QueryProductionStat(void* townMgr, int seriesIdx, int st
 // ===========================================================================
 namespace {
 
-struct InvEntry {
-    uint64_t                entity;   // +0x00
-    RawMaterialDescription* desc;     // +0x08
-    int                     value;    // +0x10
-    int                     pad;      // +0x14
-};
-static_assert(sizeof(InvEntry) == 0x18, "inventory entry 0x18");
+// The entry is TownHallInventoryEntry (Dialog/TownHallUI.h).
+using InvEntry = TownHallInventoryEntry;
 
 // System::String is a char* with the length stored as int at ptr-8.
 bool SysStrLess(const System::String& a, const System::String& b) {
@@ -308,11 +301,11 @@ bool InvDescLess(const InvEntry* a, const InvEntry* b) {
 
 } // namespace
 
-extern "C" void TownHall_InventorySortAsc(void* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvNameLess);   // LEFT: SIG TownHall_InventorySortAsc (callers in townhallui.cpp, wave X)
+extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*) {
+    if (count > 1) InvInsertionSort(items, count, &InvNameLess);
 }
-extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvDescLess);   // LEFT: SIG TownHall_InventorySortDesc (callers in townhallui.cpp, wave X)
+extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*) {
+    if (count > 1) InvInsertionSort(items, count, &InvDescLess);
 }
 
 // ===========================================================================
@@ -355,14 +348,12 @@ void DemoteToLaborer(CitizenComponent* citizen, Profession* laborer) {
 
 } // namespace
 
-extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) {
-    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(citizenList);   // LEFT: SIG TownHall_RemoveWorker (callers in townhallui.cpp, workplaceui.cpp, professionui.cpp, wave X)
+extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession) {
     if (!town || GameUpdateLoop::_singleton == nullptr) return;
     const ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
     if (!professions) return;
     Profession* laborer = professions->field_0x30;
-    // The key the callers pass: the ExternalPtr<Profession> as a qword.
-    const Profession* profession = reinterpret_cast<const Profession*>(professionId);  // CAST-OK: ptr_int
+    // `profession` is the ExternalPtr<Profession> the callers hold (compared as an unsigned qword).
 
     // Pass 1: idle (no-workplace) adult worker of this profession.
     int cnt = town->citizenCount;
