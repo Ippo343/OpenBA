@@ -546,7 +546,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
         rtcoll::RtColl_ArraySetSize_180029510(&_iconData,
                      _iconHeight * _iconWidth);      // 1800b4d27/d37
         cs->IO::CompressedStream::Read(
-            _iconCount * 4, _iconData);                        // 1800b4d56  REAL CALL
+            _iconData._size * 4, _iconData._data);             // 1800b4d56  REAL CALL
 
         if (formatVersion >= 2) {                              // 1800b4d62  CMP 2 / JL
             int32_t* const n90 =
@@ -554,7 +554,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
             cs->IO::CompressedStream::Read(4, n90);            // 1800b4d6c  +0x90
             rtcoll::RtColl_ArraySetSize_180029630(&_previewData, *n90);   // 1800b4dea/df1
             // NOTE the bound: retail reads `*n90` bytes, not the ARRAY's size.
-            cs->IO::CompressedStream::Read(*n90, _previewData);  // 1800b4e09
+            cs->IO::CompressedStream::Read(*n90, _previewData._data);  // 1800b4e09
         }
 
         String tmp;
@@ -598,7 +598,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
         _iconWidth  = 1;                                  // 1800b5b49
         _iconHeight = 1;                                  // 1800b5b4d
         rtcoll::RtColl_ArraySetSize_180029510(&_iconData, 1);  // 1800b5b5a
-        _iconData[0] = 0xff000000u;                            // 1800b5b66
+        _iconData._data[0] = 0xff000000u;                           // 1800b5b66
         // falls into 0x1800b5b6c, which reloads formatVersion — still 0 here.
     }
 

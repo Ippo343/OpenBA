@@ -89,7 +89,6 @@
 #include "../../types/video/CompanionData.h"   // the typed *Data companions
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
-#include "../../types/io/Modification.h"   // RtIO::RtColl_ArrayU8Dtor_1800112a0
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"      // IO::Stream, IO::kReading
 #include "../../types/object/External.h"
@@ -195,7 +194,7 @@ void VertexLayout::Destruct() { this->~VertexLayout(); }
 // `_refs`.
 VertexLayout::~VertexLayout() {
     this->Video::VertexLayout::PlatformDestruct();
-    RtIO::RtColl_ArrayU8Dtor_1800112a0(&_signature);     // 0x1800112a0 Array<uint8>::~Array
+    _signature.~Array();                                 // 0x1800112a0 Array<uint8>::~Array
     rtcoll::RtColl_ArrayDtorElem_18004fa30(&_elements);  // 0x18004fa30 ~Array<Element> (releases names)
 }
 

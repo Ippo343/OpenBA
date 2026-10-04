@@ -223,8 +223,10 @@ IO::PackageFile::~PackageFile() {
     // Each Array door is handed its {data, size, capacity} header.
     rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(&_entries)->~Array();   // +0xB0
 
-    RtIO::RtColl_ArrayU8Dtor_1800112a0(&_previewData);   // 0x1800b4586  ~Array<uint8> 0x1800112a0, +0x98
-    RtIO::RtColl_ArrayI32Dtor_1800111a0(&_iconData);     // 0x1800b4593  ~Array<int32> 0x1800111a0, +0x80
+    // 0x1800b4586 (~Array<uint8> 0x1800112a0, +0x98) and 0x1800b4593
+    // (~Array<uint32> 0x1800111a0, +0x80) are the members' own destructors
+    // since B4 X7-RT: the compiler runs them after this body, preview first
+    // (reverse declaration order), before the five Strings below.
 
     // 0x1800b4599..0x1800b4658 (the five Strings, +0x60 down to +0x40) and
     // 0x1800b465c / 0x1800b4666 (`~Array<System::String>` 0x180010ab0 on +0x30

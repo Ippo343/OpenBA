@@ -241,14 +241,10 @@ static void* ArrayFreeBuffer(ModArrayOf<T>* a) {
     return nullptr;               // retail leaves RAX == 0
 }
 
-// 0x1800111a0 — Collection::Array<int32>::~Array
-void* RtColl_ArrayI32Dtor_1800111a0(void* a) {
-    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: ERASED core entry: its caller holds PackageFile::_iconData as a raw triple (H5, package_file_dtor.cpp)
-}
-// 0x1800112a0 — Collection::Array<uint8>::~Array
-void* RtColl_ArrayU8Dtor_1800112a0(void* a) {
-    return ArrayFreeBuffer(static_cast<ModArray*>(a));   // LEFT: ERASED core entry: its callers hold PackageFile::_previewData as a raw triple (H5) and VertexLayout::_signature as an Array<uint8_t>
-}
+// 0x1800111a0 / 0x1800112a0 (Collection::Array<int32> / <uint8>::~Array): the
+// two erased entries that stood here had no caller left once PackageFile's icon
+// and preview arrays and VertexLayout::_signature became typed members (B4
+// X7-RT): those call `Collection::Array<T>::~Array`, the same free-and-zero.
 
 // 0x180009af0, already ported by lane FIND (filesystem_find_win.cpp) and
 // registered there. Declared, not re-implemented: two copies of a release loop

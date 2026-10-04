@@ -154,13 +154,15 @@ public:
     // +0x14 (i.e. +0xc4 and +0xd4).
     // The two Arrays (1800b4489..95) and the five Strings (1800b4499..a9) are
     // their members' own constructors, run in declaration order first.
-    PackageFile() : Object::External() {
-        _version = 0; _userVersion = 0;                         // 1800b44ad (one qword)
-        _priority = 0x2710; _platform = 0;                      // 1800b44b1 (one qword 0x2710)
-        _iconData = nullptr;                                    // 1800b44b9
-        _iconCount = 0; _iconCapacity = 0;                      // 1800b44c0
-        _previewData = nullptr;                                 // 1800b44c7
-        _previewCount = 0; _previewCapacity = 0;                // 1800b44ce
+    // B4 X7-RT: the icon and preview Arrays are members; the four scalars
+    // before them move into the init list with them, so the stores keep
+    // retail's order (+0x68, +0x70, +0x80/+0x88, +0x98/+0xa0, then the body).
+    PackageFile()
+        : Object::External(),
+          _version(0), _userVersion(0),                         // 1800b44ad (one qword)
+          _priority(0x2710), _platform(0),                      // 1800b44b1 (one qword 0x2710)
+          _iconData(),                                          // 1800b44b9 / 1800b44c0
+          _previewData() {                                      // 1800b44c7 / 1800b44ce
         _crc = 0;                                               // 1800b44d5
         _overridable = 1;                                       // 1800b44dc
         _entries = nullptr;                                     // 1800b44e3
@@ -325,9 +327,11 @@ public:
     int32_t  _iconWidth;    // +0x78
     int32_t  _iconHeight;   // +0x7c
 
-    uint32_t* _iconData;     // +0x80  Collection::Array<uint32> — ?GetIconData@
-    int32_t  _iconCount;     // +0x88
-    int32_t  _iconCapacity;  // +0x8c
+    // +0x80 — `Collection::Array<unsigned int>` (`?GetIconData@` spells
+    // `?$Array@I`). B4 X7-RT (`behaviour:`): a typed member; its destructor is
+    // retail's 0x1800b4593 CALL 0x1800111a0, run after ~PackageFile's body and
+    // after the preview array's (reverse declaration order).
+    Collection::Array<uint32_t> _iconData;   // +0x80 {data, size +0x88, capacity +0x8c}
 
     // +0x90 — A REAL int32 FIELD THE CONSTRUCTOR SKIPS. Its store list runs
     // …, PutQ(0x88, 0), PutQ(0x98, 0), … so +0x90..+0x97 is never written by
@@ -346,9 +350,10 @@ public:
     int32_t  _previewByteCount;  // +0x90
     int32_t  _pad94;             // +0x94 — NOT PINNED
 
-    uint8_t* _previewData;     // +0x98  Collection::Array<uint8> — ?GetPreviewData@
-    int32_t  _previewCount;    // +0xa0
-    int32_t  _previewCapacity; // +0xa4
+    // +0x98 — `Collection::Array<unsigned char>` (`?GetPreviewData@` spells
+    // `?$Array@E`). B4 X7-RT: a typed member; its destructor is retail's
+    // 0x1800b4586 CALL 0x1800112a0, the first one after the body.
+    Collection::Array<uint8_t> _previewData;  // +0x98 {data, size +0xa0, capacity +0xa4}
 
     // +0xa8 — the package CRC, which is ALSO the packfile id: `?GetCRC@`
     // (0x180025500) and `FileSystem::GetPackfileId` (0x1800ab050) hit the same
@@ -401,12 +406,14 @@ static_assert(offsetof(PackageFile, _platform)    == 0x74, "GetPlatform 0x180025
 static_assert(offsetof(PackageFile, _iconWidth)   == 0x78, "GetIconWidth 0x180025510");
 static_assert(offsetof(PackageFile, _iconHeight)  == 0x7c, "GetIconHeight 0x180025520");
 static_assert(offsetof(PackageFile, _iconData)    == 0x80, "GetIconData 0x180025530 LEA RDX,[RCX+0x80]");
-static_assert(offsetof(PackageFile, _iconCount)   == 0x88, "Serialize 1800b620f reads the count at +0x88");
+static_assert(offsetof(PackageFile, _iconData) + offsetof(Collection::Array<uint32_t>, _size) == 0x88,
+              "Serialize 1800b620f reads the count at +0x88");
 static_assert(offsetof(PackageFile, _previewByteCount) == 0x90,
               "ReadPackfile 0x1800b4e09 reads [this+0x90] as the byte count of the "
               "+0x98 array read; the ctor's store list jumps PutQ(0x88,0) to PutQ(0x98,0)");
 static_assert(offsetof(PackageFile, _previewData) == 0x98, "GetPreviewData 0x180025580 LEA RDX,[RCX+0x98]");
-static_assert(offsetof(PackageFile, _previewCount) == 0xa0, "ctor 1800b44ce PutQ(0xA0,0)");
+static_assert(offsetof(PackageFile, _previewData) + offsetof(Collection::Array<uint8_t>, _size) == 0xa0,
+              "ctor 1800b44ce PutQ(0xA0,0)");
 static_assert(offsetof(PackageFile, _crc)         == 0xa8, "GetCRC 0x180025500 / GetPackfileId 0x1800ab050");
 static_assert(offsetof(PackageFile, _overridable) == 0xac, "ctor 1800b44dc MOV byte [RCX+0xac],1");
 static_assert(offsetof(PackageFile, _entries)     == 0xb0, "GetFileName 0x180025475 ADD RDX,[RCX+0xb0]");
