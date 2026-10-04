@@ -85,6 +85,7 @@
 #include "../object/External.h"
 #include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 #include "../collection/Collection.h" // B4 X7-RT: the three Array members
+#include "Sprite.h"                   // B4 X7-RT: Array<Sprite> needs the complete element
 
 // The hand-derived row of `Array<UI::SpriteCapture::CaptureEntry>` (array.cpp,
 // 0x18004bde0): its destroy releases each entry's `name` String (0x18003f070),
