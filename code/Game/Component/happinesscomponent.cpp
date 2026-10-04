@@ -102,8 +102,7 @@
 // Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
 void Map::StampInfluence(int state, int cx, int cy, int r, short delta) {
-    // Map's cells are raw 0x30-byte records (GAME-b): LEFT.
-    uint8_t* grid = reinterpret_cast<uint8_t*>(cells);
+    MapCell* grid = cells;   // +0x80
     int yy = cy - r;
     if (yy <= cy + r) {
         int dy = cy - yy;
@@ -116,9 +115,9 @@ void Map::StampInfluence(int state, int cx, int cy, int r, short delta) {
                     int width = size;
                     if (ix >= 0 && yy >= 0 && ix < width && yy < width &&
                         dy * dy + dx * dx <= r * r) {
-                        char* cell = reinterpret_cast<char*>(
-                            grid + (int64_t)state + 0x1c + (int64_t)(width * yy + ix) * 0x30);
-                        *cell = (char)(*cell + (char)delta);
+                        // MapCell +0x1C, the nine per-state bytes, indexed by `state`
+                        uint8_t* cell = &grid[(int64_t)(width * yy + ix)].field_0x1C[(int64_t)state];
+                        *cell = (uint8_t)(*cell + (uint8_t)delta);
                     }
                     ix++;
                     dx--;
@@ -184,8 +183,7 @@ void HappinessComponent::UpdateInfluence(int16_t delta) {
     int y = (static_cast<int16_t>(mc->tileY1) >> 1) + static_cast<int16_t>(mc->tileY0);
     int r = radius ? radius->_radius : 0;
 
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT.
-    reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game)->StampInfluence(state, x, y,
+    GameUpdateLoop::_singleton->m_game->StampInfluence(state, x, y,   // +0xf8
                                r, delta);   // 0x14009f990
 }
 
@@ -239,12 +237,10 @@ bool HappinessComponent::IsActive() {
 
     if (!store) return false;
 
-    // StorageComponent::storageSlots is still void* (COMP-e): the 0x10-byte item's
-    // first qword, the good's ComponentDescription, is LEFT.
-    ComponentDescription* const* items =
-        reinterpret_cast<ComponentDescription* const*>(store->storageSlots);
+    // The 0x10-byte item's first qword is the good's ComponentDescription.
+    const StorageComponent::Item* items = store->storageSlots;   // +0x28
     for (int i = 0; i < store->slotCount; ++i) {
-        const ComponentDescription* good = items[i * 2];
+        const ComponentDescription* good = items[i]._resource;   // Item +0x00
 
         const RawMaterialDescription* rawMat = nullptr;
         if (good) {
@@ -265,11 +261,10 @@ bool HappinessComponent::IsActive() {
     return matched;
 }
 
-// GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a); the town manager it
-// points at is the CitizenBehavior (WORK-a), whose happiness list is read by name. The
-// one bridge from the untyped member is LEFT.
+// GameUpdateLoop::m_citizenList (+0xF0): the town manager, the CitizenBehavior, whose
+// happiness list is read by name.
 static CitizenBehavior* TownManager() {
-    return reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    return GameUpdateLoop::_singleton->m_citizenList;
 }
 
 // ============================================================

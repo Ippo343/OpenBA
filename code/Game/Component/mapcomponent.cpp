@@ -23,6 +23,7 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Minimap.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
@@ -41,13 +42,14 @@
 // grid+0x28 over a (w x h) rectangle anchored at (x, y). Row index is flipped:
 //   cell = (((width - y) - row - 1) * width + x + col), width @ grid+4.
 // Pure data write, no external deps. 1:1 port of the exe helper.
-// LEFT: the minimap overlay object (GameUpdateLoop +0x148) has no class yet.
-extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y,
+// The grid is the Minimap (GameUpdateLoop +0x148): +0x00 overlayDirty, +0x04 size,
+// +0x28 overlayPixels.
+extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y,
                                        int w, int h) {
-    uint8_t* grid = reinterpret_cast<uint8_t*>(gridPtr);
-    *grid = 1;
-    int width = *(int*)(grid + 4);
-    uint32_t* cells = *(uint32_t**)(grid + 0x28);
+    Minimap* grid = gridPtr;
+    grid->overlayDirty = 1;
+    int width = grid->size;
+    uint32_t* cells = grid->overlayPixels;
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
             int64_t idx = (int64_t)(((int64_t)width - y - row - 1) * width + x + col);
@@ -137,10 +139,9 @@ static void MapComponent_PaintMinimapRect(MapComponent* mc, bool clear) {
     if (!desc->_showOnMap) return;
     if (!clear && !desc->_claimOnAdd) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: the minimap overlay (GameUpdateLoop +0x148) has no class yet.
-    uint8_t* minimap = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton->m_imageCapture);
-    if (!minimap || !*(void**)(minimap + 0x28)) return;  // overlay array not built yet
-    int width = *(int32_t*)(minimap + 4);
+    Minimap* minimap = GameUpdateLoop::_singleton->m_imageCapture;   // +0x148
+    if (!minimap || !minimap->overlayPixels) return;  // overlay array not built yet
+    int width = minimap->size;
     int x = static_cast<int16_t>(mc->tileX0), y = static_cast<int16_t>(mc->tileY0);
     int w = static_cast<int16_t>(mc->tileX1), h = static_cast<int16_t>(mc->tileY1);
     // Unplaced components keep the 0xFFFF ctor sentinel in the tile fields, and
@@ -182,7 +183,7 @@ static void MapComponent_PaintMinimapRect(MapComponent* mc, bool clear) {
 // retail's answer to "a building was placed on top of trees" — the trees are destroyed,
 // not harvested. Calling only the cell-write half would leave those trees standing but
 // absent from the grid, so the eviction is not optional if this runs at all.
-void MapComponent_overlay_dc20(int* param_1, ComponentEntity* const* owner, uint8_t param_3,
+void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint8_t param_3,
                                int param_4, int param_5, int param_6, int param_7,
                                const System::String* footprint, int param_9);   // keystone_a_map.cpp
 
@@ -194,8 +195,7 @@ static void MapComponent_ApplyOccupancy_41b0(MapComponent* mc) {
     MapDescription* desc = static_cast<MapDescription*>(linked);
     if (!desc) return;
     if (desc->_noOccupancy) return;                           // description opts out
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
-    int* grid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* grid = GameUpdateLoop::_singleton->m_game;   // +0xF8
     if (!grid) return;
 
     ComponentEntity* owner = mc->_entity;
@@ -274,7 +274,7 @@ void MapComponent::RemoveFromMap() {
 // The tree's null test is kept here (the member has none; retail's 0x140124750 has none).
 extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
     if (!selfV) return;
-    reinterpret_cast<MapComponent*>(selfV)->RemoveFromMap();
+    reinterpret_cast<MapComponent*>(selfV)->RemoveFromMap();   // LEFT: SIG MapComponent_DetachOccupancy_4750 (B4 FORWARD, cropfieldcomponent_states.cpp)
 }
 
 // ============================================================================
@@ -408,7 +408,7 @@ void MapComponent::OnRemove() {
     if (building) {
         if (building->_showOnMap) {
             if (GameUpdateLoop::_singleton != nullptr) {
-                void* terrainPtr = GameUpdateLoop::_singleton->m_imageCapture;   // +0x148
+                Minimap* terrainPtr = GameUpdateLoop::_singleton->m_imageCapture;   // +0x148
                 if (terrainPtr) {
                     MapTerrainClear_Reimpl(terrainPtr, 0,   // 0x1400a4d30
                         (int)(int16_t)tileX0,

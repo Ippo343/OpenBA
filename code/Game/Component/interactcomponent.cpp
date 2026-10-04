@@ -48,18 +48,6 @@
 //   ~Serializer()
 
 // ============================================================
-// Reimpl of FUN_140004740 (find the WorkplaceComponent (type DWORD_1401c7ac0)
-//   on an entity and return it wrapped in an InternalBasePtr via retBuf)
-// ============================================================
-// B4 FORWARD: FindComponent<MultiObjectComponent> for outside callers
-// (destroycomponent_states.cpp, fencedtool_calcpath.cpp, pathtool_setselected.cpp,
-// tool_base_render.cpp).
-void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
-    new (retBuf) ::Object::InternalPtr<MultiObjectComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<MultiObjectComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// ============================================================
 // InteractComponent::Draw (vtable slot [6], 0x140123110)
 // ============================================================
 // Reimpl of FUN_140123110: rebuild the interact-use-location list from the

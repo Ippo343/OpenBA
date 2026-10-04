@@ -90,10 +90,8 @@
 // step 2) — converted at its call sites below; 0x140002cc0 is CemeteryListErase_Reimpl
 // (DynArray8_EraseByValue).
 //
-// LEFT (B.4 COMP-d): GameUpdateLoop::m_game / m_citizenList / m_entityList are void*
-// (W0 header): the map, the town manager and the entity list are reached through one
-// cast each. PopulationComponent's fields are untyped (COMP-e): its grid is read through
-// casts.
+// LEFT (B.4 P2 COMP-45): 0x140003870 (ModelComponent's transform-from-yaw) is PLAYER's
+// free body taking an integer receiver (wave X).
 
 // Reimpl of FUN_140106b10: per-animal "has this animal reached its migration target
 // tile?" test. Finds the CharacterComponent on the owning entity (0x1400012d0), reads
@@ -101,8 +99,7 @@
 // converts it to a clamped tile index, then returns true iff that tile falls inside
 // the animal's wander box (+0x38..+0x3e).
 bool AnimalComponent::IsInWanderBox() const {
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    const Map* map = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);
+    const Map* map = GameUpdateLoop::_singleton->m_game;
 
     CharacterComponent* character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     const Math::Vector3& pos =
@@ -172,8 +169,7 @@ void AnimalComponent::Place(const Math::Vector3* position, float yaw, bool pose)
     ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
     if (!model) return;   // the tree's guard (retail has none)
 
-    // LEFT: 0x140003870 (ModelComponent's transform-from-yaw) is PLAYER's free body.
-    ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(model), position, yaw);   // 0x140003870
+    ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(model), position, yaw);   // 0x140003870  LEFT: SIG ToolTile_SetTransformFromYaw_3870
     canGraze = pose;
 
     if (pose) {
@@ -256,9 +252,8 @@ void HerdComponent::AdjustSize(int targetSize) {
     ComponentDescription* descr = cfg->_animal;
     if (GameUpdateLoop::_singleton == nullptr) return;   // the tree's guard
     System::Random* rng = GameUpdateLoop::_singleton->m_random;
-    void* game = GameUpdateLoop::_singleton->m_game;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    const Map* map = reinterpret_cast<const Map*>(game);
+    Map* game = GameUpdateLoop::_singleton->m_game;
+    const Map* map = game;
     bool altFlag = rng->Rand(2u) == 0;
     const float spread = kRdata_140172220;   // 0x140172220
     const float half = kRdata_140172114;     // 0x140172114
@@ -338,8 +333,7 @@ void HerdComponent::AddMember(WildAnimalComponent* const* member) {
         ? static_cast<HerdDescription*>(cfgRaw) : nullptr;
     int spread = cfg->_spread;
     if (GameUpdateLoop::_singleton == nullptr) return;   // the tree's guard
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    int mapDim = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game)->size;
+    int mapDim = GameUpdateLoop::_singleton->m_game->size;
 
     int bx = tile % mapDim - (spread >> 1);
     int by = tile / mapDim - (spread >> 1);
@@ -401,9 +395,8 @@ void HerdComponent::Populate(int count) {
 
     if (GameUpdateLoop::_singleton == nullptr || !herdDesc) return;   // the tree's guards
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    void* game = gw->m_game;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    const Map* map = reinterpret_cast<const Map*>(game);
+    Map* game = gw->m_game;
+    const Map* map = game;
     System::Random* rng = gw->m_random;
 
     // StartMigration picks the grazing tile into +0x4c, or leaves -1 when the
@@ -509,17 +502,6 @@ void HerdComponent::Populate(int count) {
     migrating = false;
 }
 
-// B4 FORWARD: 1 outside caller (populationcomponent.cpp).
-void HerdComponent_Populate(int64_t herdComp, int count) {
-    reinterpret_cast<HerdComponent*>(herdComp)->Populate(count);
-}
-
-// B4 FORWARD: 1 outside caller (tradecomponent_livestock.cpp).
-void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pose) {
-    reinterpret_cast<AnimalComponent*>(animalComp)->Place(
-        reinterpret_cast<const Math::Vector3*>(pos), yaw, pose != 0);
-}
-
 // ============================================================
 // Reimpl of FUN_140121e20 — HerdComponent::OnRemove (vtable slot 7).
 // Detaches every member (the inlined SetHerd(member, null) — erasing the
@@ -542,8 +524,7 @@ void HerdComponent::OnRemove() {
     }
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
     HerdComponent* selfRef = this;
     CemeteryListErase_Reimpl(&townMgr->herds, &selfRef);   // 0x140002cc0
@@ -558,8 +539,7 @@ static bool IsTileValid(HerdComponent* self) {
     PopulationComponent* population = self->population;
     if (population == nullptr) return false;
 
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    int mapWidth = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game)->size;
+    int mapWidth = GameUpdateLoop::_singleton->m_game->size;
 
     int tileIdx = self->tile;
 
@@ -615,8 +595,7 @@ HerdComponent::HerdComponent()
 // [6] 0x140121f40. Appends this herd to the town manager's herd list.
 void HerdComponent::OnAdded() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
 
     HerdComponent* selfRef = this;
@@ -633,7 +612,7 @@ void HerdComponent::OnAdded() {
 static long long s_herdUpdCalls = 0, s_herdUpdNoPop = 0, s_herdUpdNoCfg = 0, s_herdUpdFired = 0;
 
 void HerdComponent::Update(void* time) {
-    const System::Time* deltaTime = static_cast<const System::Time*>(time);
+    const System::Time* deltaTime = static_cast<const System::Time*>(time);   // LEFT: SIG Component::Update (Component.h)
 
     // Every branch below reaches the owning PopulationComponent through +0x28
     // (food sampling, tile validity, migration retarget), which retail derefs
