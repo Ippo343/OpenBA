@@ -70,6 +70,7 @@
 #include "Game/Profession.h"
 #include "Game/ProfessionList.h"
 #include "Entity/CitizenBehavior.h"
+#include "Game/PlayerToolManager.h"
 #include "Entity/ComponentEntity.h"
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"
@@ -872,7 +873,7 @@ next_iter:
 // a rotation index (gotoIndex, +0x70) that wraps around.
 //
 // Only considers adult, non-student citizens (age >= adultAge, school == 0).
-// Calls Toolbar_CenterOnEntity_Impl to snap the camera and select
+// Calls PlayerToolManager::CenterOnEntity to snap the camera and select
 // the citizen in the EditTool.
 //
 // Original: 0x140076a30.
@@ -943,7 +944,7 @@ void ProfessionUI::HandleButton(int profIndex) {
 
                 // Center camera on this citizen
                 UI::DialogInstance* dialogInst = _dialog;
-                Toolbar_CenterOnEntity_Impl(game->m_toolManager, &dialogInst, &entityPtr);
+                game->m_toolManager->CenterOnEntity(&dialogInst, &entityPtr);   // 0x140103040
                 return;
             }
         }
@@ -960,7 +961,7 @@ void ProfessionUI::HandleButton(int profIndex) {
             ComponentEntity* entityPtr = citizen->_entity;
 
             UI::DialogInstance* dialogInst = _dialog;
-            Toolbar_CenterOnEntity_Impl(game->m_toolManager, &dialogInst, &entityPtr);
+            game->m_toolManager->CenterOnEntity(&dialogInst, &entityPtr);   // 0x140103040
             return;
         }
 

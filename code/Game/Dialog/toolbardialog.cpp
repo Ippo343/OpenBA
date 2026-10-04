@@ -36,6 +36,7 @@
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/MainMenuDialog.h"
 #include "Dialog/ToolbarDialog.h"
+#include "Dialog/ToolRegistryNode.h"
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -137,30 +138,13 @@ void ToolbarDialog::ChangeSpeed(int direction) {
     toolManager->field_0x34 = speedValues[currentSpeedIndex];
 }
 
-// One node of the town's per-template entity tree (CitizenBehavior +0x160,
-// 0x38 bytes; the same tree citizenlist_serialize.cpp serializes as its
-// CompRefNode): the template, the entities built from it, the AVL links.
-// LEFT: CitizenBehavior::field_0x160 is void* (WORK-a's header).
-struct TemplateEntityNode {
-    ComponentDescription* key;         // +0x00 the entity's template (compared by address)
-    ComponentEntity**     entities;    // +0x08 Array<InternalPtr<ComponentEntity>> data
-    int32_t               count;       // +0x10 its count
-    int32_t               capacity;    // +0x14
-    TemplateEntityNode*   parent;      // +0x18
-    TemplateEntityNode*   left;        // +0x20
-    TemplateEntityNode*   right;       // +0x28
-    int32_t               balance;     // +0x30
-    uint8_t               _pad34[4];   // +0x34
-};
-static_assert(sizeof(TemplateEntityNode) == 0x38, "the +0x160 tree's node is 0x38");
-static_assert(offsetof(TemplateEntityNode, entities) == 0x08, "TemplateEntityNode +0x08");
-static_assert(offsetof(TemplateEntityNode, count) == 0x10, "TemplateEntityNode +0x10");
-static_assert(offsetof(TemplateEntityNode, left) == 0x20, "TemplateEntityNode +0x20");
-static_assert(offsetof(TemplateEntityNode, right) == 0x28, "TemplateEntityNode +0x28");
+// The town's per-template entity tree is CitizenBehavior +0x160: its node is
+// TemplateBucket (Entity/CitizenBehavior.h, 0x38 bytes: the template, the entities
+// built from it, the AVL links).
 
 // The +0x160 node of `key`, or null.
-static TemplateEntityNode* Toolbar_FindTemplateNode(const CitizenBehavior* town, const void* key) {
-    TemplateEntityNode* node = reinterpret_cast<TemplateEntityNode*>(town->field_0x160);
+static TemplateBucket* Toolbar_FindTemplateNode(const CitizenBehavior* town, const void* key) {
+    TemplateBucket* node = town->field_0x160;
     while (node != nullptr) {
         const void* nodeKey = node->key;
         if (nodeKey > key) {
@@ -178,7 +162,7 @@ static TemplateEntityNode* Toolbar_FindTemplateNode(const CitizenBehavior* town,
 // BST search: walks the town's +0x160 tree for the template, returns its
 // index-th entity, or null.
 static ComponentEntity* Toolbar_FindEntity_Impl(const CitizenBehavior* town, const void* key, int index) {
-    TemplateEntityNode* node = Toolbar_FindTemplateNode(town, key);
+    TemplateBucket* node = Toolbar_FindTemplateNode(town, key);
     if (node != nullptr) {
         return node->entities[index];
     }
@@ -250,7 +234,7 @@ void ToolbarDialog::UpdateButtons() {
             } else {
                 // The town's count of the template
                 int entityCount = 0;
-                TemplateEntityNode* node = Toolbar_FindTemplateNode(town, typeId);
+                TemplateBucket* node = Toolbar_FindTemplateNode(town, typeId);
                 if (node != nullptr) entityCount = node->count;
                 enabled = entityCount < matchedComponent->_val0;
             }
@@ -267,7 +251,7 @@ void ToolbarDialog::UpdateButtons() {
 
             // The town's count of the template
             int entityCount = 0;
-            TemplateEntityNode* node = Toolbar_FindTemplateNode(town, typeId);
+            TemplateBucket* node = Toolbar_FindTemplateNode(town, typeId);
             if (node != nullptr) entityCount = node->count;
 
             bool enabled = entityCount > 0;
@@ -291,7 +275,7 @@ void ToolbarDialog::UpdateButtons() {
 //      the matching tool node in the registry, create the Tool + its ToolSetting,
 //      configure & start it
 //
-// The tool registry (+0x10): an AVL tree of ToolRegistryNode (0x30 bytes), keyed
+// The tool registry (+0x10): an AVL tree of ToolRegistryNode (0x38 bytes), keyed
 // by the type id of a sub-description a group template carries.
 //
 // group == 0 IS A REAL LOOKUP, NOT A "CLEAR" NO-OP.
@@ -303,23 +287,7 @@ void ToolbarDialog::UpdateButtons() {
 // via SetEditMode(pc, 0). Do not add an early-out on foundTypeId == 0.
 // ============================================================
 
-// One node of the tool registry at PlayerToolManager +0x10 (0x30 bytes).
-struct ToolRegistryNode {
-    uint32_t          typeId;          // +0x00 the key: a sub-description's type id
-    uint32_t          _pad04;          // +0x04
-    uint32_t          factoryTypeId;   // +0x08 the Tool class Factory::CreateObject builds
-    uint32_t          _pad0C;          // +0x0C
-    ToolSetting*      toolSetting;     // +0x10 InternalPtr<ToolSetting>, created lazily
-    ToolRegistryNode* parent;          // +0x18
-    ToolRegistryNode* left;            // +0x20
-    ToolRegistryNode* right;           // +0x28
-};
-static_assert(sizeof(ToolRegistryNode) == 0x30, "the tool registry node is 0x30");
-static_assert(offsetof(ToolRegistryNode, factoryTypeId) == 0x08, "ToolRegistryNode +0x08");
-static_assert(offsetof(ToolRegistryNode, toolSetting) == 0x10, "ToolRegistryNode +0x10");
-static_assert(offsetof(ToolRegistryNode, parent) == 0x18, "ToolRegistryNode +0x18");
-static_assert(offsetof(ToolRegistryNode, left) == 0x20, "ToolRegistryNode +0x20");
-static_assert(offsetof(ToolRegistryNode, right) == 0x28, "ToolRegistryNode +0x28");
+// The tool registry node: Dialog/ToolRegistryNode.h.
 
 void PlayerToolManager::SelectTool(ComponentDescription* group) {
     // Step 1: If the lock is set and the group is non-zero, override with the
@@ -679,8 +647,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
     int count = ui->_addDialogs.GetSize();
     printf("[HarnessDrive] UI+0x28 dialog array=%p count=%d\n", static_cast<void*>(data), count);
     for (int idx = 0; data && idx < count && idx < 32; idx++) {
-        // LEFT: UserInterface's DialogInstancePtr is void* (R-UI's header).
-        UI::DialogInstance* dialog = static_cast<UI::DialogInstance*>(data[idx]);
+        UI::DialogInstance* dialog = data[idx];
         if (!dialog) { printf("[HarnessDrive] dialog[%d]=null\n", idx); continue; }
         UI::DialogController** ctrlArr = dialog->_controllers.GetData();
         int cnt = dialog->_controllers.GetSize();
@@ -1726,9 +1693,8 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
     }
 }
 
-// B4 FORWARD: 7 outside caller(s) (Dialog/citizenui.cpp, professionui.cpp,
-// residenceui.cpp, townhallui.cpp, workplaceui.cpp, statusbarui.cpp -- this
-// block's, converted below -- and toolbardialog.cpp's FocusEntity button).
+// B4 FORWARD: outside callers in Dialog/citizenui.cpp, entityui.cpp, townhallui.cpp,
+// workplaceui.cpp and residenceui.cpp's GoToCitizen (its entity is still raw).
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
     reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(
         reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),
