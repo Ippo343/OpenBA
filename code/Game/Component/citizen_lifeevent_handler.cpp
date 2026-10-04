@@ -141,7 +141,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world || !listMgr) return out;
     Map* map = world->m_game;                                    // +0xf8
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkBase_ValidateCell_a00f0 (int* map; Work/exe_bodies.h, wave X)
+    Map* mapGrid = map;
     int best = 0x7fffffff;
     int count = listMgr->cemeteryCount;                          // +0x48
     uint32_t tidInteract = InteractComponent::TypeId();

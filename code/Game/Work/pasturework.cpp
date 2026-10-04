@@ -190,7 +190,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         Map* map = gameWorld->m_game;
         // The map helpers (0x14009ccf0, 0x1400a00f0, 0x14009f3e0) take the map as int*:
         // LEFT.
-        int* piVar4 = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h) take the Map as int*
+        Map* piVar4 = map;
 
         // Get citizen position for pathfinding: CharacterComponent (+0x278) ->
         // ModelComponent (+0x68) -> the transform's translation

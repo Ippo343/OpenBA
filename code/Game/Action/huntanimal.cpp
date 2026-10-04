@@ -238,7 +238,7 @@ void HuntAnimal::Enter(void*, const System::Time*) {
     int fromCell = mapSize * foundCellY + foundCellX;
 
     // LEFT: 0x14009ccf0 / 0x1400a00f0 are declared in Work/exe_bodies.h (WORK) taking int*.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    Map* mapGrid = map;
 
     // Check path cost between the two cells
     uint32_t pathCost = (uint32_t)WorkGrid_FindCell_9ccf0(mapGrid, fromCell, toCell, 0xe1f);   // 0x14009ccf0

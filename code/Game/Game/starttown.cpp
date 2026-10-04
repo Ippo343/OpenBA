@@ -1101,13 +1101,13 @@ static std::function<ComponentEntity*(ComponentDescription* /*tmpl*/, int /*tile
 // was typed `char (*)(int*, uint32_t, uint32_t, int)` and read AL only. B3R keeps
 // today's bits with the cast (a behaviour: candidate).
 static inline char ST_CanPathTo(Map* map, uint32_t mask, uint32_t destCell, int srcCell) {
-    return static_cast<char>(WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(map), mask, destCell, srcCell));   // LEFT: SIG WorkBase_ValidateCell_a00f0
+    return static_cast<char>(WorkBase_ValidateCell_a00f0(map, mask, destCell, srcCell));
 }
 
 static bool ST_SiteIsWorkable(int tx, int ty, int fw, int fh) {
     if (GameUpdateLoop::_singleton == nullptr) return true;
     Map* map = GameUpdateLoop::_singleton->m_game;
-    int* grid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkGrid_FindCell_9ccf0
+    Map* grid = map;
     if (!grid) return true;
     const int mapW = map->size;
     for (int yy = 0; yy < fh; ++yy) {
@@ -1216,7 +1216,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
     }
     const double t0 = StressNowMs();
 
-    int* grid = reinterpret_cast<int*>(game);   // LEFT: SIG WorkGrid_FindCell_9ccf0
+    Map* grid = game;
     const int mapW = game->size;
     if (mapW <= 0) return 0;
     const size_t cells = (size_t)mapW * (size_t)mapW;

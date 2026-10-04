@@ -262,7 +262,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     CitizenBehavior* townMgr = gw->m_citizenList;
     Map* map = gw->m_game;
     // The map helpers (0x14009ccf0, 0x1400a00f0, 0x140008830) take the map as int*.
-    int* grid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkGrid_FindCell_9ccf0 / WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830
+    Map* grid = map;
 
     // --- citizen's free carry capacity -----------------------------------------
     CitizenComponent* citizen = *citizenRef;

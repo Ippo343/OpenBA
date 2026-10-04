@@ -235,7 +235,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
     Map* map = gameWorld->m_game;
     // The map helpers (0x140008830, 0x14009ccf0, 0x1400a00f0, 0x14009f3e0) take the map
     // as int* / void*: LEFT.
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees (Work/exe_bodies.h, Action/exe_bodies.h) take the Map as int*
+    Map* mapGrid = map;
 
     int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;

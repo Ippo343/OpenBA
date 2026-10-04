@@ -199,7 +199,7 @@ bool CitizenAIComponent::State_Wander() {
     if (sy < 0) sy = 0;
     if (mapSize <= sy) sy = mapSize - 1;
 
-    int cell = WorkGrid_FindCell_9ccf0(reinterpret_cast<int*>(grid), mapSize * ty + tx, mapSize * sy + sx, 0xe1f);   // LEFT: SIG WorkGrid_FindCell_9ccf0 (int* map; Work/exe_bodies.h)
+    int cell = WorkGrid_FindCell_9ccf0(grid, mapSize * ty + tx, mapSize * sy + sx, 0xe1f);
     if (cell < 0) return false;
 
     float kBias = kRdata_140172114;

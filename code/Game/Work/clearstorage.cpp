@@ -84,7 +84,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     // Get game world grid data
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     Map* map = gameWorld->m_game;
-    int* gridDataPtr = (int*)map;   // LEFT: SIG WorkBase_ValidateCell_a00f0 (Map passed as int*)
+    Map* gridDataPtr = map;
     CitizenBehavior* worldArray = gameWorld->m_citizenList;
 
     // Citizen position: CharacterComponent (+0x278) -> ModelComponent (+0x68)

@@ -123,7 +123,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
 
     // Step 4: Get map and citizen position (the model's translation, character +0x68)
     Map* map = GameUpdateLoop::_singleton->m_game;
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees take the Map as its leading int
+    Map* mapGrid = map;
 
     CitizenComponent* citizen = *citizenRef;
     ModelComponent* posComp = citizen->character->modelComponent;

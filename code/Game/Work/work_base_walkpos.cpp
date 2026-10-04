@@ -87,7 +87,7 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
         int row = WalkClampCell(static_cast<int>(pos.y + static_cast<float>(w2 >> 1)), w2);
         uint32_t destCell = static_cast<uint32_t>(w2 * row + col);
 
-        uint64_t reach = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, srcCell, static_cast<int>(destCell));
+        uint64_t reach = WorkBase_ValidateCell_a00f0(map, 0xe1f, srcCell, static_cast<int>(destCell));
         if (static_cast<char>(reach) != '\0') {
             int dist = Pf_IsDstReachable_f810(mapGrid, srcCell, destCell, '\x01');
             if (dist < 0) {

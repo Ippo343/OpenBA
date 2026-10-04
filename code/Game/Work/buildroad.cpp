@@ -295,7 +295,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     Map* map = gameWorld->m_game;
-    int* mapGrid = (int*)map;   // LEFT: SIG WorkGrid_FindCell_9ccf0 / WorkBase_ValidateCell_a00f0 (Map passed as int*)
+    Map* mapGrid = map;
 
     int mapSize = map->size;
     int cellIndex = PosToCellIndex(map, GetPositionData(entityIBP));
