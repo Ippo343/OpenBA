@@ -116,7 +116,10 @@ extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00
 // ---- citizenai_growup.cpp
 
 // ---- citizenai_housing_idle.cpp
-extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b);  // 0x14000e360
+// The AVL rebalance walk over any 0x30 node (links +0x10 / +0x18 / +0x20, int16 balance /
+// height +0x28 / +0x2A; one retail body for every such tree, B13); instantiated per node type
+// in citizenai_housing_idle.cpp.
+template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** walk);  // 0x14000e360
 
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;

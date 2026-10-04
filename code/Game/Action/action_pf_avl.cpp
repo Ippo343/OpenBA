@@ -21,6 +21,8 @@
 #include "Dialog/TownHallUI.h"         // TownHallUI::ProfessionNode / AgricultureNode
 #include "Entity/CitizenBehavior.h"    // PathGraph
 #include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode, WorkCandidateNode
+#include "Game/LegacyKeyIntNode.h"     // LegacyKeyIntNode
+#include "Component/TradeComponent.h"  // TradeResourceNode
 #include "Work/Work.h"                 // WorkEntitySetNode
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
@@ -228,6 +230,12 @@ template void AvlRebalance<WorkSchedulerIdNode>(WorkSchedulerIdNode**, WorkSched
 template void AvlRebalance<WorkEntitySetNode>(WorkEntitySetNode**, WorkEntitySetNode**);
 template WorkCandidateNode* AvlRotateLeft<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
 template WorkCandidateNode* AvlRotateRight<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
+// The other trees of 0x14000e360's walk (CitizenAI_Reg_helper_e360): the trade stock tree
+// and CitizenList's version < 2 key -> int tree.
+template TradeResourceNode* AvlRotateLeft<TradeResourceNode>(TradeResourceNode**, TradeResourceNode*);
+template TradeResourceNode* AvlRotateRight<TradeResourceNode>(TradeResourceNode**, TradeResourceNode*);
+template LegacyKeyIntNode* AvlRotateLeft<LegacyKeyIntNode>(LegacyKeyIntNode**, LegacyKeyIntNode*);
+template LegacyKeyIntNode* AvlRotateRight<LegacyKeyIntNode>(LegacyKeyIntNode**, LegacyKeyIntNode*);
 // TownHallUI's profession tree (0x30 node: 0x140013480) and agriculture trees (0x28
 // node: 0x1400149a0, retail's third copy of the 0x28 retrace, same rotations
 // 0x140014c70 / 0x140014da0).
@@ -457,10 +465,7 @@ AvlNode30** PathCostTreeInsert(AvlTreeHead<AvlNode30>* tree, AvlNode30** out, co
         nn = AvlNewNode30(key, local_res8);
         cur->left = nn;
 LAB_140025afa:
-        // LEFT: 0x14000e360's C declaration (Component/exe_bodies.h, block COMP) takes
-        // int64_t*; the two arguments are the tree root slot and the cursor.
-        CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(&tree->root),   // LEFT: SIG CitizenAI_Reg_helper_e360 (CAI-4)
-                                  reinterpret_cast<int64_t*>(&local_res8));   // 0x14000e360 LEFT: SIG CitizenAI_Reg_helper_e360 (CAI-4)
+        CitizenAI_Reg_helper_e360(&tree->root, &local_res8);   // 0x14000e360
         *out = nn;
     }
     tree->count = tree->count + 1;
