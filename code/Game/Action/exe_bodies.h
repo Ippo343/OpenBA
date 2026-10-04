@@ -116,10 +116,7 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
-void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3, uint64_t p4, uint32_t p5, uint8_t p6);  // 0x1400c7cd0
-void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3, uint64_t, uint8_t p5);  // 0x1400c63b0
 void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);  // 0x1400ca230
-void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_t* param_3, int64_t param_4, int param_5, uint8_t param_6);  // 0x1400ca520
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470

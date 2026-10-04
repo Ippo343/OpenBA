@@ -376,15 +376,6 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
 //   RCX=self, RDX=p2, R8=p3(material), R9=p4(u64, unused), [stack]=p5(byte).
 //   +0x20=*p2 ; +0x28=0 ; +0x30=0 ; +0x38=p5(byte); then 64b0(self, p3, 1).
 // ============================================================
-void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
-                                        uint64_t /*p4*/, uint8_t p5) {
-    // B4 FORWARD: 3 outside callers (Component/citizenai_actionctors.cpp,
-    // Work/work_act_perform.cpp) hold the entity as uint64_t* and the material as an integer.
-    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(
-        reinterpret_cast<ComponentEntity* const*>(p2),
-        reinterpret_cast<ComponentDescription*>(p3), p5));
-}
-
 // 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 (one qword) ; +0x38 = p5 (byte); then
 // the consume-list append 0x1400c64b0(this, material, 1) (R8D = 1, retail 0x1400c6412).
 ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage,
