@@ -229,21 +229,6 @@ void* SendComponentMessage::CreateInPlaceObject(void* storage) {
 }
 
 
-// ============================================================
-// FUN_1400cb1d0 — SendComponentMessage_Action CopyCtor
-// Base Internal ctor, Action -> SendComponentMessage vtable; copies IBP +0x20 (param_2),
-// IBP +0x28 (param_5), int +0x30 (*param_3), +0x34 (param_4), +0x38 (param_6), +0x3c=0.
-// ============================================================
-void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3,
-                                           uint32_t param_4, uint64_t* param_5, uint32_t param_6) {
-    // B4 FORWARD: outside callers (Action/action_pf_ctors.cpp, the
-    // Component citizen builders, the Work action builders) hold the refs as uint64_t*.
-    return static_cast<Object::Base*>(
-        new (param_1) SendComponentMessage(reinterpret_cast<ComponentEntity* const*>(param_2), param_3,
-                                           param_4, reinterpret_cast<ComponentEntity* const*>(param_5),
-                                           param_6));
-}
-
 // 0x1400cb1d0 — the ctor body: +0x20 = *param_2, +0x28 = *param_5, then the retail stores
 // (and the tree's typeid heal).
 SendComponentMessage::SendComponentMessage(ComponentEntity* const* param_2, const uint32_t* param_3,

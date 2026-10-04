@@ -129,7 +129,7 @@ static bool BSTContains(const RtIO::ModSetNode* root, const RtIO::ModSetNode* fi
 // ============================================================
 // OnOpened (0x14006D700): Setup — populates mod details UI
 // ============================================================
-extern void* g_lastModDetails;   // mod_dialog_vtables.cpp (autostart click driver)
+extern ModDetailsDialog* g_lastModDetails;   // mod_dialog_vtables.cpp (autostart click driver)
 void ModDetailsDialog::OnOpened() {
     g_lastModDetails = this;
     printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", (void*)this, modIndex);

@@ -266,14 +266,14 @@ static inline float* InlScalarMax(const float* a, float* ret, const float* b) {
 
 // PerfX's deferred pick push (perf-only, PICK_CULL) builds its transform copy through
 // this: the Math::Transform copy constructor, which the exe slot 0x140151418 names.
-static void PickXfCtorMember(void* xformOut, void* transformIn) {
-    ::new (xformOut) Math::Transform(*static_cast<const Math::Transform*>(transformIn));   // B.3.1 bridge  // LEFT: SIG PerfX::PickCullSkip (standalone/perf_experimental.h, SA)
+static Math::Transform* PickXfCtorMember(void* xformOut, const Math::Transform* transformIn) {
+    return ::new (xformOut) Math::Transform(*transformIn);
 }
 // PerfX's deferred pick push (perf-only, PICK_CULL) replays through this: the
 // member Picking::Scene::SetTransform, which the exe slot 0x1401529a8 used to
 // be resolved for (the slot's registered target is the same member's door).
-static void PickSetXfMember(void* scene, uint32_t id, void* xform) {
-    reinterpret_cast<Picking::Scene*>(scene)->SetTransform(id, *static_cast<const Math::Transform*>(xform));   // B.3.7 bridge  // LEFT: SIG PerfX::PickCullSkip (standalone/perf_experimental.h, SA)
+static void PickSetXfMember(Picking::Scene* scene, uint32_t id, const Math::Transform* xform) {
+    scene->SetTransform(id, *xform);
 }
 
 // Picking::Scene::AddMesh (Runtime 0x1801252e0) registers a pick mesh and returns its

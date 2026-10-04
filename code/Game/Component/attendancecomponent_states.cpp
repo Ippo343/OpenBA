@@ -172,13 +172,13 @@ char AttendanceComponent::State2Enter() {
         ComponentEntity* entity = _entity;
         location = ::new (work) LocationWork(&entity);
     }
-    Object::InternalPtr<LocationWork> workIbp(location);
+    Object::InternalPtr<Work> workIbp(location);
 
     // 3. post it to the citizen work ledger
     {
         WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
-        // LEFT: SIG CitizenAI_WorkScheduler_Post takes the component as uintptr_t
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, '\0', &workIbp);
+
+        CitizenAI_WorkScheduler_Post(workComp, 1, '\0', &workIbp);
     }
 
     // 4. open the workplace

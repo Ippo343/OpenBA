@@ -90,6 +90,7 @@
 #include "Component/CharacterComponent.h"
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
+#include "Action/PathAvl.h"   // AvlRotateLeft / AvlRotateRight (0x14000e450 / 0x14000e580)
 #include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/WorkScheduler.h"        // WorkScheduler (GameUpdateLoop +0x118)
@@ -175,7 +176,6 @@ void* Helper_3f010(unsigned char* dst, uint64_t byteVal, uint64_t count) {
 //   callers pass the candidate tree (Game/WorkSchedulerNodes.h WorkCandidateNode).
 // ============================================================
 void Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** param_2) {
-    int64_t* rotRoot = reinterpret_cast<int64_t*>(rootSlot);   // LEFT: SIG Pf_AvlRotateB_e450 / _e580 (int64_t* root)
     WorkCandidateNode* node = *param_2;
     while (ValidNode(node)) {
         WorkCandidateNode* n = *param_2;
@@ -194,10 +194,10 @@ void Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** param_2) {
             if (ValidNode(rc)) {
                 // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
                 if (rc->balance < 1 && rc->balance < 0) {
-                    Pf_AvlRotateB_e580(rotRoot, reinterpret_cast<int64_t>(rc));   // LEFT: SIG Pf_AvlRotateB_e580
+                    AvlRotateRight(rootSlot, rc);   // 0x14000e580
                     n = *param_2;
                 }
-                if (ValidNode(n)) Pf_AvlRotateB_e450(rotRoot, reinterpret_cast<int64_t>(n));   // LEFT: SIG Pf_AvlRotateB_e450
+                if (ValidNode(n)) AvlRotateLeft(rootSlot, n);   // 0x14000e450
             }
         }
         n = *param_2;
@@ -206,10 +206,10 @@ void Helper_e360(WorkCandidateNode** rootSlot, WorkCandidateNode** param_2) {
             if (ValidNode(lc)) {
                 // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
                 if (lc->balance > -1 && lc->balance > 0) {
-                    Pf_AvlRotateB_e450(rotRoot, reinterpret_cast<int64_t>(lc));   // LEFT: SIG Pf_AvlRotateB_e450
+                    AvlRotateLeft(rootSlot, lc);   // 0x14000e450
                     n = *param_2;
                 }
-                if (ValidNode(n)) Pf_AvlRotateB_e580(rotRoot, reinterpret_cast<int64_t>(n));   // LEFT: SIG Pf_AvlRotateB_e580
+                if (ValidNode(n)) AvlRotateRight(rootSlot, n);   // 0x14000e580
             }
         }
         *param_2 = parent;

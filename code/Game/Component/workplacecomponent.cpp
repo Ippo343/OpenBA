@@ -548,12 +548,11 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // Hand any in-flight work item over from Builder to the natural profession, so it stops
     // being offered to builders the moment the building is finished. FUN_1400f8400 —
     // citizenai_work_scheduler.cpp CitizenAI_WorkScheduler_Rekey.
-    // The rekey takes the scheduler and its keys as integers (wave X).
     if (workComp && workComp->workId >= 0) {
-        uintptr_t sched = (uintptr_t)gw->m_tutorial;   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
+        WorkScheduler* sched = gw->m_tutorial;
         if (sched)
             CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
-                    (uint64_t)profession, (uint64_t)naturalKey);   // LEFT: SIG CitizenAI_WorkScheduler_Rekey
+                    profession, naturalKey);
     }
 
     profession = naturalKey;

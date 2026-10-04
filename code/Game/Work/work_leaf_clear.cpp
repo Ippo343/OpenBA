@@ -28,7 +28,7 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
-#include "Action/exe_bodies.h"   // B3R: Pf_AvlRebalanceB_13480
+#include "Action/PathAvl.h"   // AvlRebalance (0x140013480)
 #include "Player/exe_bodies.h"   // B3R: PlayerPath_FindComponent_3ea0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
@@ -49,7 +49,7 @@
 // Shared exe sub-callees, called by name (B3R)
 // ============================================================
 // 0x14001ca60 — BST single-node remove + rebalance: WorkCellBST_Remove_ca60 (Work/exe_bodies.h).
-// 0x140013480 — BST rebalance/fixup after insert: Pf_AvlRebalanceB_13480 (Action/exe_bodies.h).
+// 0x140013480 — BST rebalance/fixup after insert: AvlRebalance (Action/PathAvl.h).
 
 // ============================================================
 // 0x14011b390 — PlantArea_helper_b390
@@ -200,8 +200,7 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
             node = right;
         }
     inserted:
-        // LEFT: the retrace 0x140013480 (ACT) takes the set and the cursor as int64_t*.
-        Pf_AvlRebalanceB_13480(static_cast<int64_t*>(treeRootSlot), reinterpret_cast<int64_t*>(&newChildSlotOwner));
+        AvlRebalance(&set->_root, &newChildSlotOwner);   // 0x140013480
         *out = result;
     }
     set->_count = set->_count + 1;

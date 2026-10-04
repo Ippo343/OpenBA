@@ -74,7 +74,8 @@ extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession
 extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 
 // ---- citizen_updatehealth.cpp
-extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float* radius, int typeId, void* outArr);  // 0x140092990
+class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;
+extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius, int typeId, RawArray<CharacterComponent*>* outArr);  // 0x140092990
 extern "C" void CitizenComp_Infect(void* self, void* disease);  // 0x140116b90
 
 // ---- citizenai_actionctors.cpp
@@ -114,9 +115,10 @@ extern "C" int Storage_GetResourceCount2(int64_t param_1);  // 0x14012ab00
 extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b);  // 0x14000e360
 
 // ---- citizenai_work_scheduler.cpp
-extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, char flag, void* pWorkIBP);  // 0x14012ec60
-extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId, uint64_t oldKey, uint64_t newKey);  // 0x1400f8400
+class WorkScheduler; class WorkComponent; class Work; class Profession;
+extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
+extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* workComp, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);  // 0x14012ec60
+extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
 void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);  // 0x140008090
@@ -145,7 +147,8 @@ void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0
 void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
 
 // ---- cropfieldcomponent_states.cpp
-extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410  B4 FORWARD: CropFieldComponent::Maturity (cropui_promote.cpp)
+class CropFieldComponent;
+extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp);  // 0x14011b410 -> CropFieldComponent::Maturity, with a null guard (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00
@@ -181,7 +184,8 @@ extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h
 extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
-extern "C" void MapComponent_DetachOccupancy_4750(void* selfV);  // 0x140124750
+class MapComponent;
+extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140124750 (keeps the tree's null test)
 
 // ---- modelcomponent.cpp
 extern "C" void ModelComponentNotify_Reimpl(void* entity, int param);  // 0x1400c2b70
@@ -195,8 +199,6 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  
 // B.4 COMP-6: OrchardComponent_ValidateRefs had no caller left: deleted.
 
 // ---- pasturecomponent.cpp
-void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20 B4 FORWARD to AnimalComponent::GetWanderBox
-uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570 B4 FORWARD to PastureComponent::ComputeCapacity
 
 // ---- pasturecomponent_spawn.cpp
 class PastureComponent;
@@ -209,13 +211,11 @@ class Map;   // Game/Map.h
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)
 
 // ---- rawmaterialcomponent.cpp
-void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 
 // ---- residencecomponent.cpp
 // B.4 COMP-6: the three forwarders (SetFamilyCount / EvictResidents / IsFamilyFull) had no caller left: deleted.
 
 // ---- statusiconcomponent.cpp
-void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)
 
 // ---- storagecomponent.cpp
 int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
@@ -228,7 +228,6 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
 
 // ---- tradecomponent_livestock.cpp
-extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0 B4 FORWARD -> TradeComponent::SpawnPurchasedLivestock (Dialog/tradeui_checkout.cpp)
 
 // ---- wellcomponent.cpp
 // B.4 COMP-f: 0x140091ba0 is CitizenBehavior::UnregisterWell.

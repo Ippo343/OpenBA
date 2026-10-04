@@ -354,18 +354,12 @@ extern "C" void CitizenComp_IntArrayResize(RawArray<float>* arr, int newCount, c
 // stride 0x24, base walker+0x24, top index at walker+0x8. Node box =
 // [pos - (2ex,2ey,ez) + (0,0,-1), pos + (2ex,2ey,ez) + (0,0,+1)]  (the (0,0,∓1) z pads
 // are the walker's +0x0c/+0x18 vectors, seeded from the init's -1.0f/+1.0f args).
-extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float* radius,
-                                       int typeId, void* outArr) {
+extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius,
+                                       int typeId, RawArray<CharacterComponent*>* arr) {
     EnsureInit();
     if (out) *out = nullptr;
-    if (!map || !pos || !radius || !outArr)
+    if (!grid || !pos || !radius || !arr)
         return out;
-
-    // The signature is the C one other blocks' callers hold (tornadocomponent.cpp): the
-    // grid and the output array are typed once here.
-    const CharacterGrid* grid = reinterpret_cast<const CharacterGrid*>(map);   // LEFT: SIG Map_RadiusQuery_92990 (float* map)
-    RawArray<CharacterComponent*>* arr =
-        reinterpret_cast<RawArray<CharacterComponent*>*>(outArr);           // LEFT: SIG Map_RadiusQuery_92990 (void* outArr)
 
     // The 0x2430-byte stack walker (retail: at RBP+0x10; top at walker+0x08, node r at
     // walker+0x24 + r*0x24, cell at node+0x18, grid at walker+0x2428 — 0x140092a82,
@@ -663,7 +657,7 @@ void CitizenComponent::SpreadDisease() {
     RawArray<CharacterComponent*> found = { nullptr, 0, 0 };
     void* victim = nullptr;   // diag only
     void* scratch = nullptr;
-    Map_RadiusQuery_92990((float*)gw->m_characterGrid, &scratch, pos, &radius,   // LEFT: SIG Map_RadiusQuery_92990 (float* map)
+    Map_RadiusQuery_92990(gw->m_characterGrid, &scratch, pos, &radius,
                           (int)typeId, &found);
 
     for (int i = 0; i < found.size; i++) {

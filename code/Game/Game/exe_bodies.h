@@ -43,8 +43,16 @@ extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  
 // ---- citizenlist_serialize.cpp
 
 // ---- eventlog.cpp
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580 B4 FORWARD -> EventLog::AddEvent
-extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr, void* titleStr, void* extraStr);  // 0x140094e00 B4 FORWARD -> EventLog::AddCitizenEvent
+class EventLog; struct EventLogEntry; class GameUpdateLoop;
+namespace Object { class InternalBasePtr; }
+// The two below keep their null-log guard (not pure forwarders).
+extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP);  // 0x140095580 -> EventLog::AddEvent
+extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const void* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: CitizenComponent::name is raw String storage, H5)
+// The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
+extern "C" void EventLog_ArrayGrow_Reg(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry);  // 0x140019b70
+extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it
+extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr);
+extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)
 
 // ---- game.cpp
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
@@ -178,7 +186,6 @@ extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0
 // ---- serialize_struct60b.cpp
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);  // 0x14001f250
 extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src);  // 0x14001f5e0
-extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
 
 // ---- town_storage_seed.cpp
 class Component; class MapGenerator;

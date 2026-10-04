@@ -145,10 +145,6 @@ void CitizenBehavior::RegisterRawMaterial(ComponentDescription* material) {
 // B4 FORWARD: 5 outside callers (debugui.cpp, tradeui_checkout.cpp, starttown.cpp,
 // tradecomponent_dock.cpp, and this file's Startup, whose receiver comes from the
 // untyped GameUpdateLoop::m_citizenList).
-void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain) {
-    reinterpret_cast<CitizenBehavior*>(worldMgr)->RegisterRawMaterial(
-        reinterpret_cast<ComponentDescription*>(entityChain));   // LEFT: B4 FORWARD (wave X: 4 outside caller files hold void*)
-}
 
 // ============================================================
 // RawMaterialDescription::GetPickupCategory (0x140129480): the pickup work's
@@ -289,12 +285,11 @@ void RawMaterialComponent::OnAdded() {
     }
 
     // Wrap in InternalBasePtr
-    Object::InternalPtr<Pickup> itemRef(pickupItemResult);
+    Object::InternalPtr<Work> itemRef(pickupItemResult);
 
     // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
     // hauls this pile away. This is the pile-pickup trigger.
-    // LEFT: CitizenAI_WorkScheduler_Post takes the WorkComponent as uintptr_t (COMP-b's declaration).
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), category, '\x01', &itemRef);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+    CitizenAI_WorkScheduler_Post(workComp, category, '\x01', &itemRef);
 }
 
 // [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported
