@@ -142,9 +142,9 @@ void Video::Context::SetLight(const void* directionRaw, const void* attenuationR
                               int32_t shadowResolution) {
     Context* const self = this;
     const float*    direction   = static_cast<const float*>(directionRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
-    const float*    attenuation = static_cast<const float*>(attenuationRaw);  // LEFT: SIG as above
-    const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);  // LEFT: SIG as above
-    const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);  // LEFT: SIG as above
+    const float*    attenuation = static_cast<const float*>(attenuationRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
+    const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
+    const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
     LightStaging& L = _lightStaging;
 
     // +0x1dd8 .. +0x1de4 — the colour, four dwords copied as dwords.

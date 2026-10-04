@@ -1252,7 +1252,7 @@ void UI::UserInterface::SaveAllSettings() {
                 UiSerializer ser2{ st, nullptr };
                 IO::ReaderWriter* rw2 = nullptr;
                 if (enc) {
-                    IO::Serializer& s2 = *reinterpret_cast<IO::Serializer*>(&ser2);   // LEFT: as above (null-Encoding guard)
+                    IO::Serializer& s2 = *reinterpret_cast<IO::Serializer*>(&ser2);   // LEFT: the tree guards a null Encoding before CreateWriter, which IO::Serializer's ctor (0x1800b9960) does not: a real Serializer would drop that guard
                     rw2 = st->_direction != 0 ? enc->CreateWriter(s2, 0)
                                               : enc->CreateReader(s2, 0);
                 }

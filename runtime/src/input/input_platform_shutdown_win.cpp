@@ -204,7 +204,7 @@ bool EraseCallback(Application::Application* app, unsigned message) {
     // Read the node out BEFORE the call so a hit can be recognised without
     // duplicating retail's descent logic in two places.
     for (Node* n = set->root; n; ) {
-        const unsigned key = *reinterpret_cast<const unsigned*>(n);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        const unsigned key = *reinterpret_cast<const unsigned*>(n);   // LEFT: ERASED rtsetavl::Node keeps its element opaque: the message key is the node's first dword (erased AVL core)
         if (message < key)      n = n->left;
         else if (key >= message) {
             app->UnregisterMessageCallback(message);

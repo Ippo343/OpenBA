@@ -486,7 +486,7 @@ void Engine::MainLoop::OnVideoError() {
                 rec._typeId = static_cast<int32_t>(e->Type());
                 // FindNext hands the walk out const; the record keeps the object
                 // it will Destruct and reload.
-                rec._object = const_cast< ::Object::External*>(e);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+                rec._object = const_cast< ::Object::External*>(e);   // LEFT: FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code (the close decides const_cast, ledger S3)
                 // 0x1800dcac0: retail zeroes the slot, adopts, and normalises —
                 // `operator=` (0x180006770) is release-adopt-normalise, and the
                 // release arm is a no-op on the null the default ctor just put
@@ -664,7 +664,7 @@ void Engine::MainLoop::OnVideoRestart() {
             // Retail's unguarded load when the walk fell off the tree — see the
             // banner. `node + 0x10` is the record's BaseTypeInfo, and retail
             // calls its in-place factory DIRECTLY (`CALL [RDX+0x28]`).
-            reinterpret_cast<void (*)(void*)>(node->element.record.info->inPlaceFactoryFn)(r->_object);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+            node->element.record.info->inPlaceFactoryFn(r->_object);   // the returned Base* is not read (retail ignores RAX)
 
             // `object->_path = entry.path`: the inlined String assign, then
             // AdjustDelimiters. +0x08 is Object::External's own Filename, read
@@ -701,14 +701,14 @@ void Engine::MainLoop::OnVideoRestart() {
             // External::Load's entry point still takes the RtObject::External
             // POD (external_load.cpp; X-R1's mirror family).
             RtObject::RtObject_External_Load(&compiled,
-                                             reinterpret_cast<RtObject::External*>(r->_object));   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+                                             reinterpret_cast<RtObject::External*>(r->_object));   // LEFT: SIG RtObject::RtObject_External_Load takes the RtObject::External POD mirror (external_load.cpp)
             // `compiled` releases here — retail's 0x1800dc4fe, now ~Filename.
         }
     }
 
     // ---- 7: drop the record -------------------------------------------------------
     // kSpec_VideoResource's destroy arm takes raw element storage.
-    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);   // LEFT: FLOOR? element callback: the erased spec's destroy arm (rtcoll::ElemDestroy) takes the element storage as bytes
     if (arr._data != nullptr) rtcoll::MemFree(arr._data);
     arr._data = nullptr;
     arr._size = 0;

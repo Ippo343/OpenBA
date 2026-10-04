@@ -184,7 +184,7 @@ void VideoProgram::SetupShaders(Context& context) const {
     if (videoProgramSlot != static_cast<const void*>(this)) {
         ctx->_dirty |= kDirtyVideoProgram;
         const VideoProgram* me = this;
-        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));  // LEFT: as above
+        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));  // LEFT: Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)
     }
 
     Apply(ctx, ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);

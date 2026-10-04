@@ -301,7 +301,7 @@ static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
 // 0x180011110 — Collection::Array<int32>::operator=
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
     ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (void* core entry, wave X)
-    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: SIG as above
+    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (void* core entry, wave X)
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
     for (int32_t i = 0; i < dst->size; ++i) {
@@ -315,7 +315,7 @@ void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
 // 0x180011220 — Collection::Array<uint8>::operator=
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
     ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (void* core entry, wave X)
-    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: SIG as above
+    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (void* core entry, wave X)
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);
     for (int32_t i = 0; i < dst->size; ++i) {
@@ -579,7 +579,7 @@ void* RtColl_ArrayModDtor_180010b80(void* av) {
 // (runtime/src/engine/loops.cpp:230). Both doors now land here.
 void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
     ModArrayOf<Mod>* dst = static_cast<ModArrayOf<Mod>*>(dstv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (void* core entry, wave X)
-    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG as above
+    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (void* core entry, wave X)
     if (dst == src) return dst;
     RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
     ArrayAssignGrow(dst, src, 0x80, 8);

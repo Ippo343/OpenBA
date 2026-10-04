@@ -255,7 +255,7 @@ bool Particle::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    rw->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);   // +0x78; LEFT: `_active` is the byte retail stores (Particle.h)   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    rw->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);   // +0x78; LEFT: `_active` is the byte retail stores (Particle.h)   // CAST-OK: byte_io
     rw->SerializeInt(_recordCount, nullptr);   // +0xa0
     rw->SerializeInt(_subCount, nullptr);      // +0xa0
 
@@ -820,7 +820,7 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
         // Six 16-bit indices, and every arithmetic step is 16-bit. The index
         // cursor is Context+0x20f0 (Context.h's `_unknown20f0`, not named yet:
         // LEFT, the one view of that qword as the uint16 cursor it is).
-        uint16_t* ip = reinterpret_cast<uint16_t*>(context._unknown20f0);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+        uint16_t* ip = reinterpret_cast<uint16_t*>(context._unknown20f0);   // LEFT: Context::_unknown20f0 is uint64_t: code/ readers step it by bytes (geometry_draw.cpp) and as short / void* (statusicon_geometry.cpp, weather_particle_draw.cpp): typing it is a cross-file decision
         const uint16_t b = base;
         const uint16_t idx[6] = { static_cast<uint16_t>(b - 2), b,
                                   static_cast<uint16_t>(b - 1),

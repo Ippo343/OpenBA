@@ -351,7 +351,7 @@ using EmitterArray = Collection::Array<Audio::Scene::EmitterInstance>;
 // ---------------------------------------------------------------------------
 void* Array16Assign(void* dstRaw, const void* srcRaw) {
     EmitterArray*       dst = static_cast<EmitterArray*>(dstRaw);  // LEFT: void* door (audio.cpp / audio_scene_update.cpp hold void*)
-    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: as above
+    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: void* door (audio.cpp / audio_scene_update.cpp hold void*)
     if (dst == src) return dst;
 
     rtcoll::RtColl_ArrayDtor_180051d80(dst);

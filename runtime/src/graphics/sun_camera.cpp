@@ -342,7 +342,7 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     // LEFT: the door builds the POD; the one view of it as the class is here.
     RtGraphics::Camera slot = {};
     RtGraphics_Camera_Ctor(&slot, &f, &xf, true);   // 0x1800fe960
-    return *reinterpret_cast<const Camera*>(&slot);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    return *reinterpret_cast<const Camera*>(&slot);   // LEFT: H10 the RtGraphics_Camera_Ctor door builds the RtGraphics::Camera POD; the one view of it as Graphics::Camera (its protected default ctor: the H5 item)
 }
 
 }  // namespace Graphics

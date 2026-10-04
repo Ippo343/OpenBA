@@ -355,12 +355,12 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(
             const int32_t next = i + 1;
             if (next < a->_size) {
                 RtObject::PathStackElement* dst =
-                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 as above
+                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
                 // Retail tests the COMPUTED address, which can only be null
                 // when _data is null and i == 0.
                 if (dst != nullptr) {
                     const RtObject::PathStackElement* src =
-                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: H10 as above
+                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
                     ++RtObject::g_psc.elemsShifted;
                     new (&dst->directory) System::Filename(src->directory);
                     new (&dst->filename)  System::Filename(src->filename);
